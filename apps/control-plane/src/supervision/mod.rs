@@ -120,7 +120,7 @@ async fn authorize(s: &AppState, user: &str, id: Uuid) -> AppResult<()> {
     if organization.kind != SpaceKind::Organization {
         return Err(AppError::NotFound);
     }
-    let inside = spaces::in_organization(&s.pool, &s.fga, user, id)
+    let inside = spaces::in_organization(&s.pool, user, id)
         .await
         .map_err(|error| match error {
             AppError::Internal(_) => unavailable(),
@@ -131,7 +131,7 @@ async fn authorize(s: &AppState, user: &str, id: Uuid) -> AppResult<()> {
     }
     crate::lifecycle::store::require_active(&s.pool, id).await?;
     if !s
-        .fga
+        .authorization
         .check_space(user, SpacePermission::AdministerOrganization, id)
         .await
         .map_err(|_| unavailable())?
@@ -288,7 +288,11 @@ async fn collect(
         .filter(|s| s.active)
         .map(|s| s.id)
         .collect();
-    let grants = s.fga.grants_on(&active).await.map_err(|_| unavailable())?;
+    let grants = s
+        .authorization
+        .grants_on(&active)
+        .await
+        .map_err(|_| unavailable())?;
     for (id, grants) in grants {
         let buckets = destinations
             .get(&id)

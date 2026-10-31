@@ -13,10 +13,9 @@
       "dockerfile": "apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod",
       "build_args": "PRODUCTION_FASTAPI_DOCS_ENABLED=false",
       "publish": true,
-      "pr_inputs_reason": "Its expensive build only depends on these paths: its own tree, its local libraries fred-core and fred-pod (closed: fred-core imports only fred-pod), the embedded Weaver OpenFGA model, the scripts it copies, the root alembic.ini and build context rules, and this selection itself. Adding a dependency edits a pyproject.toml already listed here, so the image rebuilds and a missing COPY still fails.",
+      "pr_inputs_reason": "Its expensive build only depends on these paths: its own tree, its local libraries fred-core and fred-pod (closed: fred-core imports only fred-pod), the scripts it copies, the root alembic.ini and build context rules, and this selection itself. Adding a dependency edits a pyproject.toml already listed here, so the image rebuilds and a missing COPY still fails.",
       "pr_inputs": [
         "apps/knowledge-flow-backend/**",
-        "apps/control-plane/openfga/model.json",
         "libs/fred-core/**",
         "libs/fred-pod/**",
         "scripts/**",
@@ -35,10 +34,9 @@
       "dockerfile": "apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod",
       "build_args": "PRODUCTION_FASTAPI_DOCS_ENABLED=false\nINSTALL_PYMUPDF=true",
       "publish": true,
-      "pr_inputs_reason": "Its expensive build only depends on these paths: its own tree, its local libraries fred-core and fred-pod (closed: fred-core imports only fred-pod), the embedded Weaver OpenFGA model, the scripts it copies, the root alembic.ini and build context rules, and this selection itself. Adding a dependency edits a pyproject.toml already listed here, so the image rebuilds and a missing COPY still fails.",
+      "pr_inputs_reason": "Its expensive build only depends on these paths: its own tree, its local libraries fred-core and fred-pod (closed: fred-core imports only fred-pod), the scripts it copies, the root alembic.ini and build context rules, and this selection itself. Adding a dependency edits a pyproject.toml already listed here, so the image rebuilds and a missing COPY still fails.",
       "pr_inputs": [
         "apps/knowledge-flow-backend/**",
-        "apps/control-plane/openfga/model.json",
         "libs/fred-core/**",
         "libs/fred-pod/**",
         "scripts/**",

@@ -44,8 +44,7 @@ dependencies = [
     "langchain-openai>=1.1.14",
     "azure-identity>=1.25.0",
     "authzed>=1.22.1",
-    "openfga-sdk>=0.9.9",
-    # Security floor: openfga-sdk only requires aiohttp>=3.9.3, which still
+    # Keep the patched HTTP transport floor; older versions still
     # admits vulnerable versions. Pin the patched floor so package-index
     # consumers cannot resolve a vulnerable aiohttp.
     "aiohttp>=3.14.5",
@@ -73,7 +72,6 @@ include = ["fred_core*"]
 
 [tool.setuptools.package-data]
 "fred_core" = ["py.typed"]
-"fred_core.security.rebac" = ["schema.fga", "schema.fga.json", "weaver-model.json"]
 "fred_core.kpi" = ["model_impact_factors.yaml"]
 
 [dependency-groups]
@@ -124,13 +122,12 @@ omit = [
   "fred_core/history/*",
   "fred_core/sql/alembic_env.py",
   "fred_core/sql/base_sql.py",
-  # Object-storage and search backends: requires MinIO, OpenSearch, or OpenFGA
+  # Object-storage and search backends: requires MinIO or OpenSearch
   "fred_core/filesystem/minio_filesystem.py",
   "fred_core/store/minio_content_store.py",
   "fred_core/store/opensearch_mapping_validator.py",
   "fred_core/logs/opensearch_log_store.py",
   "fred_core/kpi/opensearch_kpi_store.py",
-  "fred_core/security/rebac/openfga_engine.py",
   # AI model factories: requires live provider credentials (OpenAI, Azure, Ollama, Vertex)
   "fred_core/model/factory.py",
   # OIDC / Keycloak HTTP clients: requires a live auth service
@@ -154,7 +151,7 @@ minversion = "8.0"
 addopts = "-ra"
 markers = [
   "integration: marks tests that require external services",
-  "integration_postgres: integration tests that specifically need a real PostgreSQL — docker-compose.integration.yml only provisions OpenFGA, so `make test-integration` excludes this subset by default",
+  "integration_postgres: integration tests that specifically need a real PostgreSQL",
 ]
 testpaths = ["fred_core/tests"]
 

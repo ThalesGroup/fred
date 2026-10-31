@@ -1,17 +1,14 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-use control_plane::{db, domain::Space, fga::Fga};
+use control_plane::{authorization::Authorization, db, domain::Space};
 use sqlx::{AssertSqlSafe, PgPool};
-use std::time::Duration;
 use uuid::Uuid;
-const IGNORE: &str = "needs disposable Postgres and OpenFGA: make test-integration";
+const IGNORE: &str = "needs disposable Postgres: make test-integration";
 
 pub struct Env {
     pub pool: PgPool,
-    pub fga: Fga,
-    pub openfga: String,
-    pub store: String,
+    pub authorization: Authorization,
     subjects: OpenDirectory,
 }
 
@@ -73,7 +70,6 @@ async fn open_directory() -> OpenDirectory {
 
 pub async fn env() -> Env {
     let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES").expect(IGNORE);
-    let openfga = std::env::var("CONTROL_PLANE_IT_OPENFGA").expect(IGNORE);
     let name = format!("t_{}", Uuid::new_v4().simple());
     let admin = PgPool::connect(&format!("{postgres}/postgres"))
         .await
@@ -86,24 +82,10 @@ pub async fn env() -> Env {
         .await
         .unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
-    let fga = Fga::connect(
-        &openfga,
-        &name,
-        true,
-        true,
-        None,
-        Some(Duration::from_secs(5)),
-    )
-    .await
-    .unwrap()
-    .initialize(&pool)
-    .await
-    .unwrap();
+    let authorization = Authorization::new(pool.clone());
     Env {
         pool,
-        fga,
-        openfga,
-        store: name,
+        authorization,
         subjects: open_directory().await,
     }
 }
@@ -120,17 +102,17 @@ pub async fn insert_document(
 }
 
 /// A space by parent and name, resolved as the importer does: organizations by name,
-/// children among their parent's OpenFGA children.
+/// children among SQL placement.
 pub async fn named_space(
     pool: &PgPool,
-    fga: &Fga,
+    authorization: &Authorization,
     parent: Option<Uuid>,
     name: &str,
 ) -> anyhow::Result<Option<Space>> {
     let row = match parent {
         None => db::organization_named(pool, name).await?,
         Some(parent) => {
-            let ids = fga.linked_to(parent, false).await?;
+            let ids = authorization.linked_to(parent, false).await?;
             db::spaces(pool, &ids)
                 .await?
                 .into_iter()

@@ -38,7 +38,6 @@ from knowledge_flow_backend.features.tag.structure import (
     Tag,
     TagType,
     TagWithItemsId,
-    TagWithPermissions,
 )
 
 OWNER = "team-1"
@@ -147,10 +146,8 @@ def test_the_projections_a_reader_receives_carry_the_machine():
     marked = _tag("lib", "Mirror", MACHINE)
 
     with_items = TagWithItemsId.from_tag(marked, item_ids=[])
-    with_permissions = TagWithPermissions.from_tag_with_items(with_items, permissions=[])
 
     assert with_items.synchronized_by == MACHINE
-    assert with_permissions.synchronized_by == MACHINE
 
 
 def test_an_unmarked_folder_is_omitted_rather_than_sent_as_null():

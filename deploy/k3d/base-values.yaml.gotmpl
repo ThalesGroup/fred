@@ -24,4 +24,15 @@ The control-plane configuration is owned by values.yaml.gotmpl, not the factory.
 {{- range $name := list "control-plane-backend" "control-plane-worker" -}}
   {{- $_ := unset (index $base.applications $name) "configuration" -}}
 {{- end -}}
+{{- /* The checkout's permission authority is Control Plane/PostgreSQL. */ -}}
+{{- range $app := $base.applications -}}
+  {{- with (index $app "configuration") -}}
+    {{- with (index . "security") -}}{{- $_ := unset . "rebac" -}}{{- end -}}
+  {{- end -}}
+  {{- $env := list -}}
+  {{- range (index $app "extraEnvVars" | default (list)) -}}
+    {{- if ne .name "OPENFGA_API_TOKEN" -}}{{- $env = append $env . -}}{{- end -}}
+  {{- end -}}
+  {{- if hasKey $app "extraEnvVars" -}}{{- $_ := set $app "extraEnvVars" $env -}}{{- end -}}
+{{- end -}}
 {{ $base | toYaml }}

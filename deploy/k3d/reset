@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
-exec python3 "$(dirname "$0")/reset_data.py"
+set -euo pipefail
+echo "Application data reset is unsupported for Weaver. Recreate the disposable installation through the deployment factory." >&2
+exit 1

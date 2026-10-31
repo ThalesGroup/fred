@@ -14,32 +14,28 @@ selects a tenant. Business routes answer a missing or foreign space with 404, th
 retired one with 409 `space_pending_deletion`, then a missing permission with 403
 ([security](A6-security.md#business-authorization-answer)). Authorization probes return
 `allowed: false` for each of these refusals and for a missing document, and 409 for
-an ambiguous context. A role grant answers 422 for a malformed subject,
-one unknown to the user directory or a tuple OpenFGA rejects as invalid, 409 when its
-OpenFGA guard was consumed (retry with fresh checks), and 503 when the directory is
-unavailable.
+an ambiguous context. A role grant answers 422 for an invalid or unknown subject,
+and 503 when the directory is unavailable.
 
 `GET /organizations/{organization_id}/agents` reuses runtime discovery after
 `spaces::authorize(..., Manage)` and an organization-kind check. The target must
 belong to the admitted caller's unique organization and be active. Organization
 ownership alone, team/project owneristration and platform roles confer no access.
 The response contains `AgentEnablement` rows with runtime/template provenance and
-the OpenFGA `default_on` marker for this organization. The UI reuses the existing
+the SQL default enablement for this organization. The UI reuses the existing
 switch and confirmation with organization-scoped messages.
 `PUT /organizations/{organization_id}/agents/{agent_id}/default-on` repeats
 admission and authorization, discovers before locking, then rechecks under the
-existing platform/organization guards. It writes the template anchor and changes
-only the default marker. Activation requires every tool dependency the template
+existing platform/organization locks. It updates the organization template policy. Activation requires every tool dependency the template
 declares to be enabled by default for the organization on the same pod; the
 check runs under the organization lock, and the first missing one is named in the
 409 refusal.
 Template IDs are UUIDv5, first namespaced by organization/runtime, then template;
-no mutable display name participates. `agent_template` retains the Swift
-explicit-deny, explicit-grant and personal-class precedence, evaluated in OpenFGA.
-`can_use_agent` supplies contextual reverse links from trusted space placement;
-it is not wired to enrollment or execution. The cleanup reader drains template
-references in bounded pages and retains the organization anchor until the last
-page, including orphan exception subjects. The embedded definition is `fred.github.ralph`, version `0.1.0`, provider
+no mutable display name participates. `agent_template_policy` stores organization
+defaults; policy cleanup follows its SQL organization foreign key.
+
+
+The embedded definition is `fred.github.ralph`, version `0.1.0`, provider
 `control-plane`; external-source failure still fails the whole discovery.
 
 <!-- generated: routes apps/control-plane/src/agents.rs /control-plane/v1 -->
@@ -169,7 +165,7 @@ through utoipa/OpenAPI and the generated RTK client. The
 
 This catalogue covers the Rust control-plane's PostgreSQL tables. In the local k3d
 configuration they live in database `fred`, schema `public`. It does not describe
-the private schemas of Keycloak, Temporal, OpenFGA or other Fred services.
+the private schemas of Keycloak, Temporal or other Fred services.
 
 Internal catalog storage is defined by the `runtime_*` tables of
 [`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql)
@@ -190,7 +186,7 @@ and owned by [`agents/enablement.rs`](../../apps/control-plane/src/agents/enable
 A row enables one `(runtime_id, capability_id)` offer for every space of the
 organization; no row denies it. Its foreign key requires an observed offer, and
 enabling requires the offer to be currently advertised. It is SQL configuration,
-not an OpenFGA grant. The organization Capabilities tab reads it within the
+not an SQL grant. The organization Capabilities tab reads it within the
 inventory snapshot and writes it in the same authorized transaction as refresh,
 with a `capability.default_changed` audit event when the decision changes.
 `usable_capability_ids` filters agent forms and gates enrollment and capability
@@ -340,15 +336,17 @@ SQLx creates its history table itself; it is outside that generated diagram.
 
 | Table | Key and responsibility | Lifecycle and ownership |
 | --- | --- | --- |
-| `space` | UUID `id`; kind, name, optional personal owner, required `organization_id` and optional `parent_id`, both referencing `space.id`. | Control-plane records immutable placement before publishing matching FGA links. Roles and permission evaluation remain in OpenFGA. `deletion_id` marks scheduled cleanup without removing attachment metadata. |
+| `space` | UUID `id`; kind, name, optional personal owner, required `organization_id` and optional `parent_id`, both referencing `space.id`. | Control Plane stores placement and direct roles atomically. `deletion_id` marks scheduled cleanup without removing attachment metadata. |
 | `folder` | UUID `id`; named folder, containing space, optional parent folder and UUID-based path. | Control-plane owns the hierarchy. Placement is immutable; folder and parent must belong to the same space. `deletion_id` marks a retired row: reads and producers ignore it, and name uniqueness covers only active rows. |
 | `document` | UUID `id`; name, MIME type, size, SHA-256, creator, object key and quota owner. | Metadata for a stored original. The bytes live in object storage, not PostgreSQL. Placement is immutable. `deletion_id` marks a retired row: reads and producers ignore it, and name uniqueness covers only active rows. |
 | `deletion` | UUID `id`, unique `target_id`; durable deletion request, policy, deadlines, status and progress counters. | API and lifecycle worker share operational state. Target identifiers deliberately have no foreign keys so the receipt can survive target removal. `target_kind` is text constrained to `organization`, `team`, `project` or `document`. |
 | `document_upload` | UUID `id`, unique `(actor, request_key)`; upload reservation and receipt, object key, completion, retry and cleanup state. | Control-plane owns upload idempotency and reservations. Target space/folder IDs are historical references without foreign keys; the resulting document and retry predecessor have SQL links. |
 | `document_processing` | UUID `id`, unique `(actor, request_key)` and `workflow_id`; processing attempt, delivery lease, profile, generations, result and cleanup state. | Control-plane records processing orchestration. The document and space have SQL references. JSONB fields contain the submitted contract, settings and artifact metadata, not canonical authorization. |
 | `document_storage` | Boolean singleton; installation namespace, original/derived storage locations, inventory counters, cursor and lease. | Installation-wide storage binding and inventory progress, independent of any individual upload. |
-| `platform_bootstrap` | Boolean singleton; claimant, claim time and OpenFGA grant completion time. | Durable bootstrap receipt. `granted_at IS NULL` distinguishes an unfinished claim from a completed grant. This is not the platform-admin role store. |
-| `authorization_store` | Boolean singleton; configured/source/active OpenFGA store and published model ID. | Pins the installation's initialized authorization store/model. It contains no grants or permission matrix. |
+| `platform_bootstrap` | Boolean singleton; claimant, claim time and role-grant completion time. | Durable bootstrap receipt. The role grant and completed receipt commit atomically. This is not the platform-admin role store. |
+| `platform_role_grant` | Subject and typed platform role | Canonical direct platform grants. |
+| `space_role_grant` | Space, subject and typed space role | Canonical direct grants, deleted with the space. |
+| `agent_template_policy` | Organization and template | Organization default enablement, deleted with the organization. |
 | `terms_acceptance` | Text `user_id`; accepted terms version and timestamp. | Consent belongs to the authenticated subject independently of directory profiles and space membership. |
 | `user_identity` | UUID `id`; username, email, first/last names and last observation time. | Local-directory profiles observed after authentication, including generic OIDC users. No passwords, bearer tokens or grants. Usernames are intentionally not unique; exact lookup rejects ambiguous matches. |
 | `_sqlx_migrations` | Migration `version`; description, installation time, success, checksum and execution time. | Owned by SQLx. Records which immutable migration files were applied; application code must not rewrite its checksums. |
@@ -356,8 +354,7 @@ SQLx creates its history table itself; it is outside that generated diagram.
 ### Physical relationships
 
 The diagram represents SQL foreign keys. Absence of an edge is meaningful:
-SQL records immutable organization/parent placement; OpenFGA owns user-role relationships
-and evaluates its matching links. Subject identifiers such
+SQL records immutable placement and direct user-role relationships. Subject identifiers such
 as `actor`, `created_by`, `completed_by` and `terms_acceptance.user_id` do not
 reference `user_identity`: Keycloak directory mode does not require local profile
 rows. Do not add such foreign keys as an apparent completeness fix.
@@ -383,6 +380,7 @@ erDiagram
 "document" }o--|| "space" : "space_id"
 "document" }o--|| "folder" : "folder_id, space_id"
 "document" }o--o| "generation" : "published_generation"
+"document" }o--|| "session_metadata" : "session_id, space_id"
 "document_upload" |o--o| "document_upload" : "retry_of"
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
@@ -400,6 +398,8 @@ erDiagram
 "session_metadata" }o--o| "deletion" : "deletion_id"
 "organization_capability" }o--|| "space" : "organization_id"
 "organization_capability" }o--|| "runtime_capability" : "runtime_id, capability_id"
+"space_role_grant" }o--|| "space" : "space_id"
+"agent_template_policy" }o--|| "space" : "organization_id"
 
 "deletion" {
   uuid id
@@ -442,6 +442,7 @@ erDiagram
   uuid id
   uuid space_id FK
   uuid folder_id FK
+  uuid session_id FK
   text name
   text mime
   bigint size
@@ -467,13 +468,6 @@ erDiagram
   text completed_by
   timestamp_with_time_zone completed_at
   timestamp_with_time_zone granted_at
-}
-"authorization_store" {
-  boolean singleton
-  text configured_store
-  text source_store
-  text active_store
-  text model_id
 }
 "terms_acceptance" {
   text user_id
@@ -511,6 +505,7 @@ erDiagram
   uuid organization_id
   uuid space_id
   uuid folder_id
+  uuid session_id
   uuid quota_owner
   text name
   text mime
@@ -596,6 +591,7 @@ erDiagram
   jsonb tuning
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
+  bigint configuration_revision
 }
 "users_preferences" {
   text user_id
@@ -676,6 +672,7 @@ erDiagram
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
   uuid deletion_id FK
+  bigint agent_configuration_revision
 }
 "organization_capability" {
   uuid organization_id FK
@@ -684,11 +681,23 @@ erDiagram
   text enabled_by
   timestamp_with_time_zone enabled_at
 }
+"platform_role_grant" {
+  text subject
+  text role
+}
+"space_role_grant" {
+  uuid space_id FK
+  text subject
+  text role
+}
+"agent_template_policy" {
+  uuid organization_id FK
+  uuid template_id
+}
 ```
 <!-- end generated -->
 
-SQL records the immutable space tree without any grants. OpenFGA retains matching
-`parent` and `organization` links for its model and structural operations.
+SQL records the immutable space tree and direct role grants.
 What the schema enforces by itself:
 
 | Rule | Mechanism |
@@ -716,124 +725,34 @@ indexes support the actual traversal, quota and retry paths:
 | Upload receipts | Status is `pending`, `stored` or `failed`; stored status requires a document, and pending status has no completion timestamp. Partial indexes protect active names and index active quota, unacknowledged receipts, cleanup and expiration. |
 | Processing attempts | One active and one successful attempt per document are enforced by partial unique indexes. Additional indexes cover history, delivery and cleanup. Checks bound counters and the generations array (at most 64). Triggers verify the original's space/digest and prevent changes to processing identity or terminal outcome. |
 | Pending uploads | Delete triggers on `space` and `folder` refuse removal while pending uploads reference them, despite those historical IDs having no foreign keys. |
-| Installation state | `platform_bootstrap`, `authorization_store` and `document_storage` admit only the singleton key `true`. |
+| Installation state | `platform_bootstrap` and `document_storage` admit only the singleton key `true`. |
 | Consent and identities | Terms versions have length 1..128. `user_identity_username` indexes `(username, id)` without imposing username uniqueness. The four `user_identity_*_prefix` indexes on `lower(field) text_pattern_ops` serve the local prefix search. |
 
-SQL constraints do not replace OpenFGA checks or application mutation locks.
+SQL constraints do not replace typed permission checks or application mutation locks.
 In particular, parent kinds and organization agreement are validated by the
 application; foreign keys guarantee existence, not those domain rules. Sibling
 space names and membership eligibility are enforced by the application. See [security](03-security.md) and [organizations](04-organizations.md).
 For deployment and schema inspection, see
 [SQLx schema evolution](A3-manager-operations.md#sqlx-schema-evolution).
 
-## OpenFGA model
+## Permission storage and evaluation
 
-`store_name` identifies the configured source store. The SQL singleton
-`authorization_store` binds that name to the active store and model IDs; it holds
-no roles. Startup pins those IDs without selecting an arbitrary newer model or
-falling back to the source. A published model that differs from the binary's model
-is refused. Empty initialization publishes
-a fresh store only after its initialization writes succeed; existing state without a
-matching publication is refused. User IDs are the configured authenticated UID. In generic OIDC mode a non-UUID
-identity is normalized to UUIDv5 from the configured realm URL and identity; UUID
-identities are retained (see `auth.rs`).
+`platform_role_grant` and `space_role_grant` store direct roles. Immutable
+`space.organization_id` and `space.parent_id` define the bounded hierarchy.
+`agent_template_policy` records each organization's enabled template defaults.
+The typed evaluator in [`authorization.rs`](../../apps/control-plane/src/authorization.rs)
+implements the role matrix; inherited roles are evaluated, never copied as grants.
+Personal spaces have no parent and inherit no content permission.
 
-Each organization and the platform has a `guard` object with an immutable
-`initialized` sentinel and one random `version` revision. A mutation captures its
-scope revisions before authorization/state checks. Its Write deletes the captured
-revisions with `on_missing: error` and inserts fresh revisions together with the
-role delta. Missing revisions roll back the complete Write. Unknown outcomes end
-the attempt; replay captures fresh revisions and reauthorizes. Role insertions
-remain idempotent. Guard relations imply no permission.
+`POST /authorize/space` and `/authorize/platform` return `{allowed}`.
+`POST /authorize/scope` returns `{space_id, space_ids}`: an explicit anchor and
+only its authorized readable corpus spaces. `levels` can narrow that corpus;
+an empty list yields no corpus. These responses are not cached. Authorization
+for a later write is evaluated again inside its SQL transaction.
 
-This literal source extract preserves code identifiers and comments. The
-[responsibility comparison](A11-roles.md#responsibility-boundaries-and-current-enforcement) distinguishes
-the agreed owner/admin vocabulary from the permissions currently encoded below.
-
-<!-- generated: include apps/control-plane/openfga/model.fga text -->
-```text
-model
-  schema 1.1
-
-type user
-
-# One object, platform:root. Platform admin is the technical platform role; platform roles grant
-# no access to any space's content.
-type platform
-  relations
-    define platform_admin: [user]
-    define platform_observer: [user] or platform_admin
-    define feature_manager: [user] or platform_admin
-    define prompt_editor: [user] or platform_admin
-    define can_list_all_teams: feature_manager
-    define can_delete_team: platform_admin
-    define can_delete_space: platform_admin
-    define can_rescue_team_owner: platform_admin
-    define can_edit_agent_class_path: platform_admin
-    define can_observe_platform: platform_observer
-    define can_administer_users: platform_admin
-    define can_manage_platform: platform_admin
-    define can_manage_capabilities: feature_manager
-    define can_edit_platform_prompt: prompt_editor
-
-# Permission links match immutable SQL placement, written once at creation. A personal space has no
-# parent; `organization` records who manages it and grants nothing.
-# A role on a space requires a direct content role on its parent (enforced by control-plane).
-type space
-  relations
-    define parent: [space]
-    define organization: [space]
-    define member: [user]
-    define editor: [user]
-    define owner: [user]
-    define analyst: [user]
-    # Technical role of an organization: names its owners, reads nothing, never descends.
-    define organization_admin: [user]
-    # Editor, owner and analyst reach every descendant; member stays local.
-    define effective_editor: editor or effective_editor from parent
-    define effective_owner: owner or effective_owner from parent
-    define effective_analyst: analyst or effective_analyst from parent
-    define can_read: member or effective_editor or effective_analyst
-    define can_write: effective_editor
-    define can_manage: effective_owner
-    define can_run_evaluations: effective_analyst or effective_owner
-    define can_manage_evaluation_corpus: effective_analyst or effective_owner
-    define can_read_conversations_for_evaluation: effective_analyst
-    define can_administer_organization: organization_admin
-    # A direct business owner on an active organization, team or project is eligible.
-    # Control Plane resolves eligible scopes within the caller's organization.
-    define can_create_personal_space: owner
-    # Contextual reverse links supplied only after resolving a team's organization.
-    define template_team: [space]
-    define template_personal_team: [space]
-
-# Each template object belongs to exactly one organization; no global enablement.
-type agent_template
-  relations
-    define organization: [space]
-    define default_on: [space]
-    define enabled: [space]
-    define disabled: [space]
-    define personal_on: [space]
-    define personal_disabled: [space]
-    define can_manage: can_manage from organization
-    define personal_grant: template_personal_team from personal_on
-    define personal_block: template_personal_team from personal_disabled
-    define inherited_grant: template_team from default_on or personal_grant
-    define inherited: inherited_grant but not personal_block
-    define granted: enabled or inherited
-    define can_use: granted but not disabled
-
-# Mutation ordering only; these relations grant no permission.
-type revision
-
-type guard
-  relations
-    define initialized: [revision]
-    define version: [revision]
-```
-<!-- end generated -->
-
+Knowledge Flow uses its own authenticated service account and verified
+`person`, `run`, `agent` delegation query fields. The person's current admission
+and rights are evaluated; the workload acquires no content privilege.
 
 ## Provisioning declarations
 
@@ -853,7 +772,7 @@ A roles object maps declared usernames to arrays of `member`, `editor`, `analyst
 deduplicated. Admin and owner confer no implicit content role. Every new space
 requires a declared admin, and every new organization a declared owner. Every child-role
 holder requires a declared or existing direct parent content role; inherited access
-does not count. Existing direct roles are read from OpenFGA; no space grant is synthesized. The demo explicitly declares
+does not count. Existing direct roles are read from PostgreSQL; no space grant is synthesized. The demo explicitly declares
 organization membership for team-role holders.
 
 References are nonempty and unique across the entire bundle. Parents and role
@@ -890,9 +809,9 @@ lifecycle refuses new requests with 503 while preserving reads and replay. Overl
 retired targets, personal-only deletion and document-bearing scopes return 409.
 Unsupported documents or unexpected references discovered during cleanup block the
 receipt; later sweeps resume after the cause is corrected. Completion requires all
-manifest rows and their FGA references absent.
+manifest rows and their role grants absent.
 
 `deletion` records each deletion and `space.deletion_id` its manifest. The receipt has no
 foreign key to its target, and survives physical deletion. Its parent snapshot is
 operational recovery metadata. SQL retains immutable placement on space rows;
-OpenFGA retains grants and the links evaluated by its model.
+PostgreSQL stores direct grants and placement.

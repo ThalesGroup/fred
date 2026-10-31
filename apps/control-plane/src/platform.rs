@@ -16,17 +16,17 @@
 //! lock so a revoked admin cannot complete a previously authorized mutation.
 
 use crate::{
+    authorization::{self, Authorization},
     bootstrap,
     error::{AppError, AppResult},
-    fga::{Fga, Scope},
     keycloak::Directory,
     roles::PlatformRole,
 };
 use serde::Serialize;
 use sqlx::PgPool;
 
-pub(crate) async fn require_admin(fga: &Fga, caller: &str) -> AppResult<()> {
-    if !fga.is_platform_admin(caller).await? {
+pub(crate) async fn require_admin(authorization: &Authorization, caller: &str) -> AppResult<()> {
+    if !authorization.is_platform_admin(caller).await? {
         return Err(AppError::Forbidden);
     }
     Ok(())
@@ -38,9 +38,9 @@ pub struct Grant {
     pub role: PlatformRole,
 }
 
-pub async fn list(fga: &Fga, caller: &str) -> AppResult<Vec<Grant>> {
-    require_admin(fga, caller).await?;
-    Ok(fga
+pub async fn list(authorization: &Authorization, caller: &str) -> AppResult<Vec<Grant>> {
+    require_admin(authorization, caller).await?;
+    Ok(authorization
         .platform_grants()
         .await?
         .into_iter()
@@ -50,21 +50,19 @@ pub async fn list(fga: &Fga, caller: &str) -> AppResult<Vec<Grant>> {
 
 pub async fn grant(
     pool: &PgPool,
-    fga: &Fga,
     directory: Option<&Directory>,
     caller: &str,
     target: &str,
     role: PlatformRole,
 ) -> AppResult<()> {
-    let tx = bootstrap::locked(pool).await?;
-    let mut guard = fga.guard(&[Scope::Platform]).await?;
-    require_admin(fga, caller).await?;
+    let mut tx = bootstrap::locked(pool).await?;
+    require_admin_locked(&mut tx, caller).await?;
     let directory = directory
         .ok_or_else(|| AppError::Unavailable("Keycloak directory is not configured".into()))?;
     if !directory.exists(target).await? {
         return Err(AppError::NotFound);
     }
-    fga.write_platform(&mut guard, target, role, true).await?;
+    authorization::write_platform(&mut tx, target, role, true).await?;
     crate::logging::audit_relation(Some(caller), target, role.relation(), "platform:root", true);
     tx.commit().await?;
 
@@ -73,15 +71,13 @@ pub async fn grant(
 
 pub async fn revoke(
     pool: &PgPool,
-    fga: &Fga,
     caller: &str,
     target: &str,
     role: PlatformRole,
 ) -> AppResult<()> {
-    let tx = bootstrap::locked(pool).await?;
-    let mut guard = fga.guard(&[Scope::Platform]).await?;
-    require_admin(fga, caller).await?;
-    let grants = fga.platform_grants().await?;
+    let mut tx = bootstrap::locked(pool).await?;
+    require_admin_locked(&mut tx, caller).await?;
+    let grants = authorization::platform_grants(&mut *tx).await?;
     if !grants.contains(&(target.to_owned(), role)) {
         return Err(AppError::NotFound);
     }
@@ -94,7 +90,7 @@ pub async fn revoke(
             "the platform must retain an admin".into(),
         ));
     }
-    fga.write_platform(&mut guard, target, role, false).await?;
+    authorization::write_platform(&mut tx, target, role, false).await?;
     crate::logging::audit_relation(
         Some(caller),
         target,
@@ -105,4 +101,18 @@ pub async fn revoke(
     tx.commit().await?;
 
     Ok(())
+}
+
+pub(crate) async fn require_admin_locked(
+    conn: &mut sqlx::PgConnection,
+    caller: &str,
+) -> AppResult<()> {
+    if authorization::platform_roles(conn, caller)
+        .await?
+        .contains(&PlatformRole::PlatformAdmin)
+    {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
 }

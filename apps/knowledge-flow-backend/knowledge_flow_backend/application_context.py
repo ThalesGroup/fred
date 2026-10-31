@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional, Type, Union
 
+import httpx
 from fred_core import (
     BaseFilesystem,
     BaseLogStore,
@@ -25,8 +26,6 @@ from fred_core import (
     LocalFilesystem,
     MinioFilesystem,
     ModelProvider,
-    OpenFgaRebacConfig,
-    RebacEngine,
     build_log_store,
     get_embeddings,
     get_model,
@@ -37,11 +36,10 @@ from fred_core.documents import BaseDocumentMetadataStore as BaseMetadataStore
 from fred_core.documents import PostgresDocumentMetadataStore as PostgresMetadataStore
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIWriter, build_kpi_writer
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
-from fred_core.security.rebac.authorization_binding import read_authorization_binding
-from fred_core.security.rebac.authorization_model import validate_authorization_binding
-from fred_core.security.rebac.published_engine import PublishedOpenFgaRebacEngine
+from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MBearerAuth, M2MTokenProvider
 from fred_core.sql import create_async_engine_from_config
 from fred_core.users.store.postgres_user_store import init_user_store
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -157,12 +155,6 @@ def get_kpi_writer() -> BaseKPIWriter:
         KPIWriter: The singleton KPI writer instance.
     """
     return get_app_context().get_kpi_writer()
-
-
-def get_rebac_engine() -> RebacEngine:
-    """Expose the shared ReBAC engine instance."""
-
-    return get_app_context().get_rebac_engine()
 
 
 def get_app_context() -> "ApplicationContext":
@@ -304,7 +296,7 @@ class ApplicationContext:
     _content_store_instance: Optional[BaseContentStore] = None
     _embedder_instance: Optional[Embeddings] = None
     _kpi_writer: Optional[BaseKPIWriter] = None
-    _rebac_engine: Optional[RebacEngine] = None
+    _control_plane_client: httpx.AsyncClient | None = None
     _filesystem_instance: Optional[BaseFilesystem] = None
     _pg_async_engine: Optional[AsyncEngine] = None
     _task_service_instance: Optional[Any] = None
@@ -875,32 +867,6 @@ class ApplicationContext:
         )
         return self._opensearch_client
 
-    def get_task_service(self) -> Any:
-        if self._task_service_instance is not None:
-            return self._task_service_instance
-        from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
-        from fred_core.tasks.service import TaskService
-
-        from knowledge_flow_backend.features.scheduler.document_failure import on_reconciled_terminal
-        from knowledge_flow_backend.models.task_models import TASK_TABLES
-
-        backend = self.get_scheduler_backend()
-        config = self.get_config()
-        temporal_provider = TemporalClientProvider(config.scheduler.temporal) if backend == SchedulerBackend.TEMPORAL else None
-        self._task_service_instance = TaskService.build(
-            engine=self.get_pg_async_engine(),
-            tables=TASK_TABLES,
-            backend=backend,
-            temporal_client_provider=temporal_provider,
-            postgres_dsn=config.storage.postgres.dsn() if backend == SchedulerBackend.TEMPORAL else None,
-            # #2279: when Temporal ends an execution on its own (TIMED_OUT because
-            # no worker could pick the work up), no worker code runs to record the
-            # failure. Reconciliation holds the verdict API-side; this hook is what
-            # carries it onto the document, so the row stops reading "processing".
-            on_reconciled_terminal=on_reconciled_terminal,
-        )
-        return self._task_service_instance
-
     def get_async_sql_engine(self) -> AsyncEngine:
         """Create one async SQL engine for the whole app"""
         if self._pg_async_engine is None:
@@ -925,25 +891,21 @@ class ApplicationContext:
         )
         return self._kpi_writer
 
-    async def open_published_rebac_engine(self) -> None:
-        """Check permissions against the model Control Plane published, read-only.
+    def open_authorization_client(self) -> None:
+        security = self.configuration.security
+        m2m = security.m2m
+        if not m2m.enabled or not security.delegation.act_for_people or not self.configuration.control_plane_url:
+            raise ValueError("Knowledge Flow API requires Control Plane URL, workload credentials and security.delegation.act_for_people")
+        endpoint = resolve_endpoints(provider=m2m.provider, realm_url=str(m2m.realm_url).rstrip("/"), token_url=str(m2m.token_url) if m2m.token_url else None)
+        provider = M2MTokenProvider(
+            M2MAuthConfig(keycloak_realm_url=str(m2m.realm_url).rstrip("/"), client_id=m2m.client_id, scope=m2m.scope, secret_env=m2m.secret_env_var, token_url_override=endpoint.token_endpoint)
+        )
+        self._control_plane_client = httpx.AsyncClient(auth=M2MBearerAuth(provider), timeout=10.0, follow_redirects=False)
 
-        Same startup as Weaver agent pods: no store creation, model write or tuple.
-        """
-        rebac_config = self.configuration.security.rebac
-        if not isinstance(rebac_config, OpenFgaRebacConfig):
-            raise ValueError("Weaver Knowledge Flow requires OpenFGA")
-        sql_engine = self.get_pg_async_engine()
-        binding = await read_authorization_binding(sql_engine, expected_configured_store=rebac_config.store_name)
-        await validate_authorization_binding(binding, rebac_config)
-        engine = PublishedOpenFgaRebacEngine(rebac_config, binding, kpi_writer=self.get_kpi_writer())
-        await engine.get_client()
-        self._rebac_engine = engine
-
-    def get_rebac_engine(self) -> RebacEngine:
-        if self._rebac_engine is None:
-            raise RuntimeError("The published authorization engine is opened at API startup")
-        return self._rebac_engine
+    def get_authorization_client(self) -> httpx.AsyncClient:
+        if self._control_plane_client is None:
+            raise RuntimeError("Control Plane client is opened at API startup")
+        return self._control_plane_client
 
     def get_kpi_store(self) -> BaseKPIStore:
         writer = self.get_kpi_writer()
@@ -1095,22 +1057,6 @@ class ApplicationContext:
             manager_processing = self.configuration.manager_processing
             if not (manager_processing and manager_processing.enabled) and not os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET"):
                 raise ValueError("Missing required environment variable: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
-
-        rebac_cfg = self.configuration.security.rebac
-        if rebac_cfg and rebac_cfg.enabled:
-            # Print rebac type
-            logger.info("  🕸️ Rebac Enabled:")
-            logger.info("     • Type: %s", rebac_cfg.type)
-            if isinstance(rebac_cfg, OpenFgaRebacConfig):
-                logger.info("     • API URL: %s", rebac_cfg.api_url)
-                logger.info("     • Store Name: %s", rebac_cfg.store_name)
-                logger.info("     • Sync Schema on Init: %s", rebac_cfg.sync_schema_on_init)
-                logger.info(
-                    "     • Create Store if Needed: %s",
-                    rebac_cfg.create_store_if_needed,
-                )
-        else:
-            logger.info("  🕸️ Rebac Disabled")
 
         embedding = self.configuration.embedding_model
         # Non-secret settings from YAML
@@ -1341,12 +1287,8 @@ class ApplicationContext:
         except Exception:
             logger.debug("[HTTP] Failed to shutdown shared clients", exc_info=True)
 
-        # ReBAC engine (e.g. OpenFGA aiohttp session)
-        if self._rebac_engine is not None:
-            try:
-                await self._rebac_engine.close()
-            except Exception:
-                logger.debug("[REBAC] Failed to close ReBAC engine", exc_info=True)
+        if self._control_plane_client is not None:
+            await self._control_plane_client.aclose()
 
         # Async PG engine
         if self._pg_async_engine is not None:

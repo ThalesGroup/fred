@@ -37,7 +37,6 @@ from fred_core.security.delegation import (
     DelegationConfig,
     DelegationGrant,
     bears_service_account_markers,
-    enforce_account_status,
     get_delegation_config,
     holds_caller_role,
     initialize_delegation,
@@ -589,7 +588,6 @@ def test_the_delegation_surface_is_reachable_from_the_package_root() -> None:
         "is_delegation_caller": is_delegation_caller,
         "require_own_credential": require_own_credential,
         "require_workload_caller": require_workload_caller,
-        "enforce_account_status": enforce_account_status,
     }
 
     for name, obj in exported.items():

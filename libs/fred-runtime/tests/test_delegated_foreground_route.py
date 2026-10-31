@@ -14,7 +14,6 @@ import json
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
@@ -102,18 +101,6 @@ def _person_pod(
                 uid="owner-a", username="synthetic", roles=[], client_id="browser"
             )
         ),
-    )
-    rebac = SimpleNamespace(
-        get_client=AsyncMock(),
-        close=AsyncMock(),
-        requires_active_accounts=True,
-        enabled=True,
-        validate_account_status_model=AsyncMock(),
-        require_active_account=AsyncMock(),
-        check_user_team_permission_or_raise=AsyncMock(),
-    )
-    monkeypatch.setattr(
-        agent_app_module, "PublishedOpenFgaRebacEngine", lambda *args, **kwargs: rebac
     )
     config = _build_test_config(
         tmp_path,
@@ -301,8 +288,6 @@ async def test_direct_stream_preserves_terms_decision_at_http_boundary(
     connection = _Connection(app)
     async with _serving(connection) as client:
         _install_delegation()
-        rebac = get_runtime_context().config.rebac_engine
-        assert rebac is not None
         terms = AsyncMock(side_effect=HTTPException(expected_status, cause))
         monkeypatch.setattr(pod_security, "_require_accepted", terms)
         response = await asyncio.wait_for(_post(client, _MANAGED_TURN), TIMEOUT)
@@ -311,7 +296,6 @@ async def test_direct_stream_preserves_terms_decision_at_http_boundary(
     assert response.json()["detail"] == cause
     assert terms.await_args is not None
     assert terms.await_args.args[1].uid == "owner-a"
-    rebac.require_active_account.assert_not_awaited()
     assert "owner-a" not in response.text
     assert PERSON_TOKEN not in response.text
 
@@ -328,8 +312,6 @@ async def test_managed_stream_preserves_terms_decision_at_http_boundary(
     connection = _Connection(app)
     async with _serving(connection) as client:
         _install_delegation()
-        rebac = get_runtime_context().config.rebac_engine
-        assert rebac is not None
         terms = AsyncMock(side_effect=HTTPException(expected_status, cause))
         monkeypatch.setattr(pod_security, "_require_accepted", terms)
         response = await asyncio.wait_for(
@@ -348,8 +330,6 @@ async def test_managed_stream_preserves_terms_decision_at_http_boundary(
     assert response.json()["detail"] == cause
     assert terms.await_args is not None
     assert terms.await_args.args[1].uid == "owner-a"
-    rebac.require_active_account.assert_not_awaited()
-    rebac.check_user_team_permission_or_raise.assert_not_awaited()
     assert "owner-a" not in response.text
     assert PERSON_TOKEN not in response.text
 
@@ -404,13 +384,10 @@ async def test_a_delegated_stream_runs_once_and_carries_no_run_handle(
     connection = _Connection(app)
     async with _serving(connection) as client:
         runtime = _install_delegation()
-        rebac = get_runtime_context().config.rebac_engine
-        assert rebac is not None
         response = await asyncio.wait_for(_post(client, _MANAGED_TURN), TIMEOUT)
 
     assert response.status_code == 200
     # The request's own account status check is the run's only one at admission.
-    rebac.require_active_account.assert_not_awaited()
     assert "x-fred-run-id" not in response.headers
     assert not any(line.startswith("id:") for line in response.text.splitlines())
     assert _payloads(response.text)[-1]["kind"] == expected_kind

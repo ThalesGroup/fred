@@ -266,7 +266,7 @@
       "properties": {
         "accept_delegated_calls": {
           "default": false,
-          "description": "Accept person/run/agent assertions only at the runtime resolver.",
+          "description": "Accept person/run/agent assertions at runtime and decision endpoints.",
           "type": "boolean"
         },
         "audience": {
@@ -649,39 +649,6 @@
       ],
       "type": "string"
     },
-    "RebacConfig": {
-      "additionalProperties": false,
-      "properties": {
-        "api_url": {
-          "type": "string"
-        },
-        "create_store_if_needed": {
-          "type": "boolean"
-        },
-        "store_name": {
-          "description": "Never fred's own store: syncing this model there would replace fred's.",
-          "type": "string"
-        },
-        "sync_schema_on_init": {
-          "type": "boolean"
-        },
-        "timeout_millisec": {
-          "format": "int64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "token_env_var": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "api_url"
-      ],
-      "type": "object"
-    },
     "RuntimeCatalogSource": {
       "additionalProperties": false,
       "properties": {
@@ -755,9 +722,6 @@
             "null"
           ]
         },
-        "rebac": {
-          "$ref": "#/$defs/RebacConfig"
-        },
         "user": {
           "$ref": "#/$defs/UserConfig"
         },
@@ -766,8 +730,7 @@
         }
       },
       "required": [
-        "user",
-        "rebac"
+        "user"
       ],
       "type": "object"
     },

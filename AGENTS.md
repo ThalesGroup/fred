@@ -87,7 +87,7 @@ Control Plane governs.
 
 | Component | Target role | On `weaver` today |
 | --- | --- | --- |
-| Control Plane (`apps/control-plane`, Rust) | Identity and admission, OpenFGA permissions, organizations, teams, spaces, users, document drive, ingestion through Temporal, agent instances | Replaces the deleted Python `apps/control-plane-backend`; covers part of the product. Unported screens still call `slices/legacyControlPlane` and fail. |
+| Control Plane (`apps/control-plane`, Rust) | Identity and admission, PostgreSQL-backed permissions, organizations, teams, spaces, users, document drive, ingestion through Temporal, agent instances | Replaces the deleted Python `apps/control-plane-backend`; covers part of the product. Unported screens still call `slices/legacyControlPlane` and fail. |
 | Agent pod (`apps/fred-agents`, `libs/fred-runtime`, `fred-sdk`, capability libraries) | Runs agents; reaches knowledge only through capabilities, which call Knowledge Flow API | Custom assistant wired. `document_access` search calls Knowledge Flow API with the turn's space; other capabilities call Knowledge Flow endpoints not yet adapted or mounted (see capability lots below). |
 | Knowledge Flow worker (`main_worker.py`) | Temporal worker for document processing | Native ingestion path being finished. |
 | Knowledge Flow API (`main.py`) | Serves knowledge to capabilities (search, markdown, tree, content, files, tabular) under the space-based model | Capability backend only: Weaver startup, delegated calls only, mounts vector search and document chunks. Other endpoints are adapted and mounted by their capability lots; the Swift UI controllers are deleted in K3. |
@@ -117,7 +117,7 @@ Several developers and their assistants work on this branch, in separate lots:
   reformat, stage or commit them. If your lot must touch such a file, stop and
   ask. Stage explicit paths, never `git add -A` or `git add .`.
 - Re-check shared sequences just before creating an entry: next SQL migration
-  number, OpenFGA model, generated clients.
+  number and generated clients.
 - Each lot has one GitHub issue naming its owner. The issue holds the brief;
   the PR records decisions, divergences and the end-to-end validation.
 
@@ -185,7 +185,7 @@ clear, robust behavior. Do not weaken controls or compress code to claim savings
   decision (2026-10-26) supersedes the earlier next-operation rechecks and
   five-minute revocation bound for agent turns: one complete trusted
   Control Plane resolution per turn, then local enforcement of that fixed context
-  for every LLM call, retry and descendant. No additional HTTP/SQL/OpenFGA reads to
+  for every LLM call, retry and descendant. No additional HTTP/SQL reads to
   refresh turn authority during the turn; revocation/decommissioning is observed at
   the next turn. A started turn may finish. Explicit cancellation, terminal-run
   enforcement, execution limits and resource-specific data checks remain separate.
@@ -207,24 +207,25 @@ clear, robust behavior. Do not weaken controls or compress code to claim savings
   access. A missing Weaver equivalent is a contract gap to resolve explicitly,
   never permission to disable the Swift guarantee or reproduce a legacy bypass.
 - The agent's exchange with Control Plane to resolve its execution context already
-  exists in Swift. Clarify and simplify that contract; do not infer a decision to
-  replace all Python authorization with REST calls or to introduce a new signed
-  execution grant. The accepted M4 freshness boundary is one complete resolution
+  exists in Swift. Control Plane owns permission evaluation in PostgreSQL;
+  Python authenticates callers and enforces the returned context and local data checks.
+  Do not introduce a new signed execution grant. The accepted M4 freshness boundary is one complete resolution
   at turn admission; do not reintroduce per-invocation authority reads.
 - Knowledge Flow API stays. Capabilities reach knowledge through its endpoints;
   only Knowledge Flow holds storage credentials. Each endpoint must establish,
   for the person the call acts for, read access to the requested space before
   exposing data, then apply the shared visibility primitive
   (`fred_core.documents.access`). Decision K1: Knowledge Flow validates the
-  person's (delegated) identity as in Swift, then makes one OpenFGA `can_read` check on
-  the requested space against the published Weaver model. It neither asks
-  Control Plane nor trusts a pod-asserted space. The pod sends the space from
+  person's delegated identity, then requests its exact authorized corpus from
+  Control Plane with its own workload bearer and validated delegation triplet.
+  Scope includes only readable anchor/ancestor spaces; it retains an explicit anchor
+  for separately checked attachments. An empty corpus never means unrestricted access. The pod sends the space from
   its turn binding, never from model arguments. This per-request check is a
   resource-specific data check, not a turn-authority refresh.
   Storage credentials authenticate infrastructure access, not Bob's entitlement.
 - Document permissions derive from their containing Weaver space (organization,
   team, project or personal space); do not recreate per-document authorization
-  tuples. PostgreSQL placement/publication/lifecycle facts and OpenFGA permissions
+  tuples. PostgreSQL placement/publication/lifecycle facts and PostgreSQL-backed permissions
   jointly constrain access. An index hit alone is not authorization. Consolidate
   checks into a few shared, efficient primitives; do not duplicate the permission
   matrix in each capability or assume a fixed RPC budget without evidence.
@@ -454,16 +455,13 @@ Use the [user journeys](docs/architecture/02.1-user-journeys.md) to explain each
 implemented entry point, and the [reconstruction checklist](docs/swift/design/FRED-RECONSTRUCTION-CHECKLIST.md)
 to check prerequisites while scoping the next feature.
 
-Keep direct roles in OpenFGA and let its model evaluate permissions; do not move
-canonical grants into SQL or duplicate the permission matrix in Rust. For each
-authorization change, identify the exact OpenFGA request types, filters, count,
-pagination, tuple volume, dependency ordering and SQL lock duration. State which
-cardinalities drive cost (users, memberships, spaces or documents), distinguish
-client RPC counts from server-side evaluation work, and verify affected request
-budgets with focused tests. Keep the implemented inventory in the arc42 quality
-chapter; put proposed costs and trade-offs in the existing OpenSpec design.
-Report measurements with their fixture sizes and concurrency. Do not infer
-scalability from one Check call, passing correctness tests or a small demo.
+Keep canonical roles and immutable placement in PostgreSQL. Control Plane's typed
+Rust evaluator owns the permission matrix; Python callers request decisions and
+enforce their local resource constraints. Role mutations and authorization for
+writes share the relevant SQL transaction and advisory locks. No generic graph,
+remote authorization store, model publication or dual-write guard is needed.
+Measure cost by users, direct grants and spaces; do not infer scalability from
+one passing request or a small demo.
 
 Each step is one clean, tested and documented commit on this branch. Do not
 push without the developer's explicit agreement. Obtain independent review,
@@ -476,8 +474,6 @@ prefer additive changes and describe any required data transformation before app
 it. Never alter `_sqlx_migrations` checksums to bypass validation. Before changing an
 existing installation, inspect its migration history and take a backup. A fresh
 installation applies the complete migration chain.
-Before the first production release, the OpenFGA model is still replaced rather
-than upgraded; this separate policy does not require resetting SQL for additive changes.
 
 After implementation and the review/correction passes, perform a dedicated
 documentation pass over the arc42 dossier in `docs/architecture/`. Every

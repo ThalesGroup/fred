@@ -237,11 +237,6 @@ security:
     realm_url: "http://app-keycloak:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
-  rebac:
-    enabled: false
-    type: openfga
-    api_url: "http://localhost:9080"
-
 # Keep ingestion synchronous for easier test scripting and deterministic logs.
 scheduler:
   enabled: false

@@ -24,17 +24,11 @@ import pytest
 
 from fred_core.common import PostgresStoreConfig
 from fred_core.logs import log_setup as log_setup_module
-from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.rebac.rebac_engine import (
-    RebacReference,
-    TeamPermission,
-)
 from fred_core.sql import base_sql
 from fred_core.sql.base_sql import (
     create_async_engine_from_config,
     create_engine_from_config,
 )
-from fred_core.tests.security.rebac_fakes import FakeRebacEngine
 
 _SECRET = "canary-p4ssw0rd-not-elsewhere"  # nosec B105 # pragma: allowlist secret
 _HOST = "canary-host-not-elsewhere.internal"
@@ -202,22 +196,6 @@ def test_missing_password_is_reported_without_naming_the_variable(
     assert sink.sightings(_REQUIRED_ENV) == []
     for needle in (_HOST, _ACCOUNT, _DATABASE):
         assert sink.sightings(needle) == []
-
-
-@pytest.mark.asyncio
-async def test_an_authorization_denial_logs_no_subject_or_resource(sink) -> None:
-    """A denial names who wanted what — the identifying pair to keep out."""
-    rebac = FakeRebacEngine(permitted=False)
-
-    with pytest.raises(AuthorizationError):
-        await rebac.check_permission_or_raise(
-            RebacReference(type=Resource.TEAM, id=_ACCOUNT),
-            TeamPermission.CAN_USE_TEAM_APPLICATIONS,
-            RebacReference(type=Resource.APP, id=_DATABASE),
-        )
-
-    assert sink.sightings(_ACCOUNT) == []
-    assert sink.sightings(_DATABASE) == []
 
 
 def test_the_canary_probe_can_actually_see_a_leak() -> None:

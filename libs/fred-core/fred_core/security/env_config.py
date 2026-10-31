@@ -6,12 +6,11 @@ import json
 import os
 from typing import Literal
 
-from pydantic import AnyHttpUrl, AnyUrl
+from pydantic import AnyUrl
 
 from fred_core.security.delegation import DelegationConfig
 from fred_core.security.structure import (
     M2MSecurity,
-    OpenFgaRebacConfig,
     SecurityConfiguration,
     UserClaims,
     UserSecurity,
@@ -53,7 +52,6 @@ def _delegation(env_name: str) -> DelegationConfig:
 def security_configuration_from_env(
     *,
     m2m_secret_env: str,
-    openfga_token_env: str,
     delegation_env: str = DELEGATION_ENV_DEFAULT,
 ) -> SecurityConfiguration:
     """The hardened profile a first-party application runs under.
@@ -116,15 +114,4 @@ def security_configuration_from_env(
             secret_env_var=m2m_secret_env,
         ),
         delegation=_delegation(delegation_env),
-        rebac=OpenFgaRebacConfig(
-            enabled=True,
-            api_url=AnyHttpUrl(_required("OPENFGA_API_URL")),
-            store_name=os.environ.get("OPENFGA_STORE_NAME", "fred"),
-            authorization_model_id=_optional("OPENFGA_AUTHORIZATION_MODEL_ID"),
-            # A first-party application reads the shared model and never owns it.
-            create_store_if_needed=False,
-            sync_schema_on_init=False,
-            token_env_var=openfga_token_env,
-            timeout_millisec=5000,
-        ),
     )

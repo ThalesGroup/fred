@@ -21,7 +21,9 @@ def run(command: list[str], *, body: str | None = None, step: str | None = None)
     result = subprocess.run(command, input=body, text=True, capture_output=True)
     if result.returncode:
         # Subcommands may process Secrets; never echo their arguments or payloads.
-        raise RuntimeError(f"{step or command[0]} failed while preparing ingestion (exit {result.returncode})")
+        raise RuntimeError(
+            f"{step or command[0]} failed while preparing ingestion (exit {result.returncode})"
+        )
     return result.stdout
 
 
@@ -33,13 +35,25 @@ def prepare() -> None:
     namespace = os.environ.get("K3D_NAMESPACE", "fred")
     kube = ["kubectl", "--context", os.environ["KUBE_CONTEXT"], "-n", namespace]
     # Use the same templates and precedence as the deployment (including the factory environment).
-    command = ["helmfile", "--file", str(here / "helmfile.yaml.gotmpl"),
-               "--kube-context", os.environ["KUBE_CONTEXT"], "--namespace", namespace,
-               "template", "--skip-deps"]
+    command = [
+        "helmfile",
+        "--file",
+        str(here / "helmfile.yaml.gotmpl"),
+        "--kube-context",
+        os.environ["KUBE_CONTEXT"],
+        "--namespace",
+        namespace,
+        "template",
+        "--skip-deps",
+    ]
     for values in os.environ.get("K3D_APP_VALUES", "").splitlines():
         command += ["--values", values]
     manifests = [item for item in yaml.safe_load_all(run(command)) if item]
-    configs = {item["metadata"]["name"]: item for item in manifests if item["kind"] == "ConfigMap"}
+    configs = {
+        item["metadata"]["name"]: item
+        for item in manifests
+        if item["kind"] == "ConfigMap"
+    }
     worker_yaml = configs["knowledge-flow-worker-back"]["data"]["configuration.yaml"]
     worker_config = yaml.safe_load(worker_yaml)
     api_config = yaml.safe_load(
@@ -47,17 +61,33 @@ def prepare() -> None:
     )
     generated = output / "manager-ingestion.generated.yaml"
     if not worker_config.get("manager_processing", {}).get("enabled"):
-        raise RuntimeError("This profile requires manager_processing.enabled for the KF worker")
+        raise RuntimeError(
+            "This profile requires manager_processing.enabled for the KF worker"
+        )
     corpus_index, api_indexes = corpus_settings(worker_config, api_config)
     indexes = [corpus_index]
     kpi = worker_config["observability"]["kpi"]["opensearch"]
     if kpi["enabled"]:
         indexes.append(concrete_index(kpi.get("index")))
-    deploys = {item["metadata"]["name"]: item for item in manifests if item["kind"] == "Deployment"}
-    expected_deployments = {"control-plane-backend", "knowledge-flow-backend", "knowledge-flow-worker", "frontend", "fred-agents"}
+    deploys = {
+        item["metadata"]["name"]: item
+        for item in manifests
+        if item["kind"] == "Deployment"
+    }
+    expected_deployments = {
+        "control-plane-backend",
+        "knowledge-flow-backend",
+        "knowledge-flow-worker",
+        "frontend",
+        "fred-agents",
+    }
     if set(deploys) != expected_deployments:
-        raise RuntimeError("Expected only control-plane-backend, knowledge-flow-backend, knowledge-flow-worker, frontend and fred-agents deployments")
-    image = deploys["knowledge-flow-worker"]["spec"]["template"]["spec"]["containers"][0]["image"]
+        raise RuntimeError(
+            "Expected only control-plane-backend, knowledge-flow-backend, knowledge-flow-worker, frontend and fred-agents deployments"
+        )
+    image = deploys["knowledge-flow-worker"]["spec"]["template"]["spec"]["containers"][
+        0
+    ]["image"]
     image_id = run(["docker", "image", "inspect", "--format", "{{.Id}}", image]).strip()
     with tempfile.TemporaryDirectory(prefix="fred-contract-") as directory:
         path = Path(directory) / "configuration.yaml"
@@ -66,23 +96,67 @@ def prepare() -> None:
         # The image runs as a non-root user and must traverse this bind mount.
         Path(directory).chmod(0o755)
         path.chmod(0o644)
-        exported = run(["docker", "run", "--rm", "--network", "none", "--entrypoint", "python", "-v", f"{directory}:/export:ro", image,
-                        "-m", "knowledge_flow_backend.features.scheduler.export_contract", "--configuration", "/export/configuration.yaml"])
+        exported = run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--entrypoint",
+                "python",
+                "-v",
+                f"{directory}:/export:ro",
+                image,
+                "-m",
+                "knowledge_flow_backend.features.scheduler.export_contract",
+                "--configuration",
+                "/export/configuration.yaml",
+            ]
+        )
     contract = json.loads(exported)
-    if contract.get("workflow") != "ProcessPush" or set(contract.get("profiles", {})) != {"fast", "medium", "rich"}:
+    if contract.get("workflow") != "ProcessPush" or set(
+        contract.get("profiles", {})
+    ) != {"fast", "medium", "rich"}:
         raise RuntimeError("Worker image exported an invalid ingestion contract")
-    pipeline = json.loads(run([
-        "docker", "run", "--rm", "--network", "none", "--entrypoint", "python", image, "-c",
-        "import json; from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import HYBRID_SEARCH_PIPELINE_NAME, HYBRID_SEARCH_PIPELINE_CONFIG; print(json.dumps({'name': HYBRID_SEARCH_PIPELINE_NAME, 'body': HYBRID_SEARCH_PIPELINE_CONFIG}))",
-    ]))
-    digest = hashlib.sha256((image_id + "\n" + worker_yaml + "\n" + exported).encode()).hexdigest()
-    resource = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {
-        "name": "manager-processing-contract", "namespace": namespace,
-        "annotations": {"fred/worker-image": image, "fred/worker-image-id": image_id, "fred/contract-sha256": digest}},
-        "data": {"worker-contract.json": json.dumps(contract, indent=2)}}
-    foundation = json.loads(run([*kube, "get", "secret", "fred-secrets", "-o", "json"]))["data"]
+    pipeline = json.loads(
+        run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--entrypoint",
+                "python",
+                image,
+                "-c",
+                "import json; from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import HYBRID_SEARCH_PIPELINE_NAME, HYBRID_SEARCH_PIPELINE_CONFIG; print(json.dumps({'name': HYBRID_SEARCH_PIPELINE_NAME, 'body': HYBRID_SEARCH_PIPELINE_CONFIG}))",
+            ]
+        )
+    )
+    digest = hashlib.sha256(
+        (image_id + "\n" + worker_yaml + "\n" + exported).encode()
+    ).hexdigest()
+    resource = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": "manager-processing-contract",
+            "namespace": namespace,
+            "annotations": {
+                "fred/worker-image": image,
+                "fred/worker-image-id": image_id,
+                "fred/contract-sha256": digest,
+            },
+        },
+        "data": {"worker-contract.json": json.dumps(contract, indent=2)},
+    }
+    foundation = json.loads(
+        run([*kube, "get", "secret", "fred-secrets", "-o", "json"])
+    )["data"]
     application = provision_storage(kube, foundation, here, image)
-    provision_worker_identity(foundation)
+    provision_workload_identities(foundation, api_config)
     user = base64.b64decode(foundation["OPENSEARCH_ADMIN"]).decode()
     password = base64.b64decode(foundation["OPENSEARCH_ADMIN_PASSWORD"]).decode()
     authorization = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
@@ -115,8 +189,12 @@ def prepare() -> None:
 
 def concrete_index(value: object) -> str:
     # A permission pattern must identify exactly one configured index.
-    if not isinstance(value, str) or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,254}", value):
-        raise RuntimeError("OpenSearch permissions require a concrete lowercase index name, without wildcards")
+    if not isinstance(value, str) or not re.fullmatch(
+        r"[a-z0-9][a-z0-9._-]{0,254}", value
+    ):
+        raise RuntimeError(
+            "OpenSearch permissions require a concrete lowercase index name, without wildcards"
+        )
     return value
 
 
@@ -137,7 +215,9 @@ def corpus_settings(worker_config: dict, api_config: dict) -> tuple[str, list[st
     if api_kpi.get("enabled", True):
         api_indexes.append(concrete_index(api_kpi.get("index", "kpi-index")))
     if corpus_index in api_indexes:
-        raise RuntimeError("The corpus index must be separate from writable API observability indexes")
+        raise RuntimeError(
+            "The corpus index must be separate from writable API observability indexes"
+        )
     return corpus_index, api_indexes
 
 
@@ -152,13 +232,39 @@ def provision_search(
 ) -> None:
     # The existing adapter checks a cluster-wide hybrid pipeline at startup.
     # Provision it as operator; the application only needs to read it.
-    role = {"cluster_permissions": ["cluster_monitor", "cluster_composite_ops", "cluster:admin/search/pipeline/get"], "index_permissions": [
-        {"index_patterns": indexes, "allowed_actions": ["crud", "create_index", "manage"]}]}
+    role = {
+        "cluster_permissions": [
+            "cluster_monitor",
+            "cluster_composite_ops",
+            "cluster:admin/search/pipeline/get",
+        ],
+        "index_permissions": [
+            {
+                "index_patterns": indexes,
+                "allowed_actions": ["crud", "create_index", "manage"],
+            }
+        ],
+    }
     account = {"password": password, "backend_roles": ["fred-kf-ingestion"]}
-    resources = [(endpoint.removesuffix("/_plugins/_security/api") + "/_search/pipeline/" + quote(pipeline["name"], safe=""), pipeline["body"])]
-    resources += [(endpoint + "/" + suffix, payload) for suffix, payload in [
-        ("roles/fred-kf-ingestion", role), ("internalusers/fred-kf-ingestion", account),
-        ("rolesmapping/fred-kf-ingestion", {"backend_roles": ["fred-kf-ingestion"], "users": []})]]
+    resources = [
+        (
+            endpoint.removesuffix("/_plugins/_security/api")
+            + "/_search/pipeline/"
+            + quote(pipeline["name"], safe=""),
+            pipeline["body"],
+        )
+    ]
+    resources += [
+        (endpoint + "/" + suffix, payload)
+        for suffix, payload in [
+            ("roles/fred-kf-ingestion", role),
+            ("internalusers/fred-kf-ingestion", account),
+            (
+                "rolesmapping/fred-kf-ingestion",
+                {"backend_roles": ["fred-kf-ingestion"], "users": []},
+            ),
+        ]
+    ]
     # One connection serves search and observability; only the latter may write.
     api_role = {
         "cluster_permissions": [
@@ -201,9 +307,19 @@ def provision_search(
         ]
     ]
     for url, payload in resources:
-        request = Request(url, data=json.dumps(payload).encode(), headers={"Authorization": authorization, "Content-Type": "application/json"}, method="PUT")
+        request = Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={
+                "Authorization": authorization,
+                "Content-Type": "application/json",
+            },
+            method="PUT",
+        )
         # This instance's self-signed OpenSearch certificate is a documented local deviation.
-        with urlopen(request, context=ssl._create_unverified_context(), timeout=30) as response:
+        with urlopen(
+            request, context=ssl._create_unverified_context(), timeout=30
+        ) as response:
             response.read()
 
 
@@ -211,9 +327,13 @@ def apply(kube: list[str], resource: dict) -> None:
     run([*kube, "apply", "-f", "-"], body=json.dumps(resource))
 
 
-def provision_storage(kube: list[str], foundation: dict, here: Path, image: str) -> dict:
+def provision_storage(
+    kube: list[str], foundation: dict, here: Path, image: str
+) -> dict:
     # Application credentials belong to this profile, never to shared factory values.
-    existing = run([*kube, "get", "secret", "fred-ingestion", "--ignore-not-found", "-o", "json"])
+    existing = run(
+        [*kube, "get", "secret", "fred-ingestion", "--ignore-not-found", "-o", "json"]
+    )
     data = json.loads(existing).get("data", {}) if existing.strip() else {}
     credentials = {}
     for key in (
@@ -223,9 +343,21 @@ def provision_storage(kube: list[str], foundation: dict, here: Path, image: str)
         "opensearch-password",
         "kf-api-opensearch-password",
     ):
-        credentials[key] = base64.b64decode(data[key]).decode() if key in data else "F1!" + secrets.token_hex(24)
-    apply(kube, {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "fred-ingestion"},
-                 "type": "Opaque", "stringData": credentials})
+        credentials[key] = (
+            base64.b64decode(data[key]).decode()
+            if key in data
+            else "F1!" + secrets.token_hex(24)
+        )
+    apply(
+        kube,
+        {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {"name": "fred-ingestion"},
+            "type": "Opaque",
+            "stringData": credentials,
+        },
+    )
 
     # Preserve the factory's identities. Add the profile's scoped S3 identities.
     base = json.loads(
@@ -271,14 +403,44 @@ def provision_storage(kube: list[str], foundation: dict, here: Path, image: str)
         },
     )
     # Explicit local infrastructure adaptation, restored by each app deployment after k3d-up.
-    patch = {"spec": {"template": {
-        "metadata": {"annotations": {"fred/manager-s3-config": hashlib.sha256(encoded.encode()).hexdigest()}},
-        "spec": {"volumes": [{"name": "seaweedfs-config", "configMap": None,
-                               "secret": {"secretName": "control-plane-s3-config"}}]}}}}
-    run([*kube, "patch", "deployment", "seaweedfs", "--type", "strategic", "--patch-file", "/dev/stdin"], body=json.dumps(patch))
+    patch = {
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "fred/manager-s3-config": hashlib.sha256(
+                            encoded.encode()
+                        ).hexdigest()
+                    }
+                },
+                "spec": {
+                    "volumes": [
+                        {
+                            "name": "seaweedfs-config",
+                            "configMap": None,
+                            "secret": {"secretName": "control-plane-s3-config"},
+                        }
+                    ]
+                },
+            }
+        }
+    }
+    run(
+        [
+            *kube,
+            "patch",
+            "deployment",
+            "seaweedfs",
+            "--type",
+            "strategic",
+            "--patch-file",
+            "/dev/stdin",
+        ],
+        body=json.dumps(patch),
+    )
     run([*kube, "rollout", "status", "deployment/seaweedfs", "--timeout=180s"])
     # Use the worker's existing MinIO client, with credentials only on stdin.
-    bucket_script = '''import json, sys
+    bucket_script = """import json, sys
 from urllib.parse import urlsplit
 from minio import Minio
 settings = json.load(sys.stdin)
@@ -287,60 +449,145 @@ s3 = Minio(endpoint.netloc, access_key=settings["access"],
     secret_key=settings["secret"], secure=endpoint.scheme == "https", region="us-east-1")
 if not s3.bucket_exists("app-content-documents"):
     s3.make_bucket("app-content-documents")
-'''
-    run(["docker", "run", "--rm", "-i", "--network", "host", "--entrypoint", "python", image, "-c", bucket_script],
+"""
+    run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-i",
+            "--network",
+            "host",
+            "--entrypoint",
+            "python",
+            image,
+            "-c",
+            bucket_script,
+        ],
         step="Create documents bucket with the worker MinIO client",
-        body=json.dumps({"endpoint": f"http://127.0.0.1:{int(os.environ['K3D_HOST_PORT_SEAWEEDFS_S3'])}",
-            "access": base64.b64decode(foundation["SEAWEEDFS_ADMIN_USER"]).decode(),
-            "secret": base64.b64decode(foundation["SEAWEEDFS_ADMIN_PASSWORD"]).decode()}))
+        body=json.dumps(
+            {
+                "endpoint": f"http://127.0.0.1:{int(os.environ['K3D_HOST_PORT_SEAWEEDFS_S3'])}",
+                "access": base64.b64decode(foundation["SEAWEEDFS_ADMIN_USER"]).decode(),
+                "secret": base64.b64decode(
+                    foundation["SEAWEEDFS_ADMIN_PASSWORD"]
+                ).decode(),
+            }
+        ),
+    )
     return credentials
 
 
-def provision_worker_identity(foundation: dict) -> None:
+def provision_workload_identities(foundation: dict, api_config: dict) -> None:
     # The generic factory identities hook creates the client and retains its secret.
     base = f"http://127.0.0.1:{int(os.environ['K3D_HOST_PORT_KEYCLOAK'])}"
-    form = urlencode({"grant_type": "password", "client_id": "admin-cli",
-        "username": base64.b64decode(foundation["KC_BOOTSTRAP_ADMIN_USERNAME"]).decode(),
-        "password": base64.b64decode(foundation["KC_BOOTSTRAP_ADMIN_PASSWORD"]).decode()}).encode()
-    request = Request(base + "/realms/master/protocol/openid-connect/token", data=form,
-                      headers={"Content-Type": "application/x-www-form-urlencoded"})
+    form = urlencode(
+        {
+            "grant_type": "password",
+            "client_id": "admin-cli",
+            "username": base64.b64decode(
+                foundation["KC_BOOTSTRAP_ADMIN_USERNAME"]
+            ).decode(),
+            "password": base64.b64decode(
+                foundation["KC_BOOTSTRAP_ADMIN_PASSWORD"]
+            ).decode(),
+        }
+    ).encode()
+    request = Request(
+        base + "/realms/master/protocol/openid-connect/token",
+        data=form,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
     with urlopen(request, timeout=30) as response:
         token = json.load(response)["access_token"]
 
-    def api(path: str, method: str = "GET", payload: dict | None = None):
-        request = Request(base + "/admin/realms/app" + path, method=method,
-            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
-            data=json.dumps(payload).encode() if payload is not None else None)
+    def api(path: str, method: str = "GET", payload: dict | list | None = None):
+        request = Request(
+            base + "/admin/realms/app" + path,
+            method=method,
+            headers={
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json",
+            },
+            data=json.dumps(payload).encode() if payload is not None else None,
+        )
         with urlopen(request, timeout=30) as response:
             body = response.read()
             return json.loads(body) if body else None
 
     clients = api("/clients?clientId=knowledge-flow-worker")
     if len(clients) != 1:
-        raise RuntimeError("Expected the knowledge-flow-worker client from identities.yaml")
+        raise RuntimeError(
+            "Expected the knowledge-flow-worker client from identities.yaml"
+        )
     client = clients[0]
-    client.update(standardFlowEnabled=False, implicitFlowEnabled=False,
-                  directAccessGrantsEnabled=False, fullScopeAllowed=False)
+    client.update(
+        standardFlowEnabled=False,
+        implicitFlowEnabled=False,
+        directAccessGrantsEnabled=False,
+        fullScopeAllowed=False,
+    )
     path = "/clients/" + client["id"]
     api(path, "PUT", client)
     mappers = [
-        {"name": "workload-audience", "protocolMapper": "oidc-audience-mapper",
-         "config": {"included.custom.audience": "control-plane"}},
-        {"name": "workload-client-id", "protocolMapper": "oidc-hardcoded-claim-mapper",
-         "config": {"claim.name": "client_id", "claim.value": "knowledge-flow-worker", "jsonType.label": "String"}},
-        {"name": "workload-username", "protocolMapper": "oidc-usermodel-property-mapper",
-         "config": {"user.attribute": "username", "claim.name": "preferred_username", "jsonType.label": "String"}},
+        {
+            "name": "workload-audience",
+            "protocolMapper": "oidc-audience-mapper",
+            "config": {"included.custom.audience": "control-plane"},
+        },
+        {
+            "name": "workload-client-id",
+            "protocolMapper": "oidc-hardcoded-claim-mapper",
+            "config": {
+                "claim.name": "client_id",
+                "claim.value": "knowledge-flow-worker",
+                "jsonType.label": "String",
+            },
+        },
+        {
+            "name": "workload-username",
+            "protocolMapper": "oidc-usermodel-property-mapper",
+            "config": {
+                "user.attribute": "username",
+                "claim.name": "preferred_username",
+                "jsonType.label": "String",
+            },
+        },
     ]
     current = {m["name"]: m["id"] for m in api(path + "/protocol-mappers/models")}
     for mapper in mappers:
         mapper["protocol"] = "openid-connect"
-        mapper["config"].update({"access.token.claim": "true", "id.token.claim": "false"})
+        mapper["config"].update(
+            {"access.token.claim": "true", "id.token.claim": "false"}
+        )
         target = path + "/protocol-mappers/models"
         if mapper["name"] in current:
             mapper["id"] = current[mapper["name"]]
             api(target + "/" + mapper["id"], "PUT", mapper)
         else:
             api(target, "POST", mapper)
+
+    # The API delegates the already authenticated person to Control Plane. This
+    # grants trust to assert identity, never a platform or content permission.
+    security = api_config["security"]
+    caller_id = security["m2m"]["client_id"]
+    delegation = security["delegation"]
+    audience = delegation.get("audience", "fred-delegation")
+    role_name = delegation.get("caller_role", "delegation_caller")
+    callers = api("/clients?" + urlencode({"clientId": caller_id}))
+    targets = api("/clients?" + urlencode({"clientId": audience}))
+    if len(callers) != 1 or len(targets) != 1:
+        raise RuntimeError("Knowledge Flow and delegation clients must already exist")
+    caller_path = "/clients/" + callers[0]["id"]
+    target_id = targets[0]["id"]
+    service = api(caller_path + "/service-account-user")
+    role = api("/clients/" + target_id + "/roles/" + quote(role_name, safe=""))
+    api(
+        "/users/" + service["id"] + "/role-mappings/clients/" + target_id,
+        "POST",
+        [role],
+    )
+    api(caller_path + "/scope-mappings/clients/" + target_id, "POST", [role])
 
 
 if __name__ == "__main__":
@@ -350,4 +597,6 @@ if __name__ == "__main__":
         raise SystemExit(str(error)) from None
     except Exception as error:
         # Exceptions from network libraries can carry sensitive request details.
-        raise SystemExit(f"Manager ingestion preparation failed ({type(error).__name__}); check infrastructure prerequisites, image and rendered configuration") from None
+        raise SystemExit(
+            f"Manager ingestion preparation failed ({type(error).__name__}); check infrastructure prerequisites, image and rendered configuration"
+        ) from None

@@ -337,11 +337,8 @@ def mock_pod_infrastructure(monkeypatch):
     Production C3, PostgreSQL and published-model requirements are covered by
     test_authorization_startup without this fixture.
     """
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
 
     from fred_core.security import oidc
-    from fred_core.security.rebac.authorization_binding import AuthorizationBinding
     from fred_runtime.app import agent_app
 
     async def prepare(container):
@@ -350,14 +347,8 @@ def mock_pod_infrastructure(monkeypatch):
         oidc.configure_token_security(security)
         oidc.initialize_user_security(security.user)
         await container.initialize_sql()
-        return security.rebac, AuthorizationBinding("fred", "store-test", "model-test")
 
     monkeypatch.setattr(agent_app, "prepare_authorization", prepare)
-    engine = SimpleNamespace(enabled=False, get_client=AsyncMock(), close=AsyncMock())
-    monkeypatch.setattr(
-        agent_app, "PublishedOpenFgaRebacEngine", lambda *a, **k: engine
-    )
-    return engine
 
 
 @pytest.fixture

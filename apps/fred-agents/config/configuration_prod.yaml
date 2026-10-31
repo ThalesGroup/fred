@@ -44,11 +44,6 @@ security:
     realm_url: "http://localhost:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
-  rebac:
-    enabled: true
-    type: openfga
-    api_url: "http://localhost:9080"
-    store_name: control-plane # Published Weaver binding identity, not a store lookup.
   delegation:
     # Delegation lets a program act for a person. The program (a "workload") signs
     # in with its own service account: a Keycloak client identity that belongs to

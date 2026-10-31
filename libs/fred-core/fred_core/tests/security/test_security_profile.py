@@ -22,14 +22,13 @@ authorizes every request and fails closed. There is no signed grant.
 from typing import Literal
 
 import pytest
-from pydantic import AnyHttpUrl, AnyUrl, ValidationError
+from pydantic import AnyUrl, ValidationError
 
 from fred_core.security import delegation, oidc
 from fred_core.security.delegation import DelegationConfig, is_delegation_caller
 from fred_core.security.structure import (
     KeycloakUser,
     M2MSecurity,
-    OpenFgaRebacConfig,
     SecurityConfiguration,
     UserSecurity,
 )
@@ -43,21 +42,14 @@ def _security(
     profile: Literal["c3"] | None = None,
     user: bool = True,
     m2m: bool = True,
-    rebac: bool = True,
     accept_delegated_calls: bool = False,
     m2m_realm: AnyUrl = _REALM,
     user_client: str = "app",
     user_clients: tuple[str, ...] = (),
 ):
-    rebac_cfg = (
-        OpenFgaRebacConfig(enabled=rebac, api_url=AnyHttpUrl("http://fga:8080"))
-        if rebac
-        else None
-    )
     return SecurityConfiguration(
         m2m=M2MSecurity(enabled=m2m, realm_url=m2m_realm, client_id="cp"),
         user=UserSecurity(enabled=user, realm_url=_REALM, client_id=user_client),
-        rebac=rebac_cfg,
         profile=profile,
         delegation=DelegationConfig(
             accept_delegated_calls=accept_delegated_calls,
@@ -77,7 +69,7 @@ def _restore_security_profile_globals():
 def test_non_c3_profile_is_noop() -> None:
     oidc.STRICT_ISSUER = False
     oidc.STRICT_AUDIENCE = False
-    oidc.apply_security_profile(_security(profile=None, user=False, rebac=False))
+    oidc.apply_security_profile(_security(profile=None, user=False))
     # No exception, and strict flags untouched.
     assert oidc.STRICT_ISSUER is False
     assert oidc.STRICT_AUDIENCE is False
@@ -101,21 +93,8 @@ def test_c3_requires_m2m() -> None:
         oidc.apply_security_profile(_security(profile="c3", m2m=False))
 
 
-def test_c3_requires_rebac_enabled() -> None:
-    with pytest.raises(ValueError, match="rebac.enabled must be true"):
-        oidc.apply_security_profile(_security(profile="c3", rebac=False))
-
-
 def test_c3_happy_path_does_not_raise() -> None:
     oidc.apply_security_profile(_security(profile="c3"))  # no exception
-
-
-def test_the_former_setting_name_is_refused_rather_than_ignored() -> None:
-    """Ignored, a stale key would leave the check off without a word."""
-    with pytest.raises(ValidationError, match="standing_gate_enabled was removed"):
-        OpenFgaRebacConfig.model_validate(
-            {"api_url": "http://authz.invalid:9080", "standing_gate_enabled": True}
-        )
 
 
 def _bearer(client_id: str, issuer: str = str(_REALM)) -> KeycloakUser:

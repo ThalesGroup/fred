@@ -15,7 +15,6 @@ from temporalio import activity, exceptions
 
 from knowledge_flow_backend.application_context import EXTENSION_CATEGORY, ApplicationContext
 from knowledge_flow_backend.common.processing_profile_context import processing_profile_scope
-from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 from knowledge_flow_backend.features.manager_processing.artifacts import Artifacts
 from knowledge_flow_backend.features.manager_processing.client import ManagerClient, ManagerError, raise_permanent_failure
 from knowledge_flow_backend.features.manager_processing.contracts import Claim, Commit, Descriptor, Failure, FailureCode, Stage, Work
@@ -23,9 +22,8 @@ from knowledge_flow_backend.features.manager_processing.persistence import scope
 from knowledge_flow_backend.features.tabular.artifacts import read_tabular_artifact, read_tabular_multi_artifact
 
 
-class ManagedIngestionService(IngestionService):
+class ManagedIngestionService:
     def __init__(self, descriptor: Descriptor, source: str):
-        # Deliberately avoid IngestionService's legacy MetadataService/content singleton.
         self.context = ApplicationContext.get_instance()
         self.descriptor = descriptor
         self.source = source
@@ -135,20 +133,31 @@ class ManagedIngestionService(IngestionService):
         with ManagerClient(self.settings) as client:
             client.post(f"/document-processing/{d.work.processing_id}/abandon", Failure(work=d.work, stage=d.stage, generation=d.generation, code=code))
 
+    def process_input(self, user, input_path, output_dir, metadata, profile=None):
+        self.pipeline_manager.run_input(input_path=input_path, output_dir=output_dir, metadata=metadata, profile=profile)
+
+    def get_preview_file(self, user, metadata, output_dir):
+        for name in ("output.md", "table.csv", "output.txt"):
+            candidate = output_dir / name
+            if candidate.is_file():
+                return candidate
+        raise FileNotFoundError("No published preview output")
+
     def process_output(self, user, input_file_name, output_dir, input_file_metadata, profile=None):
-        with processing_profile_scope(profile):
+        with processing_profile_scope(profile) as normalized_profile:
             self.pipeline_manager, self.vectors = scoped_pipeline(self.context, self.descriptor, output_dir, self.artifacts, include_output=True)
-            result = super().process_output(user, input_file_name, output_dir, input_file_metadata, profile)
+            pipeline = self.pipeline_manager.get_pipeline_for_profile(normalized_profile)
+            result = pipeline.process_output(input_file_name=input_file_name, output_dir=output_dir, input_file_metadata=input_file_metadata)
             if EXTENSION_CATEGORY.get(Path(input_file_name).suffix.lower()) == "tabular":
                 import duckdb
 
-                from knowledge_flow_backend.features.content.content_service import ContentService
+                from knowledge_flow_backend.features.content.tabular_preview import dataframe_to_markdown_preview
 
                 artifact = (result.extensions or {})["tabular_v1"]
                 parquet = output_dir / artifact["object_key"]
                 with duckdb.connect(":memory:") as connection:
                     frame = connection.read_parquet(str(parquet)).limit(200).df()
-                (output_dir / "output.md").write_text(ContentService._dataframe_to_markdown_preview(frame))
+                (output_dir / "output.md").write_text(dataframe_to_markdown_preview(frame))
         self.output_dir = output_dir
         self.output_finished = True
         return result

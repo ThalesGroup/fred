@@ -136,7 +136,7 @@ def published(tmp_path, monkeypatch):
         get_published_artifact_reader=lambda: SimpleNamespace(read_bytes=read_bytes, bucket="derived", client=SimpleNamespace(presigned_get_object=location)),
     )
     monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
-    permission = AsyncMock()
+    permission = AsyncMock(return_value=(SPACE,))
     monkeypatch.setattr(module, "require_space_read", permission)
 
     def service(scope=DocumentScope(), *, attachments=(), conversation_id=None):

@@ -38,76 +38,25 @@ from knowledge_flow_backend.common.structures import (
 )
 from knowledge_flow_backend.features.manager_processing.retrievable import confirm_document_retrievable, record_retrievable_applied, set_document_retrievable
 from knowledge_flow_backend.features.manager_processing.retrievable_workflow import SetDocumentRetrievable
-from knowledge_flow_backend.features.scheduler.activities import (
-    emit_ingestion_task_event,
-    fast_delete_vectors,
-    fast_store_vectors,
-    output_process,
-)
-from knowledge_flow_backend.features.scheduler.pdf_render_expiry_activities import expire_pdf_renders
-from knowledge_flow_backend.features.scheduler.pdf_render_expiry_schedule import sync_pdf_render_expiry_schedule
-from knowledge_flow_backend.features.scheduler.pdf_render_expiry_workflow import ExpirePdfRendersWorkflow
-from knowledge_flow_backend.features.scheduler.pull_files_activities import (
-    create_pull_file_metadata,
-    pull_input_process,
-)
+from knowledge_flow_backend.features.scheduler.activities import output_process
 from knowledge_flow_backend.features.scheduler.push_files_activities import (
     get_push_file_metadata,
     push_input_process,
 )
 from knowledge_flow_backend.features.scheduler.workflow import (
-    CreatePullFileMetadata,
-    FastDeleteVectors,
-    FastStoreVectors,
     GetPushFileMetadata,
     OutputProcess,
-    ProcessPull,
-    ProcessPullFile,
     ProcessPush,
     ProcessPushFile,
-    PullInputProcess,
     PushInputProcess,
 )
 
 logger = logging.getLogger(__name__)
 
+
 # Every workflow in the ingestion namespace, plus the recurring-maintenance one.
 # They run on the common queue whatever profile their documents carry: only the
 # extraction activity is routed away.
-_COMMON_WORKFLOWS = [
-    ProcessPull,
-    ProcessPullFile,
-    ProcessPush,
-    ProcessPushFile,
-    CreatePullFileMetadata,
-    GetPushFileMetadata,
-    PullInputProcess,
-    PushInputProcess,
-    OutputProcess,
-    FastStoreVectors,
-    FastDeleteVectors,
-    ExpirePdfRendersWorkflow,
-]
-
-# The two heavy, profile-dependent activities, and the only ones an extraction
-# role registers. Everything else — metadata, progress events, indexing, repair,
-# maintenance — belongs to the common role below.
-_EXTRACTION_ACTIVITIES = [
-    pull_input_process,
-    push_input_process,
-]
-
-_COMMON_ACTIVITIES = [
-    create_pull_file_metadata,
-    get_push_file_metadata,
-    output_process,
-    fast_store_vectors,
-    fast_delete_vectors,
-    emit_ingestion_task_event,
-    expire_pdf_renders,
-]
-
-
 def _role_task_queue(config: TemporalSchedulerConfig, role: IngestionWorkerRole) -> str:
     """The queue a role polls. Derived through the same function the submission
     side uses, so the two cannot name a queue differently."""
@@ -145,11 +94,10 @@ def _build_worker(
             activity_concurrency,
         )
 
-    workflows = _COMMON_WORKFLOWS if is_common else []
-    activities = _COMMON_ACTIVITIES if is_common else _EXTRACTION_ACTIVITIES
-    if manager_processing:
-        workflows = [ProcessPush, ProcessPushFile, GetPushFileMetadata, PushInputProcess, OutputProcess, SetDocumentRetrievable] if is_common else []
-        activities = [get_push_file_metadata, output_process, set_document_retrievable, record_retrievable_applied, confirm_document_retrievable] if is_common else [push_input_process]
+    if not manager_processing:
+        raise ValueError("Weaver requires manager_processing")
+    workflows = [ProcessPush, ProcessPushFile, GetPushFileMetadata, PushInputProcess, OutputProcess, SetDocumentRetrievable] if is_common else []
+    activities = [get_push_file_metadata, output_process, set_document_retrievable, record_retrievable_applied, confirm_document_retrievable] if is_common else [push_input_process]
 
     return Worker(
         client=client,
@@ -223,19 +171,6 @@ async def run_worker(
         target_host=config.host,
         namespace=config.namespace,
     )
-
-    # The Schedule always targets the common queue, which is where its workflow is
-    # registered, so an extraction role has nothing to post and nothing to move.
-    if manager_processing:
-        logger.info("[SCHEDULER] Manager processing: push activities and manager cleanup, without legacy SQL or PDF expiry")
-    elif IngestionWorkerRole.common in active_roles:
-        # Housekeeping must never keep ingestion from starting: log and carry on.
-        try:
-            await sync_pdf_render_expiry_schedule(client, config, pdf_render_ttl_days)
-        except Exception:  # noqa: BLE001
-            logger.exception("[SCHEDULER] Could not sync the PDF render expiry schedule; ingestion worker starts anyway")
-    else:
-        logger.info("[SCHEDULER] Extraction-only worker; maintenance schedules stay with the common role")
 
     workers = [
         _build_worker(

@@ -9,7 +9,7 @@ These contracts do not establish identical behavior for every other Fred service
 ## Identity, consent and authority are separate
 
 In the organization/team/project journey, the configured Keycloak or OIDC provider authenticates the person,
-PostgreSQL records their personal terms-of-use (CGU) acceptance and OpenFGA decides
+PostgreSQL records their personal terms-of-use (CGU) acceptance; Control Plane decides
 their rights.
 A valid login is not consent; consent is not a role; platform administration is
 not membership of an organization. The following rules describe this journey's
@@ -21,7 +21,7 @@ manager authority, not a universal replacement for every Python security boundar
 | --- | --- |
 | Token | `Authorization: Bearer`, RS256 only, key chosen by `kid` among the realm's signing keys |
 | Endpoints | Keycloak: `<realm>/protocol/openid-connect/certs`; OIDC: discovery, issuer must match the configured one |
-| Identity | The configured UID claim (default `sub`) identifies the user and OpenFGA subject; roles from `resource_access.<client_id>.roles` or `roles_claim`; client from `azp` or `client_id`; service account recognised by case-insensitive `preferred_username = service-account-<client>` together with matching `client_id` or `clientId` |
+| Identity | The configured UID claim (default `sub`) identifies the user and authorization subject; roles from `resource_access.<client_id>.roles` or `roles_claim`; client from `azp` or `client_id`; service account recognised by case-insensitive `preferred_username = service-account-<client>` together with matching `client_id` or `clientId` |
 | OIDC subjects | A non-UUID configured UID becomes `uuid5(NAMESPACE_URL, "<realm_url>#<identity>")`; an empty UID is refused |
 | Issuer and audience | Always required: exact issuer (user and m2m realms), audience `audience` or, by default, `client_id` |
 | Times | `exp` and an integer `iat` required, `iat` not in the future, `exp - iat` at most `FRED_JWT_MAX_LIFETIME_SECONDS` (3600), leeway `FRED_JWT_CLOCK_SKEW` (0) |
@@ -87,16 +87,13 @@ is constant-time; a token shorter than 16 characters is rejected with 422, a wro
 secret with 403. The secret cannot nominate another person or bypass consent. The first platform admin is
 a real authenticated IAM person, not a local account created by the secret.
 
-Manager commits a root reservation for that caller before the OpenFGA grant. A
-failed grant can be retried only by the claimant. Once completion is recorded,
-all later bootstrap attempts return 409, even if a role is subsequently removed.
-Rotating the secret does not reset completion. Root receives platform administration,
-with no organization, team, project or personal-space membership.
+Control Plane grants the first platform-admin role and records bootstrap completion
+in one SQL transaction under the platform lock. Once complete, later bootstrap
+attempts return 409, even if a role is subsequently removed. Rotating the secret
+does not reset completion. Root receives no business membership.
 
-The [reservation sequence](A1-manager-runtime.md#root-platform-admin-bootstrap)
-shows the two transactions and failure recovery (I9). Afterwards root is an ordinary
-platform admin: any platform admin grants or revokes platform admins, and the platform
-always keeps one (I15).
+Afterwards platform administrators manage platform roles, while preserving at least
+one administrator.
 
 ## Roles, permissions and ReBAC
 
@@ -109,59 +106,40 @@ The [roles annex](A11-roles.md) defines the complete role inventory, inheritance
 from the permissions currently enforced. Teams and projects have no technical admin role.
 
 Every direct space-role grant checks, after authorization, that its subject is
-usable as an OpenFGA user (1..255 characters
+usable as an authorization subject (1..255 characters
 without whitespace, `:` or `#`) and known to the configured user directory: Keycloak by
 subject, or the local directory of observed profiles. Otherwise it answers 422; an
 unavailable directory prevents the grant (I27). Owner grants additionally require
 Keycloak subjects in the configured realm, which import also verifies. Revocation accepts a
 deleted identity so stale grants can be removed. The check proves existence at
-lookup time; external IAM deletion is not transactional with OpenFGA.
+lookup time; external IAM deletion is not transactional with PostgreSQL.
 
 Personal-space eligibility is checked against direct organization content
 membership. Provisioning publishes content grants before eligibility across batches;
 reuse of a personal space writes no new role. See the
 [role-attribution rules](A11-roles.md#attribution-accumulation-and-removal).
 
-Direct role tuples and the links evaluated for permission remain canonical in OpenFGA.
-SQL records each space's immutable `organization_id` and optional `parent_id` at
-creation, in the transaction committed after FGA accepts its links and initial roles.
-This placement metadata contains no user-role assignment or permission matrix.
-Ordinary children have a `parent` link; personal spaces have an `organization` link.
-The model evaluates permissions, including roles
-descending from ancestors; manager stores no inherited grant and computes no
-permission. Manager enforces the parent-membership rule when changing roles: a role
-on a child requires a direct content role on its parent, which inherited access
-does not satisfy. Business access first verifies the caller's unique organization
-context, then lets OpenFGA evaluate permission on the owning space. Resolving context
-does not confer read or management authority (I23).
+Direct role grants and immutable hierarchy live in PostgreSQL. The typed Rust
+permission evaluator applies local roles and the descending editor, owner and
+analyst roles; personal spaces inherit nothing. Child role grants require direct
+parent content membership. Business access also checks the person's unique
+organization context, which itself grants no content access.
 
-See the [space rules](A8-organizations.md#spaces-and-memberships),
-[generated model](A2-manager-contracts.md#openfga-model),
-[administration endpoints](A1-manager-runtime.md#platform-administration-and-self-checks)
-and [request costs](09-quality.md#openfga-request-costs).
+See [permission storage](A2-manager-contracts.md#permission-storage-and-evaluation)
+and [role semantics](A11-roles.md).
 
 ## Mutation ordering and revocation
 
-An organization lock serializes live callers. Content writes acquire it with a
-nonblocking SQL attempt: a busy attempt rolls back and releases its connection
-before retrying after 50 ms, within a five-second acquisition deadline. Authority
-checks and active-space rechecks run after acquisition; the same transaction retains
-the lock through SQL commit. Role and lifecycle mutations keep their existing
-blocking lock acquisition. Each authorized mutation also
-consumes an OpenFGA guard revision captured before its checks; a delayed remote
-write cannot reuse a consumed revision. Platform operations acquire the platform
-lock before organization locks. All direct space-role grants and revocations,
-HTTP organization creation and import share this platform serialization and
-guard, preventing competing assignments in different organizations. Team/personal
-creation and content mutations retain their organization lock and guard. Role revocation cannot silently leave a child role,
-or a personal space role in an organization, without a direct parent content role,
-nor remove a non-personal space's last owner.
+Mutations acquire the relevant SQL advisory locks before checking authority,
+and retain them through commit. Role changes and content writes use the same
+organization serialization; platform changes acquire the platform lock first.
+Checks and role writes use that transaction's connection. A successful revocation
+therefore precedes subsequent decisions without a second authorization service.
 
-I5 orders role publication and SQL commits, not HTTP response arrival. Keycloak
-creation is authorized at dispatch; cancellation or later
-revocation does not roll back already dispatched effects. A read-only permission
-check describes evaluation time, not a lease. The [runtime reference](A1-manager-runtime.md#role-and-space-mutations)
-and [invariants](09-quality.md#invariants) give the mechanisms and proofs.
+No mutation may remove the last required administrator or owner, or leave dependent
+child grants without direct parent content membership. External Keycloak operations
+remain authorized at dispatch and do not participate in the SQL transaction.
+A permission probe is an observation, not a lease.
 
 ## Business authorization answer
 
@@ -200,7 +178,7 @@ tokens cannot use this protocol. Manager binds callbacks to installation, docume
 original digest, accepted actor and stage generation; serialized worker user claims
 confer no authority. Original access and final publication recheck that actor's
 current organization, space Write permission and CGU. Publication uses the same
-organization lock and OpenFGA guard as other content writes, after remote artifact
+organization lock and transaction-local checks as other content writes, after remote artifact
 verification. Failed-stage fencing remains possible after actor revocation.
 
 Previews use current reader authority, allowlisted manifest paths, bounded streams,
@@ -229,7 +207,7 @@ In this manager journey, a valid personal credential from the configured issuer
 allows access to onboarding. After accepting the active CGU, a person with no
 organization or platform roles can reach an empty Home view. This creates no
 membership, personal space or content access. Business operations still require
-one organization context and the operation's OpenFGA permission; platform actions
+one organization context and the operation's Control Plane permission; platform actions
 require their separate platform permission.
 
 Python control-plane additionally has configurable platform-access filtering and
@@ -252,7 +230,7 @@ recheck retirement after their lock; reads already authorized may finish. Existi
 role revocation remains an immediate role operation without a purge request.
 The worker executes the accepted durable scope without retaining a user token.
 Remaining grants on retired rows still count towards the unique organization
-attachment, using `space.organization_id` even when FGA placement links are gone.
+attachment, using `space.organization_id` throughout retirement.
 
 ## Managed agent turn authority
 
@@ -282,27 +260,23 @@ are not connected under it.
 
 ## Document search within a turn
 
-Companion to [documents used by an assistant](03-security.md#36-documents-used-by-an-assistant)
-and the [component view](01-system-overview.md#15-document-search-during-a-conversation).
-Control Plane encodes no capability rule: at creation and on every capability
-edit, it accepts a capability only if the template's pod inventory offers it and
-the space's organization has enabled that offer, then the pod validates its
-configuration. `document_access` refuses session attachments and
-library or document selections, and the pod registers no document tree tool, so
-the capability only searches the corpus.
+Capabilities call Knowledge Flow API with the canonical space bound to the turn.
+The API validates the incoming workload and asserted person. It then calls Control
+Plane once for the readable scope, using its own M2M bearer and the validated
+person/run/agent triplet. It does not forward the Agent Pod's bearer.
 
-| Step | Rule | Implementation reference |
-| --- | --- | --- |
-| Creation | Control Plane refuses an offer the organization has not enabled before contacting the pod. The capability on the owning pod validates the configuration and refuses session attachments and library or document selections; Control Plane stores the versioned envelope the pod returns. | [`enablement.rs`](../../apps/control-plane/src/agents/enablement.rs), `usable_capability_ids`; [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs), `enroll`, `select_capabilities`, `validate_capability`; [`capability.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/capability.py), `DocumentAccessCapability.validate_config`; pod `POST /agents/capabilities/document_access/validate-config` |
-| Preparation | Before each chat, Control Plane rechecks only that the saved selection, or the template defaults when none is saved, is still in the template's pod inventory; otherwise preparation is refused. | [`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs), `require_available_capabilities`; [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs), `require_inventory` |
-| Tool call | The adapter checks that its context matches the admitted turn and takes the space from the turn binding, never from tool arguments. | [`adapters.py`](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py), `DocumentSearchAdapter`; [`capability.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/capability.py), `search_documents_using_vectorization` |
-| Scope | The space and its ancestors, never children or siblings; a space being deleted is refused. | [`access.py`](../../libs/fred-core/fred_core/documents/access.py), `resolve_scope`, `scope_from_space` |
-| Index query | Every semantic, strict or hybrid sub-query carries the `metadata.space_id` and `metadata.retrievable` prefilters. They narrow candidates and prove nothing. | [`opensearch_queries.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/opensearch_queries.py), `build_search`, `mandatory_filters` |
-| Verification | One grouped SQL read keeps a chunk only if its document is in scope, live, in a live space, retrievable without pending inclusion, and in the published generation's manifest. Table completion chunks pass the same check. | `access.py`, `verify_candidates`; [`search.py`](../../libs/capabilities/fred-capability-document-access/fred_capability_document_access/search.py), `CorpusSearch` |
+Control Plane returns an explicit anchor and the exact readable subset of its
+ancestors and itself. An empty corpus remains empty. The API applies document
+selection only as a further restriction; attachments use the explicit anchor and
+separate conversation ownership checks.
 
-No SQL connection is held during embedding or OpenSearch calls. Technical
-failures fail the tool; there is no Knowledge Flow fallback. Pod configuration
-(`ai.embedding_model`, `ai.document_vector_store`) is loaded by
-[`context.py`](../../libs/fred-runtime/fred_runtime/app/context.py),
-`initialize_document_search`. Search diagnostics are described in the
-[capability README](../../libs/capabilities/fred-capability-document-access/README.md#search-diagnostics).
+Index filters narrow candidates. Before returning content, the shared visibility
+primitive checks SQL publication, lifecycle and generation facts. Markdown,
+summary, extraction and tabular access use the same scope boundary. A dependency
+failure returns an unavailable error, never an unrestricted or fabricated empty
+success. These data checks do not refresh the admitted agent turn's authority.
+
+Source references: [`weaver_admission.py`](../../apps/knowledge-flow-backend/knowledge_flow_backend/security/weaver_admission.py),
+[`access.py`](../../libs/fred-core/fred_core/documents/access.py),
+[`authorization.rs`](../../apps/control-plane/src/authorization.rs) and
+[`spaces.rs`](../../apps/control-plane/src/spaces.rs).

@@ -23,9 +23,9 @@ from fred_core.common import register_exception_handlers
 from fred_core.documents.document_structures import FileType
 from openpyxl import Workbook
 
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
 from knowledge_flow_backend.core.processors.output.excel_processor.excel_table_registration_processor import ExcelTableRegistrationProcessor
-from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.controller import TabularController, tabular_service
 from knowledge_flow_backend.security.weaver_admission import delegated_person
 from tests.services.tabular_engine import TabularEngineHarness
@@ -131,7 +131,7 @@ async def test_extracted_excel_nullable_date_query_returns_json_null(tmp_path, t
     metadata.file.file_type = FileType.XLSX
     metadata.file.mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     metadata = ExcelTableRegistrationProcessor().process(str(output_dir / "output.md"), metadata)
-    await MetadataService().save_document_metadata(_user(), metadata)
+    await ApplicationContext.get_instance().get_metadata_store().save_metadata(metadata)
 
     [dataset] = await service.list_datasets(_user())
     sql = f"SELECT reference, CAST(date_expedition AS {date_type}) AS date_expedition, amount FROM {dataset.query_alias} ORDER BY reference"

@@ -256,29 +256,11 @@ security:
     realm_url: "http://localhost:8080/realms/app"
   authorized_origins:
     - "http://localhost:5173"
-  rebac:
-    enabled: true
-    type: openfga
-    api_url: "http://localhost:9080"
   delegation:
-    # Delegation lets a program act for a person. The program (a "workload") signs
-    # in with its own service account: a Keycloak client identity that belongs to
-    # the program, not to anyone. With each call it names the person, run and
-    # agent the call is for. Each backend has one switch per direction.
-    #
-    # accept_delegated_calls (incoming) - this backend's switch. It believes the
-    # person a calling workload names, but only when that workload's token carries
-    # the role named by caller_role (default delegation_caller) on the client
-    # named by audience (default fred-delegation). The role is granted in Keycloak
-    # to the caller's service account; no list of callers is kept here.
-    #
-    # act_for_people (outgoing) - this backend never calls others for a person;
-    # leave it false.
-    #
-    # Both are off by default. Locally, make delegation turns the right one on
-    # through config/.delegation.local.json after checking a freshly issued token.
-    act_for_people: false
-    accept_delegated_calls: false
+    # Receive the verified person/run/agent from the runtime, then assert that
+    # identity to the Control Plane using Knowledge Flow's own service token.
+    act_for_people: true
+    accept_delegated_calls: true
 scheduler:
   enabled: true
   backend: "temporal"
@@ -515,3 +497,5 @@ filesystem:
   bucket_name: filesystem
   secure: false
 # Workspace storage layout (paths inside the bucket/filesystem)
+
+control_plane_url: "http://localhost:8001"

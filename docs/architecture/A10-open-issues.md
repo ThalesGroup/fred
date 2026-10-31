@@ -17,9 +17,9 @@ The [system overview](01-system-overview.md#13-coordinating-document-writes) and
 [document journey](02.2-document-journey.md#concurrent-imports-and-publication)
 explain the check-and-record boundary. It supports the existing invariants in
 [chapter 9](09-quality.md#invariants), including authorization ordering (I5) and
-folder lifecycle ordering (I22), alongside SQL constraints and OpenFGA guards.
+folder lifecycle ordering (I22), alongside SQL constraints and transaction-local permission checks.
 The protocol protects durable outcomes; removing it is not equivalent to
-accepting a temporarily stale display. SQL and OpenFGA remain separate systems.
+accepting a temporarily stale display. Permissions and durable outcomes share PostgreSQL.
 
 Ordinary ingestion releases the organization lock between upload reservation,
 original publication and final indexing publication. File transfer, object
@@ -40,8 +40,7 @@ document batch's separate reservation and publication steps.
 ### Evidence needed before changing the design
 
 The useful distinction is lock **holding time** versus **waiting time**. Many
-small sections can create a queue without any unusually large query. OpenFGA
-calls and SQL quota calculations occur within the document write sections.
+small sections can create a queue without any unusually large query. SQL permission checks and quota calculations occur within the document write sections.
 The five-second acquisition limit in `authorized_write` bounds waiting to enter,
 not the duration of the acquired section or of the entire request. A saturated
 path can return 503; no strict acquisition fairness is promised.
@@ -52,7 +51,7 @@ scenario is 100 teams and 2,000 people in one organization, with rare role chang
 actual simultaneous writers and request rates matter more than registered users
 or total batch size. Compare same-organization and different-organization traffic.
 Record holding and waiting time distributions, publication throughput, request
-latency and timeout/503 rates, together with SQL pool and OpenFGA latency.
+latency and timeout/503 rates, together with SQL pool and query latency.
 Separate ordinary load, bursts and degraded dependencies. No new measurement or
 performance campaign accompanies this documentation change.
 
@@ -62,13 +61,8 @@ A lock per space could let independent teams publish concurrently. It would
 still need coordination for ancestor revocations, team/project shared quotas,
 space retirement and cross-organization membership rules. Optimistic version
 checks or a hybrid with a shorter final coordination step are other possibilities.
-They must preserve the named guarantees across SQL and OpenFGA, including failed
-or delayed remote operations, rather than just move waiting into repeated retries.
-
-The existing OpenFGA guard is not a switch to optimistic-only execution: ordinary
-content writes also advance the organization's guard revision. Removing the SQL
-lock alone would create competing revisions and leave the SQL/OpenFGA publication
-ordering unresolved. No alternative or weaker guarantee is selected here.
+They must preserve transaction ordering with role changes and retirement.
+No alternative or weaker guarantee is selected here.
 
 ### Implementation references
 
@@ -76,7 +70,6 @@ ordering unresolved. No alternative or weaker guarantee is selected here.
   `authorized_write`, `authorize_locked`, `lock_organization`.
 - [Original reservation and publication](../../apps/control-plane/src/documents/upload.rs):
   `reserve`, `publish`; [final indexing publication](../../apps/control-plane/src/processing/publication.rs): `commit`.
-- [OpenFGA version guards](../../apps/control-plane/src/fga.rs): `guard`, `write_guarded`, `fence`.
 - [Shared processing capacity](../../apps/control-plane/src/processing/store.rs):
   `admit`, `claim`; [administrative import](../../apps/control-plane/src/provisioning.rs): `reconcile`.
 - [Security ordering](A6-security.md#mutation-ordering-and-revocation) and

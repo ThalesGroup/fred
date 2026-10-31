@@ -52,9 +52,6 @@ def _healthy_context() -> SimpleNamespace:
     opensearch = MagicMock()
     opensearch.ping = MagicMock(return_value=True)
 
-    rebac = MagicMock()
-    rebac.get_client = AsyncMock(return_value=MagicMock())
-
     gcs_fs = MagicMock()
     gcs_fs.health_check = MagicMock(return_value={"backend": "gcs", "bucket": "fs"})
     gcs_content = MagicMock()
@@ -64,7 +61,6 @@ def _healthy_context() -> SimpleNamespace:
         get_pg_async_engine=lambda: engine,
         get_opensearch_client=lambda: opensearch,
         get_vector_store=lambda: object(),
-        get_rebac_engine=lambda: rebac,
         get_filesystem=lambda: gcs_fs,
         get_content_store=lambda: gcs_content,
     )
@@ -91,7 +87,7 @@ def test_ready_all_dependencies_ok() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ready"
-    for name in ("postgres", "opensearch", "openfga", "gcs_filesystem", "gcs_content_store"):
+    for name in ("postgres", "opensearch", "gcs_filesystem", "gcs_content_store"):
         assert body["checks"][name]["ok"] is True
 
 

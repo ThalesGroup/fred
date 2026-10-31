@@ -131,12 +131,6 @@ class RuntimeConfig:
     # `platform_sql` below is a pod-lifetime object rather than a per-turn one.
     # Typed Any to avoid importing httpx in this module.
     control_plane_http_client: Any | None = None
-    # Pod-side ReBAC engine (RUNTIME-07 rev. 2). The pod is the execution
-    # authority: every execute/stream/evaluate/resume request is authorized here
-    # against OpenFGA on the caller's team. Built from `security.rebac` at startup
-    # via `rebac_factory`; a disabled/Noop engine means identity-only (dev). Typed
-    # Any to avoid importing the engine here (it is `RebacEngine | None`).
-    rebac_engine: Any | None = None
     # Hardened security profile name from `security.profile` (e.g. "c3"), or None.
     # Used to fail closed on direct agent_id execution under c3 (RUNTIME-07 F-D).
     security_profile: str | None = None

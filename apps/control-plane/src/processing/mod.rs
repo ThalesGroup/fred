@@ -15,15 +15,15 @@ pub mod worker_contract;
 
 use crate::{
     auth::Authenticator,
+    authorization::Authorization,
     documents::{Storage, object_store::ObjectStore},
     error::AppError,
-    fga::Fga,
 };
 use std::sync::Arc;
 use uuid::Uuid;
 pub struct Processing {
     pub pool: sqlx::PgPool,
-    pub fga: Fga,
+    pub authorization: Authorization,
     pub terms: Option<String>,
     pub installation: Uuid,
     pub config: config::ProcessingConfig,
@@ -94,7 +94,7 @@ impl Processing {
         );
         Ok(Arc::new(Self {
             pool,
-            fga: originals.fga.clone(),
+            authorization: originals.authorization.clone(),
             terms: originals.terms.clone(),
             installation,
             config,

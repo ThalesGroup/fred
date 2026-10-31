@@ -49,9 +49,9 @@ class DelegationConfig(BaseModel):
     act_for_people: bool = Field(
         default=False,
         description=(
-            "Outgoing, read where agents run: their calls during a person's run "
-            "present this backend's workload token and name the person, run and "
-            "agent. Other backends make no such calls; leave it off there."
+            "Outgoing: backend calls on behalf of a person present this backend's "
+            "workload token and name the verified person, run and agent. Enable "
+            "for agent runtimes and Knowledge Flow calls to the Control Plane."
         ),
     )
     accept_delegated_calls: bool = Field(
@@ -99,7 +99,7 @@ class DelegationConfig(BaseModel):
         if isinstance(data, dict) and "enabled" in data:
             raise ValueError(
                 "security.delegation.enabled was split: set act_for_people where "
-                "agents run and call other backends for a person, "
+                "backends call other backends for a person, "
                 "accept_delegated_calls on the backends that believe such calls"
             )
         return data

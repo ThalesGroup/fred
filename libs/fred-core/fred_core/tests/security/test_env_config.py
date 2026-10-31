@@ -21,7 +21,6 @@ SHARED = {
 }
 OWN = {
     "m2m_secret_env": "AN_APP_M2M_CLIENT_SECRET",  # nosec B105 - variable name  # pragma: allowlist secret
-    "openfga_token_env": "AN_APP_OPENFGA_API_TOKEN",  # nosec B105 - variable name
 }
 OPTIONAL = (
     "KEYCLOAK_M2M_REALM_URL",
@@ -46,9 +45,6 @@ def env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     monkeypatch.setenv(
         OWN["m2m_secret_env"], "not-a-real-secret"
     )  # pragma: allowlist secret
-    monkeypatch.setenv(
-        OWN["openfga_token_env"], "not-a-real-token"
-    )  # pragma: allowlist secret
     for name in OPTIONAL:
         monkeypatch.delenv(name, raising=False)
     return monkeypatch
@@ -68,15 +64,10 @@ def test_two_applications_differ_only_by_the_names_that_are_their_own(
     one = security_configuration_from_env(**OWN)
     another = security_configuration_from_env(
         m2m_secret_env="ANOTHER_APP_M2M_CLIENT_SECRET",  # nosec B106 - variable name  # pragma: allowlist secret
-        openfga_token_env="ANOTHER_APP_OPENFGA_API_TOKEN",  # nosec B106 - variable name
     )
 
     assert one.profile == another.profile == "c3"
-    assert one.rebac is not None and another.rebac is not None
-    assert one.rebac.enabled and another.rebac.enabled
     # A first-party application reads the shared model; it never owns it.
-    assert not one.rebac.create_store_if_needed
-    assert not one.rebac.sync_schema_on_init
     assert one.m2m.secret_env_var != another.m2m.secret_env_var
 
 

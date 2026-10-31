@@ -119,7 +119,7 @@ impl Storage {
                 let folder = db::folder(&self.pool, id).await?;
                 spaces::authorize(
                     &self.pool,
-                    &self.fga,
+                    &self.authorization,
                     &user.uid,
                     folder.space_id,
                     Permission::Write,
@@ -131,7 +131,11 @@ impl Storage {
                 session_id,
             } => {
                 crate::sessions::require_owner(
-                    &self.pool, &self.fga, &user.uid, space_id, session_id,
+                    &self.pool,
+                    &self.authorization,
+                    &user.uid,
+                    space_id,
+                    session_id,
                 )
                 .await
             }
@@ -259,15 +263,10 @@ impl Storage {
         space: Uuid,
     ) -> AppResult<Transaction<'static, Postgres>> {
         token_current(user)?;
-        let mut tx = super::authorized_mutation(
-            &self.pool,
-            &self.fga,
-            &user.uid,
-            space,
-            destination.columns().1,
-        )
-        .await
-        .map_err(super::dependency_error)?;
+        let mut tx =
+            super::authorized_mutation(&self.pool, &user.uid, space, destination.columns().1)
+                .await
+                .map_err(super::dependency_error)?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &user.uid).await?;
         token_current(user)?;
         Ok(tx)

@@ -34,7 +34,6 @@ import httpx
 from fastapi import HTTPException, status
 from fred_core.kpi import KPIActor
 from fred_core.kpi.kpi_writer import to_kpi_actor
-from fred_core.security.rebac.rebac_engine import TeamPermission
 from fred_core.security.structure import KeycloakUser
 from fred_sdk.contracts.agent_draft import (
     MAX_DRAFT_DESCRIPTION_CHARS,
@@ -49,6 +48,8 @@ from fred_sdk.contracts.prompt_utils import strip_reserved_prompt_tags
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, ValidationError
+
+from fred_runtime.app.authorization import require_permission
 
 from ..react.react_prompting import normalize_response_language
 from ..runtime_context import get_runtime_context
@@ -649,11 +650,7 @@ async def handle_draft_request(
 ) -> AgentDraftResult:
     """`POST /agents/creation-assistant/draft`: re-check the caller, apply the
     control plane's admin settings, draft."""
-    rebac = get_runtime_context().config.rebac_engine
-    if caller is not None and rebac is not None and rebac.enabled:
-        await rebac.check_user_team_permission_or_raise(
-            caller, TeamPermission.CAN_UPDATE_AGENTS, body.team_id
-        )
+    await require_permission(authorization, "write", space_id=body.team_id)
     deadline = asyncio.get_running_loop().time() + DRAFT_TIMEOUT_S
     try:
         async with asyncio.timeout_at(deadline):

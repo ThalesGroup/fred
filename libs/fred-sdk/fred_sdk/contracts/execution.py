@@ -526,7 +526,7 @@ class RuntimeExecuteRequest(BaseModel):
 # authority. Control-plane owns the mapping from session to checkpoint storage.
 #
 # Runtime MUST validate before resuming:
-# - the caller is authorized for the session's team (Keycloak JWT + OpenFGA)
+# - the caller is authorized for the session's team (Keycloak JWT + Control Plane)
 # - if resuming HITL, the interrupt_id is pending on the session's thread
 #
 # Separation of concerns:
@@ -550,8 +550,8 @@ class RuntimeExecuteRequest(BaseModel):
 # - Runtime endpoint topology management beyond a single configured URL
 #
 # Fred code IS responsible for:
-# - Endpoint protection (Keycloak RBAC, OpenFGA REBAC)
-# - Team-scoped managed agent authorization (pod-side OpenFGA check, no grant)
+# - Endpoint protection (Keycloak identity, Control Plane authorization)
+# - Team-scoped managed agent authorization (Control Plane resolution)
 # - Runtime execution contracts (this module)
 # - History and checkpoint access validation
 # - Managed execution semantics (agent_instance_id resolution via control-plane)

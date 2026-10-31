@@ -8,7 +8,7 @@ Other bundles are supported when they follow the provisioning contract.
 | Test | What it checks against the demo |
 | --- | --- |
 | `blueprint::tests::real_make_target_supports_space_paths_and_replaces_previous_entries` | Offline test in `src/blueprint.rs`, run by `make test`: real Make packaging, paths with spaces, replacement of an old ZIP, roster and archive contents, preservation of a valid ZIP when a source file is missing. No deployed Fred or external service is used. |
-| `real_keycloak_service_account_provisions_complete_bundle` | Integration test in `tests/integration.rs`: imports the real Make artifact through HTTP into disposable services and asserts identity, space and OpenFGA request counts. |
+| `real_keycloak_service_account_provisions_complete_bundle` | Integration test in `tests/integration.rs`: imports the real Make artifact through HTTP into disposable services and asserts identities and space roles. |
 | `provisioning_browser_journey` | Browser test in `tests/browser_provisioning.rs`: builds the demo ZIP and exercises provisioning through the UI. |
 
 When changing this fixture's users, spaces or roles, review the dependent

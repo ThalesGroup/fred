@@ -40,7 +40,6 @@ from fred_core.documents.document_structures import (
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
-from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.structures import TabularSearchRequest
 from tests.services.tabular_engine import TabularEngineHarness
 
@@ -60,7 +59,7 @@ async def _ingest_csv(*, tmp_path: Path, document_uid: str, file_name: str, cont
         tags=Tagging(tag_ids=[f"lib-{document_uid}"], tag_names=[]),
     )
     processed = TabularProcessor().process(str(csv_path), metadata)
-    await MetadataService().save_document_metadata(_user(), processed)
+    await ApplicationContext.get_instance().get_metadata_store().save_metadata(processed)
     return processed
 
 

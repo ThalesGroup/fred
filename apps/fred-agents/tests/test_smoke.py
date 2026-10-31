@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -27,7 +25,6 @@ from fastapi.testclient import TestClient
 from fred_core.security import oidc
 from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
 from fred_core.security.delegation import DelegationConfig, preserved_delegation
-from fred_core.security.rebac.authorization_binding import AuthorizationBinding
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app.context import PodApplicationContext
@@ -61,13 +58,8 @@ def offline_pod_authorization(monkeypatch):
         oidc.configure_token_security(security)
         oidc.initialize_user_security(security.user)
         await container.initialize_sql()
-        return security.rebac, AuthorizationBinding("fred", "test-store", "test-model")
 
-    engine = SimpleNamespace(enabled=False, get_client=AsyncMock(), close=AsyncMock())
     monkeypatch.setattr(agent_app_module, "prepare_authorization", prepare)
-    monkeypatch.setattr(
-        agent_app_module, "PublishedOpenFgaRebacEngine", lambda *a, **k: engine
-    )
     with preserved_delegation():
         try:
             yield

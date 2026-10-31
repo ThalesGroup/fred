@@ -19,9 +19,8 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs && \
     cargo build --release --locked && \
     rm -rf src
 
-# Migrations and the OpenFGA model are embedded in the binary at compile time.
+# Migrations are embedded in the binary at compile time.
 COPY migrations ./migrations
-COPY openfga ./openfga
 COPY src ./src
 RUN touch src/main.rs && cargo build --release --locked
 

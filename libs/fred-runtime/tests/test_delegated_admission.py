@@ -48,17 +48,12 @@ from fred_core.security.delegation import (
     GRANT_PARAM_PERSON,
     GRANT_PARAM_RUN,
     DelegationConfig,
-    enforce_account_status,
     initialize_delegation,
     preserved_delegation,
 )
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.oidc import get_current_user_without_gcu
 from fred_core.security.structure import KeycloakUser
-from fred_core.tests.security.rebac_fakes import (
-    AccountStatusStore,
-    account_status_engine,
-)
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import security as pod_security
 from fred_runtime.app.config import AgentPodConfig
@@ -784,13 +779,12 @@ def unattended_request() -> RuntimeExecuteRequest:
     )
 
 
-def installing_an_account_status_engine(store: AccountStatusStore):
+def installing_receiver():
     """A lifespan installing the engine for the request's account status check, as a
     service does once its delegation block is in place."""
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        await enforce_account_status(account_status_engine(store))
         yield
 
     return lifespan
@@ -805,7 +799,7 @@ def admit_through_a_route(
 ) -> DelegatedCredentialProvider:
     """Admit one run the way an endpoint does, so the person admission sees is
     the one the receiver resolved from a verified bearer and nothing else."""
-    app = FastAPI(lifespan=installing_an_account_status_engine(AccountStatusStore()))
+    app = FastAPI(lifespan=installing_receiver())
     admitted: list[Any] = []
 
     @app.post("/agents/execute")
@@ -989,7 +983,7 @@ def test_a_role_holder_naming_nobody_is_refused_where_grants_are_not_believed(
     role off a verified bearer, so a workload naming nobody cannot run as itself."""
     runtime = install_delegation()
     container = Container()
-    app = FastAPI(lifespan=installing_an_account_status_engine(AccountStatusStore()))
+    app = FastAPI(lifespan=installing_receiver())
 
     @app.post("/agents/execute")
     async def _execute(user=Depends(get_current_user_without_gcu)) -> dict[str, str]:
@@ -1689,18 +1683,6 @@ def _own_credential_app(monkeypatch, tmp_path):
             ),
         ),
     )
-    monkeypatch.setattr(
-        agent_app_module,
-        "PublishedOpenFgaRebacEngine",
-        lambda *args, **kwargs: SimpleNamespace(
-            get_client=AsyncMock(),
-            close=AsyncMock(),
-            requires_active_accounts=True,
-            enabled=True,
-            validate_account_status_model=AsyncMock(),
-            require_active_account=AsyncMock(),
-        ),
-    )
     app = agent_app_module.create_agent_app(
         registry={_EchoAgent().agent_id: _EchoAgent()},
         config=_build_test_config(
@@ -1883,9 +1865,6 @@ def refusing_pod(
         require_active_account=AsyncMock(),
         check_user_team_permission_or_raise=AsyncMock(side_effect=refusal),
     )
-    monkeypatch.setattr(
-        agent_app_module, "PublishedOpenFgaRebacEngine", lambda *a, **k: engine
-    )
     app = agent_app_module.create_agent_app(
         registry={_EchoAgent().agent_id: _EchoAgent()},
         config=_build_test_config(
@@ -1971,7 +1950,6 @@ def test_missing_canonical_space_is_refused_before_permission_resolution(
     assert len(errors) == 1
     assert errors[0]["type"] == "value_error"
     assert "runtime_context.space_id is required" in errors[0]["msg"]
-    engine.check_user_team_permission_or_raise.assert_not_awaited()
     assert not [r for r in records if getattr(r, "audit_event", None) == "rebac_denied"]
     assert not [e for e in pod_view if e["audit_event"] == "rebac_denied"]
     for canary in REFUSED_CANARIES:
@@ -2006,11 +1984,9 @@ def test_a_terms_decision_at_managed_admission_is_not_a_permission_audit(
 
     assert response.status_code == status_code
     assert response.json()["detail"] == cause
-    engine.require_active_account.assert_not_awaited()
     terms = cast(AsyncMock, pod_security._require_accepted)
     assert terms.await_args is not None
     assert terms.await_args.args[1].uid == REFUSED_PERSON
-    engine.check_user_team_permission_or_raise.assert_not_awaited()
     assert not [r for r in records if getattr(r, "audit_event", None) == "rebac_denied"]
     assert not [e for e in pod_view if e["audit_event"] == "rebac_denied"]
 

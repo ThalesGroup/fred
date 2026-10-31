@@ -33,14 +33,14 @@ async def call_metric(
     Time one async call and emit both a timer and a counter with the same dims.
 
     Shared shape for "counter+timer keyed by a bounded-cardinality dim"
-    instrumentation (e.g. OpenFGA operation, remote-call type) — one call site
+    instrumentation (e.g. authorization operation, remote-call type) — one call site
     per instrumented operation instead of hand-rolled timing/status bookkeeping
     at each one.
 
     Usage:
-        async with call_metric(kpi, latency_metric="rebac.call_latency_ms",
-                                total_metric="rebac.call_total",
-                                dims={"rebac_operation": "check"}):
+        async with call_metric(kpi, latency_metric="authority.call_latency_ms",
+                                total_metric="authority.call_total",
+                                dims={"operation": "check"}):
             ... do the call ...
     """
     if kpi_writer is None:

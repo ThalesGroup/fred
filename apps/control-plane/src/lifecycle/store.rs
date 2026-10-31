@@ -3,10 +3,10 @@
 
 use super::policy::{Catalog, LifecycleConfig};
 use crate::{
+    authorization::Authorization,
     bootstrap, db,
     domain::{Permission, Space, SpaceKind},
     error::{AppError, AppResult},
-    fga::{Fga, Scope},
     roles::PlatformPermission,
     spaces,
 };
@@ -79,8 +79,8 @@ pub struct Lifecycle {
     pub catalog: Catalog,
 }
 
-async fn permitted(fga: &Fga, actor: &str) -> AppResult<()> {
-    if fga
+async fn permitted(authorization: &Authorization, actor: &str) -> AppResult<()> {
+    if authorization
         .check_platform(actor, PlatformPermission::DeleteSpace)
         .await?
     {
@@ -89,8 +89,13 @@ async fn permitted(fga: &Fga, actor: &str) -> AppResult<()> {
         Err(AppError::Forbidden)
     }
 }
-pub async fn status(pool: &PgPool, fga: &Fga, actor: &str, id: Uuid) -> AppResult<Receipt> {
-    permitted(fga, actor).await?;
+pub async fn status(
+    pool: &PgPool,
+    authorization: &Authorization,
+    actor: &str,
+    id: Uuid,
+) -> AppResult<Receipt> {
+    permitted(authorization, actor).await?;
     Ok(sqlx::query_as("select * from deletion where id = $1")
         .bind(id)
         .fetch_one(pool)
@@ -115,7 +120,7 @@ pub async fn require_active<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> AppR
     }
     Ok(())
 }
-/// Root placement survives loss of its FGA link until the SQL manifest is drained.
+/// Root placement stays reserved until the SQL deletion manifest is drained.
 pub(crate) async fn reserved<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     parent: Uuid,
@@ -137,7 +142,6 @@ impl Lifecycle {
     pub async fn accept_document(
         &self,
         pool: &PgPool,
-        fga: &Fga,
         actor: &str,
         document_id: Uuid,
         conversation: Option<(Uuid, Uuid)>,
@@ -169,8 +173,7 @@ impl Lifecycle {
             if conversation.is_some_and(|(space, _)| space != space_id) {
                 return Err(AppError::NotFound);
             }
-            let tx =
-                crate::documents::authorized_mutation(pool, fga, actor, space_id, session).await?;
+            let tx = crate::documents::authorized_mutation(pool, actor, space_id, session).await?;
             tx.commit().await?;
             return Ok(receipt);
         }
@@ -189,8 +192,7 @@ impl Lifecycle {
         if conversation.is_some_and(|(space, _)| space != space_id) {
             return Err(AppError::NotFound);
         }
-        let mut tx =
-            crate::documents::authorized_mutation(pool, fga, actor, space_id, session).await?;
+        let mut tx = crate::documents::authorized_mutation(pool, actor, space_id, session).await?;
         let document: Option<Uuid> = sqlx::query_scalar(
             "select id from document where id = $1 and deletion_id is null for update",
         )
@@ -245,15 +247,15 @@ impl Lifecycle {
     pub async fn accept_session(
         &self,
         pool: &PgPool,
-        fga: &Fga,
+        authorization: &Authorization,
         actor: &str,
         space_id: Uuid,
         session_id: Uuid,
     ) -> AppResult<Receipt> {
-        let space = spaces::authorize(pool, fga, actor, space_id, Permission::Read).await?;
-        let (mut tx, mut guard) = spaces::lock_for(pool, fga, &space).await?;
         let space =
-            spaces::authorize_locked(&mut tx, fga, actor, space_id, Permission::Read).await?;
+            spaces::authorize(pool, authorization, actor, space_id, Permission::Read).await?;
+        let mut tx = spaces::lock_for(pool, &space).await?;
+        let space = spaces::authorize_locked(&mut tx, actor, space_id, Permission::Read).await?;
         let retired: Option<Option<Uuid>> = sqlx::query_scalar(
             "select deletion_id from session_metadata where space_id = $1 and user_id = $2 and session_id = $3 for update",
         )
@@ -293,7 +295,7 @@ impl Lifecycle {
             .bind(operation)
             .execute(&mut *tx)
             .await?;
-        fga.fence(&mut guard).await?;
+
         tx.commit().await?;
         tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="session", operation_id=%operation, session_id=%session_id, space_id=%space_id, actor_uid=actor, "Session deletion accepted");
         Ok(receipt)
@@ -302,7 +304,7 @@ impl Lifecycle {
     pub async fn accept(
         &self,
         pool: &PgPool,
-        fga: &Fga,
+        authorization: &Authorization,
         actor: &str,
         id: Uuid,
     ) -> AppResult<Receipt> {
@@ -312,16 +314,15 @@ impl Lifecycle {
             space_target!()
         );
         if let Some(receipt) = sqlx::query_as(REPLAY).bind(id).fetch_optional(pool).await? {
-            permitted(fga, actor).await?;
+            permitted(authorization, actor).await?;
             return Ok(receipt);
         }
         if !self.config.enabled {
-            permitted(fga, actor).await?;
+            permitted(authorization, actor).await?;
             return Err(AppError::Unavailable("space deletion is disabled".into()));
         }
         let mut tx = bootstrap::locked(pool).await?;
-        let mut platform_guard = fga.guard(&[Scope::Platform]).await?;
-        permitted(fga, actor).await?;
+        crate::platform::require_admin_locked(&mut tx, actor).await?;
         if let Some(receipt) = sqlx::query_as(REPLAY)
             .bind(id)
             .fetch_optional(&mut *tx)
@@ -334,8 +335,7 @@ impl Lifecycle {
         spaces::lock_organization(&mut tx, &root).await?;
         require_active(&mut *tx, id).await?;
         let target_kind = TargetKind::try_from(root.kind)?;
-        let org_guard = fga.guard(&[Scope::Organization(root.organization)]).await?;
-        platform_guard.extend(org_guard)?;
+
         let overlaps: bool = sqlx::query_scalar(concat!("select exists(select 1 from deletion where status <> 'completed' and organization_id = $1 and ($2 = 'organization' or (", space_target!(), " and target_id = $3) or target_parent_id = $3))"))
             .bind(root.organization).bind(match root.kind { SpaceKind::Organization => "organization", _ => "child" }).bind(id).fetch_one(&mut *tx).await?;
         if overlaps {
@@ -349,9 +349,9 @@ impl Lifecycle {
             .bind(operation).bind(id).bind(target_kind).bind(root.parent_id).bind(root.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).execute(&mut *tx).await?;
         mark(&mut tx, id, operation).await?;
         if root.kind != SpaceKind::Project {
-            discover(&mut tx, fga, &root, operation).await?;
+            discover(&mut tx, &root, operation).await?;
         }
-        fga.fence(&mut platform_guard).await?;
+
         let receipt = sqlx::query_as("select * from deletion where id = $1")
             .bind(operation)
             .fetch_one(&mut *tx)
@@ -383,36 +383,32 @@ async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> 
 }
 async fn mark_children(
     tx: &mut Transaction<'_, Postgres>,
-    fga: &Fga,
     parent: Uuid,
     personal: bool,
     operation: Uuid,
 ) -> AppResult<()> {
-    let mut token = String::new();
-    loop {
-        let (ids, next) = fga.linked_page(parent, personal, &token).await?;
-        for child in db::spaces(&mut **tx, &ids).await? {
-            mark(tx, child.id, operation).await?;
-        }
-        if next.is_empty() {
-            break;
-        }
-        if next == token {
-            return Err(anyhow::anyhow!("repeated hierarchy page").into());
-        }
-        token = next;
+    let ids: Vec<Uuid> = sqlx::query_scalar(if personal {
+        "select id from space where organization_id=$1 and kind='personal'"
+    } else {
+        "select id from space where parent_id=$1"
+    })
+    .bind(parent)
+    .fetch_all(&mut **tx)
+    .await?;
+    for id in ids {
+        mark(tx, id, operation).await?;
     }
+
     Ok(())
 }
 async fn discover(
     tx: &mut Transaction<'_, Postgres>,
-    fga: &Fga,
     root: &Space,
     operation: Uuid,
 ) -> AppResult<()> {
-    mark_children(tx, fga, root.id, false, operation).await?;
+    mark_children(tx, root.id, false, operation).await?;
     if root.kind == SpaceKind::Organization {
-        mark_children(tx, fga, root.id, true, operation).await?;
+        mark_children(tx, root.id, true, operation).await?;
         let mut cursor = Uuid::nil();
         loop {
             let teams: Vec<Uuid> = sqlx::query_scalar("select id from space where deletion_id = $1 and kind = 'team' and id > $2 order by id limit 96")
@@ -421,7 +417,7 @@ async fn discover(
                 break;
             }
             for team in teams {
-                mark_children(tx, fga, team, false, operation).await?;
+                mark_children(tx, team, false, operation).await?;
                 cursor = team;
             }
         }

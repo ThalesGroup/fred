@@ -31,13 +31,6 @@ docker-build: ## Build the Docker image
 docker-push: ## Push the Docker image
 	docker push $(IMAGE_FULL)
 
-.PHONY: model check-model
-model: ## Generate OpenFGA JSON from the service's direct-role DSL
-	python3 tools/model.py
-check-model:
-	python3 tools/model.py --check
-code-quality: check-model
-
 BUNDLE ?=
 TOKEN_FILE ?=
 export BUNDLE TOKEN_FILE
@@ -62,18 +55,17 @@ test-integration: export CONTROL_PLANE_TEST_BOOTSTRAP_TOKEN := integration-boots
 
 LIFECYCLE_TEMPORAL_IMAGE ?= mirror.gcr.io/temporalio/admin-tools:1.28
 .PHONY: test-lifecycle-temporal
-test-lifecycle-temporal: dev ## API/worker restart and history replay on disposable SQL, OpenFGA and Temporal
-	@set -e; pg=fred-lifecycle-pg-$$$$; fga=fred-lifecycle-fga-$$$$; temporal=fred-lifecycle-temporal-$$$$; \
-	trap 'docker rm -f $$pg $$fga $$temporal >/dev/null 2>&1 || true' EXIT; \
+test-lifecycle-temporal: dev ## API/worker restart and history replay on disposable SQL and Temporal
+	@set -e; pg=fred-lifecycle-pg-$$$$; temporal=fred-lifecycle-temporal-$$$$; \
+	trap 'docker rm -f $$pg $$temporal >/dev/null 2>&1 || true' EXIT; \
 	docker run -d --name $$pg -e POSTGRES_PASSWORD=it -p 127.0.0.1::5432 $(INTEGRATION_POSTGRES_IMAGE) >/dev/null; \
-	docker run -d --name $$fga -p 127.0.0.1::8080 $(INTEGRATION_OPENFGA_IMAGE) run >/dev/null; \
 	docker run -d --name $$temporal -p 127.0.0.1::7233 --entrypoint temporal $(LIFECYCLE_TEMPORAL_IMAGE) server start-dev --ip 0.0.0.0 --headless >/dev/null; \
-	pg_addr=$$(docker port $$pg 5432/tcp | head -n1); fga_addr=$$(docker port $$fga 8080/tcp | head -n1); temporal_addr=$$(docker port $$temporal 7233/tcp | head -n1); \
+	pg_addr=$$(docker port $$pg 5432/tcp | head -n1); temporal_addr=$$(docker port $$temporal 7233/tcp | head -n1); \
 	ready=false; for attempt in $$(seq 1 60); do \
-		if docker exec $$pg psql -U postgres -h 127.0.0.1 -c 'select 1' >/dev/null 2>&1 && curl -sf http://$$fga_addr/healthz >/dev/null && docker exec $$temporal temporal operator cluster health >/dev/null 2>&1; then ready=true; break; fi; \
+		if docker exec $$pg psql -U postgres -h 127.0.0.1 -c 'select 1' >/dev/null 2>&1 && docker exec $$temporal temporal operator cluster health >/dev/null 2>&1; then ready=true; break; fi; \
 		sleep 1; \
 	done; test "$$ready" = true; \
-	CONTROL_PLANE_IT_POSTGRES=postgres://postgres:it@$$pg_addr CONTROL_PLANE_IT_OPENFGA=http://$$fga_addr CONTROL_PLANE_IT_TEMPORAL=$$temporal_addr \
+	CONTROL_PLANE_IT_POSTGRES=postgres://postgres:it@$$pg_addr CONTROL_PLANE_IT_TEMPORAL=$$temporal_addr \
 	$(CARGO) test --test lifecycle_temporal -- --ignored
 
 .PHONY: generate-config-schema

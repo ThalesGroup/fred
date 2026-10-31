@@ -6,7 +6,7 @@ description: Démarrer les composants Fred locaux et, sur demande, un pod fred-s
 # Fred — démarrage et observation locale
 
 Le développeur pilote l’UI et gère Docker Compose (Keycloak, Postgres,
-Temporal, OpenSearch, OpenFGA et autres services d’infrastructure). L’assistant
+Temporal, OpenSearch et autres services d’infrastructure). L’assistant
 lance les applications demandées, lit leurs logs et aide au diagnostic.
 
 ## Périmètre et accord

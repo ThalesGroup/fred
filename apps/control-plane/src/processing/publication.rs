@@ -89,14 +89,9 @@ impl Processing {
             None
         };
         let mut tx = if commit.stage == Stage::Indexing {
-            let mut tx = documents::authorized_mutation(
-                &self.pool,
-                &self.fga,
-                &r.actor,
-                r.space_id,
-                r.session_id,
-            )
-            .await?;
+            let mut tx =
+                documents::authorized_mutation(&self.pool, &r.actor, r.space_id, r.session_id)
+                    .await?;
             onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &r.actor).await?;
             tx
         } else {

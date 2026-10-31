@@ -308,7 +308,7 @@ export type ChatSseCallbacks = {
  * SSE chat transport for managed agent instances.
  *
  * - Calls control-plane /prepare-execution before each send to resolve the runtime URLs
- *   and context prompt (no signed grant — the pod authorizes via Keycloak JWT + OpenFGA).
+ *   and context prompt (no signed grant — the pod authorizes via validated identity and the Control Plane turn context).
  * - POSTs to the runtime execute_stream_url using fetch() with SSE response parsing.
  * - Maps RuntimeEvent frames (assistant_delta, final, tool_call, …) onto a flat ChatMessage[].
  * - Supports HITL resume via sendHitlResume().

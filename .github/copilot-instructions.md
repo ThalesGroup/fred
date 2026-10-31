@@ -14,7 +14,7 @@
 - Run `make code-quality` and `make test` in every touched project.
 - Default tests must stay offline.
 - Tests requiring external services must be marked `integration`.
-- Assume no third-party services are running for default validation (no MinIO/OpenSearch/Postgres/Keycloak/OpenFGA/Temporal, etc.).
+- Assume no third-party services are running for default validation (no MinIO/OpenSearch/Postgres/Keycloak/Temporal, etc.).
 - Every new or modified function must explain:
   - why it exists
   - how to use it

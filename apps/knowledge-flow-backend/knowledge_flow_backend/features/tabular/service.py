@@ -807,14 +807,14 @@ class TabularService:
         *,
         document_uids: list[str] | None = None,
     ) -> list[ResolvedDataset]:
-        await require_space_read(user, self.context.space_id)
+        authorized_space_ids = await require_space_read(user, self.context.space_id)
         try:
             ids = [UUID(uid) for uid in document_uids] if document_uids is not None else None
         except ValueError:
             raise PermissionError(forbidden_datasets_message(document_uids or [])) from None
         try:
             async with self.engine.connect() as conn:
-                scope = await resolve_scope(conn, self.context, user_id=user.uid)
+                scope = await resolve_scope(conn, self.context, user_id=user.uid, authorized_space_ids=authorized_space_ids)
             cursor = UUID(int=0)
             resolved = []
             while True:

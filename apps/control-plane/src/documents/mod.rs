@@ -11,9 +11,9 @@ mod reads;
 mod upload;
 
 use crate::{
+    authorization::Authorization,
     domain::{Space, SpaceKind},
     error::{AppError, AppResult},
-    fga::Fga,
 };
 use anyhow::{Context, Result, ensure};
 use axum::http::StatusCode;
@@ -27,20 +27,19 @@ use uuid::Uuid;
 /// Drive mutations require a space writer; attachments require their live conversation's owner.
 pub(crate) async fn authorized_mutation(
     pool: &PgPool,
-    fga: &Fga,
     actor: &str,
     space_id: Uuid,
     session_id: Option<Uuid>,
 ) -> AppResult<Transaction<'static, Postgres>> {
     match session_id {
-        Some(session) => crate::sessions::lock_owner(pool, fga, actor, space_id, session).await,
-        None => crate::spaces::authorized_write(pool, fga, actor, space_id).await,
+        Some(session) => crate::sessions::lock_owner(pool, actor, space_id, session).await,
+        None => crate::spaces::authorized_write(pool, actor, space_id).await,
     }
 }
 
 pub struct Storage {
     pub(crate) pool: PgPool,
-    pub(crate) fga: Fga,
+    pub(crate) authorization: Authorization,
     pub(crate) terms: Option<String>,
     pub config: ContentConfig,
     pub objects: ObjectStore,
@@ -55,7 +54,7 @@ impl Storage {
     /// Initialize the namespace before serving; a fresh database never adopts old keys.
     pub async fn start(
         pool: &PgPool,
-        fga: &Fga,
+        authorization: &Authorization,
         terms: Option<String>,
         config: ContentConfig,
         access: String,
@@ -124,7 +123,7 @@ impl Storage {
         .context("content spool initialization failed")??;
         Ok(Arc::new(Self {
             pool: pool.clone(),
-            fga: fga.clone(),
+            authorization: authorization.clone(),
             terms,
             prefix: if prefix.is_empty() {
                 prefix

@@ -51,7 +51,7 @@ class VectorSearchController:
             context: DocumentAccessContext = Depends(document_access_context),
             person: AssertedUser = Depends(delegated_person),
         ) -> List[VectorSearchHit]:
-            await require_space_read(person, context.space_id)
+            authorized_space_ids = await require_space_read(person, context.space_id)
             try:
                 async with phase_timer(self.kpi, "vector_search"):
                     return await self.service.search(
@@ -60,6 +60,7 @@ class VectorSearchController:
                         top_k=request.top_k,
                         policy_name=request.search_policy,
                         context=context,
+                        authorized_space_ids=authorized_space_ids,
                     )
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:
                 raise _space_error(exc) from None
@@ -78,13 +79,14 @@ class VectorSearchController:
             limit: int = Query(default=200, ge=1, le=1000),
             person: AssertedUser = Depends(delegated_person),
         ) -> List[VectorSearchHit]:
-            await require_space_read(person, context.space_id)
+            authorized_space_ids = await require_space_read(person, context.space_id)
             try:
                 async with phase_timer(self.kpi, "vector_document_chunks"):
                     return await self.service.get_document_chunks_ordered(
                         user=person,
                         document_uid=document_uid,
                         context=context,
+                        authorized_space_ids=authorized_space_ids,
                         limit=limit,
                     )
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:

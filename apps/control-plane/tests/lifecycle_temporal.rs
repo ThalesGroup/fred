@@ -30,7 +30,6 @@ fn spawn_manager(config: &std::path::Path, log: &std::path::Path) -> tokio::proc
         .env("CONFIG_FILE", config)
         .env("ENV_FILE", "/nonexistent")
         .env("FRED_POSTGRES_PASSWORD", "it")
-        .env_remove("OPENFGA_API_TOKEN")
         .kill_on_drop(true)
         .stdout(std::fs::File::create(log).unwrap())
         .stderr(std::process::Stdio::null())
@@ -69,19 +68,16 @@ async fn wait_for(
 }
 // Proves: I24, I4, I8, I23
 #[tokio::test]
-#[ignore = "needs disposable SQL/OpenFGA/Temporal: make test-lifecycle-temporal"]
+#[ignore = "needs disposable SQL/Temporal: make test-lifecycle-temporal"]
 async fn api_worker_restart_schedule_reconciliation_and_replay() {
     let host = std::env::var("CONTROL_PLANE_IT_TEMPORAL").expect("make test-lifecycle-temporal");
     let e = environment::env().await;
-    bootstrap::grant_root(&e.pool, &e.fga, "root")
-        .await
-        .unwrap();
-    let org = crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let org = crate::support::member_organization(&e.pool, &e.authorization, "TSN", "alice")
         .await
         .unwrap();
     let team = spaces::create_space(
         &e.pool,
-        &e.fga,
         "alice",
         SpaceKind::Team,
         org.id,
@@ -112,7 +108,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         agent_catalog: Default::default(),
         auth: Arc::new(identity.auth().await),
         pool: e.pool.clone(),
-        fga: e.fga.clone(),
+        authorization: e.authorization.clone(),
         directory: None,
         content: None,
         processing: None,
@@ -147,7 +143,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .unwrap();
     let t = &lifecycle.config.temporal;
     let config = json!({"app":{"base_url":"/control-plane/v1","address":"127.0.0.1","port":0,"log_format":"json"},
-      "security":{"user":{"realm_url":identity.realm,"client_id":"app"},"rebac":{"api_url":e.openfga,"store_name":e.store,"create_store_if_needed":false,"sync_schema_on_init":false}},
+      "security":{"user":{"realm_url":identity.realm,"client_id":"app"}},
       "storage":{"postgres":{"host":pg.host_str(),"port":pg.port().unwrap(),"username":"postgres","database":database}},
       "scheduler":{"lifecycle":{"enabled":true,"sweep_interval":"PT1S","temporal":{"host":t.host,"namespace":t.namespace,"task_queue":t.task_queue,"workflow_id_prefix":t.workflow_id_prefix}}},
       "policies":{"purge_catalog_path":catalog}});
@@ -158,7 +154,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     wait_for(&e.pool, operation, false, &mut first).await;
     first.kill().await.unwrap();
     first.wait().await.unwrap();
-    let receipt = lifecycle::store::status(&e.pool, &e.fga, "root", operation)
+    let receipt = lifecycle::store::status(&e.pool, &e.authorization, "root", operation)
         .await
         .unwrap();
     assert_ne!(receipt.status, Status::Completed);
@@ -178,7 +174,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .await
         .unwrap();
     wait_for(&e.pool, operation, true, &mut second).await;
-    let done = lifecycle::store::status(&e.pool, &e.fga, "root", operation)
+    let done = lifecycle::store::status(&e.pool, &e.authorization, "root", operation)
         .await
         .unwrap();
     assert_eq!(done.folders_deleted, 1001);
@@ -207,7 +203,6 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     // its local future and server-side wait within the shutdown budget.
     let waiting = spaces::create_space(
         &e.pool,
-        &e.fga,
         "alice",
         SpaceKind::Team,
         org.id,
@@ -217,7 +212,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     .await
     .unwrap();
     let waiting_receipt = lifecycle
-        .accept(&e.pool, &e.fga, "root", waiting.id)
+        .accept(&e.pool, &e.authorization, "root", waiting.id)
         .await
         .unwrap();
     let mut held = e.pool.begin().await.unwrap();
@@ -257,7 +252,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     }).await.expect("cancelled SQL must release its server-side wait");
     held.rollback().await.unwrap();
     assert_ne!(
-        lifecycle::store::status(&e.pool, &e.fga, "root", waiting_receipt.id)
+        lifecycle::store::status(&e.pool, &e.authorization, "root", waiting_receipt.id)
             .await
             .unwrap()
             .status,
@@ -268,7 +263,6 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     // Exhausted retries persist a safe status even without clean-side writes.
     let failing = spaces::create_space(
         &e.pool,
-        &e.fga,
         "alice",
         SpaceKind::Team,
         org.id,
@@ -280,14 +274,15 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     sqlx::raw_sql("create function fail_lifecycle_test() returns trigger language plpgsql as $$ begin raise exception 'private dependency detail'; end $$; create trigger fail_lifecycle_test before delete on space for each row execute function fail_lifecycle_test()")
         .execute(&e.pool).await.unwrap();
     let failing_receipt = lifecycle
-        .accept(&e.pool, &e.fga, "root", failing.id)
+        .accept(&e.pool, &e.authorization, "root", failing.id)
         .await
         .unwrap();
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
-            let receipt = lifecycle::store::status(&e.pool, &e.fga, "root", failing_receipt.id)
-                .await
-                .unwrap();
+            let receipt =
+                lifecycle::store::status(&e.pool, &e.authorization, "root", failing_receipt.id)
+                    .await
+                    .unwrap();
             if receipt.status == Status::Retrying {
                 assert_eq!(
                     receipt.error_code.as_deref(),

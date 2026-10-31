@@ -13,8 +13,8 @@ Same targets as the other apps (`make help` lists them). Building needs `protoc`
 cp config/.env.template config/.env   # once: the four secrets
 make run                              # http://localhost:8222/control-plane/v1
 make test                             # offline unit tests
-make test-integration                 # throwaway Postgres, OpenFGA and Keycloak containers
-make test-lifecycle-temporal          # disposable SQL/FGA/Temporal worker recovery
+make test-integration                 # throwaway Postgres and Keycloak containers
+make test-lifecycle-temporal          # disposable SQL/Temporal worker recovery
 make code-quality                     # model parity + clippy + rustfmt
 make -C ../../docs/architecture check # the dossier still matches the code
 ```
@@ -25,7 +25,7 @@ The existing Control Plane serves organization totals and team detail, gated by
 organization attachment. The [supervision contract](../../docs/architecture/A8-organizations.md#organization-supervision)
 defines counters, privacy boundaries, pagination and failure behavior; the
 [read budget](../../docs/architecture/09-quality.md#organization-supervision-read-budget)
-documents SQL/OpenFGA costs. The [HTTP catalogue](../../docs/architecture/A2-manager-contracts.md#organization-supervision-api)
+documents SQL costs. The [HTTP catalogue](../../docs/architecture/A2-manager-contracts.md#organization-supervision-api)
 is generated from the handlers. There is no supervision UI or separate service.
 
 ## Embedded hello-world agent
@@ -121,9 +121,8 @@ Admission, unique organization context, active lifecycle and `can_manage` on an
 organization are required; neither organization attachment alone nor platform
 roles bypass this check. The page reads projected template identities and their organization defaults.
 Its existing switch writes `PUT /organizations/{organization_id}/agents/{agent_id}/default-on`.
-The default starts off and is stored in OpenFGA, not SQL. Turning it off preserves
-explicit team and personal-class grants. No enrollment or instance state is inferred.
-The write reuses the platform/organization locks and guards after discovery; no
+The default starts off and is stored in `agent_template_policy`. No enrollment or
+instance state is inferred. The write reuses platform/organization locks after discovery; no
 runtime call holds a SQL transaction. Templates declaring tool dependencies cannot
 be enabled by this initial integration. The supplied local configuration disables the
 external fred-agents source; with no enabled external source the embedded catalog
@@ -132,7 +131,7 @@ whole discovery if unavailable.
 
 This operator command uses a 10-second timeout per source and exits with an error
 if any source fails, without printing a partial catalog. It does not start the API,
-connect to SQL/OpenFGA, persist definitions or enroll instances. `serve` does not
+connect to SQL, persist definitions or enroll instances. `serve` does not
 poll runtimes. This command does not enroll or execute agents.
 
 ## Platform model inventory and organization owneristration
@@ -258,7 +257,7 @@ restores a revoked permission. Permission alone establishes no execution readine
 
 Refresh checks admission/Manage before claiming a SQL token, commits, then performs
 HTTP without a SQL connection. After HTTP it reacquires the existing platform and
-organization locks, rechecks admission/placement/lifecycle/Manage and fences FGA
+organization locks, rechecks admission/placement/lifecycle/Manage inside the same SQL transaction
 before calling the publication store on that same transaction. Revocation refuses
 publication of both successes and failures. Configuration equality and latest-token
 checks still fence M1 publication; an unauthorized or cancelled attempt leaves its
@@ -268,7 +267,7 @@ Tables `organization_model_policy` and `organization_model_permission` hold the 
 references; deferred membership foreign keys ensure atomic default/fallback
 consistency. A trigger restricts the policy owner to an organization. Policy and
 permissions cascade only on physical organization purge, not retirement or a user's
-departure. No model OpenFGA objects are introduced.
+departure. Model policies remain organization scoped.
 
 Use the existing migration procedure before deploying this binary; startup checks
 the full sequence. Instance settings and resolver data are described below.
@@ -433,25 +432,14 @@ The pod's direct history GET currently checks ownership only: its current Weaver
 space/admission check is a prerequisite of the later chat cutover, independent of
 executable-instance state. This increment does not claim that read gate is wired.
 
-Authorization cost follows existing owners. Let R be the number of paginated FGA
-Read requests for `roles_of(user)` (filter `user:user_id, object:space:`, followed
-through every continuation token). A space authorization adds one `can_read`
-Check after that organization-context lookup. List/read use R+1 calls, independent
-of session count. Registration/patch perform two such authorizations plus two
-guard revision Reads under the existing platform/organization lock; new creation
-adds one template `can_use` Check and one fence Write, PATCH one fence Write, and
-an existing-row replay neither. Thus successful calls cost 2R+6, 2R+5 and 2R+4
-respectively when both role reads have R pages. Fence replaces the two revision
-tuples (two deletes/two writes), creating no session FGA tuple. Preparation performs
-two space authorizations and two template Checks (2R+4), with bounded discovery
-between them and outside SQL. Model offers cause no extra FGA checks. Template
-Use has one contextual placement tuple for team spaces, two for personal spaces.
-SQL lock duration for mutations includes guard/recheck/fence calls and short SQL
-reads/writes, never discovery, inference or streaming. Role cardinality drives R;
-session count drives list SQL/serialization only. These are client RPC counts,
-not measurements of server evaluation cost. M4 adds one scoped SQL association
-read within its existing admission, never within an LLM loop. No latency or load
-measurement is claimed; SQL behavior remains functionally unexecuted.
+Authorization reads the PostgreSQL role tables and immutable space placement. Mutations
+check permission under the same platform/organization locks and SQL transaction as
+their writes. Discovery, inference and streaming stay outside SQL transactions.
+
+`POST /authorize/scope` returns the requested `space_id` anchor and the exact readable
+`space_ids` subset of its ancestor path. Knowledge Flow applies that corpus directly.
+Decision endpoints accept authenticated people or trusted person/run/agent delegation,
+evaluate the person's admission and rights, and return `Cache-Control: no-store`.
 
 
 ## Background tasks
@@ -556,7 +544,7 @@ control-plane import-provisioning /path/to/bundle.zip --token-file /path/to/oper
 
 The CLI uses the normal configuration and the manager's Keycloak service client.
 It needs neither the running HTTP server nor Temporal and never initializes or
-migrates SQL/OpenFGA. The HTTP equivalent is multipart
+migrates SQL. The HTTP equivalent is multipart
 `POST /control-plane/v1/import-export/import`, with exactly one field named `file`
 and the operator bearer. It checks platform administration before reading the upload.
 A new organization declares at least one owner and one admin. Archive limits are 50 MiB compressed and
@@ -573,7 +561,7 @@ phase and acknowledgment counts; correct the cause and replay with a valid token
 There is no cross-system rollback, so failure does not prove absence of effects.
 
 `make test-integration` imports the actual Make artifact over HTTP with disposable
-Keycloak, PostgreSQL and OpenFGA, verifies replay and identity preservation, and
+Keycloak, PostgreSQL, verifies replay and identity preservation, and
 imports a variant with a project.
 
 ## Import through the frontend
@@ -593,7 +581,7 @@ make test-provisioning-browser
 ```
 
 The test needs Docker, Node/npm and the Rust/protoc prerequisites above. It starts
-throwaway PostgreSQL, OpenFGA and Keycloak plus the real manager governance router
+throwaway PostgreSQL and Keycloak plus the real manager governance router
 and Vite frontend, then removes its services. Starting with no root or consent,
 it accepts CGU, bootstraps through the UI, imports the actual Make ZIP, replays it,
 imports a project variant, then switches accounts in the same browser. It checks
@@ -617,34 +605,14 @@ or uninitialized database. The k3d factory profile enables the chart's
 pre-install/pre-upgrade migration Job. Rebuilding the Rust
 image embeds new migration files; no manual SQL command is needed for this upgrade.
 
-Migrations 0010/0011 classify existing personal spaces as `personal`, including
-retired rows, without changing their IDs, content or OpenFGA tuples. The conversion
-holds an exclusive lock on `space` and restores its placement immutability trigger
-within the same transaction. Deploy matching API and generated clients together;
-older binaries/clients only understand the three previous kinds. Review custom
-`space_kind: team` retention rules: they no longer select personal documents.
+`0001_schema.sql` creates the new Weaver schema, including platform and space roles
+and organization template policy; later numbered files evolve it. This branch requires
+a fresh database. There is no transfer of prior authorization data or compatibility mode.
+Startup rejects migration histories or checksums differing from the embedded schema.
 
-`0001_schema.sql` creates the schema; later numbered files evolve it.
-A database whose recorded
-versions or checksums differ from the embedded files is refused by the API and by
-`migrate`; recreate it explicitly. Do not edit applied files or replace stored checksums.
-
-The OpenFGA model still follows its separate pre-release replacement policy.
-The [deployment chapter](../../docs/architecture/A3-manager-operations.md#authorization-store-publication)
-describes publication and retry rules.
-
-A role mutation that loses its authorization revision returns a conflict; replay
-rechecks current authority. Timeout is not rollback. Roles and permission evaluation
-remain in OpenFGA; SQL holds only the active store/model binding.
-
-## Existing environment identifiers
-
+Role mutations, initial space grants and bootstrap commit atomically in PostgreSQL.
 The service and binary are named `control-plane`; the image remains
-`control-plane-backend`. The current defaults use OpenFGA store `control-plane`
-and lifecycle queue/prefix `control-plane-lifecycle`. Existing persisted resources
-are not renamed or migrated by deployment. These defaults require a fresh
-secondary installation or an explicit migration of existing state; application
-reset is not supported for the Rust ingestion profile.
+`control-plane-backend` and the lifecycle queue/prefix is `control-plane-lifecycle`.
 
 The frontend's `controlPlane` client targets this Rust API. `legacyControlPlane`
 retains the previous API types and clients for screens not yet migrated; the

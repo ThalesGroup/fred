@@ -37,7 +37,7 @@ pub async fn preview(
     let document = db::document(&state.pool, id).await?;
     crate::spaces::authorize(
         &state.pool,
-        &state.fga,
+        &state.authorization,
         actor,
         document.space_id,
         Permission::Read,

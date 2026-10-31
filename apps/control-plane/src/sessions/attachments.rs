@@ -126,7 +126,7 @@ async fn list_attachments(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, session_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<Json<Vec<Attachment>>> {
-    super::require_owner(&s.pool, &s.fga, &user.uid, space_id, session_id).await?;
+    super::require_owner(&s.pool, &s.authorization, &user.uid, space_id, session_id).await?;
     let mut attachments: Vec<Attachment> = sqlx::query_as(
         "select d.id as document_id, d.name, d.mime, d.size, d.created_at,
          (g.id is not null and d.retrievable and not d.retrievable_pending) as ready
@@ -163,7 +163,6 @@ async fn delete_attachment(
         .lifecycle
         .accept_document(
             &s.pool,
-            &s.fga,
             &user.uid,
             document_id,
             Some((space_id, session_id)),

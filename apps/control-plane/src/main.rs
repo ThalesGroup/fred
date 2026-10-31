@@ -18,16 +18,18 @@ use anyhow::{Context, Result};
 use futures::{FutureExt, StreamExt, future::LocalBoxFuture, stream::FuturesUnordered};
 use sqlx::postgres::PgPoolOptions;
 
-use control_plane::{api, auth, config::Configuration as Config, fga::Fga, logging};
+use control_plane::{
+    api, auth, authorization::Authorization, config::Configuration as Config, logging,
+};
 
-const USAGE: &str = "usage: control-plane [serve | discover-agents | migrate | publish-authorization-model --expected-model <id> | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | discover-agents | migrate | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args == ["--help"] || args == ["-h"] {
         println!(
-            "{USAGE}\nImport requires an operator bearer file and an initialized schema/model. Replay is additive.\nModel publication requires a backup, reviewed tuple compatibility and all consumers stopped. See openfga/README.md."
+            "{USAGE}\nImport requires an operator bearer file and an initialized schema/model. Replay is additive."
         );
         return Ok(());
     }
@@ -79,7 +81,7 @@ async fn main() -> Result<()> {
             error
         }
     })?;
-    // Operator discovery prints only JSON and does not initialize SQL, FGA or HTTP.
+    // Operator discovery prints only JSON and does not initialize SQL or HTTP.
     if args == ["discover-agents"] {
         let catalogs = control_plane::agents::discover(&config.platform).await?;
         println!("{}", serde_json::to_string_pretty(&catalogs)?);
@@ -114,13 +116,6 @@ async fn main() -> Result<()> {
         .as_slice()
     {
         [] | ["serve"] => serve(config).await,
-        ["publish-authorization-model", "--expected-model", model] => {
-            let pool = pool(&config).await?;
-            let mut config = config;
-            config.security.rebac.create_store_if_needed = false;
-            fga(&config).await?.publish_model(&pool, model).await?;
-            Ok(())
-        }
         ["import-provisioning", bundle, "--token-file", token] => {
             import(config, bundle, token).await
         }
@@ -150,27 +145,10 @@ async fn pool(config: &Config) -> Result<sqlx::PgPool> {
     Ok(pool)
 }
 
-async fn fga(config: &Config) -> Result<Fga> {
-    let rebac = &config.security.rebac;
-    Fga::connect(
-        &rebac.api_url,
-        &rebac.store_name,
-        rebac.create_store_if_needed,
-        false,
-        config.fga_token(),
-        config.fga_timeout(),
-    )
-    .await
-}
-
 async fn serve(config: Config) -> Result<()> {
     let pool = pool(&config).await?;
     control_plane::model_catalog::configure_sources(&pool, &config.platform.model_sources).await?;
-    let fga = if config.security.rebac.sync_schema_on_init {
-        fga(&config).await?.initialize(&pool).await?
-    } else {
-        fga(&config).await?.load(&pool).await?
-    };
+    let authorization = Authorization::new(pool.clone());
     let content = if let Some(content) = config.storage.content.clone() {
         let access =
             std::env::var(&content.access_key_env_var).context("missing content access key")?;
@@ -179,7 +157,7 @@ async fn serve(config: Config) -> Result<()> {
         Some(
             control_plane::documents::Storage::start(
                 &pool,
-                &fga,
+                &authorization,
                 config
                     .app
                     .gcu_version
@@ -217,7 +195,7 @@ async fn serve(config: Config) -> Result<()> {
         },
         auth: std::sync::Arc::new(auth::Authenticator::start(config.security()?).await?),
         pool: pool.clone(),
-        fga: fga.clone(),
+        authorization: authorization.clone(),
         onboarding: (&config).into(),
         lifecycle: control_plane::lifecycle::Lifecycle {
             config: config.scheduler.lifecycle.clone(),
@@ -292,7 +270,6 @@ async fn serve(config: Config) -> Result<()> {
         loop {
             match control_plane::lifecycle::worker::run(
                 pool.clone(),
-                fga.clone(),
                 config.scheduler.lifecycle.clone(),
                 stopping.clone(),
             )
@@ -368,20 +345,9 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
             &caller.uid,
         )
         .await?;
-        let rebac = &config.security.rebac;
-        let fga = Fga::connect(
-            &rebac.api_url,
-            &rebac.store_name,
-            false,
-            false,
-            config.fga_token(),
-            config.fga_timeout(),
-        )
-        .await?
-        .load(&pool)
-        .await?;
+        let authorization = Authorization::new(pool.clone());
         anyhow::ensure!(
-            fga.is_platform_admin(&caller.uid).await?,
+            authorization.is_platform_admin(&caller.uid).await?,
             "import requires platform admin"
         );
         use tokio::io::AsyncReadExt;
@@ -394,13 +360,14 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
             .await
             .map_err(|_| anyhow::anyhow!("cannot read provisioning bundle"))?;
         let bundle = tokio::task::spawn_blocking(move || Bundle::parse(&bytes)).await??;
-        Ok::<_, anyhow::Error>((pool, fga, directory, caller.uid, bundle))
+        Ok::<_, anyhow::Error>((pool, authorization, directory, caller.uid, bundle))
     }
     .await;
-    let (pool, fga, directory, operator, bundle) = prepared.map_err(import_setup_error)?;
+    let (pool, authorization, directory, operator, bundle) =
+        prepared.map_err(import_setup_error)?;
     let report = Importer {
         pool: &pool,
-        fga: &fga,
+        authorization: &authorization,
         directory: &directory,
         operator: &operator,
     }

@@ -1,9 +1,8 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Temporal owns retries and history; activities own SQL, OpenFGA and clocks.
+//! Temporal owns retries and history; activities own SQL and clocks.
 use super::{cleanup, policy::LifecycleConfig};
-use crate::fga::Fga;
 use anyhow::{Context, Result};
 use sqlx::PgPool;
 use std::{sync::Arc, time::Duration};
@@ -25,7 +24,6 @@ use uuid::Uuid;
 
 pub struct CleanupActivities {
     pub pool: PgPool,
-    pub fga: Fga,
     pub config: LifecycleConfig,
 }
 // A Temporal timeout signals cancellation; it does not drop Rust activity futures.
@@ -78,7 +76,7 @@ impl CleanupActivities {
         }
         bounded(
             &ctx,
-            cleanup::batch(&self.pool, &self.fga, operation).instrument(tracing::info_span!(
+            cleanup::batch(&self.pool, operation).instrument(tracing::info_span!(
                 "deletion",
                 operation_id = %operation,
                 target_kind = tracing::field::Empty,
@@ -213,7 +211,6 @@ pub fn stage(error: &anyhow::Error) -> &'static str {
 
 pub async fn run(
     pool: PgPool,
-    fga: Fga,
     config: LifecycleConfig,
     stopping: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<()> {
@@ -241,7 +238,7 @@ pub async fn run(
         .graceful_shutdown_period(Duration::from_secs(2))
         .register_workflow::<SpaceDeletionSweep>()
         .map_err(setup)?
-        .register_activities(CleanupActivities { pool, fga, config })
+        .register_activities(CleanupActivities { pool, config })
         .build();
     let mut worker = Worker::new(&runtime, client, options).map_err(setup)?;
     let shutdown = worker.shutdown_handle();

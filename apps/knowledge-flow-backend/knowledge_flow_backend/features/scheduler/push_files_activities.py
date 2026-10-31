@@ -19,7 +19,7 @@ import tempfile
 
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
-from temporalio import activity
+from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
@@ -51,11 +51,8 @@ async def resolve_push_input_file_for_worker(
     user: KeycloakUser,
     metadata: DocumentMetadata,
     working_dir: pathlib.Path,
-    ingestion_service=None,
+    ingestion_service,
 ) -> pathlib.Path:
-    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
-
-    ingestion_service = ingestion_service if ingestion_service is not None else get_ingestion_service()
     await asyncio.to_thread(ingestion_service.get_local_copy, user, metadata, working_dir)
     return _first_input_file(working_dir / "input")
 
@@ -75,12 +72,11 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     started_at = asyncio.get_running_loop().time()
     logger.info("Push metadata activity started")
     emit_temporal_activity_queue_wait_kpi(phase="metadata")
-    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
     from knowledge_flow_backend.features.manager_processing.service import manager_service
 
     ingestion_service = await manager_service(file.source_tag, "preparation", file=file)
     if ingestion_service is None:
-        ingestion_service = get_ingestion_service()
+        raise exceptions.ApplicationError("manager processing required", non_retryable=True)
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] push file uid={file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
     metadata = await ingestion_service.get_metadata(file.processed_by, file.document_uid)
@@ -122,7 +118,6 @@ async def push_input_process(
     profile = coerce_processing_profile(profile)
     logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s profile=%s", metadata.document_uid, profile)
 
-    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
     from knowledge_flow_backend.features.manager_processing.service import manager_service
 
     ingestion_service = await manager_service(metadata.source.source_tag, "extraction")
@@ -130,7 +125,7 @@ async def push_input_process(
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
         return metadata
     if ingestion_service is None:
-        ingestion_service = get_ingestion_service()
+        raise exceptions.ApplicationError("manager processing required", non_retryable=True)
 
     try:
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)

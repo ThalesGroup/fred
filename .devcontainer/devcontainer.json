@@ -57,8 +57,6 @@
         "ms-python.vscode-pylance",
         // Python linter and formatter
         "charliermarsh.ruff",
-        // OpenFga .fga file support
-        "openfga.openfga-vscode",
 
         // ---- Frontend ----
         // Typescript support

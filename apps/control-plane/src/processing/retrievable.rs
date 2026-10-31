@@ -151,8 +151,7 @@ impl Processing {
         input: SetRetrievable,
     ) -> AppResult<Document> {
         let document = db::document(&self.pool, id).await?;
-        let mut tx =
-            spaces::authorized_write(&self.pool, &self.fga, actor, document.space_id).await?;
+        let mut tx = spaces::authorized_write(&self.pool, actor, document.space_id).await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
         let document: Document =
             sqlx::query_as("select * from document where id=$1 and deletion_id is null for update")
@@ -229,7 +228,7 @@ impl Processing {
         let document = db::pipeline_document(&self.pool, id).await?;
         spaces::authorize(
             &self.pool,
-            &self.fga,
+            &self.authorization,
             &c.actor,
             document.space_id,
             crate::domain::Permission::Write,
@@ -264,8 +263,7 @@ impl Processing {
         }
         let document = db::pipeline_document(&self.pool, id).await?;
         let c = self.retrieval_command(id).await?;
-        let mut tx =
-            spaces::authorized_write(&self.pool, &self.fga, &c.actor, document.space_id).await?;
+        let mut tx = spaces::authorized_write(&self.pool, &c.actor, document.space_id).await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &c.actor).await?;
         // The atomic phase fence survives worker/API restarts and Temporal history expiry.
         let changed = match input.step {

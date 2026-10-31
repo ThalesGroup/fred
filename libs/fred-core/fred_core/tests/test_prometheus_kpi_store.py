@@ -124,8 +124,7 @@ def test_prometheus_store_filters_generic_phase_and_operation_dims() -> None:
     The generic `phase` (app.phase_latency_ms — Graph, checkpoint SQL, KF) and
     `operation` (e.g. llm.call_latency_ms) dims stay excluded: their value sets
     are wide and shared across unrelated call sites. TURN-01's three pre-LLM
-    stages and five OpenFGA operations use the dedicated, closed-set
-    `runtime_stage`/`rebac_operation` labels instead (see the tests below) —
+    stages use the dedicated, closed-set `runtime_stage` label instead —
     `phase`/`operation` themselves are never promoted.
     """
     delegate = _RecordingKPIStore()
@@ -145,14 +144,8 @@ def test_prometheus_store_filters_generic_phase_and_operation_dims() -> None:
     assert "status" in label_names
 
 
-def test_prometheus_store_promotes_runtime_stage_and_rebac_operation() -> None:
-    """
-    TURN-01 Grafana-visibility fix: `runtime_stage` (runtime.stage_latency_ms)
-    and `rebac_operation` (rebac.call_latency_ms/call_total) are the two
-    dedicated, closed-set dims deliberately promoted to Prometheus labels so
-    Grafana can distinguish pod_authz/runtime_binding/runtime_binding_internal
-    and check/list_objects/list_users/write/read.
-    """
+def test_prometheus_store_promotes_runtime_stage() -> None:
+    """Pre-LLM stages remain a closed-set label after OpenFGA removal."""
     delegate = _RecordingKPIStore()
     store = PrometheusKPIStore(delegate=delegate)
     metric_name = f"test.runtime_stage_promotion_{uuid4().hex}"
@@ -160,7 +153,6 @@ def test_prometheus_store_promotes_runtime_stage_and_rebac_operation() -> None:
         metric=Metric(name=metric_name, type="timer", value=3.0, unit="ms"),
         dims={
             "runtime_stage": "pod_authz",
-            "rebac_operation": "check",
             "status": "ok",
             "service": "fred-runtime",
         },
@@ -171,7 +163,6 @@ def test_prometheus_store_promotes_runtime_stage_and_rebac_operation() -> None:
     resolved_name = store._resolve_metric_name(metric_name)
     label_names = store._label_names[(resolved_name, "timer")]
     assert "runtime_stage" in label_names
-    assert "rebac_operation" in label_names
     assert "status" in label_names
     assert "service" in label_names
 
@@ -226,33 +217,10 @@ def test_prometheus_store_gives_each_runtime_stage_value_a_distinct_series() -> 
     assert samples == {"pod_authz", "runtime_binding", "runtime_binding_internal"}
 
 
-def test_prometheus_store_gives_each_rebac_operation_value_a_distinct_series() -> None:
-    delegate = _RecordingKPIStore()
-    store = PrometheusKPIStore(delegate=delegate)
-    metric_name = f"test.rebac_operation_series_{uuid4().hex}"
-
-    for operation in ("check", "list_objects", "list_users", "write", "read"):
-        store.index_event(
-            KPIEvent(
-                metric=Metric(name=metric_name, type="timer", value=1.0, unit="ms"),
-                dims={"rebac_operation": operation},
-            )
-        )
-
-    resolved_name = store._resolve_metric_name(metric_name)
-    metric = store._metrics[(resolved_name, "timer")]
-    samples = {
-        s.labels["rebac_operation"]
-        for s in next(iter(metric.collect())).samples
-        if "rebac_operation" in s.labels
-    }
-    assert samples == {"check", "list_objects", "list_users", "write", "read"}
-
-
 def test_prometheus_store_label_schema_is_stable_regardless_of_arrival_order() -> None:
     """
     Prometheus requires a fixed label set per metric name/type. Emitting the
-    three runtime_stage values (or five rebac_operation values) in any order
+    three runtime_stage values in any order
     must resolve to the same label schema — not a schema that depends on
     which dims the first event happened to carry.
     """
@@ -317,7 +285,7 @@ def test_prometheus_store_never_promotes_any_identity_label() -> None:
     """
     Item D: explicit, exhaustive privacy test — none of these identifiers may
     ever become a Prometheus label, even alongside the newly-promoted
-    runtime_stage/rebac_operation dims.
+    runtime_stage dimension.
     """
     forbidden = {
         "trace_id",
@@ -335,7 +303,6 @@ def test_prometheus_store_never_promotes_any_identity_label() -> None:
     metric_name = f"test.identity_privacy_{uuid4().hex}"
     dims: dict[str, str | None] = {name: f"value-{name}" for name in forbidden}
     dims["runtime_stage"] = "pod_authz"
-    dims["rebac_operation"] = "check"
     event = KPIEvent(
         metric=Metric(name=metric_name, type="timer", value=1.0, unit="ms"),
         dims=dims,
@@ -347,7 +314,6 @@ def test_prometheus_store_never_promotes_any_identity_label() -> None:
     label_names = set(store._label_names[(resolved_name, "timer")])
     assert label_names.isdisjoint(forbidden)
     assert "runtime_stage" in label_names
-    assert "rebac_operation" in label_names
 
 
 def test_llm_diagnostics_export_fixed_labels_and_long_buckets(monkeypatch):

@@ -21,28 +21,24 @@ reserved tags never reach the result, and short fields always fit the form.
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import hashlib
 import json
 import warnings
 from datetime import date
-from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from fastapi import HTTPException
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
-from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.rebac.rebac_engine import TeamPermission
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import creation_assistant
 from fred_runtime.runtime_context import (
     RuntimeConfig,
     RuntimeContext,
-    get_runtime_context,
     set_runtime_context,
 )
 from fred_sdk.contracts.agent_draft import (
@@ -842,21 +838,6 @@ def test_route_ignores_settings_injected_in_the_body(tmp_path, monkeypatch) -> N
         client.__exit__(None, None, None)
 
 
-class _Rebac:
-    enabled = True
-
-    def __init__(self, deny: bool) -> None:
-        self.deny = deny
-        self.calls: list[tuple[str, TeamPermission, str]] = []
-
-    async def check_user_team_permission_or_raise(
-        self, user: KeycloakUser, permission: TeamPermission, team_id: str
-    ) -> None:
-        self.calls.append((user.uid, permission, team_id))
-        if self.deny:
-            raise AuthorizationError(user.uid, permission.value, Resource.RESOURCES)
-
-
 @pytest.mark.parametrize("deny", [True, False])
 def test_route_rechecks_can_update_agents(tmp_path, monkeypatch, deny) -> None:
     alice = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
@@ -865,13 +846,10 @@ def test_route_rechecks_can_update_agents(tmp_path, monkeypatch, deny) -> None:
         agent_app_module, "_make_user_dependency", lambda *_args: lambda: alice
     )
     client = _app_with_capabilities(tmp_path, monkeypatch)
-    rebac = _Rebac(deny)
-    real = get_runtime_context()
-    secured = SimpleNamespace(
-        config=dataclasses.replace(real.config, rebac_engine=rebac),
-        get_kpi_writer=real.get_kpi_writer,
+    permission = AsyncMock(
+        side_effect=HTTPException(403, "access_denied") if deny else None
     )
-    monkeypatch.setattr(creation_assistant, "get_runtime_context", lambda: secured)
+    monkeypatch.setattr(creation_assistant, "require_permission", permission)
     built: list[str | None] = []
 
     def _pick(profile_id: str | None = None, **_kw: Any) -> Any:
@@ -882,7 +860,7 @@ def test_route_rechecks_can_update_agents(tmp_path, monkeypatch, deny) -> None:
     _settings(monkeypatch, CreationAssistantRuntimeSettings())
     try:
         response = client.post(_GENERATE, json=_body())
-        assert rebac.calls == [("alice", TeamPermission.CAN_UPDATE_AGENTS, "team-a")]
+        permission.assert_awaited_once_with(None, "write", space_id="team-a")
         assert response.status_code == (403 if deny else 200)
         assert built == ([] if deny else [None])
     finally:
@@ -1102,3 +1080,8 @@ def test_pod_without_a_control_plane_uses_its_defaults(kpi) -> None:
 def test_pod_request_has_no_admin_setting_fields() -> None:
     assert "creation_assistant_prompt" not in AgentDraftPodRequest.model_fields
     assert "model_profile_id" not in AgentDraftPodRequest.model_fields
+
+
+@pytest.fixture(autouse=True)
+def control_plane_permission(monkeypatch):
+    monkeypatch.setattr(creation_assistant, "require_permission", AsyncMock())

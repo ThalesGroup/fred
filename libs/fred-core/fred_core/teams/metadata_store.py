@@ -54,8 +54,7 @@ class JoiningMode(str, Enum):
 class TeamVisibility(str, Enum):
     """TEAM-10 (RFC FRED-TEAM-CONFIG-RFC.md §5.1.2): gates marketplace
     discoverability, independent of `JoiningMode`. `PRIVATE` withholds the
-    ReBAC `public` relation entirely (see
-    `RebacEngine.ensure_team_public_relations`/`revoke_team_public_relations`)
+    public access relation entirely
     — a non-member has no `can_read` on a private team, not just a hidden
     marketplace listing. A `PRIVATE` team can never have `joining_mode ==
     OPEN` (enforced in `update_team`, never trusting the client)."""
@@ -205,13 +204,6 @@ class TeamMetadataStore:
     ) -> AsyncIterator[None]:
         """Hold a Postgres transaction-scoped advisory lock for `key` for the
         duration of the `async with` block.
-
-        Why this exists: some team-registry actions (e.g. `rescue_team_admin`)
-        must check-then-write against OpenFGA, which has no way to express a
-        conditional write ("only if this team has no team_admin yet") in a
-        single atomic call. Serializing concurrent callers on the same `key`
-        (across replicas, not just this process — an `asyncio.Lock` would only
-        cover one) closes that race without needing OpenFGA itself to support it.
 
         The lock auto-releases when the backing transaction commits or rolls
         back — no explicit unlock, nothing can leak it on a crash. No-op on

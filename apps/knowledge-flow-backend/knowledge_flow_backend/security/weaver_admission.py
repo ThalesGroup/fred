@@ -19,12 +19,12 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fred_core.documents.access import SpacePendingDeletionError
 from fred_core.security import oidc
+from fred_core.security.control_plane import authorization_request
 from fred_core.security.delegation import AssertedUser
-from fred_core.security.models import Resource
-from fred_core.security.rebac.rebac_engine import RebacReference, SpacePermission
 from fred_core.security.structure import KeycloakUser
+from pydantic import BaseModel, ConfigDict
 
-from knowledge_flow_backend.application_context import get_rebac_engine
+from knowledge_flow_backend.application_context import get_app_context
 
 
 async def delegated_person(
@@ -39,13 +39,35 @@ async def delegated_person(
     return subject
 
 
-async def require_space_read(person: AssertedUser, space_id: UUID) -> None:
-    """One check on the published Weaver model; documents derive from their space."""
-    await get_rebac_engine().check_permission_or_raise(
-        RebacReference(Resource.USER, person.uid),
-        SpacePermission.CAN_READ,
-        RebacReference(Resource.SPACE, str(space_id)),
-    )
+class AuthorizedScope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    space_id: UUID
+    space_ids: tuple[UUID, ...]
+
+
+async def require_space_read(person: AssertedUser, space_id: UUID) -> tuple[UUID, ...]:
+    """One fresh scope decision, using this service's credential and verified person."""
+    context = get_app_context()
+    url = context.configuration.control_plane_url
+    if not url:
+        raise HTTPException(503, "authorization_unavailable")
+    try:
+        result = await authorization_request(
+            context.get_authorization_client(),
+            f"{url.rstrip('/')}/authorize/scope",
+            {"space_id": str(space_id)},
+            params={"person": person.uid, "run": person.run_id, "agent": person.agent_id},
+        )
+        scope = AuthorizedScope.model_validate(result)
+        if scope.space_id != space_id or len(set(scope.space_ids)) != len(scope.space_ids):
+            raise ValueError("Invalid scope anchor or duplicates")
+        return scope.space_ids
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            raise HTTPException(503, "authorization_unavailable") from None
+        raise
+    except (ValueError, RuntimeError):
+        raise HTTPException(503, "authorization_unavailable") from None
 
 
 def _space_error(exc: Exception) -> HTTPException:

@@ -17,7 +17,6 @@ import logging
 import pathlib
 import tempfile
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
 from typing import Any
 
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
@@ -40,14 +39,13 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
     the permission-checked `save_metadata` (the calling user must hold
     `TagPermission.UPDATE` on every tag the document carries). Used by the
     ordinary `OutputProcess` workflow."""
-    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
     from knowledge_flow_backend.features.manager_processing.service import manager_service
 
     ingestion_service = await manager_service(file.source_tag, "indexing", file=file)
     if ingestion_service is not None and ingestion_service.already_committed:
         return metadata
     if ingestion_service is None:
-        ingestion_service = get_ingestion_service()
+        raise exceptions.ApplicationError("manager processing required", non_retryable=True)
     return await _output_process_impl(
         file,
         metadata,
@@ -189,129 +187,3 @@ async def _output_process_impl(
 
         raise_permanent_failure(exc)
         raise
-
-
-@activity.defn
-async def emit_ingestion_task_event(
-    task_id: str,
-    state: str,
-    step: str | None = None,
-    progress: float | None = None,
-    error: str | None = None,
-    processed: int = 0,
-    total: int = 1,
-    failed: int = 0,
-    document_uid: str | None = None,
-    display_name: str | None = None,
-) -> None:
-    """Emit a TaskEvent for an ingestion task_run row (OPS-04)."""
-    from fred_core.tasks.models import IngestionDetail, IngestionTaskEvent, TaskState, TaskTarget
-
-    from knowledge_flow_backend.application_context import ApplicationContext
-
-    detail = IngestionDetail(
-        processed=processed,
-        total=total,
-        failed=failed,
-        preview=0,
-        vectorized=0,
-        sql_indexed=0,
-    )
-    target: TaskTarget | None = None
-    if document_uid:
-        target = TaskTarget(type="document", id=document_uid, label=display_name or document_uid)
-    event = IngestionTaskEvent(
-        task_id=task_id,
-        state=TaskState(state),
-        seq=0,  # auto-incremented by TaskStore.record_event
-        timestamp=datetime.now(tz=timezone.utc),
-        step=step,
-        progress=progress,
-        error=error,
-        detail=detail,
-        target=target,
-    )
-    task_service = ApplicationContext.get_instance().get_task_service()
-    await task_service.record(event)
-
-    # The task row is not what the library renders -- the document's processing
-    # stages are, and a terminal task leaves them stale: `in_progress` forever
-    # after an executor-side failure (#2279), or pointing at a document the user
-    # asked to stop building (#2315). Repair the document through the one policy
-    # both this compensation and API-side reconciliation share. Running it here
-    # too is what makes the list update within seconds; reconciliation is the
-    # backstop for when no worker is around to run this at all. Best-effort by
-    # contract -- it must never mask the state being reported.
-    if TaskState(state).is_terminal and document_uid:
-        from knowledge_flow_backend.features.scheduler.document_failure import repair_document_after_terminal
-
-        run = await task_service.get_run(task_id)
-        if run is not None and run.state != state:
-            return  # A different terminal outcome was already persisted.
-        await repair_document_after_terminal(
-            document_uid,
-            TaskState(state),
-            error or "Processing failed",
-            created_by=run.created_by if run is not None else None,
-        )
-
-
-@activity.defn
-async def fast_store_vectors(payload: dict) -> dict:
-    """
-    Store fast-ingest chunks into the configured vector store.
-    Payload shape:
-      {
-        "documents": [{"page_content": str, "metadata": dict}, ...]
-      }
-    """
-    logger = activity.logger
-    docs_payload = payload.get("documents") or []
-    if not isinstance(docs_payload, list):
-        raise ValueError("payload.documents must be a list")
-
-    from langchain_core.documents import Document
-
-    from knowledge_flow_backend.application_context import ApplicationContext
-
-    context = ApplicationContext.get_instance()
-    embedder = context.get_embedder()
-    vector_store = context.get_create_vector_store(embedder)
-
-    docs = []
-    for item in docs_payload:
-        if not isinstance(item, dict):
-            continue
-        page_content = str(item.get("page_content") or "")
-        metadata = item.get("metadata") or {}
-        if not isinstance(metadata, dict):
-            metadata = {}
-        docs.append(Document(page_content=page_content, metadata=metadata))
-
-    if not docs:
-        return {"chunks": 0}
-
-    ids = vector_store.add_documents(docs)
-    chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
-    logger.info("[SCHEDULER][ACTIVITY][FAST_STORE_VECTORS] Stored %d chunks", chunks)
-    return {"chunks": chunks}
-
-
-@activity.defn
-async def fast_delete_vectors(payload: dict) -> dict:
-    """
-    Delete all vectors for a fast-ingested document.
-    Payload: {"document_uid": "<uid>"}
-    """
-    document_uid = payload.get("document_uid")
-    if not document_uid:
-        raise ValueError("payload.document_uid is required")
-
-    from knowledge_flow_backend.application_context import ApplicationContext
-
-    context = ApplicationContext.get_instance()
-    embedder = context.get_embedder()
-    vector_store = context.get_create_vector_store(embedder)
-    vector_store.delete_vectors_for_document(document_uid=document_uid)
-    activity.logger.info("[SCHEDULER][ACTIVITY][FAST_DELETE_VECTORS] Deleted vectors for %s", document_uid)
-    return {"status": "ok", "document_uid": document_uid}

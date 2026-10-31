@@ -1216,7 +1216,7 @@
       "emptyTeams": "No teams on this page. Organization totals remain displayed.",
       "scopeHint": "Teams include their projects. Resource compartments are disjoint; distinct user counts cannot be added together.",
       "collection": "Metadata collected from {{start}} to {{end}}",
-      "collectionHint": "Collection timestamps do not represent an atomic SQL/OpenFGA snapshot or a physical S3/OpenSearch check. The team detail has its own collection.",
+      "collectionHint": "These timestamps delimit the collection, not a physical verification of the stored content. Team details are collected separately.",
       "forbidden": "You are not authorized to view organization supervision.",
       "missing": "The requested resource is unavailable or does not exist.",
       "contextUnavailable": "The organization context is unavailable, ambiguous or retired.",
@@ -3067,7 +3067,7 @@
           "running": "Resetting…",
           "taskLabel": "Platform reset",
           "confirmTitle": "Reset the platform?",
-          "confirmMessage": "Permanently deletes all agents, tags, and document metadata. Files (S3), vectors (OpenSearch), users (Keycloak), and permissions (OpenFGA) are not affected.",
+          "confirmMessage": "Permanently deletes all agents, tags, and document metadata. Files (S3), vectors (OpenSearch), users (Keycloak), and permissions are not affected.",
           "confirmLabel": "Reset",
           "cancelLabel": "Cancel",
           "error": "Reset failed"
@@ -3745,6 +3745,7 @@
       }
     },
     "userSettings": {
+      "organizationRoles": "Organization roles: {{roles}}",
       "privacyTitle": "Privacy information",
       "organization": "Organization: {{name}}",
       "platformRoles": "Platform roles: {{roles}}",

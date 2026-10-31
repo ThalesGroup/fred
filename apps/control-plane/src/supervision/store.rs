@@ -54,7 +54,7 @@ pub(super) struct Snapshot {
     pub processing: Vec<Processing>,
 }
 
-/// SQL only: the transaction is closed before any OpenFGA enumeration.
+/// The transaction is closed before display role enumeration.
 pub(super) async fn load(
     pool: &PgPool,
     organization: Uuid,

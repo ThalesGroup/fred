@@ -21,7 +21,6 @@ as its subject, what is audited, and that an endpoint's own body still parses.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from types import SimpleNamespace
 from typing import Any, Iterator
@@ -39,17 +38,12 @@ from fred_core.security.delegation import (
     AUDIT_GRANT_ACCEPTED,
     AUDIT_GRANT_REJECTED,
     DelegationConfig,
-    enforce_account_status,
 )
 from fred_core.security.structure import (
     SERVICE_AGENT_ROLE,
     KeycloakUser,
     PrincipalContext,
     is_service_agent,
-)
-from fred_core.tests.security.rebac_fakes import (
-    AccountStatusStore,
-    account_status_engine,
 )
 from fred_core.users.store.postgres_user_store import get_user_store
 
@@ -137,7 +131,6 @@ def _switch_on(config: DelegationConfig) -> None:
     delegation.initialize_delegation(
         config, issuers=[_ISSUER], user_clients=[_LOGIN_CLIENT]
     )
-    asyncio.run(enforce_account_status(account_status_engine(AccountStatusStore())))
 
 
 def _accept_delegated_calls() -> None:

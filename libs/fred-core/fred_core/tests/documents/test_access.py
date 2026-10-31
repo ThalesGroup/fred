@@ -28,12 +28,9 @@ from fred_core.documents.access import (
     Candidate,
     PublishedArtifact,
     SearchScope,
-    SpaceNotFoundError,
-    SpacePendingDeletionError,
     filter_candidates,
     is_live_document,
     published_artifact,
-    scope_from_space,
     verify_candidates,
 )
 from fred_core.documents.selection import DocumentScope
@@ -52,30 +49,8 @@ def space(id: UUID, parent: UUID | None, organization: UUID) -> dict[str, Any]:
     }
 
 
-@pytest.mark.parametrize(
-    ("row", "path"),
-    [
-        (space(ORG, None, ORG), (ORG,)),
-        (space(TEAM, ORG, ORG), (ORG, TEAM)),
-        (space(PROJECT, TEAM, ORG), (ORG, TEAM, PROJECT)),
-        (space(PERSONAL, None, ORG), (PERSONAL,)),
-    ],
-)
-def test_scope_is_the_space_and_its_ancestors(
-    row: dict[str, Any], path: tuple[UUID, ...]
-) -> None:
-    assert scope_from_space(row["id"], row) == SearchScope(space_ids=path)
-
-
-def test_missing_and_deleting_spaces_are_distinct_errors() -> None:
-    with pytest.raises(SpaceNotFoundError):
-        scope_from_space(TEAM, None)
-    with pytest.raises(SpacePendingDeletionError):
-        scope_from_space(TEAM, {**space(TEAM, ORG, ORG), "deletion_id": uuid4()})
-
-
 GENERATION = uuid4()
-SCOPE = SearchScope(space_ids=(ORG, TEAM))
+SCOPE = SearchScope(space_id=TEAM, space_ids=(ORG, TEAM))
 
 
 def chunk(ordinal: int, generation: UUID = GENERATION) -> str:
@@ -110,6 +85,7 @@ def test_published_attachment_is_not_a_live_corpus_document() -> None:
     row = document(session_id=uuid4(), folder_id=None)
     candidate = Candidate(str(row["id"]), chunk(2))
     scope = SearchScope(
+        space_id=TEAM,
         space_ids=(TEAM,),
         document_scope=DocumentScope.from_ids(document_ids=[str(row["id"])]),
     )
@@ -277,6 +253,7 @@ def test_selection_unions_direct_contents_and_explicit_documents(source: str) ->
     folder, other = uuid4(), uuid4()
     row = document(folder_id=folder)
     scope = SearchScope(
+        space_id=TEAM,
         space_ids=(TEAM,),
         document_scope=DocumentScope.from_ids(
             [str(folder)] if source != "explicit" else [],
@@ -297,7 +274,9 @@ def test_folder_agent_and_document_turn_intersect_by_coverage() -> None:
     candidate = Candidate(str(row["id"]), chunk(2))
     agent = DocumentScope.from_ids([str(folder)])
     turn = DocumentScope.from_ids(document_ids=[str(row["id"])])
-    scope = SearchScope(space_ids=(TEAM,), document_scope=agent.intersect(turn))
+    scope = SearchScope(
+        space_id=TEAM, space_ids=(TEAM,), document_scope=agent.intersect(turn)
+    )
     assert filter_candidates(scope, [candidate], [row]) == [candidate]
     row["folder_id"] = uuid4()
     assert filter_candidates(scope, [candidate], [row]) == []
@@ -309,6 +288,7 @@ async def test_known_id_cannot_bypass_published_artifact_selection(empty: bool) 
     folder = uuid4()
     row = document(folder_id=folder, prefix="published/", size=42, sha256="a" * 64)
     scope = SearchScope(
+        space_id=TEAM,
         space_ids=(TEAM,),
         document_scope=DocumentScope.from_ids([] if empty else [str(uuid4())]),
     )
@@ -351,6 +331,7 @@ async def test_folder_resolution_is_one_batched_query_without_document_enumerati
             document_scope=DocumentScope.from_ids([str(id) for id in folders]),
         ),
         user_id="alice",
+        authorized_space_ids=(ORG, TEAM),
     )
     assert conn.execute.await_count == 2
     statement, params = conn.execute.call_args.args
@@ -369,6 +350,7 @@ def attachment_scope(
     *ids: UUID, selection: DocumentScope = DocumentScope()
 ) -> SearchScope:
     return SearchScope(
+        space_id=TEAM,
         space_ids=(ORG, TEAM),
         document_scope=selection,
         conversation_id=CONVERSATION,
@@ -482,7 +464,9 @@ async def test_resolver_checks_conversation_and_prefilters_all_attachment_ids(
     conn.execute = AsyncMock(
         side_effect=[space_result, session_result, documents_result]
     )
-    scope = await access.resolve_scope(conn, context, user_id="alice")
+    scope = await access.resolve_scope(
+        conn, context, user_id="alice", authorized_space_ids=(ORG, TEAM)
+    )
     assert set(scope.attachment_ids) == (set(ids) if authorized else set())
     statement, params = conn.execute.call_args_list[1].args
     assert params == {
@@ -517,4 +501,37 @@ async def test_conversation_check_failure_never_falls_back_to_corpus() -> None:
                 conversation_id=CONVERSATION,
             ),
             user_id="alice",
+            authorized_space_ids=(ORG, TEAM),
         )
+
+
+def test_empty_authorized_corpus_still_allows_only_explicit_owned_attachment():
+    from dataclasses import replace
+
+    row = attachment()
+    scope = replace(attachment_scope(row["id"]), space_ids=())
+    candidate = Candidate(str(row["id"]), chunk(2))
+    assert filter_candidates(scope, [candidate], [row]) == [candidate]
+    assert (
+        filter_candidates(replace(scope, attachment_ids=()), [candidate], [row]) == []
+    )
+    assert filter_candidates(scope, [candidate], [{**row, "space_id": ORG}]) == []
+    assert filter_candidates(scope, [candidate], [{**row, "session_id": None}]) == []
+
+
+@pytest.mark.asyncio
+async def test_scope_uses_only_authorized_corpus_without_rebuilding_ancestors():
+    from fred_core.documents.access import resolve_scope
+
+    result = MagicMock()
+    result.mappings.return_value.first.return_value = space(PROJECT, TEAM, ORG)
+    conn = MagicMock(spec=AsyncConnection)
+    conn.execute = AsyncMock(return_value=result)
+    scope = await resolve_scope(
+        conn,
+        DocumentAccessContext(space_id=PROJECT, document_scope=DocumentScope()),
+        user_id="alice",
+        authorized_space_ids=(PROJECT,),
+    )
+    assert scope.space_id == PROJECT
+    assert scope.space_ids == (PROJECT,)

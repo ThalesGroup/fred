@@ -52,9 +52,7 @@ const EMPTY_TEAMS: Team[] = [];
  * - `const { activeTeam, availableTeams, isLoading } = useFrontendBootstrap();`
  */
 export function useFrontendBootstrap(skip = false): FrontendBootstrapState {
-  // #2148: no longer forces a refetch on every mount — the control-plane
-  // enrichment behind this endpoint does one OpenFGA `Read` plus one
-  // Keycloak lookup per team, and this hook mounts on nearly every page.
+  // Reuse Control Plane metadata across mounts; this hook appears on most pages.
   // RTK Query's own cache (backed by `providesTags`/`invalidatesTags` on
   // this endpoint and every team mutation, see legacyControlPlaneApiEnhancements.ts)
   // keeps this fresh for changes made in this session.

@@ -97,12 +97,12 @@ setup-env: ## Create each backend's .env from its .env.template (idempotent), fi
 		fi; \
 	done
 	@# fred-deployment-factory's docker-compose fixes these to the same value everywhere
-	@# (Postgres/OpenSearch/OpenFGA/MinIO passwords, every Keycloak client secret) -- only
+	@# (Postgres/OpenSearch/MinIO passwords, every Keycloak client secret) -- only
 	@# ever fills a placeholder that's still literally empty, never overwrites a real value.
 	@for dir in $(ENV_APPS); do \
 		f="$$dir/config/.env"; \
 		[ -f "$$f" ] || continue; \
-		for key in FRED_POSTGRES_PASSWORD OPENSEARCH_PASSWORD OPENFGA_API_TOKEN MINIO_SECRET_KEY KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET KEYCLOAK_AGENTIC_CLIENT_SECRET KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET; do \
+		for key in FRED_POSTGRES_PASSWORD OPENSEARCH_PASSWORD MINIO_SECRET_KEY KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET KEYCLOAK_AGENTIC_CLIENT_SECRET KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET; do \
 			if grep -q "^$$key=\"\"" "$$f" 2>/dev/null; then \
 				sed -i "s/^$$key=\"\"/$$key=\"Azerty123_\"/" "$$f"; \
 			fi; \

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Python users.service.search_users and its local identity directory.
-//! Profiles are display data; authorization remains in OpenFGA.
+//! Profiles are display data; authorization uses the separate SQL role tables.
 use crate::{
     auth::CurrentUser,
     error::{AppError, AppResult},
@@ -33,7 +33,7 @@ pub enum DirectoryKind {
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct DirectoryDelegation {
-    /// Accept person/run/agent assertions only at the runtime resolver.
+    /// Accept person/run/agent assertions at runtime and decision endpoints.
     pub accept_delegated_calls: bool,
     /// Keycloak client-credentials markers are mandatory when enabled.
     pub service_accounts_only: bool,

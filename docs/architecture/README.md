@@ -35,7 +35,7 @@ the annexes. Validation records live in each lot's PR; remaining work in GitHub 
 | Import accounts, teams and roles | [Provisioning journey](02.1-user-journeys.md#provisioning-the-business-account), [ZIP contract](A2-manager-contracts.md#provisioning-declarations) | Source map row ZIP import |
 | What does each role mean, and where do current permissions differ? | [Roles and responsibility boundaries](A11-roles.md) | Role definitions, attribution and SSI comparison in the annex |
 | Who can enter a space or create a folder? | [Resources journey](02.1-user-journeys.md#bob-opens-resources), [Action/role matrix](A7-action-role-matrix.md), [Security](03-security.md) | Source map rows spaces, authorization, folders and roles |
-| Where are data and permissions stored? | [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue), [OpenFGA model](A2-manager-contracts.md#openfga-model) | `migrations/`, `db.rs`, `openfga/model.fga` in the source map |
+| Where are data and permissions stored? | [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue), [typed permission evaluator](A2-manager-contracts.md#permission-storage-and-evaluation) | `migrations/`, `db.rs`, `authorization.rs` in the source map |
 | API endpoints and frontend bindings | [REST API reference](A12-control-plane-api.md), [HTTP surface rules](A2-manager-contracts.md#control-plane-http-surface) | Source map section contracts/generated code |
 | Startup, SQL migration or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-evolution) | Source map rows startup/migrations and local profile |
 | Upload/process a PDF | [Document journey](02.2-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
@@ -52,7 +52,7 @@ Exact implementation detail is available without making it the main reading path
 | Annex | Reader's question |
 | --- | --- |
 | [A1. Control-plane runtime](A1-manager-runtime.md) | Which dependencies and runtime sequences does the Control Plane rely on? |
-| [A2. Schemas and contracts](A2-manager-contracts.md) | Which HTTP rules, [SQL tables](A2-manager-contracts.md#control-plane-sql-catalogue) and OpenFGA model back the domain? |
+| [A2. Schemas and contracts](A2-manager-contracts.md) | Which HTTP rules, [SQL tables](A2-manager-contracts.md#control-plane-sql-catalogue) and typed permission evaluator back the domain? |
 | [A3. Control-plane operations](A3-manager-operations.md) | How is the Control Plane configured, logged and diagnosed? |
 | [A4. Document journey trace](A4-document-journey.md) | Which code and state does a document upload go through, and how do I inspect it? |
 | [A5. User journey contracts](A5-user-journeys.md) | Which admission, provisioning and folder contracts back the user journeys? |

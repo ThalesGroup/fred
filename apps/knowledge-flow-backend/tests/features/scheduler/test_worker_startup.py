@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Worker bootstrap: what each role registers, on which queue, and who owns the
-recurring maintenance schedules."""
+manager cleanup loop."""
 
 from __future__ import annotations
 
@@ -28,18 +28,18 @@ from knowledge_flow_backend.features.scheduler import worker as worker_module
 _CONFIG = TemporalSchedulerConfig(host="temporal:7233", task_queue="ingestion", workflow_id_prefix="pipeline")
 
 
-def _run_worker_with(sync_side_effect=None, *, roles: list[IngestionWorkerRole] | None = None, **kwargs) -> tuple[AsyncMock, MagicMock]:
+def _run_worker_with(*, roles: list[IngestionWorkerRole] | None = None, **kwargs) -> tuple[AsyncMock, MagicMock]:
     client = MagicMock()
-    sync = AsyncMock(side_effect=sync_side_effect)
+    cleanup = AsyncMock()
     worker_cls = MagicMock()
     worker_cls.return_value.run = AsyncMock()
     with (
         patch.object(worker_module.Client, "connect", AsyncMock(return_value=client)),
-        patch.object(worker_module, "sync_pdf_render_expiry_schedule", sync),
+        patch("knowledge_flow_backend.features.manager_processing.cleanup.run", cleanup),
         patch.object(worker_module, "Worker", worker_cls),
     ):
-        asyncio.run(worker_module.run_worker(_CONFIG, roles=roles, pdf_render_ttl_days=7, **kwargs))
-    return sync, worker_cls
+        asyncio.run(worker_module.run_worker(_CONFIG, roles=roles, manager_processing=True, **kwargs))
+    return cleanup, worker_cls
 
 
 def _worker_kwargs_by_queue(worker_cls: MagicMock) -> dict[str, dict]:
@@ -53,8 +53,21 @@ def test_the_common_role_polls_the_base_queue_with_every_workflow() -> None:
     _, worker_cls = _run_worker_with(roles=[IngestionWorkerRole.common])
 
     kwargs = _worker_kwargs_by_queue(worker_cls)["ingestion"]
-    assert kwargs["workflows"] == worker_module._COMMON_WORKFLOWS
-    assert kwargs["activities"] == worker_module._COMMON_ACTIVITIES
+    assert kwargs["workflows"] == [
+        worker_module.ProcessPush,
+        worker_module.ProcessPushFile,
+        worker_module.GetPushFileMetadata,
+        worker_module.PushInputProcess,
+        worker_module.OutputProcess,
+        worker_module.SetDocumentRetrievable,
+    ]
+    assert kwargs["activities"] == [
+        worker_module.get_push_file_metadata,
+        worker_module.output_process,
+        worker_module.set_document_retrievable,
+        worker_module.record_retrievable_applied,
+        worker_module.confirm_document_retrievable,
+    ]
 
 
 def test_the_common_role_does_not_run_extraction() -> None:
@@ -64,7 +77,6 @@ def test_the_common_role_does_not_run_extraction() -> None:
 
     registered = _worker_kwargs_by_queue(worker_cls)["ingestion"]["activities"]
     assert worker_module.push_input_process not in registered
-    assert worker_module.pull_input_process not in registered
 
 
 @pytest.mark.parametrize(
@@ -75,12 +87,12 @@ def test_the_common_role_does_not_run_extraction() -> None:
         (IngestionWorkerRole.extraction_rich, "ingestion-rich"),
     ],
 )
-def test_an_extraction_role_runs_only_the_two_extraction_activities(role, expected_queue) -> None:
+def test_an_extraction_role_runs_only_manager_push_extraction(role, expected_queue) -> None:
     _, worker_cls = _run_worker_with(roles=[role])
 
     kwargs = _worker_kwargs_by_queue(worker_cls)[expected_queue]
     assert kwargs["workflows"] == []
-    assert set(kwargs["activities"]) == {worker_module.push_input_process, worker_module.pull_input_process}
+    assert set(kwargs["activities"]) == {worker_module.push_input_process}
 
 
 def test_a_multi_role_process_serves_every_queue() -> None:
@@ -102,29 +114,18 @@ def test_activity_concurrency_is_applied_per_role() -> None:
     assert _worker_kwargs_by_queue(worker_cls)["ingestion-rich"]["max_concurrent_activities"] == 1
 
 
-# ── maintenance schedules ─────────────────────────────────────────────────────
+# Manager maintenance runs only alongside the common worker.
 
 
-def test_schedule_sync_failure_does_not_block_the_ingestion_worker() -> None:
-    sync, worker_cls = _run_worker_with(RuntimeError("temporal refused create_schedule"), roles=[IngestionWorkerRole.common])
-
-    sync.assert_awaited_once()
+def test_the_common_worker_runs_manager_cleanup() -> None:
+    cleanup, worker_cls = _run_worker_with(roles=[IngestionWorkerRole.common])
+    cleanup.assert_awaited_once_with()
     worker_cls.return_value.run.assert_awaited_once()
 
 
-def test_schedule_sync_receives_the_configured_ttl() -> None:
-    sync, _ = _run_worker_with(roles=[IngestionWorkerRole.common])
-
-    _, config, ttl_days = sync.await_args.args
-    assert (config, ttl_days) == (_CONFIG, 7)
-
-
-def test_an_extraction_only_worker_leaves_the_schedules_alone() -> None:
-    """Maintenance runs where its workflow is registered. An extraction pod
-    restarting must neither repost the nightly sweep nor move it."""
-    sync, worker_cls = _run_worker_with(roles=[IngestionWorkerRole.extraction_rich])
-
-    sync.assert_not_awaited()
+def test_an_extraction_only_worker_leaves_cleanup_to_the_common_worker() -> None:
+    cleanup, worker_cls = _run_worker_with(roles=[IngestionWorkerRole.extraction_rich])
+    cleanup.assert_not_awaited()
     worker_cls.return_value.run.assert_awaited_once()
 
 

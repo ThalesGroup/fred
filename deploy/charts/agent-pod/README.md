@@ -11,7 +11,6 @@ kubectl -n fred create secret generic my-agents-secrets \
   --from-literal=KEYCLOAK_MY_AGENTS_CLIENT_SECRET=... \
   --from-literal=FRED_POSTGRES_PASSWORD=... \
   --from-literal=OPENSEARCH_PASSWORD=... \
-  --from-literal=OPENFGA_API_TOKEN=... \
   --from-literal=OPENAI_API_KEY=...
 
 helm install my-agents oci://ghcr.io/thalesgroup/fred-helm/agent-pod --version <version> \
@@ -68,8 +67,7 @@ What the Fred platform must provide; the addresses go in `configuration`.
 - **The Control Plane and Knowledge Flow** the pod calls (`platform.control_plane_url`,
   `ai.knowledge_flow_url`).
 - **PostgreSQL**, when `storage.postgres` is set: the LangGraph checkpointer, in Fred's
-  database. **OpenSearch**, when `storage.opensearch` is set. **OpenFGA**, when
-  `security.rebac` is enabled (required by `security.profile: c3`).
+  database. **OpenSearch**, when `storage.opensearch` is set.
 - **A model provider** for the models the pod's catalog names.
 
 ## Configure
@@ -97,7 +95,6 @@ Environment variables, read from Secrets only:
 | the one `configuration.security.m2m.secret_env_var` names | the pod's M2M client |
 | `FRED_POSTGRES_PASSWORD` | `configuration.storage.postgres` |
 | `OPENSEARCH_PASSWORD` | `configuration.storage.opensearch` |
-| `OPENFGA_API_TOKEN` | `configuration.security.rebac` |
 | the model keys the catalog names (e.g. `OPENAI_API_KEY`) | the models |
 
 `secret.existingSecret` mounts a whole Secret; `extraEnvVars` reads single keys from

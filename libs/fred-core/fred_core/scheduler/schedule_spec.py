@@ -23,8 +23,7 @@ to Temporal unchanged.
 
 One arm today, `interval`, because that is what anything has asked for. The
 discriminated union is what lets `cron` and `calendar` arrive later without a
-stored value changing shape — the same pattern `RebacConfiguration` uses for
-the same reason.
+stored value changing shape.
 
 Nothing here is about Knowledge Bases. A recurring administration task wants
 exactly this.

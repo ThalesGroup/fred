@@ -39,7 +39,7 @@ pub(crate) fn canonical_name(raw: &str, max: usize) -> Option<String> {
         .then(|| name.to_owned())
 }
 
-/// An identity usable as an OpenFGA `user:<id>`: no whitespace, `:` or `#`.
+/// A canonical subject identifier: no whitespace, `:` or `#`.
 pub(crate) fn valid_subject(subject: &str) -> bool {
     (1..=255).contains(&subject.chars().count())
         && !subject
@@ -52,7 +52,7 @@ pub(crate) fn space_name(raw: &str) -> Option<String> {
     canonical_name(raw, 180)
 }
 
-/// Immutable placement is recorded with the space; roles remain in OpenFGA.
+/// Immutable placement and direct roles are stored in PostgreSQL.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SpaceRow {
     pub id: Uuid,
@@ -129,7 +129,7 @@ pub struct Document {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Direct roles stored in OpenFGA.
+/// Direct business roles.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema,
 )]
@@ -177,7 +177,7 @@ impl Role {
     }
 }
 
-/// Computed permissions checked against OpenFGA.
+/// Computed business permissions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Permission {

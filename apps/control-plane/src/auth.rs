@@ -94,7 +94,7 @@ pub struct SecuritySettings {
     pub max_token_lifetime_seconds: f64,
 }
 
-/// The authenticated person (`KeycloakUser`). `uid` is the OpenFGA user id.
+/// The authenticated person (`KeycloakUser`). `uid` is the canonical subject identifier.
 #[derive(Clone)]
 pub struct CurrentUser {
     pub uid: String,

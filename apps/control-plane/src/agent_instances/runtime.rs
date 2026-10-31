@@ -20,7 +20,7 @@ use crate::{
     agents::{self, enablement},
     api::AppState,
     auth::{CurrentUser, bearer},
-    domain::{Permission, SpaceKind, valid_subject},
+    domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
     extract::{ApiPath, ApiQuery},
     model_catalog::instance::{self as models, RuntimeModels},
@@ -62,50 +62,22 @@ impl RuntimeQuery {
         caller: &'a CurrentUser,
         instance_id: Uuid,
     ) -> AppResult<&'a str> {
-        let has_assertion = self.person.is_some() || self.run.is_some() || self.agent.is_some();
-        let subject = if has_assertion {
-            if !state.auth.accepts_runtime_delegation(caller) {
-                return Err(AppError::problem(
-                    StatusCode::FORBIDDEN,
-                    "delegation_not_allowed",
-                    "The authenticated caller cannot delegate.",
-                ));
-            }
-            let (Some(person), Some(run), Some(agent)) = (&self.person, &self.run, &self.agent)
-            else {
-                return Err(invalid_grant());
-            };
-            let (person, run, agent) = (person.trim(), run.trim(), agent.trim());
-            if ![person, run, agent].into_iter().all(valid_grant_identifier) {
-                return Err(invalid_grant());
-            }
-            if Uuid::parse_str(agent).ok() != Some(instance_id) {
-                return Err(AppError::problem(
-                    StatusCode::FORBIDDEN,
-                    "delegation_target_mismatch",
-                    "The delegation does not name the requested instance.",
-                ));
-            }
-            // Already canonical at the delegating runtime; never remap this with
-            // the workload's issuer or use its own terms/roles for this person.
-            person
-        } else {
-            if caller.service_account
-                || caller.delegation_caller
-                || caller.roles.iter().any(|role| role == "service_agent")
-            {
-                return Err(AppError::problem(
-                    StatusCode::FORBIDDEN,
-                    "delegation_required",
-                    "A workload must name the person, run and agent it acts for.",
-                ));
-            }
-            caller.uid.as_str()
+        let assertion = crate::authorization::Delegation {
+            person: self.person.clone(),
+            run: self.run.clone(),
+            agent: self.agent.clone(),
         };
-        // A person is a single FGA user, never a wildcard or a userset.
-        if !valid_subject(subject) || subject.contains('*') {
-            return Err(invalid_grant());
+        assertion.subject(state, caller)?;
+        if let Some(agent) = &self.agent
+            && Uuid::parse_str(agent).ok() != Some(instance_id)
+        {
+            return Err(AppError::problem(
+                StatusCode::FORBIDDEN,
+                "delegation_target_mismatch",
+                "The delegation does not name the requested instance.",
+            ));
         }
+        let subject = self.person.as_deref().unwrap_or(&caller.uid);
         Ok(subject)
     }
 }
@@ -159,7 +131,7 @@ pub struct RuntimeSpace {
 pub struct RuntimeAgent {
     pub instance_id: Uuid,
     pub runtime_id: String,
-    /// Organization-qualified OpenFGA identity, distinct from the registry key.
+    /// Organization-qualified template identity, distinct from the registry key.
     pub template_id: Uuid,
     pub template_key: String,
     pub configuration_revision: i64,
@@ -216,13 +188,23 @@ async fn resolve_runtime(
         subject,
     )
     .await?;
-    let space =
-        spaces::authorize(&state.pool, &state.fga, subject, space_id, Permission::Read).await?;
+    let space = spaces::authorize(
+        &state.pool,
+        &state.authorization,
+        subject,
+        space_id,
+        Permission::Read,
+    )
+    .await?;
     super::http::require_instance_space(space.kind)?;
     let initial = super::get_for_space(&state.pool, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !state.fga.can_use_agent(initial.template_id, &space).await? {
+    if !state
+        .authorization
+        .can_use_agent(initial.template_id, &space)
+        .await?
+    {
         return Err(AppError::NotFound);
     }
     let mut tx = state.pool.begin().await?;
@@ -277,9 +259,19 @@ async fn resolve_runtime(
         subject,
     )
     .await?;
-    let space =
-        spaces::authorize(&state.pool, &state.fga, subject, space_id, Permission::Read).await?;
-    if !state.fga.can_use_agent(record.template_id, &space).await? {
+    let space = spaces::authorize(
+        &state.pool,
+        &state.authorization,
+        subject,
+        space_id,
+        Permission::Read,
+    )
+    .await?;
+    if !state
+        .authorization
+        .can_use_agent(record.template_id, &space)
+        .await?
+    {
         return Err(AppError::NotFound);
     }
     if let Some(configuration) = record.tuning.0.as_object_mut() {

@@ -18,10 +18,7 @@
 
 use sqlx::{PgPool, Postgres, Transaction};
 
-use crate::{
-    error::AppError,
-    fga::{Fga, Scope},
-};
+use crate::{authorization, error::AppError};
 
 pub const MIN_TOKEN_LENGTH: usize = 16;
 /// `advisory_lock_key("control-plane.platform_bootstrap")`, as fred-core derives it.
@@ -52,33 +49,18 @@ pub fn same_secret(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// Grants platform admin to `uid`, the caller's own subject, in two steps under the same
-/// lock. Unlike the control-plane, the reservation naming the caller commits first, so an
-/// interrupted grant can only be finished by its claimant; the grant then re-reads the
-/// marker and records its completion under the lock, so a finished bootstrap never
-/// reopens, even for a concurrent retry or for its own admin after removal.
-pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppError> {
+/// Bootstrap marker and first administrator commit atomically under the platform lock.
+pub async fn grant_root(pool: &PgPool, uid: &str) -> Result<(), AppError> {
     let mut tx = locked(pool).await?;
-    match marker(&mut tx).await? {
-        None => {
-            sqlx::query("insert into platform_bootstrap (completed_by) values ($1)")
-                .bind(uid)
-                .execute(&mut *tx)
-                .await?;
-        }
-        Some((claimant, false)) if claimant == uid => {}
-        Some(_) => return Err(AppError::Conflict(COMPLETED.into())),
+    if marker(&mut tx).await?.is_some() {
+        return Err(AppError::Conflict(COMPLETED.into()));
     }
-    tx.commit().await?;
-
-    let mut tx = locked(pool).await?;
-    match marker(&mut tx).await? {
-        Some((claimant, false)) if claimant == uid => {}
-        _ => return Err(AppError::Conflict(COMPLETED.into())),
-    }
-    let mut guard = fga.guard(&[Scope::Platform]).await?;
-    fga.write_platform(
-        &mut guard,
+    sqlx::query("insert into platform_bootstrap(completed_by,granted_at) values($1,now())")
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?;
+    authorization::write_platform(
+        &mut tx,
         uid,
         crate::roles::PlatformRole::PlatformAdmin,
         true,
@@ -91,9 +73,6 @@ pub async fn grant_root(pool: &PgPool, fga: &Fga, uid: &str) -> Result<(), AppEr
         "platform:root",
         true,
     );
-    sqlx::query("update platform_bootstrap set granted_at = now()")
-        .execute(&mut *tx)
-        .await?;
     tx.commit().await?;
     Ok(())
 }

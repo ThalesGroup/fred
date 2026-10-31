@@ -15,7 +15,7 @@
 """Liveness (`/healthz`) and dependency-aware readiness (`/ready`) endpoints.
 
 `/healthz` stays a trivial liveness check (used by the k8s liveness/startup probes).
-`/ready` actively probes each backend (Postgres, OpenSearch, OpenFGA, and the GCS
+`/ready` actively probes each backend (Postgres, OpenSearch, and the GCS
 content store + virtual filesystem) with a per-check timeout, so an operator (or the
 fredlab-status command) sees exactly *which* dependency is down instead of a silent
 hang. Each probe is bounded by a timeout, so a stalled dependency reports as failed
@@ -63,7 +63,6 @@ class MonitoringController:
         probes: dict[str, Callable[[], Awaitable[object | None]]] = {
             "postgres": self._check_postgres,
             "opensearch": self._check_opensearch,
-            "openfga": self._check_openfga,
             "gcs_filesystem": self._check_gcs_filesystem,
             "gcs_content_store": self._check_gcs_content_store,
         }
@@ -115,16 +114,6 @@ class MonitoringController:
         store = self._context.get_vector_store()
         if isinstance(store, OpenSearchVectorStoreAdapter):
             await asyncio.to_thread(store.ensure_ready)
-
-    async def _check_openfga(self) -> None:
-        from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
-
-        engine = self._context.get_rebac_engine()
-        if not isinstance(engine, OpenFgaRebacEngine):
-            raise _SkippedCheck(f"rebac not OpenFGA-backed ({type(engine).__name__})")
-        # get_client() resolves the store + syncs the model on first call, then caches.
-        # Bounded by the OpenFGA client timeout, so a stalled engine fails fast here.
-        await engine.get_client()
 
     async def _check_gcs_filesystem(self) -> object:
         return await self._check_backend_health(self._context.get_filesystem(), "filesystem")

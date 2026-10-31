@@ -97,11 +97,6 @@ from fred_core.security.delegation import (
     DelegationGrant,
     holds_caller_role,
 )
-from fred_core.security.rebac.published_engine import PublishedOpenFgaRebacEngine
-from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
-    OrganizationPermission,
-)
 from fred_core.security.structure import (
     KeycloakUser,
     is_service_agent,
@@ -185,6 +180,7 @@ from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
+from fred_runtime.app.authorization import is_allowed, require_permission
 from fred_runtime.app.execution_diagnostics import report_execution_error
 from fred_runtime.app.history_access import (
     authorize_history_read,
@@ -1868,29 +1864,12 @@ async def _enforce_session_ownership(
     )
 
 
-async def _caller_can_manage_platform(caller: KeycloakUser | None) -> bool:
-    """True when the caller holds org-level ``can_manage_platform`` (CTRLP-12 C1).
-
-    The delete endpoints use this as an **admin branch**: a platform service
-    principal — e.g. the control-plane lifecycle worker erasing a conversation at
-    window expiry — may delete a session it does not personally own. Only the
-    per-user *ownership* check is waived; *authentication* stays enforced upstream
-    by ``_authenticated_user``.
-
-    Fails closed: returns False when there is no caller or when ReBAC is disabled
-    (dev/no-security), so ownership behaviour is unchanged there and the bypass
-    activates only when ReBAC is actually enforcing and the org permission is
-    granted. Reuses the AUTHZ-01 ``can_manage_platform`` permission — no second
-    bypass is forked.
-    """
+async def _caller_can_manage_platform(
+    caller: KeycloakUser | None, authorization: str | None
+) -> bool:
     if caller is None:
         return False
-    rebac = get_runtime_context().config.rebac_engine
-    if rebac is None or not rebac.enabled:
-        return False
-    return await rebac.has_user_permission(
-        caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-    )
+    return await is_allowed(authorization, "manage_platform")
 
 
 def _refuse_reserved_session_id(session_id: str) -> None:
@@ -2465,8 +2444,8 @@ async def _validate_session_checkpoint_access(
     TARGETS a real, currently-pending occurrence — it never mutates
     anything, and in particular never acquires the atomic single-use claim
     (`FredSqlCheckpointer.aclaim_hitl_resume`). It runs from
-    `_authorize_and_resolve`, BEFORE session-ownership, OpenFGA
-    authorization, control-plane target resolution, and capability/runtime
+    `_authorize_and_resolve`, BEFORE session-ownership and
+    control-plane target resolution, and capability/runtime
     construction — an unauthorized or malformed request must never leave a
     claim behind. The claim is acquired much later, in
     `_iterate_runtime_event_payloads`, immediately before the graph is
@@ -3970,7 +3949,7 @@ async def _claim_hitl_resume_before_invocation(
     `interrupt_id` targets a real pending occurrence but must never mutate
     anything, so an unauthorized, misrouted, or setup-failing request never
     leaves a claim behind. By the time this function runs, session
-    ownership, OpenFGA authorization, control-plane target resolution, and
+    ownership, control-plane authorization and target resolution, and
     capability/runtime construction have all already succeeded.
 
     Two-step lifecycle, both fenced by an opaque `claim_token` so a stale
@@ -4754,6 +4733,7 @@ def _build_agent_router(
 
     @router.get("/kpi-turns", dependencies=_auth_deps)
     async def get_kpi_turns(
+        http_request: Request,
         limit: int = 50,
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
@@ -4780,11 +4760,9 @@ def _build_agent_router(
         caller's own. Gated the same way as the sibling `get_audit_events`
         below, on `CAN_MANAGE_PLATFORM`, not deleted outright.
         """
-        rebac = get_runtime_context().config.rebac_engine
-        if caller is not None and rebac is not None and rebac.enabled:
-            await rebac.check_user_permission_or_raise(
-                caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-            )
+        await require_permission(
+            http_request.headers.get("Authorization"), "manage_platform"
+        )
         with container._kpi_turns_lock:
             events = list(container.kpi_turns_buffer)
         events.reverse()
@@ -4792,6 +4770,7 @@ def _build_agent_router(
 
     @router.get("/audit-events", dependencies=_auth_deps)
     async def get_audit_events(
+        http_request: Request,
         limit: int = 50,
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
@@ -4809,35 +4788,24 @@ def _build_agent_router(
           this ring buffer so the CLI can query them directly
         - max 200 entries retained in memory
         """
-        rebac = get_runtime_context().config.rebac_engine
-        if caller is not None and rebac is not None and rebac.enabled:
-            await rebac.check_user_permission_or_raise(
-                caller, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID
-            )
+        await require_permission(
+            http_request.headers.get("Authorization"), "manage_platform"
+        )
         with container._audit_events_lock:
             events = list(container.audit_events_buffer)
         events.reverse()
         return events[: max(1, limit)]
 
-    async def _web_activity_permission(
-        caller: KeycloakUser | None, permission: OrganizationPermission
-    ) -> None:
-        if not security_enabled:
-            return
-        rebac = get_runtime_context().config.rebac_engine
-        if caller is None or rebac is None or not rebac.enabled:
-            raise HTTPException(status_code=403, detail="web_activity_access_denied")
-        await rebac.check_user_permission_or_raise(caller, permission, ORGANIZATION_ID)
-
     @router.get("/web-research/activity", response_model=list[WebResearchActivity])
     async def list_web_research_activity(
+        http_request: Request,
         user_id: str | None = Query(default=None, min_length=1, max_length=128),
         limit: int = Query(default=50, ge=1, le=200),
         caller: KeycloakUser | None = Depends(_authenticated_user),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> list[WebResearchActivity]:
-        await _web_activity_permission(
-            caller, OrganizationPermission.CAN_MANAGE_PLATFORM
+        await require_permission(
+            http_request.headers.get("Authorization"), "manage_platform"
         )
         _emit_audit_event(
             container,
@@ -4852,12 +4820,13 @@ def _build_agent_router(
 
     @router.delete("/web-research/activity/users/{user_id}")
     async def erase_web_research_activity(
+        http_request: Request,
         user_id: str,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> dict[str, int]:
-        await _web_activity_permission(
-            caller, OrganizationPermission.CAN_ADMINISTER_USERS
+        await require_permission(
+            http_request.headers.get("Authorization"), "administer_users"
         )
         if len(user_id) > 128 or user_id == "*" or "#" in user_id:
             raise HTTPException(status_code=422, detail="invalid_user_id")
@@ -5447,6 +5416,7 @@ def _build_agent_router(
         status_code=status.HTTP_200_OK,
     )
     async def delete_session_history(
+        http_request: Request,
         session_id: str,
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> dict[str, int]:
@@ -5471,7 +5441,9 @@ def _build_agent_router(
                 detail="No history store configured — session history is unavailable.",
             )
         caller_uid = caller.uid if caller is not None else None
-        if await _caller_can_manage_platform(caller):
+        if await _caller_can_manage_platform(
+            caller, http_request.headers.get("Authorization")
+        ):
             # Platform admin (e.g. CTRLP-12 lifecycle erase-at-expiry): delete every
             # row for the session, not just the caller's — ownership is waived,
             # authentication stays enforced upstream.
@@ -5487,6 +5459,7 @@ def _build_agent_router(
         response_model=_ConversationFilesystemPurgeResponse,
     )
     async def delete_session_filesystem(
+        http_request: Request,
         session_id: str,
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> _ConversationFilesystemPurgeResponse:
@@ -5503,7 +5476,9 @@ def _build_agent_router(
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
         if (
-            not await _caller_can_manage_platform(caller)
+            not await _caller_can_manage_platform(
+                caller, http_request.headers.get("Authorization")
+            )
             and caller_uid is not None
             and history_store is not None
             and not await history_store.session_belongs_to_user(session_id, caller_uid)
@@ -5860,6 +5835,7 @@ def _build_agent_router(
         status_code=status.HTTP_200_OK,
     )
     async def delete_checkpoint_thread(
+        http_request: Request,
         session_id: str,
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> dict[str, int]:
@@ -5885,7 +5861,9 @@ def _build_agent_router(
         # Also the session's LangGraph-native graph threads (graph_thread_id).
         derived_prefix = graph_thread_prefix(session_id)
         if (
-            not await _caller_can_manage_platform(caller)
+            not await _caller_can_manage_platform(
+                caller, http_request.headers.get("Authorization")
+            )
             and caller_uid is not None
             and history_store is not None
             and not await history_store.session_belongs_to_user(session_id, caller_uid)
@@ -6389,9 +6367,8 @@ def create_agent_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # Observability and identity first, then durable SQL. Release the binding
-        # query connection before fetching its exact model from OpenFGA. Only
-        # after these prerequisites are ready do we expose the runtime context.
+        # Observability and identity first, then durable SQL. Expose the runtime
+        # context only after these prerequisites are ready.
         log_setup(
             service_name=config.app.runtime_id,
             log_level=config.app.log_level,
@@ -6404,7 +6381,6 @@ def create_agent_app(
         )
         gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
-        rebac_engine: PublishedOpenFgaRebacEngine | None = None
         steering_cleanup_task: asyncio.Task[None] | None = None
         try:
             container.initialize_kpi_writer()
@@ -6413,13 +6389,9 @@ def create_agent_app(
                 config.observability, kpi_writer=container.get_kpi_writer()
             )
             attach_pod_container(app, container)
-            rebac_config, binding = await prepare_authorization(container)
+            await prepare_authorization(container)
             sql_engine = container.get_sql_engine()
             assert sql_engine is not None  # owned by the prepared container
-            rebac_engine = PublishedOpenFgaRebacEngine(
-                rebac_config, binding, kpi_writer=container.get_kpi_writer()
-            )
-            await rebac_engine.get_client()
             if config.app.gcu_version is not None:
                 # Check the Rust-owned contract before readiness, without writes.
                 from sqlalchemy import text
@@ -6490,7 +6462,6 @@ def create_agent_app(
                         ),
                         control_plane_url=config.platform.control_plane_url,
                         control_plane_http_client=container.get_control_plane_http_client(),
-                        rebac_engine=rebac_engine,
                         security_profile=(
                             security.profile if security is not None else None
                         ),
@@ -6526,40 +6497,36 @@ def create_agent_app(
                 steering_cleanup_task.cancel()
                 await asyncio.gather(steering_cleanup_task, return_exceptions=True)
             turn_steering_mailbox.configure(None)
-            try:
-                if rebac_engine is not None:
-                    await rebac_engine.close()
-            finally:
-                # Shutdown must RUN and must COMPLETE.
-                # - `finally`: a plain sequence after `yield` is skipped entirely
-                #   when an exception propagates out of the app through the
-                #   generator, which is exactly the case where releasing sockets
-                #   and stopping tasks matters most.
-                # - per-step guard: these three release INDEPENDENT resources, so a
-                #   raising `container.shutdown()` must not strand the Keycloak
-                #   refresh pool behind it. The pod is going away either way;
-                #   losing a connection pool because an unrelated subsystem failed
-                #   is strictly worse than logging both failures.
-                # `except Exception` deliberately lets `CancelledError` through —
-                # a shutdown being cancelled is not a step failing.
-                for label, close in (
-                    ("gc diagnostics", gc_diagnostics.stop),
-                    ("pod container", container.shutdown),
-                    # Release the Keycloak refresh pool deterministically rather
-                    # than leaving it to GC, as the control-plane client above is.
-                    ("keycloak refresh pool", aclose_token_refresh_client),
-                ):
-                    try:
-                        await close()
-                    except Exception:
-                        if delegation.enabled:
-                            logger.error(
-                                "event=runtime_shutdown outcome=failed reason=cleanup_failed"
-                            )
-                        else:
-                            logger.exception(
-                                "[fred-runtime] shutdown step failed: %s", label
-                            )
+            # Shutdown must RUN and must COMPLETE.
+            # - `finally`: a plain sequence after `yield` is skipped entirely
+            #   when an exception propagates out of the app through the
+            #   generator, which is exactly the case where releasing sockets
+            #   and stopping tasks matters most.
+            # - per-step guard: these three release INDEPENDENT resources, so a
+            #   raising `container.shutdown()` must not strand the Keycloak
+            #   refresh pool behind it. The pod is going away either way;
+            #   losing a connection pool because an unrelated subsystem failed
+            #   is strictly worse than logging both failures.
+            # `except Exception` deliberately lets `CancelledError` through —
+            # a shutdown being cancelled is not a step failing.
+            for label, close in (
+                ("gc diagnostics", gc_diagnostics.stop),
+                ("pod container", container.shutdown),
+                # Release the Keycloak refresh pool deterministically rather
+                # than leaving it to GC, as the control-plane client above is.
+                ("keycloak refresh pool", aclose_token_refresh_client),
+            ):
+                try:
+                    await close()
+                except Exception:
+                    if delegation.enabled:
+                        logger.error(
+                            "event=runtime_shutdown outcome=failed reason=cleanup_failed"
+                        )
+                    else:
+                        logger.exception(
+                            "[fred-runtime] shutdown step failed: %s", label
+                        )
 
     app = RequestLoggingFastAPI(
         title=config.app.name,

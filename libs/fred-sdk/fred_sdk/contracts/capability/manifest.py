@@ -34,19 +34,12 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, get_args, get_origin
 
-from fred_core.security.rebac.capability_authz import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX as _CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
-)
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..context import ModelBinding
 from ..models import FieldSpec, TeamScopePolicy
 
-# Capability ids live in OpenFGA object ids (`capability:<id>`, RFC §8.1) and
-# URL path segments (`/capabilities/{id}/...`, §9.1). OpenFGA forbids `:`,
-# `#`, `*` and whitespace in object ids; this pattern is the conservative
-# URL-safe subset, enforced at declaration so a bad id fails pod boot loudly
-# instead of crashing control-plane tuple writes (#1988).
+# Capability ids use a conservative URL-safe subset, validated at pod startup.
 CAPABILITY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
 
 # Reserved id prefix for every `kind="model"` catalog entry (OBSERV-02 v3,
@@ -63,7 +56,7 @@ CAPABILITY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
 MODEL_CAPABILITY_NAMESPACE_PREFIX = "model__"
 
 # Retain the compatibility import from the shared application identifier owner.
-APPLICATION_CAPABILITY_NAMESPACE_PREFIX = _CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX
+APPLICATION_CAPABILITY_NAMESPACE_PREFIX = "app__"
 
 # Reasoning effort levels a catalog profile may declare (`reasoning_efforts`),
 # weakest first; the order is what "nearest offered level" is measured on.
@@ -82,7 +75,7 @@ def model_capability_id(provider: str, name: str) -> str:
     (`RUNTIME-EXECUTION-CONTRACT.md` §8.78). Non-id-safe characters
     (anything outside `CAPABILITY_ID_PATTERN`'s charset) are normalized to
     `-` so a provider/model name containing e.g. `:` or `/` never produces
-    an id OpenFGA would reject.
+    an invalid capability id.
     """
     safe_provider = re.sub(r"[^A-Za-z0-9._-]", "-", provider)
     safe_name = re.sub(r"[^A-Za-z0-9._-]", "-", name)
@@ -357,9 +350,8 @@ class CapabilityCatalogEntry(BaseModel):
 
     id: str = Field(min_length=1)
     # Which pod advertises this entry, and the identifier its author wrote.
-    # `id` above is a composite mangled to be colon-free for OpenFGA, so it
-    # cannot be parsed back without coupling the reader to a ReBAC storage
-    # detail. Both are None for kinds that no pod hosts.
+    # `id` is a composite; preserve the original identifiers explicitly.
+    # Both are None for kinds that no pod hosts.
     runtime_id: str | None = None
     source_id: str | None = None
     # The stored-config schema version. Always present: it is half of the

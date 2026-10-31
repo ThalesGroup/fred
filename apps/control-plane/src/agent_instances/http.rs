@@ -241,9 +241,20 @@ async fn create_agent_instance(
     headers: HeaderMap,
     ApiJson(mut body): ApiJson<CreateAgentInstanceRequest>,
 ) -> AppResult<(StatusCode, Json<ManagedAgentInstanceSummary>)> {
-    let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Write).await?;
+    let space = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        &user.uid,
+        space_id,
+        Permission::Write,
+    )
+    .await?;
     require_instance_space(space.kind)?;
-    if !s.fga.can_use_agent(body.template_id, &space).await? {
+    if !s
+        .authorization
+        .can_use_agent(body.template_id, &space)
+        .await?
+    {
         return Err(AppError::NotFound);
     }
     tuning::validate_request(&mut body)?;
@@ -273,15 +284,14 @@ async fn create_agent_instance(
         updated_by: None,
         tuning,
     };
-    let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, &space).await?;
-    let space =
-        spaces::authorize_locked(&mut tx, &s.fga, &user.uid, space_id, Permission::Write).await?;
+    let mut tx = spaces::lock_for(&s.pool, &space).await?;
+    let space = spaces::authorize_locked(&mut tx, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
-    if !s.fga.can_use_agent(instance.template_id, &space).await? {
+    if !crate::authorization::can_use_agent(&mut *tx, instance.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     models::validate_write(&mut tx, space.organization, &instance.tuning, true).await?;
-    s.fga.fence(&mut guard).await?;
+
     let record = super::create(&mut *tx, &instance)
         .await
         .map_err(instance_write_error)?;
@@ -310,19 +320,27 @@ async fn list_agent_instances(
     AdmittedUser(user): AdmittedUser,
     ApiPath(space_id): ApiPath<Uuid>,
 ) -> AppResult<Json<Vec<ManagedAgentInstanceSummary>>> {
-    let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Read).await?;
+    let space = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        &user.uid,
+        space_id,
+        Permission::Read,
+    )
+    .await?;
     require_instance_space(space.kind)?;
     let records = super::list_by_space(&s.pool, space_id).await?;
     let template_ids: BTreeSet<_> = records.iter().map(|record| record.template_id).collect();
-    let fga = &s.fga;
+    let authorization = &s.authorization;
     let space = &space;
     let template_use: BTreeMap<_, _> = futures::stream::iter(template_ids)
         .map(|template_id| async move {
-            fga.can_use_agent(template_id, space)
+            authorization
+                .can_use_agent(template_id, space)
                 .await
                 .map(|allowed| (template_id, allowed))
         })
-        .buffered(crate::fga::READ_CONCURRENCY)
+        .buffered(crate::authorization::READ_CONCURRENCY)
         .try_collect()
         .await?;
     let instances = records
@@ -353,12 +371,23 @@ async fn get_agent_instance(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, agent_instance_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<Json<ManagedAgentInstanceSummary>> {
-    let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Read).await?;
+    let space = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        &user.uid,
+        space_id,
+        Permission::Read,
+    )
+    .await?;
     require_instance_space(space.kind)?;
     let record = super::get_for_space(&s.pool, space_id, agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !s.fga.can_use_agent(record.template_id, &space).await? {
+    if !s
+        .authorization
+        .can_use_agent(record.template_id, &space)
+        .await?
+    {
         return Err(AppError::NotFound);
     }
     Ok(Json(record_to_summary(record)?))
@@ -401,12 +430,23 @@ async fn update_agent_instance(
     headers: HeaderMap,
     ApiJson(mut body): ApiJson<UpdateAgentInstanceRequest>,
 ) -> AppResult<Json<ManagedAgentInstanceSummary>> {
-    let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Write).await?;
+    let space = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        &user.uid,
+        space_id,
+        Permission::Write,
+    )
+    .await?;
     require_instance_space(space.kind)?;
     let record = super::get_for_space(&s.pool, space_id, agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !s.fga.can_use_agent(record.template_id, &space).await? {
+    if !s
+        .authorization
+        .can_use_agent(record.template_id, &space)
+        .await?
+    {
         return Err(AppError::NotFound);
     }
     tuning::validate_update_request(&mut body)?;
@@ -451,15 +491,14 @@ async fn update_agent_instance(
         }
         _ => None,
     };
-    let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, &space).await?;
-    let space =
-        spaces::authorize_locked(&mut tx, &s.fga, &user.uid, space_id, Permission::Write).await?;
+    let mut tx = spaces::lock_for(&s.pool, &space).await?;
+    let space = spaces::authorize_locked(&mut tx, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
     // Apply omissions to the current row, not the snapshot read before discovery.
     let mut current = super::get_for_space(&mut *tx, space_id, agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !s.fga.can_use_agent(current.template_id, &space).await? {
+    if !crate::authorization::can_use_agent(&mut *tx, current.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     let previous = SavedModelSettings::read(&current.tuning.0)?;
@@ -479,7 +518,7 @@ async fn update_agent_instance(
         )
         .await?;
     }
-    s.fga.fence(&mut guard).await?;
+
     let record = super::update(&mut *tx, &current, &user.uid)
         .await
         .map_err(instance_write_error)?;
@@ -508,14 +547,20 @@ async fn delete_agent_instance(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, agent_instance_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<StatusCode> {
-    let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Write).await?;
+    let space = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        &user.uid,
+        space_id,
+        Permission::Write,
+    )
+    .await?;
     require_instance_space(space.kind)?;
-    let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, &space).await?;
-    let space =
-        spaces::authorize_locked(&mut tx, &s.fga, &user.uid, space_id, Permission::Write).await?;
+    let mut tx = spaces::lock_for(&s.pool, &space).await?;
+    let space = spaces::authorize_locked(&mut tx, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
     // Space editors can remove an instance even after its template is revoked.
-    s.fga.fence(&mut guard).await?;
+
     if !super::delete(&mut *tx, space_id, agent_instance_id).await? {
         return Err(AppError::NotFound);
     }

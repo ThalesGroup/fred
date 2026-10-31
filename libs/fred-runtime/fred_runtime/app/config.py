@@ -163,12 +163,9 @@ class PodAppConfig(PodAppIdentity):
     citations, HITL) is carried in a top-level `fred` key on each SSE chunk
     and silently ignored by standard OpenAI clients.
 
-    OFF by default (RUNTIME-07 rev. 2, finding F-A): this surface executes by
-    `agent_id` (direct template), which is forbidden under the c3 profile, and it
-    must be authorized per request. When enabled it is gated by the same Keycloak
-    JWT + pod-side OpenFGA check (requires the `X-Fred-Team-Id` header). The c3
-    profile FAILS CLOSED at startup if this surface is enabled (see
-    `apply_security_profile`). Enable only for dev / eval harnesses.
+    OFF by default. This legacy surface executes a direct template by agent_id;
+    it is unsupported by the c3 runtime, which resolves executions through the
+    Control Plane.
     """
 
 

@@ -14,8 +14,8 @@ as request authorities.
 
 | `security.profile` | Meaning |
 | ------------------ | ------- |
-| _unset_ (default)  | Baseline (C1/C2). Auth and ReBAC follow the individual `user` / `m2m` / `rebac` toggles; dev conveniences (mock-admin, soft JWT) remain possible. |
-| `c3`               | Hardened, **fail-closed at startup**. Forces strict JWT issuer/audience validation, forbids no-security / mock-admin, and requires OpenFGA ReBAC enabled. The pod **refuses to boot** if `user`, `m2m`, or `rebac` is not enabled. The control-plane issues **no** signed execution grant — each agentic pod authorizes every request itself (Keycloak JWT + pod-side OpenFGA). |
+| _unset_ (default)  | Baseline (C1/C2). Authentication follows the individual `user` / `m2m` toggles; dev conveniences (mock-admin, soft JWT) remain possible. |
+| `c3`               | Hardened, **fail-closed at startup**. Forces strict JWT issuer/audience validation, forbids no-security / mock-admin, and requires `user` and `m2m` authentication. Control Plane evaluates permissions in PostgreSQL; pods validate identity and enforce the admitted turn context. |
 
 **Where it is enforced today.** `profile: c3` is honored by the services that call
 `apply_security_profile` at startup:
@@ -85,7 +85,7 @@ chart contract unchanged and supplies, per instance:
 - the instance's own Fred chart values (image tags, Foundation endpoint hostnames,
   ingress, etc.), independent of this contract;
 - the Foundation endpoints the Apps layer expects to already exist (Postgres, OpenSearch,
-  Keycloak, OpenFGA, Temporal — see `fred-deployment-factory`'s RFC-0001 §2-3 for the
+  Keycloak, Temporal — see `fred-deployment-factory`'s RFC-0001 §2-3 for the
   Foundation/Apps boundary those names must satisfy);
 - the same fresh-install sequence as every other instance: empty Foundation → user
   self-registers in Keycloak → authenticated root bootstrap (this contract) → declarative

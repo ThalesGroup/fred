@@ -14,10 +14,8 @@
 
 //! Configuration, on fred's model: a YAML file named by CONFIG_FILE (default
 //! ./config/configuration.yaml) with the same section and field names as the Python
-//! backends, and secrets only from the environment (FRED_POSTGRES_PASSWORD,
-//! OPENFGA_API_TOKEN). FRED_JWT_* stay environment settings.
-
-use std::time::Duration;
+//! backends, and secrets only from the environment (FRED_POSTGRES_PASSWORD).
+//! FRED_JWT_* stay environment settings.
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
@@ -76,7 +74,6 @@ pub struct SecurityConfig {
     pub delegation: crate::users::DirectoryDelegation,
     #[serde(default)]
     pub authorized_origins: Vec<String>,
-    pub rebac: RebacConfig,
 }
 
 /// Issuer plus outbound directory credentials, used only when `enabled`.
@@ -116,23 +113,6 @@ pub struct ClaimsConfig {
     pub email: Option<String>,
     pub given_name: Option<String>,
     pub family_name: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub struct RebacConfig {
-    pub api_url: String,
-    /// Never fred's own store: syncing this model there would replace fred's.
-    #[serde(default = "default_store")]
-    pub store_name: String,
-    #[serde(default = "yes")]
-    pub create_store_if_needed: bool,
-    #[serde(default = "yes")]
-    pub sync_schema_on_init: bool,
-    #[serde(default = "default_token_env")]
-    pub token_env_var: String,
-    #[serde(default = "default_timeout")]
-    pub timeout_millisec: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
@@ -184,15 +164,6 @@ fn default_address() -> String {
 }
 fn default_provider() -> String {
     "keycloak".into()
-}
-fn default_store() -> String {
-    "control-plane".into()
-}
-fn default_token_env() -> String {
-    "OPENFGA_API_TOKEN".into()
-}
-fn default_timeout() -> Option<u64> {
-    Some(5000)
 }
 fn default_pg_port() -> u16 {
     5432
@@ -251,17 +222,6 @@ impl Configuration {
             .database(&pg.database)
             .username(&pg.username)
             .password(&password))
-    }
-
-    pub fn fga_token(&self) -> Option<String> {
-        opt_env(&self.security.rebac.token_env_var)
-    }
-
-    pub fn fga_timeout(&self) -> Option<Duration> {
-        self.security
-            .rebac
-            .timeout_millisec
-            .map(Duration::from_millis)
     }
 
     pub fn security(&self) -> Result<SecuritySettings> {
@@ -447,7 +407,6 @@ mod tests {
             "/security/user",
             "/security/user/claims",
             "/security/delegation",
-            "/security/rebac",
             "/storage",
             "/storage/postgres",
             "/storage/content",
@@ -479,7 +438,6 @@ mod tests {
     fn parses_the_shipped_configuration() {
         let text = include_str!("../config/configuration.yaml");
         let config: Configuration = serde_yaml_ng::from_str(text).unwrap();
-        assert_eq!(config.security.rebac.store_name, "control-plane");
         assert_eq!(config.app.base_url, "/control-plane/v1");
         assert!(config.security().unwrap().profile_c3);
     }

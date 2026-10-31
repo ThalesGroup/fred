@@ -253,9 +253,9 @@ describe("TaskActivity migration result (AUTHZ-07 Step 3)", () => {
   });
 
   it("shows the failed task's error message, never the success text", () => {
-    h.tasks = [migrationTask({ task_id: "m5", state: "failed", error: "OpenFGA unreachable" })];
+    h.tasks = [migrationTask({ task_id: "m5", state: "failed", error: "Control Plane unreachable" })];
     const html = render();
-    expect(html).toContain("OpenFGA unreachable");
+    expect(html).toContain("Control Plane unreachable");
     expect(html).toContain("rework.taskActivity.failedOn");
     expect(html).not.toContain("rework.taskActivity.completedOn");
   });

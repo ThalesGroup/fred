@@ -759,7 +759,6 @@ def _with_rebac_engine(engine: _FakeRebacEngine | None):
                 RuntimeContext(
                     RuntimeConfig(
                         knowledge_flow_url="http://kf.invalid",
-                        rebac_engine=engine,
                     )
                 )
             )

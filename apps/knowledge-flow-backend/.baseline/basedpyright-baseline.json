@@ -50,16 +50,6 @@
                 }
             }
         ],
-        "./knowledge_flow_backend/features/metadata/service.py": [
-            {
-                "code": "reportUnreachable",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 85,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./knowledge_flow_backend/features/resources/utils.py": [
             {
                 "code": "reportUnreachable",

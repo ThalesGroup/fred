@@ -30,6 +30,7 @@ import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from conftest import (
     StaticChatModelFactory,
@@ -45,6 +46,7 @@ from fred_core.history.history_schema import (
 )
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.app import authorization as authorization_module
 from fred_runtime.app.agent_app import _write_turn_history
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
@@ -986,25 +988,42 @@ def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> Non
     - delete without user scoping is an irreversible cross-user data destruction
       vector; this verifies the ownership filter is applied at the store layer
     """
-    app, fake_user = _make_app_with_user(monkeypatch, tmp_path, "alice-uid")
+    app, _ = _make_app_with_user(monkeypatch, tmp_path, "alice-uid")
 
     mock_store = AsyncMock()
     mock_store.delete_session = AsyncMock(return_value=3)
+    authority = AsyncMock(spec=httpx.AsyncClient)
+    authority.post.return_value = httpx.Response(200, json={"allowed": False})
     mock_ctx = RuntimeContext(
         RuntimeConfig(
             knowledge_flow_url="http://localhost:8111/knowledge-flow/v2",
             history_store=mock_store,
+            control_plane_url="https://authority.test",
+            control_plane_http_client=authority,
         )
     )
 
     with TestClient(app) as client:
         monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: mock_ctx)
-        response = client.delete("/pod/v1/agents/sessions/session-liam")
+        monkeypatch.setattr(
+            authorization_module, "get_runtime_context", lambda: mock_ctx
+        )
+        response = client.delete(
+            "/pod/v1/agents/sessions/session-liam",
+            headers={"Authorization": "Bearer alice-token"},
+        )
 
     assert response.status_code == 200
     assert response.json() == {"deleted": 3}
     mock_store.delete_session.assert_awaited_once_with(
         session_id="session-liam", user_id="alice-uid"
+    )
+    authority.post.assert_awaited_once_with(
+        "https://authority.test/authorize/platform",
+        json={"permission": "manage_platform"},
+        follow_redirects=False,
+        headers={"Authorization": "Bearer alice-token"},
+        auth=None,
     )
 
 

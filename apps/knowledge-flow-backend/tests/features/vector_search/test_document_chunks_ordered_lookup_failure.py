@@ -52,8 +52,11 @@ async def test_get_document_chunks_ordered_propagates_a_lookup_failure() -> None
     service = VectorSearchService.__new__(VectorSearchService)
     service.vector_store = _FailingChunkStore()
 
-    with pytest.raises(RuntimeError):
-        await service.get_document_chunks_ordered(user=_user(), document_uid="doc-1", context=DocumentAccessContext(space_id=uuid4(), document_scope=DocumentScope()), limit=200)
+    space = uuid4()
+    with pytest.raises(RuntimeError, match="simulated backend outage"):
+        await service.get_document_chunks_ordered(
+            user=_user(), document_uid="doc-1", context=DocumentAccessContext(space_id=space, document_scope=DocumentScope()), authorized_space_ids=(space,), limit=200
+        )
 
 
 @pytest.mark.asyncio
@@ -61,8 +64,11 @@ async def test_document_lookup_reports_corpus_not_ready():
     service = VectorSearchService.__new__(VectorSearchService)
     service.vector_store = MagicMock(spec=OpenSearchVectorStoreAdapter)
     service.vector_store.ensure_ready.side_effect = RuntimeError("Corpus index is not initialized")
+    space = uuid4()
     with pytest.raises(HTTPException) as error:
-        await service.get_document_chunks_ordered(user=_user(), document_uid="doc-1", context=DocumentAccessContext(space_id=uuid4(), document_scope=DocumentScope()), limit=200)
+        await service.get_document_chunks_ordered(
+            user=_user(), document_uid="doc-1", context=DocumentAccessContext(space_id=space, document_scope=DocumentScope()), authorized_space_ids=(space,), limit=200
+        )
     assert error.value.status_code == 503
     assert error.value.detail == "corpus_not_ready"
     service.vector_store.get_chunks_for_document.assert_not_called()

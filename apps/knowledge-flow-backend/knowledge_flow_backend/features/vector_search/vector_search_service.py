@@ -12,13 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Protocol, cast, runtime_checkable
+from uuid import UUID
 
 from fastapi import HTTPException
 from fred_core import KeycloakUser
@@ -491,6 +490,7 @@ class VectorSearchService:
         top_k: int,
         policy_name: Optional[SearchPolicyName],
         context: DocumentAccessContext,
+        authorized_space_ids: tuple[UUID, ...],
     ) -> List[VectorSearchHit]:
         """Search one Weaver space and its ancestors; the caller checked the space read.
 
@@ -500,8 +500,8 @@ class VectorSearchService:
         await self._require_corpus_ready()
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
-            scope = await resolve_scope(conn, context, user_id=user.uid)
-        if scope.document_scope.is_empty and not scope.attachment_ids:
+            scope = await resolve_scope(conn, context, user_id=user.uid, authorized_space_ids=authorized_space_ids)
+        if (not scope.space_ids or scope.document_scope.is_empty) and not scope.attachment_ids:
             return []
         policy_key = policy_name or SearchPolicyName.hybrid
         strategy = {
@@ -510,7 +510,7 @@ class VectorSearchService:
             SearchPolicyName.semantic: self._semantic,
         }.get(policy_key, self._hybrid)
         sources = []
-        if not scope.document_scope.is_empty:
+        if scope.space_ids and not scope.document_scope.is_empty:
             sources.append(
                 (
                     {"space_id": [str(value) for value in scope.space_ids], "session_id": [""]},
@@ -615,6 +615,7 @@ class VectorSearchService:
         user: AssertedUser,
         document_uid: str,
         context: DocumentAccessContext,
+        authorized_space_ids: tuple[UUID, ...],
         limit: int,
     ) -> List[VectorSearchHit]:
         """Return a document's published chunks in chunk_index order, capped at `limit`.
@@ -640,7 +641,7 @@ class VectorSearchService:
         raw_chunks.sort(key=_order)
         engine = ApplicationContext.get_instance().get_pg_async_engine()
         async with engine.connect() as conn:
-            scope = await resolve_scope(conn, context, user_id=user.uid)
+            scope = await resolve_scope(conn, context, user_id=user.uid, authorized_space_ids=authorized_space_ids)
         documents = [
             (Document(page_content=entry.get("text") or "", metadata=entry.get("metadata") or {}), 0.0)
             for entry in raw_chunks

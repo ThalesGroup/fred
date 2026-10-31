@@ -81,7 +81,7 @@ pub struct SupervisionTeamsPage {
 pub struct OrganizationSupervision {
     pub organization_id: Uuid,
     pub collection_started_at: DateTime<Utc>,
-    /// Collection bounds, not an atomic SQL/OpenFGA snapshot.
+    /// Collection bounds, not an atomic snapshot of all displayed data.
     pub collection_finished_at: DateTime<Utc>,
     pub active_teams: u64,
     pub totals: SupervisionCounts,

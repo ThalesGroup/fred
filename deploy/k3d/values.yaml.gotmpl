@@ -6,9 +6,6 @@
 x-postgres: &postgres
   name: FRED_POSTGRES_PASSWORD
   valueFrom: {secretKeyRef: {name: fred-secrets, key: POSTGRES_FRED_PASSWORD}}
-x-fga: &fga
-  name: OPENFGA_API_TOKEN
-  valueFrom: {secretKeyRef: {name: fred-secrets, key: OPENFGA_API_TOKEN}}
 x-model: &model
   name: OPENAI_API_KEY
   valueFrom: {secretKeyRef: {name: fred-model-credentials, key: OPENAI_API_KEY}}
@@ -43,9 +40,6 @@ applications:
         gcu_version: v1
       security:
         profile: c3
-        rebac:
-          store_name: control-plane
-
   control-plane-backend:
     lifecycle_policy_catalog:
       space_policies:
@@ -72,7 +66,6 @@ applications:
       - {name: manager-env, mountPath: /app/config/.env, subPath: .env}
     extraEnvVars:
       - *postgres
-      - *fga
       - *model
       - name: SSL_CERT_FILE
         value: /etc/fred/node-ca/ca-certificates.crt
@@ -134,7 +127,6 @@ applications:
         m2m: {realm_url: {{ requiredEnv "K3D_REALM_URL" | quote }}}
         user: {realm_url: {{ requiredEnv "K3D_REALM_URL" | quote }}}
         authorized_origins: [{{ requiredEnv "K3D_PUBLIC_URL" | quote }}]
-        rebac: {api_url: http://openfga:9080}
         # Match the pod's inherited outgoing delegation and Swift's trust policy.
         delegation:
           accept_delegated_calls: true
@@ -183,9 +175,10 @@ applications:
 
   knowledge-flow-backend:
     # The capability backend: agent pods call it for a person, in an admitted turn.
-    # It reads Control Plane tables and the published OpenFGA model; no KF migration.
+    # Control Plane authorizes the corpus; local SQL checks its publication state.
     migration: {enabled: false}
     configuration:
+      control_plane_url: http://control-plane-backend:8222/control-plane/v1
       published_artifacts:
         endpoint: http://seaweedfs:8333
         bucket: app-content-documents
@@ -193,9 +186,11 @@ applications:
         secret_key_env: KF_ARTIFACT_SECRET_KEY
         allow_insecure: true
       security:
-        rebac:
-          # The store Control Plane publishes, like the agent pod.
-          store_name: control-plane
+        m2m:
+          enabled: true
+        delegation:
+          accept_delegated_calls: true
+          act_for_people: true
       storage:
         opensearch:
           username: fred-kf-api
@@ -205,7 +200,7 @@ applications:
           index: document-vectors
 
   knowledge-flow-worker:
-    # This worker has no SQL, OpenFGA or legacy KF service credentials.
+    # This worker uses its dedicated processing identity.
     extraEnvVars:
       - *model
       - name: COLUMNS

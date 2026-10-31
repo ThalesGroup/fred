@@ -259,33 +259,39 @@ describe("shared UserSettingsPage", () => {
   });
 });
 
-it("shows organization only from current successful manager memberships", () => {
-  state.spaces = [
-    {
-      id: "org",
-      name: "Demo",
-      kind: "organization",
-      organization_id: "org",
-      path: ["org"],
-      parent_id: null,
-      personal_owner: null,
-      roles: ["member"],
-      inherited_roles: [],
-    },
-  ];
-  render();
-  expect(container.textContent).toContain("rework.userSettings.organization: Demo");
-  state.spacesFetching = true;
-  render();
-  expect(container.textContent).not.toContain("Demo");
-  state.spacesFetching = false;
-  state.spacesError = true;
-  render();
-  expect(container.textContent).not.toContain("Demo");
-  clickText("rework.provisioning.retryAuthority");
-  expect(state.spacesRefetch).toHaveBeenCalledOnce();
-  state.spacesError = false;
-  state.userId = "different-person";
-  render();
-  expect(container.textContent).not.toContain("Demo");
-});
+it.each(["member", "owner", "organization_admin"] as const)(
+  "shows the organization and its %s role only from current successful memberships",
+  (role) => {
+    state.spaces = [
+      {
+        id: "org",
+        name: "Demo",
+        kind: "organization",
+        organization_id: "org",
+        path: ["org"],
+        parent_id: null,
+        personal_owner: null,
+        roles: [role],
+        inherited_roles: [],
+      },
+    ];
+    render();
+    expect(container.textContent).toContain("rework.userSettings.organization: Demo");
+    expect(container.textContent).toContain(
+      `rework.userSettings.organizationRoles: rework.supervision.roleNames.${role}`,
+    );
+    state.spacesFetching = true;
+    render();
+    expect(container.textContent).not.toContain("Demo");
+    state.spacesFetching = false;
+    state.spacesError = true;
+    render();
+    expect(container.textContent).not.toContain("Demo");
+    clickText("rework.provisioning.retryAuthority");
+    expect(state.spacesRefetch).toHaveBeenCalledOnce();
+    state.spacesError = false;
+    state.userId = "different-person";
+    render();
+    expect(container.textContent).not.toContain("Demo");
+  },
+);

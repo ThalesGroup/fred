@@ -16,6 +16,7 @@ import logging
 import pathlib
 import shutil
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fred_core import KeycloakUser
@@ -100,6 +101,8 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     metadata = _FakeMetadata(document_uid="doc-push", document_name="sample.csv")
 
     class _FakeService:
+        already_committed = False
+
         def __init__(self) -> None:
             self.context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
 
@@ -116,8 +119,8 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         return func(*args)
 
     monkeypatch.setattr(
-        "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service",
-        lambda: _FakeService(),
+        "knowledge_flow_backend.features.manager_processing.service.manager_service",
+        AsyncMock(return_value=_FakeService()),
     )
     monkeypatch.setattr(
         "knowledge_flow_backend.features.scheduler.push_files_activities.to_thread_with_heartbeat",
@@ -191,6 +194,8 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     )
 
     class _FakeService:
+        already_committed = False
+
         async def persist_progress(self, user, metadata) -> bool:
             return True
 
@@ -210,8 +215,8 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     )
 
     monkeypatch.setattr(
-        "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service",
-        lambda: _FakeService(),
+        "knowledge_flow_backend.features.manager_processing.service.manager_service",
+        AsyncMock(return_value=_FakeService()),
     )
     monkeypatch.setattr(
         "knowledge_flow_backend.application_context.ApplicationContext.get_instance",
@@ -238,8 +243,8 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_output_process_uses_permission_checked_metadata_writer(tmp_path, monkeypatch):
-    """Normal ingestion persists through the permission-checked writer."""
+async def test_output_process_uses_manager_progress_writer(tmp_path, monkeypatch):
+    """Output processing persists progress through its admitted manager job service."""
     metadata = _FakeMetadata(document_uid="doc-output", document_name="sample.csv")
     user = _user()
     file = FileToProcess(
@@ -252,6 +257,8 @@ async def test_output_process_uses_permission_checked_metadata_writer(tmp_path, 
     )
 
     class _FakeService:
+        already_committed = False
+
         def __init__(self) -> None:
             self.checked_calls = 0
 
@@ -293,8 +300,8 @@ async def test_output_process_uses_permission_checked_metadata_writer(tmp_path, 
     )
 
     monkeypatch.setattr(
-        "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service",
-        lambda: checked_service,
+        "knowledge_flow_backend.features.manager_processing.service.manager_service",
+        AsyncMock(return_value=checked_service),
     )
     await output_process(file=file, metadata=metadata, accept_memory_storage=True)
     assert checked_service.checked_calls > 0

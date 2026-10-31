@@ -12,14 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Residual authorization helpers after the RBAC→ReBAC migration (AUTHZ-01).
-
-Role-based authorization (RBACProvider / @authorize / authorize_or_raise /
-is_authorized / require_admin) has been removed — all endpoint authorization is now
-ReBAC (OpenFGA). Task access authorization (list / stream / cancel) lives in its own
-canonical owner, ``fred_core.tasks.authz`` (CTRLP-12), and is ReBAC-based; this module
-only retains the internal service-principal users below.
-"""
+"""Internal identities for processor operations whose authority is already bound."""
 
 from fred_core.security.structure import KeycloakUser
 

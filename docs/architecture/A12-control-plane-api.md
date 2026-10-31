@@ -146,15 +146,28 @@ Request: [`AuthorizeDocument`](#authorizedocument).
 
 Operation `authorize_platform`.
 
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  | Person asserted by a trusted workload; requires run and agent. |
+| `run` | query | string |  | Run identifier asserted with person and agent. |
+| `agent` | query | string |  | Agent identifier asserted with person and run; no runtime refresh. |
+
 Request: [`PlatformCheck`](#platformcheck).
 
 - 200: [`Allowed`](#allowed) — Success
 - 400: [`ErrorBody`](#errorbody) — Malformed JSON body
 - 401, 403, 422, 500: [`ErrorBody`](#errorbody) — Request failed
+- 503: [`ErrorBody`](#errorbody) — Authorization storage unavailable
 
 ### POST /authorize/scope
 
 Operation `authorize_scope`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  | Person asserted by a trusted workload; requires run and agent. |
+| `run` | query | string |  | Run identifier asserted with person and agent. |
+| `agent` | query | string |  | Agent identifier asserted with person and run; no runtime refresh. |
 
 Request: [`AuthorizeScope`](#authorizescope).
 
@@ -162,10 +175,17 @@ Request: [`AuthorizeScope`](#authorizescope).
 - 400: [`ErrorBody`](#errorbody) — Malformed JSON body
 - 401, 403, 404, 422, 500: [`ErrorBody`](#errorbody) — Request failed
 - 409: [`ErrorBody`](#errorbody) — Ambiguous organization context
+- 503: [`ErrorBody`](#errorbody) — Authorization storage unavailable
 
 ### POST /authorize/space
 
 Operation `authorize_space`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  | Person asserted by a trusted workload; requires run and agent. |
+| `run` | query | string |  | Run identifier asserted with person and agent. |
+| `agent` | query | string |  | Agent identifier asserted with person and run; no runtime refresh. |
 
 Request: [`SpaceCheck`](#spacecheck).
 
@@ -173,6 +193,7 @@ Request: [`SpaceCheck`](#spacecheck).
 - 400: [`ErrorBody`](#errorbody) — Malformed JSON body
 - 401, 403, 404, 422, 500: [`ErrorBody`](#errorbody) — Request failed
 - 409: [`ErrorBody`](#errorbody) — Ambiguous organization context
+- 503: [`ErrorBody`](#errorbody) — Authorization storage unavailable
 
 ## /bootstrap routes
 
@@ -1388,7 +1409,7 @@ One live attachment of the caller's conversation.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `levels` | array of [`SpaceKind`](#spacekind) or null |  | Keep only spaces of these kinds; omitted keeps every level. Never adds a space. |
+| `levels` | array of [`CorpusLevel`](#corpuslevel) or null |  | Keep only spaces of these kinds; omitted keeps every level. Never adds a space. |
 | `space_id` | string (uuid) | yes |  |
 
 ### BootstrapRequest
@@ -1506,6 +1527,10 @@ One of: `source_guarantee`, `api_metadata`.
 | `manifest` | [`Manifest`](#manifest) | yes |  |
 | `stage` | [`Stage`](#stage) | yes |  |
 | `work` | [`Work`](#work) | yes |  |
+
+### CorpusLevel
+
+One of: `organization`, `team`, `project`.
 
 ### CreateAgentInstanceRequest
 
@@ -1935,7 +1960,7 @@ Governance view of one organization: its technical admins and business owners.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `active_teams` | integer (int64), >= 0 | yes |  |
-| `collection_finished_at` | string (date-time) | yes | Collection bounds, not an atomic SQL/OpenFGA snapshot. |
+| `collection_finished_at` | string (date-time) | yes | Collection bounds, not an atomic snapshot of all displayed data. |
 | `collection_started_at` | string (date-time) | yes |  |
 | `organization_direct` | [`SupervisionCounts`](#supervisioncounts) | yes |  |
 | `organization_id` | string (uuid) | yes |  |
@@ -1959,7 +1984,7 @@ Omitted fields are preserved; explicit null restores the field's default.
 
 ### Permission
 
-Computed permissions checked against OpenFGA.
+Computed business permissions.
 
 One of: `read`, `write`, `manage`.
 
@@ -2187,7 +2212,7 @@ One of: `claim`, `applied`, `confirm`.
 
 ### Role
 
-Direct roles stored in OpenFGA.
+Direct business roles.
 
 One of: `member`, `editor`, `owner`, `analyst`, `organization_admin`.
 
@@ -2207,7 +2232,7 @@ One of: `member`, `editor`, `owner`, `analyst`, `organization_admin`.
 | `configuration_updated_at` | string (date-time) | yes |  |
 | `instance_id` | string (uuid) | yes |  |
 | `runtime_id` | string | yes |  |
-| `template_id` | string (uuid) | yes | Organization-qualified OpenFGA identity, distinct from the registry key. |
+| `template_id` | string (uuid) | yes | Organization-qualified template identity, distinct from the registry key. |
 | `template_key` | string | yes |  |
 
 ### RuntimeAttachment
@@ -2297,6 +2322,7 @@ One of:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `space_id` | string (uuid) | yes |  |
 | `space_ids` | array of string (uuid) | yes | Filter for chunks and metadata: `space_id` must be one of these. The space and its ancestors, never descendants: a team conversation never sees its projects' content. A personal space's scope is itself. |
 
 ### SessionDetails

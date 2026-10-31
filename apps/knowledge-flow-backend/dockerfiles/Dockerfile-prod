@@ -182,7 +182,6 @@ COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/pyproject.toml a
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
 # Install the same canonical model used by Rust, including editable installs.
-COPY --chown=${USER_ID}:${GROUP_ID} apps/control-plane/openfga/model.json /workspace/libs/fred-core/fred_core/security/rebac/weaver-model.json
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
 # Independent opt-in variants for Chroma storage and PyMuPDF extraction.
 # The builder and the default runtime image never install this extra.

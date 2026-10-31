@@ -186,7 +186,7 @@ compatibility once the picker is shown; it does not make one appear.
 - Team scope: `TeamScopePolicy.DEFAULT_ON` (no admin gate; incompatible with a *required*
   team-settings field) or `ADMIN_GATED` (default). MCP catalog servers use the same enum
   via `MCPServerConfiguration.team_scope` in `mcp_catalog.yaml` — default `admin_gated`.
-- Manifest id must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$` (FGA- and URL-safe, #1988) —
+- Manifest id must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$` (URL-safe, #1988) —
   no `:` or other separator. This is also why MCP capability ids are the bare catalog
   server id, not `mcp:<server>`; `mcp_ids.py`/`is_mcp_capability_id` are retired.
 - Manifest `icon` is a **snake_case Material Symbols name** (`graphic_eq`, not

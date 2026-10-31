@@ -87,8 +87,7 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        # Weaver pod startup: published model only, no Swift admission or tables.
-        await application_context.open_published_rebac_engine()
+        application_context.open_authorization_client()
         gc_diagnostics = install_gc_diagnostics()
 
         process_kpi_task = None

@@ -11,6 +11,7 @@ erDiagram
 "document" }o--|| "space" : "space_id"
 "document" }o--|| "folder" : "folder_id, space_id"
 "document" }o--o| "generation" : "published_generation"
+"document" }o--|| "session_metadata" : "session_id, space_id"
 "document_upload" |o--o| "document_upload" : "retry_of"
 "document_processing" }o--|| "document" : "document_id"
 "document_processing" |o--o| "document_processing" : "retry_of"
@@ -28,6 +29,8 @@ erDiagram
 "session_metadata" }o--o| "deletion" : "deletion_id"
 "organization_capability" }o--|| "space" : "organization_id"
 "organization_capability" }o--|| "runtime_capability" : "runtime_id, capability_id"
+"space_role_grant" }o--|| "space" : "space_id"
+"agent_template_policy" }o--|| "space" : "organization_id"
 
 "deletion" {
   uuid id
@@ -70,6 +73,7 @@ erDiagram
   uuid id
   uuid space_id FK
   uuid folder_id FK
+  uuid session_id FK
   text name
   text mime
   bigint size
@@ -95,13 +99,6 @@ erDiagram
   text completed_by
   timestamp_with_time_zone completed_at
   timestamp_with_time_zone granted_at
-}
-"authorization_store" {
-  boolean singleton
-  text configured_store
-  text source_store
-  text active_store
-  text model_id
 }
 "terms_acceptance" {
   text user_id
@@ -139,6 +136,7 @@ erDiagram
   uuid organization_id
   uuid space_id
   uuid folder_id
+  uuid session_id
   uuid quota_owner
   text name
   text mime
@@ -224,6 +222,7 @@ erDiagram
   jsonb tuning
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
+  bigint configuration_revision
 }
 "users_preferences" {
   text user_id
@@ -304,6 +303,7 @@ erDiagram
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
   uuid deletion_id FK
+  bigint agent_configuration_revision
 }
 "organization_capability" {
   uuid organization_id FK
@@ -311,4 +311,17 @@ erDiagram
   text capability_id FK
   text enabled_by
   timestamp_with_time_zone enabled_at
+}
+"platform_role_grant" {
+  text subject
+  text role
+}
+"space_role_grant" {
+  uuid space_id FK
+  text subject
+  text role
+}
+"agent_template_policy" {
+  uuid organization_id FK
+  uuid template_id
 }

@@ -31,7 +31,6 @@ docker exec -it app-postgres psql -U admin -d <database>
 | `data`               | tabular          | Tabular data                 |
 | `keycloak`           | keycloak_db_user | Auth / identity              |
 | `langfuse`           | langfuse         | LLM observability            |
-| `openfga`            | openfga          | Authorization tuples         |
 | `temporal`           | temporal         | Workflow engine              |
 | `temporal_visibility`| temporal         | Temporal visibility store    |
 | `postgres`           | admin            | Default admin database       |

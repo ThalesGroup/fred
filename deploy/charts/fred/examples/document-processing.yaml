@@ -1,5 +1,5 @@
 # Configuration fragment, not a complete deployment overlay. Helm replaces lists:
-# preserve every SQL/FGA/identity/model entry and volume already in your deployment.
+# preserve every SQL/identity/model entry and volume already in your deployment.
 # See deploy/k3d/ for the complete factory profile and contract preparation.
 # Use the same Swift documents bucket as document-storage.yaml; grant only output
 # writes to the worker and input writes plus input/output reads to the API.
@@ -44,7 +44,7 @@ applications:
             prefix: ""
             access_key_env_var: MANAGER_DERIVED_ACCESS_KEY
             secret_key_env_var: MANAGER_DERIVED_SECRET_KEY
-  # control-plane-worker retains its SQL/FGA environment; no S3 secret or contract mount.
+  # control-plane-worker retains its SQL environment; no S3 secret or contract mount.
   knowledge-flow-worker:
     extraEnvVars:
       - name: MANAGER_WORKER_CLIENT_SECRET

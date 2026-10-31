@@ -14,8 +14,8 @@
 
 """Read-only document visibility checks against the Control Plane SQL facts.
 
-`resolve_scope` is not an authorization: the caller must already have checked the
-person's read permission on that space. Index metadata is never trusted here.
+`resolve_scope` applies the authorized corpus returned by Control Plane, then
+checks current publication and lifecycle facts. Index metadata is never trusted here.
 """
 
 from __future__ import annotations
@@ -101,6 +101,7 @@ class SpacePendingDeletionError(Exception):
 
 @dataclass(frozen=True)
 class SearchScope:
+    space_id: UUID
     space_ids: tuple[UUID, ...]
     document_scope: DocumentScope = field(default_factory=DocumentScope)
     folder_paths: Mapping[UUID, str] = field(default_factory=dict)
@@ -128,22 +129,6 @@ class SearchScope:
 class Candidate:
     document_uid: str
     chunk_uid: str
-
-
-def scope_from_space(space_id: UUID, row: Mapping[Any, Any] | None) -> SearchScope:
-    """Same path as the Control Plane: ancestors and the space, never children or siblings."""
-    if row is None:
-        raise SpaceNotFoundError(str(space_id))
-    if row["deletion_id"] is not None:
-        raise SpacePendingDeletionError(str(space_id))
-    path: list[UUID] = []
-    parent, organization = row["parent_id"], row["organization_id"]
-    if parent is not None:
-        if parent != organization:
-            path.append(organization)
-        path.append(parent)
-    path.append(row["id"])
-    return SearchScope(space_ids=tuple(path))
 
 
 def _document_id(candidate: Candidate) -> UUID | None:
@@ -196,7 +181,7 @@ def is_visible_document(scope: SearchScope, row: Mapping[Any, Any]) -> bool:
         scope.conversation_id is not None
         and scope.user_id is not None
         and row["session_id"] == scope.conversation_id
-        and row["space_id"] == scope.space_ids[-1]
+        and row["space_id"] == scope.space_id
         and row["id"] in scope.attachment_ids
         and row["session_user_id"] == scope.user_id
         and row["session_deletion_id"] is None
@@ -255,11 +240,19 @@ def filter_candidates(
 
 
 async def resolve_scope(
-    conn: AsyncConnection, context: DocumentAccessContext, *, user_id: str
+    conn: AsyncConnection,
+    context: DocumentAccessContext,
+    *,
+    user_id: str,
+    authorized_space_ids: tuple[UUID, ...],
 ) -> SearchScope:
     space_id = context.space_id
     row = (await conn.execute(_SPACE, {"space_id": space_id})).mappings().first()
-    scope = scope_from_space(space_id, row)
+    if row is None:
+        raise SpaceNotFoundError(str(space_id))
+    if row["deletion_id"] is not None:
+        raise SpacePendingDeletionError(str(space_id))
+    scope = SearchScope(space_id=space_id, space_ids=authorized_space_ids)
     selection = context.document_scope
     folder_ids = list({id for item in selection.selections for id in item.folder_ids})
     paths = {}
@@ -465,11 +458,14 @@ async def published_tabular_documents(
             await conn.execute(
                 _TABULAR_DOCUMENTS,
                 {
-                    "space_ids": list(scope.space_ids),
+                    "space_ids": list(
+                        dict.fromkeys((*scope.space_ids, scope.space_id))
+                    ),
                     "after": after,
-                    "include_corpus": not scope.document_scope.is_empty,
+                    "include_corpus": bool(scope.space_ids)
+                    and not scope.document_scope.is_empty,
                     "conversation_id": scope.conversation_id,
-                    "space_id": scope.space_ids[-1],
+                    "space_id": scope.space_id,
                     "attachment_ids": list(scope.attachment_ids),
                     "all_documents": document_ids is None,
                     "document_ids": list(document_ids or ()),

@@ -19,7 +19,7 @@ There is no team-admin or project-admin role.
 
 | Role | Scope of grant | Agreed responsibility | Current permissions and limits, role alone | Current inheritance |
 | --- | --- | --- | --- | --- |
-| **Platform admin** (`platform_admin`) | Platform | Bootstrap platform administration and create organizations, selecting their admin and initial owner; no business role or right to know their contents. | Organization creation, platform-role and organization-admin assignment, provisioning and space retirement. Implies all platform permissions, including the three platform roles below. No direct space-content access, but broad power to grant it. **Broader than the agreed remit.** | Platform only; no space role or content inheritance. |
+| **Platform admin** (`platform_admin`) | Platform | Bootstrap platform administration and create organizations, selecting their admin and initial owner; no business role or right to know their contents. | Organization creation, platform-role and organization-admin assignment, provisioning and space retirement. Does not imply observer, feature-manager or prompt-editor roles. No direct space-content access. Platform-role assignment and standalone team/project retirement remain broader than organization-only governance. | Platform only; no space role or content inheritance. |
 | **Organization admin** (`organization_admin`) | Organization only | Execute express steering committee decisions within a limited mandate, such as team creation and organization access-allowlist changes. No model choices, business activity or right to inspect business data and agents. | Assign/revoke organization owners and read organization supervision aggregates. No content read/write, model management or evaluation permissions. Team creation and access-allowlist changes are **not granted**; see the comparison below. | Organization only; does not descend. |
 | **Owner** (`owner`) | Organization, team or project | Manage the business workspace and its community. At organization level, manage model choices and shared resources with analysts, editors and members. | Space management and role assignment; creation of teams/projects under an authorized parent. Organization owner manages model inventory/policy and template governance. Evaluation run/corpus permissions; no content read/write or evaluation-conversation read. | Granted space and all team/project descendants. |
 | **Analyst** (`analyst`) | Organization, team or project | Consult content and evaluate the space's agents and their use. | Content read; evaluation run, corpus management and evaluation-conversation-read permissions. No ordinary content write, space management or organization model management. | Granted space and all team/project descendants. |
@@ -33,10 +33,11 @@ another person's conversation. The evaluation permissions above are the model's
 `read_conversations_for_evaluation`: a positive permission answer does not prove
 that an evaluation or conversation-reading journey is wired and validated.
 
-A business `owner` role on any active organization, team or project also makes
-the person eligible for their personal space in that organization. Technical
+Any business role (`owner`, `member`, `editor` or `analyst`) on an active
+organization, team or project makes the person eligible for their personal space
+in that organization. Technical
 `platform_admin` and `organization_admin` roles alone do not. The roles can
-accumulate: an admin who is also an owner remains eligible. Personal content
+accumulate: an admin who also holds a business role remains eligible. Personal content
 still belongs only to its own member/editor, never to other business owners.
 
 ## Complementary roles in the current implementation
@@ -111,14 +112,14 @@ organizational decisions; it does not change the permission model.
 ## Responsibilities that are not additional roles
 
 - **Steering committee:** decides institutional changes; the organization admin
-  executes its express decisions. The committee is not an OpenFGA role.
+  executes its express decisions. The committee is not an permission role.
 - **Infrastructure operator:** deploys services and manages connections, secrets
   and infrastructure access. Operational access needs its own controls; it confers
   no Fred business role. Dana fills this responsibility in the model journey.
 - **Bootstrap:** the procedure establishing the first platform admin, not another
   role or a permanent super-admin identity.
 - **Personal-space owner:** the identity associated with a personal space in SQL,
-  not `organization_admin`; access requires business ownership eligibility and
+  not `organization_admin`; access requires a current business role on an active collective space and
   the space's explicit content roles.
 - **Service identity:** authenticates a workload. It does not replace the person's
   authority when acting on their behalf; see [service authentication](A6-security.md).
@@ -126,14 +127,14 @@ organizational decisions; it does not change the permission model.
 ## Evidence and terminology
 
 Role definitions and implication rules are recorded in the
-[OpenFGA model](../../apps/control-plane/openfga/model.fga),
+[typed permission evaluator](../../apps/control-plane/src/authorization.rs),
 [space roles](../../apps/control-plane/src/domain.rs) and
 [typed permissions](../../apps/control-plane/src/roles.rs).
 The comparison above is grounded in [`model_catalog/http.rs`](../../apps/control-plane/src/model_catalog/http.rs)
 (`authorize`, `authorized_transaction`);
 [`spaces.rs`](../../apps/control-plane/src/spaces.rs) (`create_space`, `context`,
 `may_attach`, `may_change`, `grant`, `create_managed_organization`);
-[`OpenFGA model`](../../apps/control-plane/openfga/model.fga);
+[`typed permission evaluator`](../../apps/control-plane/src/authorization.rs);
 [`platform.rs`](../../apps/control-plane/src/platform.rs);
 [`provisioning.rs`](../../apps/control-plane/src/provisioning.rs);
 [`lifecycle/store.rs`](../../apps/control-plane/src/lifecycle/store.rs) (`permitted`);

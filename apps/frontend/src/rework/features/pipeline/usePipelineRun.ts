@@ -41,11 +41,7 @@ import { personalTeamId } from "../../components/shared/utils/teamId";
 
 /** Binds the real product hooks into the PipelineDeps contract, as the signed-in admin. */
 export function usePipelineDeps(): PipelineDeps {
-  // Canonical personal-team id (`personal-<uid>`), NOT the bare "personal" alias.
-  // The control-plane accepts both (teams/system.py), but the agent pod is now the
-  // OpenFGA authority and checks ReBAC against the canonical id only — the bare
-  // alias has no tuple, so it fails closed with 403 (RUNTIME-07 rev. 2). Mirrors
-  // what ManagedChatPage already sends from the bootstrap-resolved team id.
+  // Legacy pipeline uses the canonical personal-team identifier.
   const teamId = personalTeamId(KeyCloakService.GetUserId() ?? "");
   const [createTag] = useCreateTagMutation();
   const [deleteTag] = useDeleteTagMutation();

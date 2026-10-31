@@ -9,7 +9,7 @@ PYTEST_OPTS ?=
 test: dev ## Run default/offline tests
 	@echo "************ TESTING ************"
 	# Ensure uv doesn't warn about foreign active VIRTUAL_ENV
-	# Enforce offline unit tests in CI (no Keycloak/Temporal/OpenFGA/Postgres/MinIO calls).
+	# Enforce offline unit tests in CI (no Keycloak/Temporal/Postgres/MinIO calls).
 	VIRTUAL_ENV= ${UV} run pytest $(PYTEST_OPTS) -m "not integration" --disable-socket --allow-unix-socket --cov=. --cov-config=.coveragerc --cov-report=html
 	@echo "✅ Coverage report: htmlcov/index.html"
 	@if [ "${OPEN_COVERAGE}" = "1" ]; then \
@@ -52,5 +52,5 @@ test-integration: dev ## Run integration tests that rely on external services an
 		${UV} run pytest -m "integration and not integration_postgres"
 
 .PHONY: test-integration-postgres
-test-integration-postgres: dev ## Run the integration tests that need a real PostgreSQL — not provisioned by docker-compose.integration.yml (OpenFGA only), so these are excluded from test-integration/test-integration-only and from CI until that's addressed. Start one with `docker compose -f scripts/docker-compose.postgres.yml up -d`, which these tests default to, or point FRED_PG_DSN elsewhere.
+test-integration-postgres: dev ## Run the integration tests that need a real PostgreSQL. Start one with `docker compose -f scripts/docker-compose.postgres.yml up -d`, which these tests default to, or point FRED_PG_DSN elsewhere.
 	${UV} run pytest -m integration_postgres

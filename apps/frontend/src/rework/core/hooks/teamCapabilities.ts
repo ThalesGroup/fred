@@ -16,7 +16,7 @@ import type { TeamPermission, UserTeamRelation } from "../../../slices/legacyCon
 
 /**
  * One boolean per `TeamPermission` the backend can grant on a team
- * (`TeamWithPermissions.permissions`, OpenFGA-derived — see
+ * (`TeamWithPermissions.permissions`, provided by Control Plane — see
  * `teams/service.py::_get_team_permissions_for_user`).
  *
  * This is the team-scoped counterpart to `UserCapabilities`

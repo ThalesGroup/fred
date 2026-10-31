@@ -81,7 +81,7 @@ fn deletion() -> control_plane::lifecycle::Lifecycle {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn conversation_limits_include_concurrent_pending_reservations() {
     use control_plane::documents::config::Limits;
     for (files, bytes, code) in [
@@ -137,7 +137,7 @@ async fn conversation_limits_include_concurrent_pending_reservations() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn conversation_limit_counts_stored_once_replays_full_and_releases_retired() {
     let limits = control_plane::documents::config::Limits {
         conversation_files: 2,
@@ -194,7 +194,7 @@ async fn conversation_limit_counts_stored_once_replays_full_and_releases_retired
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn failed_attachment_retry_reserves_once_and_keeps_idempotency() {
     let limits = control_plane::documents::config::Limits {
         conversation_files: 1,
@@ -243,7 +243,7 @@ async fn failed_attachment_retry_reserves_once_and_keeps_idempotency() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn tabular_attachments_publish_without_vectors_and_purge_all_artifacts() {
     use control_plane::lifecycle::cleanup;
     let (d, p) = Box::pin(setup_with_lifecycle(deletion())).await;
@@ -398,9 +398,7 @@ async fn tabular_attachments_publish_without_vectors_and_purge_all_artifacts() {
         })
         .await
         .unwrap();
-        cleanup::batch(&d.e.pool, &d.e.fga, deletion_id)
-            .await
-            .unwrap();
+        cleanup::batch(&d.e.pool, deletion_id).await.unwrap();
         let remaining: i64 =
             sqlx::query_scalar("select count(*) from artifact where generation_id=$1")
                 .bind(generation.id)
@@ -420,7 +418,7 @@ async fn tabular_attachments_publish_without_vectors_and_purge_all_artifacts() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn reader_attachment_is_processed_and_published_in_its_conversation() {
     let (d, p) = Box::pin(setup()).await;
     let space = d.folder.space_id;
@@ -506,7 +504,7 @@ async fn reader_attachment_is_processed_and_published_in_its_conversation() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn deleted_conversation_refuses_attachment_claim() {
     let (d, p) = Box::pin(setup_with_lifecycle(deletion())).await;
     let space = d.folder.space_id;
@@ -546,7 +544,7 @@ async fn deleted_conversation_refuses_attachment_claim() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn reader_attaches_privately_to_own_conversation() {
     let (d, _p) = Box::pin(setup_with_lifecycle(deletion())).await;
     let team = d.folder.space_id;
@@ -684,7 +682,7 @@ async fn reader_attaches_privately_to_own_conversation() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn conversation_deletion_retires_and_purges_its_attachments() {
     use control_plane::lifecycle::{Receipt, Status, TargetKind, cleanup};
     let (d, _p) = Box::pin(setup_with_lifecycle(deletion())).await;
@@ -759,9 +757,7 @@ async fn conversation_deletion_retires_and_purges_its_attachments() {
     // Cleanup purges the attachment as a document, then blocks only on runtime history.
     finish_processing(&d, kept).await;
     for _ in 0..2 {
-        cleanup::batch(&d.e.pool, &d.e.fga, operation)
-            .await
-            .unwrap();
+        cleanup::batch(&d.e.pool, operation).await.unwrap();
     }
     let present: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1)")
         .bind(kept)
@@ -784,7 +780,7 @@ async fn conversation_deletion_retires_and_purges_its_attachments() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn purged_attachment_receipt_answers_its_deleter_only() {
     use control_plane::lifecycle::cleanup;
     let (d, _p) = Box::pin(setup_with_lifecycle(deletion())).await;
@@ -802,9 +798,7 @@ async fn purged_attachment_receipt_answers_its_deleter_only() {
     .await;
     assert_eq!(code, 202, "{accepted}");
     let operation: Uuid = accepted["id"].as_str().unwrap().parse().unwrap();
-    cleanup::batch(&d.e.pool, &d.e.fga, operation)
-        .await
-        .unwrap();
+    cleanup::batch(&d.e.pool, operation).await.unwrap();
     let present: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1)")
         .bind(document)
         .fetch_one(&d.e.pool)
@@ -828,13 +822,12 @@ async fn purged_attachment_receipt_answers_its_deleter_only() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn project_attachment_counts_against_its_team_quota() {
     let (d, _p) = Box::pin(setup()).await;
     let team = d.folder.space_id;
     let project = control_plane::spaces::create_space(
         &d.e.pool,
-        &d.e.fga,
         "alice",
         control_plane::domain::SpaceKind::Project,
         team,

@@ -1,11 +1,10 @@
 -- Copyright Thales 2026
 -- SPDX-License-Identifier: Apache-2.0
--- Control Plane schema. Rights never live here: OpenFGA holds direct roles and the links
--- that evaluate inherited permissions; SQL records each space's immutable placement.
+-- Control Plane schema: placement, direct roles and organization policies.
 
 create type space_kind as enum ('organization', 'team', 'project', 'personal');
 
--- Operational receipts outlive their target; canonical placement and roles remain in FGA.
+-- Operational receipts outlive their target.
 -- Session IDs are client-chosen, so a target is identified by its kind and its ID.
 create table deletion (
     id uuid primary key,
@@ -33,7 +32,7 @@ create index deletion_due on deletion (last_visit nulls first, due_at, id) where
 create index deletion_overlap on deletion (organization_id, target_parent_id) where status <> 'completed';
 
 -- Sibling names and one personal space per organization are enforced under the
--- organization lock. Placement is written once, before the matching OpenFGA links.
+-- organization lock. Placement and initial grants commit atomically.
 create table space (
     id              uuid primary key,
     kind            space_kind not null,
@@ -148,23 +147,12 @@ create trigger space_immutable before update on space for each row execute funct
 create trigger folder_immutable before update on folder for each row execute function forbid_folder_move();
 create trigger document_immutable before update on document for each row execute function forbid_document_move();
 
--- Durable root-bootstrap marker. A claim (`completed_by`) is finished only once its
--- grant is recorded: a null `granted_at` means the OpenFGA write may not have happened,
--- and only the claimant retries.
+-- Durable root-bootstrap marker, committed atomically with the first administrator.
 create table platform_bootstrap (
     singleton    boolean primary key default true check (singleton),
     completed_by text not null,
     completed_at timestamptz not null default now(),
-    granted_at   timestamptz
-);
-
--- Publishes a completely initialized OpenFGA store; never stores grants or permissions.
-create table authorization_store (
-    singleton boolean primary key default true check (singleton),
-    configured_store text not null,
-    source_store text not null,
-    active_store text not null,
-    model_id text not null
+    granted_at   timestamptz not null default now()
 );
 
 -- Consent belongs to an authenticated subject, independently of directory or space membership.
@@ -444,7 +432,7 @@ create table model_offer (
     check (advertised = (withdrawn_at is null))
 );
 
--- Organization decisions are separate from platform observations and OpenFGA authority.
+-- Organization decisions are separate from platform observations and platform authority.
 create table organization_model_policy (
     organization_id uuid primary key references space (id) on delete cascade,
     revision bigint not null check (revision > 0),
@@ -536,3 +524,22 @@ end $$;
 
 create trigger organization_capability_organization before insert or update of organization_id
     on organization_capability for each row execute function require_organization_space();
+
+-- Direct business roles. All mutations share the platform/organization advisory locks.
+create table platform_role_grant (
+ subject text not null,
+ role text not null check (role in ('platform_admin','platform_observer','feature_manager','prompt_editor')),
+ primary key(subject, role)
+);
+create table space_role_grant (
+ space_id uuid not null references space(id) on delete cascade,
+ subject text not null,
+ role text not null check (role in ('member','editor','owner','analyst','organization_admin')),
+ primary key(space_id, subject, role)
+);
+create index space_role_subject on space_role_grant(subject, space_id);
+create table agent_template_policy (
+ organization_id uuid not null references space(id) on delete cascade,
+ template_id uuid not null,
+ primary key(organization_id, template_id)
+);

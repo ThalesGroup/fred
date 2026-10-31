@@ -22,9 +22,8 @@ is immutable and its folder belongs to the same space.
 ## Authority
 
 The owning space is the authorization boundary. Folders and documents have no
-OpenFGA grants, parent tuples or individual permission lists. Increasing their
-number adds no authorization tuples. Folder depth is limited to 15 independently
-of OpenFGA evaluation depth.
+individual grants or permission lists. Increasing their number adds no role rows.
+Folder depth is limited to 15 independently of space-role inheritance.
 
 Every request requires personal admission, the caller's unique organization and
 current space authority. Members and effective editors/analysts read; effective
@@ -33,7 +32,7 @@ spaces inherit no organization or team authority. The
 [action/role matrix](A7-action-role-matrix.md) defines these distinctions.
 
 A directory's write decision enables existing controls but reserves no right.
-Mutations recheck after the organization lock and consume an OpenFGA guard revision.
+Mutations recheck in the SQL transaction holding the organization lock.
 Uploads do so twice: when reserving quota/name and when publishing verified content.
 Token expiry and current CGU acceptance are rechecked at both boundaries. Request
 body and object-storage IO take place outside that lock.
@@ -43,7 +42,7 @@ body and object-storage IO take place outside that lock.
 Resources uses one combined page of immediate folders and published documents,
 plus the requested directory's ancestors, exact matching total and write decision.
 Rows, ancestors and total share a read-only repeatable-read SQL snapshot; the
-write decision is a separate OpenFGA Check before that transaction. Pages default to 50 rows and
+write decision is a separate Control Plane permission evaluation before that transaction. Pages default to 50 rows and
 contain at most 200, with folders first, name/date/size sorting and an identity
 tie-breaker. Folders have no aggregate size and use name order for size sorting.
 Search is a literal case-insensitive substring over the whole current directory.

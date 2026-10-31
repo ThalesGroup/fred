@@ -251,14 +251,13 @@ impl IdentityServer {
     }
 }
 
-pub mod fga_proxy;
 pub mod real_keycloak;
 
 /// Create through HTTP with a separate governance owner, then explicitly grant content
 /// to the business administrator. The temporary platform grant leaves bootstrap untouched.
 pub async fn member_organization(
     pool: &sqlx::PgPool,
-    fga: &control_plane::fga::Fga,
+    authorization: &control_plane::authorization::Authorization,
     name: &str,
     admin: &str,
 ) -> Result<control_plane::domain::Space, (u16, serde_json::Value)> {
@@ -266,7 +265,6 @@ pub async fn member_organization(
         api::{AppState, routes},
         db,
         domain::Role,
-        fga::Scope,
         roles::PlatformRole,
         spaces,
     };
@@ -279,14 +277,18 @@ pub async fn member_organization(
         identity.users.lock().await.insert(user.into(), user.into());
     }
     let operator = format!("fixture-platform-{}", uuid::Uuid::new_v4());
-    let mut guard = fga.guard(&[Scope::Platform]).await.unwrap();
-    fga.write_platform(&mut guard, &operator, PlatformRole::PlatformAdmin, true)
-        .await
-        .unwrap();
+    control_plane::authorization::write_platform(
+        &mut pool.acquire().await.unwrap(),
+        &operator,
+        PlatformRole::PlatformAdmin,
+        true,
+    )
+    .await
+    .unwrap();
     let app = routes(AppState {
         agent_catalog: Default::default(),
         pool: pool.clone(),
-        fga: fga.clone(),
+        authorization: authorization.clone(),
         auth: std::sync::Arc::new(identity.auth().await),
         directory: Some(identity.directory()),
         content: None,
@@ -311,10 +313,14 @@ pub async fn member_organization(
         )
         .await
         .unwrap();
-    let mut guard = fga.guard(&[Scope::Platform]).await.unwrap();
-    fga.write_platform(&mut guard, &operator, PlatformRole::PlatformAdmin, false)
-        .await
-        .unwrap();
+    control_plane::authorization::write_platform(
+        &mut pool.acquire().await.unwrap(),
+        &operator,
+        PlatformRole::PlatformAdmin,
+        false,
+    )
+    .await
+    .unwrap();
     let status = response.status().as_u16();
     let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
         .await
@@ -326,7 +332,6 @@ pub async fn member_organization(
     let id = uuid::Uuid::parse_str(body["id"].as_str().unwrap()).unwrap();
     spaces::grant(
         pool,
-        fga,
         &control_plane::users::Directory::Keycloak(Some(&identity.directory())),
         admin,
         id,

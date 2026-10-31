@@ -531,7 +531,6 @@ dependencies = [
     { name = "langchain-ollama" },
     { name = "langchain-openai" },
     { name = "minio" },
-    { name = "openfga-sdk" },
     { name = "opensearch-py" },
     { name = "prometheus-client" },
     { name = "psutil" },
@@ -577,7 +576,6 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.1.14" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.3.0,<3" },
     { name = "minio", specifier = ">=7.2.20" },
-    { name = "openfga-sdk", specifier = ">=0.9.9" },
     { name = "opensearch-py", specifier = "==2.8.0" },
     { name = "prometheus-client", specifier = ">=0.20.5" },
     { name = "psutil", specifier = ">=6.0.0" },
@@ -1500,21 +1498,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e4/5e/a7c7e6f565950764214fb13e2b72076e5957ce80c37eb1b0ddda2102e4f4/openai-3.36.1.tar.gz", hash = "sha256:ad8e5d56f20198915d98726ac1edb12ae38e7ecfa9bd560057e84642168b20c9", size = 2307878, upload-time = "2026-10-22T03:33:16.563Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/be/e4/83f139714d10d75af2b6891a20c973945dd9b942b11cc407ba4536fb40b9/openai-3.36.1-py3-none-any.whl", hash = "sha256:4c15b6765fe1792c5ad753556f44c7f82c2920c5e9e40219c0fca97369e923d3", size = 2296265, upload-time = "2026-10-22T03:33:14.555Z" },
-]
-
-[[package]]
-name = "openfga-sdk"
-version = "0.10.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "opentelemetry-api" },
-    { name = "python-dateutil" },
-    { name = "urllib3" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a3/af/40ef80ce225de586a2d51326893f16a54c6dde74a1ce66bda25d7492356d/openfga_sdk-0.10.5.tar.gz", hash = "sha256:3383baf1c900cf7abed471b596ea6a8cd10180e937e10845150058048e3e8d18", size = 349625, upload-time = "2026-09-29T09:00:06.831Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/77/88bcd03ccb9061b53bf58db18f44b668d2ab9c2e3457d0427c7d7f8357a7/openfga_sdk-0.10.5-py3-none-any.whl", hash = "sha256:f3fadb7eca71d8575aa0e572ba24c78ee85dde44ce28bc21e3d372eec8f44e2f", size = 267241, upload-time = "2026-09-29T09:00:05.146Z" },
 ]
 
 [[package]]

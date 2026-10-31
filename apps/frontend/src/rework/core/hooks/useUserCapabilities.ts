@@ -20,7 +20,7 @@ import type { UserCapabilities } from "../../types/conversation.ts";
  * Single source of truth for "which platform roles do I hold" on the frontend.
  *
  * Every flag below reads `PermissionSummary.platform_roles` (control-plane
- * `/frontend/bootstrap`), which is OpenFGA-derived (AUTHZ-05 review item 4) —
+ * `/frontend/bootstrap`), which is provided by Control Plane (AUTHZ-05 review item 4) —
  * never Keycloak roles. The list is union-resolved server-side and every role
  * relation unions in `platform_admin`, so a `platform_admin` holds all of them
  * and never loses a surface to a narrower flag. `canDebug` stays

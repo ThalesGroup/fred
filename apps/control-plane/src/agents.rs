@@ -332,7 +332,7 @@ pub struct AgentDefaultOnResult {
     pub default_on: bool,
 }
 
-/// Organization namespace and unambiguous provenance determine the FGA identity, not the label.
+/// Organization namespace and unambiguous provenance determine the template identity.
 pub fn template_id(organization: Uuid, runtime: &str, template: &str) -> Uuid {
     let runtime_id = Uuid::new_v5(&organization, runtime.as_bytes());
     Uuid::new_v5(&runtime_id, template.as_bytes())
@@ -399,7 +399,14 @@ async fn space_agent_templates(
     crate::onboarding::AdmittedUser(user): crate::onboarding::AdmittedUser,
     crate::extract::ApiPath(space_id): crate::extract::ApiPath<Uuid>,
 ) -> AppResult<axum::Json<Vec<AgentTemplateSummary>>> {
-    let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Read).await?;
+    let space = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        &user.uid,
+        space_id,
+        Permission::Read,
+    )
+    .await?;
     if !matches!(space.kind, SpaceKind::Team | SpaceKind::Personal) {
         return Err(AppError::BadRequest(
             "agent templates require a team or personal space".into(),
@@ -413,7 +420,7 @@ async fn space_agent_templates(
         let ids = enablement::usable_capability_ids(&s.pool, &space, &catalog.runtime_id).await?;
         usable.insert(catalog.runtime_id.clone(), ids);
     }
-    let fga = &s.fga;
+    let authorization = &s.authorization;
     let space = &space;
     let usable = &usable;
     let items: Vec<Option<AgentTemplateSummary>> =
@@ -426,7 +433,7 @@ async fn space_agent_templates(
         }))
         .map(|(runtime, template)| async move {
             let id = template_id(space.organization, &runtime, &template.template_agent_id);
-            if !fga.can_use_agent(id, space).await? {
+            if !authorization.can_use_agent(id, space).await? {
                 return Ok(None);
             }
             let usable = usable.get(&runtime);
@@ -444,7 +451,7 @@ async fn space_agent_templates(
             summary.default_capability_ids.retain(|id| allowed(id));
             Ok::<_, anyhow::Error>(Some(summary))
         })
-        .buffered(crate::fga::READ_CONCURRENCY)
+        .buffered(crate::authorization::READ_CONCURRENCY)
         .try_collect()
         .await?;
     Ok(axum::Json(items.into_iter().flatten().collect()))
@@ -469,7 +476,7 @@ async fn organization_agents(
 ) -> crate::error::AppResult<axum::Json<Vec<AgentEnablement>>> {
     let organization = crate::spaces::authorize(
         &s.pool,
-        &s.fga,
+        &s.authorization,
         &user.uid,
         organization_id,
         crate::domain::Permission::Manage,
@@ -480,7 +487,10 @@ async fn organization_agents(
     }
     let mut items = project(organization_id, discover(&s.agent_catalog).await?)?;
     for item in &mut items {
-        item.default_on = s.fga.agent_default_on(organization_id, item.id).await?;
+        item.default_on = s
+            .authorization
+            .agent_default_on(organization_id, item.id)
+            .await?;
     }
     Ok(axum::Json(items))
 }
@@ -507,7 +517,7 @@ async fn set_organization_agent_default(
 ) -> AppResult<axum::Json<AgentDefaultOnResult>> {
     let organization = spaces::authorize(
         &s.pool,
-        &s.fga,
+        &s.authorization,
         &user.uid,
         organization_id,
         Permission::Manage,
@@ -522,15 +532,8 @@ async fn set_organization_agent_default(
         .iter()
         .find(|item| item.id == agent_id)
         .ok_or(AppError::NotFound)?;
-    let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, &organization).await?;
-    spaces::authorize_locked(
-        &mut tx,
-        &s.fga,
-        &user.uid,
-        organization_id,
-        Permission::Manage,
-    )
-    .await?;
+    let mut tx = spaces::lock_for(&s.pool, &organization).await?;
+    spaces::authorize_locked(&mut tx, &user.uid, organization_id, Permission::Manage).await?;
     if body.default_on {
         // Read under the organization lock, which offer default-off also takes.
         let policy = enablement::Policy::load(&mut *tx, organization_id).await?;
@@ -546,10 +549,13 @@ async fn set_organization_agent_default(
             ));
         }
     }
-    let changed = s
-        .fga
-        .set_agent_default_on(&mut guard, organization_id, agent_id, body.default_on)
-        .await?;
+    let changed = crate::authorization::set_agent_default_on(
+        &mut tx,
+        organization_id,
+        agent_id,
+        body.default_on,
+    )
+    .await?;
     tx.commit().await?;
     if changed {
         tracing::info!(target: "fred.security.audit", audit_event="agent.default_changed",

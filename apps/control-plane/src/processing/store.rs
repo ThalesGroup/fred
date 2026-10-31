@@ -299,7 +299,7 @@ impl Processing {
             .await
             .map_err(|_| super::unavailable())?;
         let d = db::document(&self.pool, id).await?;
-        let mut tx = spaces::authorized_write(&self.pool, &self.fga, actor, d.space_id).await?;
+        let mut tx = spaces::authorized_write(&self.pool, actor, d.space_id).await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
         let summary = self.admit(&mut tx, actor, key, id, &start).await?;
         tx.commit().await?;
@@ -308,15 +308,10 @@ impl Processing {
     }
     pub(crate) async fn authorize_actor(&self, r: &Row) -> AppResult<()> {
         onboarding::require_accepted(&self.pool, self.terms.as_deref(), &r.actor).await?;
-        let tx = crate::documents::authorized_mutation(
-            &self.pool,
-            &self.fga,
-            &r.actor,
-            r.space_id,
-            r.session_id,
-        )
-        .await
-        .map_err(crate::documents::dependency_error)?;
+        let tx =
+            crate::documents::authorized_mutation(&self.pool, &r.actor, r.space_id, r.session_id)
+                .await
+                .map_err(crate::documents::dependency_error)?;
         tx.commit().await?;
         Ok(())
     }
@@ -327,9 +322,15 @@ impl Processing {
         before: Option<Uuid>,
     ) -> AppResult<Vec<Summary>> {
         let d = db::document(&self.pool, id).await?;
-        crate::spaces::authorize(&self.pool, &self.fga, actor, d.space_id, Permission::Read)
-            .await
-            .map_err(crate::documents::dependency_error)?;
+        crate::spaces::authorize(
+            &self.pool,
+            &self.authorization,
+            actor,
+            d.space_id,
+            Permission::Read,
+        )
+        .await
+        .map_err(crate::documents::dependency_error)?;
         Ok(sqlx::query_as(concat!("select ", summary_from!(), " where p.document_id=$1 and ($2::uuid is null or (p.created_at,p.id)<(select created_at,id from document_processing where id=$2 and document_id=$1)) order by p.created_at desc,p.id desc limit 50")).bind(id).bind(before).fetch_all(&self.pool).await?)
     }
     pub async fn claim(&self, c: Claim) -> AppResult<Descriptor> {
@@ -406,8 +407,8 @@ impl Processing {
             "{}{id}/",
             document_output(&self.config.derived.prefix, r.summary.document_id)
         );
-        let g: Generation = sqlx::query_as("insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,cleanup_after) values($1,$2,$3,$4,$5,$6,$7,$8,$7 + interval '60 seconds') returning *")
-            .bind(id).bind(r.summary.id).bind(c.stage).bind(c.execution_id).bind(c.activity_id).bind(attempt).bind(expires).bind(prefix).fetch_one(&mut *tx).await?;
+        let g: Generation = sqlx::query_as("insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,cleanup_after,document_id) values($1,$2,$3,$4,$5,$6,$7,$8,$7 + interval '60 seconds',$9) returning *")
+            .bind(id).bind(r.summary.id).bind(c.stage).bind(c.execution_id).bind(c.activity_id).bind(attempt).bind(expires).bind(prefix).bind(r.summary.document_id).fetch_one(&mut *tx).await?;
         sqlx::query("update document_processing set status='running',stage=$2,error_code=null,revision=revision+1 where id=$1")
             .bind(r.summary.id).bind(c.stage).execute(&mut *tx).await?;
         tx.commit().await?;

@@ -54,7 +54,7 @@ make -C docs/architecture generate  # Refresh source-derived documentation block
 make -C docs/architecture check     # Check freshness, invariant references and diagram rendering
 ```
 
-Generated blocks cover HTTP routes, SQL schema, OpenFGA, configuration and links
+Generated blocks cover HTTP routes, SQL schema, permissions, configuration and links
 between invariants and tests. These checks do not run those tests or validate the
 prose; both still need review.
 
@@ -705,7 +705,7 @@ See `apps/fred-agents/config/models_catalog.yaml` and `apps/knowledge-flow-backe
 
 The platform applications and the fred-agents pod form the default Fred deployment. By default they run self-contained on a laptop using **SQLite + ChromaDB** (no external services).
 
-Fred is modular: you can optionally add Keycloak/OpenFGA, MinIO/S3, OpenSearch, and PostgreSQL/pgvector for production-grade persistence.
+Fred is modular: you can optionally add Keycloak, MinIO/S3, OpenSearch, and PostgreSQL/pgvector for production-grade persistence.
 
 Persistence options:
 

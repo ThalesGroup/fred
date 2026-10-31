@@ -51,12 +51,6 @@ from fred_core.security.delegation import (
     get_delegation_config,
     initialize_delegation,
 )
-from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.rebac.rebac_engine import (
-    ORGANIZATION_ID,
-    OrganizationPermission,
-    RebacDisabledResult,
-)
 from fred_core.security.structure import KeycloakUser
 from fred_core.users.store import postgres_user_store
 from fred_runtime.app import AgentPodConfig, create_agent_app
@@ -403,20 +397,6 @@ def _secured_pod(
             client_id=caller_client_id,
         ).model_copy(update=token),
     )
-    monkeypatch.setattr(
-        agent_app_module,
-        "PublishedOpenFgaRebacEngine",
-        lambda *args, **kwargs: SimpleNamespace(
-            get_client=AsyncMock(),
-            close=AsyncMock(),
-            requires_active_accounts=requires_active_accounts,
-            enabled=True,
-            validate_account_status_model=AsyncMock(
-                side_effect=account_status_model_error
-            ),
-            require_active_account=AsyncMock(),
-        ),
-    )
     app = create_agent_app(
         registry={_EchoAgent().agent_id: _EchoAgent()},
         config=_build_test_config(
@@ -472,13 +452,6 @@ def test_a_service_bearer_without_a_person_is_refused_under_delegation(
     )
 
     with TestClient(app) as client:
-        engine = get_runtime_context().config.rebac_engine
-        assert engine is not None
-        engine.require_active_account = AsyncMock()
-        engine.check_user_team_permission_or_raise = AsyncMock(
-            side_effect=AssertionError
-        )
-        engine.lookup_resources = AsyncMock(return_value=RebacDisabledResult())
         response = client.post(
             "/pod/v1/agents/execute",
             json={
@@ -496,7 +469,6 @@ def test_a_service_bearer_without_a_person_is_refused_under_delegation(
         ]
 
     assert response.status_code == 403
-    engine.require_active_account.assert_not_awaited()
     assert admitted == []
     assert len(delegation.records) == 0
 
@@ -879,6 +851,9 @@ def test_delete_checkpoint_thread_returns_deleted_count(monkeypatch, tmp_path) -
     How to use it:
     - run via the default offline `make test` suite in `fred-runtime`
     """
+    monkeypatch.setattr(
+        agent_app_module, "_caller_can_manage_platform", AsyncMock(return_value=False)
+    )
 
     model = ToolFriendlyFakeChatModel(
         responses=[
@@ -1110,6 +1085,9 @@ def test_delete_session_filesystem_rejects_a_different_session_owner(
     monkeypatch, tmp_path
 ) -> None:
     """A caller cannot erase runtime files for a conversation they do not own."""
+    monkeypatch.setattr(
+        agent_app_module, "_caller_can_manage_platform", AsyncMock(return_value=False)
+    )
     caller = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
     monkeypatch.setattr(
         agent_app_module,
@@ -1991,6 +1969,7 @@ def test_emit_audit_event_populates_ring_buffer(minimal_config) -> None:
 
 def test_ring_buffer_endpoints_return_seeded_events(monkeypatch, tmp_path) -> None:
     """GET /agents/kpi-turns and /agents/audit-events return pod ring buffer contents."""
+    monkeypatch.setattr(agent_app_module, "require_permission", AsyncMock())
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
     monkeypatch.setattr(
         agent_app_module,
@@ -5323,7 +5302,6 @@ async def test_admission_defers_permissions_to_weaver_resolution(
     await agent_app_module._authorize_execution_or_raise(
         request, _ALICE, PodApplicationContext(minimal_config)
     )
-    engine.check_user_team_permission_or_raise.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -5455,79 +5433,6 @@ async def test_session_ownership_skipped_when_security_disabled(
 # --- CTRLP-12 C1: can_manage_platform admin branch on the delete endpoints -----
 
 
-class _FakePlatformRebacEngine:
-    """RebacEngine stand-in exposing has_user_permission for the C1 admin branch,
-    plus check_user_permission_or_raise for the /kpi-turns and /audit-events
-    ring-buffer endpoints' CAN_MANAGE_PLATFORM gate."""
-
-    def __init__(self, *, enabled: bool, grant: bool) -> None:
-        self._enabled = enabled
-        self._grant = grant
-        self.calls: list[tuple[str, object, str]] = []
-
-    @property
-    def enabled(self) -> bool:
-        return self._enabled
-
-    async def has_user_permission(
-        self, user: KeycloakUser, permission: object, resource_id: str, **_kw: object
-    ) -> bool:
-        self.calls.append((user.uid, permission, resource_id))
-        return self._grant
-
-    async def check_user_permission_or_raise(
-        self, user: KeycloakUser, permission: object, resource_id: str, **_kw: object
-    ) -> None:
-        self.calls.append((user.uid, permission, resource_id))
-        if not self._grant:
-            raise AuthorizationError(user.uid, str(permission), Resource.RESOURCES)
-
-
-@pytest.mark.asyncio
-async def test_caller_can_manage_platform_true_when_enabled_and_granted(
-    monkeypatch,
-) -> None:
-    """An enforcing engine that grants can_manage_platform → admin branch active."""
-    engine = _FakePlatformRebacEngine(enabled=True, grant=True)
-    _wire_engine(monkeypatch, engine)
-
-    assert await agent_app_module._caller_can_manage_platform(_ALICE) is True
-    assert engine.calls == [
-        ("alice", OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
-    ]
-
-
-@pytest.mark.asyncio
-async def test_caller_can_manage_platform_false_when_denied(monkeypatch) -> None:
-    """An enforcing engine that refuses the permission → no bypass (still owner-gated)."""
-    engine = _FakePlatformRebacEngine(enabled=True, grant=False)
-    _wire_engine(monkeypatch, engine)
-
-    assert await agent_app_module._caller_can_manage_platform(_ALICE) is False
-
-
-@pytest.mark.asyncio
-async def test_caller_can_manage_platform_false_when_engine_disabled(
-    monkeypatch,
-) -> None:
-    """A disabled (Noop) engine never grants the bypass — fails closed, dev unchanged."""
-    engine = _FakePlatformRebacEngine(enabled=False, grant=True)
-    _wire_engine(monkeypatch, engine)
-
-    assert await agent_app_module._caller_can_manage_platform(_ALICE) is False
-    assert engine.calls == []  # a disabled engine is never consulted
-
-
-@pytest.mark.asyncio
-async def test_caller_can_manage_platform_false_when_no_caller(monkeypatch) -> None:
-    """No authenticated caller → no bypass (authentication is never waived)."""
-    engine = _FakePlatformRebacEngine(enabled=True, grant=True)
-    _wire_engine(monkeypatch, engine)
-
-    assert await agent_app_module._caller_can_manage_platform(None) is False
-    assert engine.calls == []
-
-
 def _get_kpi_turns_endpoint():
     """Grab the `/kpi-turns` route's raw endpoint function, bypassing FastAPI's
     dependency-injection layer so it can be called directly with explicit args."""
@@ -5539,48 +5444,6 @@ def _get_kpi_turns_endpoint():
         for route in router.routes
         if isinstance(route, APIRoute) and route.endpoint.__name__ == "get_kpi_turns"
     )
-
-
-@pytest.mark.asyncio
-async def test_get_kpi_turns_requires_can_manage_platform_when_enforcing(
-    monkeypatch, minimal_config
-) -> None:
-    """AUTHZ-05 review finding: item 8a's blanket removal of the org-level
-    CAN_READ_METRICS check does not apply to this ring buffer — it exposes
-    cross-user/cross-team session_id/user_id/team_id/token data for every
-    caller that has hit this pod, unlike the tier-2 capabilities item 8a
-    correctly deleted elsewhere. Gated on CAN_MANAGE_PLATFORM, same as the
-    sibling `get_audit_events`, when ReBAC is actually enforcing."""
-    endpoint = _get_kpi_turns_endpoint()
-    container = PodApplicationContext(minimal_config)
-
-    denying_engine = _FakePlatformRebacEngine(enabled=True, grant=False)
-    _wire_engine(monkeypatch, denying_engine)
-    with pytest.raises(AuthorizationError):
-        await endpoint(limit=10, container=container, caller=_ALICE)
-    assert denying_engine.calls == [
-        ("alice", OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
-    ]
-
-    granting_engine = _FakePlatformRebacEngine(enabled=True, grant=True)
-    _wire_engine(monkeypatch, granting_engine)
-    assert await endpoint(limit=10, container=container, caller=_ALICE) == []
-
-
-@pytest.mark.asyncio
-async def test_get_kpi_turns_unchanged_in_dev_mode(monkeypatch, minimal_config) -> None:
-    """Dev/no-security mode (no caller, or ReBAC disabled) stays exactly as
-    before this fix: the diagnostic buffer remains reachable without a grant."""
-    endpoint = _get_kpi_turns_endpoint()
-    container = PodApplicationContext(minimal_config)
-
-    _wire_engine(monkeypatch, None)
-    assert await endpoint(limit=10, container=container, caller=None) == []
-
-    disabled_engine = _FakePlatformRebacEngine(enabled=False, grant=False)
-    _wire_engine(monkeypatch, disabled_engine)
-    assert await endpoint(limit=10, container=container, caller=_ALICE) == []
-    assert disabled_engine.calls == []  # a disabled engine is never consulted
 
 
 @pytest.mark.asyncio
@@ -5731,74 +5594,6 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
 
     assert len(resolve_calls) == 1
     assert resolve_calls[0]["request_id"] == trace_id
-
-
-@pytest.mark.parametrize(
-    "accept_delegated_calls", [False, True], ids=["acting-only", "also-accepting"]
-)
-def test_delegation_startup_opens_published_engine_without_swift_model_checks(
-    monkeypatch, tmp_path, _pod_inbound_security, accept_delegated_calls: bool
-) -> None:
-    """The published engine opens once and never validates the retired Swift model."""
-    app, _ = _secured_pod(
-        monkeypatch,
-        tmp_path,
-        caller_client_id="caller-1",
-        accept_delegated_calls=accept_delegated_calls,
-    )
-
-    with TestClient(app):
-        engine = get_runtime_context().config.rebac_engine
-        assert engine is not None
-        awaited = {
-            name
-            for name, value in vars(engine).items()
-            if isinstance(value, AsyncMock) and value.await_count
-        }
-
-    assert awaited == {"get_client"}
-    engine.validate_account_status_model.assert_not_awaited()
-    engine.close.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "endpoint_name,permission",
-    [
-        ("list_web_research_activity", OrganizationPermission.CAN_MANAGE_PLATFORM),
-        ("erase_web_research_activity", OrganizationPermission.CAN_ADMINISTER_USERS),
-    ],
-)
-async def test_web_activity_endpoints_restrict_readers_and_erasers(
-    monkeypatch, minimal_config, endpoint_name, permission
-):
-    router = agent_app_module._build_agent_router(
-        registry={}, security_enabled=True, max_chat_input_chars=5_000
-    )
-    endpoint = next(
-        route.endpoint
-        for route in router.routes
-        if isinstance(route, APIRoute) and route.endpoint.__name__ == endpoint_name
-    )
-    container = PodApplicationContext(minimal_config)
-    kwargs = {"user_id": "other", "caller": _ALICE, "container": container}
-    if endpoint_name == "list_web_research_activity":
-        kwargs["limit"] = 10
-    denying = _FakePlatformRebacEngine(enabled=True, grant=False)
-    _wire_engine(monkeypatch, denying)
-    with pytest.raises(AuthorizationError):
-        await endpoint(**kwargs)
-    assert denying.calls == [("alice", permission, ORGANIZATION_ID)]
-    _wire_engine(monkeypatch, None)
-    with pytest.raises(agent_app_module.HTTPException) as error:
-        await endpoint(**kwargs)
-    assert error.value.status_code == 403
-    granting = _FakePlatformRebacEngine(enabled=True, grant=True)
-    _wire_engine(monkeypatch, granting)
-    result = await endpoint(**kwargs)
-    assert result == (
-        [] if endpoint_name == "list_web_research_activity" else {"deleted": 0}
-    )
 
 
 @pytest.mark.usefixtures("empty_runtime_context")

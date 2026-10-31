@@ -27,9 +27,6 @@ import asyncio
 from typing import Any, Literal
 
 import pytest
-from fred_core.security.rebac.capability_authz import (
-    APPLICATION_CAPABILITY_NAMESPACE_PREFIX as CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX,
-)
 from fred_sdk.contracts.capability import (
     AgentCapability,
     AssetSlot,
@@ -510,11 +507,8 @@ def test_team_scope_policy_importable_from_both_paths() -> None:
     assert ManifestTeamScopePolicy is TeamScopePolicy
 
 
-def test_application_capability_prefix_preserves_compatibility_import() -> None:
-    assert (
-        APPLICATION_CAPABILITY_NAMESPACE_PREFIX
-        == CORE_APPLICATION_CAPABILITY_NAMESPACE_PREFIX
-    )
+def test_application_capability_prefix_is_stable() -> None:
+    assert APPLICATION_CAPABILITY_NAMESPACE_PREFIX == "app__"
 
 
 def test_mcp_server_configuration_team_scope_defaults_to_admin_gated() -> None:

@@ -25,9 +25,15 @@ impl Storage {
                 .bind(key)
                 .fetch_one(&self.pool)
                 .await?;
-        spaces::authorize(&self.pool, &self.fga, actor, row.space_id, Permission::Read)
-            .await
-            .map_err(dependency_error)?;
+        spaces::authorize(
+            &self.pool,
+            &self.authorization,
+            actor,
+            row.space_id,
+            Permission::Read,
+        )
+        .await
+        .map_err(dependency_error)?;
         if let Some(id) = row.document_id {
             row.processing = crate::processing::store::summaries(&self.pool, &[id])
                 .await?
@@ -42,9 +48,15 @@ impl Storage {
         space: Uuid,
         query: ReceiptQuery,
     ) -> AppResult<Vec<UploadReceipt>> {
-        spaces::authorize(&self.pool, &self.fga, actor, space, Permission::Read)
-            .await
-            .map_err(dependency_error)?;
+        spaces::authorize(
+            &self.pool,
+            &self.authorization,
+            actor,
+            space,
+            Permission::Read,
+        )
+        .await
+        .map_err(dependency_error)?;
         if query.before.is_some() != query.before_key.is_some() {
             return Err(invalid("Both receipt cursor fields are required"));
         }
@@ -84,7 +96,7 @@ impl Storage {
     }
 
     pub async fn summary(&self, actor: &str, id: Uuid) -> AppResult<StorageSummary> {
-        let space = spaces::authorize(&self.pool, &self.fga, actor, id, Permission::Read)
+        let space = spaces::authorize(&self.pool, &self.authorization, actor, id, Permission::Read)
             .await
             .map_err(dependency_error)?;
         self.usage(&space).await
@@ -124,7 +136,7 @@ impl Storage {
         let folder = db::folder(&self.pool, id).await?;
         let space = spaces::authorize(
             &self.pool,
-            &self.fga,
+            &self.authorization,
             actor,
             folder.space_id,
             Permission::Write,
@@ -155,7 +167,7 @@ impl Storage {
 
     pub async fn directory(
         pool: &sqlx::PgPool,
-        fga: &crate::fga::Fga,
+        authorization: &crate::authorization::Authorization,
         actor: &str,
         space: Uuid,
         query: EntryQuery,
@@ -167,10 +179,10 @@ impl Storage {
         {
             return Err(invalid("Directory search exceeds 255 characters"));
         }
-        spaces::authorize(pool, fga, actor, space, Permission::Read)
+        spaces::authorize(pool, authorization, actor, space, Permission::Read)
             .await
             .map_err(dependency_error)?;
-        let can_write = fga
+        let can_write = authorization
             .check(actor, Permission::Write, space)
             .await
             .map_err(|_| unavailable())?;
@@ -253,7 +265,7 @@ impl Storage {
         let document = db::document(&self.pool, id).await?;
         spaces::authorize(
             &self.pool,
-            &self.fga,
+            &self.authorization,
             actor,
             document.space_id,
             Permission::Read,

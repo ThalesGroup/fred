@@ -64,6 +64,11 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/authorize/platform`,
         method: "POST",
         body: queryArg.platformCheck,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
       }),
     }),
     authorizeScope: build.mutation<AuthorizeScopeApiResponse, AuthorizeScopeApiArg>({
@@ -71,10 +76,24 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/authorize/scope`,
         method: "POST",
         body: queryArg.authorizeScope,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
       }),
     }),
     authorizeSpace: build.mutation<AuthorizeSpaceApiResponse, AuthorizeSpaceApiArg>({
-      query: (queryArg) => ({ url: `/control-plane/v1/authorize/space`, method: "POST", body: queryArg.spaceCheck }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/authorize/space`,
+        method: "POST",
+        body: queryArg.spaceCheck,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
     }),
     bootstrapPlatformAdmin: build.mutation<BootstrapPlatformAdminApiResponse, BootstrapPlatformAdminApiArg>({
       query: (queryArg) => ({
@@ -552,14 +571,32 @@ export type AuthorizeDocumentApiArg = {
 };
 export type AuthorizePlatformApiResponse = /** status 200 Success */ Allowed;
 export type AuthorizePlatformApiArg = {
+  /** Person asserted by a trusted workload; requires run and agent. */
+  person?: string;
+  /** Run identifier asserted with person and agent. */
+  run?: string;
+  /** Agent identifier asserted with person and run; no runtime refresh. */
+  agent?: string;
   platformCheck: PlatformCheck;
 };
 export type AuthorizeScopeApiResponse = /** status 200 Success */ Scope;
 export type AuthorizeScopeApiArg = {
+  /** Person asserted by a trusted workload; requires run and agent. */
+  person?: string;
+  /** Run identifier asserted with person and agent. */
+  run?: string;
+  /** Agent identifier asserted with person and run; no runtime refresh. */
+  agent?: string;
   authorizeScope: AuthorizeScope;
 };
 export type AuthorizeSpaceApiResponse = /** status 200 Success */ Allowed;
 export type AuthorizeSpaceApiArg = {
+  /** Person asserted by a trusted workload; requires run and agent. */
+  person?: string;
+  /** Run identifier asserted with person and agent. */
+  run?: string;
+  /** Agent identifier asserted with person and run; no runtime refresh. */
+  agent?: string;
   spaceCheck: SpaceCheck;
 };
 export type BootstrapPlatformAdminApiResponse = /** status 200 Success */ BootstrapResponse;
@@ -1040,14 +1077,16 @@ export type PlatformCheck = {
   permission: PlatformPermission;
 };
 export type Scope = {
+  space_id: string;
   /** Filter for chunks and metadata: `space_id` must be one of these. The space and its
     ancestors, never descendants: a team conversation never sees its projects' content.
     A personal space's scope is itself. */
   space_ids: string[];
 };
+export type CorpusLevel = "organization" | "team" | "project";
 export type AuthorizeScope = {
   /** Keep only spaces of these kinds; omitted keeps every level. Never adds a space. */
-  levels?: SpaceKind[] | null;
+  levels?: CorpusLevel[] | null;
   space_id: string;
 };
 export type SpacePermission =
@@ -1623,7 +1662,7 @@ export type SupervisionTeamsPage = {
 };
 export type OrganizationSupervision = {
   active_teams: number;
-  /** Collection bounds, not an atomic SQL/OpenFGA snapshot. */
+  /** Collection bounds, not an atomic snapshot of all displayed data. */
   collection_finished_at: string;
   collection_started_at: string;
   organization_direct: SupervisionCounts;
@@ -1866,7 +1905,7 @@ export type RuntimeAgent = {
   configuration_updated_at: string;
   instance_id: string;
   runtime_id: string;
-  /** Organization-qualified OpenFGA identity, distinct from the registry key. */
+  /** Organization-qualified template identity, distinct from the registry key. */
   template_id: string;
   template_key: string;
 };

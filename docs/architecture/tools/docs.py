@@ -17,7 +17,7 @@
 
 A chapter marks a generated block like this, the body being rewritten by `generate`:
 
-    <!-- generated: include apps/control-plane/openfga/model.fga text -->
+    <!-- generated: include apps/control-plane/src/authorization.rs rust -->
     ...
     <!-- end generated -->
 

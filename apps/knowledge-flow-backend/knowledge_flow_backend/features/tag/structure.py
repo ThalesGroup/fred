@@ -14,14 +14,12 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Literal, Optional
+from typing import Optional
 
-from fred_core import RelationType, Resource, TagPermission
 from fred_core.common import BaseModelWithId
 from pydantic import BaseModel, Field, field_validator
 
 from knowledge_flow_backend.features.resources.structures import ResourceKind
-from knowledge_flow_backend.features.users.users_structures import UserSummary
 
 
 class TagType(str, Enum):
@@ -35,18 +33,6 @@ class TagType(str, Enum):
         return ResourceKind(self.value)
 
 
-# Ceiling on the depth of a tag's FULL path (parent path + its own name).
-# Guards the folder drag-and-drop mirroring (#2355): a dropped directory tree
-# creates one tag per subdirectory, so an unbounded drop could nest tags
-# arbitrarily deep. The frontend pre-filters against the same limit.
-#
-# 15 is bounded by ReBAC, not taste: every nested tag carries a PARENT tuple
-# and the OpenFGA schema inherits permissions through that chain (`read from
-# parent`, schema.fga), so a check on a depth-N tag resolves up to N hops —
-# against OpenFGA's default 25-hop resolution limit, which the chain's other
-# branches (owner/team_member) also draw from. Raising this materially means
-# retuning OpenFGA (OPENFGA_RESOLVE_NODE_LIMIT) and re-checking the btree
-# index on tag.path (~2.7KB max indexed value).
 MAX_TAG_PATH_DEPTH = 15
 
 
@@ -179,50 +165,6 @@ class TagWithItemsId(Tag):
     @classmethod
     def from_tag(cls, tag: Tag, item_ids: list[str]) -> "TagWithItemsId":
         return cls(**tag.model_dump(), item_ids=item_ids)
-
-
-class TagWithPermissions(TagWithItemsId):
-    """Tag with user-specific permissions included."""
-
-    permissions: list[TagPermission] = Field(default_factory=list)
-
-    @classmethod
-    def from_tag_with_items(cls, tag: TagWithItemsId, permissions: list[TagPermission]) -> "TagWithPermissions":
-        return cls(**tag.model_dump(), permissions=permissions)
-
-
-# Subset of RelationType for user-tag relations
-class UserTagRelation(str, Enum):
-    OWNER = RelationType.OWNER.value
-    EDITOR = RelationType.EDITOR.value
-    VIEWER = RelationType.VIEWER.value
-
-    def to_relation(self) -> RelationType:
-        return RelationType(self.value)
-
-
-# Subset of valid Resource you can share a tag with
-class ShareTargetResource(str, Enum):
-    USER = Resource.USER.value
-
-    def to_resource(self) -> Resource:
-        return Resource(self.value)
-
-
-class TagShareRequest(BaseModel):
-    target_id: str
-    target_type: ShareTargetResource
-    relation: UserTagRelation
-
-
-class TagMemberUser(BaseModel):
-    type: Literal["user"] = "user"
-    relation: UserTagRelation
-    user: UserSummary
-
-
-class TagMembersResponse(BaseModel):
-    users: list[TagMemberUser] = Field(default_factory=list)
 
 
 class ResourceTypeStatsEntry(BaseModel):

@@ -138,9 +138,16 @@ export default function UserSettingsPage() {
                   </Button>
                 </div>
               ) : organization ? (
-                <span className={styles.userSettingsIdentityRole}>
-                  {t("rework.userSettings.organization", { name: organization.name })}
-                </span>
+                <>
+                  <span className={styles.userSettingsIdentityRole}>
+                    {t("rework.userSettings.organization", { name: organization.name })}
+                  </span>
+                  <span className={styles.userSettingsIdentityRole}>
+                    {t("rework.userSettings.organizationRoles", {
+                      roles: organization.roles.map((role) => t(`rework.supervision.roleNames.${role}`)).join(", "),
+                    })}
+                  </span>
+                </>
               ) : null)}
           </div>
         </div>

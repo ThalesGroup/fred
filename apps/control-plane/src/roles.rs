@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! Typed platform roles and scoped capabilities. Direct roles and effective permissions
-//! are separate: a computed grant must never be presented as a deletable tuple.
+//! are separate: an inherited permission must never be presented as a direct role.
 
 use serde::{Deserialize, Serialize};
 
@@ -80,20 +80,6 @@ impl PlatformPermission {
         Self::ManageCapabilities,
         Self::EditPlatformPrompt,
     ];
-    pub fn relation(self) -> &'static str {
-        match self {
-            Self::ListAllTeams => "can_list_all_teams",
-            Self::DeleteTeam => "can_delete_team",
-            Self::DeleteSpace => "can_delete_space",
-            Self::RescueTeamOwner => "can_rescue_team_owner",
-            Self::EditAgentClassPath => "can_edit_agent_class_path",
-            Self::ObservePlatform => "can_observe_platform",
-            Self::AdministerUsers => "can_administer_users",
-            Self::ManagePlatform => "can_manage_platform",
-            Self::ManageCapabilities => "can_manage_capabilities",
-            Self::EditPlatformPrompt => "can_edit_platform_prompt",
-        }
-    }
 }
 
 /// Evaluation is a space capability, never a document read/write permission.
@@ -121,16 +107,4 @@ impl SpacePermission {
         Self::AdministerOrganization,
         Self::CreatePersonalSpace,
     ];
-    pub fn relation(self) -> &'static str {
-        match self {
-            Self::Read => "can_read",
-            Self::Write => "can_write",
-            Self::Manage => "can_manage",
-            Self::RunEvaluations => "can_run_evaluations",
-            Self::ManageEvaluationCorpus => "can_manage_evaluation_corpus",
-            Self::ReadConversationsForEvaluation => "can_read_conversations_for_evaluation",
-            Self::AdministerOrganization => "can_administer_organization",
-            Self::CreatePersonalSpace => "can_create_personal_space",
-        }
-    }
 }

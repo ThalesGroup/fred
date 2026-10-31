@@ -40,7 +40,7 @@ async fn request(
 }
 
 #[tokio::test]
-#[ignore = "needs disposable Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs disposable Postgres: make test-integration"]
 async fn preferences_are_personal_before_consent_and_patch_only_submitted_fields() {
     let e = env().await;
     let identity = support::IdentityServer::start().await;
@@ -48,7 +48,7 @@ async fn preferences_are_personal_before_consent_and_patch_only_submitted_fields
         agent_catalog: Default::default(),
         auth: Arc::new(identity.auth().await),
         pool: e.pool.clone(),
-        fga: e.fga.clone(),
+        authorization: e.authorization.clone(),
         directory: None,
         content: None,
         processing: None,

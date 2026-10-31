@@ -19,7 +19,7 @@ person's business context, not a space selector or a login preference.
 | Personal space | A private workspace managed by the same organization; attachment does not create it. |
 | Platform role | Authority to administer Fred independently of organization membership; no implicit access to business content. |
 
-Manager reads all pages of canonical OpenFGA direct roles, then resolves their
+Manager reads all pages of canonical SQL direct roles, then resolves their
 distinct organization IDs with one SQL query over existing space rows, including
 retired rows. Tuples without a SQL row confer no attachment. SQL holds immutable
 placement, not a second membership record.
@@ -32,7 +32,7 @@ organization removes attachment, subject to the existing dependent-role rules.
 Context resolution does not repair or revalidate parent membership prerequisites
 for existing grants: those checks run when assigning roles. An isolated direct
 project role therefore resolves to its SQL organization in both context and
-membership discovery; permission remains an OpenFGA decision.
+membership discovery; permission remains a Control Plane decision.
 
 Bob's provisioning roles attach him to Acme. After authentication and personal CGU,
 `GET /me/spaces` returns his authorized memberships within that context. Home
@@ -43,7 +43,7 @@ changes server authority. An explicit invalid space selection shows no space.
 
 Creation, direct grants and ZIP import reject a second organization attachment,
 including concurrent attempts. Business reads, authorization probes and mutations
-check context as well as OpenFGA permissions. Unattached people receive no business
+check context as well as Control Plane permissions. Unattached people receive no business
 access; platform-only people retain their authorized administration paths.
 Contradictory existing grants cause a conflict, not an arbitrary tenant choice.
 Admins can remove unwanted grants using the existing revocation rules;
@@ -59,7 +59,7 @@ spaces. Placement is immutable.
 
 `SpaceKind` and SQL `space_kind` distinguish `organization`, `team`, `project` and
 `personal`. SQL requires `personal_owner` exactly for kind `personal` and forbids
-its parent. The owner field identifies the person; OpenFGA remains authoritative
+its parent. The owner field identifies the person; the SQL role grants remain authoritative
 for their grants. Generic space creation refuses `personal`; the dedicated
 personal-space operation enforces eligibility and fixed initial member/editor roles.
 
@@ -99,14 +99,10 @@ SQL stores each space's identity, kind, name, personal owner and immutable place
 `organization_id` is the root's own ID for an organization, and the containing
 organization for every other space. `parent_id` is null for roots and personal
 spaces, the organization for a team, and the team for a project. Creation validates
-parent kinds and writes these values before publishing matching FGA links and roles;
-the SQL transaction commits only after FGA acceptance. Failed commits leave no SQL
-attachment even if FGA accepted the tuples.
-
-OpenFGA retains the `parent` links its model evaluates. A personal space has an
-`organization` link instead, which no permission uses. Paths are derived from SQL
-placement without FGA placement Reads: ancestors then self, or just self for a
-personal space. Current permission still requires an OpenFGA Check.
+parent kinds and writes placement and initial direct roles atomically.
+Permission evaluation follows SQL placement. Personal spaces have no parent and
+inherit nothing. Corpus scope contains only readable anchor/ancestor spaces;
+level selection can remove candidates but never add them.
 
 ```mermaid
 flowchart TB
@@ -152,7 +148,7 @@ identity snapshot; the supervision module itself makes no writes.
 
 `supervision::authorize` loads an organization, resolves the caller's unique
 organization through `spaces::in_organization`, checks retirement, then asks
-OpenFGA for `can_administer_organization` on that organization. The model grants this
+the typed evaluator for `administer_organization` on that organization. The model grants this
 permission only through `organization_admin`. No platform, owner or content role
 substitutes for it. A caller holding several roles is allowed when technical administration is
 among them; no content permission is additionally required.
@@ -161,8 +157,7 @@ Admission errors retain the shared contract. A missing/foreign organization or
 non-organization target gives 404; ambiguous caller context gives 409; a retired
 organization gives 409 `space_pending_deletion`; missing technical administration in the matching
 context gives 403. After organization authorization, team detail rejects a missing,
-foreign or non-team target with 404 and a retired team with 409. A failed OpenFGA
-context read, admin Check or grant page gives 503 `dependency_unavailable` without
+foreign or non-team target with 404 and a retired team with 409. A failed SQL context, permission or grant read gives 503 `dependency_unavailable` without
 partial counts. SQL lifecycle is rechecked inside the collection transaction.
 
 Responses expose organization/team UUIDs, collective team names, collection
@@ -192,11 +187,11 @@ their remaining documents contribute to organization-level purge totals.
 | `published.documents`, `chunks`, `vectors` | Unique succeeded attempt per active document; committed column sums | Independent of latest attempt; no sum of generations, extracted fragments or physical index query |
 | `published.tabular_datasets` | Count of `datasets/*.parquet` paths in successful manifests, aggregated before joining document counts | Published artifacts, not CSV filenames or persistent SQL tables |
 | `known_rows`, `datasets_with_unknown_rows`, `total_rows` | Rows are attributable only when a successful manifest has exactly one Parquet and nonnull rows | Multiple Parquet artifacts or null rows make those datasets unknown; total is null if any are unknown. No dataset means zero; known zero remains zero |
-| `distinct_users`, `direct_roles` | All direct OpenFGA grants on active scoped spaces; distinct subjects and distinct `(subject, space, role)` assignments | All five canonical roles; omitted roles mean zero. No effective/inherited roles, SQL-owner-derived grants or IdP active-account inference |
+| `distinct_users`, `direct_roles` | All direct SQL grants on active scoped spaces; distinct subjects and distinct `(subject, space, role)` assignments | All five canonical roles; omitted roles mean zero. No effective/inherited roles, SQL-owner-derived grants or IdP active-account inference |
 
 Distinct users are unioned, not summed across roles or compartments. Team role
 counts include direct grants on its projects but not inherited organization grants.
-Personal member/editor assignments are read from OpenFGA like other grants.
+Personal member/editor assignments are read from PostgreSQL like other grants.
 Ingestion refuses reprocessing after success; independent publication selection
 does not introduce a new reprocessing capability.
 
@@ -209,16 +204,16 @@ concurrent creation below the cursor requires restarting the traversal.
 
 Grouped SQL reads share one REPEATABLE READ READ ONLY transaction. It ends before
 grant enumeration. Collection timestamps bound observations, not an atomic
-SQL/OpenFGA snapshot; concurrent mutations can change visibility between reads.
+SQL snapshot; concurrent mutations can change visibility between reads.
 There is no distributed lock or consistency repair. The
 [read budget](09-quality.md#organization-supervision-read-budget) separates SQL
-and OpenFGA costs and cardinalities.
+and SQL costs and cardinalities.
 
 Source trace: [handlers and aggregation](../../apps/control-plane/src/supervision/mod.rs),
 [wire models](../../apps/control-plane/src/supervision/models.rs),
 [SQL snapshot](../../apps/control-plane/src/supervision/store.rs),
 [publication aggregation](../../apps/control-plane/src/supervision/counts.sql),
-and [paginated direct grants](../../apps/control-plane/src/fga.rs) (`grants_on`,
+and [paginated direct grants](../../apps/control-plane/src/authorization.rs) (`grants_on`,
 `read_keys`, `concurrently`). Regression scenarios are defined in
 [organization_console.rs](../../apps/control-plane/tests/support/organization_console.rs)
 by the three `supervision_*` tests; source references are not execution evidence.
@@ -294,8 +289,8 @@ admin, possibly the same person; organization admin is refused on teams and proj
 requires a platform admin, authenticated once at admission and rechecked before each
 write; bearer expiry after admission does not interrupt it.
 
-Keycloak, PostgreSQL and OpenFGA do not share a transaction. An error can leave
-created identities or acknowledged grants; replay follows correction of the cause
+Keycloak and PostgreSQL do not share a transaction. An error can leave
+created identities or previously committed grants; replay follows correction of the cause
 and never reuses rolled-back space IDs. A successful report counts resolved and
 created identities, committed reconciled spaces and acknowledged grants. HTTP 200
 means reconciliation completes. The [import sequence](A1-manager-runtime.md#authenticated-provisioning-import)
@@ -310,12 +305,10 @@ platform roles survive. Document-bearing scopes are refused before any retiremen
 
 SQL stores the operation, retired row IDs and an immutable root-parent snapshot
 for recovery and pending name reservation. This snapshot never authorizes access.
-Names remain reserved while their rows are pending, even after FGA link removal.
+Names remain reserved while their rows are pending.
 Overlapping parent/child requests conflict; replay of the same UUID returns its
 receipt. Cleanup removes descendants before parents, retaining rows until external
 references are absent. SQL parent/organization foreign keys also prevent removing
-a parent while a child row remains. Missing FGA links are not repaired by the SQL
-placement copy; a child omitted from FGA discovery can therefore prevent cleanup
-of its parent until the inconsistent state is resolved. [Runtime](A1-manager-runtime.md#space-deletion-lifecycle)
+a parent while a child row remains. Descendant discovery and role cleanup use SQL. [Runtime](A1-manager-runtime.md#space-deletion-lifecycle)
 and [operations](A3-manager-operations.md#space-deletion-lifecycle) describe execution.
 

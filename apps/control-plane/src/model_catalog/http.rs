@@ -38,7 +38,14 @@ async fn authorize(s: &AppState, uid: &str, organization_id: Uuid) -> AppResult<
     if s.auth.enabled() {
         onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), uid).await?;
     }
-    let org = spaces::authorize(&s.pool, &s.fga, uid, organization_id, Permission::Manage).await?;
+    let org = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        uid,
+        organization_id,
+        Permission::Manage,
+    )
+    .await?;
     if org.kind != SpaceKind::Organization {
         return Err(AppError::NotFound);
     }
@@ -51,16 +58,15 @@ async fn authorized_transaction(
     uid: &str,
     org: &Space,
 ) -> AppResult<Transaction<'static, Postgres>> {
-    let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, org).await?;
+    let mut tx = spaces::lock_for(&s.pool, org).await?;
     if s.auth.enabled() {
         onboarding::require_accepted(&mut *tx, s.onboarding.gcu_version.as_deref(), uid).await?;
     }
-    let current =
-        spaces::authorize_locked(&mut tx, &s.fga, uid, org.id, Permission::Manage).await?;
+    let current = spaces::authorize_locked(&mut tx, uid, org.id, Permission::Manage).await?;
     if current.kind != SpaceKind::Organization {
         return Err(AppError::NotFound);
     }
-    s.fga.fence(&mut guard).await?;
+
     Ok(tx)
 }
 

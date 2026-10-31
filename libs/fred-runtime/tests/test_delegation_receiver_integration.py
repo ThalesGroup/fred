@@ -12,14 +12,9 @@ from fastapi.testclient import TestClient
 from fred_core.security import oidc
 from fred_core.security.delegation import (
     DelegationConfig,
-    enforce_account_status,
     initialize_delegation,
 )
 from fred_core.security.oidc import get_current_user_without_gcu
-from fred_core.tests.security.rebac_fakes import (
-    AccountStatusStore,
-    account_status_engine,
-)
 
 _NOW = 2_000_000_000
 
@@ -47,7 +42,6 @@ class _Jwks:
 @asynccontextmanager
 async def _serving(_app: FastAPI) -> AsyncIterator[None]:
     # A receiver installs the engine for the account status check once it is configured.
-    await enforce_account_status(account_status_engine(AccountStatusStore()))
     yield
 
 

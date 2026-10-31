@@ -30,7 +30,7 @@ manager also applies its SQL migrations at API startup.
 - A Kubernetes cluster and [Helm](https://helm.sh/docs/intro/install/) 3 or 4.
 - The services Fred uses, reached by name from the cluster: PostgreSQL, OpenSearch,
   Keycloak (a realm with `app`, `control-plane` and Knowledge Flow clients,
-  plus clients required by any explicitly enabled legacy applications), OpenFGA, Temporal, and
+  plus clients required by any explicitly enabled legacy applications), Temporal, and
   S3-compatible storage or Google Cloud Storage.
 
 ## Install
@@ -77,7 +77,7 @@ The local k3d example in fred-deployment-factory applies
 [`k3d-apps/fred/values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/values.yaml)
 followed by built image tags and operator overrides. No manager-specific factory
 overlay or branch is required. The existing control-plane identity and Secret keys
-are reused; database `fred`, OpenFGA store `control-plane` and lifecycle queue/prefix
+are reused; database `fred` and lifecycle queue/prefix
 `control-plane-lifecycle` remain unchanged. Common `scheduler.temporal.host` and
 `namespace` settings on the API feed its shared lifecycle connection.
 The security profile (`c3`) is described in

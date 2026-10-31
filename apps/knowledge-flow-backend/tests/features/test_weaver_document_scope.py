@@ -89,7 +89,7 @@ async def test_selection_does_not_replace_space_authorization(monkeypatch):
 
 def test_index_filters_preserve_union_intersection_and_direct_folder_semantics():
     selection = DocumentScope.from_ids([str(FOLDER)], [str(UUID(int=4))]).intersect(DocumentScope.from_ids(document_ids=[str(DOC)]))
-    scope = SearchScope((SPACE,), selection, {FOLDER: f"/{FOLDER}/"})
+    scope = SearchScope(SPACE, (SPACE,), selection, {FOLDER: f"/{FOLDER}/"})
     sf = SearchFilter(metadata_any=scope.selection_terms)
     assert sf.matches_selection({"document_uid": str(DOC), "folder_path": f"/{FOLDER}/"})
     assert not sf.matches_selection({"document_uid": str(DOC), "folder_path": f"/{FOLDER}/child/"})
@@ -119,13 +119,15 @@ async def test_search_prefilters_before_top_k_and_retains_sql_verification(monke
     conn = engine.connect.return_value.__aenter__.return_value
     context = SimpleNamespace(get_pg_async_engine=lambda: engine)
     monkeypatch.setattr(search_module.ApplicationContext, "get_instance", lambda: context)
-    scope = SearchScope((SPACE,), SCOPE, {FOLDER: f"/{FOLDER}/"})
+    scope = SearchScope(SPACE, (SPACE,), SCOPE, {FOLDER: f"/{FOLDER}/"})
     resolver = AsyncMock(return_value=scope)
     monkeypatch.setattr(search_module, "resolve_scope", resolver)
     request = SearchRequest(question="q", search_policy=policy)
     person = PERSON
-    await service.search(question=request.question, user=person, top_k=8, policy_name=request.search_policy, context=DocumentAccessContext(space_id=SPACE, document_scope=SCOPE))
-    resolver.assert_awaited_once_with(conn, DocumentAccessContext(space_id=SPACE, document_scope=SCOPE), user_id=PERSON.uid)
+    await service.search(
+        question=request.question, user=person, top_k=8, policy_name=request.search_policy, context=DocumentAccessContext(space_id=SPACE, document_scope=SCOPE), authorized_space_ids=(SPACE,)
+    )
+    resolver.assert_awaited_once_with(conn, DocumentAccessContext(space_id=SPACE, document_scope=SCOPE), user_id=PERSON.uid, authorized_space_ids=(SPACE,))
     strategy = getattr(service, f"_{policy}")
     assert strategy.call_args.kwargs["metadata_any"] == scope.selection_terms
     assert strategy.call_args.kwargs["metadata_terms_extra"] == {"space_id": [str(SPACE)], "session_id": [""]}
@@ -256,7 +258,7 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
 
     attachment_id, generation = UUID(int=8), UUID(int=9)
     context = DocumentAccessContext(space_id=SPACE, document_scope=corpus, conversation_id=CONVERSATION, attachment_ids=(attachment_id,))
-    scope = SearchScope((SPACE,), corpus, {FOLDER: f"/{FOLDER}/"}, CONVERSATION, (attachment_id,), PERSON.uid)
+    scope = SearchScope(SPACE, (SPACE,), corpus, {FOLDER: f"/{FOLDER}/"}, CONVERSATION, (attachment_id,), PERSON.uid)
     engine = MagicMock()
     conn = engine.connect.return_value.__aenter__.return_value
     result = MagicMock()
@@ -295,7 +297,7 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
         return [hit(attachment_id, 5, 1.0, "stale"), hit(attachment_id, 1, 0.25, "attachment")]
 
     service._semantic = strategy
-    hits = await service.search(question="q", user=PERSON, top_k=2, policy_name=search_module.SearchPolicyName.semantic, context=context)
+    hits = await service.search(question="q", user=PERSON, top_k=2, policy_name=search_module.SearchPolicyName.semantic, context=context, authorized_space_ids=(SPACE,))
     assert [hit.content for hit in hits] == (["attachment"] if corpus.is_empty else ["corpus", "attachment"])
     assert len(hits) <= 2
     assert hits[-1].score == (0.25 if corpus.is_empty else 1 / 62)
@@ -323,7 +325,7 @@ async def test_direct_attachment_chunks_require_sql_publication_and_requested_do
     from uuid import uuid5
 
     generation = UUID(int=15)
-    scope = SearchScope((SPACE,), DocumentScope.from_ids([], []), {}, CONVERSATION, (DOC,), PERSON.uid)
+    scope = SearchScope(SPACE, (SPACE,), DocumentScope.from_ids([], []), {}, CONVERSATION, (DOC,), PERSON.uid)
     engine = MagicMock()
     conn = engine.connect.return_value.__aenter__.return_value
     result = MagicMock()
@@ -353,4 +355,4 @@ async def test_direct_attachment_chunks_require_sql_publication_and_requested_do
     rows.append(dict(text="injected", metadata={"document_uid": str(FOLDER), "chunk_uid": str(uuid5(generation, "0")), "chunk_index": 0}))
     service.vector_store = SimpleNamespace(get_chunks_for_document=lambda _: rows)
     context = DocumentAccessContext(space_id=SPACE, document_scope=scope.document_scope, conversation_id=CONVERSATION, attachment_ids=(DOC,))
-    assert await service.get_document_chunks_ordered(user=PERSON, document_uid=str(DOC), context=context, limit=10) == ["0"]
+    assert await service.get_document_chunks_ordered(user=PERSON, document_uid=str(DOC), context=context, limit=10, authorized_space_ids=(SPACE,)) == ["0"]

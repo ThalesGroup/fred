@@ -104,7 +104,7 @@ pub async fn space<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<
         .await
 }
 
-/// Committed rows only: ids that OpenFGA links to but SQL never committed are absent.
+/// The requested space rows.
 pub async fn spaces<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     ids: &[Uuid],

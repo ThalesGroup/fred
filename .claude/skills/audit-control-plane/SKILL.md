@@ -28,7 +28,7 @@ code unchanged by the last commit. Use the branch diff for orientation and regre
 history, not as the boundary of a last-lot-only review. A user-requested narrower
 scope overrides this default and must be named in the report.
 
-- Primary scope: `apps/control-plane/` Rust code, SQL migrations, OpenFGA model,
+- Primary scope: `apps/control-plane/` Rust code, SQL migrations, typed permission matrix,
   configuration, CLI/API/worker entry points, tests and deployment tooling; the
   applicable current explanations in `docs/architecture/`.
 - Follow generated frontend clients, reachable UI consumers and shared deployment
@@ -85,7 +85,7 @@ table or a `// Proves:` comment alone is not evidence that the guarantee holds.
 
 For each reconstructed feature, compare role scopes, admission, ownership, normal
 behavior and failure semantics with its Python counterpart and actual UI consumer.
-Keep canonical grants and permission evaluation in OpenFGA, as required by AGENTS.
+Keep canonical grants in PostgreSQL and permission evaluation in Control Plane, as required by AGENTS.
 Distinguish an explicitly approved model change from an accidental regression.
 A difference listed in documentation is not automatically an approved decision.
 Do not silently restore Python behavior over an approved Rust decision, copy a
@@ -118,7 +118,7 @@ standard. In particular examine:
   effects, idempotency, ambiguous acknowledgments, cancellation, timeouts, retries,
   durable progress, startup/upgrade compatibility and safe shutdown. Review the
   actual dependency API/SDK semantics when an invariant relies on them.
-- Cost: exact OpenFGA request types, filters, count, pagination, tuple volume and
+- Cost: SQL query scope, filters, count, direct-grant volume and
   dependency order; SQL lock boundaries; cardinalities driving growth. Separate
   client RPC counts from server evaluation work. Report measured fixture sizes and
   concurrency; neither one Check nor a passing demo establishes scalability.

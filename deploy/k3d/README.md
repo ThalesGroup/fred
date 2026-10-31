@@ -103,20 +103,18 @@ also routes `/fred/agents/v2` to this service on the secondary host. This same
 path is declared as `public_base_url`, used by execution preparation and session
 history to give the browser approved runtime URLs.
 
-The pod's Weaver startup reads the Rust-published `authorization_store` binding
-from PostgreSQL, validates the exact canonical model distributed in its image,
-and pins OpenFGA store/model IDs with HIGHER_CONSISTENCY. It does not create or
-synchronize an OpenFGA model or require the old Python Control Plane admission
-tables. C3, verified identity/delegation and the configured `terms_acceptance`
-contract remain required. Both services use CGU version `v1` and the configured
-store identity `control-plane`.
+The pod validates identity and obtains the admitted turn context from Control Plane.
+Control Plane evaluates permissions from PostgreSQL roles. Knowledge Flow API
+requests the authorized document scope with its own M2M bearer and the verified
+person/run/agent triplet. Preparation grants its service account the configured
+delegation caller role, which conveys no content or platform-admin rights.
+C3 and the configured terms acceptance remain required.
 
 The inherited factory settings are retained:
 
 | Dependency | Effective profile |
 | --- | --- |
 | PostgreSQL / migrations | Database `fred`, user `fred`, host `postgres`; password from `fred-secrets/POSTGRES_FRED_PASSWORD`. The enabled job runs `python -m fred_runtime migrate`, including installed capabilities, without old Python Control Plane migrations. |
-| OpenFGA | `http://openfga:9080`, token from `fred-secrets/OPENFGA_API_TOKEN`; Rust must have published the binding. |
 | Keycloak | Secondary issuer/origins, user and M2M authentication; workload client `agentic` and secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Existing outgoing delegation is retained. |
 | Storage / observability | SeaweedFS runtime object store, OpenSearch logs/KPI, Prometheus and node CA mount; their inherited credential references are retained. |
 | Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
@@ -187,8 +185,8 @@ The five application deployments are `control-plane-backend`, `knowledge-flow-ba
 chart's `control-plane-backend` key and runs `control-plane serve`; the separate
 control-plane worker and the KF SQL migration remain disabled. Manager
 and runtime migrations are enabled. Manager and the Python agent runtime access
-PostgreSQL and the published OpenFGA model; the ingestion worker keeps its scoped
-storage credentials.
+PostgreSQL; Control Plane owns permission decisions, and the ingestion worker keeps
+its scoped storage credentials.
 
 The generic identity hook provisions `knowledge-flow-worker`. The checkout's
 `prepare` hook then:

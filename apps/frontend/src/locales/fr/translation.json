@@ -1216,7 +1216,7 @@
       "emptyTeams": "Aucune équipe sur cette page. Les totaux organisationnels restent affichés.",
       "scopeHint": "Les équipes incluent leurs projets. Les compartiments de ressources sont disjoints ; les nombres d'utilisateurs distincts ne s'additionnent pas.",
       "collection": "Métadonnées collectées du {{start}} au {{end}}",
-      "collectionHint": "Ces horodatages ne représentent ni un instantané atomique SQL/OpenFGA ni une vérification physique S3/OpenSearch. Le détail d'équipe a sa propre collecte.",
+      "collectionHint": "Ces horodatages délimitent la collecte, sans vérifier physiquement les contenus stockés. Le détail d'équipe fait l'objet d'une collecte séparée.",
       "forbidden": "Vous n'êtes pas autorisé à consulter la supervision de l'organisation.",
       "missing": "La ressource demandée est indisponible ou n'existe pas.",
       "contextUnavailable": "Le contexte organisationnel est indisponible, ambigu ou retiré.",
@@ -3067,7 +3067,7 @@
           "running": "Réinitialisation…",
           "taskLabel": "Réinitialisation plateforme",
           "confirmTitle": "Réinitialiser la plateforme ?",
-          "confirmMessage": "Supprime définitivement tous les agents, tags et métadonnées de documents. Les fichiers (S3), vecteurs (OpenSearch), utilisateurs (Keycloak) et permissions (OpenFGA) ne sont pas affectés.",
+          "confirmMessage": "Supprime définitivement tous les agents, tags et métadonnées de documents. Les fichiers (S3), vecteurs (OpenSearch), utilisateurs (Keycloak) et permissions ne sont pas affectés.",
           "confirmLabel": "Réinitialiser",
           "cancelLabel": "Annuler",
           "error": "Échec de la réinitialisation"
@@ -3745,6 +3745,7 @@
       }
     },
     "userSettings": {
+      "organizationRoles": "Rôles dans l'organisation : {{roles}}",
       "privacyTitle": "Protection des données personnelles",
       "organization": "Organisation : {{name}}",
       "platformRoles": "Rôles plateforme : {{roles}}",

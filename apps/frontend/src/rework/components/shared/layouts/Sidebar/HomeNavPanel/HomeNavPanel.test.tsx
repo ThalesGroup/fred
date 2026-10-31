@@ -116,15 +116,19 @@ it.each(["organization", "team", "project"])("offers a personal space to an owne
   expect(entry()).not.toBeNull();
   expect(state.open).not.toHaveBeenCalled();
 });
-it.each(["member", "editor", "analyst", "organization_admin"])(
-  "hides the entry without business ownership (%s)",
-  async (role) => {
-    state.roles = [role];
-    state.personal = true;
-    await render();
-    expect(entry()).toBeNull();
-  },
-);
+it.each(["member", "editor", "analyst"])("offers a personal space to a business %s", async (role) => {
+  state.roles = [role];
+  state.teamRoles = [];
+  await render();
+  expect(entry()).not.toBeNull();
+});
+it("hides the entry for a technical admin without a business role", async () => {
+  state.roles = ["organization_admin"];
+  state.teamRoles = [];
+  state.personal = true;
+  await render();
+  expect(entry()).toBeNull();
+});
 it("allows mixed technical and business roles but hides the entry on authority failure", async () => {
   state.roles = ["organization_admin", "owner"];
   await render();

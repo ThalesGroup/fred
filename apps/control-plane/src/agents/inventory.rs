@@ -348,7 +348,14 @@ async fn read_inventory(
 }
 
 async fn authorize(s: &AppState, uid: &str, organization_id: Uuid) -> AppResult<Space> {
-    let org = spaces::authorize(&s.pool, &s.fga, uid, organization_id, Permission::Manage).await?;
+    let org = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        uid,
+        organization_id,
+        Permission::Manage,
+    )
+    .await?;
     if org.kind != SpaceKind::Organization {
         return Err(AppError::NotFound);
     }
@@ -367,15 +374,15 @@ fn require_source(s: &AppState, runtime_id: &str) -> AppResult<()> {
     }
 }
 
-/// Organization lock, Manage recheck on the locked connection, then the FGA fence.
+/// Organization lock and Manage recheck on the transaction connection.
 async fn authorized_transaction(
     s: &AppState,
     uid: &str,
     org: &Space,
 ) -> AppResult<Transaction<'static, Postgres>> {
-    let (mut tx, mut guard) = spaces::lock_for(&s.pool, &s.fga, org).await?;
-    spaces::authorize_locked(&mut tx, &s.fga, uid, org.id, Permission::Manage).await?;
-    s.fga.fence(&mut guard).await?;
+    let mut tx = spaces::lock_for(&s.pool, org).await?;
+    spaces::authorize_locked(&mut tx, uid, org.id, Permission::Manage).await?;
+
     Ok(tx)
 }
 

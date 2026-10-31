@@ -58,7 +58,6 @@
 			"esbenp.prettier-vscode",
 			"vivaxy.vscode-conventional-commits",
 			"lokalise.i18n-ally",
-			"openfga.openfga-vscode",
 			"redhat.vscode-yaml"
 		]
 	}

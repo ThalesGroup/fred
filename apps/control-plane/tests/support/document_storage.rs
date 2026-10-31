@@ -119,7 +119,6 @@ struct Documents {
     bucket: Bucket,
     identity: crate::support::IdentityServer,
     proxy: S3Proxy,
-    fga_proxy: crate::support::fga_proxy::Proxy,
     storage: Arc<Storage>,
     app: Router,
     folder: Folder,
@@ -196,20 +195,8 @@ impl Documents {
         config.temp_dir = spool.path().to_str().unwrap().into();
         config.limits.team_bytes = quota;
         config.limits.file_bytes = 1024 * 1024;
-        let fga_proxy = crate::support::fga_proxy::Proxy::start(&e.openfga).await;
-        let observed = control_plane::fga::Fga::connect(
-            &fga_proxy.base,
-            &e.store,
-            false,
-            false,
-            None,
-            Some(Duration::from_secs(5)),
-        )
-        .await
-        .unwrap()
-        .load(&e.pool)
-        .await
-        .unwrap();
+
+        let observed = control_plane::authorization::Authorization::new(e.pool.clone());
         let storage = Storage::start(
             &e.pool,
             &observed,
@@ -225,7 +212,7 @@ impl Documents {
             api::AppState {
                 agent_catalog: Default::default(),
                 pool: e.pool.clone(),
-                fga: observed,
+                authorization: observed,
                 auth: Arc::new(identity.auth().await),
                 content: Some(storage.clone()),
                 processing: None,
@@ -241,7 +228,6 @@ impl Documents {
             bucket,
             identity,
             proxy,
-            fga_proxy,
             storage,
             app,
             folder,
@@ -333,7 +319,7 @@ async fn json_response(response: Response<Body>) -> (u16, Value) {
 
 // Proves: I2, I3, I22
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn document_contract_guards_and_shared_project_quota() {
     let d = Documents::start_spool(8, true).await;
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -400,7 +386,6 @@ async fn document_contract_guards_and_shared_project_quota() {
     );
     let project = control_plane::spaces::create_space(
         &d.e.pool,
-        &d.e.fga,
         "alice",
         control_plane::domain::SpaceKind::Project,
         d.folder.space_id,
@@ -411,7 +396,6 @@ async fn document_contract_guards_and_shared_project_quota() {
     .unwrap();
     let folder = control_plane::spaces::create_folder(
         &d.e.pool,
-        &d.e.fga,
         "writer",
         project.id,
         None,
@@ -465,7 +449,7 @@ async fn document_contract_guards_and_shared_project_quota() {
 
 // Proves: I8, I22
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn document_publication_rechecks_token_and_terms_without_locking_remote_io() {
     let d = Arc::new(Documents::start(1024).await);
     for terms_case in [false, true] {
@@ -478,7 +462,7 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
                 .unwrap();
             let storage = Storage::start(
                 &d.e.pool,
-                &d.e.fga,
+                &d.e.authorization,
                 Some("v1".into()),
                 d.storage.config.clone(),
                 "fixture-access".into(),
@@ -490,7 +474,7 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
                 api::AppState {
                     agent_catalog: Default::default(),
                     pool: d.e.pool.clone(),
-                    fga: d.e.fga.clone(),
+                    authorization: d.e.authorization.clone(),
                     auth: Arc::new(d.identity.auth().await),
                     content: Some(storage),
                     processing: None,
@@ -557,196 +541,9 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
     }
 }
 
-#[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
-async fn document_request_budget_is_independent_of_document_count_and_cleanup_is_exclusive() {
-    let d = Arc::new(Documents::start(1024 * 1024).await);
-    {
-        let mut f = d.fga_proxy.fault.lock().await;
-        f.calls.clear();
-        f.reads.clear();
-        f.written.clear();
-    }
-    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let (ready, ready_rx) = tokio::sync::oneshot::channel();
-    let sampling = tokio::spawn(crate::folder_scaling::sample_locks(
-        d.e.pool.clone(),
-        stop.clone(),
-        ready,
-    ));
-    ready_rx.await.unwrap();
-    let gate = Arc::new(crate::support::Gate::default());
-    d.proxy.fault.lock().await.hold_put = Some(gate.clone());
-    let rss = || {
-        std::fs::read_to_string("/proc/self/status")
-            .unwrap()
-            .lines()
-            .find(|line| line.starts_with("VmRSS:"))
-            .unwrap()
-            .to_owned()
-    };
-    let before = rss();
-    let start = std::time::Instant::now();
-    let sending = d.clone();
-    let upload = tokio::spawn(async move {
-        sending
-            .upload(
-                "writer",
-                "budget.txt",
-                &vec![1; 128 * 1024],
-                Uuid::new_v4(),
-                None,
-            )
-            .await
-    });
-    tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
-        .await
-        .unwrap();
-    fn disk_bytes(path: &std::path::Path) -> u64 {
-        std::fs::read_dir(path)
-            .unwrap()
-            .map(|entry| {
-                let entry = entry.unwrap();
-                let meta = entry.metadata().unwrap();
-                if meta.is_dir() {
-                    disk_bytes(&entry.path())
-                } else {
-                    meta.len()
-                }
-            })
-            .sum()
-    }
-    let disk = disk_bytes(d._spool.path());
-    println!(
-        "document resources at held Put: spool {disk} bytes; process RSS before {before}, held {}; includes in-process test HTTP proxies",
-        rss()
-    );
-    assert_eq!(disk, 128 * 1024);
-    gate.release.notify_one();
-    assert_eq!(upload.await.unwrap().0, 201);
-    stop.store(true, std::sync::atomic::Ordering::Relaxed);
-    println!("document sampled SQL locks {}", sampling.await.unwrap());
-    assert_eq!(disk_bytes(d._spool.path()), 0);
-    let f = d.fga_proxy.fault.lock().await;
-    println!(
-        "document fixture: 5 users, 1 organization, 1 team, writer 2 memberships, 1 document, concurrency 1; upload {:?}; FGA {:?}; reads {:?}; writes {:?}",
-        start.elapsed(),
-        f.calls,
-        f.reads,
-        f.written
-    );
-    let upload_calls = f.calls.clone();
-    drop(f);
-    assert_eq!(upload_calls.get("read"), Some(&5));
-    assert_eq!(upload_calls.get("check"), Some(&3));
-    assert_eq!(upload_calls.get("write"), Some(&2));
-    d.fga_proxy.fault.lock().await.calls.clear();
-    assert_eq!(
-        d.json(
-            "reader",
-            "GET",
-            &format!(
-                "/spaces/{}/entries?parent_id={}",
-                d.folder.space_id, d.folder.id
-            ),
-            Value::Null
-        )
-        .await
-        .0,
-        200
-    );
-    let calls = d.fga_proxy.fault.lock().await.calls.clone();
-    println!("document directory FGA {calls:?}");
-    assert_eq!(calls.get("check"), Some(&2));
-    assert!(!calls.contains_key("write"));
-    // Metadata-only scale fixture: no extra remote originals are claimed or fetched.
-    sqlx::query("insert into document(id,space_id,folder_id,name,mime,size,sha256,created_by,object_key,quota_owner) select gen_random_uuid(),space_id,folder_id,'fixture-'||n,mime,size,sha256,created_by,'fixture/'||gen_random_uuid(),quota_owner from document cross join generate_series(1,100) as n").execute(&d.e.pool).await.unwrap();
-    d.fga_proxy.fault.lock().await.calls.clear();
-    let (_, page) = d
-        .json(
-            "reader",
-            "GET",
-            &format!(
-                "/spaces/{}/entries?parent_id={}&limit=10",
-                d.folder.space_id, d.folder.id
-            ),
-            Value::Null,
-        )
-        .await;
-    assert_eq!(page["total"], 101);
-    assert_eq!(d.fga_proxy.fault.lock().await.calls, calls);
-    let object: String =
-        sqlx::query_scalar("select object_key from document where name='budget.txt'")
-            .fetch_one(&d.e.pool)
-            .await
-            .unwrap();
-    let prefix = object.rsplit_once('/').unwrap().0;
-    let installation: Uuid = sqlx::query_scalar("select namespace from document_storage")
-        .fetch_one(&d.e.pool)
-        .await
-        .unwrap();
-    for i in 0..3 {
-        d.bucket
-            .client
-            .put_object()
-            .bucket("originals")
-            .key(format!("{prefix}/orphan-{i}"))
-            .metadata("fred-installation", installation.to_string())
-            .body(ByteStream::from_static(b"unreferenced"))
-            .send()
-            .await
-            .unwrap();
-    }
-    sqlx::query("update document_storage set lease_owner=$1,lease_until=clock_timestamp()+interval '1 minute'").bind(Uuid::new_v4()).execute(&d.e.pool).await.unwrap();
-    d.storage.cleanup_tick().await.unwrap();
-    assert!(
-        d.bucket
-            .store
-            .get(&format!("{prefix}/orphan-0"))
-            .await
-            .is_ok()
-    );
-    sqlx::query("update document_storage set lease_until=clock_timestamp()-interval '1 second'")
-        .execute(&d.e.pool)
-        .await
-        .unwrap();
-    // A restarted replica shares the SQL namespace/claim but owns a separate spool.
-    let mut config = d.storage.config.clone();
-    config.limits.cleanup_batch = 1;
-    let peer = Storage::start(
-        &d.e.pool,
-        &d.e.fga,
-        None,
-        config,
-        "fixture-access".into(),
-        "fixture-secret".into(),
-    )
-    .await
-    .unwrap();
-    for _ in 0..8 {
-        let (a, b) = tokio::join!(peer.cleanup_tick(), d.storage.cleanup_tick());
-        a.unwrap();
-        b.unwrap();
-    }
-    for i in 0..3 {
-        assert!(
-            d.bucket
-                .store
-                .get(&format!("{prefix}/orphan-{i}"))
-                .await
-                .is_err()
-        );
-    }
-    assert!(d.bucket.store.get(&object).await.is_ok());
-    // SQL unavailability never gives permission to remove a remote object.
-    d.e.pool.close().await;
-    assert!(peer.cleanup_tick().await.is_err());
-    assert!(d.bucket.store.get(&object).await.is_ok());
-}
-
 // Proves: I2, I3, I8, I22, I25
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn document_creation_reads_conflicts_receipts_and_safe_download() {
     let d = Documents::start(1024 * 1024).await;
     for user in ["reader", "analyst", "owner", "stranger"] {
@@ -948,7 +745,7 @@ async fn document_creation_reads_conflicts_receipts_and_safe_download() {
 }
 
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn document_concurrent_names_and_quotas_have_one_winner() {
     let d = Documents::start(10).await;
     let (a, b) = tokio::join!(
@@ -1079,7 +876,7 @@ impl S3Proxy {
 
 // Proves: I5, I8, I22, I25
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn document_revocation_cleanup_and_late_put_recovery() {
     let d = Arc::new(Documents::start(1024).await);
     let gate = Arc::new(crate::support::Gate::default());
@@ -1108,7 +905,6 @@ async fn document_revocation_cleanup_and_late_put_recovery() {
     );
     control_plane::spaces::revoke(
         &d.e.pool,
-        &d.e.fga,
         "alice",
         d.folder.space_id,
         Role::Editor,
@@ -1208,7 +1004,7 @@ async fn document_revocation_cleanup_and_late_put_recovery() {
 }
 
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn document_lost_ack_and_unavailable_provider_keep_durable_outcomes() {
     let d = Documents::start(1024).await;
     d.proxy.fault.lock().await.lose_put_ack = true;
@@ -1281,7 +1077,7 @@ async fn document_lost_ack_and_unavailable_provider_keep_durable_outcomes() {
 }
 
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn document_slow_consumer_cannot_hold_download_capacity() {
     let d = Documents::start(1024 * 1024).await;
     let (status, receipt) = d
@@ -1328,63 +1124,7 @@ async fn document_slow_consumer_cannot_hold_download_capacity() {
 }
 
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
-async fn document_dependency_failures_are_retryable_and_publication_stays_closed() {
-    let d = Arc::new(Documents::start(1024).await);
-    {
-        let mut fault = d.fga_proxy.fault.lock().await;
-        fault.fail_read_at = fault.reads.len() + 1;
-    }
-    let (status, error) = d
-        .json(
-            "writer",
-            "GET",
-            &format!("/spaces/{}/storage", d.folder.space_id),
-            Value::Null,
-        )
-        .await;
-    assert_eq!(status, 503, "{error}");
-    assert_eq!(error["code"], "storage_unavailable");
-    d.fga_proxy.fault.lock().await.fail_read_at = 0;
-    let gate = Arc::new(crate::support::Gate::default());
-    d.proxy.fault.lock().await.hold_put = Some(gate.clone());
-    let key = Uuid::new_v4();
-    let sending = d.clone();
-    let request = tokio::spawn(async move {
-        sending
-            .upload("writer", "fence.txt", b"content", key, None)
-            .await
-    });
-    tokio::time::timeout(Duration::from_secs(10), gate.entered.notified())
-        .await
-        .unwrap();
-    {
-        let mut fault = d.fga_proxy.fault.lock().await;
-        fault.fail_at = fault.writes + 1;
-    }
-    gate.release.notify_one();
-    let (status, error) = request.await.unwrap();
-    assert_eq!(status, 503, "{error}");
-    let (_, receipt) = d
-        .json(
-            "writer",
-            "GET",
-            &format!("/document-uploads/{key}"),
-            Value::Null,
-        )
-        .await;
-    assert_eq!(receipt["status"], "failed");
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("select count(*) from document")
-            .fetch_one(&d.e.pool)
-            .await
-            .unwrap(),
-        0
-    );
-}
-
-#[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn document_cleanup_skips_a_contended_organization_without_starving_other_work() {
     let d = Documents::start(1024).await;
     assert_eq!(
@@ -1393,9 +1133,10 @@ async fn document_cleanup_skips_a_contended_organization_without_starving_other_
             .0,
         201
     );
-    let peer = crate::support::member_organization(&d.e.pool, &d.e.fga, "Peer", "peer-owner")
-        .await
-        .unwrap();
+    let peer =
+        crate::support::member_organization(&d.e.pool, &d.e.authorization, "Peer", "peer-owner")
+            .await
+            .unwrap();
     let id = Uuid::new_v4();
     let failed = Uuid::new_v4();
     let pending_key:String=sqlx::query_scalar("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at) select $1,$1,actor,organization_id,space_id,folder_id,quota_owner,'pending.txt',mime,size,sha256,replace(object_key,id::text,$1::text),'pending',clock_timestamp()-interval '1 second' from document_upload where status='stored' returning object_key")
@@ -1448,7 +1189,7 @@ mod processing;
 
 // Proves: I22, I25
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn shared_swift_bucket_cleanup_preserves_foreign_objects_and_reclaims_owned_late_writes() {
     let d = Documents::start(1024).await;
     sqlx::raw_sql("create table cleanup_renewal_probe(n int); create function count_cleanup_renewals() returns trigger language plpgsql as $$ begin if new.lease_until is not null then insert into cleanup_renewal_probe values(1); end if; return new; end $$; create trigger cleanup_renewal_probe after update of lease_until on document_storage for each row execute function count_cleanup_renewals()")
@@ -1530,7 +1271,7 @@ async fn shared_swift_bucket_cleanup_preserves_foreign_objects_and_reclaims_owne
 
 // Proves: I22, I25
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn cleanup_inaccessible_original_does_not_starve_other_objects() {
     let d = Documents::start(1024).await;
     assert_eq!(

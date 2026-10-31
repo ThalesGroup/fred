@@ -48,10 +48,7 @@ logger = logging.getLogger(__name__)
 # - phase, operation: generic dims shared by many unrelated call sites (Graph,
 #   checkpoint SQL, Knowledge Flow, LLM calls) with a wide, still-growing
 #   value set — promoting either would surface far more than intended.
-#   `runtime_stage` and `rebac_operation` below are the deliberately narrow,
-#   closed-set replacements scoped to TURN-01's three pre-LLM stages and the
-#   five OpenFGA operations (see kpi_runtime_stage_metric.py and
-#   openfga_engine._rebac_timer) — never reuse `phase`/`operation` themselves.
+#   `runtime_stage` is the closed-set dimension for pre-LLM stages.
 #   `pdf_stage` is the same pattern for the PDF image OCR/VLM loop (two closed
 #   values, "image_loop"/"image_description" — see pdf_markdown_processor.py's
 #   `_pdf_kpi_timer` call sites) — deliberately a distinct label from
@@ -83,7 +80,6 @@ PROMETHEUS_ALLOWED_LABELS = frozenset(
         "file_type",
         "agent_step",
         "runtime_stage",
-        "rebac_operation",
         "pdf_stage",
         "conversation_fs_namespace",
         "conversation_fs_resource",

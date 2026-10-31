@@ -1,5 +1,5 @@
 # Configuration fragment, not a complete deployment overlay. Helm replaces lists:
-# append these extraEnvVars to the existing SQL/FGA/identity entries. See deploy/k3d/
+# append these extraEnvVars to the existing SQL/identity entries. See deploy/k3d/
 # for the complete factory profile. Provision the Swift documents bucket and Secret.
 applications:
   control-plane-backend:

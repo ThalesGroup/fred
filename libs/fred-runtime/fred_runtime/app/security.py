@@ -17,14 +17,8 @@
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fred_core.security import oidc
 from fred_core.security.delegation import AssertedUser
-from fred_core.security.rebac.authorization_binding import (
-    AuthorizationBinding,
-    read_authorization_binding,
-)
-from fred_core.security.rebac.authorization_model import validate_authorization_binding
 from fred_core.security.structure import (
     KeycloakUser,
-    OpenFgaRebacConfig,
     is_service_agent,
 )
 from sqlalchemy import text
@@ -101,29 +95,16 @@ def install_admission(app: FastAPI) -> None:
 
 async def prepare_authorization(
     container: PodApplicationContext,
-) -> tuple[OpenFgaRebacConfig, AuthorizationBinding]:
-    """Validate the pod's security and durable publication before opening OpenFGA."""
+) -> None:
+    """Validate identity and shared SQL before exposing the pod."""
     security = container.configuration.security
     if security is None or security.profile != "c3":
         raise ValueError("Weaver agent pods require security.profile='c3'")
     oidc.configure_token_security(security)
     oidc.initialize_user_security(security.user)
-    rebac_config = security.rebac
-    if not isinstance(rebac_config, OpenFgaRebacConfig):
-        raise ValueError("Weaver agent pods require OpenFGA")
-    if (
-        rebac_config.timeout_millisec is None
-        or not 1 <= rebac_config.timeout_millisec <= 30000
-    ):
-        raise ValueError("OpenFGA timeout_millisec must be between 1 and 30000")
     if not (security.user.audience or security.user.client_id).strip():
         raise ValueError("Weaver agent pods require a JWT audience")
     await container.initialize_sql()
     sql_engine = container.get_sql_engine()
     if sql_engine is None or sql_engine.dialect.name != "postgresql":
         raise ValueError("Weaver authorization requires shared PostgreSQL")
-    binding = await read_authorization_binding(
-        sql_engine, expected_configured_store=rebac_config.store_name
-    )
-    await validate_authorization_binding(binding, rebac_config)
-    return rebac_config, binding

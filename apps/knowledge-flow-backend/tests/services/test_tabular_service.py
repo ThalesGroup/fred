@@ -37,7 +37,6 @@ from fred_core.documents.document_structures import (
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
-from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     TABULAR_MULTI_EXTENSION_KEY,
@@ -102,7 +101,7 @@ async def _ingest_csv(
         tag_names=tag_names,
     )
     processed_metadata = processor.process(str(csv_path), metadata)
-    await MetadataService().save_document_metadata(_user(), processed_metadata)
+    await ApplicationContext.get_instance().get_metadata_store().save_metadata(processed_metadata)
     return processed_metadata
 
 
@@ -147,12 +146,12 @@ async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str, extra_tab
     processor.recalc = False
     processor.convert_file_to_markdown(workbook_path, output_dir, document_uid)
     metadata = ExcelTableRegistrationProcessor().process(str(output_dir / "output.md"), metadata)
-    await MetadataService().save_document_metadata(_user(), metadata)
+    await ApplicationContext.get_instance().get_metadata_store().save_metadata(metadata)
     return metadata, output_dir
 
 
 @pytest.mark.asyncio
-async def test_tabular_processor_stores_one_parquet_artifact_and_replaces_previous_revision(tmp_path, metadata_store):
+async def test_tabular_processor_stores_distinct_artifacts_for_each_revision(tmp_path, metadata_store):
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
 
@@ -196,11 +195,15 @@ async def test_tabular_processor_stores_one_parquet_artifact_and_replaces_previo
         updated_artifact.object_key,
     }
 
-    await MetadataService().save_document_metadata(_user(), updated_metadata)
+    await ApplicationContext.get_instance().get_metadata_store().save_metadata(updated_metadata)
 
-    stored_objects = content_store.list_objects(object_prefix)
-    assert len(stored_objects) == 1
-    assert stored_objects[0].key == updated_artifact.object_key
+    # Metadata selects the new revision. Artifact retirement belongs to the
+    # manager processing lifecycle, not this processor's metadata fixture.
+    saved = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid("doc-1")
+    assert saved is not None
+    assert read_tabular_artifact(saved) == updated_artifact
+    assert updated_artifact.row_count == 1
+    assert updated_artifact.source_revision != artifact.source_revision
 
 
 @pytest.mark.asyncio
@@ -737,7 +740,7 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
     metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
     content_store.save_output("doc-excel", output_dir)
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    await MetadataService().save_document_metadata(_user(), metadata)
+    await ApplicationContext.get_instance().get_metadata_store().save_metadata(metadata)
 
     service = TabularEngineHarness()
     schemas = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
@@ -797,7 +800,7 @@ async def test_describe_documents_reads_values_instead_of_legacy_metadata(tmp_pa
         else:
             column.pop("min_value", None)
             column.pop("max_value", None)
-    await MetadataService().save_document_metadata(_user(), csv_metadata)
+    await ApplicationContext.get_instance().get_metadata_store().save_metadata(csv_metadata)
 
     excel_metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
     content_store.save_output("doc-excel", output_dir)
@@ -809,7 +812,7 @@ async def test_describe_documents_reads_values_instead_of_legacy_metadata(tmp_pa
             else:
                 column.pop("min_value", None)
                 column.pop("max_value", None)
-    await MetadataService().save_document_metadata(_user(), excel_metadata)
+    await ApplicationContext.get_instance().get_metadata_store().save_metadata(excel_metadata)
 
     service = TabularEngineHarness()
     descriptions = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
@@ -870,7 +873,7 @@ async def test_describe_documents_reads_all_twenty_workbook_tables(tmp_path, met
     metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-twenty", extra_tables=18)
     content_store.save_output("doc-twenty", output_dir)
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    await MetadataService().save_document_metadata(_user(), metadata)
+    await ApplicationContext.get_instance().get_metadata_store().save_metadata(metadata)
 
     tables = (await TabularEngineHarness().describe_documents(_user(), ["doc-twenty"]))[0].tables
     assert len(tables) == 20

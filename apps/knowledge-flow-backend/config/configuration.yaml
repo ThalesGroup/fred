@@ -288,21 +288,19 @@ processing:
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
 security:
   m2m:
-    enabled: false
+    enabled: true
     client_id: "knowledge-flow"
     realm_url: "http://app-keycloak:8080/realms/app"
   user:
-    enabled: false
+    enabled: true
     client_id: "app"
     realm_url: "http://app-keycloak:8080/realms/app"
+  delegation:
+    act_for_people: true
+    accept_delegated_calls: true
   authorized_origins:
     - "http://localhost:5173"
     - "http://localhost:5180"
-  rebac:
-    enabled: false
-    type: openfga
-    api_url: "http://localhost:9080"
-
 scheduler:
   enabled: true
   backend: "memory"
@@ -440,3 +438,5 @@ mcp:
 
 filesystem:
   type: local
+
+control_plane_url: "http://localhost:8001"

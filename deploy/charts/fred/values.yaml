@@ -252,18 +252,6 @@ x-kf-security: &kf-security
   user_directory: keycloak
   authorized_origins:
     - "http://your.host:80"
-  rebac:
-    enabled: true                    # Set false to bypass ReBAC (warning: all private resources will become public)
-    type: openfga
-    api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
-    # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
-    # create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
-    # sync_schema_on_init: true         # Pushes the default Fred authorization model
-    # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
-    # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
-    timeout_millisec: 5000             # Bound account-status and membership checks
-    # headers:
-    #   X-Custom-Header: "value"
   delegation:
     # Delegation lets a program act for a person. The program (a "workload") signs
     # in with its own service account: a Keycloak client identity that belongs to
@@ -276,12 +264,12 @@ x-kf-security: &kf-security
     # named by audience (default fred-delegation). The role is granted in Keycloak
     # to the caller's service account; no list of callers is kept here.
     #
-    # act_for_people (outgoing) - this backend never calls others for a person;
-    # leave it false.
+    # The Knowledge Flow API calls Control Plane for the authenticated person's
+    # document scope using its own M2M identity and the trusted delegation triplet.
     #
     # Both are off by default; turn on the matching switch on each side together.
-    act_for_people: false
-    accept_delegated_calls: false
+    act_for_people: true
+    accept_delegated_calls: true
 
 # Shared by the knowledge-flow API and by the workers, here, in this file. It is an
 # anchor, so it is resolved when this file is parsed — it does NOT carry an override
@@ -684,11 +672,8 @@ applications:
 
       security:
         # ── Classification posture (RUNTIME-07 rev. 2) ──────────────────────────
-        # The agentic pod is the execution authority: it validates the Keycloak JWT
-        # and runs a pod-side OpenFGA check on every request (no control-plane grant).
-        # `profile: c3` hardens this at STARTUP and FAILS CLOSED — the pod refuses to
-        # boot unless user + m2m + rebac below are all enabled, and it forces strict
-        # JWT issuer/audience validation. Weaver pods require this profile.
+        # The pod validates identity and enforces the Control Plane turn context.
+        # C3 requires user + m2m authentication and strict JWT validation.
         profile: c3
         m2m:
           enabled: true
@@ -719,18 +704,6 @@ applications:
         user_directory: keycloak
         authorized_origins:
           - "http://your.host:80"
-        rebac:
-          enabled: true
-          type: openfga
-          api_url: "http://openfga:8080"
-          # Compare with authorization_store.configured_store; never discover by name.
-          store_name: control-plane
-          # Store/model IDs come only from the published binding. The pod never
-          # creates a store, synchronizes a schema or selects the latest model.
-          # token_env_var: "OPENFGA_API_TOKEN"
-          timeout_millisec: 5000
-          # headers:
-          #   X-Custom-Header: "value"
         delegation:
           # Delegation lets a program act for a person. The program (a "workload") signs
           # in with its own service account: a Keycloak client identity that belongs to
@@ -833,7 +806,6 @@ applications:
       LANGFUSE_SECRET_KEY: ""
       OPENSEARCH_PASSWORD: ""
       M2M_CLIENT_SECRET: ""
-      OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
       MINIO_SECRET_KEY: "" # required when storage.object_store.type=minio
       WEB_RESEARCH_PROVIDER_KEY: "" # Brave Search API key, required when web_research.enabled
@@ -1233,6 +1205,7 @@ applications:
       frontend: false
     # ── Application configuration (rendered as ConfigMap) ───────────────
     configuration:
+      control_plane_url: "http://control-plane-backend:8222/control-plane/v1"
       app:
         name: "Knowledge Flow Backend"
         base_url: "/knowledge-flow/v2"
@@ -1285,7 +1258,6 @@ applications:
       OPENSEARCH_PASSWORD: ""
       PROMETHEUS_PASSWORD: ""
       PROMETHEUS_BEARER_TOKEN: ""
-      OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
 
   # ── 3.4 Knowledge Flow Workers (Temporal) ──────────────────────────
@@ -1479,6 +1451,7 @@ applications:
     # not through a YAML anchor: an anchor is resolved when this file is parsed, so
     # it would not carry an override supplied by a -f values file or a --set.
     configuration:
+      control_plane_url: "http://control-plane-backend:8222/control-plane/v1"
       app:
         name: "Knowledge Flow Backend"
         base_url: "/knowledge-flow/v2"
@@ -1534,7 +1507,6 @@ applications:
       OPENSEARCH_PASSWORD: ""
       PROMETHEUS_PASSWORD: ""
       PROMETHEUS_BEARER_TOKEN: ""
-      OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
 
   # ── 3.4b Knowledge Flow Extraction Workers (Temporal) ──────────────
@@ -1891,9 +1863,9 @@ applications:
           client_id: app
         authorized_origins:
         - http://your.host:80
-        rebac:
-          api_url: http://openfga:8080
-          store_name: control-plane
+        delegation:
+          accept_delegated_calls: true
+          service_accounts_only: true
       storage:
         postgres:
           host: postgres

@@ -32,7 +32,6 @@ from fred_core.common import (
 from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
 from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
 from fred_core.documents.document_structures import DocumentMetadata
-from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -159,7 +158,6 @@ def app_context(monkeypatch, fake_embedder):
         m2m=M2MSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-m2m-realm"), client_id="fake-m2m-client"),
         user=UserSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-user-realm"), client_id="fake-user-client"),
         authorized_origins=[AnyHttpUrl("http://localhost:5173")],
-        rebac=None,
     )
     config = Configuration(
         app=AppConfig(
@@ -300,7 +298,6 @@ def app_context(monkeypatch, fake_embedder):
     ctx = ApplicationContext(config)
     ctx._metadata_store_instance = _InMemoryTestMetadataStore()
     # Production opens the published engine at API startup; unit tests allow all.
-    ctx._rebac_engine = NoopRebacEngine()
     return ctx
 
 

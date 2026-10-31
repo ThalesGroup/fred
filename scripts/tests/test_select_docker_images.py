@@ -19,7 +19,9 @@ spec.loader.exec_module(s)
 MANIFEST = json.loads((ROOT / ".github" / "docker-images.json").read_text())
 ALL = {image["name"] for image in MANIFEST["images"]}
 KF = "knowledge-flow-backend"
-KF_INPUTS = next(image for image in MANIFEST["images"] if image["name"] == KF)["pr_inputs"]
+KF_INPUTS = next(image for image in MANIFEST["images"] if image["name"] == KF)[
+    "pr_inputs"
+]
 
 
 def built(*changed: str) -> set[str]:
@@ -28,22 +30,40 @@ def built(*changed: str) -> set[str]:
 
 class SelectionTest(unittest.TestCase):
     def test_documentation_builds_nothing(self):
-        self.assertEqual(built("docs/swift/rfc/X.md", "openspec/changes/a/tasks.md", "CLAUDE.md"), set())
+        self.assertEqual(
+            built("docs/swift/rfc/X.md", "openspec/changes/a/tasks.md", "CLAUDE.md"),
+            set(),
+        )
 
     def test_markdown_under_apps_is_code(self):
         # The fred-agents pyproject builds with its README, so it is not documentation.
-        self.assertEqual(built("apps/fred-agents/README.md"), ALL - {KF, "knowledge-flow-backend-pymupdf"})
+        self.assertEqual(
+            built("apps/fred-agents/README.md"),
+            ALL - {KF, "knowledge-flow-backend-pymupdf"},
+        )
 
     def test_manager_publishes_the_control_plane_image(self):
-        manifest = json.loads((Path(__file__).resolve().parents[2] / ".github/docker-images.json").read_text())
+        manifest = json.loads(
+            (
+                Path(__file__).resolve().parents[2] / ".github/docker-images.json"
+            ).read_text()
+        )
         images = {entry["name"]: entry for entry in manifest["images"]}
         self.assertNotIn("control-plane", images)
-        self.assertEqual(images["control-plane-backend"]["context"], "apps/control-plane")
-        self.assertEqual(images["control-plane-backend"]["dockerfile"], "apps/control-plane/dockerfiles/Dockerfile-prod")
+        self.assertEqual(
+            images["control-plane-backend"]["context"], "apps/control-plane"
+        )
+        self.assertEqual(
+            images["control-plane-backend"]["dockerfile"],
+            "apps/control-plane/dockerfiles/Dockerfile-prod",
+        )
         self.assertIn("control-plane-backend", built("apps/control-plane/src/main.rs"))
 
     def test_frontend_application_builds_only_frontend(self):
-        self.assertEqual(built("apps/frontend/src/App.tsx", "apps/frontend/package-lock.json"), {"frontend"})
+        self.assertEqual(
+            built("apps/frontend/src/App.tsx", "apps/frontend/package-lock.json"),
+            {"frontend"},
+        )
 
     def test_npm_package_producer_builds_nothing(self):
         self.assertEqual(built("libs/frontend/ui/src/index.tsx"), set())
@@ -55,12 +75,13 @@ class SelectionTest(unittest.TestCase):
             "libs/capabilities/fred-capability-documents/a.py",
             "apps/fred-agents/dockerfiles/Dockerfile-prod",
         ):
-            self.assertEqual(built(path), ALL - {KF, "knowledge-flow-backend-pymupdf"}, path)
+            self.assertEqual(
+                built(path), ALL - {KF, "knowledge-flow-backend-pymupdf"}, path
+            )
 
     def test_knowledge_flow_inputs_build_everything(self):
         for path in (
             "apps/knowledge-flow-backend/app/main.py",
-            "apps/control-plane/openfga/model.json",
             "libs/fred-core/fred_core/a.py",
             "libs/fred-pod/pyproject.toml",
             "scripts/download_models.py",
@@ -79,7 +100,10 @@ class SelectionTest(unittest.TestCase):
         self.assertIn(KF, built("libs/fred-core/pyproject.toml"))
 
     def test_unknown_path_falls_back_to_general(self):
-        self.assertEqual(built("new-top-level/thing.py"), ALL - {KF, "knowledge-flow-backend-pymupdf"})
+        self.assertEqual(
+            built("new-top-level/thing.py"),
+            ALL - {KF, "knowledge-flow-backend-pymupdf"},
+        )
 
     def test_selection_is_a_union(self):
         self.assertEqual(built("docs/a.md", "apps/frontend/src/a.ts"), {"frontend"})
@@ -106,14 +130,18 @@ class KnowledgeFlowInputsTest(unittest.TestCase):
 
     def test_every_copy_source_is_an_input(self):
         dockerfile = ROOT / "apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod"
-        self.assertTrue(self.covered("apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod"))
+        self.assertTrue(
+            self.covered("apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod")
+        )
         for line in dockerfile.read_text().splitlines():
             if not line.startswith("COPY") or "--from=" in line:
                 continue
             sources = [t for t in line.split()[1:-1] if not t.startswith("--")]
             for source in sources:
                 path = source.rstrip("/").removesuffix("/.").removesuffix("*")
-                self.assertTrue(self.covered(path), f"COPY {source} is not in pr_inputs")
+                self.assertTrue(
+                    self.covered(path), f"COPY {source} is not in pr_inputs"
+                )
 
     def test_every_local_dependency_is_an_input(self):
         pending, seen = [ROOT / "apps/knowledge-flow-backend"], set()
@@ -123,9 +151,13 @@ class KnowledgeFlowInputsTest(unittest.TestCase):
                 continue
             seen.add(project)
             rel = project.relative_to(ROOT).as_posix()
-            self.assertTrue(self.covered(rel), f"{rel} is a local dependency missing from pr_inputs")
+            self.assertTrue(
+                self.covered(rel), f"{rel} is a local dependency missing from pr_inputs"
+            )
             sources = tomllib.loads((project / "pyproject.toml").read_text())
-            for source in sources.get("tool", {}).get("uv", {}).get("sources", {}).values():
+            for source in (
+                sources.get("tool", {}).get("uv", {}).get("sources", {}).values()
+            ):
                 if isinstance(source, dict) and "path" in source:
                     pending.append((project / source["path"]).resolve())
         self.assertGreater(len(seen), 1)
@@ -137,7 +169,10 @@ class ChangedPathsTest(unittest.TestCase):
 
             def git(*args):
                 return subprocess.run(
-                    ["git", "-C", tmp, *args], check=True, capture_output=True, text=True
+                    ["git", "-C", tmp, *args],
+                    check=True,
+                    capture_output=True,
+                    text=True,
                 ).stdout.strip()
 
             git("init", "-q", "-b", "main")
@@ -157,7 +192,9 @@ class ChangedPathsTest(unittest.TestCase):
 
             changed = s.changed_paths(base, git("rev-parse", "HEAD"), repo=tmp)
 
-        self.assertEqual(set(changed), {"docs/moved.md", "libs/fred-core/café.md", "docs/gone.md"})
+        self.assertEqual(
+            set(changed), {"docs/moved.md", "libs/fred-core/café.md", "docs/gone.md"}
+        )
         self.assertIn(KF, built(*changed))
 
 

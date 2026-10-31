@@ -456,7 +456,7 @@ impl Drop for Completion {
     }
 }
 
-/// Fred's security stream, emitted when OpenFGA acknowledges the durable write,
+/// Fred's security stream records role changes,
 /// independently of a later SQL commit. No fabricated actor for operator-only calls.
 pub(crate) fn audit_relation(
     actor: Option<&str>,

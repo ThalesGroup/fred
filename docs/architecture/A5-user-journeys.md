@@ -11,8 +11,8 @@ contracts describe behavior; they are not a record of a manually validated run.
 | --- | --- | --- | --- |
 | 1. Sign in | A person authenticates with the configured identity provider. | Fred opens the admission journey. A login alone grants no space access. | In local-directory mode, the authenticated person's profile is recorded in `user_identity`; Keycloak directory mode reads the provider instead. |
 | 2. Accept terms | The person reads the displayed CGU and accepts the current version. | Fred continues admission. If terms cannot load, the protected journey remains closed. | `terms_acceptance` records this subject, version and acceptance time. No space or role is created. |
-| 3. Bootstrap | On an unclaimed platform, that person supplies the deployment bootstrap token. | The first platform admin reaches Organizations. A wrong token does not grant ownership. | `platform_bootstrap` records the claimant and completion; the actual platform-admin role is in OpenFGA. |
-| 4. Provision | The platform admin imports a provisioning ZIP defining accounts, an organization, teams and their explicit roles. | The report shows acknowledged creations and grants, or the failed phase. | Account identities, `space` rows and OpenFGA roles/placement. Import does not accept terms for anyone. |
+| 3. Bootstrap | On an unclaimed platform, that person supplies the deployment bootstrap token. | The first platform admin reaches Organizations. A wrong token does not grant ownership. | `platform_bootstrap` records the claimant and completion; the actual platform-admin role is in PostgreSQL. |
+| 4. Provision | The platform admin imports a provisioning ZIP defining accounts, an organization, teams and their explicit roles. | The report shows acknowledged creations and grants, or the failed phase. | Account identities, `space` rows and permission roles/placement. Import does not accept terms for anyone. |
 | 5. Change account | The platform admin signs out. A provisioned business user signs in and accepts their own CGU. | Home displays that person's accessible spaces. The organization name appears in Profile. | No automatic team, folder or personal space is created by login. |
 | 6. Choose a space | The user selects an accessible team, or opens their entitled personal space. | The existing space navigation opens. | Personal-space creation, when requested and allowed, creates a `space` row and its roles. Reopening reuses it. |
 | 7. Open Resources | The user opens Resources in that space. | The current directory lists its folders/documents, with loading, empty and error states. | Browsing creates nothing. |
@@ -29,7 +29,7 @@ that also carry business roles. An organization owner also has the
 existing Features entry, governed by that organization role: its Agents tab reads
 Rust template discovery and organization defaults without global legacy catalog
 calls. Its existing default switch and withdrawal confirmation write only the
-organization's OpenFGA default; team/personal exception editing and managed
+organization's SQL default; team/personal exception editing and managed
 instances are not connected by this operation. Its Capabilities tab
 ([`OrganizationCapabilities.tsx`](../../apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationCapabilities.tsx))
 reads the stored per-pod inventory (`organization_capabilities`), refreshes it

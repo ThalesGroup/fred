@@ -216,7 +216,7 @@ jobs:
           [
             {"name": "fred-pod", "directory": "libs/fred-pod", "needs-pandoc": false, "integration-target": "",
              "triggers": ["fred-pod"]},
-            {"name": "fred-core", "directory": "libs/fred-core", "needs-pandoc": false, "integration-target": "test-integration",
+            {"name": "fred-core", "directory": "libs/fred-core", "needs-pandoc": false, "integration-target": "",
              "triggers": ["fred-core", "fred-pod"]},
             {"name": "knowledge-flow-backend", "directory": "apps/knowledge-flow-backend", "needs-pandoc": true, "integration-target": "",
              "triggers": ["knowledge-flow", "fred-core", "fred-pod"]},
@@ -359,8 +359,6 @@ jobs:
           uv run --no-sync python ../../scripts/check_pdf_dependencies.py --pymupdf > /tmp/pdf-optional-inventory.json
           uv run --no-sync pytest tests/processors/input/lightweight_markdown_processor tests/processors/input/pdf_markdown_processor tests/processors/input/test_pptx_slide_renderer.py tests/core/test_optional_pdf_dependencies.py -m 'not integration' --disable-socket --allow-unix-socket
 
-      # fred-core only: ReBAC rules are only really covered against a live OpenFGA,
-      # which the target starts and stops via docker compose.
       - name: Run integration tests
         if: ${{ matrix.integration-target != '' }}
         timeout-minutes: 15

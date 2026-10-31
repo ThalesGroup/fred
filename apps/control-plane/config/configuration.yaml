@@ -24,10 +24,6 @@ security:
     client_id: app
   authorized_origins:
     - http://localhost:5173
-  rebac:
-    api_url: "http://localhost:9080"
-    store_name: control-plane
-
 storage:
   # Enable after provisioning a bucket without versioning, Object Lock or lifecycle.
   # content:

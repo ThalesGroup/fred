@@ -80,7 +80,7 @@ async def runtime_stage_timer(
 
     Usage:
         async with runtime_stage_timer(kpi, "pod_authz"):
-            ... do the OpenFGA check ...
+            ... do the authorization check ...
     """
     start = time.monotonic()
     try:

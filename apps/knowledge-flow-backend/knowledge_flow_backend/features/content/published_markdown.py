@@ -19,11 +19,11 @@ from knowledge_flow_backend.security.weaver_admission import _space_error, deleg
 
 
 async def published_markdown(person: AssertedUser, document_uid: str, access: DocumentAccessContext) -> str:
-    await require_space_read(person, access.space_id)
+    authorized_space_ids = await require_space_read(person, access.space_id)
     context = ApplicationContext.get_instance()
     try:
         async with context.get_pg_async_engine().connect() as conn:
-            scope = await resolve_scope(conn, access, user_id=person.uid)
+            scope = await resolve_scope(conn, access, user_id=person.uid, authorized_space_ids=authorized_space_ids)
             try:
                 document_id = UUID(document_uid)
             except ValueError:

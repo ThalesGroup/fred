@@ -61,7 +61,6 @@ applications:
     dotenv:
       KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: ""
       FRED_POSTGRES_PASSWORD: ""
-      OPENFGA_API_TOKEN: ""
 
   knowledge-flow-backend:
     # --- Workload Identity: bind the KSA to a Google service account (GSA) ---
@@ -130,4 +129,3 @@ applications:
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       FRED_POSTGRES_PASSWORD: ""
-      OPENFGA_API_TOKEN: ""

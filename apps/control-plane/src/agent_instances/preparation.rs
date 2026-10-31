@@ -195,12 +195,23 @@ async fn prepare_execution(
     ApiQuery(query): ApiQuery<PreparationQuery>,
     headers: HeaderMap,
 ) -> AppResult<impl IntoResponse> {
-    let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Read).await?;
+    let space = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        &user.uid,
+        space_id,
+        Permission::Read,
+    )
+    .await?;
     super::http::require_instance_space(space.kind)?;
     let initial = super::get_for_space(&s.pool, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !s.fga.can_use_agent(initial.template_id, &space).await? {
+    if !s
+        .authorization
+        .can_use_agent(initial.template_id, &space)
+        .await?
+    {
         return Err(AppError::NotFound);
     }
     let base = public_base(&s.agent_catalog, &initial.source_runtime_id).ok_or_else(|| {
@@ -252,8 +263,19 @@ async fn prepare_execution(
     let model_error = models::preparation_error(&models, model_choice.as_ref());
     tx.commit().await?;
     onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
-    let space = spaces::authorize(&s.pool, &s.fga, &user.uid, space_id, Permission::Read).await?;
-    if !s.fga.can_use_agent(current.template_id, &space).await? {
+    let space = spaces::authorize(
+        &s.pool,
+        &s.authorization,
+        &user.uid,
+        space_id,
+        Permission::Read,
+    )
+    .await?;
+    if !s
+        .authorization
+        .can_use_agent(current.template_id, &space)
+        .await?
+    {
         return Err(AppError::NotFound);
     }
     let models: PreparationModels = models.into();

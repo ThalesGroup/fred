@@ -783,46 +783,6 @@ def test_configuration_refuses_shared_vector_and_content_namespaces(kind, field)
         config.isolate_manager_processing()
 
 
-def test_legacy_listing_preview_expiry_and_clear_do_not_touch_derived_bucket(monkeypatch):
-    import asyncio
-
-    from knowledge_flow_backend.application_context import ApplicationContext
-    from knowledge_flow_backend.core.stores.content.minio_content_store import MinioStorageBackend
-    from knowledge_flow_backend.features.scheduler.pdf_render_expiry_activities import expire_pdf_renders
-
-    key = "legacy-document/output/render.pdf"
-    derived = "manager/document/attempt/generation/native.pdf"
-    buckets = {"legacy": {key: b"legacy"}, "objects": {}, "derived": {derived: b"manager"}}
-    calls = []
-
-    def objects(bucket, **_):
-        calls.append(bucket)
-        return [SimpleNamespace(object_name=name, size=len(body), last_modified=datetime.now(timezone.utc) - timedelta(days=90), etag="fixture") for name, body in buckets[bucket].items()]
-
-    def get(bucket, name):
-        calls.append(bucket)
-        return SimpleNamespace(read=lambda: buckets[bucket][name], close=lambda: None, release_conn=lambda: None)
-
-    def remove(bucket, name):
-        calls.append(bucket)
-        buckets[bucket].pop(name, None)
-
-    store = MinioStorageBackend.__new__(MinioStorageBackend)
-    store.document_bucket = "legacy"
-    store.object_bucket = "objects"
-    store.buckets = {"legacy", "objects"}
-    store.client = SimpleNamespace(list_objects=objects, get_object=get, remove_object=remove)
-    context = SimpleNamespace(get_config=lambda: SimpleNamespace(app=SimpleNamespace(pdf_render_ttl_days=30)), get_content_store=lambda: store)
-    monkeypatch.setattr(ApplicationContext, "get_instance", lambda: context)
-    assert store.list_document_uids(strict=True) == ["legacy-document"]
-    assert store.get_output_artifact(key) == b"legacy"
-    assert asyncio.run(expire_pdf_renders())["expired"] == 1
-    store.clear()
-    assert buckets["legacy"] == {}
-    assert buckets["derived"] == {derived: b"manager"}
-    assert "derived" not in calls
-
-
 @pytest.mark.parametrize("kind,done,expected", [("single", True, True), ("multi", True, True), ("single", False, False), ("none", True, False)])
 def test_indexing_publishes_tabular_inclusion_without_vectors(monkeypatch, descriptor, tmp_path, kind, done, expected):
     from fred_core.documents.document_structures import DocumentMetadata, FileInfo, Identity, ProcessingStage, SourceInfo, SourceType

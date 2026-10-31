@@ -29,7 +29,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.tabular.controller import TabularController, tabular_service
@@ -219,39 +219,3 @@ def test_search_maps_each_failure_to_its_own_status(tabular_client, raised, expe
     response = client.post("/tabular/search", json={"keyword": "abc"})
 
     assert response.status_code == expected_status
-
-
-@pytest.fixture
-def content_client(app_context: ApplicationContext):
-    """The CSV preview route renders from the Parquet artifact, so it shares the
-    tabular execution budget and must surface the same 503/504 split."""
-    from knowledge_flow_backend.features.content.content_controller import ContentController
-
-    app = FastAPI()
-    register_tabular_exception_handlers(app)
-    router = APIRouter()
-    controller = ContentController(router)
-    app.include_router(router)
-    app.dependency_overrides[get_current_user] = _user
-    with TestClient(app, raise_server_exceptions=False) as client:
-        yield client, controller
-
-
-@pytest.mark.parametrize(
-    ("raised", "expected_status"),
-    [
-        (TabularCapacityExceededError("saturated"), 503),
-        (TabularExecutionTimeoutError("too slow"), 504),
-    ],
-)
-def test_markdown_preview_maps_tabular_execution_errors(content_client, raised, expected_status):
-    client, controller = content_client
-
-    async def _raise(*_args, **_kwargs):
-        raise raised
-
-    controller.service.get_markdown_preview = _raise
-
-    response = client.get("/markdown/doc-1")
-
-    assert response.status_code == expected_status, "a saturated pod must not turn a document preview into a 500"

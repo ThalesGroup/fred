@@ -104,19 +104,18 @@ flowchart TB
     end
     cp["Control Plane API"]
     kfa["Knowledge Flow API<br/>Search and content retrieval"]
-    fga["OpenFGA<br/>Space read permission"]
     stores[("Knowledge stores<br/>Index, publication facts and content")]
     ui <-->|"Messages / streamed answers"| agent
     agent -->|"Resolve authorized turn context"| cp
     capability -->|"Delegated identity / bound space"| kfa
-    kfa -->|"Check user's access"| fga
+    kfa -->|"Resolve authorized document scope"| cp
     kfa -->|"Search / verify visibility / retrieve"| stores
 
     classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
     classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
     class ui,agent,capability,cp,kfa fred
-    class fga,stores cots
+    class stores cots
     class pod neutral
 ```
 

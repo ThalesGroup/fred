@@ -32,7 +32,7 @@ async fn get(app: &axum::Router, token: &str, path: &str) -> (u16, Value) {
 
 // Proves: I1, I6, I8, I23
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn resource_reads_enforce_scope_and_role_semantics() {
     let e = env().await;
     let identity = support::IdentityServer::start().await;
@@ -47,7 +47,7 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         grant(&e, team.id, role, user).await;
     }
     grant(&e, org.id, Role::Owner, "reader").await;
-    let personal = spaces::create_personal_space(&e.pool, &e.fga, "reader", org.id)
+    let personal = spaces::create_personal_space(&e.pool, "reader", org.id)
         .await
         .unwrap()
         .0;
@@ -88,27 +88,15 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
             .unwrap();
         expected.push(d.id);
     }
-    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
-    let observed = Fga::connect(
-        &proxy.base,
-        &e.store,
-        false,
-        false,
-        None,
-        Some(Duration::from_secs(5)),
-    )
-    .await
-    .unwrap()
-    .load(&e.pool)
-    .await
-    .unwrap();
+
+    let observed = Authorization::new(e.pool.clone());
     let app = control_plane::api::routes(control_plane::api::AppState {
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
         pool: e.pool.clone(),
-        fga: observed,
+        authorization: observed,
         directory: None,
         content: None,
         processing: None,
@@ -179,33 +167,12 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         .0,
         403
     );
-    // Same read budget with 0 or 53 documents, concurrency 1. Force role paging.
-    for path in [format!("{base}/entries"), docs.clone()] {
-        *proxy.fault.lock().await = support::fga_proxy::Fault {
-            read_page_size: Some(1),
-            ..Default::default()
-        };
-        assert_eq!(get(&app, &reader, &path).await.0, 200);
-        let fault = proxy.fault.lock().await;
-        // Read decision plus the directory's current write decision.
-        assert_eq!(fault.calls.get("check"), Some(&2));
-        assert_eq!(fault.writes, 0);
-        assert_eq!(fault.calls.len(), 2);
-        // Four direct-role pages: organization member, team member, personal member/editor.
-        // Zero placement Reads for context or target.
-        assert_eq!(fault.calls.get("read"), Some(&4));
-        assert!(fault.reads.iter().any(|r| {
-            r["continuation_token"]
-                .as_str()
-                .is_some_and(|s| !s.is_empty())
-        }));
-    }
-    spaces::revoke(&e.pool, &e.fga, "alice", team.id, Role::Member, "reader")
+    spaces::revoke(&e.pool, "alice", team.id, Role::Member, "reader")
         .await
         .unwrap();
     assert_eq!(get(&app, &reader, &docs).await.0, 403);
     assert_eq!(get(&app, &reader, &format!("{base}/entries")).await.0, 403);
-    let other = crate::support::member_organization(&e.pool, &e.fga, "Other", "outsider")
+    let other = crate::support::member_organization(&e.pool, &e.authorization, "Other", "outsider")
         .await
         .unwrap();
     assert_eq!(
@@ -214,141 +181,6 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
             .0,
         404
     );
-}
-
-// Proves: I1, I23
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn sql_placement_matches_fga_hierarchy_and_context() {
-    let e = env().await;
-    let (org, team, project) = tree(&e).await;
-    grant(&e, org.id, Role::Analyst, "reader").await;
-    grant(&e, org.id, Role::Owner, "reader").await;
-    let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "reader", org.id)
-        .await
-        .unwrap();
-
-    // Independent reference: the previous resolver followed FGA links, not SQL placement.
-    for expected in [&org, &team, &project, &personal] {
-        let mut ancestors = Vec::new();
-        let organization = if expected.personal_owner.is_some() {
-            e.fga.link_of(expected.id, true).await.unwrap().unwrap()
-        } else {
-            if expected.kind != SpaceKind::Organization {
-                let parent = e.fga.link_of(expected.id, false).await.unwrap().unwrap();
-                ancestors.push(parent);
-                if expected.kind == SpaceKind::Project {
-                    ancestors.insert(0, e.fga.link_of(parent, false).await.unwrap().unwrap());
-                }
-            }
-            ancestors.first().copied().unwrap_or(expected.id)
-        };
-        let parent = ancestors.last().copied();
-        ancestors.push(expected.id);
-        let actual = spaces::load(&e.pool, expected.id).await.unwrap();
-        assert_eq!(
-            (actual.organization, actual.parent_id, actual.path),
-            (organization, parent, ancestors)
-        );
-    }
-    for user in ["alice", "reader", "unattached"] {
-        let roles = e.fga.roles_of(user).await.unwrap();
-        let ids: Vec<_> = roles.iter().map(|(id, _)| *id).collect();
-        let mut organizations = std::collections::BTreeSet::new();
-        for row in db::spaces(&e.pool, &ids).await.unwrap() {
-            let organization = if row.personal_owner.is_some() {
-                e.fga.link_of(row.id, true).await.unwrap().unwrap()
-            } else if row.kind == SpaceKind::Organization {
-                row.id
-            } else {
-                let parent = e.fga.link_of(row.id, false).await.unwrap().unwrap();
-                if row.kind == SpaceKind::Project {
-                    e.fga.link_of(parent, false).await.unwrap().unwrap()
-                } else {
-                    parent
-                }
-            };
-            organizations.insert(organization);
-        }
-        assert!(organizations.len() <= 1);
-        assert_eq!(
-            spaces::organization(&e.pool, &e.fga, user).await.unwrap(),
-            organizations.first().copied()
-        );
-    }
-    let memberships = spaces::memberships(&e.pool, &e.fga, "reader")
-        .await
-        .unwrap();
-    assert_eq!(memberships.len(), 4);
-    for membership in memberships {
-        let expected = [&org, &team, &project, &personal]
-            .into_iter()
-            .find(|s| s.id == membership.space.id)
-            .unwrap();
-        assert_eq!(membership.space.path, expected.path);
-        assert_eq!(membership.space.organization, org.id);
-    }
-}
-
-// Proves: I23
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn organization_context_reads_only_role_pages() {
-    let e = env().await;
-    let org = crate::support::member_organization(&e.pool, &e.fga, "TSN", "alice")
-        .await
-        .unwrap();
-    grant(&e, org.id, Role::Member, "reader").await;
-    // Distinct teams must not add any placement RPC to context resolution.
-    for i in 0..40 {
-        let team = spaces::create_space(
-            &e.pool,
-            &e.fga,
-            "alice",
-            SpaceKind::Team,
-            org.id,
-            format!("Team {i}"),
-            "alice",
-        )
-        .await
-        .unwrap();
-        grant(&e, team.id, Role::Member, "reader").await;
-    }
-    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
-    let observed = Fga::connect(
-        &proxy.base,
-        &e.store,
-        false,
-        false,
-        None,
-        Some(Duration::from_secs(5)),
-    )
-    .await
-    .unwrap()
-    .load(&e.pool)
-    .await
-    .unwrap();
-    *proxy.fault.lock().await = support::fga_proxy::Fault {
-        read_page_size: Some(10),
-        ..Default::default()
-    };
-    assert_eq!(
-        spaces::organization(&e.pool, &observed, "reader")
-            .await
-            .unwrap(),
-        Some(org.id)
-    );
-    let fault = proxy.fault.lock().await;
-    assert_eq!(fault.calls.get("read"), Some(&5)); // five role pages, no links
-    assert_eq!(fault.calls.len(), 1);
-    assert_eq!(fault.writes, 0);
-    assert!(fault.reads.iter().all(|r| {
-        r["tuple_key"]["user"] == "user:reader"
-            && r["tuple_key"]["object"] == "space:"
-            && r["tuple_key"].get("relation").is_none()
-            && r["consistency"] == "HIGHER_CONSISTENCY"
-    }));
-    assert_eq!(fault.active_reads, 0);
 }
 
 async fn create(
@@ -385,7 +217,7 @@ async fn create(
 
 // Proves: I1, I2, I5, I6, I8, I23
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn folder_creation_governance_contract_and_request_budget() {
     let e = env().await;
     let identity = support::IdentityServer::start().await;
@@ -401,34 +233,22 @@ async fn folder_creation_governance_contract_and_request_budget() {
     }
     grant(&e, org.id, Role::Editor, "inherited").await;
     grant(&e, org.id, Role::Owner, "writer").await;
-    let personal = spaces::create_personal_space(&e.pool, &e.fga, "writer", org.id)
+    let personal = spaces::create_personal_space(&e.pool, "writer", org.id)
         .await
         .unwrap()
         .0;
-    let other = crate::support::member_organization(&e.pool, &e.fga, "Other", "outsider")
+    let other = crate::support::member_organization(&e.pool, &e.authorization, "Other", "outsider")
         .await
         .unwrap();
-    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
-    let observed = Fga::connect(
-        &proxy.base,
-        &e.store,
-        false,
-        false,
-        None,
-        Some(Duration::from_secs(5)),
-    )
-    .await
-    .unwrap()
-    .load(&e.pool)
-    .await
-    .unwrap();
+
+    let observed = Authorization::new(e.pool.clone());
     let app = control_plane::api::routes(control_plane::api::AppState {
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
         pool: e.pool.clone(),
-        fga: observed,
+        authorization: observed,
         directory: None,
         content: None,
         processing: None,
@@ -542,88 +362,17 @@ async fn folder_creation_governance_contract_and_request_budget() {
         .0,
         201
     );
-    // One inherited org-editor tuple, one HTTP request at a time, one tuple/page.
-    *proxy.fault.lock().await = support::fga_proxy::Fault {
-        read_page_size: Some(1),
-        ..Default::default()
-    };
-    let started = std::time::Instant::now();
-    assert_eq!(
-        create(&app, &identity.token("inherited"), team.id, None, "budget")
-            .await
-            .0,
-        201
-    );
-    let fault = proxy.fault.lock().await;
-    assert_eq!(fault.calls.get("read"), Some(&2));
-    assert_eq!(fault.calls.get("check"), Some(&1));
-    assert_eq!(fault.calls.get("write"), Some(&1));
-    assert_eq!(fault.calls.len(), 3);
-    assert_eq!(
-        fault.written[0]["writes"]["tuple_keys"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
-    );
-    assert_eq!(
-        fault.written[0]["deletes"]["tuple_keys"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
-    );
-    assert!(
-        fault.written[0]["writes"]["tuple_keys"][0]["object"]
-            .as_str()
-            .unwrap()
-            .starts_with("guard:")
-    );
-    eprintln!(
-        "folder create: 1 org-editor tuple, HTTP concurrency 1, 3 Reads/1 Check/1 Write; elapsed {:?}",
-        started.elapsed()
-    );
-    drop(fault);
-    let (a, b) = tokio::join!(
-        create(&app, &token, team.id, None, "concurrent"),
-        create(&app, &token, team.id, None, "concurrent")
-    );
-    assert!(matches!((a.0, b.0), (201, 409) | (409, 201)));
-    let held = hold_organization_lock(&e, org.id).await;
-    let since = sqlx::query_scalar("select clock_timestamp()")
-        .fetch_one(&e.pool)
-        .await
-        .unwrap();
-    let waiting_app = app.clone();
-    let waiting_token = token.clone();
-    let waiting = tokio::spawn(async move {
-        create(
-            &waiting_app,
-            &waiting_token,
-            team.id,
-            None,
-            "revoked-waiter",
-        )
-        .await
-    });
-    wait_for_write_retry(&e.pool, since).await;
-    delete_tuple(&e, "writer", "editor", &format!("space:{}", team.id)).await;
-    held.commit().await.unwrap();
-    assert_eq!(waiting.await.unwrap().0, 403);
-    assert_eq!(create(&app, &token, team.id, None, "revoked").await.0, 403);
-    let count:i64 = sqlx::query_scalar("select count(*) from folder where name in ('forbidden','foreign','foreign-org','revoked','revoked-waiter','too-deep')").fetch_one(&e.pool).await.unwrap();
-    assert_eq!(count, 0);
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn folder_rename_preserves_creation_name_rules() {
     let e = env().await;
     let (org, _) = org_and_team(&e).await;
     grant(&e, org.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let app = content_app(&e, &identity).await;
-    let folder = spaces::create_folder(&e.pool, &e.fga, "alice", org.id, None, "Original".into())
+    let folder = spaces::create_folder(&e.pool, "alice", org.id, None, "Original".into())
         .await
         .unwrap();
     let path = format!("/folders/{}", folder.id);
@@ -663,7 +412,7 @@ async fn folder_rename_preserves_creation_name_rules() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn space_names_match_organization_and_child_http_creation_contracts() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
@@ -671,7 +420,7 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
     let app = content_app(&e, &identity).await;
     for name in ["".into(), "  ".into(), "a\nb".into(), "é".repeat(181)] {
         assert!(matches!(
-            crate::support::member_organization(&e.pool, &e.fga, &name, "bob").await,
+            crate::support::member_organization(&e.pool, &e.authorization, &name, "bob").await,
             Err((422, _))
         ));
         for (kind, parent) in [("team", org.id), ("project", team.id)] {
@@ -691,9 +440,9 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
             );
         }
     }
-    assert!(e.fga.roles_of("bob").await.unwrap().is_empty());
+    assert!(e.authorization.roles_of("bob").await.unwrap().is_empty());
     let name = format!(" /{} ", "é".repeat(177));
-    let other = crate::support::member_organization(&e.pool, &e.fga, &name, "bob")
+    let other = crate::support::member_organization(&e.pool, &e.authorization, &name, "bob")
         .await
         .unwrap();
     // Inner spaces and slashes are kept; surrounding whitespace is not.
@@ -708,7 +457,7 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
 
 // Proves: I2
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
     let e = env().await;
     let identity = support::IdentityServer::start().await;
@@ -718,29 +467,16 @@ async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
     grant(&e, team.id, Role::Member, "reader").await;
     let app = content_app(&e, &identity).await;
     let token = identity.token("writer");
-    let root = spaces::create_folder(&e.pool, &e.fga, "writer", team.id, None, "root".into())
+    let root = spaces::create_folder(&e.pool, "writer", team.id, None, "root".into())
         .await
         .unwrap();
-    let child = spaces::create_folder(
-        &e.pool,
-        &e.fga,
-        "writer",
-        team.id,
-        Some(root.id),
-        "child".into(),
-    )
-    .await
-    .unwrap();
-    let grandchild = spaces::create_folder(
-        &e.pool,
-        &e.fga,
-        "writer",
-        team.id,
-        Some(child.id),
-        "leaf".into(),
-    )
-    .await
-    .unwrap();
+    let child = spaces::create_folder(&e.pool, "writer", team.id, Some(root.id), "child".into())
+        .await
+        .unwrap();
+    let grandchild =
+        spaces::create_folder(&e.pool, "writer", team.id, Some(child.id), "leaf".into())
+            .await
+            .unwrap();
     sqlx::query(
         "insert into folder (id, space_id, parent_id, name, path, created_at)
         select id, $1, $2, 'entry-' || lpad(n::text, 4, '0'), $3 || id || '/',

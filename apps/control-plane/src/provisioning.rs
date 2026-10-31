@@ -15,12 +15,12 @@
 //! Additive provisioning. Preflight is read-only; each identity mutation holds the
 //! platform lock, and space reconciliation holds platform then organization locks.
 //! No distributed rollback: replay resolves identities and committed IDs. The caller
-//! authenticates the operator once; each mutation boundary rechecks OpenFGA authority.
+//! authenticates the operator once; each mutation boundary rechecks SQL authority.
 
 use crate::{
+    authorization::{self, Authorization},
     bootstrap, db,
     domain::{Role, Space, SpaceKind, SpaceRow},
-    fga::{Fga, Guard, Link, Scope, Tuple},
     keycloak::Directory,
     logging, platform, spaces,
 };
@@ -42,11 +42,7 @@ pub struct Failure {
 impl Failure {
     fn at(phase: &str, error: anyhow::Error, report: &Report) -> Self {
         use axum::http::StatusCode as S;
-        let status = if error.is::<crate::fga::Conflict>() {
-            S::CONFLICT
-        } else if error.is::<crate::fga::InvalidTuple>() {
-            S::UNPROCESSABLE_ENTITY
-        } else if let Some(e) = error.downcast_ref::<AppError>() {
+        let status = if let Some(e) = error.downcast_ref::<AppError>() {
             match e {
                 AppError::Forbidden | AppError::Denied(_) => S::FORBIDDEN,
                 AppError::BadRequest(_) | AppError::Unprocessable(_) => S::UNPROCESSABLE_ENTITY,
@@ -116,7 +112,7 @@ impl std::fmt::Display for Report {
 
 pub struct Importer<'a> {
     pub pool: &'a PgPool,
-    pub fga: &'a Fga,
+    pub authorization: &'a Authorization,
     pub directory: &'a Directory,
     /// Operator uid, authenticated at admission against the directory's realm.
     pub operator: &'a str,
@@ -125,7 +121,7 @@ impl Importer<'_> {
     /// Recheck platform administration at every mutation boundary, including after lock waits;
     /// bearer expiry after admission does not bound the import's duration.
     async fn authorize(&self) -> Result<()> {
-        platform::require_admin(self.fga, self.operator).await?;
+        platform::require_admin(self.authorization, self.operator).await?;
         Ok(())
     }
 
@@ -156,9 +152,9 @@ impl Importer<'_> {
             }
         }
         let mut tx = bootstrap::locked(self.pool).await?;
-        self.authorize().await?;
+        platform::require_admin_locked(&mut tx, self.operator).await?;
         let resolved = self.resolve_spaces(&mut tx, bundle).await?;
-        self.validate_parents(bundle, &resolved, &subjects, None)
+        self.validate_parents(&mut tx, bundle, &resolved, &subjects, None)
             .await?;
         self.validate_organizations(&mut tx, bundle, &resolved, &subjects, None)
             .await?;
@@ -167,7 +163,7 @@ impl Importer<'_> {
     }
 
     /// Resolve organization names under the platform lock, then lock every organization
-    /// in UUID order and resolve children among their parent's OpenFGA children. The
+    /// in UUID order and resolve children from SQL placement. The
     /// returned IDs are candidates until the enclosing SQL commit.
     async fn resolve_spaces(
         &self,
@@ -198,7 +194,11 @@ impl Importer<'_> {
                             return Err(conflict("space is pending deletion"));
                         }
                         if let btree_map::Entry::Vacant(slot) = children.entry(parent.id) {
-                            let ids = self.fga.linked_to(parent.id, false).await?;
+                            let ids: Vec<Uuid> =
+                                sqlx::query_scalar("select id from space where parent_id=$1")
+                                    .bind(parent.id)
+                                    .fetch_all(&mut **tx)
+                                    .await?;
                             slot.insert(db::spaces(&mut **tx, &ids).await?);
                         }
                         children[&parent.id]
@@ -259,6 +259,7 @@ impl Importer<'_> {
 
     async fn validate_parents(
         &self,
+        tx: &mut Transaction<'_, Postgres>,
         bundle: &Bundle,
         resolved: &[(Space, bool)],
         subjects: &BTreeMap<String, String>,
@@ -286,11 +287,10 @@ impl Importer<'_> {
                 }
                 let allowed =
                     if let Some(subject) = subjects.get(username).filter(|_| !resolved[p].1) {
-                        self.fga
-                            .direct_roles_on(subject, resolved[p].0.id)
+                        authorization::roles_of(&mut **tx, subject)
                             .await?
                             .iter()
-                            .any(|r| r.grants_content())
+                            .any(|(id, role)| *id == resolved[p].0.id && role.grants_content())
                     } else {
                         false
                     };
@@ -332,7 +332,7 @@ impl Importer<'_> {
                 continue;
             }
             if let Some(subject) = subjects.get(username) {
-                spaces::may_attach(&mut **tx, self.fga, subject, organization).await?;
+                spaces::may_attach(&mut **tx, subject, organization).await?;
             }
         }
         Ok(())
@@ -348,11 +348,10 @@ impl Importer<'_> {
         let mut subjects = BTreeMap::new();
         for entry in &bundle.users {
             let result = async {
-                let tx = bootstrap::locked(self.pool).await?;
-                let mut guard = self.fga.guard(&[Scope::Platform]).await?;
-                self.authorize().await?;
+                let mut tx = bootstrap::locked(self.pool).await?;
+                platform::require_admin_locked(&mut tx, self.operator).await?;
                 // Authorize external dispatch; a timeout is not remote rollback.
-                self.fga.fence(&mut guard).await?;
+
                 let user = &entry.identity;
                 let (resolved, created) = self
                     .directory
@@ -386,16 +385,15 @@ impl Importer<'_> {
         report: &mut Report,
     ) -> Result<()> {
         let mut tx = bootstrap::locked(self.pool).await?;
-        self.authorize().await?;
+        platform::require_admin_locked(&mut tx, self.operator).await?;
         let resolved = self.resolve_spaces(&mut tx, bundle).await?;
-        // Whole-bundle checks precede publication; each subtree is checked again
-        // after capturing its guard, so a late revoke cannot invalidate the decision.
-        self.validate_parents(bundle, &resolved, subjects, None)
+        // Validate the whole bundle under the same locks as its writes.
+        self.validate_parents(&mut tx, bundle, &resolved, subjects, None)
             .await?;
         self.validate_organizations(&mut tx, bundle, &resolved, subjects, None)
             .await?;
         // Verify every admin before publishing any subtree. External IAM deletion is
-        // not transactional with OpenFGA; this is an existence check, not an account lease.
+        // not transactional with PostgreSQL; this is an existence check, not an account lease.
         let admins: std::collections::BTreeSet<_> = bundle
             .spaces
             .iter()
@@ -415,116 +413,41 @@ impl Importer<'_> {
                 ensure!(result??, "identity disappeared before admin grant");
             }
         }
-        for (org, is_new) in resolved
-            .iter()
-            .filter(|(s, _)| s.kind == SpaceKind::Organization)
-        {
+        for (declaration, (space, is_new)) in bundle.spaces.iter().zip(&resolved) {
             if *is_new {
-                self.fga
-                    .initialize_guard(Scope::Organization(org.id))
-                    .await?;
+                db::insert_space(&mut tx, space).await?;
             }
-            let mut guard = self
-                .fga
-                .guard(&[Scope::Platform, Scope::Organization(org.id)])
-                .await?;
-            self.authorize().await?;
-            self.validate_parents(bundle, &resolved, subjects, Some(org.id))
-                .await?;
-            self.validate_organizations(&mut tx, bundle, &resolved, subjects, Some(org.id))
-                .await?;
-            let mut wrote = false;
-            for (declaration, (space, is_new)) in bundle
-                .spaces
-                .iter()
-                .zip(&resolved)
-                .filter(|(_, (s, _))| s.organization == org.id)
-            {
-                let mut link = None;
-                if *is_new {
-                    db::insert_space(&mut tx, space).await?;
-                    link = space.parent_id.map(|parent| Link::Parent {
-                        child: space.id,
-                        parent,
-                    });
-                }
-                let grants: Vec<_> = declaration
-                    .roles
-                    .iter()
-                    .flat_map(|(username, roles)| {
-                        let user = subjects[username].as_str();
-                        roles.iter().map(move |role| Tuple {
-                            user,
-                            role: *role,
-                            space: space.id,
-                        })
-                    })
-                    .collect();
-                wrote |= link.is_some() || !grants.is_empty();
-                self.grant_spaces(&mut guard, link, &grants, report).await?;
-            }
-            if !wrote {
-                self.fga.fence(&mut guard).await?;
-            }
-        }
-        if bundle.users.iter().any(|e| !e.platform.is_empty()) {
-            let mut guard = self.fga.guard(&[Scope::Platform]).await?;
-            for entry in &bundle.users {
-                for role in &entry.platform {
-                    self.authorize().await?;
-                    let user = &subjects[&entry.identity.username];
-                    ensure!(
-                        self.directory.exists(user).await?,
-                        "identity disappeared before platform grant"
-                    );
-                    self.fga
-                        .write_platform(&mut guard, user, *role, true)
-                        .await?;
+            for (username, roles) in &declaration.roles {
+                let subject = &subjects[username];
+                for role in roles {
+                    authorization::write_role(&mut tx, subject, *role, space.id, true).await?;
                     report.grants_acknowledged += 1;
                     logging::audit_relation(
                         Some(self.operator),
-                        user,
-                        role.relation(),
-                        "platform:root",
+                        subject,
+                        role.as_str(),
+                        &format!("space:{}", space.id),
                         true,
                     );
                 }
             }
         }
-        tx.commit().await?;
-        report.spaces_reconciled = resolved.len();
-        Ok(())
-    }
-
-    async fn grant_spaces(
-        &self,
-        guard: &mut Guard,
-        mut link: Option<Link>,
-        tuples: &[Tuple<'_>],
-        report: &mut Report,
-    ) -> Result<()> {
-        // Two scopes consume four operations in OpenFGA's 100-operation transaction.
-        // A new space's link shares its first batch. Acknowledged revisions carry
-        // forward; any failed batch invalidates the attempt.
-        let mut rest = tuples;
-        while link.is_some() || !rest.is_empty() {
-            let room = 96 - usize::from(link.is_some());
-            let (batch, tail) = rest.split_at(room.min(rest.len()));
-            rest = tail;
-            self.authorize().await?;
-            let links: Vec<Link> = link.take().into_iter().collect();
-            self.fga.write_created(guard, &links, batch).await?;
-            report.grants_acknowledged += batch.len();
-            for tuple in batch {
+        for entry in &bundle.users {
+            for role in &entry.platform {
+                let subject = &subjects[&entry.identity.username];
+                authorization::write_platform(&mut tx, subject, *role, true).await?;
+                report.grants_acknowledged += 1;
                 logging::audit_relation(
                     Some(self.operator),
-                    tuple.user,
-                    tuple.role.as_str(),
-                    &format!("space:{}", tuple.space),
+                    subject,
+                    role.relation(),
+                    "platform:root",
                     true,
                 );
             }
         }
+        tx.commit().await?;
+        report.spaces_reconciled = resolved.len();
         Ok(())
     }
 }

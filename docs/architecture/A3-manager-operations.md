@@ -27,9 +27,9 @@ Structured stdout, in the format shared by Fred's services.
 - Acknowledged role writes emit one `authz.relation.granted` or `authz.relation.revoked`
   on `fred.security.audit`, with `actor_uid` when known, `subject`, `relation`,
   `resource` and `outcome: succeeded`; no other event carries those names. Revoking a
-  role that is not held advances the guard but emits nothing. This stream is always JSON and includes INFO
+  role that is not held emits nothing. This stream is always JSON and includes INFO
   even when the application threshold is WARNING or ERROR. Events precede SQL commit:
-  an acknowledged FGA write remains auditable when SQL commit fails (I16).
+  role changes remain auditable alongside their SQL transaction (I16).
 - A changed personal acceptance emits `terms.accepted` on `fred.security.audit`
   with `actor_uid`, `version` and `outcome: succeeded`, after SQL persistence.
   Repeating an existing acceptance emits no new event.
@@ -72,7 +72,7 @@ multi-organization mode. Manager blocks business context instead of choosing one
 An attachment conflict during import is reported through the sanitized preflight
 or roles/spaces error and existing acknowledgment counters.
 
-Inspect the subject's direct OpenFGA roles and the committed SQL spaces, including
+Inspect the subject's direct SQL roles and the committed SQL spaces, including
 personal links and governance-only roles. Agree the intended organization, then
 have owners authorized in each affected organization revoke its unwanted
 grants bottom-up:
@@ -84,7 +84,7 @@ No role or content is deleted automatically, and granting platform administratio
 not bypass content or ordinary space-administration checks.
 
 Upgrade all manager role writers together; an old writer can still create conflicting
-data. There is no SQL/FGA schema migration for this rule. Deployment and rollback
+data. There is no SQL schema migration for this rule. Deployment and rollback
 steps are in the [migration note](../swift/ops/migrations/rust-control-plane.md).
 
 ## Configuration
@@ -103,7 +103,6 @@ secrets and the two token-time settings below, and never overrides the process e
 | Secret | Read from |
 | --- | --- |
 | `FRED_POSTGRES_PASSWORD` | process or `.env` |
-| `OPENFGA_API_TOKEN` | the variable `security.rebac.token_env_var` names |
 | `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` (host default), `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` (chart) | the variable `security.m2m.secret_env_var` names |
 | `FRED_BOOTSTRAP_TOKEN` | the variable `app.bootstrap_token_env_var` names |
 | `FRED_CONTENT_ACCESS_KEY`, `FRED_CONTENT_SECRET_KEY` | variables named by `storage.content.access_key_env_var` and `secret_key_env_var`, when content is configured |
@@ -138,10 +137,6 @@ security:
     client_id: app
   authorized_origins:
     - http://localhost:5173
-  rebac:
-    api_url: "http://localhost:9080"
-    store_name: control-plane
-
 storage:
   # Enable after provisioning a bucket without versioning, Object Lock or lifecycle.
   # content:
@@ -248,9 +243,7 @@ as compensation.
 ## Deployment topology
 
 Both stories run against the infrastructure of fred-deployment-factory. control-plane
-requires its SQL migrations to be applied before startup and initializes its
-OpenFGA store at startup; the Keycloak
-realm starts empty.
+requires its SQL migrations to be applied before startup; the Keycloak realm starts empty.
 
 ```mermaid
 flowchart LR
@@ -261,7 +254,6 @@ flowchart LR
     subgraph infra [docker-up or k3d-up]
         pg[("Postgres :5432")]
         kc["Keycloak :8080"]
-        fga["OpenFGA :9080"]
         tmp["Temporal :7233"]
     end
     subgraph cluster [k3d namespace fred]
@@ -269,10 +261,10 @@ flowchart LR
         secrets[["fred-secrets"]]
         traefik["Traefik :8088<br/>/control-plane"]
     end
-    run --> pg & kc & fga
+    run --> pg & kc
     run --> tmp
     browser --> traefik --> pod
-    secrets -. "POSTGRES_FRED_PASSWORD,<br/>OPENFGA_API_TOKEN,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN,<br/>KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET" .-> pod
+    secrets -. "POSTGRES_FRED_PASSWORD,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN,<br/>KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET" .-> pod
 ```
 
 | | Host run | k3d release |
@@ -280,7 +272,7 @@ flowchart LR
 | Start | `make run` in `apps/control-plane` | `make k3d-app APP=fred DIR=../fred` in the factory |
 | Configuration | `config/configuration.yaml`, `log_format: text` | values `configuration`, rendered to ConfigMap `control-plane-backend-back`, `log_format: json` |
 | Secrets | `config/.env` | `fred-secrets`, as `extraEnvVars` |
-| Addresses | `localhost` ports | `postgres`, `openfga:9080`, `temporal:7233`, `keycloak:8080` |
+| Addresses | `localhost` ports | `postgres`, `temporal:7233`, `keycloak:8080` |
 | Token issuer accepted | `http://localhost:8080/realms/app` | `http://keycloak:8080/realms/app` (hosts entry `127.0.0.1 keycloak`) |
 | Public URL | `http://localhost:8222/control-plane/v1` | `http://localhost:8088/control-plane/v1` |
 | Bootstrap secret | `FRED_BOOTSTRAP_TOKEN` in `.env` | `CONTROL_PLANE_BOOTSTRAP_TOKEN` of `fred-secrets`, generated with the cluster |
@@ -291,8 +283,7 @@ configuration through its generated Rust schema. `generate-config-schema` runs
 offline; `make generate-chart-schema` embeds the application contracts.
 
 The image (`dockerfiles/Dockerfile-prod`) builds the release binary with `protoc` and
-`libprotobuf-dev`, then runs it as user 1000 on Debian slim; migrations and the OpenFGA
-model are compiled into the binary.
+`libprotobuf-dev`, then runs it as user 1000 on Debian slim; migrations are compiled into the binary.
 
 The factory's standard `control-plane` confidential client has the
 `realm-management/query-users`, `view-users` and `manage-users` grants. The cluster
@@ -348,8 +339,7 @@ redeploy through the existing application command. Additive changes can preserve
 compatibility with the previous running application. Data transformations,
 constraint changes and destructive DDL need their own explicit deployment and
 recovery procedure: neither SQLx history nor rolling back an image restores lost
-data. OpenFGA model publication has its separate lifecycle below; an additive SQL
-migration does not require resetting its store.
+data.
 
 These read-only queries inspect an installation without reading user profiles or
 document contents. Run them in the configured control-plane database (`fred` in
@@ -383,10 +373,9 @@ reference through the dossier generator.
 ## Running provisioning
 
 Apply SQL migrations with the migration Job or `control-plane migrate`, then start
-the compatible service to initialize the extended FGA model. Accept CGU and
-complete root bootstrap in the UI. CLI import itself never migrates SQL, creates a store
-or synchronizes a model. It needs Postgres, OpenFGA and Keycloak; it does not need the
-HTTP server or Temporal to remain running. It loads the published store/model IDs.
+the service. Accept CGU and complete root bootstrap in the UI. CLI import itself
+never migrates SQL. It needs PostgreSQL and Keycloak; it does not need the HTTP
+server or Temporal to remain running.
 
 From `apps/control-plane`, with the directory client configured and an operator access
 token in a private file:
@@ -439,14 +428,11 @@ or `extraEnvVars` override them, including for a custom cluster DNS domain.
 Access logs retain the bounded `control-plane` route family without paths, tokens
 or upload contents. UI components and generated API paths are unchanged.
 
-## Authorization store publication
+## Authorization initialization
 
-`sync_schema_on_init` allows initialization of an empty installation only. An
-existing binding pins its model; a published model that differs from the binary's
-model is refused.
-Concurrent initializers converge. Ordinary loads and CLI import never
-synchronize models; changed logical store names and existing data without
-publication are refused.
+The SQL schema owns direct grants and template policy. Startup applies the fresh
+schema; first-user bootstrap records the administrator and completion atomically.
+There is no separate authorization model, store publication or service token.
 
 ## First-user application entry
 
@@ -493,7 +479,7 @@ due time is an earliest cleanup time. Disabling every worker prevents cleanup an
 pauses its schedule when Temporal is reachable. Settings load at process startup.
 
 A sweep selects at most `batch_size` operations and performs one successful batch
-per selected operation. This is not a throughput limit in folders or tuples per
+per selected operation. This is not a throughput limit in folders or spaces per
 minute. For an operation needing `B` successful batches and interval `I`, with no
 backlog, failures or overlap skips, completion after its due time takes roughly
 `delta + (B - 1) * I` plus execution time, where `delta` is the wait for the first
@@ -503,26 +489,16 @@ within the same sweep; outages and long sweeps can extend the delay without boun
 The worker purges documents marked by its operation once their derived results
 are cleaned, before folders and spaces; it never deletes an unmarked document.
 
-Folder batches remove at most 1000 current leaves. A chain of 15 folders therefore
-needs 15 successful folder batches, followed by tuple cleanup and a separate SQL
-space-removal batch. For one space with at most 96 direct tuples, this is at least
-17 batches: about 160-170 minutes after its due time with PT10M, before additional
-backlog or failure delay. Descendant spaces add their own batches. A person's
-organization attachment persists while their direct roles on remaining retired
-rows exist; it can end before the whole operation completes. Names remain reserved
-until their corresponding SQL rows are removed.
-
-Cleanup also drains SQL-absent descendants left by aborted creations or imports
-when they remain linked to the retired space. It removes their grants and descendants
-before removing the placement link in a separate batch. These extra batches add
-sweep intervals but do not increment `spaces_deleted`. No global orphan scan runs;
-committed spaces outside the retired manifest are preserved.
+Folder and descendant-space batches add sweep intervals. Direct grants disappear
+with their SQL space. Organization attachment persists while roles on retired rows
+remain, and names remain reserved until the corresponding rows are removed.
+Creation and role publication are atomic, so cleanup has no remote orphan tuples
+to discover or repair.
 
 Inspect safe errors through the receipt. `unsupported_documents` requires resolving
 unexpected document metadata through its owning lifecycle; `unexpected_reference`
 or `unexpected_hierarchy` requires reconciling the scope before retry.
-`dependency_unavailable` retries; missing organization guards require operator
-reconciliation unless only final root removal remains. No content-store cleanup is
+`dependency_unavailable` retries the transaction. No content-store cleanup is
 claimed. `make test-lifecycle-temporal` verifies HTTP acceptance, a real worker restart,
 schedule reuse, history replay, SIGTERM during a SQL lock wait and exhausted-retry
 recovery against disposable services.
@@ -630,7 +606,7 @@ policy does not pin the installed Python implementation.
 ## Complete local ingestion profile
 
 The [k3d entry point](../../deploy/k3d/README.md) uses the factory's complete
-`manager-ingestion.yaml` profile, including retained SQL/FGA/identity/model
+`manager-ingestion.yaml` profile, including retained SQL/identity/model
 references. Its prepare hook renders the effective worker configuration, exports
 from the selected image without service secrets and applies the contract ConfigMap.
 The image ID, configuration and export determine a digest recorded on the

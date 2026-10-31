@@ -140,10 +140,15 @@ async fn request(
         serde_json::from_slice(&bytes).unwrap_or(Value::Null),
     )
 }
-async fn app(e: &Env, identity: &support::IdentityServer, catalog: &Catalog, fga: Fga) -> Router {
+async fn app(
+    e: &Env,
+    identity: &support::IdentityServer,
+    catalog: &Catalog,
+    authorization: Authorization,
+) -> Router {
     routes(AppState {
         pool: e.pool.clone(),
-        fga,
+        authorization,
         agent_catalog: catalog.config(),
         auth: Arc::new(identity.auth().await),
         directory: Some(identity.directory()),
@@ -155,11 +160,14 @@ async fn app(e: &Env, identity: &support::IdentityServer, catalog: &Catalog, fga
 }
 async fn enable(e: &Env, org: Uuid, key: &str, on: bool) -> Uuid {
     let id = template_id(org, "fixture", key);
-    let mut guard = e.fga.guard(&[Scope::Organization(org)]).await.unwrap();
-    e.fga
-        .set_agent_default_on(&mut guard, org, id, on)
-        .await
-        .unwrap();
+    control_plane::authorization::set_agent_default_on(
+        &mut e.pool.acquire().await.unwrap(),
+        org,
+        id,
+        on,
+    )
+    .await
+    .unwrap();
     id
 }
 /// Offers are denied by default; seed one observed offer enabled for `org`.
@@ -222,14 +230,14 @@ async fn create(
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn instances_round_trip_validation_and_saved_snapshot() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
     enable_capability(&e, org.id, "tool").await;
     let (status, templates) = request(
@@ -548,14 +556,14 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn instances_capabilities_and_profiles_fail_explicitly() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Existing")).await;
     // Metadata edits preserve opaque, not-yet-connected saved settings.
@@ -702,14 +710,14 @@ async fn instances_capabilities_and_profiles_fail_explicitly() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn instances_discovery_concurrency_rechecks_and_isolation() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = Arc::new(support::IdentityServer::start().await);
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Existing")).await;
     for actor in [None, Some("stranger")] {
@@ -760,7 +768,7 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
             403
         );
     }
-    let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "alice", org.id)
+    let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
         .await
         .unwrap();
     let personal_instance =
@@ -790,12 +798,11 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
         .await,
         (200, json!([personal_instance]))
     );
-    let other = support::member_organization(&e.pool, &e.fga, "Other", "bob")
+    let other = support::member_organization(&e.pool, &e.authorization, "Other", "bob")
         .await
         .unwrap();
     let other_team = spaces::create_space(
         &e.pool,
-        &e.fga,
         "bob",
         SpaceKind::Team,
         other.id,
@@ -806,7 +813,6 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
     .unwrap();
     spaces::grant(
         &e.pool,
-        &e.fga,
         &e.subjects(),
         "bob",
         other_team.id,
@@ -965,21 +971,19 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
 
 // Proves: I24
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn instances_retention_and_exact_space_purge() {
     use control_plane::lifecycle::{Lifecycle, Status, cleanup, store};
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
-    bootstrap::grant_root(&e.pool, &e.fga, "root")
-        .await
-        .unwrap();
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let identity = Arc::new(support::IdentityServer::start().await);
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Retained")).await;
-    let (personal, _) = spaces::create_personal_space(&e.pool, &e.fga, "alice", org.id)
+    let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
         .await
         .unwrap();
     let other = create(
@@ -1014,12 +1018,12 @@ async fn instances_retention_and_exact_space_purge() {
         .await
         .unwrap();
     let receipt = lifecycle
-        .accept(&e.pool, &e.fga, "root", team.id)
+        .accept(&e.pool, &e.authorization, "root", team.id)
         .await
         .unwrap();
     gate.release.notify_one();
     assert_eq!(pending.await.unwrap().0, 409);
-    cleanup::batch(&e.pool, &e.fga, receipt.id).await.unwrap();
+    cleanup::batch(&e.pool, receipt.id).await.unwrap();
     assert_eq!(
         storage::list_by_space(&e.pool, team.id)
             .await
@@ -1061,8 +1065,8 @@ async fn instances_retention_and_exact_space_purge() {
         .await
         .unwrap();
     for _ in 0..100 {
-        cleanup::batch(&e.pool, &e.fga, receipt.id).await.unwrap();
-        if store::status(&e.pool, &e.fga, "root", receipt.id)
+        cleanup::batch(&e.pool, receipt.id).await.unwrap();
+        if store::status(&e.pool, &e.authorization, "root", receipt.id)
             .await
             .unwrap()
             .status
@@ -1072,7 +1076,7 @@ async fn instances_retention_and_exact_space_purge() {
         }
     }
     assert_eq!(
-        store::status(&e.pool, &e.fga, "root", receipt.id)
+        store::status(&e.pool, &e.authorization, "root", receipt.id)
             .await
             .unwrap()
             .status,
@@ -1091,177 +1095,7 @@ async fn instances_retention_and_exact_space_purge() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
-async fn instances_list_deduplicates_bounded_checks_and_propagates_failures() {
-    let e = env().await;
-    let (org, team) = org_and_team(&e).await;
-    grant(&e, team.id, Role::Editor, "alice").await;
-    let identity = support::IdentityServer::start().await;
-    let catalog = Catalog::start().await;
-    let proxy = support::fga_proxy::Proxy::start(&e.openfga).await;
-    let observed = Fga::connect(
-        &proxy.base,
-        &e.store,
-        false,
-        false,
-        None,
-        Some(Duration::from_secs(5)),
-    )
-    .await
-    .unwrap()
-    .load(&e.pool)
-    .await
-    .unwrap();
-    let app = app(&e, &identity, &catalog, observed).await;
-    let mut ids = Vec::new();
-    for n in 0..12 {
-        let template = enable(&e, org.id, &format!("template-{n}"), true).await;
-        for copy in 0..2 {
-            let id = Uuid::new_v4();
-            ids.push(id);
-            storage::create(
-                &e.pool,
-                &storage::NewAgentInstance {
-                    agent_instance_id: id,
-                    space_id: team.id,
-                    template_id: template,
-                    source_runtime_id: "fixture".into(),
-                    source_agent_id: format!("template-{n}"),
-                    display_name: format!("Instance-{n}-{copy}"),
-                    description: None,
-                    enabled: copy == 0,
-                    created_by: Some("alice".into()),
-                    updated_by: None,
-                    tuning: json!({"role":"Saved", "values":{}, "capability_config":{}}),
-                },
-            )
-            .await
-            .unwrap();
-        }
-    }
-    // Equal timestamps force the UUID tie-breaker, independent of insertion order.
-    sqlx::query("update agent_instance set created_at='2026-01-01T00:00:00Z' where space_id=$1")
-        .bind(team.id)
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    ids.sort();
-    *proxy.fault.lock().await = support::fga_proxy::Fault {
-        template_check_delay: Some(Duration::from_millis(40)),
-        ..Default::default()
-    };
-    let (status, list) = request(
-        &app,
-        &identity,
-        Some("alice"),
-        "GET",
-        &collection(team.id),
-        Value::Null,
-    )
-    .await;
-    assert_eq!(status, 200, "{list}");
-    assert_eq!(
-        list.as_array()
-            .unwrap()
-            .iter()
-            .map(|v| Uuid::parse_str(v["agent_instance_id"].as_str().unwrap()).unwrap())
-            .collect::<Vec<_>>(),
-        ids
-    );
-    {
-        let fault = proxy.fault.lock().await;
-        assert_eq!(fault.template_checks.len(), 12);
-        assert!(fault.peak_template_checks > 1);
-        assert!(fault.peak_template_checks <= control_plane::fga::READ_CONCURRENCY);
-        for check in &fault.template_checks {
-            assert_eq!(check["consistency"], "HIGHER_CONSISTENCY");
-            assert!(check["authorization_model_id"].is_string());
-        }
-    }
-    assert_eq!(catalog.state.lock().await.calls, 0);
-    for instance in list.as_array().unwrap() {
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("alice"),
-                "GET",
-                &item(team.id, instance),
-                Value::Null
-            )
-            .await,
-            (200, instance.clone())
-        );
-    }
-    *proxy.fault.lock().await = support::fga_proxy::Fault {
-        fail_template_check_at: 2,
-        ..Default::default()
-    };
-    let failure = request(
-        &app,
-        &identity,
-        Some("alice"),
-        "GET",
-        &collection(team.id),
-        Value::Null,
-    )
-    .await;
-    assert!(failure.0 >= 500, "{failure:?}");
-    assert!(!failure.1.is_array());
-    assert!(!failure.1.to_string().contains("private-template-error"));
-    // Already dispatched calls may still complete after try_collect returns an error.
-    proxy.fault.lock().await.fail_template_check_at = 0;
-    enable(&e, org.id, "template-0", false).await;
-    let filtered = request(
-        &app,
-        &identity,
-        Some("alice"),
-        "GET",
-        &collection(team.id),
-        Value::Null,
-    )
-    .await;
-    assert_eq!(filtered.0, 200);
-    assert_eq!(filtered.1.as_array().unwrap().len(), 22);
-    // Authorized corrupt snapshots and SQL failures cannot produce partial success.
-    sqlx::query("update agent_instance set tuning='{}'::jsonb where source_agent_id='template-1'")
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "GET",
-            &collection(team.id),
-            Value::Null
-        )
-        .await
-        .0,
-        500
-    );
-    sqlx::query("alter table agent_instance rename to unavailable_instances")
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "GET",
-            &collection(team.id),
-            Value::Null
-        )
-        .await
-        .0,
-        500
-    );
-}
-
-#[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn instances_store_tuning_opaquely() {
     let e = env().await;
     let (org, _) = org_and_team(&e).await;
@@ -1279,14 +1113,14 @@ async fn instances_store_tuning_opaquely() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn instances_space_revocation_during_discovery_preserves_configuration() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = Arc::new(support::IdentityServer::start().await);
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Existing")).await;
     for method in ["POST", "PATCH"] {
@@ -1313,7 +1147,7 @@ async fn instances_space_revocation_during_discovery_preserves_configuration() {
         tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
             .await
             .unwrap();
-        spaces::revoke(&e.pool, &e.fga, "alice", team.id, Role::Editor, "alice")
+        spaces::revoke(&e.pool, "alice", team.id, Role::Editor, "alice")
             .await
             .unwrap();
         gate.release.notify_one();
@@ -1361,14 +1195,14 @@ async fn instances_space_revocation_during_discovery_preserves_configuration() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn preparation_combines_pod_controls_and_reasoning_after_capability_governance() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
     sqlx::query("insert into runtime_catalog (runtime_id, reachable) values ('fixture', true)")
         .execute(&e.pool)
@@ -1460,14 +1294,14 @@ async fn preparation_combines_pod_controls_and_reasoning_after_capability_govern
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn conversations_pin_configuration_and_keep_history_after_agent_edits() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Revision")).await;
     let base = item(team.id, &instance);
@@ -1667,7 +1501,7 @@ async fn conversations_pin_configuration_and_keep_history_after_agent_edits() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres and OpenFGA: make test-integration"]
+#[ignore = "needs Postgres: make test-integration"]
 async fn runtime_binding_lists_all_eligible_conversation_attachments() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
@@ -1676,7 +1510,7 @@ async fn runtime_binding_lists_all_eligible_conversation_attachments() {
     grant(&e, team.id, Role::Member, "bob").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.fga.clone()).await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Files")).await;
     let base = item(team.id, &instance);
@@ -1700,8 +1534,8 @@ async fn runtime_binding_lists_all_eligible_conversation_attachments() {
     ).bind(&ids).execute(&e.pool).await.unwrap();
     // Published CSV/Excel need no vectors, just like text documents in this fixture.
     sqlx::query(
-        "insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,committed_at,vector_ordinals,cleanup_after)
-         select id,id,'indexing',id,id,1,now()+interval '1 hour',id::text,now(),'{}',now()+interval '2 hours' from document where id=any($1)",
+        "insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,committed_at,vector_ordinals,cleanup_after,document_id)
+         select id,id,'indexing',id,id,1,now()+interval '1 hour',id::text,now(),'{}',now()+interval '2 hours',id from document where id=any($1)",
     ).bind(&ids).execute(&e.pool).await.unwrap();
     sqlx::query("update document set published_generation=id where id=any($1)")
         .bind(&ids)

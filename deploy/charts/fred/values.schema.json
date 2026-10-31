@@ -1372,7 +1372,7 @@
                       "properties": {
                         "act_for_people": {
                           "default": false,
-                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "description": "Outgoing: backend calls on behalf of a person present this backend's workload token and name the verified person, run and agent. Enable for agent runtimes and Knowledge Flow calls to the Control Plane.",
                           "title": "Act For People",
                           "type": "boolean"
                         },
@@ -1445,121 +1445,6 @@
                       "title": "Authorized Origins",
                       "type": "array"
                     },
-                    "rebac": {
-                      "anyOf": [
-                        {
-                          "discriminator": {
-                            "mapping": {
-                              "openfga": "#/$defs/OpenFgaRebacConfig"
-                            },
-                            "propertyName": "type"
-                          },
-                          "oneOf": [
-                            {
-                              "description": "Configuration for an OpenFGA-backed relationship engine.",
-                              "properties": {
-                                "enabled": {
-                                  "default": true,
-                                  "description": "To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
-                                  "title": "Enabled",
-                                  "type": "boolean"
-                                },
-                                "type": {
-                                  "const": "openfga",
-                                  "default": "openfga",
-                                  "title": "Type",
-                                  "type": "string"
-                                },
-                                "api_url": {
-                                  "description": "Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
-                                  "format": "uri",
-                                  "minLength": 1,
-                                  "title": "Api Url",
-                                  "type": "string"
-                                },
-                                "store_name": {
-                                  "default": "fred",
-                                  "description": "Name of the OpenFGA store to use",
-                                  "title": "Store Name",
-                                  "type": "string"
-                                },
-                                "authorization_model_id": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
-                                  "title": "Authorization Model Id"
-                                },
-                                "create_store_if_needed": {
-                                  "default": true,
-                                  "description": "Create the OpenFGA store if it does not already exist",
-                                  "title": "Create Store If Needed",
-                                  "type": "boolean"
-                                },
-                                "sync_schema_on_init": {
-                                  "default": true,
-                                  "description": "Synchronize the authorization model when creating the engine",
-                                  "title": "Sync Schema On Init",
-                                  "type": "boolean"
-                                },
-                                "token_env_var": {
-                                  "default": "OPENFGA_API_TOKEN",
-                                  "description": "Environment variable that stores the OpenFGA API token",
-                                  "title": "Token Env Var",
-                                  "type": "string"
-                                },
-                                "timeout_millisec": {
-                                  "anyOf": [
-                                    {
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": 5000,
-                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
-                                  "title": "Timeout Millisec"
-                                },
-                                "headers": {
-                                  "anyOf": [
-                                    {
-                                      "additionalProperties": {
-                                        "type": "string"
-                                      },
-                                      "type": "object"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Static HTTP headers to send with each OpenFGA API request",
-                                  "title": "Headers"
-                                }
-                              },
-                              "required": [
-                                "api_url"
-                              ],
-                              "title": "OpenFgaRebacConfig",
-                              "type": "object",
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "title": "Rebac"
-                    },
                     "profile": {
                       "anyOf": [
                         {
@@ -1571,7 +1456,7 @@
                         }
                       ],
                       "default": null,
-                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and \u2014 failing startup otherwise. The control-plane issues no signed grant.",
                       "title": "Profile"
                     }
                   },
@@ -5420,7 +5305,7 @@
                       "properties": {
                         "act_for_people": {
                           "default": false,
-                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "description": "Outgoing: backend calls on behalf of a person present this backend's workload token and name the verified person, run and agent. Enable for agent runtimes and Knowledge Flow calls to the Control Plane.",
                           "title": "Act For People",
                           "type": "boolean"
                         },
@@ -5493,121 +5378,6 @@
                       "title": "Authorized Origins",
                       "type": "array"
                     },
-                    "rebac": {
-                      "anyOf": [
-                        {
-                          "discriminator": {
-                            "mapping": {
-                              "openfga": "#/$defs/OpenFgaRebacConfig"
-                            },
-                            "propertyName": "type"
-                          },
-                          "oneOf": [
-                            {
-                              "description": "Configuration for an OpenFGA-backed relationship engine.",
-                              "properties": {
-                                "enabled": {
-                                  "default": true,
-                                  "description": "To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
-                                  "title": "Enabled",
-                                  "type": "boolean"
-                                },
-                                "type": {
-                                  "const": "openfga",
-                                  "default": "openfga",
-                                  "title": "Type",
-                                  "type": "string"
-                                },
-                                "api_url": {
-                                  "description": "Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
-                                  "format": "uri",
-                                  "minLength": 1,
-                                  "title": "Api Url",
-                                  "type": "string"
-                                },
-                                "store_name": {
-                                  "default": "fred",
-                                  "description": "Name of the OpenFGA store to use",
-                                  "title": "Store Name",
-                                  "type": "string"
-                                },
-                                "authorization_model_id": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
-                                  "title": "Authorization Model Id"
-                                },
-                                "create_store_if_needed": {
-                                  "default": true,
-                                  "description": "Create the OpenFGA store if it does not already exist",
-                                  "title": "Create Store If Needed",
-                                  "type": "boolean"
-                                },
-                                "sync_schema_on_init": {
-                                  "default": true,
-                                  "description": "Synchronize the authorization model when creating the engine",
-                                  "title": "Sync Schema On Init",
-                                  "type": "boolean"
-                                },
-                                "token_env_var": {
-                                  "default": "OPENFGA_API_TOKEN",
-                                  "description": "Environment variable that stores the OpenFGA API token",
-                                  "title": "Token Env Var",
-                                  "type": "string"
-                                },
-                                "timeout_millisec": {
-                                  "anyOf": [
-                                    {
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": 5000,
-                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
-                                  "title": "Timeout Millisec"
-                                },
-                                "headers": {
-                                  "anyOf": [
-                                    {
-                                      "additionalProperties": {
-                                        "type": "string"
-                                      },
-                                      "type": "object"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Static HTTP headers to send with each OpenFGA API request",
-                                  "title": "Headers"
-                                }
-                              },
-                              "required": [
-                                "api_url"
-                              ],
-                              "title": "OpenFgaRebacConfig",
-                              "type": "object",
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "title": "Rebac"
-                    },
                     "profile": {
                       "anyOf": [
                         {
@@ -5619,7 +5389,7 @@
                         }
                       ],
                       "default": null,
-                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and \u2014 failing startup otherwise. The control-plane issues no signed grant.",
                       "title": "Profile"
                     }
                   },
@@ -6700,6 +6470,18 @@
                   },
                   "title": "ProcessingConfig",
                   "type": "object"
+                },
+                "control_plane_url": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Control Plane Url"
                 },
                 "manager_processing": {
                   "anyOf": [
@@ -10755,7 +10537,7 @@
                       "properties": {
                         "act_for_people": {
                           "default": false,
-                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "description": "Outgoing: backend calls on behalf of a person present this backend's workload token and name the verified person, run and agent. Enable for agent runtimes and Knowledge Flow calls to the Control Plane.",
                           "title": "Act For People",
                           "type": "boolean"
                         },
@@ -10828,121 +10610,6 @@
                       "title": "Authorized Origins",
                       "type": "array"
                     },
-                    "rebac": {
-                      "anyOf": [
-                        {
-                          "discriminator": {
-                            "mapping": {
-                              "openfga": "#/$defs/OpenFgaRebacConfig"
-                            },
-                            "propertyName": "type"
-                          },
-                          "oneOf": [
-                            {
-                              "description": "Configuration for an OpenFGA-backed relationship engine.",
-                              "properties": {
-                                "enabled": {
-                                  "default": true,
-                                  "description": "To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
-                                  "title": "Enabled",
-                                  "type": "boolean"
-                                },
-                                "type": {
-                                  "const": "openfga",
-                                  "default": "openfga",
-                                  "title": "Type",
-                                  "type": "string"
-                                },
-                                "api_url": {
-                                  "description": "Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
-                                  "format": "uri",
-                                  "minLength": 1,
-                                  "title": "Api Url",
-                                  "type": "string"
-                                },
-                                "store_name": {
-                                  "default": "fred",
-                                  "description": "Name of the OpenFGA store to use",
-                                  "title": "Store Name",
-                                  "type": "string"
-                                },
-                                "authorization_model_id": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
-                                  "title": "Authorization Model Id"
-                                },
-                                "create_store_if_needed": {
-                                  "default": true,
-                                  "description": "Create the OpenFGA store if it does not already exist",
-                                  "title": "Create Store If Needed",
-                                  "type": "boolean"
-                                },
-                                "sync_schema_on_init": {
-                                  "default": true,
-                                  "description": "Synchronize the authorization model when creating the engine",
-                                  "title": "Sync Schema On Init",
-                                  "type": "boolean"
-                                },
-                                "token_env_var": {
-                                  "default": "OPENFGA_API_TOKEN",
-                                  "description": "Environment variable that stores the OpenFGA API token",
-                                  "title": "Token Env Var",
-                                  "type": "string"
-                                },
-                                "timeout_millisec": {
-                                  "anyOf": [
-                                    {
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": 5000,
-                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
-                                  "title": "Timeout Millisec"
-                                },
-                                "headers": {
-                                  "anyOf": [
-                                    {
-                                      "additionalProperties": {
-                                        "type": "string"
-                                      },
-                                      "type": "object"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Static HTTP headers to send with each OpenFGA API request",
-                                  "title": "Headers"
-                                }
-                              },
-                              "required": [
-                                "api_url"
-                              ],
-                              "title": "OpenFgaRebacConfig",
-                              "type": "object",
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "title": "Rebac"
-                    },
                     "profile": {
                       "anyOf": [
                         {
@@ -10954,7 +10621,7 @@
                         }
                       ],
                       "default": null,
-                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and \u2014 failing startup otherwise. The control-plane issues no signed grant.",
                       "title": "Profile"
                     }
                   },
@@ -12035,6 +11702,18 @@
                   },
                   "title": "ProcessingConfig",
                   "type": "object"
+                },
+                "control_plane_url": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Control Plane Url"
                 },
                 "manager_processing": {
                   "anyOf": [
@@ -16079,7 +15758,7 @@
                       "properties": {
                         "act_for_people": {
                           "default": false,
-                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "description": "Outgoing: backend calls on behalf of a person present this backend's workload token and name the verified person, run and agent. Enable for agent runtimes and Knowledge Flow calls to the Control Plane.",
                           "title": "Act For People",
                           "type": "boolean"
                         },
@@ -16152,118 +15831,6 @@
                       "title": "Authorized Origins",
                       "type": "array"
                     },
-                    "rebac": {
-                      "anyOf": [
-                        {
-                          "discriminator": {
-                            "mapping": {
-                              "openfga": "#/$defs/OpenFgaRebacConfig"
-                            },
-                            "propertyName": "type"
-                          },
-                          "oneOf": [
-                            {
-                              "description": "Configuration for an OpenFGA-backed relationship engine.",
-                              "properties": {
-                                "enabled": {
-                                  "default": true,
-                                  "description": "To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
-                                  "title": "Enabled",
-                                  "type": "boolean"
-                                },
-                                "type": {
-                                  "const": "openfga",
-                                  "default": "openfga",
-                                  "title": "Type",
-                                  "type": "string"
-                                },
-                                "api_url": {
-                                  "description": "Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
-                                  "format": "uri",
-                                  "minLength": 1,
-                                  "title": "Api Url",
-                                  "type": "string"
-                                },
-                                "store_name": {
-                                  "default": "fred",
-                                  "description": "Name of the OpenFGA store to use",
-                                  "title": "Store Name",
-                                  "type": "string"
-                                },
-                                "authorization_model_id": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
-                                  "title": "Authorization Model Id"
-                                },
-                                "create_store_if_needed": {
-                                  "default": true,
-                                  "description": "Create the OpenFGA store if it does not already exist",
-                                  "title": "Create Store If Needed",
-                                  "type": "boolean"
-                                },
-                                "sync_schema_on_init": {
-                                  "default": true,
-                                  "description": "Synchronize the authorization model when creating the engine",
-                                  "title": "Sync Schema On Init",
-                                  "type": "boolean"
-                                },
-                                "token_env_var": {
-                                  "default": "OPENFGA_API_TOKEN",
-                                  "description": "Environment variable that stores the OpenFGA API token",
-                                  "title": "Token Env Var",
-                                  "type": "string"
-                                },
-                                "timeout_millisec": {
-                                  "anyOf": [
-                                    {
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": 5000,
-                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
-                                  "title": "Timeout Millisec"
-                                },
-                                "headers": {
-                                  "anyOf": [
-                                    {
-                                      "additionalProperties": {
-                                        "type": "string"
-                                      },
-                                      "type": "object"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Static HTTP headers to send with each OpenFGA API request",
-                                  "title": "Headers"
-                                }
-                              },
-                              "title": "OpenFgaRebacConfig",
-                              "type": "object",
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "title": "Rebac"
-                    },
                     "profile": {
                       "anyOf": [
                         {
@@ -16275,7 +15842,7 @@
                         }
                       ],
                       "default": null,
-                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and \u2014 failing startup otherwise. The control-plane issues no signed grant.",
                       "title": "Profile"
                     }
                   },
@@ -17312,6 +16879,18 @@
                   },
                   "title": "ProcessingConfig",
                   "type": "object"
+                },
+                "control_plane_url": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Control Plane Url"
                 },
                 "manager_processing": {
                   "anyOf": [
@@ -21175,7 +20754,7 @@
                       "properties": {
                         "act_for_people": {
                           "default": false,
-                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "description": "Outgoing: backend calls on behalf of a person present this backend's workload token and name the verified person, run and agent. Enable for agent runtimes and Knowledge Flow calls to the Control Plane.",
                           "title": "Act For People",
                           "type": "boolean"
                         },
@@ -21248,118 +20827,6 @@
                       "title": "Authorized Origins",
                       "type": "array"
                     },
-                    "rebac": {
-                      "anyOf": [
-                        {
-                          "discriminator": {
-                            "mapping": {
-                              "openfga": "#/$defs/OpenFgaRebacConfig"
-                            },
-                            "propertyName": "type"
-                          },
-                          "oneOf": [
-                            {
-                              "description": "Configuration for an OpenFGA-backed relationship engine.",
-                              "properties": {
-                                "enabled": {
-                                  "default": true,
-                                  "description": "To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
-                                  "title": "Enabled",
-                                  "type": "boolean"
-                                },
-                                "type": {
-                                  "const": "openfga",
-                                  "default": "openfga",
-                                  "title": "Type",
-                                  "type": "string"
-                                },
-                                "api_url": {
-                                  "description": "Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
-                                  "format": "uri",
-                                  "minLength": 1,
-                                  "title": "Api Url",
-                                  "type": "string"
-                                },
-                                "store_name": {
-                                  "default": "fred",
-                                  "description": "Name of the OpenFGA store to use",
-                                  "title": "Store Name",
-                                  "type": "string"
-                                },
-                                "authorization_model_id": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
-                                  "title": "Authorization Model Id"
-                                },
-                                "create_store_if_needed": {
-                                  "default": true,
-                                  "description": "Create the OpenFGA store if it does not already exist",
-                                  "title": "Create Store If Needed",
-                                  "type": "boolean"
-                                },
-                                "sync_schema_on_init": {
-                                  "default": true,
-                                  "description": "Synchronize the authorization model when creating the engine",
-                                  "title": "Sync Schema On Init",
-                                  "type": "boolean"
-                                },
-                                "token_env_var": {
-                                  "default": "OPENFGA_API_TOKEN",
-                                  "description": "Environment variable that stores the OpenFGA API token",
-                                  "title": "Token Env Var",
-                                  "type": "string"
-                                },
-                                "timeout_millisec": {
-                                  "anyOf": [
-                                    {
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": 5000,
-                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
-                                  "title": "Timeout Millisec"
-                                },
-                                "headers": {
-                                  "anyOf": [
-                                    {
-                                      "additionalProperties": {
-                                        "type": "string"
-                                      },
-                                      "type": "object"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Static HTTP headers to send with each OpenFGA API request",
-                                  "title": "Headers"
-                                }
-                              },
-                              "title": "OpenFgaRebacConfig",
-                              "type": "object",
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "title": "Rebac"
-                    },
                     "profile": {
                       "anyOf": [
                         {
@@ -21371,7 +20838,7 @@
                         }
                       ],
                       "default": null,
-                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and \u2014 failing startup otherwise. The control-plane issues no signed grant.",
                       "title": "Profile"
                     }
                   },
@@ -22408,6 +21875,18 @@
                   },
                   "title": "ProcessingConfig",
                   "type": "object"
+                },
+                "control_plane_url": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Control Plane Url"
                 },
                 "manager_processing": {
                   "anyOf": [
@@ -26271,7 +25750,7 @@
                       "properties": {
                         "act_for_people": {
                           "default": false,
-                          "description": "Outgoing, read where agents run: their calls during a person's run present this backend's workload token and name the person, run and agent. Other backends make no such calls; leave it off there.",
+                          "description": "Outgoing: backend calls on behalf of a person present this backend's workload token and name the verified person, run and agent. Enable for agent runtimes and Knowledge Flow calls to the Control Plane.",
                           "title": "Act For People",
                           "type": "boolean"
                         },
@@ -26344,118 +25823,6 @@
                       "title": "Authorized Origins",
                       "type": "array"
                     },
-                    "rebac": {
-                      "anyOf": [
-                        {
-                          "discriminator": {
-                            "mapping": {
-                              "openfga": "#/$defs/OpenFgaRebacConfig"
-                            },
-                            "propertyName": "type"
-                          },
-                          "oneOf": [
-                            {
-                              "description": "Configuration for an OpenFGA-backed relationship engine.",
-                              "properties": {
-                                "enabled": {
-                                  "default": true,
-                                  "description": "To disable ReBAC checks (do not disable in production). If OIDC (UserSecurity and M2MSecurity) ReBAC check will be disabled even if this is true.",
-                                  "title": "Enabled",
-                                  "type": "boolean"
-                                },
-                                "type": {
-                                  "const": "openfga",
-                                  "default": "openfga",
-                                  "title": "Type",
-                                  "type": "string"
-                                },
-                                "api_url": {
-                                  "description": "Base URL for the OpenFGA HTTP API (e.g. https://fga.example.com)",
-                                  "format": "uri",
-                                  "minLength": 1,
-                                  "title": "Api Url",
-                                  "type": "string"
-                                },
-                                "store_name": {
-                                  "default": "fred",
-                                  "description": "Name of the OpenFGA store to use",
-                                  "title": "Store Name",
-                                  "type": "string"
-                                },
-                                "authorization_model_id": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Optional authorization model ID to use for read operations. Will be overridden if sync_schema_on_init is True.",
-                                  "title": "Authorization Model Id"
-                                },
-                                "create_store_if_needed": {
-                                  "default": true,
-                                  "description": "Create the OpenFGA store if it does not already exist",
-                                  "title": "Create Store If Needed",
-                                  "type": "boolean"
-                                },
-                                "sync_schema_on_init": {
-                                  "default": true,
-                                  "description": "Synchronize the authorization model when creating the engine",
-                                  "title": "Sync Schema On Init",
-                                  "type": "boolean"
-                                },
-                                "token_env_var": {
-                                  "default": "OPENFGA_API_TOKEN",
-                                  "description": "Environment variable that stores the OpenFGA API token",
-                                  "title": "Token Env Var",
-                                  "type": "string"
-                                },
-                                "timeout_millisec": {
-                                  "anyOf": [
-                                    {
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": 5000,
-                                  "description": "Timeout in milliseconds for OpenFGA API requests. Defaults to 5000 so a stalled OpenFGA call fails fast with an error instead of hanging the request indefinitely (set to None only to explicitly disable the timeout).",
-                                  "title": "Timeout Millisec"
-                                },
-                                "headers": {
-                                  "anyOf": [
-                                    {
-                                      "additionalProperties": {
-                                        "type": "string"
-                                      },
-                                      "type": "object"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ],
-                                  "default": null,
-                                  "description": "Static HTTP headers to send with each OpenFGA API request",
-                                  "title": "Headers"
-                                }
-                              },
-                              "title": "OpenFgaRebacConfig",
-                              "type": "object",
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "default": null,
-                      "title": "Rebac"
-                    },
                     "profile": {
                       "anyOf": [
                         {
@@ -26467,7 +25834,7 @@
                         }
                       ],
                       "default": null,
-                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and requires OpenFGA ReBAC enabled (pod-side authorization, fail-closed) \u2014 failing startup otherwise. The control-plane issues no signed grant.",
+                      "description": "Hardened security profile (RUNTIME-07). 'c3' forces strict JWT issuer/audience validation, forbids no-security/mock-admin, and \u2014 failing startup otherwise. The control-plane issues no signed grant.",
                       "title": "Profile"
                     }
                   },
@@ -27504,6 +26871,18 @@
                   },
                   "title": "ProcessingConfig",
                   "type": "object"
+                },
+                "control_plane_url": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Control Plane Url"
                 },
                 "manager_processing": {
                   "anyOf": [
@@ -31205,7 +30584,7 @@
                       "properties": {
                         "accept_delegated_calls": {
                           "default": false,
-                          "description": "Accept person/run/agent assertions only at the runtime resolver.",
+                          "description": "Accept person/run/agent assertions at runtime and decision endpoints.",
                           "type": "boolean"
                         },
                         "audience": {
@@ -31283,39 +30662,6 @@
                         "string",
                         "null"
                       ]
-                    },
-                    "rebac": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "api_url": {
-                          "type": "string"
-                        },
-                        "create_store_if_needed": {
-                          "type": "boolean"
-                        },
-                        "store_name": {
-                          "description": "Never fred's own store: syncing this model there would replace fred's.",
-                          "type": "string"
-                        },
-                        "sync_schema_on_init": {
-                          "type": "boolean"
-                        },
-                        "timeout_millisec": {
-                          "format": "int64",
-                          "minimum": 0,
-                          "type": [
-                            "integer",
-                            "null"
-                          ]
-                        },
-                        "token_env_var": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "api_url"
-                      ],
-                      "type": "object"
                     },
                     "user": {
                       "additionalProperties": false,
@@ -31405,8 +30751,7 @@
                     }
                   },
                   "required": [
-                    "user",
-                    "rebac"
+                    "user"
                   ],
                   "type": "object"
                 },
@@ -33165,7 +32510,7 @@
                       "properties": {
                         "accept_delegated_calls": {
                           "default": false,
-                          "description": "Accept person/run/agent assertions only at the runtime resolver.",
+                          "description": "Accept person/run/agent assertions at runtime and decision endpoints.",
                           "type": "boolean"
                         },
                         "audience": {
@@ -33243,39 +32588,6 @@
                         "string",
                         "null"
                       ]
-                    },
-                    "rebac": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "api_url": {
-                          "type": "string"
-                        },
-                        "create_store_if_needed": {
-                          "type": "boolean"
-                        },
-                        "store_name": {
-                          "description": "Never fred's own store: syncing this model there would replace fred's.",
-                          "type": "string"
-                        },
-                        "sync_schema_on_init": {
-                          "type": "boolean"
-                        },
-                        "timeout_millisec": {
-                          "format": "int64",
-                          "minimum": 0,
-                          "type": [
-                            "integer",
-                            "null"
-                          ]
-                        },
-                        "token_env_var": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "api_url"
-                      ],
-                      "type": "object"
                     },
                     "user": {
                       "additionalProperties": false,
@@ -33365,8 +32677,7 @@
                     }
                   },
                   "required": [
-                    "user",
-                    "rebac"
+                    "user"
                   ],
                   "type": "object"
                 },

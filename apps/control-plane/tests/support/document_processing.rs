@@ -33,22 +33,10 @@ async fn setup_with_content_limits(
             .fetch_one(&d.e.pool)
             .await
             .unwrap();
-    let observed = control_plane::fga::Fga::connect(
-        &d.fga_proxy.base,
-        &d.e.store,
-        false,
-        false,
-        None,
-        Some(Duration::from_secs(5)),
-    )
-    .await
-    .unwrap()
-    .load(&d.e.pool)
-    .await
-    .unwrap();
+    let observed = control_plane::authorization::Authorization::new(d.e.pool.clone());
     let processing = Arc::new(Processing {
         pool: d.e.pool.clone(),
-        fga: observed.clone(),
+        authorization: observed.clone(),
         terms: None,
         installation,
         auth: d.identity.auth().await,
@@ -66,7 +54,7 @@ async fn setup_with_content_limits(
         api::AppState {
             agent_catalog: Default::default(),
             pool: d.e.pool.clone(),
-            fga: observed,
+            authorization: observed,
             auth: Arc::new(d.identity.auth().await),
             content: Some(d.storage.clone()),
             processing: Some(processing.clone()),
@@ -162,7 +150,7 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
         pool: sqlx::PgPool::connect_with(p.pool.connect_options().as_ref().clone())
             .await
             .unwrap(),
-        fga: p.fga.clone(),
+        authorization: p.authorization.clone(),
         terms: p.terms.clone(),
         installation: p.installation,
         config: p.config.clone(),
@@ -383,7 +371,7 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
 
 // Proves: I2, I3, I22, I25, I26
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn processing_admission_fences_publication_and_original_survival() {
     let (d, p) = Box::pin(setup()).await;
     let (status, receipt) = d
@@ -500,18 +488,6 @@ async fn processing_admission_fences_publication_and_original_survival() {
     })
     .await
     .unwrap();
-    *d.fga_proxy.fault.lock().await = crate::support::fga_proxy::Fault {
-        read_page_size: Some(1),
-        ..Default::default()
-    };
-    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let (ready, rx) = tokio::sync::oneshot::channel();
-    let samples = tokio::spawn(crate::folder_scaling::sample_locks(
-        d.e.pool.clone(),
-        stop.clone(),
-        ready,
-    ));
-    rx.await.unwrap();
     let pointer = "select published_generation from document where id=$1";
     let unpublished: Option<Uuid> = sqlx::query_scalar(pointer)
         .bind(work.document_id)
@@ -544,18 +520,6 @@ async fn processing_admission_fences_publication_and_original_survival() {
             .unwrap()
             .retrievable
     );
-    stop.store(true, std::sync::atomic::Ordering::Relaxed);
-    let locks = samples.await.unwrap();
-    let observed = d.fga_proxy.fault.lock().await;
-    assert_eq!(
-        observed.calls,
-        [("check".into(), 1), ("read".into(), 3), ("write".into(), 1)].into()
-    );
-    println!(
-        "processing publication: FGA={:?}, locks={locks}",
-        observed.calls
-    );
-    drop(observed);
     Box::pin(verify_terminal_replay(&d, &p, &work, &done)).await;
     // A fenced attempt writes only below its own prefix and cannot replace published bytes.
     assert_ne!(first.output_prefix, indexed.output_prefix);
@@ -743,7 +707,7 @@ fn start_temporal() -> (TemporalFixture, String) {
 }
 // Proves: I22, I25, I26, I28
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "needs disposable pgvector, OpenFGA, S3, Temporal and the KF Python environment"]
+#[ignore = "needs disposable pgvector, S3, Temporal and the KF Python environment"]
 async fn processing_existing_worker_journey_without_kf_http() {
     if std::env::var_os("CONTROL_PLANE_IT_PROCESSING").is_none() {
         return;
@@ -1379,7 +1343,7 @@ async fn run_id_within(pool: &sqlx::PgPool, id: Uuid, within: Duration) -> Optio
 // No KF worker polls the queue here, so delivered workflows stay running.
 // Proves: I28
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "needs disposable PostgreSQL, OpenFGA, SeaweedFS and Temporal"]
+#[ignore = "needs disposable PostgreSQL, SeaweedFS and Temporal"]
 async fn processing_dispatch_wakes_on_commit_and_prefers_new_intents() {
     if std::env::var_os("CONTROL_PLANE_IT_PROCESSING").is_none() {
         return;
@@ -1452,7 +1416,7 @@ async fn processing_dispatch_wakes_on_commit_and_prefers_new_intents() {
 
 // Proves: I2, I3, I22, I25, I26
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn processing_upload_atomic_intent_and_retry_without_new_original() {
     let (d, p) = Box::pin(setup()).await;
     let key = Uuid::new_v4();
@@ -1557,7 +1521,7 @@ async fn processing_upload_atomic_intent_and_retry_without_new_original() {
 
 // Proves: I2, I3, I22, I25, I26
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn processing_workload_identity_and_revoked_publication() {
     let (d, p) = Box::pin(setup()).await;
     let (_, receipt) = d
@@ -1666,29 +1630,16 @@ async fn processing_workload_identity_and_revoked_publication() {
         .await
         .unwrap();
     }
-    *d.fga_proxy.fault.lock().await = crate::support::fga_proxy::Fault {
-        read_page_size: Some(1),
-        ..Default::default()
-    };
     let org: Uuid = sqlx::query_scalar("select s.organization_id from document_processing p join document d on d.id=p.document_id join space s on s.id=d.space_id where p.id=$1")
         .bind(summary.id)
         .fetch_one(&d.e.pool)
         .await
         .unwrap();
     let held = crate::hold_organization_lock(&d.e, org).await;
-    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let (ready, rx) = tokio::sync::oneshot::channel();
-    let samples = tokio::spawn(crate::folder_scaling::sample_locks(
-        d.e.pool.clone(),
-        stop.clone(),
-        ready,
-    ));
-    rx.await.unwrap();
     let pool = d.e.pool.clone();
-    let fga = p.fga.clone();
     let space = d.folder.space_id;
     let revoke = tokio::spawn(async move {
-        control_plane::spaces::revoke(&pool, &fga, "alice", space, Role::Editor, "writer").await
+        control_plane::spaces::revoke(&pool, "alice", space, Role::Editor, "writer").await
     });
     async fn waiting(pool: &sqlx::PgPool, count: i64) {
         tokio::time::timeout(Duration::from_secs(5), async {
@@ -1719,12 +1670,6 @@ async fn processing_workload_identity_and_revoked_publication() {
     held.rollback().await.unwrap();
     revoke.await.unwrap().unwrap();
     assert!(publish.await.unwrap().is_err());
-    stop.store(true, std::sync::atomic::Ordering::Relaxed);
-    let locks = samples.await.unwrap();
-    println!(
-        "processing concurrent revoke/publication: FGA={:?}, locks={locks}",
-        d.fga_proxy.fault.lock().await.calls
-    );
     // The service identity can fence its failed attempt after the human loses access.
     p.abandon(Failure {
         work: work.clone(),
@@ -1756,83 +1701,8 @@ async fn processing_workload_identity_and_revoked_publication() {
     );
 }
 
-// Proves: I2, I22
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
-async fn processing_admission_request_budget_at_one_and_one_hundred_documents() {
-    use futures::{StreamExt, stream};
-    let (d, p) = Box::pin(setup()).await;
-    let (_, receipt) = d
-        .upload("writer", "budget.txt", b"kept", Uuid::new_v4(), None)
-        .await;
-    let id: Uuid = receipt["document_id"].as_str().unwrap().parse().unwrap();
-    let mut baseline = None;
-    for count in [1, 100] {
-        if count == 100 {
-            // Metadata cardinality fixture; only the real original above is processed.
-            sqlx::query("insert into document(id,space_id,folder_id,name,mime,size,sha256,created_by,object_key,quota_owner) select gen_random_uuid(),space_id,folder_id,'fixture-'||n,mime,size,sha256,created_by,'fixture/'||gen_random_uuid(),quota_owner from document cross join generate_series(1,99) as n where id=$1").bind(id).execute(&d.e.pool).await.unwrap();
-        }
-        for concurrency in [1, 8] {
-            *d.fga_proxy.fault.lock().await = crate::support::fga_proxy::Fault {
-                read_page_size: Some(1),
-                ..Default::default()
-            };
-            let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-            let (ready, rx) = tokio::sync::oneshot::channel();
-            let samples = tokio::spawn(crate::folder_scaling::sample_locks(
-                d.e.pool.clone(),
-                stop.clone(),
-                ready,
-            ));
-            rx.await.unwrap();
-            let key = Uuid::new_v4();
-            let results = stream::iter(0..concurrency)
-                .map(|_| {
-                    p.start(
-                        "writer",
-                        key,
-                        id,
-                        Start {
-                            profile: Profile::Fast,
-                            retry_of: None,
-                        },
-                    )
-                })
-                .buffer_unordered(concurrency)
-                .collect::<Vec<_>>()
-                .await;
-            let first = results[0].as_ref().unwrap();
-            assert!(results.iter().all(|r| r.as_ref().unwrap().id == first.id));
-            stop.store(true, std::sync::atomic::Ordering::Relaxed);
-            let locks = samples.await.unwrap();
-            let observed = d.fga_proxy.fault.lock().await;
-            let per_request: std::collections::BTreeMap<_, _> = observed
-                .calls
-                .iter()
-                .map(|(k, v)| (k.clone(), v / concurrency))
-                .collect();
-            if let Some(expected) = &baseline {
-                assert_eq!(&per_request, expected);
-            } else {
-                baseline = Some(per_request);
-            }
-            println!(
-                "processing admission: documents={count}, concurrency={concurrency}, writer_memberships=2, FGA={:?}, reads={:?}, writes={:?}, locks={locks}",
-                observed.calls, observed.reads, observed.written
-            );
-            drop(observed);
-            // Reuse only the real original for another independent admission measurement.
-            sqlx::query("delete from document_processing where document_id=$1")
-                .bind(id)
-                .execute(&d.e.pool)
-                .await
-                .unwrap();
-        }
-    }
-}
-
-#[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn stage_claims_lock_only_their_own_processing() {
     let (d, p) = Box::pin(setup()).await;
     let busy = admit(&d, &p, "busy.txt").await;
@@ -1866,7 +1736,7 @@ async fn stage_claims_lock_only_their_own_processing() {
 /// An abandoned attempt whose lease expired; `due` is its queue time relative to now.
 async fn abandoned_generation(pool: &sqlx::PgPool, processing: Uuid, due: &str) -> Uuid {
     let id = Uuid::new_v4();
-    sqlx::query("insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,cleanup_after) values($1,$2,'preparation',$1,$1,1,clock_timestamp()-interval '2 minutes','fixture/'||$1||'/',clock_timestamp()+$3::interval)")
+    sqlx::query("insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,cleanup_after,document_id) values($1,$2,'preparation',$1,$1,1,clock_timestamp()-interval '2 minutes','fixture/'||$1||'/',clock_timestamp()+$3::interval,(select document_id from document_processing where id=$2))")
         .bind(id).bind(processing).bind(due).execute(pool).await.unwrap();
     id
 }
@@ -1904,7 +1774,7 @@ async fn poll_concurrently(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn cleanup_queues_lease_disjoint_batches_past_failing_candidates() {
     let (d, p) = Box::pin(setup()).await;
     let processing = admit(&d, &p, "swept.txt").await;
@@ -1989,7 +1859,7 @@ async fn cleanup_queues_lease_disjoint_batches_past_failing_candidates() {
 
 // Proves: I25, I26
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA, SeaweedFS and Temporal"]
+#[ignore = "needs disposable PostgreSQL, SeaweedFS and Temporal"]
 async fn retrieval_delivery_restarts_closed_failure_and_preserves_running_execution() {
     use control_plane::processing::dispatch::deliver_retrieval;
     use temporalio_client::{grpc::WorkflowService, tonic::Request};
@@ -2067,7 +1937,7 @@ async fn retrieval_delivery_restarts_closed_failure_and_preserves_running_execut
 }
 
 #[tokio::test]
-#[ignore = "needs disposable PostgreSQL, OpenFGA and SeaweedFS"]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn retired_folders_and_documents_are_absent_from_reads_and_producers() {
     let (mut d, _processing) = Box::pin(setup()).await;
     let space = d.folder.space_id;
@@ -2080,26 +1950,13 @@ async fn retired_folders_and_documents_are_absent_from_reads_and_producers() {
         .await
         .unwrap();
     let a = d.folder.clone();
-    let b = control_plane::spaces::create_folder(
-        &d.e.pool,
-        &d.e.fga,
-        "writer",
-        space,
-        Some(a.id),
-        "B".into(),
-    )
-    .await
-    .unwrap();
-    let c = control_plane::spaces::create_folder(
-        &d.e.pool,
-        &d.e.fga,
-        "writer",
-        space,
-        None,
-        "C".into(),
-    )
-    .await
-    .unwrap();
+    let b =
+        control_plane::spaces::create_folder(&d.e.pool, "writer", space, Some(a.id), "B".into())
+            .await
+            .unwrap();
+    let c = control_plane::spaces::create_folder(&d.e.pool, "writer", space, None, "C".into())
+        .await
+        .unwrap();
     let ids = [
         Uuid::new_v4(),
         Uuid::new_v4(),
@@ -2494,7 +2351,7 @@ async fn mark_document_team(d: &Documents) -> Uuid {
 
 // Proves: I25, I26
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     use control_plane::domain::SpaceKind;
     use control_plane::error::AppError;
@@ -2566,7 +2423,6 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .unwrap();
     let other = spaces::create_space(
         &d.e.pool,
-        &d.e.fga,
         "alice",
         SpaceKind::Team,
         organization,
@@ -2576,16 +2432,9 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     .await
     .unwrap();
     crate::grant(&d.e, other.id, Role::Editor, "writer").await;
-    d.folder = spaces::create_folder(
-        &d.e.pool,
-        &d.e.fga,
-        "writer",
-        other.id,
-        None,
-        "Witness".into(),
-    )
-    .await
-    .unwrap();
+    d.folder = spaces::create_folder(&d.e.pool, "writer", other.id, None, "Witness".into())
+        .await
+        .unwrap();
     let (status, witness) = d
         .upload("writer", "W.txt", b"witness", Uuid::new_v4(), None)
         .await;
@@ -2642,9 +2491,7 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .unwrap();
     assert_eq!((cursor, purged), (200, false));
 
-    cleanup::batch(&d.e.pool, &d.e.fga, operation)
-        .await
-        .unwrap();
+    cleanup::batch(&d.e.pool, operation).await.unwrap();
     let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)
@@ -2659,9 +2506,7 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .await
         .unwrap();
     assert_eq!(remaining, vec![work.document_id]);
-    cleanup::batch(&d.e.pool, &d.e.fga, operation)
-        .await
-        .unwrap();
+    cleanup::batch(&d.e.pool, operation).await.unwrap();
     let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)
@@ -2718,9 +2563,7 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     assert!(purged);
     assert!(p.cleanup_candidates().await.unwrap().is_empty());
     for _ in 0..20 {
-        cleanup::batch(&d.e.pool, &d.e.fga, operation)
-            .await
-            .unwrap();
+        cleanup::batch(&d.e.pool, operation).await.unwrap();
         let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
             .bind(operation)
             .fetch_one(&d.e.pool)
@@ -2766,7 +2609,7 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn lifecycle_waits_for_running_retired_document() {
     use control_plane::lifecycle::{Receipt, Status, cleanup};
     let (d, p) = Box::pin(setup()).await;
@@ -2785,9 +2628,7 @@ async fn lifecycle_waits_for_running_retired_document() {
         .bind(processing).execute(&d.e.pool).await.unwrap();
     assert!(p.cleanup_candidates().await.unwrap().is_empty());
     for _ in 0..2 {
-        cleanup::batch(&d.e.pool, &d.e.fga, operation)
-            .await
-            .unwrap();
+        cleanup::batch(&d.e.pool, operation).await.unwrap();
         let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
             .bind(operation)
             .fetch_one(&d.e.pool)
@@ -2814,7 +2655,7 @@ async fn lifecycle_waits_for_running_retired_document() {
 }
 
 #[tokio::test]
-#[ignore = "needs Postgres, OpenFGA and S3: make test-integration"]
+#[ignore = "needs Postgres and S3: make test-integration"]
 async fn editor_deletes_document_without_retiring_its_folder() {
     use control_plane::lifecycle::{Lifecycle, Receipt, Status, TargetKind, cleanup};
     let mut lifecycle = Lifecycle::default();
@@ -3012,9 +2853,7 @@ async fn editor_deletes_document_without_retiring_its_folder() {
         .bind(active_work.document_id).fetch_one(&d.e.pool).await.unwrap();
     assert!(untouched);
 
-    cleanup::batch(&d.e.pool, &d.e.fga, operation)
-        .await
-        .unwrap();
+    cleanup::batch(&d.e.pool, operation).await.unwrap();
     let waiting: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)
@@ -3049,9 +2888,7 @@ async fn editor_deletes_document_without_retiring_its_folder() {
     })
     .await
     .unwrap();
-    cleanup::batch(&d.e.pool, &d.e.fga, operation)
-        .await
-        .unwrap();
+    cleanup::batch(&d.e.pool, operation).await.unwrap();
     let completed: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)
@@ -3106,9 +2943,7 @@ async fn editor_deletes_document_without_retiring_its_folder() {
     .await;
     assert_eq!(status, 202, "{accepted}");
     let operation: Uuid = accepted["id"].as_str().unwrap().parse().unwrap();
-    cleanup::batch(&d.e.pool, &d.e.fga, operation)
-        .await
-        .unwrap();
+    cleanup::batch(&d.e.pool, operation).await.unwrap();
     let completed: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)

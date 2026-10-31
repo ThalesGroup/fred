@@ -25,7 +25,7 @@ personal CGU acceptance when configured. Space business actions also require the
 caller's unique organization to match the target. Roles do not bypass admission.
 `GET /me/spaces` can list governance-only spaces: seeing an entry is not permission
 to read its Resources. Organization context is derived from committed spaces and
-OpenFGA direct grants, never selected by a request URL or a token group.
+SQL direct grants, never selected by a request URL or a token group.
 
 The HTTP prefix below is `/control-plane/v1`. Route registration is generated in
 [manager contracts](A2-manager-contracts.md#control-plane-http-surface).
@@ -100,7 +100,7 @@ Conditions are part of these rights:
 - Supervision requires `can_administer_organization` after admission, unique matching
   organization context and lifecycle checks. It grants technical aggregates only,
   not content, downloads or named-user listings. Team detail accepts only a
-  collective team in that organization. All OpenFGA pages must succeed; dependency
+  collective team in that organization. All required SQL reads must succeed; dependency
   failure returns 503 `dependency_unavailable`, never a partial result. Exact
   scopes, refusals and counters are in [the supervision contract](A8-organizations.md#organization-supervision).
 
@@ -113,14 +113,13 @@ Conditions are part of these rights:
 - Personal-space creation requires current owner eligibility at any active scope
   in the organization; reuse also needs personal read, without restoring removed
   roles. The same eligibility gates new Control Plane access to existing spaces.
-- Every grant names a subject usable as an OpenFGA user and known to the configured
+- Every grant names a subject usable as an authorization subject and known to the configured
   user directory, checked after authorization; otherwise 422 (I27).
 - Owner changes are platform operations and do not require the actor to belong to
   the target organization. A new organization admin must exist in the configured Keycloak realm;
   removal can clean up a deleted identity. The other space-role routes require the
   actor's matching organization context.
-- Mutation checks occur after the organization lock and before the OpenFGA fence
-  and write. A previous UI permission response does not reserve a future right.
+- Mutation checks occur inside the transaction holding the organization lock, before the write. A previous UI permission response does not reserve a future right.
 
 
 ## Platform operations
@@ -192,7 +191,7 @@ an evaluation permission answer does not run an evaluation or read a conversatio
 `/authorize/document` also accepts `manage`: an effective owner can receive true
 without receiving read/write. The folder mutation handlers require write,
 not manage. Platform admin includes the other platform permissions through the
-OpenFGA model; that implication is not a stored grant of every role.
+typed permission evaluator; that implication is not a stored grant of every role.
 
 ## Operator commands
 
@@ -208,7 +207,7 @@ Document storage and folder operations make no Temporal call. Lifecycle backgrou
 
 ## Evidence and maintenance
 
-The matrices are checked against [the model](../../apps/control-plane/openfga/model.fga),
+The matrices are checked against [the model](../../apps/control-plane/src/authorization.rs),
 [typed permissions](../../apps/control-plane/src/roles.rs),
 [HTTP handlers](../../apps/control-plane/src/api.rs),
 [original storage](../../apps/control-plane/src/documents/http.rs),
