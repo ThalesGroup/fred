@@ -442,6 +442,7 @@ async def _build_enablement_item(
         model_context_window_tokens=entry.model_context_window_tokens,
         model_max_input_tokens=entry.model_max_input_tokens,
         model_max_output_tokens=entry.model_max_output_tokens,
+        route_base_url=entry.route_base_url,
     )
 
 

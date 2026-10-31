@@ -1,0 +1,133 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The ppt_builder config widget's own types; the inventory and the override
+// come from the generated client.
+
+import type { Pattern, PatternOverride, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
+
+export type { PatternOverride };
+
+export type SlideKind = Pattern["kind"];
+
+export const SLIDE_KINDS = [
+  "cover",
+  "agenda",
+  "section",
+  "bullets",
+  "two_columns",
+  "comparison",
+  "cards",
+  "figures",
+  "process",
+  "timeline",
+  "team",
+  "quote",
+  "image_text",
+  "table",
+  "chart",
+  "closing",
+  "other",
+] as const satisfies readonly SlideKind[];
+
+export type OverridePatch = Partial<Omit<PatternOverride, "pattern_id">>;
+
+/** The kinds the selector offers for a pattern: `chart` only where the slide
+ *  holds a chart zone, as the backend's vision check rules (`kind_fits_slots`). */
+export function kindsFor(pattern: Pattern): readonly SlideKind[] {
+  const hasChart = (pattern.zones ?? []).some((zone) => zone.role === "chart");
+  return SLIDE_KINDS.filter((kind) => kind !== "chart" || hasChart || pattern.kind === "chart");
+}
+
+export const TEMPLATE_SHA_KEY = "template_sha256";
+export const OVERRIDES_KEY = "overrides";
+export const USE_VISION_KEY = "use_vision";
+export const LABELLING_MODEL_KEY = "labelling_model";
+export const VARIETY_CHECK_KEY = "variety_check";
+export const VARIETY_MAX_USES_KEY = "variety_max_uses";
+export const VALIDATE_PLAN_KEY = "validate_plan";
+
+export function readOverrides(configValues: Record<string, unknown>): PatternOverride[] {
+  const raw = configValues[OVERRIDES_KEY];
+  return Array.isArray(raw) ? (raw as PatternOverride[]) : [];
+}
+
+export function readTemplateSha(configValues: Record<string, unknown>): string | null {
+  const raw = configValues[TEMPLATE_SHA_KEY];
+  return typeof raw === "string" && raw ? raw : null;
+}
+
+/** Merge a patch into one pattern's override; an override left with no
+ *  correction is dropped so the stored list stays minimal. */
+export function upsertOverride(
+  overrides: PatternOverride[],
+  patternId: string,
+  patch: OverridePatch,
+): PatternOverride[] {
+  const current = overrides.find((o) => o.pattern_id === patternId) ?? { pattern_id: patternId };
+  const next: PatternOverride = { ...current, ...patch };
+  const empty = !next.label?.trim() && next.kind == null && next.included == null;
+  const others = overrides.filter((o) => o.pattern_id !== patternId);
+  return empty ? others : [...others, next];
+}
+
+/** The inventory as the agent will see it: the analysis with the author's
+ *  corrections applied (the backend's `apply_overrides`, for display). */
+export function effectiveInventory(inventory: TemplateInventory, overrides: PatternOverride[]): TemplateInventory {
+  const byId = new Map(overrides.map((o) => [o.pattern_id, o]));
+  return {
+    ...inventory,
+    patterns: (inventory.patterns ?? []).map((pattern) => {
+      const override = byId.get(pattern.id);
+      if (!override) return pattern;
+      return {
+        ...pattern,
+        label: override.label?.trim() ? override.label.trim() : pattern.label,
+        kind: override.kind ?? pattern.kind,
+        included: override.included ?? pattern.included,
+        // The analysis' own reason wins over "by you" when it would set the slide aside anyway.
+        exclusion_reason:
+          override.included === false
+            ? pattern.included === false
+              ? pattern.exclusion_reason
+              : "author"
+            : override.included
+              ? null
+              : pattern.exclusion_reason,
+      };
+    }),
+  };
+}
+
+/** Overrides naming a pattern the analysed template no longer has (dropped on save). */
+export function unmatchedOverrides(overrides: PatternOverride[], inventory: TemplateInventory): string[] {
+  const ids = new Set((inventory.patterns ?? []).map((p) => p.id));
+  return overrides.filter((o) => !ids.has(o.pattern_id)).map((o) => o.pattern_id);
+}
+
+export interface InventorySummary {
+  patterns: number;
+  excluded: number;
+}
+
+export function summarize(inventory: TemplateInventory): InventorySummary {
+  const patterns = inventory.patterns ?? [];
+  const included = patterns.filter((p) => p.included !== false).length;
+  return { patterns: included, excluded: patterns.length - included };
+}
+
+/** Slides the analysis itself set aside (library sheets, tables…), not the author: worth a review. */
+export function hasAnalysisExclusions(patterns: Pattern[]): boolean {
+  return patterns.some((p) => p.included === false && Boolean(p.exclusion_reason) && p.exclusion_reason !== "author");
+}

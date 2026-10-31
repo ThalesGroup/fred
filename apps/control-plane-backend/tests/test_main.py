@@ -38,6 +38,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from control_plane_backend.agent_instances.store import (
+    ANY_REASON,
     AgentInstanceRecord,
     AgentInstanceStore,
 )
@@ -96,6 +97,9 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+
+# Offline: saves and sweeps must not call a pod for capability readiness.
+pytestmark = pytest.mark.usefixtures("pods_report_ready")
 
 
 @pytest.fixture(autouse=True)
@@ -266,6 +270,8 @@ class _FakeAgentInstanceStore:
         team_id: TeamId,
         *,
         reason: str | None,
+        detail: str | None = None,
+        expected_reason: Any = ANY_REASON,
     ) -> AgentInstanceRecord | None:
         record = next(
             (
@@ -277,7 +283,9 @@ class _FakeAgentInstanceStore:
         )
         if record is None:
             return None
-        record.suspension_reason = reason
+        if expected_reason is ANY_REASON or record.suspension_reason == expected_reason:
+            record.suspension_reason = reason
+            record.suspension_detail = detail
         return record
 
     async def delete(
@@ -2880,6 +2888,7 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
                     description VARCHAR(500),
                     enabled BOOLEAN NOT NULL,
                     suspension_reason VARCHAR(64),
+                    suspension_detail TEXT,
                     created_by VARCHAR,
                     updated_by VARCHAR,
                     tuning_json TEXT,
@@ -7201,6 +7210,7 @@ def _fake_pod_validate_config_echo(monkeypatch: pytest.MonkeyPatch) -> None:
         agent_instance_id,
         authorization,
         asset_files=(),
+        routing_params=None,
     ) -> dict[str, Any]:
         # `asset_files` (#1903) accepted for signature parity with the
         # production call in `_apply_capability_selection`; these MCP-config

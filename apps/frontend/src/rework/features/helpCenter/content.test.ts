@@ -83,6 +83,12 @@ describe("help content corpus", () => {
     expect(page!.body).not.toContain("---\ntitle");
   });
 
+  it("holds the template guide the ppt_builder form links to, in both languages", () => {
+    for (const lang of HELP_LANGS) {
+      expect(getHelpPage(lang, "guides", "prepare-powerpoint-template"), lang).not.toBeNull();
+    }
+  });
+
   it("returns null for unknown pages", () => {
     expect(getHelpPage("fr", "getting-started", "nope")).toBeNull();
     expect(getHelpPage("fr", "nope", "index")).toBeNull();

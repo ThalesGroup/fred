@@ -7,8 +7,8 @@ requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.5.7",
-  "fred-sdk[agents]>=4.5.7",
+  "fred-core>=4.6.0",
+  "fred-sdk[agents]>=4.6.0",
   "pydantic>=2.7.0,<3.0.0",
   "python-pptx>=1.0.2",
   "Pillow>=13.0.0",
@@ -17,6 +17,10 @@ dependencies = [
   "fastapi>=0.110",
   # The analyze route takes a multipart file upload (fastapi Form/File).
   "python-multipart>=0.0.9",
+  # Rasterises the patterns PDF for vision labelling (Apache-2.0/BSD-3).
+  "pypdfium2>=4.30",
+  # ppt_builder owns its analysis table (cap_ppt_builder_analysis).
+  "sqlalchemy>=2.0",
 ]
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
@@ -30,6 +34,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # the fred-agents pod auto-discovers the capability at boot via this entry point.
 [project.entry-points."fred.capabilities"]
 ppt_filler = "fred_capability_ppt_filler.capability:PptFillerCapability"
+ppt_builder = "fred_capability_ppt_filler.builder.capability:PptBuilderCapability"
 
 [project.optional-dependencies]
 dev = [
@@ -41,6 +46,9 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  # The ppt_builder migration tree: type checks and the `alembic` CLI. At deploy
+  # time `python -m fred_runtime migrate` brings its own.
+  "alembic>=1.13",
 ]
 
 [build-system]
@@ -50,10 +58,16 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["fred_capability_ppt_filler*"]
 
+[tool.setuptools.package-data]
+# The built-in template and its stored analysis ship in the wheel.
+"fred_capability_ppt_filler.builder" = ["assets/*.pptx", "assets/*.json"]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra"
-markers = ["integration: marks tests that require external services"]
+markers = [
+    "integration: marks tests that require external services",
+]
 testpaths = ["tests"]
 
 [tool.uv.sources]
@@ -63,6 +77,12 @@ fred-pod = { path = "../../fred-pod", editable = true }
 # wheel resolves fred-core / fred-sdk from PyPI via [project.dependencies].
 fred-core = { path = "../../fred-core", editable = true }
 fred-sdk = { path = "../../fred-sdk", editable = true }
+
+[tool.alembic]
+# ppt_builder's own migration tree: `python -m fred_runtime migrate` finds it by
+# entry point; this block lets the `alembic` CLI reach the same tree.
+script_location = "%(here)s/fred_capability_ppt_filler/builder/ppt_builder_migrations"
+prepend_sys_path = ["."]
 
 [dependency-groups]
 dev = [
@@ -74,4 +94,7 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  # The ppt_builder migration tree: type checks and the `alembic` CLI. At deploy
+  # time `python -m fred_runtime migrate` brings its own.
+  "alembic>=1.13",
 ]

@@ -66,8 +66,6 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain_core.tools import BaseTool, StructuredTool
-from PIL import Image, UnidentifiedImageError
-from pptx import Presentation
 from pydantic import BaseModel, Field, create_model
 
 from fred_capability_ppt_filler.concurrency import (
@@ -75,7 +73,13 @@ from fred_capability_ppt_filler.concurrency import (
     release_heavy_job_slot,
     run_heavy_ppt_job,
 )
+from fred_capability_ppt_filler.images import (
+    NotAnImageError,
+    fit_inside_box,
+    prepare_picture,
+)
 from fred_capability_ppt_filler.parser import apply_kept_notes_to_slide
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 from fred_capability_ppt_filler.traversal import (
     ImageAnchor,
     list_image_anchors_on_slide,
@@ -99,15 +103,20 @@ _OUTPUT_FILE_NAME = "filled_presentation.pptx"
 _PPTX_SUFFIX = ".pptx"
 _PDF_SUFFIX = ".pdf"
 
-# Pillow ``format`` values python-pptx's ``add_picture`` can actually embed.
-# Anything KF ingests outside this set (WEBP, ICO, ...) decodes in Pillow but is
-# rejected by ``add_picture`` with "unsupported image format"; such images are
-# transcoded to PNG in-memory before embedding.
-_PPTX_EMBEDDABLE_FORMATS = frozenset({"BMP", "GIF", "JPEG", "PNG", "TIFF", "WMF"})
-
 # Bounded concurrency for the image-bytes prefetch (#2183): a template with
 # many image fields must not fire an unbounded burst of document fetches.
 _IMAGE_PREFETCH_CONCURRENCY = 4
+# Per deck: the pictures are held in memory until the render ends.
+MAX_PREFETCHED_IMAGES = 40
+MAX_PREFETCHED_IMAGE_BYTES = 60 * 1024 * 1024
+_BYTES_OVER = (
+    f"the deck's pictures exceed {MAX_PREFETCHED_IMAGE_BYTES // (1024 * 1024)} MB"
+)
+
+
+class ImageBudgetError(Exception):
+    """A picture left out: the deck already holds as many as it may."""
+
 
 # Top-level (non-slide) arg the model fills with a human-friendly name for the
 # output deck. Optional: when missing/blank we fall back to _OUTPUT_FILE_NAME.
@@ -124,6 +133,51 @@ _TEXT_FORMATTING_HINT = (
     "You may use inline Markdown to emphasize part of this value: **bold** and "
     "*italic* (or _italic_). Markup is optional — omit it for plain text."
 )
+
+
+BuildNoteCode = Literal[
+    "text_shortened",
+    "content_left_out",
+    "items_left_out",
+    "image_unusable",
+    "table_left_out",
+    "table_text_smaller",
+    "text_overflows",
+    "left_empty",
+    "fixed_slide",
+    "list_continued",
+    "other_kind",
+    "chart_type_changed",
+    "chart_shows_shares",
+    "layout_repeated",
+    "layout_not_repeated",
+    "intent_not_shown",
+    "intent_shown_otherwise",
+    "illustrative_data",
+]
+
+
+class BuildNote(BaseModel):
+    """What happened to one slide, as a code the frontend words for the user."""
+
+    code: BuildNoteCode
+    count: Optional[int] = None
+    # The requested kind (`other_kind`) or chart type (`chart_type_changed`).
+    kind: Optional[str] = None
+    # The plan field an intent note is about: "highlight", "total_row", "trend"...
+    field: Optional[str] = None
+
+
+class BuiltSlide(BaseModel):
+    """One rendered slide as the user sees it; ``number`` is its place in the deck."""
+
+    number: int
+    part: int = 1
+    parts: int = 1
+    title: str = ""
+    kind: str
+    template: str
+    notes: List[BuildNote] = Field(default_factory=list)
 
 
 class PptPreviewPart(BaseModel):
@@ -155,6 +209,11 @@ class PptPreviewPart(BaseModel):
     version: str  # per-fill token; drives cache-busting + react-pdf remount
     pptx_download_url: Optional[str] = None  # durable href for the source .pptx
     file_name: Optional[str] = None  # .pptx download file name
+    # Both capabilities of this package deliver this part; the card opens the
+    # preview pane of the one that produced it, the only one the agent may have.
+    capability_id: str = "ppt_filler"
+    # ppt_builder only: what each rendered slide holds and what was changed.
+    summary: Optional[List[BuiltSlide]] = None
 
 
 def _slide_field_name(slide_number: int) -> str:
@@ -169,6 +228,9 @@ def _slide_number_from_field(field_name: str) -> Optional[int]:
         return int(suffix)
     except ValueError:
         return None
+
+
+_MAX_OUTPUT_STEM = 120
 
 
 def _sanitize_output_file_name(raw: object) -> str:
@@ -186,6 +248,8 @@ def _sanitize_output_file_name(raw: object) -> str:
     name = "".join(c for c in name if c.isprintable() and c not in '<>:"\\|?*')
     if name.lower().endswith(_PPTX_SUFFIX):
         name = name[: -len(_PPTX_SUFFIX)].rstrip()
+    # Bounded: the name is a storage key segment and a download header value.
+    name = name[:_MAX_OUTPUT_STEM].rstrip()
     if not name:
         return _OUTPUT_FILE_NAME
     return f"{name}{_PPTX_SUFFIX}"
@@ -315,30 +379,6 @@ def _text_values(raw: Dict[str, object], image_keys: set[str]) -> Dict[str, str]
     }
 
 
-def _fit_inside_box(
-    img_w: int, img_h: int, box_left: int, box_top: int, box_w: int, box_h: int
-) -> Tuple[int, int, int, int]:
-    """Scale ``(img_w, img_h)`` to fit inside ``(box_w, box_h)`` preserving aspect
-    ratio, centered within the box. Inputs/outputs are EMU; the image pixel dims
-    only set the aspect ratio. Returns ``(left, top, width, height)`` in EMU.
-    """
-    if img_w <= 0 or img_h <= 0 or box_w <= 0 or box_h <= 0:
-        return (box_left, box_top, box_w, box_h)
-
-    ar = img_w / img_h
-    if box_w / box_h > ar:
-        height = box_h
-        width = box_h * ar
-        top = box_top
-        left = box_left + (box_w - width) / 2
-    else:
-        width = box_w
-        height = box_w / ar
-        left = box_left
-        top = box_top + (box_h - height) / 2
-    return (round(left), round(top), round(width), round(height))
-
-
 def _remove_anchor_shape(anchor) -> None:
     """Remove a placeholder shape from its slide (drops the empty ``{{key}}`` box)."""
     element = anchor.shape._element
@@ -406,17 +446,30 @@ async def _prefetch_image_bytes(
     port = services.document_content
     assert port is not None  # guarded by the caller (has_image_fields check)
     semaphore = asyncio.Semaphore(_IMAGE_PREFETCH_CONCURRENCY)
+    ordered = sorted(document_uids)
+    fetched_bytes = 0
 
     async def _fetch_one(document_uid: str) -> Tuple[str, object]:
+        nonlocal fetched_bytes
         async with semaphore:
+            if fetched_bytes > MAX_PREFETCHED_IMAGE_BYTES:
+                return document_uid, ImageBudgetError(_BYTES_OVER)
             try:
                 raw_blob = await port.fetch_raw(document_uid)
-                return document_uid, raw_blob.content
             except Exception as exc:  # noqa: BLE001 - surfaced per-key below
                 return document_uid, exc
+            fetched_bytes += len(raw_blob.content)
+            if fetched_bytes > MAX_PREFETCHED_IMAGE_BYTES:
+                return document_uid, ImageBudgetError(_BYTES_OVER)
+            return document_uid, raw_blob.content
 
-    results = await asyncio.gather(*(_fetch_one(uid) for uid in document_uids))
-    return dict(results)
+    kept = ordered[:MAX_PREFETCHED_IMAGES]
+    results = dict(await asyncio.gather(*(_fetch_one(uid) for uid in kept)))
+    for document_uid in ordered[MAX_PREFETCHED_IMAGES:]:
+        results[document_uid] = ImageBudgetError(
+            f"a deck holds at most {MAX_PREFETCHED_IMAGES} pictures"
+        )
+    return results
 
 
 def _place_images_on_slide(
@@ -495,27 +548,21 @@ def _place_images_on_slide(
             )
         image_bytes = cast(bytes, fetched)
 
-        # Validate the bytes ARE a usable image and read pixel dimensions for
-        # the aspect ratio. Formats python-pptx cannot embed are transcoded to
-        # PNG in-memory rather than rejected later by ``add_picture``.
+        # Validate the bytes ARE a usable image (transcoding what python-pptx
+        # cannot embed) and read the pixel size for the aspect ratio.
         try:
-            with Image.open(io.BytesIO(image_bytes)) as image:
-                img_w, img_h = image.size
-                if image.format not in _PPTX_EMBEDDABLE_FORMATS:
-                    buffer = io.BytesIO()
-                    image.convert("RGBA").save(buffer, format="PNG")
-                    image_bytes = buffer.getvalue()
-        except (UnidentifiedImageError, OSError, ValueError) as exc:
+            image_bytes, img_w, img_h = prepare_picture(image_bytes)
+        except NotAnImageError as exc:
             placeholder = f"{{{{{key}}}}}"
             return (
                 f"The document '{document_uid}' you chose for the image field "
-                f"{placeholder} is not a usable image [{type(exc).__name__}: "
-                f"{exc}]. List the field's folder again with "
-                "list_images_in_folder and pick a valid image document."
+                f"{placeholder} is not a usable image [{exc}]. List the field's "
+                "folder again with list_images_in_folder and pick a valid image "
+                "document."
             )
 
         for anchor in key_anchors:
-            left, top, width, height = _fit_inside_box(
+            left, top, width, height = fit_inside_box(
                 img_w,
                 img_h,
                 anchor.left,
@@ -555,7 +602,7 @@ def _build_filled_deck(
     contract :func:`_place_images_on_slide` used to return directly). Any
     other exception propagates to the caller, which wraps it uniformly.
     """
-    presentation = Presentation(io.BytesIO(template_bytes))
+    presentation = open_presentation(template_bytes)
     slides = list(presentation.slides)
     for field_name, slide_args in provided.items():
         slide_number = _slide_number_from_field(field_name)

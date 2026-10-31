@@ -18,7 +18,8 @@ import type { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { includedCapabilityStatus, type IncludedCapabilityStatus } from "../toolPackLogic.ts";
-import type { ToolPack } from "../toolPacks.ts";
+import { BETA_CAPABILITY_IDS, type ToolPack } from "../toolPacks.ts";
+import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 import styles from "./ToolPackCard.module.css";
 
 interface ToolPackCardProps {
@@ -131,6 +132,7 @@ export function ToolPackCard({
           <span className={styles.meta}>
             <span className={styles.titleRow}>
               <span className={styles.title}>{title}</span>
+              {pack.enablesCapabilityIds.some((id) => BETA_CAPABILITY_IDS.has(id)) && <BetaBadge />}
               {/* Described, not named, and inert on click: tapping it shows the tooltip without toggling. */}
               {hasMissing && (
                 <Tooltip text={missingLabel}>

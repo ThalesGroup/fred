@@ -26,6 +26,7 @@ import os
 import shutil
 import subprocess  # nosec B404: only used to construct result/exception stubs in tests
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -260,6 +261,28 @@ def test_a_failing_command_raises_like_a_checked_run() -> None:
             timeout=10,
         )
     assert excinfo.value.returncode == 3 and excinfo.value.stderr == b"boom"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("background", "pool"), [(False, "office2pdf_"), (True, "office2pdf-background")]
+)
+async def test_background_conversions_queue_on_their_own_worker(
+    monkeypatch, background, pool
+) -> None:
+    monkeypatch.setattr(f"{_MODULE}.shutil.which", lambda _: "/usr/bin/soffice")
+    threads: list[str] = []
+
+    def fake_run(cmd, **kwargs):
+        threads.append(threading.current_thread().name)
+        outdir = Path(cmd[cmd.index("--outdir") + 1])
+        (outdir / Path(cmd[-1]).with_suffix(".pdf").name).write_bytes(b"%PDF")
+        return None
+
+    monkeypatch.setattr(f"{_MODULE}._run_soffice", fake_run)
+    pdf = await convert_office_bytes_to_pdf(b"x", suffix=".pptx", background=background)
+    assert pdf == b"%PDF"
+    assert threads[0].startswith(pool)
 
 
 @pytest.mark.integration

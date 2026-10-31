@@ -37,6 +37,7 @@ from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
     CapabilityManifest,
+    CapabilityReadiness,
     ChatControlSpec,
     EmptyModel,
     HitlGateRequest,
@@ -174,6 +175,21 @@ def test_default_upgrade_config_validates_against_stored_model() -> None:
     upgraded = cap.upgrade_config({"threshold": 9}, from_version="0.9.0")
     assert isinstance(upgraded, _StoredConfig)
     assert upgraded.threshold == 9
+
+
+def test_default_readiness_is_ready() -> None:
+    cap = _FullCapability()
+    verdict = asyncio.run(
+        cap.readiness(_StoredConfig(), CapabilityIdentity(user_id="u-1"))
+    )
+    assert verdict == CapabilityReadiness.ready()
+
+
+def test_readiness_failure_carries_its_detail() -> None:
+    assert CapabilityReadiness.failed("boom") == CapabilityReadiness(
+        state="failed", detail="boom"
+    )
+    assert CapabilityReadiness.pending().detail is None
 
 
 def test_default_chat_controls_and_hitl_specs_are_empty() -> None:

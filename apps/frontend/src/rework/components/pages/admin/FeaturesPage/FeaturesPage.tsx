@@ -21,6 +21,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { EntityIdentity } from "@shared/molecules/EntityIdentity/EntityIdentity.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
@@ -49,6 +50,8 @@ import {
 import type { CapabilityEnablementItem } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
 import { CapabilityTeamMatrixDrawer } from "./CapabilityTeamMatrixDrawer.tsx";
+import { CapabilityPlatformDrawer } from "./CapabilityPlatformDrawer.tsx";
+import { platformPanelFor } from "../../../../features/capabilities/platformPanelRegistry";
 import { PlatformModelBindingsPanel } from "./PlatformModelBindingsPanel/PlatformModelBindingsPanel.tsx";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
@@ -108,6 +111,7 @@ export default function FeaturesPage() {
 
   const [matrixCapabilityId, setMatrixCapabilityId] = useState<string | null>(null);
   const [suspendedCapabilityId, setSuspendedCapabilityId] = useState<string | null>(null);
+  const [platformCapabilityId, setPlatformCapabilityId] = useState<string | null>(null);
   const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
   const [noDefaultModalOpen, setNoDefaultModalOpen] = useState(false);
   const [noDefaultModalPending, setNoDefaultModalPending] = useState(false);
@@ -305,6 +309,7 @@ export default function FeaturesPage() {
   const matrixCapability =
     capabilities.find((cap) => cap.id === matrixCapabilityId && !unavailableDiscoveredIds.has(cap.id)) ?? null;
   const suspendedCapability = capabilities.find((cap) => cap.id === suspendedCapabilityId) ?? null;
+  const platformCapability = capabilities.find((cap) => cap.id === platformCapabilityId) ?? null;
   const visiblePendingDefaultOff = applicationsEnabled || pendingDefaultOff?.kind !== "app" ? pendingDefaultOff : null;
   // Each kind loses something different when default-on goes off: agent
   // instances can be suspended, an application or a Knowledge Base only loses
@@ -740,6 +745,17 @@ export default function FeaturesPage() {
           >
             {t("rework.admin.capabilities.manageTeams")}
           </Button>
+          {platformPanelFor(cap.id) && (
+            <Tooltip text={t("rework.admin.capabilities.platformSettings")}>
+              <IconButton
+                variant="icon"
+                size="medium"
+                icon={{ category: "outlined", type: "settings" }}
+                aria-label={t("rework.admin.capabilities.platformSettings")}
+                onClick={() => setPlatformCapabilityId(cap.id)}
+              />
+            </Tooltip>
+          )}
         </div>
       ),
     },
@@ -949,6 +965,8 @@ export default function FeaturesPage() {
         }}
         onCancel={() => setNoDefaultModalOpen(false)}
       />
+
+      <CapabilityPlatformDrawer capability={platformCapability} onClose={() => setPlatformCapabilityId(null)} />
 
       <SuspendedInstancesDrawer
         capability={suspendedCapability}

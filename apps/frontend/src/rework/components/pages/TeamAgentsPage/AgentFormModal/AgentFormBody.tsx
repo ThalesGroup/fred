@@ -17,6 +17,7 @@ import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { IconType } from "@shared/utils/Type.ts";
+import { capabilityPreparingKey } from "@shared/utils/capabilityPreparing.ts";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -36,18 +37,22 @@ import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/Capabilit
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
 import {
+  BETA_CAPABILITY_IDS,
   CAP_DOCUMENT_ACCESS,
+  CAP_PPT_BUILDER,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
   DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
+import { PptBuilderConfigForm } from "../../../../features/capabilities/ppt_builder/PptBuilderConfigForm.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { RecommendedModelField } from "./RecommendedModelField/RecommendedModelField.tsx";
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
+import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
 
@@ -224,12 +229,25 @@ export function AgentFormBody({
   const suspensionReason = mode === "edit" ? editInstance?.suspension_reason : undefined;
   const availableCapabilityIds = new Set(capabilities.map((c) => c.id));
   const missingCapabilityIds =
-    suspensionReason && suspensionReason !== "capability_config_invalid"
+    suspensionReason === "capability_unavailable" || suspensionReason === "capability_access_revoked"
       ? (editInstance?.selected_capability_ids ?? []).filter((id) => !availableCapabilityIds.has(id))
       : [];
+  const suspensionTitle =
+    suspensionReason === "capability_pending"
+      ? t("rework.teams.formAgent.suspended.pendingTitle")
+      : t("rework.teams.formAgent.suspended.title");
   const suspensionMessage = (() => {
     if (!suspensionReason) return undefined;
     const capabilityList = missingCapabilityIds.join(", ") || "—";
+    // Pending clears on its own once the capability reports ready.
+    if (suspensionReason === "capability_pending") {
+      const detail = editInstance?.suspension_detail;
+      if (detail) return t("rework.teams.formAgent.suspended.pendingFailed", { detail });
+      const preparingKey = editInstance && capabilityPreparingKey(editInstance, (key) => i18n.exists(key));
+      return preparingKey
+        ? t("rework.teams.formAgent.suspended.pendingDetail", { detail: t(preparingKey) })
+        : t("rework.teams.formAgent.suspended.pending");
+    }
     if (suspensionReason === "capability_config_invalid") {
       return t("rework.teams.formAgent.suspended.configInvalid");
     }
@@ -374,6 +392,20 @@ export function AgentFormBody({
         />
       );
     }
+    // Presentation builder → the same widget as the Advanced card.
+    if (pack.enablesCapabilityIds.includes(CAP_PPT_BUILDER) && availableCapabilityIds.has(CAP_PPT_BUILDER)) {
+      return (
+        <PptBuilderConfigForm
+          disabled={isSubmitting}
+          teamId={teamId}
+          agentInstanceId={editInstance?.agent_instance_id}
+          configValues={capabilityConfigValues[CAP_PPT_BUILDER] ?? {}}
+          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_PPT_BUILDER, key, value)}
+          assetFiles={capabilityAssetFiles[CAP_PPT_BUILDER] ?? {}}
+          onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_BUILDER, slotKey, file)}
+        />
+      );
+    }
     return undefined;
   };
 
@@ -402,7 +434,7 @@ export function AgentFormBody({
 
       {suspensionMessage && (
         <div className={styles.suspensionBanner} role="alert">
-          <strong>{t("rework.teams.formAgent.suspended.title")}</strong> {suspensionMessage}
+          <strong>{suspensionTitle}</strong> {suspensionMessage}
         </div>
       )}
 
@@ -543,6 +575,7 @@ export function AgentFormBody({
                           checked={checked}
                           disabled={isSubmitting}
                           onToggle={toggle}
+                          badge={BETA_CAPABILITY_IDS.has(capability.id) && <BetaBadge />}
                           subForm={checked && renderConfigForm(capability)}
                         />
                       );

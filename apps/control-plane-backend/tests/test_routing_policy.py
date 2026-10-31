@@ -42,7 +42,13 @@ from control_plane_backend.routing_policy.schemas import (
 )
 from control_plane_backend.routing_policy.service import resolve_effective_chat_model
 from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
-from fred_core import AuthorizationError, KeycloakUser, Resource, TeamPermission
+from fred_core import (
+    AuthorizationError,
+    KeycloakUser,
+    RelationType,
+    Resource,
+    TeamPermission,
+)
 from fred_core.common import TeamId
 from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
 from fred_sdk.contracts.context import ModelBinding
@@ -1375,6 +1381,105 @@ async def test_available_models_denied_for_plain_team_member(monkeypatch) -> Non
         )
 
 
+class _OrgMarkerRebac:
+    """ReBAC fake for the team-free list: only `enabled` is read directly."""
+
+    enabled = True
+
+
+def _platform_gate(monkeypatch: pytest.MonkeyPatch, *, manager: bool) -> None:
+    async def _gate(rebac, user):
+        if not manager:
+            raise AuthorizationError(
+                user_id=user.uid,
+                action="read",
+                resource=Resource.ORGANIZATION,
+                message="denied",
+            )
+
+    monkeypatch.setattr(routing_policy_service, "require_manage_capabilities", _gate)
+
+
+def _default_on(monkeypatch: pytest.MonkeyPatch, ids: set[str]) -> None:
+    async def _fake(rebac, capability_id, relation):
+        assert relation is RelationType.DEFAULT_ON
+        return capability_id in ids
+
+    monkeypatch.setattr(routing_policy_service, "has_org_relation", _fake)
+
+
+@pytest.mark.asyncio
+async def test_platform_available_models_need_a_capability_manager(
+    monkeypatch, _stub_team_lookup
+) -> None:
+    _platform_gate(monkeypatch, manager=False)
+    with pytest.raises(AuthorizationError):
+        await routing_policy_service.list_available_model_profiles(
+            _user(), None, _deps(store=_FakeStore(), rebac=_OrgMarkerRebac())
+        )
+    assert _stub_team_lookup == []  # no team gate without a team
+
+
+@pytest.mark.asyncio
+async def test_platform_available_models_keep_models_on_for_every_team(
+    monkeypatch, _stub_catalog
+) -> None:
+    """No `can_use`: a model enabled for some teams only is not offered."""
+    _platform_gate(monkeypatch, manager=True)
+    _default_on(monkeypatch, {"model__openai__gpt-4o"})
+    _stub_catalog["model__openai__gpt-4o"] = _stub_catalog[
+        "model__openai__gpt-4o"
+    ].model_copy(update={"model_vision_profile_ids": ("chat.openai.gpt4o",)})
+
+    async def _no_usable(rebac, team_id):
+        raise AssertionError("can_use is a team question")
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _no_usable)
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), None, _deps(store=_FakeStore(), rebac=_OrgMarkerRebac())
+    )
+    assert [(p.profile_id, p.supports_vision) for p in result.profiles] == [
+        ("chat.openai.gpt4o", True)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_platform_available_models_span_every_pod(monkeypatch) -> None:
+    _platform_gate(monkeypatch, manager=True)
+    _default_on(monkeypatch, {"model__openai__gpt-5", "model__openai__gpt-4o"})
+    scopes: list[set[str] | None] = []
+
+    async def _universal(deps, *, source_runtime_ids=None):
+        scopes.append(source_runtime_ids)
+        return frozenset({"chat.openai.gpt5"})
+
+    monkeypatch.setattr(
+        routing_policy_service,
+        "universally_available_chat_model_profile_ids",
+        _universal,
+    )
+    _pod_defaults(monkeypatch, [("chat.openai.gpt5", "model__openai__gpt-5")])
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), None, _deps(store=_FakeStore(), rebac=_OrgMarkerRebac())
+    )
+    assert scopes == [set()]  # every enabled pod
+    assert [p.profile_id for p in result.profiles] == ["chat.openai.gpt5"]
+    assert result.effective_default_profile_id == "chat.openai.gpt5"
+
+
+@pytest.mark.asyncio
+async def test_platform_available_models_unfiltered_without_rebac(monkeypatch) -> None:
+    _platform_gate(monkeypatch, manager=True)
+
+    class _Disabled:
+        enabled = False
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), None, _deps(store=_FakeStore(), rebac=_Disabled())
+    )
+    assert len(result.profiles) == 3
+
+
 @pytest.mark.asyncio
 async def test_elevated_role_check_skipped_for_personal_space() -> None:
     # A personal-space owner holds team_editor unconditionally and must never
@@ -2279,6 +2384,7 @@ async def test_effective_model_is_empty_for_a_deleted_instance(
         "reasoning_enabled": False,
         "selectable_models": [],
         "choice_locked": False,
+        "supports_vision": False,
     }
 
 
@@ -2304,3 +2410,62 @@ async def test_effective_model_is_empty_for_an_instance_of_another_team(
     )
     assert result.name is None
     assert result.capability_id is None
+
+
+@pytest.mark.asyncio
+async def test_available_models_report_supports_vision_per_profile(
+    monkeypatch, _stub_catalog
+) -> None:
+    async def _fake_usable(rebac, team_id):
+        return None
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    _stub_catalog["model__openai__gpt-5"] = _stub_catalog[
+        "model__openai__gpt-5"
+    ].model_copy(update={"model_vision_profile_ids": ("chat.openai.gpt5",)})
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+
+    assert {p.profile_id: p.supports_vision for p in result.profiles} == {
+        "chat.openai.gpt4o": False,
+        "chat.openai.gpt5": True,
+        "chat.openai.gpt5.creative": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_effective_model_reports_supports_vision_of_the_resolved_profile(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    entry = _chat_entry("model__openai__gpt-4o", "chat.vision").model_copy(
+        update={"model_vision_profile_ids": ("chat.vision",)}
+    )
+    _stub_pod_catalog(
+        monkeypatch, entries=[entry], default_chat_profile_id="chat.vision"
+    )
+
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", _resolution_deps()
+    )
+
+    assert result.supports_vision is True
+
+
+@pytest.mark.asyncio
+async def test_effective_model_without_vision_declaration_reports_false(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[_chat_entry("model__openai__mistral-small", "chat.small")],
+        default_chat_profile_id="chat.small",
+    )
+
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", _resolution_deps()
+    )
+
+    assert result.supports_vision is False

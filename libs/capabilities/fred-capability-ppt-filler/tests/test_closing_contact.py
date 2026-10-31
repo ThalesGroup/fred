@@ -1,0 +1,330 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Closing slides: a contact design only when the user gave a contact, a
+thank-you design otherwise, and a built deck that ends on one, added outside the
+slide count, unless the user opted out (synthetic template, plus the reference corporate template when
+`PPT_BUILDER_REFERENCE_TEMPLATE` points at it)."""
+
+from __future__ import annotations
+
+import io
+import os
+from typing import Any, List, cast
+
+import pytest
+from builder_decks import L_TITLE_ONLY, _set_title, _textbox, build_slides
+from deck_builders import png_bytes
+from fred_capability_ppt_filler.builder import lexicon
+from fred_capability_ppt_filler.builder import tools as tools_mod
+from fred_capability_ppt_filler.builder.analysis import analyze_template
+from fred_capability_ppt_filler.builder.assign import assign
+from fred_capability_ppt_filler.builder.models import Pattern, TemplateInventory
+from fred_capability_ppt_filler.builder.plan import DeckPlan
+from fred_capability_ppt_filler.builder.render import render_deck
+from fred_capability_ppt_filler.builder.tools import (
+    BUILD_TOOL_NAME,
+    _args_schema,
+    _closed,
+    _description,
+    _opted_out,
+    offered_kinds,
+)
+from port_fakes import FakeWorkspace
+from pptx import Presentation
+from pptx.util import Inches
+from test_build_tool import _configured, _ctx, _no_pdf, _tools
+
+COVER = {"title": "Projet X", "subtitle": "Revue de lancement"}
+POINTS = {"title": "Le contexte", "bullets": ["Un marché en croissance", "Deux sites"]}
+THANKS = {"title": "Merci", "subtitle": "Questions et échanges"}
+EMAIL = "jean.dupont@example.com"
+PHONE = "+33 6 12 34 56 78"
+
+
+def _contact_slide(presentation):
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_TITLE_ONLY])
+    _set_title(slide, "Contact")
+    _textbox(slide.shapes, 3.0, 2.6, 4.0, 0.4, "Nom Prénom")
+    _textbox(slide.shapes, 3.0, 3.1, 4.0, 0.4, "Intitulé du poste")
+    for y, sample in ((3.9, "Numéro de téléphone"), (4.4, "email")):
+        _textbox(slide.shapes, 4.4, y, 2.5, 0.3, sample)
+        slide.shapes.add_picture(
+            io.BytesIO(png_bytes(8, 8)),
+            Inches(4.1),
+            Inches(y),
+            Inches(0.2),
+            Inches(0.3),
+        )
+
+
+def _thanks_slide(presentation):
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_TITLE_ONLY])
+    _set_title(slide, "Merci")
+    _textbox(slide.shapes, 2.0, 4.0, 6.0, 0.6, "Questions et échanges")
+
+
+def _cover_slide(presentation):
+    slide = presentation.slides.add_slide(presentation.slide_layouts[0])
+    _set_title(slide, "Titre de la présentation")
+    slide.placeholders[1].text = "Sous-titre"
+
+
+def _points_slide(presentation):
+    slide = presentation.slides.add_slide(presentation.slide_layouts[1])
+    _set_title(slide, "Titre")
+    slide.placeholders[1].text = "Premier point\nSecond point"
+
+
+def _template(*closings) -> bytes:
+    return build_slides([_cover_slide, _points_slide, *closings])
+
+
+def _inventory(content: bytes) -> TemplateInventory:
+    inventory = analyze_template(content).inventory
+    assert inventory is not None
+    return inventory
+
+
+def _closing(inventory: TemplateInventory, last: dict) -> Pattern:
+    assignment = assign(
+        inventory, DeckPlan.model_validate({"slides": [COVER, POINTS, last]})
+    )
+    assert not assignment.problems
+    pattern = assignment.patterns[-1]
+    assert pattern is not None
+    return pattern
+
+
+def _contact_roles(pattern: Pattern) -> List[str]:
+    return sorted(z.role for z in pattern.zones if z.role.startswith("contact_"))
+
+
+@pytest.mark.parametrize(
+    "sample, role",
+    [
+        ("email", "contact_email"),
+        ("E-mail", "contact_email"),
+        ("prenom.nom@thalesgroup.com", "contact_email"),
+        ("Numéro de téléphone", "contact_phone"),
+        ("Tél.", "contact_phone"),
+        ("+33 1 23 45 67 89", "contact_phone"),
+        ("01 23 45 67 89", "contact_phone"),
+        ("Nom Prénom", None),
+        ("2024 - 2026", None),
+        ("Questions et échanges", None),
+    ],
+)
+def test_contact_samples_are_recognised(sample, role):
+    assert lexicon.contact_kind(sample) == role
+
+
+def test_the_contact_lines_of_a_closing_slide_get_contact_roles():
+    inventory = _inventory(_template(_contact_slide, _thanks_slide))
+    closings = [p for p in inventory.patterns if p.kind == "closing"]
+    assert [_contact_roles(p) for p in closings] == [
+        ["contact_email", "contact_phone"],
+        [],
+    ]
+
+
+def test_a_closing_without_contact_never_takes_the_contact_design():
+    inventory = _inventory(_template(_contact_slide, _thanks_slide))
+    assert _closing(inventory, THANKS).label == "Merci"
+    assert _closing(inventory, {"title": "Merci", "kind": "closing"}).label == "Merci"
+
+
+def test_a_closing_with_a_contact_takes_the_contact_design():
+    inventory = _inventory(_template(_contact_slide, _thanks_slide))
+    assert _contact_roles(_closing(inventory, {"title": "Merci", "email": EMAIL}))
+    assert _contact_roles(_closing(inventory, {"title": "Contact", "phone": PHONE}))
+
+
+def test_with_only_a_contact_design_a_closing_without_contact_uses_another_design():
+    inventory = _inventory(_template(_contact_slide))
+    plan = DeckPlan.model_validate({"slides": [COVER, POINTS, THANKS]})
+    assignment = assign(inventory, plan)
+    assert not assignment.problems
+    pattern = assignment.patterns[-1]
+    assert pattern is not None and not _contact_roles(pattern)
+
+
+def test_the_contact_fills_its_lines_and_an_empty_one_loses_its_icon():
+    content = _template(_contact_slide, _thanks_slide)
+    inventory = _inventory(content)
+    last = {"title": "Contact", "bullets": ["Jean Dupont", "Directeur"], "email": EMAIL}
+    plan = DeckPlan.model_validate({"slides": [COVER, POINTS, last]})
+    assignment = assign(inventory, plan)
+    result = render_deck(content, inventory, plan, assignment.patterns)
+    slide = Presentation(io.BytesIO(result.pptx)).slides[-1]
+    texts = [cast(Any, s).text_frame.text for s in slide.shapes if s.has_text_frame]
+    assert texts == ["Contact", "Jean Dupont", "Directeur", EMAIL]
+    pictures = [s for s in slide.shapes if s.shape_type == 13]
+    # The mail icon stays beside its line; the phone icon left with its line.
+    assert len(pictures) == 1
+    assert abs(pictures[0].top - Inches(4.4)) < Inches(0.05)
+
+
+def test_a_closing_without_a_contact_line_lists_the_contact():
+    content = _template(_thanks_slide)
+    inventory = _inventory(content)
+    last = {"title": "Merci", "bullets": ["Jean Dupont"], "email": EMAIL}
+    plan = DeckPlan.model_validate({"slides": [COVER, POINTS, last]})
+    assignment = assign(inventory, plan)
+    assert not assignment.problems
+    result = render_deck(content, inventory, plan, assignment.patterns)
+    slide = Presentation(io.BytesIO(result.pptx)).slides[-1]
+    text = " ".join(
+        cast(Any, s).text_frame.text for s in slide.shapes if s.has_text_frame
+    )
+    assert EMAIL in text
+
+
+REFERENCE = os.environ.get("PPT_BUILDER_REFERENCE_TEMPLATE")
+
+
+@pytest.mark.skipif(
+    not REFERENCE or not os.path.exists(REFERENCE or ""),
+    reason="reference template not provided",
+)
+def test_reference_template_picks_thanks_or_contact():
+    inventory = _inventory(open(REFERENCE, "rb").read())  # type: ignore[arg-type]
+    contacts = [p for p in inventory.patterns if _contact_roles(p)]
+    assert contacts and all(p.kind == "closing" for p in contacts)
+    assert not _contact_roles(_closing(inventory, THANKS))
+    chosen = _closing(inventory, {"title": "Contact", "email": EMAIL, "phone": PHONE})
+    assert _contact_roles(chosen) == ["contact_email", "contact_phone"]
+
+
+# --- the built deck ends on a closing slide, outside the slide count -------------
+
+
+def _ended(content: bytes, slides: List[dict], opted_out: bool = False):
+    """The plan as the build closes it, whether a closing was added, and its
+    assignment."""
+    inventory = _inventory(content)
+    plan = DeckPlan.model_validate({"slides": slides, "no_closing": opted_out})
+    closed, added = _closed(plan, offered_kinds(inventory))
+    assignment = assign(inventory, closed)
+    assert not assignment.problems
+    return closed, added, assignment
+
+
+def test_a_deck_without_a_contact_gets_the_thanks_slide_after_its_slides():
+    template = _template(_contact_slide, _thanks_slide)
+    plan, added, assignment = _ended(template, [COVER, POINTS])
+    assert added and len(plan.slides) == 3 and plan.slides[-1].title == "Merci"
+    pattern = assignment.patterns[-1]
+    assert pattern is not None and pattern.label == "Merci"
+
+
+def test_a_deck_whose_last_slide_gives_the_contact_keeps_it():
+    last = {"title": "Contact", "bullets": ["Jean Dupont"], "email": EMAIL}
+    template = _template(_contact_slide, _thanks_slide)
+    plan, added, assignment = _ended(template, [COVER, POINTS, last])
+    assert not added and len(plan.slides) == 3
+    pattern = assignment.patterns[-1]
+    assert pattern is not None and _contact_roles(pattern)
+
+
+def test_a_user_who_opted_out_gets_no_closing_slide():
+    template = _template(_contact_slide, _thanks_slide)
+    plan, added, _ = _ended(template, [COVER, POINTS], opted_out=True)
+    assert not added and len(plan.slides) == 2
+
+
+def test_a_template_without_a_closing_slide_gets_none_added():
+    plan, added, _ = _ended(_template(), [COVER, POINTS])
+    assert not added and len(plan.slides) == 2
+
+
+@pytest.mark.parametrize(
+    "last", [THANKS, {"title": "Questions ?"}, {"title": "Fin", "kind": "closing"}]
+)
+def test_a_deck_already_ending_on_a_closing_gets_no_second_one(last):
+    template = _template(_contact_slide, _thanks_slide)
+    plan, added, assignment = _ended(template, [COVER, POINTS, last])
+    assert not added and len(plan.slides) == 3
+    pattern = assignment.patterns[-1]
+    assert pattern is not None and pattern.kind == "closing"
+
+
+def test_an_english_deck_ends_on_thank_you():
+    points = {"title": "The context", "bullets": ["A growing market", "Two sites"]}
+    cover = {"title": "Project X", "subtitle": "Kick-off review"}
+    plan, added, _ = _ended(_template(_thanks_slide), [cover, points])
+    assert added and plan.slides[-1].title == "Thank you"
+
+
+def test_four_slides_asked_get_the_closing_as_a_fifth():
+    """Owner decision: the closing is outside the slide count asked."""
+    template = _template(_contact_slide, _thanks_slide)
+    plan, added, _ = _ended(template, [COVER, POINTS, POINTS, POINTS])
+    assert added and len(plan.slides) == 5 and plan.slides[-1].title == "Merci"
+
+
+def test_the_guidance_puts_the_closing_outside_the_slide_count():
+    inventory = _inventory(_template(_contact_slide, _thanks_slide))
+    assert "outside any slide count" in _description(inventory, "template_slide", 2)
+    field = _args_schema(inventory).model_json_schema()["properties"]["no_closing"]
+    assert "a slide count is never a reason" in field["description"]
+
+
+@pytest.mark.asyncio
+async def test_an_opt_out_sent_with_changes_drops_the_added_closing(
+    monkeypatch, deck_plan_store
+):
+    """The opt-out removes the thank-you closing the build appended, without a
+    `remove` op, even when the edit sent leaves every slide as it was."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    workspace = FakeWorkspace()
+    template = _template(_contact_slide, _thanks_slide)
+
+    def build():
+        config, assets = _configured(template=template)
+        ctx = _ctx(config, assets=assets, workspace=workspace)
+        return _tools(ctx)[BUILD_TOOL_NAME].coroutine
+
+    def slides() -> int:
+        return len(Presentation(io.BytesIO(workspace.writes[-1]["content"])).slides)
+
+    text, result = await build()(slides=[COVER, POINTS])
+    assert not result.is_error, text
+    assert slides() == 3
+    same = {"op": "edit", "slide": 2, "field": "title", "value": POINTS["title"]}
+    text, result = await build()(changes=[same], no_closing=True)
+    assert not result.is_error, text
+    assert slides() == 2
+    # Opting back in rebuilds the deck with its closing, though no slide changed.
+    text, result = await build()(changes=[same], no_closing=False)
+    assert not result.is_error, text
+    assert slides() == 3
+
+
+def test_an_opt_out_keeps_a_closing_the_model_wrote_or_edited():
+    added = {"title": "Merci", "kind": "closing", "added_closing": True}
+    contact = {**added, "email": EMAIL}
+    renamed = {**added, "title": "Questions ?"}
+    for last, kept in (
+        (added, False),
+        (contact, True),
+        (renamed, True),
+        ({"title": "Merci"}, True),
+    ):
+        plan = DeckPlan.model_validate(
+            {"slides": [COVER, POINTS, last], "no_closing": True}
+        )
+        assert (len(_opted_out(plan).slides) == 3) is kept
+    plan = DeckPlan.model_validate({"slides": [COVER, added]})
+    assert len(_opted_out(plan).slides) == 2

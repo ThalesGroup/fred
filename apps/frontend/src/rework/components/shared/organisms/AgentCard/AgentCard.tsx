@@ -17,6 +17,8 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
+import { capabilityPreparingKey } from "@shared/utils/capabilityPreparing.ts";
+import { isPreparing } from "@core/hooks/useTeamAgentInstances.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -91,17 +93,21 @@ export default function AgentCard({
   marketplace,
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // A suspended instance (#1975, RFC §3.9) is a platform-forced broken state
   // distinct from the editor's enable toggle: it never counts as enabled (no
   // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
   const isSuspended = !!instance.suspension_reason;
   const isEnabled = !offline && !isSuspended && instance.status === "enabled";
-  const toggleLabel = isSuspended
-    ? t("rework.agentCard.suspendedToggleLocked")
-    : isEnabled
-      ? t("rework.agentCard.deactivate")
-      : t("rework.agentCard.activate");
+  const preparing = isPreparing(instance);
+  const preparingKey = preparing ? capabilityPreparingKey(instance, (key) => i18n.exists(key)) : undefined;
+  const toggleLabel = preparing
+    ? t("rework.agentCard.pendingToggleLocked")
+    : isSuspended
+      ? t("rework.agentCard.suspendedToggleLocked")
+      : isEnabled
+        ? t("rework.agentCard.deactivate")
+        : t("rework.agentCard.activate");
   // Best-effort keyword guess from the agent's own identity, falling back to
   // the site's configured default icon when nothing matches (#2076 follow-up).
   const iconName = resolveAgentIcon(instance, agentIconName);
@@ -273,7 +279,17 @@ export default function AgentCard({
       )}
 
       <div className={styles.footer}>
-        {isSuspended && <div className={styles.suspensionWarning}>{t("rework.agentCard.suspended")}</div>}
+        {isSuspended && (
+          <div className={styles.suspensionWarning}>
+            {preparing
+              ? preparingKey
+                ? t("rework.agentCard.preparingDetail", { detail: t(preparingKey) })
+                : t("rework.agentCard.preparing")
+              : instance.suspension_reason === "capability_pending"
+                ? t("rework.agentCard.preparationFailed", { detail: instance.suspension_detail })
+                : t("rework.agentCard.suspended")}
+          </div>
+        )}
         <div className={styles.actions}>
           <Tooltip content={infoTooltipContent}>
             <span className={styles.infoIcon} tabIndex={0}>

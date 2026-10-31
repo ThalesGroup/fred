@@ -52,17 +52,36 @@ const sidePanelRegistry = buildSidePanelRegistry();
 /**
  * Every side panel contributed by the given active capabilities, in the order
  * the capabilities are supplied (then plugin declaration order). Capabilities
- * without side panels are skipped. Pure — safe to call on every render.
+ * without side panels are skipped. A widget declared by several capabilities
+ * (ppt_builder reuses ppt_filler's preview pane) appears once, under the first.
+ * Pure — safe to call on every render.
  */
 export function sidePanelsForCapabilities(
   capabilityIds: readonly string[],
   registry: ReadonlyMap<string, readonly SidePanelEntry[]> = sidePanelRegistry,
 ): readonly SidePanelEntry[] {
   const entries: SidePanelEntry[] = [];
+  const widgets = new Set<string>();
   for (const id of capabilityIds) {
     for (const entry of registry.get(id) ?? []) {
+      if (widgets.has(entry.widget)) continue;
+      widgets.add(entry.widget);
       entries.push(entry);
     }
   }
   return entries;
+}
+
+/**
+ * The entry a `${capabilityId}:${widget}` key opens. A request made by a
+ * capability whose widget was merged into another's entry falls back to it.
+ */
+export function findSidePanel(entries: readonly SidePanelEntry[], key: string | null): SidePanelEntry | null {
+  if (!key) return null;
+  const widget = key.slice(key.indexOf(":") + 1);
+  return (
+    entries.find((entry) => `${entry.capabilityId}:${entry.widget}` === key) ??
+    entries.find((entry) => entry.widget === widget) ??
+    null
+  );
 }

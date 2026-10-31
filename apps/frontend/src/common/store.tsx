@@ -22,6 +22,7 @@ import { writableDocumentCapabilityApi } from "../rework/features/capabilities/w
 import writableDocumentReducer from "../rework/features/capabilities/writable_document/writableDocumentSlice.ts";
 import { pptFillerCapabilityApi } from "../rework/features/capabilities/ppt_filler/api/pptFillerCapabilityApi.ts";
 import pptPreviewReducer from "../rework/features/capabilities/ppt_filler/pptPreviewSlice.ts";
+import { pptBuilderCapabilityApi } from "../rework/features/capabilities/ppt_builder/api/pptBuilderCapabilityApi.ts";
 import htmlArtifactReducer from "../rework/features/capabilities/html_artifact/htmlArtifactSlice.ts";
 import { sidePanelOpenRequestSlice } from "../rework/features/capabilities/sidePanelOpenRequestSlice.ts";
 
@@ -56,6 +57,7 @@ const combinedReducer = combineReducers({
   [writableDocumentCapabilityApi.reducerPath]: writableDocumentCapabilityApi.reducer,
   writableDocument: writableDocumentReducer,
   [pptFillerCapabilityApi.reducerPath]: pptFillerCapabilityApi.reducer,
+  [pptBuilderCapabilityApi.reducerPath]: pptBuilderCapabilityApi.reducer,
   pptPreview: pptPreviewReducer,
   htmlArtifact: htmlArtifactReducer,
   capabilitySidePanelOpenRequest: sidePanelOpenRequestSlice.reducer,
@@ -70,6 +72,7 @@ export const store = configureStore({
       controlPlaneApi.middleware,
       writableDocumentCapabilityApi.middleware,
       pptFillerCapabilityApi.middleware,
+      pptBuilderCapabilityApi.middleware,
       loggingMiddleware,
     ),
   devTools: true,

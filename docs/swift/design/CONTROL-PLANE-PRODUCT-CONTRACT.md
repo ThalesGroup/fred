@@ -5175,3 +5175,65 @@ personal localStorage values do not seed the row or serve as a fallback; the
 frontend applies the database response or defaults to in-memory controls and
 does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
+
+## 70. Contract Notes — capability readiness and vision flags (2026-10-05)
+
+**Readiness suspension.** `SuspensionReason` gains `capability_pending`: a selected
+capability reports, through its pod's `POST /agents/capabilities/readiness`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.120), that its saved configuration is still
+being prepared, or that preparing it failed. `ManagedAgentInstanceSummary` gains
+`suspension_detail` (nullable; Alembic `b8e1f4a2c6d9` adds the column), set only
+with `capability_pending` to carry the failure message. The existing suspension
+guards apply unchanged (prepare-execution 409, locked toggle, hidden from chat
+pickers, recents and search).
+
+Control-plane asks the pod after an enrol, after a copy and after a save touching
+capabilities, on
+`POST /teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check`
+(`CAN_UPDATE_AGENTS`, returns the summary), which the agent form polls, and on
+`GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances
+without a failure detail (a random subset over the cap; a failure only changes on a
+save, a re-run or a re-check), concurrently on the shared runtime HTTP client, with
+the caller's token and a 2 s bound (the sweep has no production host). Readiness verdicts alone set and clear `capability_pending`; every other
+reason outranks it. An older pod without the route (404) reads as ready.
+
+After an enrol, a copy or a capability save, the instance gets one suspension write: none
+when the pod answers ready (the save resolves any earlier reason), else
+`capability_pending`. No answer (timeout, unreachable pod, error) fails closed to
+`capability_pending` without detail, lifted by the next listing, re-check or sweep
+that gets an answer. An availability reason that clears (capability back, access
+re-granted) also leaves `capability_pending` without detail, since it may have
+overwritten one. Elsewhere, no answer changes nothing. Readiness writes are
+compare-and-set on the reason read before the pod call, so they never overwrite a
+suspension written meanwhile.
+
+**Save-time routing.** The pod `validate-config` call carries query parameters
+`template_agent_id`, `chat_default_profile_id` (the team default) and
+`recommended_chat_profile_id` (the instance recommendation, when set): the levels a
+new conversation of this agent starts from, so a capability can call the agent's
+model during its save. No platform binding is sent. The pod
+`copy-config` call carries the same parameters for the destination team.
+
+**Vision flags.** `AvailableModelProfile.supports_vision` and
+`EffectiveChatModel.supports_vision` (default false) report whether the profile
+declares `supports_vision` in the pod catalog. A platform binding reports false.
+
+## 71. Contract Notes — capability platform settings fields (2026-10-22)
+
+`CapabilityEnablementItem` (`GET /admin/capabilities`, `can_manage_capabilities`)
+gains `route_base_url` (nullable): the ingress-relative base URL of the capability's
+own routes (`CapabilityCatalogEntry.route_base_url`), so Admin > Features can open a
+capability's platform settings panel against its pod, as the agent form does.
+
+`GET /routing-policy/available-models` (`can_manage_capabilities`) returns the
+`AvailableModelProfileList` of `GET /teams/{team_id}/routing-policy/available-models`
+for a platform-wide choice, from the same service function called without a team:
+no `can_use` check, but the model must hold the org `default_on` marker, the
+profile must be a chat profile available on every enabled pod, and
+`effective_default_profile_id` is the pods' common default. A capability's platform
+panel filters it on `supports_vision`, as the agent form filters the team list.
+
+The capability routes those panels call (ppt_builder `/platform*`) live on the pod
+and are gated by the pod's capability-manager check
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.121). Acceptance scenarios:
+`openspec/specs/ppt-builder/spec.md`.

@@ -1,0 +1,1048 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Changes against the previous deck plan: replace, insert, remove, edit or
+move slides by their number in that plan. The result is a whole plan; the tool
+assigns and renders it as any full call, so quality never depends on the mode."""
+
+from __future__ import annotations
+
+import difflib
+import json
+import re
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
+
+from fred_capability_ppt_filler.builder.plan import (
+    HIDDEN_FIELDS,
+    REPEAT_ALIASES,
+    DeckPlan,
+    SlidePlan,
+    has_content,
+)
+
+_OPS: Tuple[str, ...] = ("replace", "insert", "remove", "edit", "move")
+_OP_ALIASES = {
+    "delete": "remove",
+    "add": "insert",
+    "update": "edit",
+    "set": "edit",
+    "modify": "edit",
+}
+_SLIDES_ALIASES = ("with", "new_slides", "new_slide", "content")
+# The edit field that gives a slide the template slide of another one.
+LIKE = "like"
+# The edit field that keeps the previous slide's layout, as the user asked.
+REPEAT = "repeat_layout"
+# Slide fields (and their aliases) a model may write in the change itself.
+_SLIDE_KEYS = frozenset(
+    (
+        "title",
+        "subtitle",
+        "number",
+        "bullets",
+        "columns",
+        "items",
+        "image",
+        "images",
+        "table",
+    )
+    + ("chart", "charts", "takeaway", "source")
+    + ("notes", "kind", "body", "text", "pattern", "type", "email", "phone")
+)
+
+
+# Where a slide of the changed plan comes from: ("base", its number there),
+# ("replaced", the number it replaces) or ("new", the index of its change).
+Origin = Tuple[str, int]
+
+
+class ChangeError(ValueError):
+    """Every bad change of one call, each with its remedy."""
+
+    def __init__(self, problems: List[str]) -> None:
+        super().__init__("\n".join(problems))
+        self.problems = problems
+
+
+def _unknown(key: str, op: Any) -> str:
+    if key in _SLIDE_KEYS and op == "edit":
+        return f"'{key}' is a slide field: write it as `field` '{key}' with its `value`"
+    if key in _SLIDE_KEYS:
+        return f"'{key}' is a slide field, which {op or 'this change'} does not take: drop it"
+    return (
+        f"unknown key '{key}': a change takes op, slide, after, slides, field and value; "
+        "drop it"
+    )
+
+
+def _number(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value.strip())
+    return None
+
+
+class SlideChange(BaseModel):
+    """One change to the previous deck, its slides numbered as in that deck."""
+
+    op: Optional[str] = Field(
+        default=None,
+        description="replace | insert | remove | edit | move.",
+        json_schema_extra={"enum": list(_OPS)},
+    )
+    slide: Optional[int] = Field(
+        default=None,
+        description="replace, remove, edit, move: the slide's number in the previous deck.",
+    )
+    after: Optional[int] = Field(
+        default=None,
+        description=(
+            "insert, move: after this slide; 1 = after the cover, 0 = before it (a new "
+            "first slide)."
+        ),
+    )
+    slides: List[SlidePlan] = Field(
+        default_factory=list,
+        description="replace, insert: the new slides, written as in `slides`.",
+    )
+    field: Optional[str] = Field(
+        default=None,
+        description=(
+            "edit: the field to set, e.g. 'title', 'bullets[1]', 'items[2].label' (indexes "
+            "from 0), or 'like' (a design)."
+        ),
+    )
+    value: Any = Field(
+        default=None,
+        description=(
+            "edit: the new value (text, list or object); null removes a list element; "
+            "'like': a slide number."
+        ),
+    )
+
+    has_value: SkipJsonSchema[bool] = False
+    unknown: SkipJsonSchema[List[str]] = Field(default_factory=list)
+    raw_numbers: SkipJsonSchema[Dict[str, str]] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return {"unknown": [f"'{str(value)[:40]}' is not a change object"]}
+        data = dict(value)
+        op = data.get("op") or data.get("operation") or data.get("action")
+        if isinstance(op, str):
+            op = op.strip().lower()
+            op = _OP_ALIASES.get(op, op)
+        slides = data.get("slides")
+        for alias in _SLIDES_ALIASES:
+            if slides in (None, [], {}) and data.get(alias) not in (None, [], {}):
+                slides = data[alias]
+        # A slide object written under `slide` is the content, not a number.
+        slide = data.get("slide")
+        if isinstance(slide, dict) and slides in (None, [], {}):
+            slides, slide = slide, None
+        if isinstance(slides, dict):
+            slides = [slides]
+        known = {"op", "operation", "action", "slide", "after", "slides", "field"}
+        known |= {"value", "like", *_SLIDES_ALIASES}
+        if "has_value" in data:  # a validated change dumped and read again
+            return {k: v for k, v in data.items() if k in cls.model_fields}
+        # `{"op": "edit", "slide": 7, "like": 5}` means the `like` field.
+        if "like" in data and not data.get("field") and "value" not in data:
+            data["field"], data["value"] = LIKE, data["like"]
+        # `{"op": "edit", "slide": 7, "repeat_layout": true}` means that field.
+        for key in (REPEAT, *REPEAT_ALIASES):
+            if (
+                op == "edit"
+                and key in data
+                and not data.get("field")
+                and "value" not in data
+            ):
+                data["field"], data["value"] = REPEAT, data[key]
+                known.add(key)
+        if data.get("field") in REPEAT_ALIASES:
+            data["field"] = REPEAT
+        # A new slide written in the change itself, not under `slides`.
+        flat = {k: v for k, v in data.items() if k in _SLIDE_KEYS}
+        unknown = [_unknown(k, op) for k in data if k not in known | set(flat)]
+        if flat and op in ("replace", "insert"):
+            if slides in (None, [], {}):
+                slides = [flat]
+            else:
+                unknown.append(
+                    f"{', '.join(flat)} sent beside `slides`: it is unclear which new slide "
+                    "they belong to; put them inside that slide's entry of `slides`"
+                )
+        elif flat:
+            unknown += [_unknown(k, op) for k in flat]
+        raw = {
+            k: str(n)[:20]
+            for k, n in (("slide", slide), ("after", data.get("after")))
+            if n is not None and _number(n) is None
+        }
+        return {
+            "op": op if isinstance(op, str) else None,
+            "slide": _number(slide),
+            "after": _number(data.get("after")),
+            "slides": slides if isinstance(slides, list) else [],
+            "field": data.get("field") if isinstance(data.get("field"), str) else None,
+            "value": data.get("value"),
+            "has_value": "value" in data,
+            "unknown": unknown,
+            "raw_numbers": raw,
+        }
+
+    @field_validator("slides", mode="before")
+    @classmethod
+    def _entries(cls, value: Any) -> Any:
+        return [v for v in value if v is not None] if isinstance(value, list) else []
+
+
+# --- edit paths -------------------------------------------------------------------------
+
+_Type = Union[str, Tuple[str, Any]]
+_FIELDS: Dict[str, Dict[str, _Type]] = {
+    "slide": {
+        "takeaway": "text",
+        "source": "text",
+        "title": "text",
+        "subtitle": "text",
+        "number": "text",
+        "bullets": ("list", "text"),
+        "columns": ("list", "column"),
+        "items": ("list", "item"),
+        "image": "text",
+        "images": ("list", "text"),
+        "table": "table",
+        "chart": "chart",
+        "charts": ("list", "chart"),
+        "notes": "text",
+        "email": "text",
+        "phone": "text",
+        "kind": "text",
+        REPEAT: "flag",
+    },
+    "column": {"heading": "text", "bullets": ("list", "text")},
+    "item": {
+        k: "text" for k in ("number", "heading", "text", "label", "image", "trend")
+    },
+    "table": {
+        "header": ("list", "text"),
+        "rows": ("list", ("list", "text")),
+        "total_row": "flag",
+        "highlight_row": "text",
+        "highlight_column": "text",
+    },
+    "chart": {
+        "type": "text",
+        "title": "text",
+        "unit": "text",
+        "show": "text",
+        "highlight": "text",
+        "sort": "text",
+        "stacked_as": "text",
+        "x_title": "text",
+        "x_unit": "text",
+        "y_title": "text",
+        "size_title": "text",
+        "size_unit": "text",
+        "categories": ("list", "text"),
+        "series": ("list", "series"),
+    },
+    "series": {
+        "name": "text",
+        "values": ("list", "number"),
+        "points": ("list", "point"),
+    },
+    "point": {"x": "number", "y": "number", "size": "number", "label": "text"},
+}
+_PATH = re.compile(r"^[a-z_]+(\[\d+\])*(\.[a-z_]+(\[\d+\])*)*$")
+_TOKEN = re.compile(r"([a-z_]+)|\[(\d+)\]")
+
+
+def _empty_of(kind: _Type) -> Any:
+    if isinstance(kind, tuple):
+        return []
+    return {} if kind in _FIELDS else None
+
+
+def _not_a_list(shown: str, kind: _Type, value: Any) -> Optional[str]:
+    """Why ``value`` cannot replace a whole list of objects: one object would
+    become the only entry, silently dropping the others."""
+    if not isinstance(kind, tuple) or kind[1] not in _FIELDS:
+        return None
+    if value is None or isinstance(value, list):
+        return None
+    entry = {"column": "{heading, bullets}", "item": "item", "chart": "chart"}
+    one = entry.get(str(kind[1]), "entry")
+    return (
+        f"'{shown}' is a list: send the whole list as `value` ([{one}, ...], every "
+        f"entry it keeps), or edit one entry with '{shown}[i]' (from 0)"
+    )
+
+
+def _overlap(one: str, other: str) -> bool:
+    """Two paths where one holds the other: no order makes both mean the base."""
+    short, long = sorted((one, other), key=len)
+    return long == short or long.startswith((short + ".", short + "["))
+
+
+def _on_the_base(
+    entries: List[Tuple[int, SlideChange]],
+) -> List[Tuple[int, SlideChange]]:
+    """Edits ordered so every index means the base slide's entry: sets and
+    appends upward, then deletes downward, so none shifts another."""
+
+    def at(change: SlideChange) -> Tuple[int, ...]:
+        return tuple(int(n) for n in re.findall(r"\[(\d+)\]", change.field or ""))
+
+    def deletes(change: SlideChange) -> bool:
+        return change.value is None and (change.field or "").endswith("]")
+
+    kept = sorted((e for e in entries if not deletes(e[1])), key=lambda e: at(e[1]))
+    gone = sorted((e for e in entries if deletes(e[1])), key=lambda e: at(e[1]))
+    return kept + gone[::-1]
+
+
+def _edit(slide: Dict[str, Any], path: str, value: Any) -> Optional[str]:
+    """Set ``path`` of a dumped slide in place; the reason it cannot, else None."""
+    if not _PATH.match(path):
+        return f"'{path}' is not a field path (write e.g. 'title', 'bullets[1]', 'items[2].label')"
+    tokens = [(m.group(1), m.group(2)) for m in _TOKEN.finditer(path)]
+    held = len(slide.get("charts") or [])
+    if tokens[0][0] == "chart" and held:
+        return (
+            f"this slide has {held} chart(s) in `charts`: edit 'charts[i]"
+            f"{path.removeprefix('chart')}' (i from 0 to {held - 1})"
+        )
+    node: Any = slide
+    kind: _Type = "slide"
+    shown = ""
+    for position, (key, index) in enumerate(tokens):
+        last = position == len(tokens) - 1
+        if key is not None:
+            fields = _FIELDS.get(kind) if isinstance(kind, str) else None
+            if fields is None or key not in fields:
+                where = f"'{shown}'" if shown else "a slide"
+                allowed = ", ".join(fields) if fields else "an index [n]"
+                return f"'{key}' is not a field of {where} (it takes {allowed})"
+            shown += ("." if shown else "") + key
+            if last:
+                why = _not_a_list(shown, fields[key], value)
+                if why:
+                    return why
+                node[key] = value
+                return None
+            kind = fields[key]
+            if node.get(key) is None:
+                node[key] = _empty_of(kind)
+            node = node[key]
+            continue
+        n = int(index)
+        if not isinstance(kind, tuple):
+            return f"'{shown}' is not a list: write '{shown}' without [{n}]"
+        size = len(node)
+        span = f"{shown}[0] to {shown}[{size - 1}]" if size else "none yet"
+        if last:
+            if n < size:
+                if value is None:
+                    del node[n]
+                else:
+                    node[n] = value
+                return None
+            if n == size and value is not None:
+                node.append(value)
+                return None
+            return (
+                f"'{shown}' has {size} entries ({span}); give an index up to {size} "
+                "(that one adds an entry)"
+            )
+        if n >= size:
+            return f"'{shown}' has {size} entries ({span})"
+        kind = kind[1]
+        if node[n] is None:
+            node[n] = _empty_of(kind)
+        node = node[n]
+        shown += f"[{n}]"
+    return None  # pragma: no cover - the loop returns on the last token
+
+
+# --- applying ---------------------------------------------------------------------------
+
+
+def _check(change: SlideChange, n: int) -> List[str]:
+    """What is wrong with one change on its own, each with its remedy."""
+    issues = list(change.unknown)
+    for key, raw in change.raw_numbers.items():
+        issues.append(f"`{key}` '{raw}' is not a number: give the slide's number")
+    if change.op not in _OPS:
+        given = f"'{change.op}'" if change.op else "no `op`"
+        return issues + [
+            f"{given} is not an operation: use replace, insert, remove, edit or move"
+        ]
+    if change.op in ("insert", "move"):
+        if change.after is None and "after" not in change.raw_numbers:
+            issues.append(
+                f"{change.op} needs `after`: the slide number the slides go after (0 = first)"
+            )
+        elif change.after is not None and not 0 <= change.after <= n:
+            issues.append(
+                f"`after` {change.after} does not exist; the previous deck has {n} slides. "
+                f"Use a number from 0 to {n}"
+            )
+        elif change.op == "move" and change.after == change.slide:
+            issues.append(
+                f"`after` {change.after} is the moved slide itself: give the slide it goes after"
+            )
+    if change.op == "insert":
+        pass  # new slides, numbered by `after` only
+    elif change.slide is None:
+        if "slide" not in change.raw_numbers:
+            issues.append(
+                f"{change.op} needs `slide`: the slide's number in the previous deck"
+            )
+    elif not 1 <= change.slide <= n:
+        issues.append(
+            f"slide {change.slide} does not exist; the previous deck has {n} slides. "
+            f"Use a number from 1 to {n}"
+        )
+    if change.op in ("replace", "insert") and not change.slides:
+        issues.append(f"{change.op} needs `slides`: the new slide objects")
+    if change.op == "edit":
+        if not change.field:
+            issues.append("edit needs `field`, e.g. 'title' or 'items[2].label'")
+        if not change.has_value:
+            issues.append(
+                "edit needs `value`: the new text, list or object (null removes)"
+            )
+    return issues
+
+
+def _like_problem(base: DeckPlan, number: int, value: Any) -> Optional[str]:
+    """Why slide ``number`` cannot take the design of the slide ``value`` names."""
+    n = len(base.slides)
+    ref = _number(value)
+    if ref is None:
+        return (
+            f"`like` takes as `value` the number of the slide whose design to use "
+            f"(e.g. 5), not '{str(value)[:20]}'"
+        )
+    if not 1 <= ref <= n:
+        return (
+            f"`like` {ref}: slide {ref} does not exist; the previous deck has {n} slides. "
+            f"Use a number from 1 to {n}"
+        )
+    if ref == number:
+        return (
+            f"`like` {ref} is slide {number} itself, which already has its design: give "
+            "the number of the slide whose design it should take"
+        )
+    if base.slides[ref - 1].built_on is None:
+        return (
+            f"slide {ref} has no design yet (it is not in the last delivered deck): build "
+            "the deck first, then ask for that slide's design"
+        )
+    return None
+
+
+def _asked(base: DeckPlan, ref: int) -> Dict[str, Any]:
+    """The design of slide ``ref`` as the delivered file shows it, whatever the
+    same call changes on that slide."""
+    return {"asked_design": base.slides[ref - 1].built_on, "asked_from": ref}
+
+
+def _shown(slide: SlidePlan, kinds: Mapping[str, str]) -> Tuple[Dict[str, Any], Any]:
+    """What a slide shows: its content and template slide, a kind left out
+    being its template slide's."""
+    design = slide.asked_design or slide.built_on
+    content = slide.model_dump(exclude=set(HIDDEN_FIELDS))
+    content["kind"] = slide.kind or kinds.get(design or "")
+    return content, design
+
+
+def unchanged(base: DeckPlan, changed: DeckPlan, kinds: Mapping[str, str]) -> bool:
+    """Whether ``changed`` shows exactly what ``base`` does, slide for slide;
+    ``kinds`` maps a template slide to its kind."""
+    return len(base.slides) == len(changed.slides) and all(
+        _shown(a, kinds) == _shown(b, kinds)
+        for a, b in zip(base.slides, changed.slides)
+    )
+
+
+# Share of the delivered deck's titles a resend keeps to be an edit of it, not a new deck.
+_KEPT_TITLES = 0.6
+
+
+def _is_cover(slide: SlidePlan, kinds: Mapping[str, str]) -> bool:
+    kind = _kind(slide, kinds)
+    if kind is not None:
+        return kind == "cover"
+    body = slide.model_copy(update={"title": None, "subtitle": None})
+    return not has_content(body)
+
+
+def cover_dropped(
+    delivered: DeckPlan, plan: DeckPlan, kinds: Mapping[str, str]
+) -> bool:
+    """Whether a whole deck resent as an edit of the delivered one (most of its
+    titles kept) no longer opens on the cover the delivered deck had."""
+    if not delivered.slides or not plan.slides:
+        return False
+    if not _is_cover(delivered.slides[0], kinds) or _is_cover(plan.slides[0], kinds):
+        return False
+    before = {_title_key(s) for s in delivered.slides[1:]} - {""}
+    after = {_title_key(s) for s in plan.slides}
+    return bool(before) and len(before & after) >= _KEPT_TITLES * len(before)
+
+
+def _title_key(slide: SlidePlan) -> str:
+    return " ".join(re.findall(r"\w+", (slide.title or "").lower()))
+
+
+def repinned(delivered: DeckPlan, plan: DeckPlan, kinds: Mapping[str, str]) -> DeckPlan:
+    """A resent slide identical to a delivered one keeps its template slide: a
+    whole deck resent never moves the slides it leaves as they were."""
+    free = [s for s in delivered.slides if s.built_on]
+    slides = []
+    for slide in plan.slides:
+        twin = next(
+            (
+                d
+                for d in free
+                if _shown(slide.model_copy(update={"built_on": d.built_on}), kinds)
+                == _shown(d, kinds)
+            ),
+            None,
+        )
+        if twin is not None:
+            free.remove(twin)
+            slide = slide.model_copy(update={"built_on": twin.built_on})
+        slides.append(slide)
+    return plan.model_copy(update={"slides": slides})
+
+
+def _numbers(found: List[int]) -> str:
+    return ", ".join(str(n) for n in found)
+
+
+# A whole deck resent for an edit this small risks drift in the slides it repeats.
+_SMALL_EDIT = 2
+
+
+def _face(rendered: str) -> str:
+    """What a rendered slide shows, its speaker notes left out."""
+    return rendered.split(":")[0]
+
+
+def _words(shown: str) -> set[str]:
+    return set(re.findall(r"\w+", shown.lower()))
+
+
+def _paired(before: List[str], after: List[str]) -> List[Tuple[int, int]]:
+    """The slides of a differing run that are edits of each other, in order:
+    the most shared words, so a removal is the slide that went, not the last."""
+    if not before or not after:
+        return []
+    bw, aw = [_words(x) for x in before], [_words(y) for y in after]
+    score = [[len(x & y) / (len(x | y) or 1) for y in aw] for x in bw]
+    n, m = len(before), len(after)
+    # best[i][j]: the best total over before[i:], after[j:].
+    best = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            best[i][j] = max(
+                best[i + 1][j], best[i][j + 1], score[i][j] + best[i + 1][j + 1]
+            )
+    pairs: List[Tuple[int, int]] = []
+    i = j = 0
+    while i < n and j < m:
+        if best[i][j] == score[i][j] + best[i + 1][j + 1] and score[i][j] > 0:
+            pairs.append((i, j))
+            i, j = i + 1, j + 1
+        elif best[i][j] == best[i + 1][j]:
+            i += 1
+        else:
+            j += 1
+    return pairs
+
+
+def _points(slide: SlidePlan) -> int:
+    rows = len(slide.table.rows) if slide.table is not None else 0
+    columns = sum(len([b for b in c.bullets if b.strip()]) for c in slide.columns)
+    bullets = len([b for b in slide.bullets if b.strip()])
+    return bullets + columns + len(slide.items) + rows
+
+
+def _fewer(
+    before: DeckPlan,
+    after: DeckPlan,
+    pairs: List[Tuple[int, int]],
+    numbers: Optional[Sequence[int]],
+) -> List[str]:
+    """Slides whose design changed and that hold fewer points than before, a
+    list continued on the next slides counted whole: what a recast lost."""
+    found = []
+    for i, j in pairs:
+        old, new = before.slides[i], after.slides[j]
+        # A table drawn as a chart holds its rows as values, not points.
+        if old.built_on == new.built_on or new.chart or new.charts:
+            continue
+        group = [j]
+        if numbers is not None and len(numbers) == len(after.slides):
+            if j and numbers[j - 1] == numbers[j]:
+                continue  # counted with the list's first part
+            group = [k for k in range(j, len(numbers)) if numbers[k] == numbers[j]]
+        had, has = _points(old), sum(_points(after.slides[k]) for k in group)
+        if has < had:
+            found.append(f"slide {j + 1} ({had} → {has})")
+    return found
+
+
+def deck_delta(
+    before: DeckPlan,
+    after: DeckPlan,
+    kinds: Mapping[str, str],
+    resent: bool = False,
+    numbers: Optional[Sequence[int]] = None,
+) -> str:
+    """Which slides of ``after`` differ from the delivered ``before`` (content
+    or design), as a line the agent can describe its edit from truthfully;
+    ``resent``: the whole deck came in `slides`; ``numbers``: each slide's
+    number in the sent plan (a split list's parts share it). Rendered slides
+    compare by what the file shows: an edit that renders the same is no change."""
+    a = [
+        json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in before.slides
+    ]
+    b = [
+        json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in after.slides
+    ]
+    rendered = all(s.rendered for s in before.slides + after.slides)
+    keys_a, keys_b = a, b
+    if rendered:
+        keys_a = [s.rendered or "" for s in before.slides]
+        keys_b = [s.rendered or "" for s in after.slides]
+    changed: List[int] = []
+    in_notes: List[int] = []
+    added: List[int] = []
+    removed: List[int] = []
+    fewer: List[str] = []
+    matcher = difflib.SequenceMatcher(a=keys_a, b=keys_b, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        pairs = _paired(a[i1:i2], b[j1:j2])
+        olds, news = {i for i, _ in pairs}, {j for _, j in pairs}
+        for i, j in pairs:
+            same = rendered and _face(keys_a[i1 + i]) == _face(keys_b[j1 + j])
+            (in_notes if same else changed).append(j1 + j + 1)
+        fewer += _fewer(before, after, [(i1 + i, j1 + j) for i, j in pairs], numbers)
+        added += [j1 + j + 1 for j in range(j2 - j1) if j not in news]
+        removed += [i1 + i + 1 for i in range(i2 - i1) if i not in olds]
+    # A slide the same elsewhere moved: never a removal and an addition.
+    moves: List[str] = []
+    for j in list(added):
+        i = next((i for i in removed if keys_a[i - 1] == keys_b[j - 1]), None)
+        if i is not None:
+            added.remove(j)
+            removed.remove(i)
+            moves.append(f"{j} (was {i})")
+    kept = len(b) - len(changed) - len(in_notes) - len(added) - len(moves)
+    parts = [f"changed: {_numbers(changed)}"] if changed else []
+    parts += [f"moved: {', '.join(moves)}"] if moves else []
+    parts += (
+        [
+            f"changed in the speaker notes only, the slide itself looks the same: "
+            f"{_numbers(in_notes)}"
+        ]
+        if in_notes
+        else []
+    )
+    parts += [f"added: {_numbers(added)}"] if added else []
+    parts += [f"removed: {_numbers(removed)} of the previous deck"] if removed else []
+    lead = f"\nCompared with the previous deck ({len(a)} slides), slides of this file "
+    if not parts:
+        return lead + "none changed: tell the user the deck is the same as before."
+    touched = len(changed) + len(in_notes) + len(added) + len(removed) + len(moves)
+    hint = (
+        " For an edit of a few slides, send only `changes` next time."
+        if resent and touched <= _SMALL_EDIT < kept
+        else ""
+    )
+    return (
+        lead
+        + "; ".join(parts + [f"{kept} slide{'' if kept == 1 else 's'} unchanged"])
+        + ". Describe only these changes to the user."
+        + (
+            f" Tell the user that points were merged or dropped in the new design of "
+            f"{', '.join(fewer)}: that content is not the same as before."
+            if fewer
+            else ""
+        )
+        + hint
+    )
+
+
+# Content a slide can lose when its kind changes; notes always stay.
+CLEARABLE = (
+    "takeaway",
+    "title",
+    "subtitle",
+    "number",
+    "bullets",
+    "columns",
+    "items",
+    "image",
+    "images",
+    "table",
+    "chart",
+    "charts",
+)
+
+
+def _clear_for_kind(
+    before: SlidePlan,
+    dumped: Dict[str, Any],
+    entries: List[Tuple[int, SlideChange]],
+    unplaced: Callable[[SlidePlan], List[str]],
+) -> List[str]:
+    """A kind edit moves the slide to another shape: the old content the new kind
+    has no place for goes, unless this call sets it. Returns what went."""
+    slide = SlidePlan.model_validate(dumped)
+    if slide.kind is None or slide.kind == before.kind:
+        return []
+    sent = {(c.field or "").split("[")[0].split(".")[0] for _, c in entries}
+    gone = [f for f in unplaced(slide) if f in CLEARABLE and f not in sent]
+    for name in gone:
+        dumped[name] = None
+    return gone
+
+
+# What a kind's slide shows, for a kind edit that would leave it empty;
+# the title-only kinds are never empty with their title.
+_CONTENT_OF = {
+    "bullets": "bullets",
+    "agenda": "bullets",
+    "two_columns": "columns",
+    "comparison": "columns",
+    "cards": "items",
+    "figures": "items",
+    "process": "items",
+    "timeline": "items",
+    "team": "items",
+    "image_text": "image and bullets",
+    "table": "table",
+    "chart": "chart",
+}
+_TITLE_ONLY = ("cover", "section", "quote", "closing")
+
+
+def _emptied(number: int, dumped: Dict[str, Any], gone: List[str]) -> Optional[str]:
+    """Why a kind edit cannot stand: it cleared the old content and sent none
+    for the new kind, so the slide would be delivered empty."""
+    slide = SlidePlan.model_validate(dumped)
+    body = slide.model_copy(update={"title": None, "subtitle": None})
+    if not gone or slide.kind in _TITLE_ONLY or has_content(body):
+        return None
+    wanted = _CONTENT_OF.get(slide.kind or "", "its content")
+    return (
+        f"slide {number}: changing its kind to '{slide.kind}' clears its "
+        f"{', '.join(gone)} and would leave it empty: send its content for that kind "
+        f"in the same call (title and {wanted}), or keep its kind"
+    )
+
+
+def _kind(slide: SlidePlan, kinds: Mapping[str, str]) -> Optional[str]:
+    return slide.kind or kinds.get(slide.asked_design or slide.built_on or "")
+
+
+def _behind_the_cover(
+    base: DeckPlan, changes: List[SlideChange], kinds: Mapping[str, str]
+) -> set[int]:
+    """The changes that put a slide other than a cover before the deck's cover:
+    the cover stays first, as rebuilt as a section slide it loses its design."""
+    if not base.slides or _kind(base.slides[0], kinds) != "cover":
+        return set()
+    if any(c.slide == 1 and c.op in ("remove", "move") for c in changes):
+        return set()
+    if any(
+        c.slide == 1
+        and c.op == "replace"
+        and _kind(c.slides[0], kinds) not in (None, "cover")
+        for c in changes
+        if c.slides
+    ):
+        return set()
+    return {
+        k
+        for k, c in enumerate(changes)
+        if c.after == 0
+        and (
+            (c.op == "insert" and all(s.kind != "cover" for s in c.slides))
+            or (
+                c.op == "move"
+                and c.slide is not None
+                and 1 < c.slide <= len(base.slides)
+                and _kind(base.slides[c.slide - 1], kinds) != "cover"
+            )
+        )
+    }
+
+
+def apply_changes(
+    base: DeckPlan,
+    changes: List[SlideChange],
+    unplaced: Optional[Callable[[SlidePlan], List[str]]] = None,
+    cleared: Optional[Dict[int, List[str]]] = None,
+    origins: Optional[Dict[int, Origin]] = None,
+    kinds: Optional[Mapping[str, str]] = None,
+    after_cover: Optional[List[int]] = None,
+) -> DeckPlan:
+    """The whole plan after ``changes``, all numbered on ``base``. Untouched
+    slides stay the base's objects; raises :class:`ChangeError` listing every
+    bad change, so nothing is built from half of them. With ``unplaced``, a kind
+    edit clears the fields it names; ``cleared`` gets them per resulting slide,
+    ``origins`` where each resulting slide comes from. With ``kinds`` (template
+    slide to kind), a slide sent before the cover goes after it, its resulting
+    number added to ``after_cover``."""
+    n = len(base.slides)
+    behind = _behind_the_cover(base, changes, kinds) if kinds is not None else set()
+    changes = [
+        c.model_copy(update={"after": 1}) if k in behind else c
+        for k, c in enumerate(changes)
+    ]
+    problems: List[str] = []
+    replaced: Dict[int, List[SlidePlan]] = {}
+    removed: set[int] = set()
+    # The change that took each slide first: a second one on it is a conflict.
+    owner: Dict[int, int] = {}
+    # Per slide of the base, what goes after it: new slides, or a moved slide's number.
+    inserts: Dict[int, List[Tuple[int, Union[SlidePlan, int]]]] = {}
+    moved: Dict[int, int] = {}
+    edits: Dict[int, List[Tuple[int, SlideChange]]] = {}
+    likes: List[Tuple[int, SlideChange, int]] = []
+
+    def report(k: int, change: SlideChange, why: str) -> None:
+        problems.append(f"changes[{k}] ({change.op or '?'}): {why}.")
+
+    for k, change in enumerate(changes):
+        issues = _check(change, n)
+        if issues:
+            for issue in issues:
+                report(k, change, issue)
+            continue
+        if change.op == "insert":
+            inserts.setdefault(change.after or 0, []).extend(
+                (k, s) for s in change.slides
+            )
+            continue
+        number = change.slide or 0
+        if change.op == "move":
+            if number in moved:
+                report(
+                    k,
+                    change,
+                    f"slide {number} is already moved by changes[{moved[number]}]",
+                )
+            else:
+                moved[number] = k
+                inserts.setdefault(change.after or 0, []).append((k, number))
+            continue
+        if change.op == "edit" and change.field == LIKE:
+            why = _like_problem(base, number, change.value)
+            if why:
+                report(k, change, why)
+            else:
+                likes.append((k, change, _number(change.value) or 0))
+            continue
+        whole = number in replaced or number in removed
+        if change.op in ("replace", "remove"):
+            if number in owner:
+                report(
+                    k,
+                    change,
+                    f"slide {number} is already changed by changes[{owner[number]}]: send one "
+                    "replace or remove per slide, and put edits in the replacement",
+                )
+                continue
+            owner[number] = k
+            if change.op == "replace":
+                replaced[number] = change.slides
+            else:
+                removed.add(number)
+            continue
+        if whole:
+            report(
+                k,
+                change,
+                f"slide {number} is replaced or removed by changes[{owner[number]}]: put the "
+                "edit in the replacement slide instead",
+            )
+            continue
+        owner.setdefault(number, k)
+        if base.slides[number - 1].invalid_entry is not None:
+            report(
+                k, change, f"slide {number} was not a slide object: replace it instead"
+            )
+            continue
+        twice = next(
+            (
+                (j, c.field)
+                for j, c in edits.get(number, [])
+                if _overlap(c.field or "", change.field or "")
+            ),
+            None,
+        )
+        if twice is not None:
+            report(
+                k,
+                change,
+                f"slide {number}: changes[{twice[0]}] already sets '{twice[1]}', and a "
+                "second edit would replace it: send one edit per field, with every "
+                "entry in its value",
+            )
+            continue
+        edits.setdefault(number, []).append((k, change))
+
+    for number, k in moved.items():
+        if number in removed:
+            report(
+                k, changes[k], f"slide {number} is removed by changes[{owner[number]}]"
+            )
+    # Resolved once every replace and remove is known, whatever their order.
+    liked: Dict[int, int] = {}
+    for k, change, ref in likes:
+        number = change.slide or 0
+        if number in removed:
+            report(k, change, f"slide {number} is removed by changes[{owner[number]}]")
+        elif number in liked:
+            report(
+                k,
+                change,
+                f"slide {number} already takes slide {liked[number]}'s design",
+            )
+        elif number not in replaced and base.slides[number - 1].invalid_entry:
+            report(
+                k, change, f"slide {number} was not a slide object: replace it instead"
+            )
+        else:
+            liked[number] = ref
+
+    edited: Dict[int, SlidePlan] = {}
+    gone: Dict[int, List[str]] = {}
+    for number in sorted(set(edits) | (set(liked) - set(replaced))):
+        entries = edits.get(number, [])
+        dumped = base.slides[number - 1].model_dump()
+        failed: List[Tuple[int, SlideChange, str]] = []
+        for k, change in _on_the_base(entries):
+            why = _edit(dumped, change.field or "", change.value)
+            if why:
+                failed.append((k, change, f"slide {number}: {why}"))
+        for k, change, why in sorted(failed, key=lambda f: f[0]):
+            report(k, change, why)
+        if number in liked:
+            dumped.update(_asked(base, liked[number]))
+            # The design decides the kind, unless this call sets one.
+            if not any(c.field == "kind" for _, c in entries):
+                dumped["kind"] = None
+        if not failed and unplaced is not None and number not in liked:
+            before = base.slides[number - 1]
+            gone[number] = _clear_for_kind(before, dumped, entries, unplaced)
+            why = _emptied(number, dumped, gone[number])
+            if why:
+                k, change = next(
+                    (e for e in entries if e[1].field == "kind"), entries[0]
+                )
+                report(k, change, why)
+                failed.append((k, change, why))
+        if not failed:
+            edited[number] = SlidePlan.model_validate(dumped)
+    if problems:
+        raise ChangeError(problems)
+
+    slides: List[SlidePlan] = []
+    where: Dict[int, Origin] = {} if origins is None else origins
+
+    def add(slide: SlidePlan, origin: Origin) -> None:
+        slides.append(slide)
+        where[len(slides)] = origin
+
+    def emit(number: int) -> None:
+        """Base slide ``number`` as the changes leave it, then what goes after it."""
+        placed.add(number)
+        slide = base.slides[number - 1]
+        if number in replaced:
+            # The replacement keeps the replaced slide's design when it fits.
+            new = replaced[number]
+            first = new[0].model_copy(update={"built_on": slide.built_on})
+            if number in liked:
+                first = first.model_copy(update=_asked(base, liked[number]))
+            add(first, ("replaced", number))
+            for entry in new[1:]:
+                add(entry, ("new", owner[number]))
+        elif number not in removed:
+            add(edited.get(number, slide), ("base", number))
+            if gone.get(number) and cleared is not None:
+                cleared[len(slides)] = gone[number]
+        follow(number)
+
+    def follow(number: int) -> None:
+        for k, entry in inserts.get(number, []):
+            if k in behind and after_cover is not None:
+                after_cover.append(len(slides) + 1)
+            if isinstance(entry, int):
+                emit(entry)
+            else:
+                add(entry, ("new", k))
+
+    placed: set[int] = set()
+    follow(0)
+    for number in range(1, n + 1):
+        if number not in moved:
+            emit(number)
+    looped = [k for number, k in moved.items() if number not in placed]
+    if looped:
+        raise ChangeError(
+            [
+                f"changes[{k}] (move): the slides moved form a loop, each after "
+                "another moved one: move each slide after a slide that stays."
+                for k in looped
+            ]
+        )
+    return DeckPlan(
+        slides=slides,
+        file_name=base.file_name,
+        audience=base.audience,
+        main_message=base.main_message,
+        show_takeaways=base.show_takeaways,
+        no_closing=base.no_closing,
+    )

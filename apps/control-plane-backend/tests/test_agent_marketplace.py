@@ -77,6 +77,9 @@ from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 from test_capability_selection_1974 import _DEMO_ENTRY, _template_payload
 
+# Offline: imports must not call a pod for capability readiness.
+pytestmark = pytest.mark.usefixtures("pods_report_ready")
+
 _TEAM = TeamId("alpha")
 _OTHER = TeamId("beta")
 _THIRD = TeamId("gamma")
@@ -243,7 +246,7 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
     async def _usable(_rebac, team_id):
         return usable.get(str(team_id))
 
-    async def _copy(*, base_url, capability_id, request, authorization):
+    async def _copy(*, base_url, capability_id, request, authorization, **_):
         pod.copies.append((capability_id, request))
         return {
             "schema_version": request.config.schema_version,
@@ -293,6 +296,10 @@ async def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
         get_team_metadata_store=lambda: teams,
         get_runtime_http_client=lambda: client,
         get_kpi_writer=lambda: None,
+        # No team routing policy: copies follow the pod default model.
+        get_team_routing_policy_store=lambda: SimpleNamespace(
+            get=lambda **_: _async(None)
+        ),
     )
     try:
         yield _Env(

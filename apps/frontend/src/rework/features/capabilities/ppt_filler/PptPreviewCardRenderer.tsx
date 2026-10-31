@@ -42,6 +42,7 @@ import type { UiPartRendererProps } from "../types";
 import type { PptPreviewPartData } from "./types";
 import { openPreview, registerPreview } from "./pptPreviewSlice";
 import PptxDownloadButton from "./PptxDownloadButton";
+import DeckSummaryButton from "./DeckSummaryButton";
 import styles from "./PptPreviewCardRenderer.module.css";
 
 // Module-level so the heuristic survives card remounts within one page load.
@@ -57,11 +58,11 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
 
   const key = `${preview.preview_id}:${preview.version}`;
 
-  // Opening = register the deck AND signal the page to open the ppt_filler
-  // side-panel column (the page owns the single-push-drawer state).
+  // Opening = register the deck AND signal the page to open the pane of the
+  // capability that produced it (the page owns the single-push-drawer state).
   const openPane = (data: PptPreviewPartData) => {
     dispatch(openPreview({ sessionId, preview: data }));
-    dispatch(requestSidePanelOpen({ capabilityId: "ppt_filler", widget: "ppt_preview_pane" }));
+    dispatch(requestSidePanelOpen({ capabilityId: data.capability_id ?? "ppt_filler", widget: "ppt_preview_pane" }));
   };
 
   useEffect(() => {
@@ -92,9 +93,12 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
         <span className={styles.title} title={title}>
           {title}
         </span>
-        {preview.pptx_download_url && (
-          <PptxDownloadButton href={preview.pptx_download_url} fileName={preview.file_name} />
-        )}
+        <div className={styles.tools}>
+          <DeckSummaryButton summary={preview.summary} />
+          {preview.pptx_download_url && (
+            <PptxDownloadButton href={preview.pptx_download_url} fileName={preview.file_name} />
+          )}
+        </div>
       </div>
       <div className={styles.actions}>
         <Button

@@ -32,6 +32,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     Any,
     Final,
@@ -63,6 +64,16 @@ from .context import (
 from .models import AgentDefinition
 from .skills import SkillLoadAttribution, SkillsPort
 from .web_research import WebResearchPort
+
+if TYPE_CHECKING:
+    from langchain_core.messages import AIMessage, BaseMessage
+
+    from ._capability_route_deps import (
+        capability_platform_model as capability_platform_model,
+    )
+    from ._capability_route_deps import (
+        capability_team_authorizer as capability_team_authorizer,
+    )
 
 ChatModelHandle: TypeAlias = object
 RuntimeToolHandle: TypeAlias = object
@@ -578,6 +589,80 @@ class ChatModelFactoryPort(ABC):
         agent definitions remain pure declarations, while model selection stays
         an injected capability that Fred can later align with a broader SDK.
         """
+
+
+class CapabilityModelUnavailableError(RuntimeError):
+    """No model this capability call may use: unknown, not usable by the team,
+    or not vision-capable when vision was required."""
+
+
+class CapabilityModelPort(ABC):
+    """
+    Turn-free chat-model access for capability code that runs outside a turn
+    (save-time validation, background jobs started from it).
+
+    Resolves the model the saved agent uses by default (agent override, team
+    default, catalogue default), within the team's usable models. A `profile_id`
+    replaces that default and is never swapped for it. Fails closed with
+    `CapabilityModelUnavailableError`, including when that profile is unknown or
+    outside the usable models, and when `require_vision` is set and the resolved
+    profile does not declare `supports_vision`. Images go as
+    LangChain `image_url` content parts.
+    """
+
+    @abstractmethod
+    async def ainvoke(
+        self,
+        messages: Sequence[BaseMessage],
+        *,
+        profile_id: str | None = None,
+        require_vision: bool = False,
+    ) -> AIMessage:
+        """Run one chat completion and return the model's message."""
+
+    async def require_vision_profile(self, profile_id: str) -> None:
+        """Raise `CapabilityModelUnavailableError` unless `profile_id` is a
+        vision chat profile this port may use, without calling the model.
+        Refuses unless an implementer overrides it."""
+        raise CapabilityModelUnavailableError(
+            f"Model profile {profile_id!r} cannot be checked here."
+        )
+
+
+# Request-state keys under which the pod binds the caller's authorizer and the
+# teamless model port before a capability route runs.
+CAPABILITY_TEAM_AUTHORIZER_STATE: Final = "fred_capability_team_authorizer"
+CAPABILITY_PLATFORM_MODEL_STATE: Final = "fred_capability_platform_model"
+
+
+class CapabilityTeamAuthorizer(ABC):
+    """Team-scoped authorization for capability routes, bound to the caller."""
+
+    @abstractmethod
+    async def require_agent_editor(self, team_id: str) -> None:
+        """Raise HTTP 403 unless the caller may edit the agents of `team_id`."""
+
+    async def require_capability_manager(self) -> None:
+        """Raise HTTP 403 unless the caller may manage capabilities platform-wide
+        (the Admin > Features gate). Refuses unless an implementer overrides it."""
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail=CAPABILITY_MANAGER_DENIED)
+
+
+CAPABILITY_MANAGER_DENIED: Final = "You cannot manage the platform's capabilities."
+
+_ROUTE_DEPENDENCIES = ("capability_team_authorizer", "capability_platform_model")
+
+
+def __getattr__(name: str) -> Any:
+    # Route dependencies load on first use: fred-sdk does not depend on
+    # fastapi (see `CapabilityManifest`).
+    if name in _ROUTE_DEPENDENCIES:
+        from . import _capability_route_deps
+
+        return getattr(_capability_route_deps, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class ToolInvokerPort(ABC):
@@ -1636,6 +1721,9 @@ class RuntimeServices:
     conversation_filesystem: ConversationFilesystemPort | None = None
     web_research: WebResearchPort | None = None
     skills: SkillsPort | None = None
+    # Turn-free model access for save-time and background capability work.
+    # Appended last to preserve positional compatibility.
+    capability_model: CapabilityModelPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

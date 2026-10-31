@@ -1,0 +1,343 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Turn-free platform ports for capability code: the model port injected on the
+save path, and the team authorizer bound before every capability route.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+
+from fastapi import Depends, HTTPException, Request, status
+from fred_core.common.team_id import is_personal_team_ref, personal_team_id
+from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.oidc import get_current_user
+from fred_core.security.rebac.capability_authz import CapabilityEnablementFacts
+from fred_core.security.rebac.rebac_engine import (
+    ORGANIZATION_ID,
+    OrganizationPermission,
+    RebacDisabledResult,
+    RebacEngine,
+    RebacReference,
+    TeamPermission,
+)
+from fred_core.security.structure import KeycloakUser
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    PortableContext,
+    PortableEnvironment,
+    RuntimeContext,
+)
+from fred_sdk.contracts.models import AgentDefinition, ExecutionCategory
+from fred_sdk.contracts.runtime import (
+    CAPABILITY_MANAGER_DENIED,
+    CAPABILITY_PLATFORM_MODEL_STATE,
+    CAPABILITY_TEAM_AUTHORIZER_STATE,
+    CapabilityModelPort,
+    CapabilityModelUnavailableError,
+    CapabilityTeamAuthorizer,
+)
+from langchain_core.messages import AIMessage, BaseMessage
+from pydantic import BaseModel, ConfigDict
+
+from ..model_routing.authz import usable_model_capability_ids
+from ..model_routing.contracts import ModelNotUsableError, TeamRoutingProfileDriftError
+from ..model_routing.provider import RoutedChatModelFactory
+from ..runtime_context import get_runtime_context_or_none
+
+
+class CapabilitySaveRouting(BaseModel):
+    """Team routing snapshot control-plane sends as validate-config query
+    parameters. Client-tier, as at prepare-execution: the port still applies
+    the team's usable models, and no platform binding is accepted here."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    template_agent_id: str | None = None
+    chat_default_profile_id: str | None = None
+    recommended_chat_profile_id: str | None = None
+
+
+def parse_save_routing(params: Mapping[str, str]) -> CapabilitySaveRouting | None:
+    """Parse the routing query parameters; none means pod-local routing."""
+    if not any(key in params for key in CapabilitySaveRouting.model_fields):
+        return None
+    return CapabilitySaveRouting(
+        template_agent_id=params.get("template_agent_id") or None,
+        chat_default_profile_id=params.get("chat_default_profile_id") or None,
+        recommended_chat_profile_id=params.get("recommended_chat_profile_id") or None,
+    )
+
+
+# A port may serve a background job for minutes: re-read the team's usable
+# models this often, so a revoked model stops being used.
+_USABLE_MODELS_TTL_S = 30.0
+_monotonic = time.monotonic
+
+
+class _RoutingKeyDefinition(AgentDefinition):
+    """Model routing reads `agent_id` only; this carries nothing else."""
+
+
+class RoutedCapabilityModelPort(CapabilityModelPort):
+    """`CapabilityModelPort` over the pod's routed chat-model factory."""
+
+    def __init__(
+        self,
+        *,
+        binding: BoundRuntimeContext,
+        routing_agent_id: str,
+        factory: object | None,
+        rebac: RebacEngine | None,
+    ) -> None:
+        self._binding = binding
+        self._definition = _RoutingKeyDefinition(
+            agent_id=routing_agent_id,
+            role="capability model",
+            description="Turn-free capability model routing key.",
+            execution_category=ExecutionCategory.REACT,
+        )
+        self._factory = factory
+        self._rebac = rebac
+        self._resolved: BoundRuntimeContext | None = None
+        self._resolved_at = 0.0
+        self._resolve_lock = asyncio.Lock()
+
+    async def ainvoke(
+        self,
+        messages: Sequence[BaseMessage],
+        *,
+        profile_id: str | None = None,
+        require_vision: bool = False,
+    ) -> AIMessage:
+        factory = self._factory
+        if not isinstance(factory, RoutedChatModelFactory):
+            raise CapabilityModelUnavailableError("No routed chat model on this pod.")
+        binding = await self._usable_binding()
+        try:
+            model, selection = factory.build_for_chat(
+                definition=self._definition, binding=binding, profile_id=profile_id
+            )
+        except (
+            ModelNotUsableError,
+            TeamRoutingProfileDriftError,
+            KeyError,
+            ValueError,
+        ) as exc:
+            raise CapabilityModelUnavailableError(str(exc)) from exc
+        if require_vision and not factory.supports_vision(selection):
+            raise CapabilityModelUnavailableError(
+                f"Model profile {selection.profile_id!r} does not support vision."
+            )
+        result = await model.ainvoke(list(messages))
+        if not isinstance(result, AIMessage):
+            raise TypeError(f"Chat model returned {type(result).__name__}.")
+        return result
+
+    async def require_vision_profile(self, profile_id: str) -> None:
+        """Without a team, the model must also be on for every team: the same
+        rule as control-plane's platform model list, minus the pod coverage
+        only control-plane can see."""
+        factory = self._factory
+        if not isinstance(factory, RoutedChatModelFactory):
+            raise CapabilityModelUnavailableError("No routed chat model on this pod.")
+        binding = await self._usable_binding()
+        selection = factory.usable_profile_selection(profile_id, binding)
+        if selection is None or not factory.supports_vision(selection):
+            raise CapabilityModelUnavailableError(
+                f"Model profile {profile_id!r} is not a vision model this port may use."
+            )
+        if binding.runtime_context.team_id is None and not await _on_for_every_team(
+            self._rebac, selection.capability_id
+        ):
+            raise CapabilityModelUnavailableError(
+                f"Model profile {profile_id!r} is not enabled for every team."
+            )
+
+    def _fresh(self) -> BoundRuntimeContext | None:
+        if _monotonic() - self._resolved_at < _USABLE_MODELS_TTL_S:
+            return self._resolved
+        return None
+
+    async def _usable_binding(self) -> BoundRuntimeContext:
+        """The save binding plus the team's usable models, re-read after a TTL."""
+        if (resolved := self._fresh()) is not None:
+            return resolved
+        async with self._resolve_lock:
+            if (resolved := self._fresh()) is not None:
+                return resolved
+            team_id = self._binding.runtime_context.team_id
+            ids = (
+                await usable_model_capability_ids(self._rebac, team_id)
+                if team_id
+                else None
+            )
+            resolved = self._binding.model_copy(
+                update={"usable_model_ids": tuple(ids) if ids is not None else None}
+            )
+            self._resolved, self._resolved_at = resolved, _monotonic()
+            return resolved
+
+
+async def _on_for_every_team(rebac: RebacEngine | None, capability_id: str) -> bool:
+    """The org `default_on` marker; without ReBAC nothing is restricted."""
+    if rebac is None or not rebac.enabled:
+        return True
+    relations = await rebac.list_direct_relations(
+        RebacReference(type=Resource.CAPABILITY, id=capability_id),
+        subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
+    )
+    if isinstance(relations, RebacDisabledResult):
+        return True
+    return CapabilityEnablementFacts.from_relations(relations).default_on
+
+
+async def require_team_permission(
+    *,
+    user: KeycloakUser | None,
+    enforce: bool,
+    rebac: RebacEngine | None,
+    team_id: str,
+    permission: TeamPermission,
+    denied: str,
+) -> None:
+    """403 unless the caller holds `permission` on the team. A personal space is
+    its owner's only; without ReBAC the check is identity-only; `enforce=False`
+    (security disabled) allows everything."""
+    if not enforce:
+        return
+    if user is None:
+        raise _forbidden(denied)
+    if is_personal_team_ref(team_id):
+        if team_id != personal_team_id(user.uid):
+            raise _forbidden(denied)
+        return
+    if rebac is None or not rebac.enabled:
+        return
+    try:
+        await rebac.check_user_team_permission_or_raise(user, permission, team_id)
+    except AuthorizationError as exc:
+        raise _forbidden(denied) from exc
+
+
+class RebacCapabilityTeamAuthorizer(CapabilityTeamAuthorizer):
+    """Agent-editor check on a team, as control-plane applies it to agent edits."""
+
+    def __init__(
+        self, *, user: KeycloakUser | None, enforce: bool, rebac: RebacEngine | None
+    ) -> None:
+        self._user = user
+        self._enforce = enforce
+        self._rebac = rebac
+
+    async def require_agent_editor(self, team_id: str) -> None:
+        await require_team_permission(
+            user=self._user,
+            enforce=self._enforce,
+            rebac=self._rebac,
+            team_id=team_id,
+            permission=TeamPermission.CAN_UPDATE_AGENTS,
+            denied=AGENT_EDITOR_DENIED,
+        )
+
+    async def require_capability_manager(self) -> None:
+        """The Admin > Features gate (`platform_admin or feature_manager`), with
+        the same enforce and ReBAC-disabled rules as the team check."""
+        if not self._enforce:
+            return
+        if self._user is None:
+            raise _forbidden(CAPABILITY_MANAGER_DENIED)
+        if self._rebac is None or not self._rebac.enabled:
+            return
+        try:
+            await self._rebac.check_user_permission_or_raise(
+                self._user,
+                OrganizationPermission.CAN_MANAGE_CAPABILITIES,
+                ORGANIZATION_ID,
+            )
+        except AuthorizationError as exc:
+            raise _forbidden(CAPABILITY_MANAGER_DENIED) from exc
+
+
+AGENT_EDITOR_DENIED = "You cannot edit the agents of this team."
+PLATFORM_MODEL_ROUTING_KEY = "capability:platform"
+
+
+def _forbidden(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+def team_authorizer_binder(*, security_enabled: bool) -> Callable[..., Awaitable[None]]:
+    """Router dependency binding the caller's `CapabilityTeamAuthorizer`
+    on the request, read back by `fred_sdk`'s `capability_team_authorizer`."""
+
+    if security_enabled:
+
+        async def _bind_secured(
+            request: Request, user: object = Depends(get_current_user)
+        ) -> None:
+            _bind(request, user if isinstance(user, KeycloakUser) else None, True)
+
+        return _bind_secured
+
+    async def _bind_open(request: Request) -> None:
+        _bind(request, None, False)
+
+    return _bind_open
+
+
+def _bind(request: Request, user: KeycloakUser | None, enforce: bool) -> None:
+    runtime = get_runtime_context_or_none()
+    rebac = runtime.config.rebac_engine if runtime is not None else None
+    authorizer = RebacCapabilityTeamAuthorizer(user=user, enforce=enforce, rebac=rebac)
+    setattr(request.state, CAPABILITY_TEAM_AUTHORIZER_STATE, authorizer)
+    if runtime is not None:
+        port = platform_model_port(runtime.config.chat_model_factory, rebac)
+        setattr(request.state, CAPABILITY_PLATFORM_MODEL_STATE, port)
+
+
+_platform_port: tuple[object, RoutedCapabilityModelPort] | None = None
+
+
+def platform_model_port(
+    factory: object | None, rebac: RebacEngine | None
+) -> RoutedCapabilityModelPort:
+    """One pod-wide port bound to no team and no user: its default is the pod's
+    default chat profile, with no usable-models restriction."""
+    global _platform_port
+    if _platform_port is None or _platform_port[0] is not factory:
+        binding = BoundRuntimeContext(
+            runtime_context=RuntimeContext(),
+            portable_context=PortableContext(
+                request_id="capability-platform",
+                correlation_id="capability-platform",
+                actor=PLATFORM_MODEL_ROUTING_KEY,
+                tenant="default",
+                environment=PortableEnvironment.DEV,
+                agent_id=PLATFORM_MODEL_ROUTING_KEY,
+                agent_name=PLATFORM_MODEL_ROUTING_KEY,
+            ),
+        )
+        port = RoutedCapabilityModelPort(
+            binding=binding,
+            routing_agent_id=PLATFORM_MODEL_ROUTING_KEY,
+            factory=factory,
+            rebac=rebac,
+        )
+        _platform_port = (factory, port)
+    return _platform_port[1]

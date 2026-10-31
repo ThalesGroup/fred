@@ -141,6 +141,7 @@ from control_plane_backend.product.service import (
     prepare_execution,
     prepare_runtime_agent_execution,
     promote_prompt,
+    recheck_agent_instance_readiness,
     record_marketplace_prompt_use,
     record_prompt_use,
     set_prompt_favorite,
@@ -302,6 +303,7 @@ async def get_team_agent_templates(
 async def get_team_agent_instances(
     team_id: Annotated[TeamId, Path()],
     deps: ProductDependencies,
+    http_request: Request,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[ManagedAgentInstanceSummary]:
     """
@@ -323,7 +325,10 @@ async def get_team_agent_instances(
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    summaries = await list_managed_agent_instances(team_id, deps)
+    # The caller's token lets a pending capability be re-checked on its pod.
+    summaries = await list_managed_agent_instances(
+        team_id, deps, authorization=http_request.headers.get("Authorization")
+    )
     await attach_marketplace_states(
         user=user, team_id=team_id, summaries=summaries, deps=deps
     )
@@ -666,6 +671,44 @@ async def patch_team_agent_instance_with_assets(
         raise HTTPException(
             status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent instance {agent_instance_id!r} not found for team {team_id!r}.",
+        )
+    return result
+
+
+@router.post(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check",
+    response_model=ManagedAgentInstanceSummary,
+    response_model_exclude_none=True,
+    summary="Re-check a managed agent instance's capability readiness.",
+)
+async def post_team_agent_instance_readiness_check(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    http_request: Request,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> ManagedAgentInstanceSummary:
+    """
+    Ask the instance's pod whether its capabilities finished preparing their
+    saved configuration, and set or clear `capability_pending` accordingly.
+    Polled by the agent form so the agent becomes available without a save.
+    """
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
+    result = await recheck_agent_instance_readiness(
+        team_id=team_id,
+        agent_instance_id=agent_instance_id,
+        deps=deps,
+        authorization=http_request.headers.get("Authorization"),
+    )
     if result is None:
         raise HTTPException(
             status_code=404,

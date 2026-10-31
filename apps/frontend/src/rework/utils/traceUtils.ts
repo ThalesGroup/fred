@@ -177,7 +177,7 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
     "wiki_publish_proposal",
   ],
   "capabilities.htmlArtifact": ["render_html_artifact"],
-  "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template"],
+  "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template", "build_presentation"],
   "capabilities.platformOps": ["postgres_list_tables", "postgres_run_query"],
   skills: ["load_skill", "read_skill_file"],
   deep: [

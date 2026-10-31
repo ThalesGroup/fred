@@ -39,7 +39,7 @@ from ..models import (
     CapabilityConfigExportResult,
     StoredCapabilityConfig,
 )
-from .base import AgentCapability, ToolCarrierMiddleware
+from .base import AgentCapability, CapabilityReadiness, ToolCarrierMiddleware
 from .chat_controls import (
     ChatControlsRequest,
     ChatControlsRequestItem,
@@ -87,6 +87,7 @@ __all__ = [
     "CapabilityContext",
     "CapabilityIdentity",
     "CapabilityManifest",
+    "CapabilityReadiness",
     "ChatControlDescriptor",
     "ChatControlItem",
     "ChatControlSpec",

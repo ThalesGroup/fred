@@ -139,6 +139,7 @@ do not fold tools into the `middleware()` override, or they vanish for Graph age
 | System-prompt fragment | `middleware()` override, `wrap_model_call` / `modify_model_request` — ReAct only |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free (ReAct only) |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()` — the single platform gate merges them; **capabilities never ship interrupt middleware** (RFC §5.4) |
+| Save starts background work the agent must wait for | `readiness(stored, identity)` → `CapabilityReadiness`; pending/failed keeps the agent suspended (`capability_pending`) — no control-plane code; add frontend locale key `capability.<id>.preparing` so the UI names the pending work |
 
 Tools keep their original LangChain objects across runtimes. Use native `ainvoke`
 semantics and `content_and_artifact` for structured Fred results; no Graph wrapper
@@ -208,6 +209,11 @@ cd apps/frontend && make update-<id>-capability-api
 The generated slice + dumped schema (under
 `apps/frontend/src/rework/features/capabilities/<id>/api/`) are `.prettierignore`d — never
 hand-edit them. See `apps/frontend/Makefile` (`update-demo-echo-capability-api`).
+
+Route authorization: `Depends(capability_team_authorizer)` then
+`require_agent_editor(team_id)` for team-scoped rows, or `require_capability_manager()` for
+platform-wide writes; `Depends(capability_platform_model)` gives such a route a model port
+bound to no team. See AUTHORING.md and `RUNTIME-EXECUTION-CONTRACT.md` §8.119/§8.121.
 
 ---
 

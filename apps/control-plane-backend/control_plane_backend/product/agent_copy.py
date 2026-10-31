@@ -233,15 +233,20 @@ async def _copy_capability_config_via_pod(
     capability_id: str,
     request: CapabilityConfigCopyRequest,
     authorization: str | None,
+    routing_params: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
-    """The pod's answer (envelope and notices), or None when the capability is left out."""
+    """The pod's answer (envelope and notices), or None when the capability is left out.
+    `routing_params` carry the destination team's routing, as on a save."""
 
     url = f"{base_url.rstrip('/')}/agents/capabilities/{capability_id}/copy-config"
     headers = {"Authorization": authorization} if authorization else None
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                url, json=request.model_dump(mode="json"), headers=headers
+                url,
+                json=request.model_dump(mode="json"),
+                headers=headers,
+                params=routing_params or None,
             )
     except httpx.RequestError as exc:
         raise EnrollmentError(
@@ -332,6 +337,16 @@ async def copy_agent_instance_to_team(
     if display_name is not None:
         await _ensure_duplicate_name_free(target_team_id, display_name, deps)
     new_instance_id = str(uuid4())
+    routing_params = (
+        await product_service._capability_save_routing_params(
+            deps,
+            target_team_id,
+            record.source_agent_id,
+            record.tuning.recommended_chat_profile_id,
+        )
+        if source.capability_ids
+        else None
+    )
 
     async def prepare(cap_id: str) -> tuple[str, dict[str, Any] | None]:
         if usable is not None and cap_id not in usable:
@@ -359,6 +374,7 @@ async def copy_agent_instance_to_team(
             capability_id=cap_id,
             request=request,
             authorization=authorization,
+            routing_params=routing_params,
         )
 
     prepared = await asyncio.gather(*(prepare(c) for c in source.capability_ids))
@@ -410,6 +426,10 @@ async def copy_agent_instance_to_team(
             created = await store.create(copy)
         except AgentNameAlreadyExistsError as again:
             raise agent_name_conflict(target_team_id, copy.display_name) from again
+    # A copied capability may start preparing again in the destination.
+    created = await product_service.settle_capability_save(
+        deps, created, authorization=authorization
+    )
     emit_agent_created_kpi(created, user=user, deps=deps)
     emit_audit_log(
         "agent.copied",

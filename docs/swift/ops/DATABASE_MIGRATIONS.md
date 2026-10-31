@@ -21,6 +21,7 @@ own single head — never rebased against another's. ORM models are registered i
 | knowledge-flow | `apps/knowledge-flow-backend/alembic/` | `alembic_version_knowledge_flow` |
 | fred-runtime | `libs/fred-runtime/fred_runtime/migrations/` | `alembic_version_runtime` |
 | writable-document capability | `libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/writable_document_migrations/` | `cap_writable_document_alembic_version` |
+| ppt_builder capability | `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/ppt_builder_migrations/` | `cap_ppt_builder_alembic_version` |
 
 A capability's tree sits inside its package rather than under `alembic/`, because
 `python -m fred_runtime migrate` discovers it by entry point (`fred.capabilities`) and runs
@@ -100,6 +101,7 @@ the tree whose migration you intend to reverse. The target is mandatory:
 cd apps/fred-agents
 make db-downgrade MIGRATION_TREE=runtime ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml
 make db-downgrade MIGRATION_TREE=capability:writable_document ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml
+make db-downgrade MIGRATION_TREE=capability:ppt_builder ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml
 ```
 
 Each invocation moves only its selected tree back one revision. Under the
@@ -113,7 +115,9 @@ runtime tree.
 
 Review the selected `downgrade()` script and take a suitable backup before
 running it. The writable-document capability's initial revision drops its
-document table on downgrade; fred-runtime's retired demo table revision has
+document table on downgrade, and the ppt_builder tree's two table revisions drop
+`cap_ppt_builder_deck_plan` and `cap_ppt_builder_analysis` (stored templates and
+analyses included); fred-runtime's retired demo table revision has
 an empty downgrade. A changed version row therefore does not prove that data
 or schema was restored. Check the selected version table and schema before
 restarting writers. This command does not coordinate application rollback or

@@ -31,6 +31,14 @@
   padding: var(--spacing-2xs) var(--spacing-s);
 }
 
+/* Info, download and close sit side by side, as one toolbar. */
+.tools {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0;
+}
+
 .titleGroup {
   display: flex;
   flex: 1;
@@ -69,9 +77,38 @@
 /* Each slide is a card with a shadow; margin (not container `gap`) guarantees the
  * space between consecutive slides survives react-pdf's per-page wrappers. */
 .page {
+  position: relative;
   box-shadow: var(--shadow-s);
   border-radius: var(--radius-s);
   overflow: hidden;
+}
+
+/* Every slide's number shows while the pointer is over the panel: the number the
+ * file, the assistant and PowerPoint all use. */
+.pageNumber {
+  display: flex;
+  position: absolute;
+  top: var(--spacing-xs);
+  right: var(--spacing-xs);
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  z-index: 1;
+  transition: opacity var(--duration-short-3) var(--easing-standard);
+  box-sizing: border-box;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--surface-container-highest) 80%, transparent);
+  padding: 0 var(--spacing-2xs);
+  min-width: 24px;
+  height: 24px;
+  pointer-events: none;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.body:hover .pageNumber,
+.body:focus-within .pageNumber {
+  opacity: 1;
 }
 
 .page:not(:last-child) {

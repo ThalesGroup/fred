@@ -1152,6 +1152,151 @@ The name `small` is scoped to this component. On the shared scale, 24px is
 
 ---
 
+### `PptBuilderTemplatePanel` + `PatternReviewDialog` (2026-10-05)
+
+**Location:** `src/rework/features/capabilities/ppt_builder/`
+
+**Status:** `Functional`
+
+The `ppt_builder` capability's configuration surface: one widget
+(`PptBuilderConfigForm`) owns all seven config fields (`template_sha256`,
+`overrides`, `use_vision`, `labelling_model`, `variety_check`,
+`variety_max_uses`, `validate_plan`) and is rendered by the
+Advanced capability card and the Simple "Generate a presentation" pack alike.
+Nothing in it is mandatory — an agent without a template builds on the
+built-in template.
+
+- **Upload row.** The same row as `ppt_filler` (outlined primary button, file
+  `Chip` with remove). The chip reads the staged file name, "A template is
+  configured", "Template set by the administrator: {file}"
+  (`admin_panel_settings`, when the platform template is in effect, its slides
+  and the administrator's edits shown read only), or "Built-in template"
+  (`palette`). A staged file is only
+  analysed after the save: the status line says so.
+- **Analysis status** (Body Small, `on-surface-retreat`), read from
+  `GET /analysis/{instance_id}` and polled every 3 s while pending/running
+  (a failed poll keeps the last answer on screen and polling goes on):
+  spinner + "Reading the template…" while in progress; on failure or
+  interruption an `error`-coloured line and the backend's message, both
+  telling the author to save the agent to read the template again (no
+  button: only the save carries the labelling model); an analysis made by
+  older rules says the same in a neutral line. When the
+  analysis ends, the widget calls control-plane `readiness-check` once, so the
+  agent leaves "preparing" without another save.
+- **Summary line** ("12 slides ready to use, 3 set aside") next to a text
+  button "Review slides" (`grid_view`); read-only for the built-in template.
+- **Guide link.** Last line of the template card: "How to prepare your
+  template?", a Body Small `primary` link (underlined on hover) opening the
+  Help Center guide `guides/prepare-powerpoint-template` in a new tab.
+- **Plan approval** (`PptBuilderPlanSettings`). A setting card right under
+  the template card, outside the advanced settings: the switch row "Validate
+  the plan before building" (default off) with its Body Small description.
+  On saves `validate_plan: true`: the first deck of a conversation is shown as
+  an outline the user approves before it is built.
+- **Vision settings.** A switch row "Use a vision model" (default on). With no
+  vision-capable model for the agent (`supports_vision` on neither the
+  effective chat model nor any available profile) it is shown off and
+  disabled, its description replaced by "No vision-capable model is available
+  for this agent; slides are labelled by rules". While on, an indented
+  (`outline-muted` left rule) `Select` lists "The agent's model" plus the
+  vision-capable profiles only.
+- **Variety row** (`PptBuilderVarietySettings`). Same setting card as the
+  vision switch: the switch row "Enforce variety" with its Body Small
+  description, then one line "[By slide name | By identified slide type] at
+  most [1–5] times each" (two compact small `Select`s, the mode one filling
+  the width; wraps only when very narrow). The selects sit outside the switch's
+  `label`, so a click on one never toggles it. Off saves `variety_check: "off"`
+  and leaves both selects in place, disabled; on restores the last mode.
+- **Review dialog** (central `Dialog`, `maxWidth` 1040, single "Done"
+  action). A grid of cards (`surface-container`, `--radius-s`, 1px
+  `outline-muted`): thumbnail (react-pdf page rendered at the box's width),
+  compact label `TextInput` (committed on every change, so closing with
+  Enter or Escape keeps a rename; emptying it falls back to the analysis
+  label) beside a small include
+  `Switch` (header grid `minmax(0, 1fr) auto`, so the switch stays inside
+  the card), kind `Select` (the closed `SlideKind` list), meta line (source,
+  "Named by rules" for a heuristic label, exclusion reason). Three sections,
+  empty ones omitted (Label Large, `on-surface-retreat`, separated by an
+  `outline-muted` rule): "Slides (n)", the template's own included slides,
+  always open; "Layouts (n)", included layouts, folded under a `<details>`
+  with a Body Small note that they are used only when no slide fits; "Slides
+  set aside (n)", every excluded pattern whatever its source, folded. Toggling
+  include moves the card to the matching section; focus follows it to its
+  switch there, unfolding that section. Escape closes only the dialog, never
+  the agent form hosting it.
+- **Thumbnails** come from `GET /analysis/{instance_id}/patterns.pdf` or the
+  built-in `/builtin/patterns.pdf`; best effort, a `slideshow` placeholder
+  otherwise.
+- Every correction is an override (`pattern_id`, `label`, `kind`,
+  `included`) written to the `overrides` field; an override with nothing left
+  is dropped. Overrides the analysed template no longer matches are counted
+  under the status line.
+
+Deliberate limits: no pagination (tens of slides, not hundreds); thumbnails
+render with the server's fonts; the vision switch is forced off for display
+only, the stored value is left as is.
+
+---
+
+### `PptBuilderPlatformPanel` — platform presentation template (2026-10-22)
+
+**Location:** `src/rework/features/capabilities/ppt_builder/PptBuilderPlatformPanel.tsx`,
+hosted by `FeaturesPage/CapabilityPlatformDrawer.tsx`
+
+**Status:** `Functional`
+
+Opened from a `settings` `IconButton` (medium, `on-surface-retreat`, tooltip
+"Platform settings") after "Manage by team" on the rows whose UI plugin declares
+a `platformPanel`; an `InlineDrawer` (480px) titled "{capability}: platform
+settings".
+
+- **Template card** (same outlined setting card as the agent form): a `Chip`
+  "Platform template: {file}" (`slideshow`) or "Fred template (built-in)"
+  (`palette`), the outlined primary "Upload / Replace the template" button,
+  the status line, the summary with "Review slides" and "Slides PDF" text
+  buttons, the guide link.
+- **Status line**: spinner + "Analysing {file}… Agents keep the current (or
+  Fred) template until it ends", polled every 3 s; a failed replacement is an
+  `error` line saying agents keep the previous template, plus the backend's
+  reason.
+- **Vision settings**: the agent form's `PptBuilderVisionSettings`, its first
+  option "The platform's default AI model", then the catalogue's vision
+  profiles; applied at the next upload or re-run.
+- **Actions row**: outlined "Run the analysis again" (`refresh`) and outlined
+  `error` "Reset to the Fred template", which opens a critical
+  `ConfirmationDialog`.
+- **Review**: the shared `PatternReviewDialog`, editable for capability
+  managers; the edits are saved once, when it closes.
+
+Write actions (upload, vision, re-run, reset, edits) render only for
+`feature_manager` (platform admins hold it too); the page itself is already
+gated on it.
+
+---
+
+### `DeckSummaryButton` — "What was built" (2026-10-07)
+
+**Location:** `src/rework/features/capabilities/ppt_filler/DeckSummaryButton.tsx`
+
+**Status:** `Functional`
+
+An `info` `IconButton` (`size="small"` like the download and close buttons,
+default `on-surface-retreat`, tooltip and accessible name "What was built",
+`aria-haspopup="dialog"`) placed just before the `.pptx` download, on the
+`ppt_preview` chat card and in the preview pane header; info, download and
+close sit in one group with no gap between them. Rendered only when the part carries a `summary` (ppt_builder
+decks); ppt_filler decks and older parts show nothing. It opens the central
+`Dialog` (`maxWidth` 480, single "Close" action): a Body Medium line "This
+presentation has N slides.", then an ordered list, one row per slide separated
+by an `outline-muted` rule: the slide number (Label Large, `on-surface-muted`),
+the title (Body Medium emphasized; the template slide's label when the slide
+has no title), the kind label (`capability.ppt_builder.kinds.*`, Body Small,
+`on-surface-retreat`) and, when any, a bulleted list of plain notes (Body Small,
+`on-surface-retreat`) worded from the tool's note codes. An unknown code is
+skipped, never shown raw. The content is fluid (`width: 100%`).
+
+---
+
 ### Package-foundation component corrections (2026-09-09)
 
 **Location:** `src/rework/components/shared/atoms/{Button,Icon,IconButton,TextInput,Spinner}/`
@@ -2148,6 +2293,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 - Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
 - Description (3-line clamp).
 - Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
+- **Preparing banner** (`capability_pending`, no detail): "Preparing — {what the capability prepares} The agent will be available again automatically in a few minutes." when exactly one of the agent's capabilities declares `capability.<id>.preparing` (ppt_builder: "reading the PowerPoint template."), else the generic "Preparing — the agent will be available again automatically in a few minutes. Nothing to do on your side." The edit form's pending message follows the same rule under the title "This agent is temporarily unavailable." (`capabilityPreparingKey`).
 - Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission; a plain 20px `on-surface-muted` icon, focusable, aligned with the card content — not a button) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
 - The origin/template line that used to sit under the agent name (#2076) is gone from the card body entirely — it only lives in the info tooltip now.
 - **Duplicate** opens `DuplicateAgentDialog` (name field prefilled with the source's name); confirming rebuilds a `CreateAgentInstanceRequest` from the source instance via the same `buildAgentFormSubmitPayload`/`extractCapabilityConfigValues` helpers the edit form uses (correct capability filtering against the live template), then calls the normal create endpoint — no backend change.

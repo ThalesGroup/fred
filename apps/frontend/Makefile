@@ -267,6 +267,16 @@ update-ppt-filler-capability-api: check-node node_modules ## Regenerate the ppt_
 	@echo "🎯 Generating RTK Query hooks for ppt_filler capability..."
 	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/ppt_filler/api/pptFillerCapabilityOpenApiConfig.json
 
+# ppt_builder ships in the same package as ppt_filler; same pod environment.
+.PHONY: update-ppt-builder-capability-api
+update-ppt-builder-capability-api: check-node node_modules ## Regenerate the ppt_builder capability client only
+	@echo "🔧 Dumping ppt_builder capability OpenAPI document..."
+	cd ../fred-agents && $(MAKE) --no-print-directory dev >/dev/null && \
+		.venv/bin/python -m fred_runtime dump-openapi ppt_builder \
+		> ../frontend/src/rework/features/capabilities/ppt_builder/api/openapi.json
+	@echo "🎯 Generating RTK Query hooks for ppt_builder capability..."
+	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/ppt_builder/api/pptBuilderCapabilityOpenApiConfig.json
+
 ##@ Clean
 
 .PHONY: clean

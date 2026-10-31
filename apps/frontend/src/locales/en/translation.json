@@ -344,12 +344,12 @@
         "close": "Close preview",
         "loadError": "Failed to load preview.",
         "loading": "Loading preview…",
-        "empty": "No preview yet. Ask the assistant to fill a deck."
+        "empty": "No presentation yet. Ask the assistant to create one."
       },
       "panel": {
         "ppt_preview_pane": {
           "title": "Presentation preview",
-          "launcher": "PPT viewer"
+          "launcher": "Presentation"
         }
       }
     },
@@ -383,6 +383,229 @@
             "read_write": "Read and propose"
           }
         }
+      }
+    },
+    "ppt_builder": {
+      "preparing": "reading the PowerPoint template.",
+      "name": "Generate a presentation",
+      "description": "Builds a PowerPoint deck from a chat request, on the team's template or a built-in theme.",
+      "fields": {
+        "template": {
+          "title": "PowerPoint template",
+          "description": "The template the agent builds its presentations on."
+        },
+        "overrides": {
+          "title": "Slide corrections",
+          "description": "Your corrections to the slides found in the template."
+        },
+        "use_vision": {
+          "title": "Use a vision model",
+          "description": "A model that reads images looks at each slide of the template to name it and understand what it is for.",
+          "unavailable": "No vision-capable model is available for this agent; slides are labelled by rules."
+        },
+        "labelling_model": {
+          "title": "Model that reads the slides",
+          "description": "Leave the agent's model to use the one it answers with.",
+          "agentDefault": "The agent's model",
+          "rereadOnSave": "Changing the model reads the template again when you save the agent."
+        },
+        "variety_check": {
+          "title": "Enforce variety",
+          "atMost": "at most",
+          "times": "times each",
+          "modeAria": "What must vary",
+          "maxAria": "Maximum number of times",
+          "description": "Keeps the same slide from coming back too often, as far as the template allows.",
+          "options": {
+            "template_slide": "By slide name",
+            "kind": "By identified slide type"
+          }
+        },
+        "validate_plan": {
+          "title": "Validate the plan before building",
+          "description": "Before building the first presentation of a conversation, the agent shows its plan (audience, main message, one line per slide) and waits for your answer. Changes to a delivered presentation never wait."
+        }
+      },
+      "form": {
+        "uploadTemplate": "Upload a .pptx template",
+        "replaceTemplate": "Replace the template",
+        "uploadAria": "PowerPoint template file",
+        "clearAria": "Remove the selected file",
+        "currentTemplate": "A template is configured for this agent.",
+        "builtInTemplate": "Built-in template (no template uploaded)",
+        "summary": "{{patterns}} slides ready to use, {{excluded}} set aside.",
+        "summaryBuiltin": "Built-in template: {{patterns}} slides ready to use.",
+        "review": "Review slides",
+        "templateGuide": "How to prepare your template?",
+        "droppedOverrides": "{{count}} earlier correction(s) no longer match this template and will be dropped on the next save.",
+        "adminTemplate": "Template set by the administrator: {{name}}",
+        "adminTemplateUnnamed": "Template set by the administrator",
+        "summaryPlatform": "Administrator's template: {{patterns}} slides ready to use, {{excluded}} set aside."
+      },
+      "analysis": {
+        "staged": "The template will be read once you save the agent. The agent becomes available when that is done.",
+        "inProgress": "Reading the template… The agent becomes available when it is done; you can close this window.",
+        "unknown": "The template's status is not available right now.",
+        "failed": "The template could not be read. The agent stays unavailable until it is; save the agent to read it again.",
+        "interrupted": "Reading the template was interrupted. The agent stays unavailable until you save it to read the template again.",
+        "outdated": "This template was read with an older version. The agent keeps using it; save the agent to read it again and benefit from the latest improvements.",
+        "refreshing": "Reading the template again… The agent keeps using the previous reading until it is done."
+      },
+      "review": {
+        "title": "Template slides",
+        "done": "Done",
+        "labelFor": "Name of {{label}}",
+        "include": "Use {{label}}",
+        "kindFor": "Kind of {{label}}",
+        "labelledByRules": "Named by rules",
+        "slides": "Slides ({{count}})",
+        "layouts": "Layouts ({{count}})",
+        "layoutsHint": "Used only when no slide of the template fits.",
+        "excluded": "Slides set aside ({{count}})",
+        "loadingThumbnails": "Loading thumbnails…",
+        "thumbnailsUnavailable": "Thumbnails are not available for this template.",
+        "source": {
+          "layout": "Layout {{index}}",
+          "slide": "Slide {{index}}"
+        },
+        "exclusion": {
+          "chart": "Chart",
+          "table": "Table",
+          "library": "Resource sheet",
+          "icon_bank": "Icon bank",
+          "no_placeholder": "No placeholder",
+          "unsupported_parts": "Cannot be copied",
+          "author": "Excluded by you"
+        }
+      },
+      "kinds": {
+        "cover": "Cover",
+        "agenda": "Agenda",
+        "section": "Section",
+        "bullets": "Bullet points",
+        "two_columns": "Two columns",
+        "comparison": "Comparison",
+        "cards": "Cards",
+        "figures": "Key figures",
+        "process": "Process",
+        "timeline": "Timeline",
+        "team": "Team",
+        "quote": "Quote",
+        "image_text": "Image and text",
+        "table": "Table",
+        "chart": "Chart",
+        "closing": "Closing",
+        "other": "Other"
+      },
+      "chartTypes": {
+        "column": "column",
+        "bar": "bar",
+        "line": "line",
+        "pie": "pie",
+        "doughnut": "doughnut",
+        "stacked_column": "stacked column",
+        "area": "area",
+        "stacked_bar": "stacked bar",
+        "radar": "radar",
+        "scatter": "scatter",
+        "bubble": "bubble",
+        "waterfall": "waterfall",
+        "funnel": "funnel",
+        "treemap": "treemap",
+        "gantt": "Gantt",
+        "heatmap": "heat map",
+        "gauge": "gauge"
+      },
+      "panel": {
+        "ppt_preview_pane": {
+          "title": "Presentation preview",
+          "launcher": "Presentation"
+        }
+      },
+      "summary": {
+        "open": "What was built",
+        "title": "What was built",
+        "close": "Close",
+        "count_one": "This presentation has {{count}} slide.",
+        "count_other": "This presentation has {{count}} slides.",
+        "untitled": "Untitled slide",
+        "notes": {
+          "text_shortened": "Some text was shortened to fit.",
+          "content_left_out": "Some content had no place on this slide and was left out.",
+          "items_left_out_one": "{{count}} item was left out: the slide has no room for more.",
+          "items_left_out_other": "{{count}} items were left out: the slide has no room for more.",
+          "image_unusable_one": "{{count}} image could not be used.",
+          "image_unusable_other": "{{count}} images could not be used.",
+          "table_left_out": "The table did not fit and was left out.",
+          "table_text_smaller": "The table text was made smaller to fit.",
+          "text_overflows": "A heading is too long for one line and may run into the text below.",
+          "left_empty": "This slide stays empty: it expects a list and none was given.",
+          "fixed_slide": "This slide is used as it is in the template, so its content was left out.",
+          "list_continues": "The list continues on the next slide.",
+          "list_continuation": "Continuation of the list from the previous slide.",
+          "other_kind": "Built as “{{built}}” instead of “{{asked}}”.",
+          "chart_type_changed": "A “{{asked}}” chart is not available: the data is shown as a column chart.",
+          "chart_type_changed_unnamed": "This chart type is not available: the data is shown as a column chart.",
+          "chart_shows_shares": "The chart shows percentages: the numbers themselves are not displayed.",
+          "layout_repeated": "Same layout as the previous slide, as you asked.",
+          "layout_not_repeated": "The previous slide's layout could not be kept: this content does not fit it.",
+          "intent_not_shown": "An emphasis you asked for could not be shown.",
+          "intent_not_shown_highlight": "The emphasis asked on one part of the chart could not be shown.",
+          "intent_not_shown_sort": "The chart keeps the order given: it could not be sorted as asked.",
+          "intent_not_shown_stacked_as": "The chart could not show its columns as percentages.",
+          "intent_not_shown_total_row": "The table's last row could not be shown as a total.",
+          "intent_not_shown_highlight_row": "The emphasis asked on a table row could not be shown.",
+          "intent_not_shown_highlight_column": "The emphasis asked on a table column could not be shown.",
+          "intent_not_shown_trend": "The rising or falling arrows asked on the figures could not be shown.",
+          "intent_not_shown_takeaway": "The key message could not be shown on this slide: it stays in the speaker notes.",
+          "intent_shown_otherwise": "An emphasis you asked for is shown in bold instead.",
+          "intent_shown_otherwise_total_row": "The total row is shown in bold: the table's style has no total formatting.",
+          "intent_shown_otherwise_highlight_row": "The emphasised row is shown in bold only, to stay readable on the table's dark colours.",
+          "intent_shown_otherwise_highlight_column": "The emphasised column is shown in bold only, to stay readable on the table's dark colours.",
+          "illustrative_data": "The figures on this slide are illustrative: they do not come from your documents."
+        }
+      },
+      "platform": {
+        "intro": "Agents without a template of their own build their presentations on this one.",
+        "loading": "Loading the platform template…",
+        "loadError": "The platform template could not be loaded.",
+        "unavailable": "Presentation settings are not available right now: the service that builds presentations cannot be reached.",
+        "current": "Platform template: {{name}}",
+        "fredTemplate": "Fred template (built-in)",
+        "upload": "Upload a .pptx template",
+        "replace": "Replace the template",
+        "uploadAria": "Platform PowerPoint template file",
+        "uploaded": "Template uploaded: its analysis has started.",
+        "uploadError": "The template was not accepted.",
+        "uploadFailed": "Something went wrong while sending the file. Try again in a moment.",
+        "analysing": {
+          "keepCurrent": "Analysing {{name}}… Agents keep the current template until it ends.",
+          "keepFred": "Analysing {{name}}… Agents keep the Fred template until it ends."
+        },
+        "failed": {
+          "keepCurrent": "{{name}} could not be read. Agents keep the current template; run the analysis again or upload another file.",
+          "keepFred": "{{name}} could not be read. Agents keep the Fred template; run the analysis again or upload another file."
+        },
+        "refreshing": "Reading the template again… Agents keep the previous reading until it ends.",
+        "outdated": "This template was read by an older version. Agents keep using it; run the analysis again to get the latest improvements.",
+        "defaultModel": "The platform's default AI model",
+        "visionRereads": "A new model is used the next time the template is read.",
+        "rerun": "Run the analysis again",
+        "rerunStarted": "Analysis started again.",
+        "rerunError": "The analysis could not be started again.",
+        "reset": "Reset to the Fred template",
+        "resetDone": "The Fred template is in use again.",
+        "resetError": "The template could not be reset.",
+        "resetConfirm": {
+          "title": "Go back to the Fred template?",
+          "message": "The platform template and all your slide edits, including those of the Fred template, will be deleted. Agents without a template of their own will go back to the Fred template.",
+          "confirm": "Reset",
+          "cancel": "Cancel"
+        },
+        "overridesSaved": "Slide edits saved.",
+        "overridesError": "The slide edits could not be saved.",
+        "patternsPdf": "Slides PDF",
+        "pdfError": "The slides PDF could not be downloaded."
       }
     }
   },
@@ -1330,7 +1553,11 @@
           "depNeedsSettings": "{{dep}} needs its own settings for this team — enable it from its own row first.",
           "thenSettingsForm": "You will then be asked to fill in {{agent}}'s settings before it is enabled."
         },
-        "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet."
+        "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet.",
+        "platformSettings": "Platform settings",
+        "platformDrawer": {
+          "title": "{{name}}: platform settings"
+        }
       },
       "platformModelBindings": {
         "openButton": "Model defaults",
@@ -1492,6 +1719,10 @@
       "noDescription": "No description yet.",
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
       "suspendedToggleLocked": "Suspended",
+      "preparing": "Preparing — the agent will be available again automatically in a few minutes. Nothing to do on your side.",
+      "preparingDetail": "Preparing — {{detail}} The agent will be available again automatically in a few minutes.",
+      "preparationFailed": "Unavailable — a capability this agent uses could not prepare its configuration: {{detail}} Edit the agent to fix it.",
+      "pendingToggleLocked": "Preparing",
       "duplicate": "Duplicate",
       "copyTo": "Copy to…",
       "copyDialog": {
@@ -2093,7 +2324,8 @@
           },
           "pptFiller": {
             "list_images_in_folder": "Finding images for a PowerPoint presentation",
-            "fill_ppt_template": "Creating a PowerPoint presentation"
+            "fill_ppt_template": "Creating a PowerPoint presentation",
+            "build_presentation": "Creating a PowerPoint presentation"
           },
           "platformOps": {
             "postgres_list_tables": "Reviewing available data",
@@ -3374,6 +3606,10 @@
             "webPage": {
               "title": "Generate a web page (HTML/CSS)",
               "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
+            },
+            "presentationBuilder": {
+              "title": "Generate a presentation",
+              "description": "Ability to build a PowerPoint deck from a request, on an optional corporate template."
             }
           }
         },
@@ -3473,7 +3709,11 @@
           "title": "This agent is suspended.",
           "unavailable": "A capability it uses is no longer available ({{capabilities}}). Untick it and re-save the agent to fix it, or contact a platform administrator.",
           "accessRevoked": "Your team's access to a capability it uses was revoked ({{capabilities}}). Untick it and re-save the agent, or contact a platform administrator.",
-          "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator."
+          "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator.",
+          "pendingTitle": "This agent is temporarily unavailable.",
+          "pending": "Preparing — the agent will be available again automatically in a few minutes. Nothing to do on your side.",
+          "pendingDetail": "Preparing — {{detail}} The agent will be available again automatically in a few minutes.",
+          "pendingFailed": "A capability it uses could not prepare its configuration: {{detail}} Fix its parameters and re-save the agent."
         },
         "subtitle": "Team: {{team}}",
         "subtitleWithTemplate": "Team: {{team}} · Template: {{template}}",

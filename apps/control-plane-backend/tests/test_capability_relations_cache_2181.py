@@ -440,3 +440,20 @@ async def test_failed_app_grant_invalidates_only_the_app_row() -> None:
     assert len(engine.list_direct_relations_calls) == 3
     assert application_item.disabled_team_ids == []
     assert application_item.enabled_team_ids == []
+
+
+@pytest.mark.asyncio
+async def test_build_enablement_item_carries_route_base_url() -> None:
+    """A capability's platform panel reaches its pod."""
+    engine = CountingRebacEngine(direct_relations=[])
+    tool = await _build_enablement_item(
+        _entry("ppt_builder").model_copy(
+            update={"route_base_url": "/agents/capabilities/ppt_builder"}
+        ),
+        rebac=engine,
+        total_team_count=1,
+        total_personal_space_count=1,
+        impact={},
+        reasoning_enabled_ids=frozenset(),
+    )
+    assert tool.route_base_url == "/agents/capabilities/ppt_builder"

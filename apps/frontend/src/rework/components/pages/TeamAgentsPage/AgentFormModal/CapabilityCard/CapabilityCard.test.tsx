@@ -14,9 +14,11 @@
 
 // A `ui.visible_when` gate that is itself hidden hides its dependants: a stored
 // `bind_libraries` must not show the library picker while team documents is off.
+// The optional badge sits right after the capability name.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 vi.mock("react-i18next", () => ({
@@ -74,5 +76,21 @@ describe("CapabilityCard included with the agent", () => {
     expect(html).toContain("config");
     expect(html).toContain('data-checked="true"');
     expect(html).not.toContain('type="checkbox"');
+  });
+});
+
+const renderWithBadge = (badge?: React.ReactNode) =>
+  renderToStaticMarkup(
+    <CapabilityCard name="Slides" checked={false} disabled={false} onToggle={() => {}} badge={badge} />,
+  );
+
+describe("CapabilityCard badge", () => {
+  it("renders the badge after the name", () => {
+    const html = renderWithBadge(<BetaBadge />);
+    expect(html.indexOf("Slides")).toBeLessThan(html.indexOf('aria-label="Beta"'));
+  });
+
+  it("renders no badge by default", () => {
+    expect(renderWithBadge()).not.toContain('aria-label="Beta"');
   });
 });
