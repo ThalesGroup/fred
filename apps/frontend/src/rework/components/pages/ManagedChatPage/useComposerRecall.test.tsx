@@ -20,6 +20,7 @@ import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { RichInputField, type CommandChoice } from "@shared/molecules/RichInputField/RichInputField";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { CommandDescriptor } from "../../../../slices/runtime/runtimeOpenApi";
+import { promptSummaryFixture } from "../PromptsPage/weaverPromptFixtures";
 import { useComposerCommands } from "./useComposerCommands";
 import { recallLinesOf, useComposerRecall } from "./useComposerRecall";
 
@@ -34,14 +35,30 @@ vi.mock("react-i18next", () => ({
 }));
 
 const PROMPTS = [
-  { prompt_id: "p-search", name: "Recherche", command: "search", description: "Chercher", emoji: null },
-  { prompt_id: "p-summary", name: "Résumé", command: "summary", description: "Résumer", emoji: null },
+  promptSummaryFixture({
+    prompt_id: "p-search",
+    display_name: "Recherche",
+    logical_name: "search",
+    description: "Chercher",
+  }),
+  promptSummaryFixture({
+    prompt_id: "p-summary",
+    display_name: "Résumé",
+    logical_name: "summary",
+    description: "Résumer",
+  }),
 ];
 
 vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ currentData: PROMPTS }),
   useGetAgentInstanceSkillsQuery: () => ({ currentData: { supported: true, skills: [] } }),
-  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [vi.fn()],
+}));
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePromptCatalogQuery: (_args: unknown, options: { skip: boolean }) => ({
+    currentData: options.skip ? undefined : { items: PROMPTS, next_cursor: null },
+    isFetching: false,
+    isError: false,
+  }),
+  useLazyGetPromptQuery: () => [vi.fn()],
 }));
 
 let counter = 0;

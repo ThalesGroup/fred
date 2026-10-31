@@ -70,15 +70,11 @@ import { useComposerRecall } from "./useComposerRecall";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
-import { useMySpacesQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useMySpacesQuery, useLazyGetPromptQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { MySpace, PromptSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
-import {
-  useGetAgentInstanceSkillDetailQuery,
-  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
-  type ContextPromptSummary,
-} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useGetAgentInstanceSkillDetailQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -165,11 +161,24 @@ export default function ManagedChatPage() {
       key={`${KeyCloakService.GetSessionIdentity()}:${space.id}:${agentInstanceId}`}
       space={space}
       agentInstanceId={agentInstanceId}
+      personalSpaceId={
+        context.currentData?.find(
+          (candidate) => candidate.kind === "personal" && candidate.organization_id === space.organization_id,
+        )?.id
+      }
     />
   );
 }
 
-function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentInstanceId: string }) {
+function ManagedChatContent({
+  space,
+  agentInstanceId,
+  personalSpaceId,
+}: {
+  space: MySpace;
+  agentInstanceId: string;
+  personalSpaceId?: string;
+}) {
   const pendingListId = useId();
   const [pendingExpanded, setPendingExpanded] = useState(true);
   const { t } = useTranslation();
@@ -239,7 +248,6 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
   );
 
   const isPersonalTeam = space.kind === "personal";
-  const activeTeam = space.kind === "personal" ? { id: space.id, name: space.name } : undefined;
   const team = { id: space.id, name: space.name };
   const isAdmin =
     space.kind === "personal" || space.roles.some((role) => role === "owner" || role === "organization_admin");
@@ -464,7 +472,7 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
   // (it is not attached as a session-context chip). The prompt text lives on the
   // full record, not the summary, so we fetch it on demand; personal-scope prompts
   // are stored under the user's personal team, team-scope under the chat team.
-  const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
+  const [fetchPrompt] = useLazyGetPromptQuery();
   // Asks RichInputField to focus with the caret at the end of the draft: bumped
   // alongside chat.setInput below (an inserted prompt, batched into one render)
   // and on entering a conversation.
@@ -484,19 +492,37 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
   // dismissing the list under them.
   const executionDisabledRef = useRef(chat.executionDisabled);
   executionDisabledRef.current = chat.executionDisabled;
-  const insertContextPrompt = async (prompt: ContextPromptSummary): Promise<boolean> => {
+  const promptScope = JSON.stringify([space.id, personalSpaceId, agentInstanceId, chat.sessionId]);
+  const promptScopeRef = useRef({ key: promptScope });
+  if (promptScopeRef.current.key !== promptScope) promptScopeRef.current = { key: promptScope };
+  const promptScopeIdentity = promptScopeRef.current;
+  const promptRequests = useRef(new Set<{ abort: () => void }>());
+  const promptLive = useRef(true);
+  useEffect(() => {
+    promptLive.current = true;
+    return () => {
+      promptLive.current = false;
+      for (const request of promptRequests.current) request.abort();
+      promptRequests.current.clear();
+    };
+  }, [promptScope]);
+  const insertContextPrompt = async (prompt: PromptSummary): Promise<boolean> => {
     if (executionDisabledRef.current) return false;
-    const promptTeamId = prompt.scope === "personal" ? activeTeam?.id : teamId;
+    const promptTeamId = prompt.space_id;
+    if (promptTeamId !== teamId && promptTeamId !== personalSpaceId) return false;
     try {
       // No owning team means no way to fetch the text — the same dead end as a
       // failed request, so it gets the same toast rather than a silent no-op.
       if (!promptTeamId) throw new Error("unknown prompt team");
-      const detail = await fetchPrompt({ teamId: promptTeamId, promptId: prompt.id }).unwrap();
-      if (executionDisabledRef.current) return false;
-      const text = detail.text?.trim();
+      const request = fetchPrompt({ spaceId: promptTeamId, promptId: prompt.prompt_id }, false);
+      promptRequests.current.add(request);
+      const detail = await request.unwrap().finally(() => promptRequests.current.delete(request));
+      if (!promptLive.current || promptScopeRef.current !== promptScopeIdentity || executionDisabledRef.current)
+        return false;
+      const text = detail.text;
       // An empty record is a failed insert from the user's side, not a no-op:
       // without the toast the click would look ignored.
-      if (!text) throw new Error("empty prompt");
+      if (!text.trim()) throw new Error("empty prompt");
       // Functional update: `chat.input` read before the await is stale by the
       // time it resolves, so typing (or sending) during the fetch would be
       // clobbered or resurrected.
@@ -504,6 +530,7 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
       setFocusEndRequestId((n) => n + 1);
       return true;
     } catch {
+      if (!promptLive.current || promptScopeRef.current !== promptScopeIdentity) return false;
       showError({
         summary: t("chatbot.contextPrompts.insertErrorSummary"),
         detail: t("chatbot.contextPrompts.insertErrorDetail"),
@@ -594,7 +621,7 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
     documentSelection: chat.documentSelection,
     // The document_scope tune row calls this to open the side panel (#2259).
     onOpenDocumentScopePanel: () => setActivePushDrawer({ kind: "document-scope" }),
-    onOpenPromptLibraryPanel: undefined,
+    onOpenPromptLibraryPanel: () => setActivePushDrawer({ kind: "prompt-library" }),
     searchPolicy: chat.searchPolicy,
     onSearchPolicyChange: chat.setSearchPolicy,
     ragScope: chat.ragScope,
@@ -632,10 +659,12 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
   // menu reach the same send.
   const commands = useComposerCommands({
-    enabled: false,
+    enabled: !chat.executionDisabled,
+    skillsEnabled: false,
+    sessionId: chat.sessionId,
     teamId,
     agentInstanceId,
-    personalTeamId: activeTeam?.id,
+    personalTeamId: personalSpaceId,
     onRunSkill: (run) => void chat.runSkill(run),
     onSkillError: (reason) =>
       showError({
@@ -659,14 +688,18 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
   });
 
   // A composer prompt token opens its own prompt; a second click closes it.
-  const [fetchPromptPreview, promptPreview] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
+  const [fetchPromptPreview, promptPreview] = useLazyGetPromptQuery();
   // One identity for every token and across keystrokes, so no token is
   // rebuilt as the user types: the activated token says which prompt it is.
   const openPromptPreview = useCallback(
     ({ promptId, promptTeamId, command, name }: InlinePromptTarget) => {
       const open = previewPromptIdRef.current === promptId;
       setActivePushDrawer(open ? null : { kind: "prompt-preview", promptId, promptTeamId, command, promptName: name });
-      if (!open) void fetchPromptPreview({ teamId: promptTeamId, promptId });
+      if (!open) {
+        const request = fetchPromptPreview({ spaceId: promptTeamId, promptId }, false);
+        promptRequests.current.add(request);
+        void request.then(() => promptRequests.current.delete(request));
+      }
     },
     [fetchPromptPreview],
   );
@@ -674,7 +707,9 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
     ? undefined
     : promptPreview.isFetching
       ? ("loading" as const)
-      : promptPreview.isError || promptPreview.originalArgs?.promptId !== promptPreviewDrawer.promptId
+      : promptPreview.isError ||
+          promptPreview.originalArgs?.promptId !== promptPreviewDrawer.promptId ||
+          promptPreview.originalArgs?.spaceId !== promptPreviewDrawer.promptTeamId
         ? ("error" as const)
         : undefined;
 
@@ -1231,7 +1266,7 @@ function ManagedChatContent({ space, agentInstanceId }: { space: MySpace; agentI
             open={!chat.executionDisabled && activePushDrawer?.kind === "prompt-library"}
             onClose={() => setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : v))}
             teamId={teamId}
-            personalTeamId={activeTeam?.id}
+            personalTeamId={personalSpaceId}
             isPersonalChat={isPersonalTeam}
             onInsert={insertContextPrompt}
           />

@@ -454,6 +454,37 @@ const injectedRtkApi = api.injectEndpoints({
     spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
     }),
+    listPrompts: build.query<ListPromptsApiResponse, ListPromptsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    createPrompt: build.mutation<CreatePromptApiResponse, CreatePromptApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts`,
+        method: "POST",
+        body: queryArg.createPromptRequest,
+      }),
+    }),
+    getPrompt: build.query<GetPromptApiResponse, GetPromptApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}` }),
+    }),
+    deletePrompt: build.mutation<DeletePromptApiResponse, DeletePromptApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}`,
+        method: "DELETE",
+      }),
+    }),
+    updatePrompt: build.mutation<UpdatePromptApiResponse, UpdatePromptApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}`,
+        method: "PATCH",
+        body: queryArg.updatePromptRequest,
+      }),
+    }),
     listSessions: build.query<ListSessionsApiResponse, ListSessionsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions` }),
     }),
@@ -912,6 +943,33 @@ export type ResolveRuntimeApiArg = {
 export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
 export type SpaceAgentTemplatesApiArg = {
   spaceId: string;
+};
+export type ListPromptsApiResponse = /** status 200 undefined */ PromptPage;
+export type ListPromptsApiArg = {
+  spaceId: string;
+  /** Exclusive logical_name cursor from next_cursor. Omit for the first page; at most 100 entries per page. */
+  after?: string;
+};
+export type CreatePromptApiResponse = /** status 201 undefined */ Prompt;
+export type CreatePromptApiArg = {
+  spaceId: string;
+  createPromptRequest: CreatePromptRequest;
+};
+export type GetPromptApiResponse = /** status 200 undefined */ Prompt;
+export type GetPromptApiArg = {
+  spaceId: string;
+  promptId: string;
+};
+export type DeletePromptApiResponse = unknown;
+export type DeletePromptApiArg = {
+  spaceId: string;
+  promptId: string;
+};
+export type UpdatePromptApiResponse = /** status 200 undefined */ Prompt;
+export type UpdatePromptApiArg = {
+  spaceId: string;
+  promptId: string;
+  updatePromptRequest: UpdatePromptRequest;
 };
 export type ListSessionsApiResponse = /** status 200 undefined */ SessionDetails[];
 export type ListSessionsApiArg = {
@@ -1992,6 +2050,51 @@ export type AgentTemplateSummary = {
   team_instantiable: boolean;
   template_id: string;
 };
+export type PromptMetadata = {
+  created_at: string;
+  created_by: string;
+  description: string | null;
+  display_name: string;
+  /** Immutable space-local identity. The slash command is "/" + logical_name. */
+  logical_name: string;
+  prompt_id: string;
+  space_id: string;
+  updated_at: string;
+  updated_by: string;
+};
+export type PromptSummary = PromptMetadata & {
+  /** First 240 characters, selected in PostgreSQL without fetching the full body. */
+  text_preview: string;
+};
+export type PromptPage = {
+  /** At most 100 entries, ordered by immutable logical_name in ASCII order. */
+  items: PromptSummary[];
+  /** Pass as `after` until null, including for search, pickers and command menus.
+    Pages are not a snapshot; restart to include concurrent inserts before the cursor. */
+  next_cursor: string | null;
+};
+export type Prompt = PromptMetadata & {
+  /** Current full text, preserved verbatim. */
+  text: string;
+};
+export type CreatePromptRequest = {
+  /** Omitted/null means no description. NUL characters are rejected. */
+  description?: string | null;
+  /** NFC-normalized and trimmed, nonblank, without control characters. */
+  display_name: string;
+  /** Immutable; "skill" is reserved. Invalid names are rejected, never normalized. */
+  logical_name: string;
+  /** Preserved verbatim, including whitespace and empty strings. NUL is rejected. */
+  text: string;
+};
+export type UpdatePromptRequest = {
+  /** Omitted keeps the value; null clears it; a string replaces it (including ""). */
+  description?: string | null;
+  /** Omitted/null keeps the value. Supplied strings follow creation's label rules. */
+  display_name?: string | null;
+  /** Omitted/null keeps the value; a string replaces it verbatim (including ""). */
+  text?: string | null;
+};
 export type SessionDetails = {
   agent_configuration_changed: boolean;
   agent_configuration_revision: number;
@@ -2165,6 +2268,13 @@ export const {
   useLazyResolveRuntimeQuery,
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
+  useListPromptsQuery,
+  useLazyListPromptsQuery,
+  useCreatePromptMutation,
+  useGetPromptQuery,
+  useLazyGetPromptQuery,
+  useDeletePromptMutation,
+  useUpdatePromptMutation,
   useListSessionsQuery,
   useLazyListSessionsQuery,
   useCreateSessionMutation,

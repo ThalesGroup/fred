@@ -89,6 +89,7 @@
 .name {
   color: var(--on-surface);
   font: var(--font-body-medium-emphasized);
+  overflow-wrap: anywhere;
 }
 
 .description {

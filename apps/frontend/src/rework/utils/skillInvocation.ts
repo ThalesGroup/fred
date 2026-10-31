@@ -43,7 +43,7 @@ export function assemblePromptTurn(
       own.push(before);
       push(before);
     }
-    const body = prompt.text.trim();
+    const body = prompt.text;
     listed.push({
       command: prompt.command,
       prompt_id: prompt.promptId,

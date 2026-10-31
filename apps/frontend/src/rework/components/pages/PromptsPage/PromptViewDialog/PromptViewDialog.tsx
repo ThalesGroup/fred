@@ -23,6 +23,8 @@ import {
   type PromptCategorySummary,
   useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
 } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useGetPromptQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import styles from "./PromptViewDialog.module.scss";
 
 /** Minimal prompt shape the read-only view can render without a team fetch. */
@@ -43,6 +45,7 @@ interface PromptViewDialogProps {
   onClose: () => void;
   /** team variant: fetches the prompt detail for this team. */
   teamId?: string;
+  spaceId?: string;
   promptId?: string | null;
   categories?: PromptCategorySummary[];
   /**
@@ -63,6 +66,7 @@ interface PromptViewDialogProps {
 export default function PromptViewDialog({
   open,
   teamId,
+  spaceId,
   promptId,
   categories = [],
   preloadedDetail,
@@ -74,25 +78,42 @@ export default function PromptViewDialog({
   const { showSuccess } = useToast();
   const [copied, setCopied] = useState(false);
 
-  const { data: rawDetail } = useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery(
-    { teamId: teamId || "", promptId: promptId || "" },
-    { skip: !open || !promptId || !teamId || !!preloadedDetail },
-  );
-  // RTK Query's `data` keeps returning the *previous* successful result (same
-  // object reference) for a moment after `promptId` changes, before the new
-  // fetch resolves — same root cause as issue #1996 in the edit form. Without
-  // this guard, opening prompt B right after prompt A briefly (or, on a slow
-  // network, not-so-briefly) renders A's name/category/text under B's dialog.
+  const { currentData: rawDetail, isError: legacyError } =
+    useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery(
+      { teamId: teamId || "", promptId: promptId || "" },
+      { skip: !!spaceId || !open || !promptId || !teamId || !!preloadedDetail },
+    );
+  // Keep the marketplace/home consumers on their own contract. Weaver never
+  // converts its definition to a legacy DTO or starts the legacy query.
   const fetched = rawDetail && rawDetail.id === promptId ? rawDetail : undefined;
-  const detail: PromptViewDetail | undefined = preloadedDetail ?? fetched;
+  const weaver = useGetPromptQuery(
+    { spaceId: spaceId ?? "", promptId: promptId ?? "" },
+    {
+      skip: !open || !spaceId || !promptId,
+      refetchOnMountOrArgChange: true,
+    },
+  );
+  const detail = spaceId
+    ? !weaver.isError && !weaver.isFetching
+      ? weaver.currentData
+      : undefined
+    : (preloadedDetail ?? fetched);
+  const failed = spaceId ? weaver.isError : legacyError;
+  const name = detail && ("display_name" in detail ? detail.display_name : detail.name);
+  const command = detail && ("logical_name" in detail ? detail.logical_name : detail.command);
 
   useEffect(() => {
     setCopied(false);
   }, [open, promptId, preloadedDetail?.id]);
 
-  const category = categories.find((c) => c.id === detail?.category_id);
-  const resolvedChipLabel =
-    chipLabel !== undefined ? chipLabel : (category?.name ?? t("rework.promptCategories.noCategory"));
+  const category = categories.find(
+    (c) => c.id === (detail && "category_id" in detail ? detail.category_id : undefined),
+  );
+  const resolvedChipLabel = spaceId
+    ? null
+    : chipLabel !== undefined
+      ? chipLabel
+      : (category?.name ?? t("rework.promptCategories.noCategory"));
 
   const handleCopy = () => {
     if (!detail) return;
@@ -109,30 +130,32 @@ export default function PromptViewDialog({
   return (
     <FullPageModal isOpen={open} onClose={onClose} id="prompt-view-modal" background="scrim">
       <div className={styles.card}>
-        {!detail ? (
+        <div className={styles.header}>
+          <span id="prompt-view-modal-title" className={styles.title}>
+            {name ?? t("chatbot.promptSelectionPanel.title")}
+          </span>
+        </div>
+        <div className={styles.closeButton}>
+          <IconButton
+            size="medium"
+            color="on-surface-retreat"
+            variant="icon"
+            icon={{ category: "outlined", type: "close" }}
+            aria-label={t("rework.teams.prompts.view.closeAria")}
+            onClick={onClose}
+          />
+        </div>
+        {failed ? (
+          <ServiceNotice icon="info" title={t("chatbot.commandTurn.previewError")} />
+        ) : !detail ? (
           <div className={styles.loading}>
             <Spinner size={20} />
           </div>
         ) : (
           <>
-            <div className={styles.header}>
-              <span className={styles.title}>{detail.name}</span>
-            </div>
-
-            <div className={styles.closeButton}>
-              <IconButton
-                size="medium"
-                color="on-surface-retreat"
-                variant="icon"
-                icon={{ category: "outlined", type: "close" }}
-                aria-label={t("rework.teams.prompts.view.closeAria")}
-                onClick={onClose}
-              />
-            </div>
-
-            {(detail.command || detail.description) && (
+            {(command || detail.description) && (
               <div className={styles.summary}>
-                {detail.command && <span className={styles.commandSlug}>/{detail.command}</span>}
+                {command && <span className={styles.commandSlug}>/{command}</span>}
                 {detail.description && <p className={styles.description}>{detail.description}</p>}
               </div>
             )}

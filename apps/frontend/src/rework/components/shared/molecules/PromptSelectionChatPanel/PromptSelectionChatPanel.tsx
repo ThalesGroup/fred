@@ -1,47 +1,17 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
-// Prompt-library side panel for the chat composer. Replaces the anchored
-// sub-menu that listed every prompt flat, with no search and no way to reach
-// the caller's personal prompts from a team chat.
-
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
-import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel.tsx";
-import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
-import type { OptionModel } from "@models/Option.model.ts";
-import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import FavoritesFilterChip from "@shared/molecules/FavoritesFilterChip/FavoritesFilterChip.tsx";
-import { usePromptFavoriteToggle } from "@core/hooks/usePromptFavoriteToggle.ts";
-import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
-import {
-  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
-  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
-  type ContextPromptSummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import Button from "@shared/atoms/Button/Button";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
+import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
+import { filterPrompts } from "@shared/utils/promptFilter";
+import { usePromptCatalogQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { PromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PromptSelectionChatPanel.module.css";
-
-/**
- * "Every category" as a select value. A sentinel rather than `null`: the menu
- * derives each option's DOM id from its value, and `null` would stringify.
- * Mapped back to `null` — no filter — before it reaches the predicate.
- */
-const ALL_CATEGORIES = "__all__";
 
 type Space = "team" | "personal";
 const SPACES: Space[] = ["team", "personal"];
@@ -49,18 +19,12 @@ const SPACES: Space[] = ["team", "personal"];
 export interface PromptSelectionChatPanelProps {
   open: boolean;
   onClose: () => void;
-  /** The chat's own team. In a personal chat this *is* the personal space. */
   teamId: string;
-  /** The caller's personal space, from bootstrap. Undefined until it resolves. */
+  /** Authorized personal space in the conversation's organization. */
   personalTeamId?: string;
-  /** Hides the space picker: a personal chat has no team side to offer. */
   isPersonalChat: boolean;
-  /**
-   * Inserts the prompt into the composer. Resolves true once the text is in —
-   * the panel stays open on false so a failed fetch does not lose the user's
-   * place in the list.
-   */
-  onInsert: (prompt: ContextPromptSummary) => Promise<boolean>;
+  /** Only closes after the complete text has been inserted into the draft. */
+  onInsert: (prompt: PromptSummary) => Promise<boolean>;
 }
 
 export default function PromptSelectionChatPanel({
@@ -74,114 +38,33 @@ export default function PromptSelectionChatPanel({
   const { t } = useTranslation();
   const [space, setSpace] = useState<Space>(isPersonalChat ? "personal" : "team");
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<string | null>(null);
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [insertingId, setInsertingId] = useState<string | null>(null);
-
-  // Reopening starts clean: a search left over from last time would otherwise
-  // show an empty list the user has no reason to expect.
+  const canPickSpace = !isPersonalChat && Boolean(personalTeamId);
+  const spaceId = isPersonalChat || !canPickSpace || space === "team" ? teamId : personalTeamId!;
+  const scope = JSON.stringify([open, spaceId]);
+  const currentScope = useRef({ key: scope });
+  if (currentScope.current.key !== scope) currentScope.current = { key: scope };
+  const scopeIdentity = currentScope.current;
   useEffect(() => {
-    if (!open) return;
     setSpace(isPersonalChat ? "personal" : "team");
     setSearch("");
-    setCategory(null);
-    setFavoritesOnly(false);
-  }, [open, isPersonalChat]);
-
-  // Prompt categories are team-owned, so each space has its own set — the
-  // active filter cannot survive a space change.
+  }, [open, teamId, personalTeamId, isPersonalChat]);
   useEffect(() => {
-    setCategory(null);
-  }, [space]);
-
-  // The space the list and the chips read from. A personal chat only ever has
-  // one, and it is the chat's own team id.
-  const spaceTeamId = isPersonalChat || space === "team" ? teamId : personalTeamId;
-  const toggleFavorite = usePromptFavoriteToggle(spaceTeamId);
-
-  // Every query is skipped while closed: the panel is mounted for every chat,
-  // but most sessions never open it.
-  const {
-    data: teamPrompts = [],
-    isFetching: isFetchingTeam,
-    isUninitialized: isTeamUninitialized,
-  } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery({ teamId }, { skip: !open || !teamId });
-  // `/prompts/context` returns one space per call and never leaks personal
-  // prompts into a team's answer, so the personal side needs its own call.
-  const {
-    data: personalPrompts = [],
-    isFetching: isFetchingPersonal,
-    isUninitialized: isPersonalUninitialized,
-  } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
-    { teamId: personalTeamId ?? "" },
-    { skip: !open || !personalTeamId || isPersonalChat },
-  );
-  const { data: categories = [] } = useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery(
-    { teamId: spaceTeamId ?? "" },
-    { skip: !open || !spaceTeamId },
-  );
-
-  // Switching spaces needs a personal id. Without one (bootstrap not resolved)
-  // the panel stays on the team side rather than offering a tab whose query is
-  // skipped and whose spinner could never clear.
-  const canPickSpace = !isPersonalChat && Boolean(personalTeamId);
-  const onTeamSide = !canPickSpace || space === "team";
-  const prompts = onTeamSide ? teamPrompts : personalPrompts;
-  // `isFetching` alone is false on the render where `skip` flips, while the
-  // query is still uninitialized — the list would flash "no prompts" before the
-  // spinner. Both flags together cover the whole gap.
-  const isLoading = onTeamSide ? isFetchingTeam || isTeamUninitialized : isFetchingPersonal || isPersonalUninitialized;
-
-  const knownCategoryIds = useMemo(() => new Set(categories.map((cat) => cat.id)), [categories]);
-
-  // Counts come from the whole space, not the searched subset, so a chip's
-  // number does not shift as the user types. A prompt whose category was
-  // deleted counts as uncategorised, matching how the filter treats it.
-  const categoryCounts = useMemo(() => {
-    const byId = new Map<string, number>();
-    let noCategory = 0;
-    for (const prompt of prompts) {
-      const id = prompt.category_id;
-      if (id && knownCategoryIds.has(id)) byId.set(id, (byId.get(id) ?? 0) + 1);
-      else noCategory += 1;
-    }
-    return { byId, noCategory };
-  }, [prompts, knownCategoryIds]);
-
-  // Counts ride in the label: a menu row has no second column for them, and the
-  // number is what makes an empty category obvious before clicking it.
-  const categoryOptions: OptionModel<string>[] = useMemo(
-    () => [
-      { value: ALL_CATEGORIES, key: ALL_CATEGORIES, label: t("chatbot.promptSelectionPanel.allCategories") },
-      {
-        value: NO_CATEGORY_FILTER_ID,
-        key: NO_CATEGORY_FILTER_ID,
-        label: `${t("rework.promptCategories.noCategory")} (${categoryCounts.noCategory})`,
-      },
-      ...categories.map((cat) => ({
-        value: cat.id,
-        key: cat.id,
-        label: `${cat.name} (${categoryCounts.byId.get(cat.id) ?? 0})`,
-      })),
-    ],
-    [categories, categoryCounts, t],
-  );
-
-  const visiblePrompts = useMemo(
-    () => filterPrompts(prompts, { search, categoryId: category, knownCategoryIds, favoritesOnly }),
-    [prompts, search, category, knownCategoryIds, favoritesOnly],
-  );
-
-  const handlePick = async (prompt: ContextPromptSummary) => {
+    setSearch("");
+    setInsertingId(null);
+  }, [scope]);
+  const catalog = usePromptCatalogQuery({ spaceId }, { skip: !open || !spaceId, refetchOnMountOrArgChange: true });
+  const prompts = catalog.currentData?.items ?? [];
+  const visible = filterPrompts(prompts, { search, categoryId: null });
+  const handlePick = async (prompt: PromptSummary) => {
     if (insertingId) return;
-    setInsertingId(prompt.id);
+    setInsertingId(prompt.prompt_id);
     try {
-      if (await onInsert(prompt)) onClose();
+      if ((await onInsert(prompt)) && currentScope.current === scopeIdentity) onClose();
     } finally {
-      setInsertingId(null);
+      if (currentScope.current === scopeIdentity) setInsertingId(null);
     }
   };
-
   return (
     <ChatSidePanel
       open={open}
@@ -193,7 +76,6 @@ export default function PromptSelectionChatPanel({
     >
       {canPickSpace && (
         <ButtonGroup
-          // 2xs, not xs: ButtonGroup's ladder skips that tier.
           size="2xs"
           color="secondary"
           variant="radio"
@@ -204,84 +86,50 @@ export default function PromptSelectionChatPanel({
           onSelectedIndexChange={(index) => setSpace(SPACES[index])}
         />
       )}
-
-      {/* Search and category are one group — both narrow the same list — so they
-          sit tighter than the panel body's own spacing between blocks. */}
       <div className={styles.filters}>
-        <div className={styles.searchRow}>
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
-            clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
-            size="xs"
-          />
-          <FavoritesFilterChip
-            size="xs"
-            label={t("rework.teams.prompts.favorite.filter")}
-            active={favoritesOnly}
-            onToggle={() => setFavoritesOnly((on) => !on)}
-          />
-        </div>
-
-        {categories.length > 0 && (
-          <Select<string>
-            size="xs"
-            compact
-            options={categoryOptions}
-            value={category ?? ALL_CATEGORIES}
-            onChange={(value) => setCategory(value === ALL_CATEGORIES ? null : value)}
-            ariaLabel={t("chatbot.promptSelectionPanel.categoryLabel")}
-          />
-        )}
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
+          clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
+          size="xs"
+        />
+        <p className={styles.state}>{t("rework.weaverPrompts.filtersDeferred")}</p>
       </div>
-
-      {isLoading ? (
+      {catalog.isError ? (
+        <div className={styles.state} role="alert">
+          {t("rework.weaverPrompts.catalogError")}
+          <Button color="primary" variant="text" size="small" onClick={() => void catalog.refetch()}>
+            {t("rework.weaverPrompts.retry")}
+          </Button>
+        </div>
+      ) : !catalog.currentData ? (
         <div className={styles.state}>
           <Spinner size={20} />
         </div>
-      ) : visiblePrompts.length === 0 ? (
+      ) : visible.length === 0 ? (
         <p className={styles.state}>
-          {/* A category chip can empty the list on its own, with the search
-                box untouched — "no match for this search" would be a lie. */}
-          {prompts.length === 0
-            ? t("chatbot.promptSelectionPanel.empty")
-            : favoritesOnly
-              ? t("rework.teams.prompts.favorite.empty")
-              : t("chatbot.promptSelectionPanel.emptyFilters")}
+          {t(prompts.length === 0 ? "chatbot.promptSelectionPanel.empty" : "chatbot.promptSelectionPanel.emptyFilters")}
         </p>
       ) : (
         <ul className={styles.list}>
-          {visiblePrompts.map((prompt) => (
-            <li key={prompt.id} className={styles.item}>
+          {visible.map((prompt) => (
+            <li key={prompt.prompt_id} className={styles.item}>
               <button
                 type="button"
                 className={styles.row}
                 disabled={insertingId !== null}
-                aria-busy={insertingId === prompt.id}
+                aria-busy={insertingId === prompt.prompt_id}
                 onClick={() => void handlePick(prompt)}
               >
-                <span className={styles.name}>{prompt.name}</span>
+                <span className={styles.name} title={prompt.display_name}>
+                  {prompt.display_name}
+                </span>
+                <span className={styles.description} title={`/${prompt.logical_name}`}>
+                  /{prompt.logical_name}
+                </span>
                 {prompt.description && <span className={styles.description}>{prompt.description}</span>}
               </button>
-              {/* A sibling of the row, not inside it: a button cannot hold a button. */}
-              <span className={styles.favorite}>
-                <Tooltip
-                  text={t(
-                    prompt.is_favorite ? "rework.teams.prompts.favorite.remove" : "rework.teams.prompts.favorite.add",
-                  )}
-                >
-                  <IconButton
-                    variant="icon"
-                    size="small"
-                    color={prompt.is_favorite ? "warning" : "on-surface-retreat"}
-                    icon={{ category: "outlined", type: "star", filled: prompt.is_favorite === true }}
-                    aria-label={t("rework.teams.prompts.favorite.filter")}
-                    aria-pressed={prompt.is_favorite === true}
-                    onClick={() => void toggleFavorite(prompt)}
-                  />
-                </Tooltip>
-              </span>
             </li>
           ))}
         </ul>

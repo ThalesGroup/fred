@@ -26,6 +26,8 @@
   border-radius: var(--radius-ms);
   background: var(--surface-container);
   padding: 12px var(--spacing-m);
+  min-width: 0;
+  color: var(--on-surface);
 
   &:hover {
     border-color: var(--outline-variant);

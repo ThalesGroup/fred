@@ -44,6 +44,7 @@ pub mod model_catalog;
 pub mod onboarding;
 pub mod platform;
 pub mod processing;
+pub mod prompts;
 pub mod roles;
 pub mod sessions;
 pub mod spaces;

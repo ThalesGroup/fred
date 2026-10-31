@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { promptSummaryFixture } from "../../pages/PromptsPage/weaverPromptFixtures";
 import { describe, expect, it } from "vitest";
 import { filterPrompts, NO_CATEGORY_FILTER_ID, type FilterablePrompt } from "./promptFilter";
 
@@ -111,4 +112,10 @@ describe("filterPrompts", () => {
     expect(ids(filterPrompts(starred, { search: "", categoryId: "cat-report", favoritesOnly: true }))).toEqual(["p-1"]);
     expect(ids(filterPrompts(starred, { search: "", categoryId: "cat-hr", favoritesOnly: true }))).toEqual([]);
   });
+});
+
+it.each(["real name", "SUMMARY", "description"])("searches Weaver title, identity and description: %s", (search) => {
+  const prompt = promptSummaryFixture();
+  expect(filterPrompts([prompt], { ...ALL, search })).toEqual([prompt]);
+  expect(filterPrompts([prompt], { ...ALL, search: "Truncated preview" })).toEqual([]);
 });

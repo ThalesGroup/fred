@@ -24,13 +24,13 @@ const prompt = (
   return { command, promptId: id, promptName: `Name of ${command}`, from, to: from + command.length + 1, text };
 };
 
-/** What the single-prompt composer sent before the list existed. */
-function legacyTurn(draft: string, resolved: ResolvedPromptCommand) {
+/** Single-prompt descriptor compatibility, retaining the current full text. */
+function singleTurn(draft: string, resolved: ResolvedPromptCommand) {
   const before = draft.slice(0, resolved.from).trim();
   const after = draft.slice(resolved.to).trim();
   const appended = [before, after].filter(Boolean).join("\n\n");
   return {
-    text: [before, resolved.text.trim(), after].filter(Boolean).join("\n\n"),
+    text: [before, resolved.text, after].filter(Boolean).join("\n\n"),
     command: {
       command: resolved.command,
       ...(appended ? { appended_text: appended } : {}),
@@ -51,13 +51,13 @@ describe("assemblePromptTurn", () => {
   ])("sends for one prompt exactly the text and single fields of a single-prompt turn: %j", (draft, text) => {
     const resolved = prompt(draft, "summary", text);
     const { text: sent, command } = assemblePromptTurn(draft, [resolved]);
-    const legacy = legacyTurn(draft, resolved);
+    const expected = singleTurn(draft, resolved);
     const { prompts, ...single } = command;
 
-    expect(sent).toBe(legacy.text);
-    expect(single).toEqual(legacy.command);
+    expect(sent).toBe(expected.text);
+    expect(single).toEqual(expected.command);
     expect(prompts).toHaveLength(1);
-    expect(sent.slice(prompts![0].text_offset, prompts![0].text_offset + prompts![0].text_length)).toBe(text.trim());
+    expect(sent.slice(prompts![0].text_offset, prompts![0].text_offset + prompts![0].text_length)).toBe(text);
   });
 
   it("expands two prompts in place, in the order of the line", () => {
@@ -143,9 +143,9 @@ describe("assemblePromptTurn with line breaks", () => {
     const { text, command } = assemblePromptTurn(draft, [prompt(draft, "summary", `${body}\r\n`)]);
     const [entry] = command.prompts!;
 
-    expect(text).toBe(`Avant\n\n${body}\n\nensuite`);
+    expect(text).toBe(`Avant\n\n${body}\r\n\n\nensuite`);
     expect(entry.draft_offset).toBe(7);
-    expect(text.slice(entry.text_offset, entry.text_offset + entry.text_length)).toBe(body);
+    expect(text.slice(entry.text_offset, entry.text_offset + entry.text_length)).toBe(`${body}\r\n`);
     expect(usablePromptList(command, text)).toHaveLength(1);
   });
 });

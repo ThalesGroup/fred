@@ -27,6 +27,8 @@ import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import { useComposerCommands } from "./useComposerCommands";
+import { promptFixture, promptSummaryFixture } from "../PromptsPage/weaverPromptFixtures";
+import type { PromptSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -38,12 +40,20 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 
-// The shape of `GET /teams/{id}/prompt-commands`: only invocable prompts, and
-// already ordered by command. Excluding the ones without a command is the
-// endpoint's job, proven by `test_prompt_commands_endpoint_lists_only_invocable_prompts`.
-const PROMPTS = [
-  { prompt_id: "p-search", name: "Recherche", command: "search", description: "Chercher", emoji: null },
-  { prompt_id: "p-summary", name: "Résumé", command: "summary", description: "Résumer", emoji: null },
+// Complete catalog payloads; pagination itself is covered with the real RTK store.
+const PROMPTS: PromptSummary[] = [
+  promptSummaryFixture({
+    prompt_id: "p-search",
+    display_name: "Recherche",
+    logical_name: "search",
+    description: "Chercher",
+  }),
+  promptSummaryFixture({
+    prompt_id: "p-summary",
+    display_name: "Résumé",
+    logical_name: "summary",
+    description: "Résumer",
+  }),
 ];
 
 const PROMPT_TEXT: Record<string, string> = {
@@ -56,6 +66,8 @@ let listResult: { data?: typeof PROMPTS; currentData?: typeof PROMPTS } = { data
 let personalResult: typeof listResult = { data: [] };
 let commandsFetching = false;
 let commandsFailed = false;
+let personalFetching = false;
+let personalFailed = false;
 const listCommands = vi.fn();
 // What a catalog answers when the hook asks it again; nothing by default.
 const refetchCommands = vi.fn<(teamId: string) => Promise<{ data?: typeof PROMPTS }>>();
@@ -64,27 +76,56 @@ const NO_SKILLS = { supported: false, skills: [] };
 let skillsPending = false;
 let skillsFailed = false;
 
+const skillQueries = vi.fn();
 vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetAgentInstanceSkillsQuery: () => ({
-    currentData: skillsPending ? undefined : (skillCatalog ?? NO_SKILLS),
-    isError: skillsFailed,
-    refetch: refetchSkills,
-  }),
-  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: (
-    args: { teamId: string },
-    options: { skip: boolean },
-  ) => {
-    listCommands(args, options);
-    const result = args.teamId === "personal-1" ? personalResult : listResult;
+  useGetAgentInstanceSkillsQuery: (_args: unknown, options: { skip: boolean }) => {
+    skillQueries(options);
     return {
-      data: result.data,
-      currentData: options.skip ? undefined : "currentData" in result ? result.currentData : result.data,
-      isFetching: !options.skip && commandsFetching,
-      isError: !options.skip && commandsFailed,
-      refetch: () => refetchCommands(args.teamId),
+      currentData: options.skip || skillsPending ? undefined : (skillCatalog ?? NO_SKILLS),
+      isFetching: !options.skip && skillsPending,
+      isError: !options.skip && skillsFailed,
+      refetch: refetchSkills,
     };
   },
-  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [fetchPrompt],
+}));
+const abortRead = vi.fn();
+// Build full generated payloads from each scenario's text/error. Abort deliberately
+// does not resolve held responses, so the late-response guard is exercised too.
+const readPrompt = (args: { spaceId: string; promptId: string }, preferCache: boolean) => {
+  const request = fetchPrompt(args, preferCache);
+  return {
+    abort: abortRead,
+    unsubscribe: vi.fn(),
+    unwrap: async () => {
+      const summary = [...(listResult.data ?? []), ...(personalResult.data ?? [])].find(
+        (p) => p.prompt_id === args.promptId,
+      );
+      return promptFixture({
+        ...summary,
+        prompt_id: args.promptId,
+        space_id: args.spaceId,
+        ...(await request.unwrap()),
+      });
+    },
+  };
+};
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePromptCatalogQuery: (args: { spaceId: string }, options: { skip: boolean }) => {
+    listCommands(args, options);
+    const result = args.spaceId === "personal-1" ? personalResult : listResult;
+    const current = options.skip ? undefined : "currentData" in result ? result.currentData : result.data;
+    return {
+      data: result.data && { items: result.data, next_cursor: null },
+      currentData: current && { items: current, next_cursor: null },
+      isFetching: !options.skip && (args.spaceId === "personal-1" ? personalFetching : commandsFetching),
+      isError: !options.skip && (args.spaceId === "personal-1" ? personalFailed : commandsFailed),
+      refetch: async () => {
+        const answer = await refetchCommands(args.spaceId);
+        return { data: answer.data && { items: answer.data, next_cursor: null }, isError: !answer.data };
+      },
+    };
+  },
+  useLazyGetPromptQuery: () => [readPrompt],
 }));
 
 let skillCatalog:
@@ -103,16 +144,22 @@ function Host({
   teamId = "team-1",
   agentInstanceId = "instance-1",
   personalTeamId,
+  skillsEnabled = false,
+  sessionId = "session-1",
 }: {
   inlineEditor?: boolean;
   teamId?: string;
   agentInstanceId?: string;
   personalTeamId?: string;
+  skillsEnabled?: boolean;
+  sessionId?: string;
 }) {
   const [input, setInput] = useState("");
   setHostInput = setInput;
   const commands = useComposerCommands({
     teamId,
+    skillsEnabled,
+    sessionId,
     agentInstanceId,
     personalTeamId,
     onRunSkill,
@@ -159,6 +206,8 @@ beforeEach(() => {
   personalResult = { data: [] };
   commandsFetching = false;
   commandsFailed = false;
+  personalFetching = false;
+  personalFailed = false;
   skillsPending = false;
   skillsFailed = false;
   refetchCommands.mockImplementation(async () => ({}));
@@ -171,7 +220,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(<Host />);
+    root.render(<Host skillsEnabled />);
   });
 });
 
@@ -241,7 +290,7 @@ describe("the command menu", () => {
     act(() =>
       root.render(
         <>
-          <Host />
+          <Host skillsEnabled />
           <InlineDrawer open layout="push" title="Skill preview" onClose={onClose} />
         </>,
       ),
@@ -319,15 +368,15 @@ describe("the command menu", () => {
   it("lists names starting with the typed text first in each section and focuses the first row", () => {
     listResult = {
       data: [
-        { prompt_id: "t-1", name: "A", command: "pre-sum", description: null, emoji: null },
-        { prompt_id: "t-2", name: "B", command: "big-sum", description: null, emoji: null },
+        promptSummaryFixture({ prompt_id: "t-1", display_name: "A", logical_name: "pre-sum", description: null }),
+        promptSummaryFixture({ prompt_id: "t-2", display_name: "B", logical_name: "big-sum", description: null }),
       ] as unknown as typeof PROMPTS,
     };
     personalResult = {
       data: [
-        { prompt_id: "p-1", name: "C", command: "my-sum", description: null, emoji: null },
-        { prompt_id: "p-2", name: "D", command: "sum-up", description: null, emoji: null },
-        { prompt_id: "p-3", name: "E", command: "sum", description: null, emoji: null },
+        promptSummaryFixture({ prompt_id: "p-1", display_name: "C", logical_name: "my-sum", description: null }),
+        promptSummaryFixture({ prompt_id: "p-2", display_name: "D", logical_name: "sum-up", description: null }),
+        promptSummaryFixture({ prompt_id: "p-3", display_name: "E", logical_name: "sum", description: null }),
       ] as unknown as typeof PROMPTS,
     };
     skillCatalog = {
@@ -337,7 +386,7 @@ describe("the command menu", () => {
         { name: "summarize", description: "Summarize" },
       ],
     };
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
     type("/sum");
 
     expect(sections()).toEqual([
@@ -490,24 +539,13 @@ describe("the command menu", () => {
     expect(scrolled.map((element) => element.getAttribute("role"))).toEqual([null, "option"]);
     expect(list.scrollTop).toBe(0);
   });
-
-  it("prefetches the focused entry once, and not again on the way back", () => {
-    type("/");
-    expect(fetchPrompt.mock.calls.map(([arg]) => arg.promptId)).toEqual(["p-search"]);
-
-    press("ArrowDown");
-    expect(fetchPrompt.mock.calls.map(([arg]) => arg.promptId)).toEqual(["p-search", "p-summary"]);
-
-    press("ArrowUp");
-    expect(fetchPrompt.mock.calls).toHaveLength(2);
-  });
 });
 
 describe("with nothing to offer", () => {
   it("says there is no command yet rather than vanishing", () => {
     listResult = { data: [] };
     act(() => {
-      root.render(<Host />);
+      root.render(<Host skillsEnabled />);
     });
 
     type("/");
@@ -519,7 +557,7 @@ describe("with nothing to offer", () => {
   it("says the commands are loading instead of claiming there is none", () => {
     listResult = { currentData: undefined };
     commandsFetching = true;
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
 
     type("/");
     expect(panel()?.getAttribute("role")).toBe("status");
@@ -531,14 +569,14 @@ describe("with nothing to offer", () => {
 
     // What has already answered is offered while the rest loads.
     personalResult = { data: [PROMPTS[1]] };
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
     type("/");
     expect(labels()).toEqual(["/summary"]);
 
     listResult = { data: [] };
     personalResult = { data: [] };
     commandsFetching = false;
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
     expect(container.textContent).toContain("chatbot.commandMenu.none");
   });
 
@@ -574,7 +612,7 @@ describe("running a command", () => {
 
     expect(textarea().value).toBe("/summary ");
     expect(container.querySelector('[role="listbox"]')).toBeNull();
-    expect(fetchPrompt).toHaveBeenCalledTimes(1);
+    expect(fetchPrompt).not.toHaveBeenCalled();
     expect(onRunCommand).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
 
@@ -718,7 +756,7 @@ describe("platform skills", () => {
         { name: "review", description: "Review" },
       ],
     };
-    act(() => root.render(<Host inlineEditor={inlineEditor} />));
+    act(() => root.render(<Host skillsEnabled inlineEditor={inlineEditor} />));
     if (!inlineEditor) act(() => textarea().focus());
   }
   const selected = () =>
@@ -775,11 +813,18 @@ describe("platform skills", () => {
       personalResult = {
         data:
           owner === "personal-1"
-            ? [{ prompt_id: "p-summary", command: "summary", name: "Résumé", description: "Résumer", emoji: null }]
+            ? [
+                promptSummaryFixture({
+                  prompt_id: "p-summary",
+                  logical_name: "summary",
+                  display_name: "Résumé",
+                  description: "Résumer",
+                }),
+              ]
             : [],
       };
       if (owner === "personal-1") listResult = { data: [] };
-      act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
+      act(() => root.render(<Host skillsEnabled inlineEditor personalTeamId="personal-1" />));
       cmType("Before /review middle /su after /meeting-minutes Notes");
       act(() => cm().dispatch({ selection: { anchor: 25 } }));
       cmPress("Tab");
@@ -788,7 +833,7 @@ describe("platform skills", () => {
       expect(container.querySelectorAll(".cm-content button")).toHaveLength(2);
       expect(container.querySelector(".cm-content [role=group]")).not.toBeNull();
       await act(async () => renders[renders.length - 1]!.submit());
-      expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: owner, promptId: "p-summary" }, false);
+      expect(fetchPrompt).toHaveBeenLastCalledWith({ spaceId: owner, promptId: "p-summary" }, false);
       expect(onRunCommand).toHaveBeenCalledWith({
         text: "Before /review middle\n\nRésume le document en :\n\nafter /meeting-minutes Notes",
         command: {
@@ -818,8 +863,8 @@ describe("platform skills", () => {
     "invokes the valid prompt command %s inline with two skills",
     async (command) => {
       activateSkills(true);
-      listResult = { data: [{ ...PROMPTS[1], command }] };
-      act(() => root.render(<Host inlineEditor />));
+      listResult = { data: [{ ...PROMPTS[1], logical_name: command }] };
+      act(() => root.render(<Host skillsEnabled inlineEditor />));
       cmType(`Before /review middle /${command}`);
       expect(labels()).toEqual([`/${command}`]);
       cmPress("Tab");
@@ -842,7 +887,7 @@ describe("platform skills", () => {
     act(() => cm().dispatch({ changes: { from: cm().state.doc.length, insert: "/meet" }, selection: { anchor: 13 } }));
     cmPress("Tab");
     skillCatalog = { supported: true, skills: [{ name: "meeting-minutes", description: "Meeting minutes" }] };
-    act(() => root.render(<Host inlineEditor />));
+    act(() => root.render(<Host skillsEnabled inlineEditor />));
     act(() => renders[renders.length - 1]!.submit());
     expect(onRunSkill).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
@@ -867,14 +912,21 @@ describe("platform skills", () => {
     cmType("/review /meeting-minutes");
     act(() => cm().dispatch({ changes: { from: cm().state.doc.length, insert: " " } }));
     skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
-    act(() => root.render(<Host inlineEditor />));
+    act(() => root.render(<Host skillsEnabled inlineEditor />));
     act(() => renders[renders.length - 1]!.submit());
     expect(onRunSkill).not.toHaveBeenCalled();
     expect(onSkillError).toHaveBeenCalledWith("unavailable");
   });
   it("restores an explicit prompt homonym through undo/redo of its whole deletion", async () => {
     listResult = {
-      data: [{ prompt_id: "p-review", command: "review", name: "Prompt review", description: "Prompt", emoji: null }],
+      data: [
+        promptSummaryFixture({
+          prompt_id: "p-review",
+          logical_name: "review",
+          display_name: "Prompt review",
+          description: "Prompt",
+        }),
+      ],
     };
     fetchPrompt.mockImplementation(() => ({ unwrap: async () => ({ text: "Prompt instructions" }) }));
     activateSkills(true);
@@ -1011,19 +1063,18 @@ describe("platform skills", () => {
     activateSkills(true);
     personalResult = {
       data: [
-        {
+        promptFixture({
           prompt_id: "personal-summary",
-          command: "summary",
-          name: "Personal summary",
+          logical_name: "summary",
+          display_name: "Personal summary",
           description: "Private",
-          emoji: null,
-        },
+        }),
       ],
     };
-    fetchPrompt.mockImplementation(({ teamId }: { teamId: string }) => ({
-      unwrap: async () => ({ text: teamId === "personal-1" ? "Personal instructions" : "Team instructions" }),
+    fetchPrompt.mockImplementation(({ spaceId }: { spaceId: string }) => ({
+      unwrap: async () => ({ text: spaceId === "personal-1" ? "Personal instructions" : "Team instructions" }),
     }));
-    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled inlineEditor personalTeamId="personal-1" />));
     cmType("/su");
     cmPress("ArrowDown");
     cmPress("Tab");
@@ -1036,7 +1087,7 @@ describe("platform skills", () => {
     });
     await act(async () => renders[renders.length - 1]!.submit());
     expect(onRunCommand.mock.calls[0][0].command.prompt_id).toBe("personal-summary");
-    expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: "personal-1", promptId: "personal-summary" }, false);
+    expect(fetchPrompt).toHaveBeenLastCalledWith({ spaceId: "personal-1", promptId: "personal-summary" }, false);
   });
   it("preserves whitespace before a leading prompt outside ReAct", async () => {
     activateSkills();
@@ -1145,7 +1196,12 @@ describe("platform skills", () => {
     listResult = {
       data: [
         ...PROMPTS,
-        { prompt_id: "p-review", name: "Prompt review", command: "review", description: "Prompt", emoji: null },
+        promptSummaryFixture({
+          prompt_id: "p-review",
+          display_name: "Prompt review",
+          logical_name: "review",
+          description: "Prompt",
+        }),
       ],
     };
     fetchPrompt.mockImplementation(() => ({ unwrap: async () => ({ text: "Prompt instructions" }) }));
@@ -1166,11 +1222,18 @@ describe("platform skills", () => {
   });
   it.each([true, false])("preserves prompts that prefix skill (enabled: %s)", async (enabled) => {
     listResult = {
-      data: [{ prompt_id: "p-ski", command: "ski", name: "Ski", description: "Plan a trip", emoji: null }],
+      data: [
+        promptSummaryFixture({
+          prompt_id: "p-ski",
+          logical_name: "ski",
+          display_name: "Ski",
+          description: "Plan a trip",
+        }),
+      ],
     };
     fetchPrompt.mockImplementation(() => ({ unwrap: async () => ({ text: "Plan a ski trip" }) }));
     if (enabled) activateSkills();
-    else act(() => root.render(<Host />));
+    else act(() => root.render(<Host skillsEnabled />));
     type("/ski");
     expect(labels()).toEqual(["/ski"]);
     await pressAsync("Enter");
@@ -1182,7 +1245,7 @@ describe("platform skills", () => {
   it("preserves skill names that prefix the old dispatcher", () => {
     activateSkills();
     skillCatalog = { supported: true, skills: [...skillCatalog!.skills, { name: "skillet", description: "Cooking" }] };
-    act(() => root.render(<Host />));
+    act(() => root.render(<Host skillsEnabled />));
     type("/ski");
     expect(labels()).toEqual(["/skillet"]);
     press("Tab");
@@ -1192,13 +1255,13 @@ describe("platform skills", () => {
     activateSkills();
     type("/meeting-minutes Notes");
     skillCatalog = undefined;
-    act(() => root.render(<Host />));
+    act(() => root.render(<Host skillsEnabled />));
     expect(selected()).toBeNull();
     expect(textarea().value).toBe("/meeting-minutes Notes");
     press("Enter");
     expect(onRunSkill).not.toHaveBeenCalled();
     skillCatalog = { supported: false, skills: [{ name: "review", description: "Review" }] };
-    act(() => root.render(<Host />));
+    act(() => root.render(<Host skillsEnabled />));
     type("/");
     expect(labels()).toEqual(["/search", "/summary"]);
   });
@@ -1281,7 +1344,7 @@ describe("platform skills", () => {
     "keeps both completion orders with the personal space %s",
     async (personalTeamId) => {
       activateSkills(true);
-      act(() => root.render(<Host inlineEditor personalTeamId={personalTeamId} />));
+      act(() => root.render(<Host skillsEnabled inlineEditor personalTeamId={personalTeamId} />));
       act(() => cm().contentDOM.focus());
       for (const promptFirst of [false, true]) {
         const before = promptFirst ? "Before" : "Before /review middle";
@@ -1327,7 +1390,12 @@ describe("platform skills", () => {
     listResult = {
       data: [
         ...PROMPTS,
-        { prompt_id: "p-review", name: "Prompt review", command: "review", description: "Prompt", emoji: null },
+        promptSummaryFixture({
+          prompt_id: "p-review",
+          display_name: "Prompt review",
+          logical_name: "review",
+          description: "Prompt",
+        }),
       ],
     };
     activateSkills(true);
@@ -1344,7 +1412,12 @@ describe("platform skills", () => {
     listResult = {
       data: [
         ...PROMPTS,
-        { prompt_id: "p-review", name: "Prompt review", command: "review", description: "Prompt", emoji: null },
+        promptSummaryFixture({
+          prompt_id: "p-review",
+          display_name: "Prompt review",
+          logical_name: "review",
+          description: "Prompt",
+        }),
       ],
     };
     activateSkills(true);
@@ -1367,7 +1440,12 @@ describe("platform skills", () => {
     listResult = {
       data: [
         ...PROMPTS,
-        { prompt_id: "p-review", name: "Prompt review", command: "review", description: "Prompt", emoji: null },
+        promptSummaryFixture({
+          prompt_id: "p-review",
+          display_name: "Prompt review",
+          logical_name: "review",
+          description: "Prompt",
+        }),
       ],
     };
     fetchPrompt.mockImplementation(() => ({ unwrap: async () => ({ text: "Prompt instructions" }) }));
@@ -1396,7 +1474,12 @@ describe("platform skills", () => {
     listResult = {
       data: [
         ...PROMPTS,
-        { prompt_id: "p-review", name: "Prompt review", command: "review", description: "Prompt", emoji: null },
+        promptSummaryFixture({
+          prompt_id: "p-review",
+          display_name: "Prompt review",
+          logical_name: "review",
+          description: "Prompt",
+        }),
       ],
     };
     activateSkills(true);
@@ -1423,16 +1506,15 @@ describe("platform skills", () => {
 });
 
 describe("personal and team prompt commands", () => {
-  const personalPrompt = {
+  const personalPrompt = promptSummaryFixture({
     prompt_id: "personal-summary",
-    command: "summary",
-    name: "Personal summary",
+    logical_name: "summary",
+    display_name: "Personal summary",
     description: "Private instructions",
-    emoji: null,
-  };
+  });
   const mountReact = () => {
     personalResult = { data: [personalPrompt] };
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
   };
   it.each(["personal", "skill-homonym"])(
     "preserves the chosen %s prompt after a legacy skill prefix",
@@ -1445,11 +1527,11 @@ describe("personal and team prompt commands", () => {
         ],
       };
       personalResult = { data: [personalPrompt] };
-      fetchPrompt.mockImplementation(({ teamId }: { teamId: string }) => ({
-        unwrap: async () => ({ text: teamId === "personal-1" ? "Personal instructions" : "Team instructions" }),
+      fetchPrompt.mockImplementation(({ spaceId }: { spaceId: string }) => ({
+        unwrap: async () => ({ text: spaceId === "personal-1" ? "Personal instructions" : "Team instructions" }),
       }));
       const react = variant === "personal";
-      act(() => root.render(<Host inlineEditor personalTeamId={react ? "personal-1" : undefined} />));
+      act(() => root.render(<Host skillsEnabled inlineEditor personalTeamId={react ? "personal-1" : undefined} />));
       const view = EditorView.findFromDOM(container.querySelector(".cm-content")!)!;
       const draft = "  /skill review   /su";
       act(() => {
@@ -1478,10 +1560,10 @@ describe("personal and team prompt commands", () => {
   );
   it.each(["team", "personal"])("decorates the completed %s prompt and sends that same selection", async (source) => {
     personalResult = { data: [personalPrompt] };
-    fetchPrompt.mockImplementation(({ teamId }: { teamId: string }) => ({
-      unwrap: async () => ({ text: teamId === "personal-1" ? "Personal instructions" : "Team instructions" }),
+    fetchPrompt.mockImplementation(({ spaceId }: { spaceId: string }) => ({
+      unwrap: async () => ({ text: spaceId === "personal-1" ? "Personal instructions" : "Team instructions" }),
     }));
-    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled inlineEditor personalTeamId="personal-1" />));
     const view = EditorView.findFromDOM(container.querySelector(".cm-content")!)!;
     act(() => view.contentDOM.focus());
     act(() => view.dispatch({ changes: { from: 0, insert: "/su" }, selection: { anchor: 3 } }));
@@ -1537,13 +1619,13 @@ describe("personal and team prompt commands", () => {
   it.each(["Tab", "pointer", "Enter"])(
     "runs the selected personal homonym through %s using its owning library",
     async (selection) => {
-      fetchPrompt.mockImplementation(({ teamId }: { teamId: string }) => ({
-        unwrap: async () => ({ text: teamId === "personal-1" ? "Personal instructions" : "Team instructions" }),
+      fetchPrompt.mockImplementation(({ spaceId }: { spaceId: string }) => ({
+        unwrap: async () => ({ text: spaceId === "personal-1" ? "Personal instructions" : "Team instructions" }),
       }));
       mountReact();
       type("/su");
       press("ArrowDown");
-      expect(fetchPrompt).toHaveBeenCalledWith({ teamId: "personal-1", promptId: "personal-summary" }, true);
+      expect(fetchPrompt).not.toHaveBeenCalled();
       if (selection === "pointer")
         act(() => options()[1].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
       else await pressAsync(selection);
@@ -1563,15 +1645,15 @@ describe("personal and team prompt commands", () => {
     },
   );
   it("preserves team precedence for a typed command and uses a unique personal command", async () => {
-    fetchPrompt.mockImplementation(({ teamId }: { teamId: string }) => ({
-      unwrap: async () => ({ text: teamId === "personal-1" ? "Personal instructions" : "Team instructions" }),
+    fetchPrompt.mockImplementation(({ spaceId }: { spaceId: string }) => ({
+      unwrap: async () => ({ text: spaceId === "personal-1" ? "Personal instructions" : "Team instructions" }),
     }));
     mountReact();
     type("/summary notes");
     await pressAsync("Enter");
     expect(onRunCommand.mock.calls[0][0].command.prompt_id).toBe("p-summary");
-    personalResult = { data: [{ ...personalPrompt, command: "private-summary" }] };
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    personalResult = { data: [{ ...personalPrompt, logical_name: "private-summary" }] };
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
     type("/private-summary notes");
     await pressAsync("Enter");
     expect(onRunCommand.mock.calls[1][0]).toMatchObject({
@@ -1611,7 +1693,7 @@ describe("personal and team prompt commands", () => {
     press("ArrowDown");
     press("Tab");
     personalResult = { data: [] };
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
     await pressAsync("Enter");
     expect(renders[renders.length - 1]?.selectedPrompts).toEqual([]);
     expect(onResolveError.mock.calls).toEqual([["stale", "summary"]]);
@@ -1634,19 +1716,19 @@ describe("personal and team prompt commands", () => {
   });
   it("queries a personal chat once and lists its prompts in the personal section only", () => {
     personalResult = { data: [personalPrompt] };
-    act(() => root.render(<Host teamId="personal-1" personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled teamId="personal-1" personalTeamId="personal-1" />));
     type("/");
     expect(labels()).toEqual(["/summary"]);
     expect(sections()).toEqual([["chatbot.commandMenu.sections.personal", ["/summary"]]]);
     const calls = listCommands.mock.calls.slice(-2);
     expect(calls).toEqual([
-      [{ teamId: "personal-1" }, { skip: false }],
-      [{ teamId: "personal-1" }, { skip: true }],
+      [{ spaceId: "personal-1" }, { skip: false }],
+      [{ spaceId: "personal-1" }, { skip: true }],
     ]);
   });
   it("skips the personal source while the personal space is unknown", () => {
     personalResult = { data: [personalPrompt] };
-    act(() => root.render(<Host />));
+    act(() => root.render(<Host skillsEnabled />));
     type("/");
     expect(labels()).toEqual(["/search", "/summary"]);
     expect(listCommands.mock.calls[listCommands.mock.calls.length - 1]?.[1]).toEqual({ skip: true });
@@ -1655,7 +1737,7 @@ describe("personal and team prompt commands", () => {
     mountReact();
     listResult = { data: PROMPTS, currentData: undefined };
     personalResult = { data: [personalPrompt], currentData: undefined };
-    act(() => root.render(<Host teamId="team-2" personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled teamId="team-2" personalTeamId="personal-1" />));
     type("/");
     expect(labels()).toEqual([]);
   });
@@ -1669,6 +1751,7 @@ describe("personal and team prompt commands", () => {
       act(() =>
         root.render(
           <Host
+            skillsEnabled
             teamId={variant === "team" ? "team-2" : "team-1"}
             agentInstanceId={variant === "agent" ? "instance-2" : "instance-1"}
             personalTeamId={variant === "personal" ? undefined : "personal-1"}
@@ -1691,7 +1774,7 @@ describe("personal and team prompt commands", () => {
     mountReact();
     listResult = { data: PROMPTS, currentData: undefined };
     refetchCommands.mockImplementation(async () => ({ data: PROMPTS }));
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
     type("/summary notes");
     await pressAsync("Enter");
     // The typed command takes the team's match, not the personal one already there.
@@ -1703,7 +1786,7 @@ describe("personal and team prompt commands", () => {
     fetchPrompt.mockImplementation(() => ({ unwrap: async () => ({ text: "Personal instructions" }) }));
     mountReact();
     listResult = { currentData: undefined };
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
     type("/su");
     press("Tab");
     await pressAsync("Enter");
@@ -1728,6 +1811,7 @@ describe("personal and team prompt commands", () => {
       act(() =>
         root.render(
           <Host
+            skillsEnabled
             teamId={variant === "team" ? "team-2" : "team-1"}
             agentInstanceId={variant === "agent" ? "instance-2" : "instance-1"}
             personalTeamId={variant === "personal" ? undefined : "personal-1"}
@@ -1735,7 +1819,7 @@ describe("personal and team prompt commands", () => {
         ),
       );
       // Returning to the original scope cannot resurrect its earlier request.
-      act(() => root.render(<Host personalTeamId="personal-1" />));
+      act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
       await act(async () => resolve({ text: "Late personal instructions" }));
       expect(onRunCommand).not.toHaveBeenCalled();
       expect(onResolveError).not.toHaveBeenCalled();
@@ -1744,7 +1828,12 @@ describe("personal and team prompt commands", () => {
 });
 
 describe("sending while a catalog has not answered", () => {
-  const TONE = { prompt_id: "p-tone", command: "tone", name: "Ton", description: "Ton formel", emoji: null };
+  const TONE = promptSummaryFixture({
+    prompt_id: "p-tone",
+    logical_name: "tone",
+    display_name: "Ton",
+    description: "Ton formel",
+  });
   /** A catalog asked again, answering when the test says so. */
   function pending<T>() {
     let answer!: (result: { data?: T }) => void;
@@ -1767,7 +1856,7 @@ describe("sending while a catalog has not answered", () => {
     fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
       unwrap: async () => ({ text: `Text of ${promptId}` }),
     }));
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
     type("/summary and /tone now");
     await pressAsync("Enter");
     expect(refetchCommands.mock.calls).toEqual([["personal-1"]]);
@@ -1787,7 +1876,7 @@ describe("sending while a catalog has not answered", () => {
     const team = pending<typeof PROMPTS>();
     const personal = pending<typeof PROMPTS>();
     refetchCommands.mockImplementation((teamId) => (teamId === "team-1" ? team.promise : personal.promise));
-    act(() => root.render(<Host personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
     type("/summary report");
     await pressAsync("Enter");
     // A second Enter while waiting sends nothing more.
@@ -1805,7 +1894,7 @@ describe("sending while a catalog has not answered", () => {
     skillsPending = true;
     const skills = pending<typeof skillCatalog>();
     refetchSkills.mockImplementation(() => skills.promise);
-    act(() => root.render(<Host />));
+    act(() => root.render(<Host skillsEnabled />));
     type("/review notes");
     await pressAsync("Enter");
     nothingSent();
@@ -1818,7 +1907,7 @@ describe("sending while a catalog has not answered", () => {
   it("sends a word no catalog knows as plain text once they have answered, with no error", async () => {
     listResult = { currentData: undefined };
     refetchCommands.mockImplementation(async () => ({ data: PROMPTS }));
-    act(() => root.render(<Host />));
+    act(() => root.render(<Host skillsEnabled />));
     type("see /etc and /nosuch please");
     await pressAsync("Enter");
     expect(onSend).toHaveBeenCalledOnce();
@@ -1829,7 +1918,7 @@ describe("sending while a catalog has not answered", () => {
   it("does not wait for a draft with no command-shaped word", async () => {
     listResult = { currentData: undefined };
     skillsPending = true;
-    act(() => root.render(<Host />));
+    act(() => root.render(<Host skillsEnabled />));
     type("see /etc/hosts and a/b");
     press("Enter");
     expect(onSend).toHaveBeenCalledOnce();
@@ -1841,10 +1930,10 @@ describe("sending while a catalog has not answered", () => {
     listResult = { currentData: undefined };
     const team = pending<typeof PROMPTS>();
     refetchCommands.mockImplementation(() => team.promise);
-    act(() => root.render(<Host />));
+    act(() => root.render(<Host skillsEnabled />));
     type("/summary report");
     await pressAsync("Enter");
-    act(() => root.render(<Host teamId="team-2" />));
+    act(() => root.render(<Host skillsEnabled teamId="team-2" />));
     await team.answer(PROMPTS);
     nothingSent();
   });
@@ -1853,7 +1942,7 @@ describe("sending while a catalog has not answered", () => {
     beforeEach(() => {
       listResult = { currentData: undefined };
       commandsFailed = true;
-      act(() => root.render(<Host />));
+      act(() => root.render(<Host skillsEnabled />));
     });
 
     it("asks it once more on submit and sends when it answers", async () => {
@@ -1900,7 +1989,7 @@ describe("sending while a catalog has not answered", () => {
 
     it("still lists the commands of the catalogs that answered", () => {
       skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
-      act(() => root.render(<Host />));
+      act(() => root.render(<Host skillsEnabled />));
       type("/");
       expect(labels()).toEqual(["/review"]);
       expect(container.textContent).not.toContain("chatbot.commandMenu.error");
@@ -1918,11 +2007,11 @@ describe("restoring recalled invocations", () => {
     "preserves the selected prompt identity with $variant homonym/catalog and padding '$padding'",
     async ({ variant, padding }) => {
       const selectedId = variant === "personal" ? "private-review" : "p-review";
-      listResult = { data: [{ ...PROMPTS[0], command: "review", prompt_id: "p-review" }] };
-      personalResult = { data: [{ ...PROMPTS[0], command: "review", prompt_id: "private-review" }] };
+      listResult = { data: [{ ...PROMPTS[0], logical_name: "review", prompt_id: "p-review" }] };
+      personalResult = { data: [{ ...PROMPTS[0], logical_name: "review", prompt_id: "private-review" }] };
       skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
       fetchPrompt.mockImplementation(() => ({ unwrap: async () => ({ text: "Selected instructions" }) }));
-      act(() => root.render(<Host personalTeamId="personal-1" />));
+      act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
       const command = {
         command: "review",
         prompt_id: selectedId,
@@ -1941,15 +2030,15 @@ describe("restoring recalled invocations", () => {
       };
       if (variant === "missing" || variant === "loading") {
         listResult = { currentData: variant === "missing" ? [] : undefined };
-        act(() => root.render(<Host personalTeamId="personal-1" />));
+        act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
       }
       act(() => {
         renders[renders.length - 1]!.dismiss(command.draft_text, message);
         setHostInput(command.draft_text);
       });
       if (variant === "loading") {
-        listResult = { data: [{ ...PROMPTS[0], command: "review", prompt_id: "p-review" }] };
-        act(() => root.render(<Host personalTeamId="personal-1" />));
+        listResult = { data: [{ ...PROMPTS[0], logical_name: "review", prompt_id: "p-review" }] };
+        act(() => root.render(<Host skillsEnabled personalTeamId="personal-1" />));
       }
       await act(async () => renders[renders.length - 1]!.submit());
       if (variant === "missing") {
@@ -1963,7 +2052,7 @@ describe("restoring recalled invocations", () => {
         });
         expect(fetchPrompt).toHaveBeenCalledWith(
           {
-            teamId: variant === "personal" ? "personal-1" : "team-1",
+            spaceId: variant === "personal" ? "personal-1" : "team-1",
             promptId: selectedId,
           },
           false,
@@ -1996,7 +2085,12 @@ describe("restoring recalled invocations", () => {
 });
 
 describe("several prompt commands in one message", () => {
-  const TONE = { prompt_id: "p-tone", command: "tone", name: "Ton", description: "Ton formel", emoji: null };
+  const TONE = promptSummaryFixture({
+    prompt_id: "p-tone",
+    logical_name: "tone",
+    display_name: "Ton",
+    description: "Ton formel",
+  });
   const TEXTS: Record<string, string> = {
     "p-summary": "Summarise the document.",
     "p-search": "Search the corpus.",
@@ -2024,7 +2118,7 @@ describe("several prompt commands in one message", () => {
     fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
       unwrap: async () => ({ text: TEXTS[promptId] }),
     }));
-    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled inlineEditor personalTeamId="personal-1" />));
     act(() => cm().contentDOM.focus());
   }
 
@@ -2045,7 +2139,7 @@ describe("several prompt commands in one message", () => {
   });
 
   it("holds two tokens picked from two libraries and keeps one when the other is removed", () => {
-    mount([TONE, { ...TONE, prompt_id: "personal-summary", command: "summary", name: "Mine" }]);
+    mount([TONE, { ...TONE, prompt_id: "personal-summary", logical_name: "summary", display_name: "Mine" }]);
     cmAppend("/to");
     cmPress("Tab");
     cmAppend("then /summ");
@@ -2075,8 +2169,8 @@ describe("several prompt commands in one message", () => {
     await submit();
 
     expect(fetchPrompt.mock.calls).toEqual([
-      [{ teamId: "team-1", promptId: "p-summary" }, false],
-      [{ teamId: "personal-1", promptId: "p-tone" }, false],
+      [{ spaceId: "team-1", promptId: "p-summary" }, false],
+      [{ spaceId: "personal-1", promptId: "p-tone" }, false],
     ]);
     expect(onRunCommand).toHaveBeenCalledExactlyOnceWith({
       text: "First\n\nSummarise the document.\n\nthen\n\nUse a formal tone.\n\nplease",
@@ -2111,16 +2205,16 @@ describe("several prompt commands in one message", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  it("sends the prompt as its library holds it now, not the copy read for the menu", async () => {
+  it("reads fresh full text only when sending the completed command", async () => {
     mount();
     fetchPrompt.mockImplementation((_arg: unknown, preferCache: boolean) => ({
       unwrap: async () => ({ text: preferCache ? "Text read when the row was focused." : "Text edited since." }),
     }));
     cmAppend("/summ");
-    expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: "team-1", promptId: "p-summary" }, true);
+    expect(fetchPrompt).not.toHaveBeenCalled();
     cmPress("Tab");
     await submit();
-    expect(fetchPrompt).toHaveBeenLastCalledWith({ teamId: "team-1", promptId: "p-summary" }, false);
+    expect(fetchPrompt).toHaveBeenLastCalledWith({ spaceId: "team-1", promptId: "p-summary" }, false);
     expect(onRunCommand.mock.calls[0][0].text).toBe("Text edited since.");
   });
 
@@ -2242,7 +2336,7 @@ describe("several prompt commands in one message", () => {
   });
 
   it("resolves hand-typed names one by one, the team's command before the personal one", async () => {
-    mount([TONE, { ...TONE, prompt_id: "personal-summary", command: "summary", name: "Mine" }]);
+    mount([TONE, { ...TONE, prompt_id: "personal-summary", logical_name: "summary", display_name: "Mine" }]);
     cmAppend("/summary and /tone then /summary now");
     expect(tokens()).toEqual([
       ["summary", "team-1", 0],
@@ -2253,8 +2347,8 @@ describe("several prompt commands in one message", () => {
     await submit();
 
     expect(fetchPrompt.mock.calls.map(([arg]) => arg)).toEqual([
-      { teamId: "team-1", promptId: "p-summary" },
-      { teamId: "personal-1", promptId: "p-tone" },
+      { spaceId: "team-1", promptId: "p-summary" },
+      { spaceId: "personal-1", promptId: "p-tone" },
     ]);
     expect(
       onRunCommand.mock.calls[0][0].command.prompts.map((entry: { prompt_id: string }) => entry.prompt_id),
@@ -2262,7 +2356,7 @@ describe("several prompt commands in one message", () => {
   });
 
   it("mixes a picked personal homonym with the same name typed by hand", async () => {
-    mount([{ ...TONE, prompt_id: "personal-summary", command: "summary", name: "Mine" }]);
+    mount([{ ...TONE, prompt_id: "personal-summary", logical_name: "summary", display_name: "Mine" }]);
     cmAppend("/summ");
     cmPress("ArrowDown");
     cmPress("Tab");
@@ -2276,9 +2370,9 @@ describe("several prompt commands in one message", () => {
   });
 
   it("waits for the team's catalog for a typed name next to a picked personal prompt", async () => {
-    mount([TONE, { ...TONE, prompt_id: "p-style", command: "style", name: "Style" }]);
+    mount([TONE, { ...TONE, prompt_id: "p-style", logical_name: "style", display_name: "Style" }]);
     listResult = { data: PROMPTS, currentData: undefined };
-    act(() => root.render(<Host inlineEditor personalTeamId="personal-1" />));
+    act(() => root.render(<Host skillsEnabled inlineEditor personalTeamId="personal-1" />));
     cmAppend("/sty");
     cmPress("Tab");
     cmAppend("then /tone now");
@@ -2293,7 +2387,7 @@ describe("several prompt commands in one message", () => {
   });
 
   it("keeps a typed skill homonym a skill next to a prompt, unless its prompt row was picked", async () => {
-    mount([{ ...TONE, prompt_id: "p-review", command: "review", name: "Relecture" }], ["review"]);
+    mount([{ ...TONE, prompt_id: "p-review", logical_name: "review", display_name: "Relecture" }], ["review"]);
     cmAppend("/summary then /review the text");
     expect(latest().selectedPrompts.map((prompt) => prompt.command)).toEqual(["summary"]);
     expect(latest().selectedSkills.map((skill) => skill.name)).toEqual(["review"]);
@@ -2339,7 +2433,7 @@ describe("several prompt commands in one message", () => {
   });
 
   describe("a character glued to a token", () => {
-    const SUM = { ...TONE, prompt_id: "p-sum", command: "sum", name: "Somme" };
+    const SUM = { ...TONE, prompt_id: "p-sum", logical_name: "sum", display_name: "Somme" };
     const cmInsert = (at: number, text: string) =>
       act(() => cm().dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + text.length } }));
     const pickSum = () => {
@@ -2416,7 +2510,7 @@ describe("several prompt commands in one message", () => {
   });
 
   describe("deleting one of two tokens with the same name", () => {
-    const MINE = { ...TONE, prompt_id: "personal-summary", command: "summary", name: "Mine" };
+    const MINE = { ...TONE, prompt_id: "personal-summary", logical_name: "summary", display_name: "Mine" };
     const pickBoth = (before: string) => {
       mount([MINE]);
       cmAppend(`${before}/summ`);
@@ -2468,7 +2562,7 @@ describe("several prompt commands in one message", () => {
     });
 
     it("leaves the skill when the prompt of the same name before it is removed", async () => {
-      listResult = { data: [{ ...TONE, prompt_id: "p-review", command: "review", name: "Review" }] };
+      listResult = { data: [{ ...TONE, prompt_id: "p-review", logical_name: "review", display_name: "Review" }] };
       mount([], ["review"]);
       cmAppend("/rev");
       cmPress("Tab");
@@ -2492,7 +2586,12 @@ describe("several prompt commands in one message", () => {
   });
 
   describe("recalled", () => {
-    const personalSummary2 = { ...TONE, prompt_id: "personal-summary", command: "summary-2", name: "Mine" };
+    const personalSummary2 = {
+      ...TONE,
+      prompt_id: "personal-summary",
+      logical_name: "summary-2",
+      display_name: "Mine",
+    };
     const line = "/summary then /summary-2 now";
     const message = {
       id: "recalled",
@@ -2531,8 +2630,8 @@ describe("several prompt commands in one message", () => {
       await submit();
 
       expect(fetchPrompt.mock.calls.map(([arg]) => arg)).toEqual([
-        { teamId: "team-1", promptId: "p-summary" },
-        { teamId: "personal-1", promptId: "personal-summary" },
+        { spaceId: "team-1", promptId: "p-summary" },
+        { spaceId: "personal-1", promptId: "personal-summary" },
       ]);
       expect(onRunCommand.mock.calls[0][0].command.prompts).toEqual([
         expect.objectContaining({ prompt_id: "p-summary", draft_offset: 0 }),
@@ -2562,5 +2661,85 @@ describe("several prompt commands in one message", () => {
         expect.objectContaining({ kind: "prompt", promptId: "p-summary", from: 0 }),
       ]);
     });
+  });
+});
+
+describe("Weaver resolution lifecycle", () => {
+  it("does not request or refetch skills when skillsEnabled is false", async () => {
+    skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
+    skillQueries.mockClear();
+    act(() => root.render(<Host skillsEnabled={false} />));
+    type("/review notes");
+    await act(async () => renders[renders.length - 1]!.submit());
+    expect(skillQueries.mock.calls.every(([options]) => options.skip)).toBe(true);
+    expect(refetchSkills).not.toHaveBeenCalled();
+    expect(onRunSkill).not.toHaveBeenCalled();
+    expect(onSend).toHaveBeenCalledOnce();
+  });
+
+  it.each(["draft", "conversation", "space", "unmount"])("discards full reads after changing %s", async (change) => {
+    let finish!: (value: { text: string }) => void;
+    fetchPrompt.mockImplementationOnce(() => ({
+      unwrap: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    }));
+    type("/summary notes");
+    act(() => renders[renders.length - 1]!.submit());
+    expect(fetchPrompt).toHaveBeenCalledExactlyOnceWith({ spaceId: "team-1", promptId: "p-summary" }, false);
+    if (change === "draft") type("New draft");
+    else
+      act(() =>
+        root.render(
+          change === "unmount" ? null : (
+            <Host
+              sessionId={change === "conversation" ? "session-2" : "session-1"}
+              teamId={change === "space" ? "team-2" : "team-1"}
+            />
+          ),
+        ),
+      );
+    await act(async () => finish({ text: "Late full text" }));
+    expect(onRunCommand).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+    expect(onResolveError).not.toHaveBeenCalled();
+    if (change === "draft") expect(textarea().value).toBe("New draft");
+    else expect(abortRead).toHaveBeenCalledOnce();
+  });
+
+  it.each(["draft", "conversation", "unmount"])("discards a pending catalog after changing %s", async (change) => {
+    let finish!: (value: { data: typeof PROMPTS }) => void;
+    listResult = { currentData: undefined };
+    commandsFetching = true;
+    refetchCommands.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    act(() => root.render(<Host />));
+    type("/summary notes");
+    act(() => renders[renders.length - 1]!.submit());
+    if (change === "draft") type("New draft");
+    else act(() => root.render(change === "unmount" ? null : <Host sessionId="session-2" />));
+    await act(async () => finish({ data: PROMPTS }));
+    expect(fetchPrompt).not.toHaveBeenCalled();
+    expect(onRunCommand).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+    expect(onResolveError).not.toHaveBeenCalled();
+  });
+
+  it("uses the freshly read title and exact whitespace in the sent descriptor", async () => {
+    fetchPrompt.mockImplementationOnce(() => ({
+      unwrap: async () => ({ display_name: "Renamed since listing", text: "  📄 Full instructions\n\n" }),
+    }));
+    type("/summary ");
+    await act(async () => renders[renders.length - 1]!.submit());
+    const sent = onRunCommand.mock.calls[0][0];
+    expect(sent.text).toBe("  📄 Full instructions\n\n");
+    expect(sent.command.prompt_name).toBe("Renamed since listing");
+    const entry = sent.command.prompts[0];
+    expect(sent.text.slice(entry.text_offset, entry.text_offset + entry.text_length)).toBe(sent.text);
   });
 });

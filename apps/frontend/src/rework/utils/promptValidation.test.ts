@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { isPromptLogicalNameValid } from "./promptValidation";
 import { describe, expect, it } from "vitest";
 import { RESERVED_PROMPT_TAGS, findReservedPromptTag, reservedTagInPromptField } from "./promptValidation";
 
@@ -51,5 +52,17 @@ describe("reservedTagInPromptField", () => {
     expect(reservedTagInPromptField({ type: "prompt" }, "<example/>")).toBeNull();
     expect(reservedTagInPromptField({ type: "boolean" }, "</tools>")).toBeNull();
     expect(reservedTagInPromptField({ type: "prompt" }, undefined)).toBeNull();
+  });
+});
+
+describe("Weaver logical names", () => {
+  it.each(["", "Upper", "with space", "é", "bad!", "skill", "x".repeat(65)])(
+    "rejects %j without normalization",
+    (name) => {
+      expect(isPromptLogicalNameValid(name)).toBe(false);
+    },
+  );
+  it.each(["summary", "synthese_v2-bis", "x".repeat(64), "skill-tools"])("accepts %j", (name) => {
+    expect(isPromptLogicalNameValid(name)).toBe(true);
   });
 });

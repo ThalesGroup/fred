@@ -31,6 +31,7 @@
   min-height: 500px;
   /* Never closer than 2rem (32px) to the scrim's top/bottom edge. */
   max-height: calc(100vh - 4rem);
+  color: var(--on-surface);
 }
 
 .closeButton {
@@ -55,6 +56,7 @@
 .title {
   color: var(--on-surface);
   font: var(--font-title-large);
+  overflow-wrap: anywhere;
 }
 
 /* The command heads the description, as it does in the composer's command menu
@@ -75,6 +77,7 @@
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+  overflow-wrap: anywhere;
 }
 
 /* ── Category chip (static — not selectable) ──────────────────────────────── */

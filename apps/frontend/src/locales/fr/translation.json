@@ -1156,6 +1156,19 @@
     "updateSuccess": "Mis à jour"
   },
   "rework": {
+    "weaverPrompts": {
+      "retry": "Réessayer",
+      "actions": "Actions pour {{name}}",
+      "logicalName": "Nom logique (commande)",
+      "immutableName": "Ce nom est définitif. Le titre peut être modifié indépendamment.",
+      "nameHelp": "De 1 à 64 lettres ASCII minuscules, chiffres, tirets ou traits de soulignement. Le nom « skill » est réservé.",
+      "nameConflict": "Ce nom logique est déjà utilisé dans cet espace.",
+      "titleLimit": "Le titre doit contenir de 1 à 255 caractères.",
+      "descriptionLimit": "La description ne peut pas dépasser 500 caractères Unicode.",
+      "deferred": "Les catégories, tags, favoris, le marketplace et les compteurs d’utilisation ne sont pas encore raccordés.",
+      "filtersDeferred": "Les filtres par catégorie et favoris ne sont pas encore raccordés.",
+      "catalogError": "Le catalogue complet des prompts n’a pas pu être chargé."
+    },
     "weaverAgents": {
       "documentSelectionUnknown": "La sélection des sous-dossiers n'est pas encore entièrement connue. Un clic vérifie toute l'arborescence, puis la retire si elle est entièrement sélectionnée ou la sélectionne en entier sinon.",
       "documentSelectionUnavailable": "La sélection de dossiers et de documents n'est pas encore disponible. L'agent recherche dans son périmètre d'espaces autorisé.",

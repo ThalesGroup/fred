@@ -20,7 +20,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ContextPromptSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { PromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { promptSummaryFixture } from "../../../pages/PromptsPage/weaverPromptFixtures";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -29,38 +30,19 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
-  promptsByTeam: {} as Record<string, unknown[]>,
-  categoriesByTeam: {} as Record<string, unknown[]>,
-  toggleFavorite: vi.fn(),
-  favoriteTeamIds: [] as (string | undefined)[],
+  promptsByTeam: {} as Record<string, PromptSummary[]>,
+  isError: false,
+  pending: false,
+  refetch: vi.fn(),
 }));
-
-vi.mock("@core/hooks/usePromptFavoriteToggle.ts", () => ({
-  usePromptFavoriteToggle: (teamId: string | undefined) => {
-    h.favoriteTeamIds.push(teamId);
-    return h.toggleFavorite;
-  },
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}));
-
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: (
-    arg: { teamId: string },
-    opts: { skip?: boolean },
-    // A skipped query is uninitialized, not idle — the panel reads both flags to
-    // avoid flashing "no prompts" on the render where skip flips.
-  ) => ({
-    data: opts.skip ? undefined : (h.promptsByTeam[arg.teamId] ?? []),
-    isFetching: false,
-    isUninitialized: Boolean(opts.skip),
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePromptCatalogQuery: ({ spaceId }: { spaceId: string }, { skip }: { skip?: boolean }) => ({
+    currentData: skip || h.pending ? undefined : { items: h.promptsByTeam[spaceId] ?? [], next_cursor: null },
+    isFetching: !skip && h.pending,
+    isError: !skip && h.isError,
+    refetch: h.refetch,
   }),
-  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: (
-    arg: { teamId: string },
-    opts: { skip?: boolean },
-  ) => ({ data: opts.skip ? undefined : (h.categoriesByTeam[arg.teamId] ?? []) }),
 }));
 
 import PromptSelectionChatPanel from "./PromptSelectionChatPanel.tsx";
@@ -68,33 +50,27 @@ import PromptSelectionChatPanel from "./PromptSelectionChatPanel.tsx";
 const TEAM_ID = "team-1";
 const PERSONAL_ID = "personal-u1";
 
-function prompt(over: Partial<ContextPromptSummary> & Pick<ContextPromptSummary, "id" | "name">) {
-  return { scope: "team", version: 1, session_count: 0, ...over } as ContextPromptSummary;
-}
-
 let container: HTMLDivElement;
 let root: Root;
 
 function mount(props: Partial<React.ComponentProps<typeof PromptSelectionChatPanel>> = {}) {
-  container = document.createElement("div");
-  document.body.appendChild(container);
-  root = createRoot(container);
+  if (!container) {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  }
   act(() => {
     root.render(
       <PromptSelectionChatPanel
-        open
+        open={props.open ?? true}
         onClose={props.onClose ?? (() => {})}
-        teamId={TEAM_ID}
+        teamId={props.teamId ?? TEAM_ID}
         personalTeamId={"personalTeamId" in props ? props.personalTeamId : PERSONAL_ID}
         isPersonalChat={props.isPersonalChat ?? false}
         onInsert={props.onInsert ?? (async () => true)}
       />,
     );
   });
-}
-
-function categoryTrigger(): HTMLButtonElement | null {
-  return container.querySelector('button[aria-haspopup="listbox"]');
 }
 
 function buttonWithText(text: string): HTMLButtonElement | undefined {
@@ -110,19 +86,27 @@ async function click(el: Element | undefined) {
 beforeEach(() => {
   h.promptsByTeam = {
     [TEAM_ID]: [
-      prompt({ id: "t1", name: "Weekly report", description: "Sprint summary", category_id: "cat-a" }),
-      prompt({ id: "t2", name: "Bug triage", category_id: null }),
+      promptSummaryFixture({
+        prompt_id: "t1",
+        space_id: TEAM_ID,
+        display_name: "Weekly report",
+        description: "Sprint summary",
+      }),
+      promptSummaryFixture({ prompt_id: "t2", space_id: TEAM_ID, display_name: "Bug triage", logical_name: "triage" }),
     ],
-    [PERSONAL_ID]: [prompt({ id: "p1", name: "My scratch prompt", scope: "personal" })],
+    [PERSONAL_ID]: [
+      promptSummaryFixture({ prompt_id: "p1", space_id: PERSONAL_ID, display_name: "My scratch prompt" }),
+    ],
   };
-  h.toggleFavorite.mockReset();
-  h.favoriteTeamIds = [];
-  h.categoriesByTeam = { [TEAM_ID]: [{ id: "cat-a", name: "Reports" }], [PERSONAL_ID]: [] };
+  h.isError = false;
+  h.pending = false;
+  h.refetch.mockReset();
 });
 
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  container = undefined!;
 });
 
 describe("PromptSelectionChatPanel", () => {
@@ -157,33 +141,6 @@ describe("PromptSelectionChatPanel", () => {
     expect(container.textContent).not.toContain("chatbot.promptSelectionPanel.space.team");
   });
 
-  it("defaults the category filter to every category", () => {
-    mount();
-
-    // toContain, not toBe: the trigger also renders its dropdown arrow glyph.
-    expect(categoryTrigger()?.textContent).toContain("chatbot.promptSelectionPanel.allCategories");
-    expect(container.textContent).toContain("Weekly report");
-    expect(container.textContent).toContain("Bug triage");
-  });
-
-  it("carries each category's count in its option label", async () => {
-    // A menu row has no second column for a count, so it rides in the label —
-    // and it is what makes an empty category obvious before clicking it.
-    mount();
-    await click(categoryTrigger());
-
-    const options = document.body.textContent ?? "";
-    expect(options).toContain("Reports (1)");
-    expect(options).toContain("rework.promptCategories.noCategory (1)");
-  });
-
-  it("hides the category filter when the space has none", () => {
-    h.categoriesByTeam[TEAM_ID] = [];
-    mount();
-
-    expect(categoryTrigger()).toBeNull();
-  });
-
   it("filters the list as the user searches", async () => {
     mount();
     const input = container.querySelector("input") as HTMLInputElement;
@@ -202,7 +159,9 @@ describe("PromptSelectionChatPanel", () => {
     mount();
     // Exact text, not a substring: "…empty" is a prefix of "…emptyFilters", so
     // `toContain` cannot tell the two messages apart.
-    expect(container.querySelector("p")?.textContent).toBe("chatbot.promptSelectionPanel.empty");
+    expect(Array.from(container.querySelectorAll("p")).slice(-1)[0]?.textContent).toBe(
+      "chatbot.promptSelectionPanel.empty",
+    );
   });
 
   it("says the filters match nothing when the space does hold prompts", async () => {
@@ -216,7 +175,9 @@ describe("PromptSelectionChatPanel", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
-    expect(container.querySelector("p")?.textContent).toBe("chatbot.promptSelectionPanel.emptyFilters");
+    expect(Array.from(container.querySelectorAll("p")).slice(-1)[0]?.textContent).toBe(
+      "chatbot.promptSelectionPanel.emptyFilters",
+    );
   });
 
   it("closes only once the insert resolves", async () => {
@@ -253,40 +214,31 @@ describe("PromptSelectionChatPanel", () => {
     expect(onInsert).toHaveBeenCalledTimes(1);
   });
 
-  it("narrows the list to favorites from the chip beside the search", async () => {
-    h.promptsByTeam[TEAM_ID] = [
-      prompt({ id: "t1", name: "Weekly report", category_id: "cat-a", is_favorite: true }),
-      prompt({ id: "t2", name: "Bug triage", category_id: null }),
-    ];
+  it("shows a catalog error and retries instead of presenting cached rows as complete", async () => {
+    h.isError = true;
     mount();
-    const chip = container.querySelector<HTMLButtonElement>("button[aria-pressed][data-size='xs']");
-    expect(chip?.getAttribute("aria-pressed")).toBe("false");
-
-    await click(chip ?? undefined);
-
-    expect(chip?.getAttribute("aria-pressed")).toBe("true");
-    expect(container.textContent).toContain("Weekly report");
-    expect(container.textContent).not.toContain("Bug triage");
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(buttonWithText("Weekly report")).toBeUndefined();
+    await click(buttonWithText("rework.weaverPrompts.retry"));
+    expect(h.refetch).toHaveBeenCalledOnce();
   });
 
-  it("says how to add a favorite when the space has none", async () => {
-    mount();
-    await click(container.querySelector("button[data-size='xs']") ?? undefined);
-
-    expect(container.textContent).toContain("rework.teams.prompts.favorite.empty");
-  });
-
-  it("stars a prompt of the space it is listed in, without inserting it", async () => {
-    const onInsert = vi.fn(async () => true);
-    mount({ onInsert });
-    const star = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="rework.teams.prompts.favorite.filter"][aria-pressed="false"]',
-    );
-
-    await click(star ?? undefined);
-
-    expect(h.toggleFavorite).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }));
-    expect(h.favoriteTeamIds[h.favoriteTeamIds.length - 1]).toBe(TEAM_ID);
-    expect(onInsert).not.toHaveBeenCalled();
+  it.each([false, true])("ignores an old insertion after reopening (new insertion: %s)", async (again) => {
+    const onClose = vi.fn();
+    const releases: ((ok: boolean) => void)[] = [];
+    const onInsert = vi.fn(() => new Promise<boolean>((resolve) => releases.push(resolve)));
+    mount({ onClose, onInsert });
+    await click(buttonWithText("Weekly report"));
+    mount({ open: false, onClose, onInsert });
+    mount({ open: true, onClose, onInsert });
+    if (again) await click(buttonWithText("Bug triage"));
+    await act(async () => releases[0](true));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(buttonWithText("Weekly report")?.disabled).toBe(again);
+    if (again) {
+      await act(async () => releases[1](true));
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(buttonWithText("Weekly report")?.disabled).toBe(false);
+    }
   });
 });

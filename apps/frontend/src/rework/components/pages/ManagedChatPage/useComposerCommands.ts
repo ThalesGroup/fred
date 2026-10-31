@@ -22,12 +22,7 @@ import {
   type CommandTriggerBinding,
   type DraftEdit,
 } from "@shared/molecules/RichInputField/RichInputField";
-import {
-  type PromptCommandSummary,
-  useGetAgentInstanceSkillsQuery,
-  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
-  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
-} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useGetAgentInstanceSkillsQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   assemblePromptTurn,
   findCommandWords,
@@ -36,6 +31,11 @@ import {
   MAX_TURN_PROMPTS,
   usablePromptList,
 } from "@rework/utils/skillInvocation";
+import {
+  usePromptCatalogQuery,
+  useLazyGetPromptQuery,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { Prompt, PromptSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 
 /**
@@ -98,25 +98,24 @@ function isGone(error: unknown): boolean {
   return status === 403 || status === 404;
 }
 
-function promptEntries(prompts: PromptCommandSummary[], teamId: string, source: "personal" | "team") {
+function promptEntries(prompts: PromptSummary[], teamId: string, source: "personal" | "team") {
   return prompts
-    .filter((prompt) => prompt.command !== "skill")
+    .filter((prompt) => prompt.logical_name !== "skill")
     .map((prompt) => ({
       kind: "prompt" as const,
       promptId: prompt.prompt_id,
       promptTeamId: teamId,
       source,
-      command: prompt.command,
-      name: prompt.name,
+      command: prompt.logical_name,
+      name: prompt.display_name,
       description: prompt.description,
-      emoji: prompt.emoji,
     }));
 }
 
 /** The prompt commands of a conversation: the team's, then the personal ones. */
 function promptCommands(
-  team: PromptCommandSummary[] | undefined,
-  personal: PromptCommandSummary[] | undefined,
+  team: PromptSummary[] | undefined,
+  personal: PromptSummary[] | undefined,
   teamId: string,
   personalTeamId: string | undefined,
 ) {
@@ -159,6 +158,9 @@ export interface ComposerCommandsMenu {
 
 export function useComposerCommands(params: {
   enabled?: boolean;
+  skillsEnabled?: boolean;
+  /** Invalidates pending resolutions on a conversation change. */
+  sessionId?: string | null;
   teamId: string;
   agentInstanceId?: string;
   /** The caller's personal space, whose prompt commands join the team's. */
@@ -193,9 +195,19 @@ export function useComposerCommands(params: {
   onComposerChange: (value: string) => void;
 } {
   const { teamId, agentInstanceId, personalTeamId, enabled = true } = params;
-  const scopeKey = JSON.stringify([teamId, agentInstanceId, personalTeamId]);
+  const scopeKey = JSON.stringify([teamId, agentInstanceId, personalTeamId, params.sessionId, enabled]);
   const scopeRef = useRef({ key: scopeKey, version: 0 });
   if (scopeRef.current.key !== scopeKey) scopeRef.current = { key: scopeKey, version: scopeRef.current.version + 1 };
+  const live = useRef(true);
+  const pendingReads = useRef(new Set<{ abort: () => void }>());
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+      for (const request of pendingReads.current) request.abort();
+      pendingReads.current.clear();
+    };
+  }, [scopeKey]);
   type Choice = CommandChoice;
   const [choices, setChoices] = useState<Choice[]>([]);
   const choicesRef = useRef(choices);
@@ -206,7 +218,7 @@ export function useComposerCommands(params: {
   const pendingEditsRef = useRef<readonly DraftEdit[] | null>(null);
   const lastEditRef = useRef<{ old: string; value: string; edits: readonly DraftEdit[] } | null>(null);
   const restoredChoicesRef = useRef<readonly Choice[] | null>(null);
-  const skillsQueried = Boolean(enabled && teamId && agentInstanceId);
+  const skillsQueried = Boolean(enabled && params.skillsEnabled && teamId && agentInstanceId);
   const {
     currentData: catalog,
     isFetching: skillsFetching,
@@ -216,13 +228,19 @@ export function useComposerCommands(params: {
     { teamId, agentInstanceId: agentInstanceId ?? "" },
     { skip: !skillsQueried, refetchOnMountOrArgChange: true },
   );
-  const skills = catalog?.supported ? (catalog.skills ?? []) : [];
+  const skills = skillsQueried && catalog?.supported ? (catalog.skills ?? []) : [];
   const skillsRef = useRef(skills);
   skillsRef.current = skills;
   const skillNames = useMemo(() => skills.map((skill) => skill.name), [skills]);
   const skillDescriptions = useMemo(
-    () => new Map((catalog?.supported ? (catalog.skills ?? []) : []).map((skill) => [skill.name, skill.description])),
-    [catalog],
+    () =>
+      new Map(
+        (skillsQueried && catalog?.supported ? (catalog.skills ?? []) : []).map((skill) => [
+          skill.name,
+          skill.description,
+        ]),
+      ),
+    [catalog, skillsQueried],
   );
   const listboxId = useId();
   const optionIdPrefix = useId();
@@ -233,30 +251,24 @@ export function useComposerCommands(params: {
   const paramsRef = useRef(params);
   paramsRef.current = params;
 
-  // Its own endpoint rather than a filter over the prompt listing: that listing
-  // is capped, and a command past the cap would resolve to nothing — silently,
-  // since an unmatched token is sent to the agent as ordinary text.
-  const {
-    currentData: prompts,
-    isFetching: teamCommandsFetching,
-    isError: teamCommandsFailed,
-    refetch: refetchTeamCommands,
-  } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
-    { teamId },
-    { skip: !enabled || !teamId },
-  );
+  const teamCatalog = usePromptCatalogQuery({ spaceId: teamId }, { skip: !enabled || !teamId });
+  const prompts = teamCatalog.isError || teamCatalog.isFetching ? undefined : teamCatalog.currentData?.items;
+  const { isFetching: teamCommandsFetching, isError: teamCommandsFailed } = teamCatalog;
+  const refetchTeamCommands = async () => {
+    const result = await teamCatalog.refetch();
+    return { data: result.isError ? undefined : result.data?.items };
+  };
   const teamCommandsReadyRef = useRef(false);
   teamCommandsReadyRef.current = prompts !== undefined;
   const personalQueried = enabled && Boolean(personalTeamId) && personalTeamId !== teamId;
-  const {
-    currentData: personalPrompts,
-    isFetching: personalCommandsFetching,
-    isError: personalCommandsFailed,
-    refetch: refetchPersonalCommands,
-  } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
-    { teamId: personalTeamId ?? "" },
-    { skip: !personalQueried },
-  );
+  const personalCatalog = usePromptCatalogQuery({ spaceId: personalTeamId ?? "" }, { skip: !personalQueried });
+  const personalPrompts =
+    personalCatalog.isError || personalCatalog.isFetching ? undefined : personalCatalog.currentData?.items;
+  const { isFetching: personalCommandsFetching, isError: personalCommandsFailed } = personalCatalog;
+  const refetchPersonalCommands = async () => {
+    const result = await personalCatalog.refetch();
+    return { data: result.isError ? undefined : result.data?.items };
+  };
   // A prompt missing from a catalog that has not answered is not known gone.
   const promptCatalogsReadyRef = useRef(false);
   promptCatalogsReadyRef.current = prompts !== undefined && (!personalQueried || personalPrompts !== undefined);
@@ -279,7 +291,7 @@ export function useComposerCommands(params: {
       refetch: refetchPersonalCommands,
     },
     skills: {
-      data: catalog,
+      data: skillsQueried ? catalog : undefined,
       missing: skillsQueried && catalog === undefined,
       failed: skillsFailed,
       refetch: refetchSkills,
@@ -289,7 +301,7 @@ export function useComposerCommands(params: {
   catalogSourcesRef.current = catalogSources;
   const catalogsFailed =
     !catalogsLoading && Object.values(catalogSources).some((source) => source.missing && source.failed);
-  const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
+  const [fetchPrompt] = useLazyGetPromptQuery();
 
   const commands = useMemo(
     () => promptCommands(prompts, personalPrompts, teamId, personalTeamId),
@@ -536,20 +548,6 @@ export function useComposerCommands(params: {
     );
   }, []);
 
-  // Prefetch warms the connection and the preview for the focused row; the
-  // set makes moving the focus back over an entry a no-op. Submit reads again.
-  const prefetchedRef = useRef(new Set<string>());
-  const focusedEntry = panelOpen && hasEntries ? entries[safeIndex] : undefined;
-  const focusedPromptId = focusedEntry?.kind === "prompt" ? focusedEntry.promptId : null;
-  const focusedPromptTeamId = focusedEntry?.kind === "prompt" ? focusedEntry.promptTeamId : null;
-  useEffect(() => {
-    if (!focusedPromptId || !focusedPromptTeamId) return;
-    const key = `${focusedPromptTeamId}:${focusedPromptId}`;
-    if (prefetchedRef.current.has(key)) return;
-    prefetchedRef.current.add(key);
-    void fetchPrompt({ teamId: focusedPromptTeamId, promptId: focusedPromptId }, true);
-  }, [focusedPromptId, focusedPromptTeamId, fetchPrompt]);
-
   const complete = useCallback(
     (entry: CommandMenuEntry) => {
       const activeRange = commandRangeRef.current;
@@ -583,35 +581,43 @@ export function useComposerCommands(params: {
     [mapChoices],
   );
 
+  const resolvingRef = useRef(false);
   type PromptEntry = Extract<CommandMenuEntry, { kind: "prompt" }>;
   const run = useCallback(
     async (
       draft: string,
       targets: { entry: PromptEntry; from: number; to: number }[],
       selections: SkillInvocation[],
+      sourceDraft: string,
     ) => {
+      if (resolvingRef.current) return;
+      resolvingRef.current = true;
       const scopeAtSubmit = scopeRef.current.version;
       // One read per distinct prompt, all started together, and never from the
       // cache: what is sent is the prompt as its library holds it now.
-      const reads = new Map<string, Promise<string>>();
+      const reads = new Map<string, Promise<Prompt>>();
       for (const { entry } of targets) {
         const key = `${entry.promptTeamId}:${entry.promptId}`;
         if (reads.has(key)) continue;
+        const request = fetchPrompt({ spaceId: entry.promptTeamId, promptId: entry.promptId }, false);
+        pendingReads.current.add(request);
         reads.set(
           key,
-          fetchPrompt({ teamId: entry.promptTeamId, promptId: entry.promptId }, false)
+          request
             .unwrap()
             .then((detail) => {
-              const text = detail.text?.trim();
-              if (!text) throw new Error("empty prompt");
-              return text;
-            }),
+              if (!detail.text.trim()) throw new Error("empty prompt");
+              return detail;
+            })
+            .finally(() => pendingReads.current.delete(request)),
         );
       }
       const results = await Promise.allSettled(
         targets.map(({ entry }) => reads.get(`${entry.promptTeamId}:${entry.promptId}`)!),
       );
-      if (scopeRef.current.version !== scopeAtSubmit) return;
+      resolvingRef.current = false;
+      if (!live.current || scopeRef.current.version !== scopeAtSubmit || paramsRef.current.input !== sourceDraft)
+        return;
       // All or nothing: the first command of the line that failed is reported.
       const failed = results.findIndex((result) => result.status === "rejected");
       if (failed >= 0) {
@@ -625,10 +631,10 @@ export function useComposerCommands(params: {
           targets.map(({ entry, from, to }, index) => ({
             command: entry.command,
             promptId: entry.promptId,
-            promptName: entry.name,
+            promptName: (results[index] as PromiseFulfilledResult<Prompt>).value.display_name,
             from,
             to,
-            text: (results[index] as PromiseFulfilledResult<string>).value,
+            text: (results[index] as PromiseFulfilledResult<Prompt>).value.text,
           })),
         ),
         ...(selections.length ? { skills: selections } : {}),
@@ -728,7 +734,7 @@ export function useComposerCommands(params: {
               .map((token) => token.name),
           ),
         ].map((name) => ({ name }));
-        void run(input, targets, selections);
+        void run(input, targets, selections, draft);
         return;
       }
       if (skillRanges.length) {
@@ -779,7 +785,7 @@ export function useComposerCommands(params: {
     void Promise.all([answerOf(sources.team), answerOf(sources.personal), answerOf(sources.skills)]).then(
       ([team, personal, skillCatalog]) => {
         waitingRef.current = false;
-        if (scopeRef.current.version !== scopeAtSubmit) return;
+        if (!live.current || scopeRef.current.version !== scopeAtSubmit || paramsRef.current.input !== draft) return;
         const answered = {
           team: sources.team.missing ? team : sources.team.data,
           personal: sources.personal.missing ? personal : sources.personal.data,

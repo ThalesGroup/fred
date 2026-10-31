@@ -13,7 +13,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use futures::{StreamExt, TryStreamExt};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -23,7 +23,7 @@ use crate::{
     api::AppState,
     domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
-    extract::{ApiJson, ApiPath},
+    extract::{ApiJson, ApiPath, present},
     model_catalog::instance::{self as models, ModelOfferKey, ModelOptions, SavedModelSettings},
     onboarding::AdmittedUser,
     spaces,
@@ -90,15 +90,6 @@ pub struct UpdateAgentInstanceRequest {
     /// Omitted keeps; null/{} resets; an object replaces all three overrides.
     #[serde(default, deserialize_with = "present")]
     pub model_options: Option<Option<ModelOptions>>,
-}
-
-// Serde calls this only for present keys, so explicit null remains Some(None).
-fn present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]

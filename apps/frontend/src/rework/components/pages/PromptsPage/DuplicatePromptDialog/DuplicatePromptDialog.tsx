@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import { isPromptLogicalNameValid } from "@rework/utils/promptValidation";
 import { Portal } from "@shared/utils/Portal.tsx";
 import styles from "./DuplicatePromptDialog.module.css";
 
@@ -24,16 +25,20 @@ interface DuplicatePromptDialogProps {
   /** The source prompt's current name, prefilled as the starting point. */
   initialName: string;
   isSubmitting?: boolean;
+  error?: string;
+  onNameChange?: () => void;
   onCancel: () => void;
   onConfirm: (newName: string) => void;
 }
 
-/** Mirrors `DuplicateAgentDialog`: a single-field "name the copy" dialog. Prompt
- * names are unique within a team, so the parent surfaces a 409 as a field error. */
+/** Mirrors `DuplicateAgentDialog`: a single-field "name the copy" dialog. The copy gets a new
+ * immutable logical name; its display title can stay identical. */
 export default function DuplicatePromptDialog({
   open,
   initialName,
   isSubmitting = false,
+  error,
+  onNameChange,
   onCancel,
   onConfirm,
 }: DuplicatePromptDialogProps) {
@@ -55,8 +60,7 @@ export default function DuplicatePromptDialog({
 
   if (!open) return null;
 
-  const trimmedName = name.trim();
-  const canConfirm = trimmedName.length > 0 && !isSubmitting;
+  const canConfirm = isPromptLogicalNameValid(name) && !isSubmitting;
 
   return (
     <Portal id="modal-portal">
@@ -73,12 +77,21 @@ export default function DuplicatePromptDialog({
               {t("rework.teams.prompts.duplicateDialog.title")}
             </p>
             <TextInput
-              label={t("rework.teams.prompts.duplicateDialog.nameLabel")}
+              label={t("rework.weaverPrompts.logicalName")}
+              explanation={t("rework.weaverPrompts.nameHelp")}
+              error={error}
+              prefix="/"
+              required
+              maxLength={64}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              disabled={isSubmitting}
+              onChange={(e) => {
+                setName(e.target.value);
+                onNameChange?.();
+              }}
               autoFocus
               onKeyDown={(e) => {
-                if (e.key === "Enter" && canConfirm) onConfirm(trimmedName);
+                if (e.key === "Enter" && canConfirm) onConfirm(name);
               }}
             />
           </div>
@@ -91,7 +104,7 @@ export default function DuplicatePromptDialog({
               variant="filled"
               size="medium"
               disabled={!canConfirm}
-              onClick={() => onConfirm(trimmedName)}
+              onClick={() => onConfirm(name)}
             >
               {t("rework.teams.prompts.duplicateDialog.confirm")}
             </Button>

@@ -16,12 +16,19 @@
 // prompt-selection panel, so the two lists narrow identically.
 
 /** The fields both prompt payloads expose; narrower than either full type. */
-export interface FilterablePrompt {
+interface LegacyFilterablePrompt {
   name: string;
   description?: string | null;
   category_id?: string | null;
   is_favorite?: boolean;
 }
+
+export type FilterablePrompt =
+  | LegacyFilterablePrompt
+  | Pick<
+      import("../../../../slices/controlPlane/controlPlaneOpenApi").PromptSummary,
+      "display_name" | "logical_name" | "description"
+    >;
 
 /**
  * Sentinel category id for "prompts with no category at all". Not a real
@@ -48,7 +55,11 @@ export interface PromptFilterCriteria {
 /** Case-insensitive substring match over name + description. */
 function matchesSearch(prompt: FilterablePrompt, query: string): boolean {
   if (!query) return true;
-  return [prompt.name, prompt.description]
+  return [
+    "display_name" in prompt ? prompt.display_name : prompt.name,
+    "logical_name" in prompt ? prompt.logical_name : "",
+    prompt.description,
+  ]
     .filter(Boolean)
     .some((field) => (field as string).toLowerCase().includes(query));
 }
@@ -59,7 +70,7 @@ function matchesCategory(
   knownCategoryIds?: ReadonlySet<string>,
 ): boolean {
   if (!categoryId) return true;
-  const { category_id: id } = prompt;
+  const id = "category_id" in prompt ? prompt.category_id : undefined;
   if (categoryId === NO_CATEGORY_FILTER_ID) {
     return !id || (knownCategoryIds !== undefined && !knownCategoryIds.has(id));
   }
@@ -70,7 +81,7 @@ export function filterPrompts<T extends FilterablePrompt>(prompts: T[], criteria
   const query = criteria.search.trim().toLowerCase();
   return prompts.filter(
     (prompt) =>
-      (!criteria.favoritesOnly || prompt.is_favorite === true) &&
+      (!criteria.favoritesOnly || ("is_favorite" in prompt && prompt.is_favorite === true)) &&
       matchesSearch(prompt, query) &&
       matchesCategory(prompt, criteria.categoryId, criteria.knownCategoryIds),
   );

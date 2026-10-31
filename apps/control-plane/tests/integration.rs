@@ -4456,3 +4456,6 @@ async fn role_grants_require_a_valid_known_subject() {
             .unwrap()
     );
 }
+
+#[path = "support/prompts.rs"]
+mod prompts;

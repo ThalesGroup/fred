@@ -94,6 +94,7 @@ async fn prompt_names_and_promotions_are_local_and_independent() {
     );
     for invalid in [
         "",
+        "skill",
         "Resume",
         " resume",
         "a b",

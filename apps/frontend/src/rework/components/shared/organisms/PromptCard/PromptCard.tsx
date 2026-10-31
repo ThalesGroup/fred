@@ -17,7 +17,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { OptionModel } from "@models/Option.model.ts";
-import { type PromptSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import { type PromptSummary as LegacyPromptSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { useTranslation } from "react-i18next";
 import styles from "./PromptCard.module.scss";
 
@@ -26,7 +26,10 @@ export type PromptCardVariant = "team" | "marketplace";
 type MoreAction = "edit" | "duplicate" | "publish" | "unpublish" | "delete" | "import" | "removeFromMarketplace";
 
 export interface PromptCardProps {
-  prompt: PromptSummary;
+  prompt:
+    | Pick<LegacyPromptSummary, "name" | "description" | "text_preview" | "is_favorite" | "session_count">
+    | import("../../../../../slices/controlPlane/controlPlaneOpenApi").PromptSummary;
+  unavailableReason?: string;
   /** "team" (library management) or "marketplace" (community discovery). Default "team". */
   variant?: PromptCardVariant;
   /** team variant: resolved category name, or null → "no category" fallback. */
@@ -56,6 +59,7 @@ export interface PromptCardProps {
 
 export default function PromptCard({
   prompt,
+  unavailableReason,
   variant = "team",
   categoryName,
   teamName,
@@ -74,10 +78,11 @@ export default function PromptCard({
   onToggleFavorite,
 }: PromptCardProps) {
   const { t } = useTranslation();
-  const body = prompt.description && prompt.description !== prompt.name ? prompt.description : null;
+  const name = "display_name" in prompt ? prompt.display_name : prompt.name;
+  const body = prompt.description && prompt.description !== name ? prompt.description : null;
   const preview = !body && prompt.text_preview ? prompt.text_preview : null;
   const isMarketplace = variant === "marketplace";
-  const isFavorite = prompt.is_favorite === true;
+  const isFavorite = "is_favorite" in prompt && prompt.is_favorite === true;
 
   // Header label: the author team on the marketplace (each team has its own
   // categories, so a category label is meaningless there), the category in the
@@ -117,7 +122,7 @@ export default function PromptCard({
       },
     );
     // Personal-space prompts are not publishable — no publish/unpublish action.
-    if (publishable) {
+    if (publishable || unavailableReason) {
       options.push(
         published
           ? {
@@ -127,6 +132,8 @@ export default function PromptCard({
               icon: { category: "outlined", type: "storefront" },
             }
           : {
+              disabled: Boolean(unavailableReason),
+              tooltip: unavailableReason,
               key: "publish",
               value: "publish",
               label: t("rework.teams.prompts.card.menu.publish"),
@@ -156,20 +163,28 @@ export default function PromptCard({
   return (
     <div
       className={styles.card}
-      data-has-favorite={Boolean(onToggleFavorite)}
+      data-has-favorite={Boolean(onToggleFavorite || unavailableReason)}
       onClick={onView}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onView()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onView();
+        }
+      }}
     >
       {/* ── Favorite star + more menu (top-right) ── */}
-      {(onToggleFavorite || options.length > 0) && (
+      {(onToggleFavorite || unavailableReason || options.length > 0) && (
         // The card itself is a button; stop these clicks from opening the
         // read-only view behind it.
         <div className={styles.moreMenu} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-          {onToggleFavorite && (
+          {(onToggleFavorite || unavailableReason) && (
             <Tooltip
-              text={t(isFavorite ? "rework.teams.prompts.favorite.remove" : "rework.teams.prompts.favorite.add")}
+              text={
+                unavailableReason ??
+                t(isFavorite ? "rework.teams.prompts.favorite.remove" : "rework.teams.prompts.favorite.add")
+              }
             >
               <IconButton
                 variant="icon"
@@ -178,6 +193,7 @@ export default function PromptCard({
                 icon={{ category: "outlined", type: "star", filled: isFavorite }}
                 aria-label={t("rework.teams.prompts.favorite.filter")}
                 aria-pressed={isFavorite}
+                disabled={Boolean(unavailableReason)}
                 onClick={onToggleFavorite}
               />
             </Tooltip>
@@ -189,6 +205,7 @@ export default function PromptCard({
                 variant: "icon",
                 size: "small",
                 icon: { category: "outlined", type: "more_vert" },
+                "aria-label": t("rework.weaverPrompts.actions", { name }),
               }}
               options={options}
               onSelect={handleMoreSelect}
@@ -199,10 +216,16 @@ export default function PromptCard({
 
       {/* ── Header: category (team) or author team (marketplace) + name ── */}
       <div className={styles.header}>
-        <span className={styles.category} data-uncategorized={!label}>
-          {label ?? t("rework.promptCategories.noCategory")}
+        <span
+          className={styles.category}
+          data-uncategorized={!("logical_name" in prompt) && !label}
+          title={"logical_name" in prompt ? `/${prompt.logical_name}` : (label ?? undefined)}
+        >
+          {"logical_name" in prompt ? `/${prompt.logical_name}` : (label ?? t("rework.promptCategories.noCategory"))}
         </span>
-        <span className={styles.name}>{prompt.name}</span>
+        <span className={styles.name} title={name}>
+          {name}
+        </span>
       </div>
 
       {/* ── Body ── */}
@@ -213,7 +236,11 @@ export default function PromptCard({
 
       {/* ── Footer: usage count + optional "published" chip ── */}
       <div className={styles.footer}>
-        <span className={styles.uses}>{t("rework.teams.prompts.card.uses", { count: prompt.session_count ?? 0 })}</span>
+        {!unavailableReason && "session_count" in prompt && (
+          <span className={styles.uses}>
+            {t("rework.teams.prompts.card.uses", { count: prompt.session_count ?? 0 })}
+          </span>
+        )}
         {!isMarketplace && published && (
           <span className={styles.publishedChip}>
             <Icon category="outlined" type="storefront" />

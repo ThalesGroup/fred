@@ -342,3 +342,45 @@ pub async fn member_organization(
     .unwrap();
     Ok(db::space(pool, id).await.unwrap().into())
 }
+
+pub async fn request(
+    app: &Router,
+    identity: &IdentityServer,
+    actor: Option<&str>,
+    method: &str,
+    path: &str,
+    body: Value,
+) -> (u16, Value) {
+    use axum::{
+        body::{Body, to_bytes},
+        http::Request,
+    };
+    use tower::ServiceExt;
+
+    let mut req = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("content-type", "application/json");
+    if let Some(actor) = actor {
+        req = req.header("authorization", format!("Bearer {}", identity.token(actor)));
+    }
+    let response = app
+        .clone()
+        .oneshot(req.body(Body::from(body.to_string())).unwrap())
+        .await
+        .unwrap();
+    let status = response.status().as_u16();
+    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    assert!(
+        status != 204 || bytes.is_empty(),
+        "204 responses must have an empty body"
+    );
+    (
+        status,
+        if bytes.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice(&bytes).expect("HTTP response must be JSON or empty")
+        },
+    )
+}

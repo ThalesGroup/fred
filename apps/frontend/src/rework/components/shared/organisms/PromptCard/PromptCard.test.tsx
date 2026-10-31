@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { promptSummaryFixture } from "../../../pages/PromptsPage/weaverPromptFixtures";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -78,4 +79,16 @@ describe("PromptCard favorite star", () => {
     expect(onToggleFavorite).toHaveBeenCalledOnce();
     expect(onView).not.toHaveBeenCalled();
   });
+});
+
+it.each(["Enter", " "])("opens a Weaver card with %j while deferred actions stay disabled", (key) => {
+  const onView = vi.fn();
+  mount({ prompt: promptSummaryFixture(), onView, unavailableReason: "Deferred", canManage: true });
+  const card = container.querySelector('[role="button"]')!;
+  act(() => card.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })));
+  expect(onView).toHaveBeenCalledOnce();
+  expect(star()?.disabled).toBe(true);
+  expect(container.textContent).toContain("/summary");
+  expect(container.textContent).toContain("Real Name");
+  expect(container.textContent).not.toContain("card.uses");
 });

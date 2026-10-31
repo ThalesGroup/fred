@@ -10,9 +10,18 @@ use axum::{
     extract::{FromRequest, FromRequestParts, Path, Query, Request, rejection::JsonRejection},
     http::{StatusCode, request::Parts},
 };
-use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 
 use crate::error::AppError;
+
+/// With `serde(default)`, omitted keys stay None and explicit null is Some(None).
+pub(crate) fn present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
 
 fn invalid_fields() -> AppError {
     AppError::problem(

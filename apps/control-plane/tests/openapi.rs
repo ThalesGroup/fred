@@ -175,6 +175,11 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "put /organizations/{organization_id}/model-policy",
         "post /organizations/{organization_id}/model-sources/{source_id}/refresh",
         "get /spaces/{space_id}/agent-templates",
+        "get /spaces/{space_id}/prompts",
+        "post /spaces/{space_id}/prompts",
+        "get /spaces/{space_id}/prompts/{prompt_id}",
+        "patch /spaces/{space_id}/prompts/{prompt_id}",
+        "delete /spaces/{space_id}/prompts/{prompt_id}",
         "post /spaces/{space_id}/agent-instances",
         "get /spaces/{space_id}/agent-instances",
         "get /spaces/{space_id}/agent-instances/{agent_instance_id}",
@@ -684,4 +689,120 @@ fn instance_operations_and_nullable_patch_match_the_wire_contract() {
         serde_json::from_value(json!({"tuning_field_values":{},"capability_ids":[]})).unwrap();
     assert!(empty.tuning_field_values.unwrap().unwrap().is_empty());
     assert!(empty.capability_ids.unwrap().unwrap().is_empty());
+}
+
+#[test]
+fn prompt_operations_preserve_strict_requests_and_flattened_responses() {
+    let api = schema();
+    let schemas = &api["components"]["schemas"];
+    let collection = "/control-plane/v1/spaces/{space_id}/prompts";
+    let item = format!("{collection}/{{prompt_id}}");
+    for (path, method, status, response) in [
+        (collection, "get", "200", "PromptPage"),
+        (collection, "post", "201", "Prompt"),
+        (item.as_str(), "get", "200", "Prompt"),
+        (item.as_str(), "patch", "200", "Prompt"),
+        (item.as_str(), "delete", "204", ""),
+    ] {
+        let op = &api["paths"][path][method];
+        let success = &op["responses"][status];
+        assert!(success.is_object(), "{method} {path}");
+        if status == "204" {
+            assert!(success.get("content").is_none());
+        } else {
+            assert_eq!(
+                success["content"]["application/json"]["schema"]["$ref"],
+                format!("#/components/schemas/{response}")
+            );
+        }
+    }
+    for (path, method, name, fields) in [
+        (
+            collection,
+            "post",
+            "CreatePromptRequest",
+            vec!["description", "display_name", "logical_name", "text"],
+        ),
+        (
+            item.as_str(),
+            "patch",
+            "UpdatePromptRequest",
+            vec!["description", "display_name", "text"],
+        ),
+    ] {
+        assert_eq!(
+            api["paths"][path][method]["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            format!("#/components/schemas/{name}")
+        );
+        assert_eq!(schemas[name]["additionalProperties"], false);
+        assert_eq!(schemas[name]["properties"]["description"]["maxLength"], 500);
+        assert_eq!(
+            schemas[name]["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            fields.into_iter().collect()
+        );
+    }
+    assert_eq!(
+        schemas["CreatePromptRequest"]["required"],
+        json!(["logical_name", "display_name", "text"])
+    );
+    assert!(
+        schemas["UpdatePromptRequest"]["required"]
+            .as_array()
+            .is_none_or(Vec::is_empty)
+    );
+    for field in ["display_name", "description", "text"] {
+        assert!(
+            schemas["UpdatePromptRequest"]["properties"][field]["type"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("null")),
+            "{field}"
+        );
+    }
+    for (name, field) in [
+        ("PromptMetadata", "description"),
+        ("PromptPage", "next_cursor"),
+    ] {
+        assert!(
+            schemas[name]["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(field))
+        );
+        assert_eq!(
+            schemas[name]["properties"][field]["type"],
+            json!(["string", "null"])
+        );
+    }
+    assert_eq!(
+        schemas["PromptPage"]["properties"]["items"]["maxItems"],
+        100
+    );
+    assert_eq!(
+        schemas["PromptPage"]["properties"]["items"]["items"]["$ref"],
+        "#/components/schemas/PromptSummary"
+    );
+    for (name, field) in [("Prompt", "text"), ("PromptSummary", "text_preview")] {
+        let parts = schemas[name]["allOf"].as_array().unwrap();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0]["$ref"], "#/components/schemas/PromptMetadata");
+        assert_eq!(
+            parts[1]["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            [field]
+        );
+        assert_eq!(parts[1]["required"], json!([field]));
+        if field == "text_preview" {
+            assert_eq!(parts[1]["properties"][field]["maxLength"], 240);
+        }
+    }
 }

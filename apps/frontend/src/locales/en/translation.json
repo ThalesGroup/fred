@@ -1156,6 +1156,19 @@
     "updateSuccess": "Updated"
   },
   "rework": {
+    "weaverPrompts": {
+      "retry": "Retry",
+      "actions": "Actions for {{name}}",
+      "logicalName": "Logical name (command)",
+      "immutableName": "This name is permanent. The display title can be changed independently.",
+      "nameHelp": "1 to 64 lowercase ASCII letters, digits, underscores or hyphens. The name \"skill\" is reserved.",
+      "nameConflict": "This logical name is already used in this space.",
+      "titleLimit": "The title must contain 1 to 255 characters.",
+      "descriptionLimit": "The description cannot exceed 500 Unicode characters.",
+      "deferred": "Categories, tags, favorites, marketplace and usage counts are not connected yet.",
+      "filtersDeferred": "Category and favorite filters are not connected yet.",
+      "catalogError": "The complete prompt catalog could not be loaded."
+    },
     "weaverAgents": {
       "documentSelectionUnknown": "Subfolder selection is not fully known yet. Clicking checks the entire subtree, then clears it if fully selected or selects it all otherwise.",
       "documentSelectionUnavailable": "Folder and document selection is not available yet. The agent searches its authorized space scope.",

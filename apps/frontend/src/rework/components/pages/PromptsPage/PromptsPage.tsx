@@ -1,638 +1,410 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
-import Button from "@shared/atoms/Button/Button.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
-import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor.tsx";
-import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
-import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
-import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
-import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
-import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
-import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker.tsx";
-import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
-import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
-import FavoritesFilterChip from "@shared/molecules/FavoritesFilterChip/FavoritesFilterChip.tsx";
-import { usePromptFavoriteToggle } from "@core/hooks/usePromptFavoriteToggle.ts";
-import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
-import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog.tsx";
-import PromptViewDialog from "./PromptViewDialog/PromptViewDialog.tsx";
-import DuplicatePromptDialog from "./DuplicatePromptDialog/DuplicatePromptDialog.tsx";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { getQueryUiState } from "@core/utils/queryUiState.ts";
+import Button from "@shared/atoms/Button/Button";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
+import TextInput from "@shared/atoms/TextInput/TextInput";
+import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader";
+import PromptCard from "@shared/organisms/PromptCard/PromptCard";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput";
+import { isPromptLogicalNameValid } from "@rework/utils/promptValidation";
+import { countUnicodeCodePoints } from "@core/utils/chatInput";
+import { filterPrompts } from "@shared/utils/promptFilter";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
-import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import {
-  type PromptSummary,
-  useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
-  useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
-  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
-  useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
-  usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
-  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
-  usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation,
-  usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
-  usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
-} from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+  useMySpacesQuery,
+  useAuthorizeSpaceMutation,
+  usePromptCatalogQuery,
+  useGetPromptQuery,
+  useCreatePromptMutation,
+  useUpdatePromptMutation,
+  useDeletePromptMutation,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type {
+  CreatePromptRequest,
+  MySpace,
+  PromptMetadata,
+  PromptSummary,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { agentErrorText, resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
+import PromptViewDialog from "./PromptViewDialog/PromptViewDialog";
+import DuplicatePromptDialog from "./DuplicatePromptDialog/DuplicatePromptDialog";
 import styles from "./PromptsPage.module.scss";
 
-type FormState = {
-  name: string;
-  command: string;
-  description: string;
-  category_id: string | null;
-  tags: string[];
-  text: string;
-};
-const emptyForm: FormState = { name: "", command: "", description: "", category_id: null, tags: [], text: "" };
-
-/** Matches `COMMAND_MAX_LENGTH` and the column in the control-plane backend. */
-const COMMAND_MAX_LENGTH = 64;
-/** Returned by the API on a 409 that is about the command, not the name. */
-const COMMAND_CONFLICT_CODE = "prompt_command_conflict";
-
-/** Keep only what a command may contain, folding case as the user types.
- *  Uppercase becomes lowercase — visible and immediate; anything else is
- *  refused outright rather than repaired into something never chosen. */
-const toCommand = (raw: string) =>
-  raw
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, "")
-    .slice(0, COMMAND_MAX_LENGTH);
-
-const asErrorBody = (detail: unknown): { code?: string; message?: string } | null =>
-  typeof detail === "object" && detail !== null ? (detail as { code?: string; message?: string }) : null;
-
-const isCommandConflict = (detail: unknown) => asErrorBody(detail)?.code === COMMAND_CONFLICT_CODE;
-
-const detailMessage = (detail: unknown) => (typeof detail === "string" ? detail : asErrorBody(detail)?.message);
+const emptyForm: CreatePromptRequest = { display_name: "", logical_name: "", description: "", text: "" };
 
 export default function PromptsPage() {
-  const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
-  const { canUpdateResources: canManage } = useTeamCapabilities(selectedTeam);
+  const { teamId } = useParams();
+  const { t } = useTranslation();
+  const context = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
+  const space = resolveAgentSpace(context.currentData, teamId);
+  if (context.isError) return <ServiceNotice icon="info" title={agentErrorText(context.error, t)} />;
+  if (!context.currentData) return <Spinner size={20} />;
+  if (!space) return <ServiceNotice icon="lock" title={t("rework.weaverAgents.scopeUnavailable")} centered />;
+  return <SpacePrompts key={space.id} space={space} contextStamp={context.fulfilledTimeStamp} />;
+}
+
+function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: number }) {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
-
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editingPrompt, setEditingPrompt] = useState<PromptSummary | null>(null);
-  const [commandError, setCommandError] = useState<string | null>(null);
-  const [viewingPrompt, setViewingPrompt] = useState<PromptSummary | null>(null);
-  const [duplicatingPrompt, setDuplicatingPrompt] = useState<PromptSummary | null>(null);
-  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
-  const [form, setForm] = useState<FormState>(emptyForm);
-  // Which prompt id `form` is currently fully seeded for. RTK Query's
-  // `editDetail` can keep the same object reference across a close/reopen
-  // of the same card (skipping a query doesn't clear its last result), so
-  // a `useEffect` keyed on `[editDetail]` alone would never re-fire on
-  // reopen. Comparing against this id (a primitive, reset on close) makes
-  // reseeding reliable regardless of `editDetail`'s identity.
-  const [seededForId, setSeededForId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const toggleFavorite = usePromptFavoriteToggle(teamId);
-  const FILTER_VISIBLE = 4;
-
-  const {
-    data: prompts = [],
-    isLoading,
-    isUninitialized,
-    isError,
-  } = useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery({ teamId: teamId || "" }, { skip: !teamId });
-
-  const { data: categories = [], refetch: refetchCategories } =
-    useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery(
-      { teamId: teamId || "" },
-      { skip: !teamId },
-    );
-
-  const { data: editDetail } = useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery(
-    { teamId: teamId || "", promptId: editingPrompt?.id || "" },
-    { skip: !editingPrompt },
-  );
-
-  // Duplicating needs the source's full text (the list projection only carries
-  // a preview), so fetch the detail for the prompt being duplicated.
-  const { data: duplicateDetail } = useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery(
-    { teamId: teamId || "", promptId: duplicatingPrompt?.id || "" },
-    { skip: !duplicatingPrompt },
-  );
-
-  const [createPrompt, { isLoading: isCreating }] = usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation();
-  const [updatePrompt, { isLoading: isUpdating }] =
-    usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation();
-  const [deletePrompt] = useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation();
-  const [publishPrompt] = usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation();
-  const [unpublishPrompt] = usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation();
-  const [recordPromptUse] = usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation();
-  const [duplicatePrompt, { isLoading: isDuplicating }] =
-    usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation();
-
+  const spaceId = space.id;
+  const live = useRef(true);
   useEffect(() => {
-    // `editingPrompt` must also be checked: `editDetail` is RTK Query's
-    // *last* successful result for this endpoint, which lingers even after
-    // the query is skipped (editingPrompt set back to null on close) — so
-    // without this guard, resetting `seededForId` in `closeModal` would
-    // immediately re-mark it "seeded" against that lingering `editDetail`
-    // before the card is ever reopened.
-    // `editDetail.id === editingPrompt.id` is required too: if the user
-    // closes prompt A and opens prompt B before B's query resolves,
-    // `editDetail` can still be A's lingering result while `editingPrompt`
-    // is already B — without this check the form would seed from A's
-    // content under B's id (PR review, chatgpt-codex-connector).
-    if (editingPrompt && editDetail && editDetail.id === editingPrompt.id && seededForId !== editDetail.id) {
-      setForm({
-        name: editDetail.name,
-        command: editDetail.command ?? "",
-        description: editDetail.description ?? "",
-        category_id: editDetail.category_id ?? null,
-        tags: editDetail.tags ?? [],
-        text: editDetail.text,
-      });
-      setSeededForId(editDetail.id);
-    }
-  }, [editingPrompt, editDetail, seededForId]);
-
-  const categoryNameById = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
-  const usedCategoryIds = useMemo(
-    () => new Set(prompts.map((p) => p.category_id).filter(Boolean) as string[]),
-    [prompts],
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+  const [authorize] = useAuthorizeSpaceMutation();
+  const [access, setAccess] = useState<{ stamp?: number; allowed: boolean; error?: unknown }>();
+  useEffect(() => {
+    let current = true;
+    const request = authorize({ spaceCheck: { space_id: spaceId, permission: "write" } });
+    void request.unwrap().then(
+      ({ allowed }) => {
+        if (current) setAccess({ stamp: contextStamp, allowed });
+      },
+      (error: unknown) => {
+        if (current) setAccess({ stamp: contextStamp, allowed: false, error });
+      },
+    );
+    return () => {
+      current = false;
+      request.abort();
+    };
+  }, [authorize, spaceId, contextStamp]);
+  const canManage = access?.stamp === contextStamp && access?.allowed === true;
+  const canManageRef = useRef(canManage);
+  canManageRef.current = canManage;
+  const catalog = usePromptCatalogQuery({ spaceId }, { refetchOnMountOrArgChange: true });
+  const prompts = catalog.currentData?.items ?? [];
+  const [search, setSearch] = useState("");
+  const [mode, setMode] = useState<"create" | "edit" | null>(null);
+  const [editingId, setEditingId] = useState<string>();
+  const [viewingId, setViewingId] = useState<string>();
+  const [duplicating, setDuplicating] = useState<PromptSummary>();
+  const [form, setForm] = useState<CreatePromptRequest>(emptyForm);
+  const [seeded, setSeeded] = useState(false);
+  const [nameError, setNameError] = useState<string>();
+  // Increments on every dialog change, including reopening the same prompt.
+  const dialogVersion = useRef(0);
+  const [create, creating] = useCreatePromptMutation();
+  const [update, updating] = useUpdatePromptMutation();
+  const [remove, removing] = useDeletePromptMutation();
+  const busy = creating.isLoading || updating.isLoading || removing.isLoading;
+  const detail = useGetPromptQuery(
+    { spaceId, promptId: editingId ?? "" },
+    {
+      skip: !editingId,
+      refetchOnMountOrArgChange: true,
+    },
   );
-  const categoryCounts = useMemo(() => {
-    const byId = new Map<string, number>();
-    let noCategory = 0;
-    for (const p of prompts) {
-      if (p.category_id) {
-        byId.set(p.category_id, (byId.get(p.category_id) ?? 0) + 1);
-      } else {
-        noCategory += 1;
-      }
-    }
-    return { byId, noCategory };
-  }, [prompts]);
-
-  const filtered = useMemo(
-    () => filterPrompts(prompts, { search, categoryId: activeCategory, favoritesOnly }),
-    [prompts, search, activeCategory, favoritesOnly],
+  const duplicate = useGetPromptQuery(
+    { spaceId, promptId: duplicating?.prompt_id ?? "" },
+    {
+      skip: !duplicating,
+      refetchOnMountOrArgChange: true,
+    },
   );
-
-  const isSubmitting = isCreating || isUpdating;
-
-  const openCreate = () => {
+  useEffect(() => {
+    if (mode !== "edit" || seeded || detail.isFetching || detail.isError || !detail.currentData) return;
+    const saved = detail.currentData;
+    setForm({
+      logical_name: saved.logical_name,
+      display_name: saved.display_name,
+      description: saved.description,
+      text: saved.text,
+    });
+    setSeeded(true);
+  }, [mode, seeded, detail.isFetching, detail.isError, detail.currentData]);
+  const close = () => {
+    dialogVersion.current++;
+    setMode(null);
+    setEditingId(undefined);
+    setDuplicating(undefined);
     setForm(emptyForm);
-    setIsCreateOpen(true);
+    setSeeded(false);
+    setNameError(undefined);
   };
-
-  const openPrompt = (prompt: PromptSummary) => {
-    setForm({ ...emptyForm, category_id: prompt.category_id ?? null });
-    setEditingPrompt(prompt);
+  const open = (prompt?: PromptSummary) => {
+    close();
+    setMode(prompt ? "edit" : "create");
+    setEditingId(prompt?.prompt_id);
   };
-
-  const openView = (prompt: PromptSummary) => {
-    setViewingPrompt(prompt);
+  const notifyError = (error: unknown) => {
+    if (live.current) showError({ summary: agentErrorText(error, t) });
   };
-
-  const closeModal = () => {
-    setIsCreateOpen(false);
-    setEditingPrompt(null);
-    setForm(emptyForm);
-    setSeededForId(null);
-    setCommandError(null);
+  const saveError = (error: unknown) => {
+    if ((error as { data?: { code?: string } })?.data?.code === "prompt_name_conflict") {
+      setNameError(t("rework.weaverPrompts.nameConflict"));
+    } else notifyError(error);
   };
-
-  const performSave = async () => {
-    if (!teamId) return;
+  const validName = isPromptLogicalNameValid(form.logical_name);
+  const validTitle =
+    Boolean(form.display_name.trim()) && countUnicodeCodePoints(form.display_name.normalize("NFC").trim()) <= 255;
+  const validDescription = countUnicodeCodePoints(form.description ?? "") <= 500;
+  const ready = mode === "create" || (seeded && !detail.isFetching && !detail.isError);
+  const save = async () => {
+    if (!canManage || busy || !ready || !validName || !validTitle || !validDescription) return;
+    const version = dialogVersion.current;
     try {
-      if (editingPrompt) {
-        await updatePrompt({
-          teamId,
-          promptId: editingPrompt.id,
+      if (mode === "edit" && editingId && detail.currentData) {
+        await update({
+          spaceId,
+          promptId: editingId,
           updatePromptRequest: {
-            name: form.name,
-            command: form.command || null,
-            description: form.description || undefined,
-            category_id: form.category_id,
-            tags: form.tags,
-            text: form.text,
+            display_name: form.display_name === detail.currentData.display_name ? undefined : form.display_name,
+            description: form.description === detail.currentData.description ? undefined : form.description || null,
+            text: form.text === detail.currentData.text ? undefined : form.text,
           },
         }).unwrap();
-        showSuccess({ summary: t("rework.teams.prompts.toasts.updated") });
-      } else {
-        await createPrompt({
-          teamId,
-          createPromptRequest: {
-            name: form.name,
-            command: form.command || null,
-            description: form.description || undefined,
-            category_id: form.category_id,
-            tags: form.tags,
-            text: form.text,
-          },
-        }).unwrap();
-        showSuccess({ summary: t("rework.teams.prompts.toasts.created") });
-      }
-      closeModal();
-    } catch (error: unknown) {
-      const err = error as { data?: { detail?: unknown }; message?: string };
-      const detail = err?.data?.detail;
-      // A name conflict and a command conflict are both 409 on this route, so
-      // the code — not the prose — decides which input to mark.
-      if (asErrorBody(detail)?.code === "prompt_command_reserved") {
-        setCommandError(t("rework.teams.prompts.form.commandReserved"));
-        return;
-      }
-      if (isCommandConflict(detail)) {
-        setCommandError(t("rework.teams.prompts.form.commandConflict"));
-        return;
-      }
-      showError({
-        summary: t("rework.teams.prompts.toasts.saveFailed"),
-        detail: detailMessage(detail) || err?.message || String(error),
+      } else if (mode === "create") {
+        await create({ spaceId, createPromptRequest: form }).unwrap();
+      } else return;
+      if (!live.current || dialogVersion.current !== version) return;
+      showSuccess({
+        summary: t(mode === "edit" ? "rework.teams.prompts.toasts.updated" : "rework.teams.prompts.toasts.created"),
       });
+      close();
+    } catch (error) {
+      if (live.current && dialogVersion.current === version) saveError(error);
     }
   };
-
-  const handleSubmit = async () => {
-    if (!teamId || !form.name.trim() || !form.text.trim()) return;
-    // Editing a published prompt updates the live marketplace entry too — warn
-    // once before saving (spec: confirmation before saving a change to a
-    // published prompt).
-    if (editingPrompt?.published) {
-      showConfirmationDialog({
-        title: t("rework.teams.prompts.editPublishedDialog.title"),
-        message: t("rework.teams.prompts.editPublishedDialog.message"),
-        confirmButtonLabel: t("rework.teams.prompts.editPublishedDialog.confirm"),
-        onConfirm: performSave,
-      });
-      return;
-    }
-    await performSave();
-  };
-
-  const handleDelete = (prompt: PromptSummary) => {
-    if (!teamId) return;
+  const handleDelete = (prompt: PromptMetadata) => {
+    if (!canManage || busy) return;
+    const version = dialogVersion.current;
     showConfirmationDialog({
       criticalAction: true,
       title: t("rework.teams.prompts.deleteDialog.title"),
-      message: t("rework.teams.prompts.deleteDialog.message", { name: prompt.name }),
+      message: t("rework.teams.prompts.deleteDialog.message", { name: prompt.display_name }),
       confirmButtonLabel: t("rework.teams.prompts.deleteDialog.confirm"),
       onConfirm: async () => {
+        if (!live.current || !canManageRef.current) return;
         try {
-          await deletePrompt({ teamId, promptId: prompt.id }).unwrap();
+          await remove({ spaceId, promptId: prompt.prompt_id }).unwrap();
+          if (!live.current) return;
           showSuccess({ summary: t("rework.teams.prompts.toasts.deleted") });
-          closeModal();
-        } catch (error: unknown) {
-          const err = error as { data?: { detail?: string }; message?: string };
-          showError({
-            summary: t("rework.teams.prompts.toasts.deleteFailed"),
-            detail: err?.data?.detail || err?.message || String(error),
-          });
+          if (dialogVersion.current === version) close();
+        } catch (error) {
+          notifyError(error);
         }
       },
     });
   };
-
-  const handlePublish = (prompt: PromptSummary) => {
-    if (!teamId) return;
-    showConfirmationDialog({
-      title: t("rework.teams.prompts.publishDialog.title"),
-      message: t("rework.teams.prompts.publishDialog.message"),
-      confirmButtonLabel: t("rework.teams.prompts.publishDialog.confirm"),
-      onConfirm: async () => {
-        try {
-          await publishPrompt({ teamId, promptId: prompt.id }).unwrap();
-          showSuccess({ summary: t("rework.teams.prompts.publishDialog.successToast") });
-        } catch (error: unknown) {
-          const err = error as { data?: { detail?: string }; message?: string };
-          showError({
-            summary: t("rework.teams.prompts.publishDialog.errorToast"),
-            detail: err?.data?.detail || err?.message || String(error),
-          });
-        }
-      },
-    });
-  };
-
-  const handleUnpublish = (prompt: PromptSummary) => {
-    if (!teamId) return;
-    showConfirmationDialog({
-      criticalAction: true,
-      title: t("rework.teams.prompts.unpublishDialog.title"),
-      message: t("rework.teams.prompts.unpublishDialog.message"),
-      confirmButtonLabel: t("rework.teams.prompts.unpublishDialog.confirm"),
-      onConfirm: async () => {
-        try {
-          await unpublishPrompt({ teamId, promptId: prompt.id }).unwrap();
-          showSuccess({ summary: t("rework.teams.prompts.unpublishDialog.successToast") });
-        } catch (error: unknown) {
-          const err = error as { data?: { detail?: string }; message?: string };
-          showError({
-            summary: t("rework.teams.prompts.unpublishDialog.errorToast"),
-            detail: err?.data?.detail || err?.message || String(error),
-          });
-        }
-      },
-    });
-  };
-
-  const handleDuplicateConfirm = async (newName: string) => {
-    if (!teamId || !duplicateDetail) return;
+  const handleDuplicate = async (logicalName: string) => {
+    const source = duplicate.currentData;
+    if (!canManage || busy || !source || duplicate.isFetching || duplicate.isError) return;
+    const version = dialogVersion.current;
     try {
-      await duplicatePrompt({
-        teamId,
+      await create({
+        spaceId,
         createPromptRequest: {
-          name: newName,
-          description: duplicateDetail.description || undefined,
-          category_id: duplicateDetail.category_id ?? null,
-          tags: duplicateDetail.tags ?? [],
-          text: duplicateDetail.text,
+          logical_name: logicalName,
+          display_name: source.display_name,
+          description: source.description,
+          text: source.text,
         },
       }).unwrap();
+      if (!live.current || dialogVersion.current !== version) return;
       showSuccess({ summary: t("rework.teams.prompts.duplicateDialog.successToast") });
-      setDuplicatingPrompt(null);
-    } catch (error: unknown) {
-      const err = error as { data?: { detail?: string }; message?: string };
-      // Keep the dialog open on a name conflict so the user can pick another.
-      showError({
-        summary: t("rework.teams.prompts.duplicateDialog.errorToast"),
-        detail: err?.data?.detail || err?.message || String(error),
-      });
+      close();
+    } catch (error) {
+      if (live.current && dialogVersion.current === version) saveError(error);
     }
   };
-
-  // Full-page spinner only on the initial load (no data yet). A background
-  // refetch — e.g. after publish/unpublish/delete invalidates the list — must
-  // not blank the page (that flashed the whole list + any open dialog).
-  const promptsQueryState = getQueryUiState({ isLoading, isUninitialized, isError });
-
-  if (!teamId) {
-    return <div className={styles.pageError}>{t("rework.teams.prompts.missingTeam")}</div>;
-  }
-
-  if (promptsQueryState === "loading") {
-    return (
-      <div className={styles.loadingState}>
-        <Spinner size={20} />
-        {t("rework.teams.prompts.loading")}
-      </div>
-    );
-  }
-
-  if (promptsQueryState === "error") {
-    return (
-      <ServiceNotice
-        icon="cloud_off"
-        title={t("rework.serviceNotice.controlPlane.title")}
-        description={t("rework.serviceNotice.controlPlane.description")}
-        centered
-      />
-    );
-  }
-
+  const filtered = filterPrompts(prompts, { search, categoryId: null });
+  const unavailable = t("rework.weaverAgents.notConnected");
   return (
     <div className={styles.pageContainer}>
-      {prompts.length === 0 ? (
+      <PageHeader
+        title={t(space.kind === "personal" ? "rework.teams.prompts.titlePersonal" : "rework.teams.prompts.title")}
+        actions={
+          <>
+            {canManage && (
+              <Button
+                color="primary"
+                variant="filled"
+                size="small"
+                icon={{ category: "outlined", type: "add" }}
+                onClick={() => open()}
+              >
+                {t("rework.teams.prompts.create")}
+              </Button>
+            )}
+            <div className={styles.searchBar}>
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder={t("rework.teams.prompts.searchPlaceholder")}
+                clearAriaLabel={t("rework.teams.prompts.clearSearch")}
+                size="xs"
+              />
+            </div>
+            <Button
+              color="on-surface"
+              variant="text"
+              size="small"
+              disabled
+              title={unavailable}
+              icon={{ category: "outlined", type: "tune" }}
+            >
+              {t("rework.promptCategories.manage.buttonAria")}
+            </Button>
+          </>
+        }
+      />
+      <ServiceNotice icon="info" title={t("rework.weaverPrompts.deferred")} />
+      {access?.error != null && <ServiceNotice icon="info" title={agentErrorText(access.error, t)} />}
+      {catalog.isError ? (
+        <ServiceNotice
+          icon="cloud_off"
+          title={t("rework.weaverPrompts.catalogError")}
+          description={agentErrorText(catalog.error, t)}
+          action={
+            <Button color="primary" variant="text" size="small" onClick={() => void catalog.refetch()}>
+              {t("rework.weaverPrompts.retry")}
+            </Button>
+          }
+        />
+      ) : !catalog.currentData ? (
+        <div className={styles.loadingState}>
+          <Spinner size={20} />
+          {t("rework.teams.prompts.loading")}
+        </div>
+      ) : prompts.length === 0 ? (
         <PageEmptyState
           icon="edit_note"
           message={t("rework.teams.prompts.noPrompt")}
-          action={canManage ? { label: t("rework.teams.prompts.firstCreate"), onClick: openCreate } : undefined}
+          action={canManage ? { label: t("rework.teams.prompts.firstCreate"), onClick: () => open() } : undefined}
         />
+      ) : filtered.length === 0 ? (
+        <div className={styles.emptyState}>{t("rework.teams.prompts.emptySearch")}</div>
       ) : (
-        <>
-          {/* ── Toolbar: title + create button, then search + category
-              management grouped at the far right ── */}
-          <PageHeader
-            title={isPersonalTeam ? t("rework.teams.prompts.titlePersonal") : t("rework.teams.prompts.title")}
-            actions={
-              <>
-                {canManage && (
-                  <Button
-                    color="primary"
-                    variant="filled"
-                    size="small"
-                    icon={{ category: "outlined", type: "add" }}
-                    onClick={openCreate}
-                  >
-                    {t("rework.teams.prompts.create")}
-                  </Button>
-                )}
-                <div className={styles.titleActions}>
-                  <div className={styles.searchBar}>
-                    <SearchInput
-                      value={search}
-                      onChange={setSearch}
-                      placeholder={t("rework.teams.prompts.searchPlaceholder")}
-                      clearAriaLabel={t("rework.teams.prompts.clearSearch")}
-                      size="xs"
-                    />
-                  </div>
-                  {canManage && (
-                    <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
-                      <IconButton
-                        size="small"
-                        color="on-surface-retreat"
-                        variant="icon"
-                        icon={{ category: "outlined", type: "tune" }}
-                        aria-label={t("rework.promptCategories.manage.buttonAria")}
-                        onClick={() => setIsManageCategoriesOpen(true)}
-                      />
-                    </Tooltip>
-                  )}
-                </div>
-              </>
-            }
-          />
-
-          {/* ── Favorites toggle, then the category chips (radio) ── */}
-          <div className={styles.filterBar}>
-            <div className={styles.filterRow}>
-              <FavoritesFilterChip
-                label={t("rework.teams.prompts.favorite.filter")}
-                active={favoritesOnly}
-                onToggle={() => setFavoritesOnly((on) => !on)}
-              />
-              {categories.length > 0 && (
-                <FilterChips
-                  options={[
-                    {
-                      id: NO_CATEGORY_FILTER_ID,
-                      label: t("rework.promptCategories.noCategory"),
-                      count: categoryCounts.noCategory,
-                    },
-                    ...categories.map((cat) => ({
-                      id: cat.id,
-                      label: cat.name,
-                      count: categoryCounts.byId.get(cat.id) ?? 0,
-                    })),
-                  ]}
-                  value={activeCategory}
-                  onChange={(v) => setActiveCategory(v)}
-                  allLabel={t("rework.teams.agents.podFilter.all")}
-                  maxVisible={FILTER_VISIBLE}
-                  showMoreLabel={(count) => `+${count}`}
-                  showLessLabel="−"
-                />
-              )}
-            </div>
-          </div>
-
-          {filtered.length === 0 ? (
-            <div className={styles.emptyState}>
-              {favoritesOnly ? t("rework.teams.prompts.favorite.empty") : t("rework.teams.prompts.emptySearch")}
-            </div>
-          ) : (
-            <div className={styles.promptList}>
-              {filtered.map((prompt) => (
-                <PromptCard
-                  key={prompt.id}
-                  prompt={prompt}
-                  variant="team"
-                  categoryName={(prompt.category_id && categoryNameById.get(prompt.category_id)) || null}
-                  canManage={canManage}
-                  publishable={!isPersonalTeam}
-                  published={prompt.published}
-                  onView={() => openView(prompt)}
-                  onEdit={() => openPrompt(prompt)}
-                  onDuplicate={() => setDuplicatingPrompt(prompt)}
-                  onPublish={() => handlePublish(prompt)}
-                  onUnpublish={() => handleUnpublish(prompt)}
-                  onDelete={() => handleDelete(prompt)}
-                  onToggleFavorite={() => void toggleFavorite(prompt)}
-                />
-              ))}
-            </div>
-          )}
-        </>
+        <div className={styles.promptList}>
+          {filtered.map((prompt) => (
+            <PromptCard
+              key={prompt.prompt_id}
+              prompt={prompt}
+              canManage={canManage && !busy}
+              publishable={false}
+              unavailableReason={unavailable}
+              onView={() => setViewingId(prompt.prompt_id)}
+              onEdit={() => open(prompt)}
+              onDuplicate={() => {
+                close();
+                setDuplicating(prompt);
+              }}
+              onDelete={() => handleDelete(prompt)}
+            />
+          ))}
+        </div>
       )}
-
-      {/* ── Create / Edit modal ── */}
-      <FullPageModal
-        isOpen={isCreateOpen || !!editingPrompt}
-        onClose={closeModal}
-        id="prompt-form-modal"
-        background="container"
-      >
+      <FullPageModal isOpen={mode !== null} onClose={close} id="prompt-form-modal" background="container">
         <div className={styles.modalCard}>
           <div className={styles.modalHeader}>
-            <span className={styles.modalTitle}>
-              {editingPrompt ? t("rework.teams.prompts.modalEdit") : t("rework.teams.prompts.modalCreate")}
+            <span id="prompt-form-modal-title" className={styles.modalTitle}>
+              {t(mode === "edit" ? "rework.teams.prompts.modalEdit" : "rework.teams.prompts.modalCreate")}
             </span>
           </div>
-
-          <div className={styles.modalContent}>
-            {/* ── Emoji + Name row ── */}
-            <TextInput
-              label={t("rework.teams.prompts.form.name")}
-              required
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              maxLength={120}
-            />
-
-            <TextInput
-              label={t("rework.teams.prompts.form.command")}
-              explanation={t("rework.teams.prompts.form.commandHelp")}
-              error={commandError ?? undefined}
-              // The `/` is shown, never stored: it is what the user types in the
-              // chat, so the field reads as the thing they will type.
-              prefix="/"
-              value={form.command}
-              onChange={(e) => {
-                setCommandError(null);
-                setForm((f) => ({ ...f, command: toCommand(e.target.value) }));
-              }}
-              maxLength={COMMAND_MAX_LENGTH}
-            />
-
-            <TextInput
-              label={t("rework.teams.prompts.form.description")}
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              maxLength={300}
-            />
-
-            <CategoryPicker
-              categories={categories}
-              value={form.category_id}
-              onChange={(categoryId) => setForm((f) => ({ ...f, category_id: categoryId }))}
-            />
-
-            <PromptEditor
-              label={t("rework.teams.prompts.form.text")}
-              required
-              value={form.text}
-              onChange={(text) => setForm((f) => ({ ...f, text }))}
-            />
-          </div>
-
+          {mode === "edit" && detail.isError ? (
+            <ServiceNotice icon="info" title={agentErrorText(detail.error, t)} />
+          ) : !ready ? (
+            <Spinner size={20} />
+          ) : (
+            <div className={styles.modalContent}>
+              <TextInput
+                label={t("rework.teams.prompts.form.name")}
+                required
+                value={form.display_name}
+                disabled={!canManage || busy}
+                error={!validTitle && form.display_name ? t("rework.weaverPrompts.titleLimit") : undefined}
+                onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
+              />
+              <TextInput
+                label={t("rework.weaverPrompts.logicalName")}
+                explanation={t(
+                  mode === "edit" ? "rework.weaverPrompts.immutableName" : "rework.weaverPrompts.nameHelp",
+                )}
+                required
+                prefix="/"
+                readOnly={mode === "edit"}
+                disabled={!canManage || busy}
+                value={form.logical_name}
+                maxLength={64}
+                error={nameError ?? (form.logical_name && !validName ? t("rework.weaverPrompts.nameHelp") : undefined)}
+                onChange={(e) => {
+                  setNameError(undefined);
+                  setForm((f) => ({ ...f, logical_name: e.target.value }));
+                }}
+              />
+              <TextInput
+                label={t("rework.teams.prompts.form.description")}
+                value={form.description ?? ""}
+                disabled={!canManage || busy}
+                error={!validDescription ? t("rework.weaverPrompts.descriptionLimit") : undefined}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+              <PromptEditor
+                label={t("rework.teams.prompts.form.text")}
+                value={form.text}
+                disabled={!canManage || busy}
+                onChange={(text) => setForm((f) => ({ ...f, text }))}
+              />
+            </div>
+          )}
           <div className={styles.modalFooter}>
-            {editingPrompt && (
-              <Button color="error" variant="text" size="medium" onClick={() => handleDelete(editingPrompt)}>
+            {mode === "edit" && detail.currentData && canManage && (
+              <Button
+                color="error"
+                variant="text"
+                size="medium"
+                disabled={busy}
+                onClick={() => handleDelete(detail.currentData!)}
+              >
                 {t("rework.delete")}
               </Button>
             )}
             <div className={styles.modalFooterActions}>
-              <Button color="on-surface" variant="text" size="medium" onClick={closeModal}>
+              <Button color="on-surface" variant="text" size="medium" onClick={close}>
                 {t("rework.cancel")}
               </Button>
               <Button
                 color="primary"
                 variant="filled"
                 size="medium"
-                onClick={handleSubmit}
-                disabled={isSubmitting || !form.name.trim() || !form.text.trim()}
+                onClick={save}
+                disabled={!canManage || busy || !ready || !validName || !validTitle || !validDescription}
               >
-                {editingPrompt ? t("rework.save") : t("rework.create")}
+                {t(mode === "edit" ? "rework.save" : "rework.create")}
               </Button>
             </div>
           </div>
         </div>
       </FullPageModal>
-
-      <ManageCategoriesDialog
-        open={isManageCategoriesOpen}
-        teamId={teamId}
-        categories={categories}
-        usedCategoryIds={usedCategoryIds}
-        onClose={() => setIsManageCategoriesOpen(false)}
-        onChanged={() => refetchCategories()}
-      />
-
       <PromptViewDialog
-        open={!!viewingPrompt}
-        teamId={teamId}
-        promptId={viewingPrompt?.id ?? null}
-        categories={categories}
-        onCopied={() => {
-          if (viewingPrompt) recordPromptUse({ teamId, promptId: viewingPrompt.id });
-        }}
-        onClose={() => setViewingPrompt(null)}
+        key={viewingId}
+        open={Boolean(viewingId)}
+        spaceId={spaceId}
+        promptId={viewingId}
+        onClose={() => setViewingId(undefined)}
       />
-
       <DuplicatePromptDialog
-        open={!!duplicatingPrompt}
-        initialName={duplicatingPrompt?.name ?? ""}
-        isSubmitting={isDuplicating || (!!duplicatingPrompt && !duplicateDetail)}
-        onCancel={() => setDuplicatingPrompt(null)}
-        onConfirm={handleDuplicateConfirm}
+        open={Boolean(duplicating)}
+        initialName=""
+        error={nameError ?? (duplicate.isError ? agentErrorText(duplicate.error, t) : undefined)}
+        onNameChange={() => setNameError(undefined)}
+        isSubmitting={busy || !canManage || duplicate.isFetching || duplicate.isError || !duplicate.currentData}
+        onCancel={close}
+        onConfirm={handleDuplicate}
       />
     </div>
   );

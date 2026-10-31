@@ -13,24 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Regression coverage for issue #1996 (Prompts): "click a card to edit it,
-// press Esc, click again — the form is empty". Confirmed mechanism: RTK
-// Query's `data` field (as opposed to `currentData`) keeps returning the
-// last successful result for a query — the SAME object reference — even
-// while the query is skipped, and again once unskipped for the same cache
-// key (see @reduxjs/toolkit's buildHooks.ts `queryStatePreSelector`, which
-// falls back to `lastResult.data` whenever the live state is uninitialized,
-// and only clears `lastResult` when unskipped args differ from the last
-// ones). So `useEffect(() => { if (editDetail) ... }, [editDetail])` never
-// re-fires on reopen: `editDetail` never changed reference to begin with.
-// The mock query hook below reproduces that exact persistence so this test
-// fails against the un-fixed component and passes once PromptsPage tracks
-// "which id the form is currently seeded for" instead of trusting object
-// identity.
-
+// Retains the edit/view reseed regressions while exercising the Weaver contract.
 import { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -41,15 +27,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
-  useSelectedTeam: () => ({ teamId: "team-1", selectedTeam: undefined }),
-}));
-// Card click now opens a read-only view dialog (PROMPT-09 follow-up); editing
-// is only reachable through the card's hover-edit pencil, which is gated on
-// `canManage` — force it on so the edit-form-reseed regression tests below
-// can still reach that pencil.
-vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
-vi.mock("@core/hooks/usePromptFavoriteToggle.ts", () => ({ usePromptFavoriteToggle: () => vi.fn() }));
+import { SPACES, SPACE_A, SPACE_B } from "../TeamAgentsPage/weaverAgentFixtures";
+import { promptFixture, promptSummaryFixture } from "./weaverPromptFixtures";
+import type { Prompt, MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+const route = vi.hoisted(() => ({ teamId: "" }));
+vi.mock("react-router-dom", () => ({ useParams: () => route }));
 // The dialog itself is not rendered: the test reads what the page asked for
 // and confirms by calling `onConfirm` directly.
 type ConfirmationOptions = { title: string; message: string; confirmButtonLabel?: string; onConfirm: () => unknown };
@@ -64,138 +46,68 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () =>
 const toast = vi.hoisted(() => ({ showError: vi.fn(), showSuccess: vi.fn() }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => toast }));
 
-const PROMPT_SUMMARY = {
-  id: "prompt-1",
-  name: "Real Name",
-  description: "Real description",
-  category_id: null,
-};
-
-// Stable object reference on purpose: the real backend response for the
-// same promptId/teamId is exactly this reused, not a fresh object per call.
-const PROMPT_DETAIL = {
-  id: "prompt-1",
-  team_id: "team-1",
-  name: "Real Name",
-  description: "Real description",
-  category_id: null,
-  tags: ["greeting"],
-  // A command, so the view dialog has one to show ahead of the description.
-  // Prompt B below deliberately has none: `command: null` keeps them one shape.
-  text: "Real prompt text",
-  command: "summary" as string | null,
-};
-
-// A second prompt used only by the cross-prompt-leak test below. Its detail
-// query "resolves" only once `promptBReady` is flipped, letting the test
-// hold it in the uninitialized/loading gap where a naive re-seed guard would
-// leak the previous prompt's still-lingering `data` into its form.
-const PROMPT_B_SUMMARY = {
-  id: "prompt-2",
-  name: "Other Name",
+const PROMPT_DETAIL = promptFixture();
+const PROMPT_B_DETAIL = promptFixture({
+  prompt_id: "prompt-2",
+  display_name: "Other Name",
+  logical_name: "other",
   description: "Other description",
-  category_id: null,
-};
-const PROMPT_B_DETAIL = {
-  id: "prompt-2",
-  team_id: "team-1",
-  name: "Other Name",
-  description: "Other description",
-  category_id: null,
-  tags: [],
   text: "Other prompt text",
-  command: null,
-};
+});
 let promptBReady = false;
+let context: MySpace[] = SPACES;
+let stamp = 1;
+let catalogError = false;
 const createCalls: unknown[] = [];
 let createRejectsWith: unknown = null;
 let deleteRejectsWith: unknown = null;
-
+const authorize = vi.fn();
+const update = vi.fn();
+const remove = vi.fn();
+const create = vi.fn();
+const catalogRead = vi.fn();
+const detailRead = vi.fn();
+const copy = vi.hoisted(() => vi.fn());
+vi.mock("@rework/utils/clipboardUtils", () => ({ writeRichClipboard: copy }));
 vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery: () => ({
-    data: [PROMPT_SUMMARY, PROMPT_B_SUMMARY],
-    isLoading: false,
-    isFetching: false,
-    isUninitialized: false,
-    isError: false,
-    refetch: async () => {},
-  }),
-  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: () => ({
-    data: [],
-    refetch: async () => {},
-  }),
-  // Faithful reproduction of RTK Query's confirmed `data` persistence
-  // (verified directly against @reduxjs/toolkit's buildHooks.ts
-  // `queryStatePreSelector`: `lastValue` is a per-hook-instance ref that is
-  // NEVER cleared on an args change, only on a very specific same-args store
-  // reset). So switching from one promptId to a different one keeps
-  // returning the PREVIOUS id's data for as long as the new id's fetch
-  // hasn't resolved yet — `lastData` below models exactly that.
-  useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: (
-    args: { promptId: string },
-    opts: { skip: boolean },
-  ) => {
-    const lastData = useRef<typeof PROMPT_DETAIL | undefined>(undefined);
-    if (!opts.skip) {
-      if (args.promptId === PROMPT_DETAIL.id) {
-        lastData.current = PROMPT_DETAIL;
-      } else if (args.promptId === PROMPT_B_DETAIL.id && promptBReady) {
-        lastData.current = PROMPT_B_DETAIL;
-      }
-      // else: prompt-2 requested but not "resolved" yet — lastData.current
-      // is deliberately left untouched, lingering on whatever it held
-      // before (prompt-1's detail, if that was open last).
-    }
-    return { data: lastData.current };
-  },
-  usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation: () => [
-    (arg: unknown) => {
-      createCalls.push(arg);
-      return {
-        unwrap: async () => {
-          if (createRejectsWith) throw createRejectsWith;
-          return undefined;
-        },
-      };
-    },
-    { isLoading: false },
-  ],
-  usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation: () => [
-    async () => ({ unwrap: async () => undefined }),
-    { isLoading: false },
-  ],
-  useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation: () => [
-    () => ({
-      unwrap: async () => {
-        if (deleteRejectsWith) throw deleteRejectsWith;
-        return undefined;
+  useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => ({}),
+}));
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useMySpacesQuery: () => ({ currentData: context, fulfilledTimeStamp: stamp, isError: false }),
+  useAuthorizeSpaceMutation: () => [authorize],
+  usePromptCatalogQuery: (args: unknown) => {
+    catalogRead(args);
+    return {
+      currentData: {
+        items: [promptSummaryFixture(PROMPT_DETAIL), promptSummaryFixture(PROMPT_B_DETAIL)],
+        next_cursor: null,
       },
-    }),
-  ],
-  usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation: () => [
-    async () => ({ unwrap: async () => undefined }),
-  ],
-  usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation: () => [
-    async () => ({ unwrap: async () => undefined }),
-  ],
-  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation: () => [
-    async () => ({ unwrap: async () => undefined }),
-  ],
-  usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation: () => [
-    async () => ({ unwrap: async () => undefined }),
-    { isLoading: false },
-  ],
-  usePutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutMutation: () => [
-    async () => ({ unwrap: async () => undefined }),
-    { isLoading: false },
-  ],
-  useDeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteMutation: () => [
-    async () => ({ unwrap: async () => undefined }),
-  ],
+      isFetching: false,
+      isError: catalogError,
+      refetch: vi.fn(),
+    };
+  },
+  useGetPromptQuery: (args: { promptId: string }, opts: { skip: boolean }) => {
+    detailRead(args, opts);
+    const lastData = useRef<Prompt | undefined>(undefined);
+    const currentData = opts.skip
+      ? undefined
+      : args.promptId === PROMPT_DETAIL.prompt_id
+        ? PROMPT_DETAIL
+        : promptBReady
+          ? PROMPT_B_DETAIL
+          : undefined;
+    if (currentData) lastData.current = currentData;
+    return { data: lastData.current, currentData, isFetching: !opts.skip && !currentData, isError: false };
+  },
+  useCreatePromptMutation: () => [create, { isLoading: false }],
+  useUpdatePromptMutation: () => [update, { isLoading: false }],
+  useDeletePromptMutation: () => [remove, { isLoading: false }],
 }));
 
 import { EditorView } from "@codemirror/view";
 import PromptsPage from "./PromptsPage";
+import PromptViewDialog from "./PromptViewDialog/PromptViewDialog";
 
 // FullPageModal renders through a `createPortal` into a div appended
 // directly to `document.body` (see Portal.tsx) — it is NOT a descendant of
@@ -229,22 +141,75 @@ function formValues() {
   };
 }
 
-describe("PromptsPage edit form reseed", () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
+let container: HTMLDivElement;
+let root: Root;
+const render = () => act(() => root.render(<PromptsPage />));
+const click = (element: Element | null | undefined) => {
+  expect(element).toBeTruthy();
+  act(() => element!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })));
+};
+const button = (text: string) =>
+  Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.trim().endsWith(text));
+const escape = () => act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+function cardAction(action: string, index = 0) {
+  const card = container.querySelectorAll('[role="button"]')[index];
+  click(Array.from(card.querySelectorAll("button")).find((b) => b.textContent?.includes("more_vert")));
+  click(Array.from(document.querySelectorAll("li")).find((el) => el.textContent?.includes(`card.menu.${action}`)));
+}
+function typeInto(input: HTMLInputElement, value: string) {
+  expect(input).toBeTruthy();
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+function setText(text: string) {
+  const view = EditorView.findFromDOM(document.querySelector('[role="dialog"] .cm-editor')!)!;
+  act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }));
+}
+async function save() {
+  await act(async () => click(button("rework.create") ?? button("rework.save")));
+}
+beforeEach(async () => {
+  vi.resetAllMocks();
+  context = SPACES;
+  stamp = 1;
+  route.teamId = SPACE_A;
+  promptBReady = false;
+  catalogError = false;
+  createCalls.length = 0;
+  createRejectsWith = null;
+  deleteRejectsWith = null;
+  confirmation.last = null;
+  authorize.mockImplementation(() => ({ unwrap: async () => ({ allowed: true }), abort: vi.fn() }));
+  create.mockImplementation((arg: unknown) => {
+    createCalls.push(arg);
+    return {
+      unwrap: async () => {
+        if (createRejectsWith) throw createRejectsWith;
+        return PROMPT_DETAIL;
+      },
+    };
+  });
+  update.mockImplementation(() => ({ unwrap: async () => PROMPT_DETAIL }));
+  remove.mockImplementation(() => ({
+    unwrap: async () => {
+      if (deleteRejectsWith) throw deleteRejectsWith;
+    },
+  }));
+  copy.mockResolvedValue(true);
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () => root.render(<PromptsPage />));
+});
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+});
 
+describe("PromptsPage edit form reseed", () => {
   it("re-populates the form when the same card is reopened after closing via Escape", () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
     act(() => {
       root.render(<PromptsPage />);
     });
@@ -253,20 +218,7 @@ describe("PromptsPage edit form reseed", () => {
     // through the card's more-menu → "Edit" item instead (the pencil became a
     // more-menu with the prompts marketplace, PROMPT-06). The menu renders in a
     // portal on document.body, so the Edit item is queried from the document.
-    const openEditForm = (index = 0) => {
-      const cards = container.querySelectorAll('[role="button"]');
-      const card = cards[index] as HTMLElement;
-      const moreButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent?.includes("more_vert"));
-      act(() => {
-        moreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      });
-      const editItem = Array.from(document.querySelectorAll("li")).find((el) =>
-        el.textContent?.includes("card.menu.edit"),
-      );
-      act(() => {
-        editItem?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      });
-    };
+    const openEditForm = (index = 0) => cardAction("edit", index);
 
     // First open: form should be fully seeded from the detail query.
     openEditForm();
@@ -298,28 +250,11 @@ describe("PromptsPage edit form reseed", () => {
     // prompt 2's form with prompt 1's still-lingering `editDetail`.
     promptBReady = false;
 
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
     act(() => {
       root.render(<PromptsPage />);
     });
 
-    const openEditForm = (index: number) => {
-      const cards = container.querySelectorAll('[role="button"]');
-      const card = cards[index] as HTMLElement;
-      const moreButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent?.includes("more_vert"));
-      act(() => {
-        moreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      });
-      const editItem = Array.from(document.querySelectorAll("li")).find((el) =>
-        el.textContent?.includes("card.menu.edit"),
-      );
-      act(() => {
-        editItem?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      });
-    };
+    const openEditForm = (index = 0) => cardAction("edit", index);
 
     // Open prompt 1 — resolves immediately, seeds the form.
     openEditForm(0);
@@ -352,21 +287,7 @@ describe("PromptsPage edit form reseed", () => {
 });
 
 describe("PromptsPage card click", () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-  });
-
   it("opens a read-only view dialog instead of the edit form", () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-
     act(() => {
       root.render(<PromptsPage />);
     });
@@ -390,10 +311,6 @@ describe("PromptsPage card click", () => {
     // above), but for PromptViewDialog: RTK Query's `data` keeps returning
     // the previous promptId's result for a moment after switching ids.
     promptBReady = false;
-
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
 
     act(() => {
       root.render(<PromptsPage />);
@@ -432,13 +349,7 @@ describe("PromptsPage card click", () => {
 });
 
 describe("PromptsPage view dialog", () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
   const openCard = (index: number) => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
     act(() => {
       root.render(<PromptsPage />);
     });
@@ -448,11 +359,6 @@ describe("PromptsPage view dialog", () => {
     });
     return document.querySelector('[role="dialog"]') as HTMLElement;
   };
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-  });
 
   it("shows the command ahead of the description", () => {
     const dialog = openCard(0);
@@ -464,172 +370,99 @@ describe("PromptsPage view dialog", () => {
   });
 
   it("shows nothing of the sort on a prompt that carries no command", () => {
-    promptBReady = true;
-    const dialog = openCard(1);
-
+    act(() =>
+      root.render(
+        <PromptViewDialog
+          open
+          onClose={() => {}}
+          preloadedDetail={{ id: "legacy", name: "Other Name", text: "Other prompt text", command: null }}
+        />,
+      ),
+    );
+    const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain("Other prompt text");
     expect(dialog.textContent).not.toContain("/summary");
-    promptBReady = false;
   });
 });
 
 describe("PromptsPage command field", () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
   const openCreateForm = () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-    act(() => {
-      root.render(<PromptsPage />);
-    });
-    const newButton = Array.from(container.querySelectorAll("button")).find((b) =>
-      b.textContent?.includes("teams.prompts.create"),
-    );
-    act(() => {
-      newButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
+    click(button("rework.teams.prompts.create"));
+    typeInto(fieldByLabel("form.name")!, "Valid title");
+    expect(button("rework.create")?.disabled).toBe(true);
   };
 
-  const typeInto = (input: HTMLInputElement, value: string) => {
-    act(() => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter?.call(input, value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  };
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    createCalls.length = 0;
-    createRejectsWith = null;
-  });
-
-  it("folds an uppercase keystroke to lowercase", () => {
+  it("keeps an invalid uppercase name visible and prevents saving", () => {
     openCreateForm();
-    const command = fieldByLabel("form.command")!;
+    const command = fieldByLabel("weaverPrompts.logicalName")!;
     typeInto(command, "S");
-    expect(fieldByLabel("form.command")!.value).toBe("s");
+    expect(fieldByLabel("weaverPrompts.logicalName")!.value).toBe("S");
+    expect(button("rework.create")?.disabled).toBe(true);
   });
 
-  it("refuses a space, an accented letter and a punctuation mark", () => {
+  it("rejects a space, an accented letter and punctuation without repairing them", () => {
     openCreateForm();
-    const command = fieldByLabel("form.command")!;
+    const command = fieldByLabel("weaverPrompts.logicalName")!;
     typeInto(command, "abc");
+    expect(button("rework.create")?.disabled).toBe(false);
     for (const keystroke of ["abc ", "abcé", "abc!"]) {
-      typeInto(fieldByLabel("form.command")!, keystroke);
-      expect(fieldByLabel("form.command")!.value).toBe("abc");
+      typeInto(fieldByLabel("weaverPrompts.logicalName")!, keystroke);
+      expect(fieldByLabel("weaverPrompts.logicalName")!.value).toBe(keystroke);
+      expect(button("rework.create")?.disabled).toBe(true);
     }
   });
 
   it("keeps digits, hyphens and underscores", () => {
     openCreateForm();
-    typeInto(fieldByLabel("form.command")!, "synthese_v2-bis");
-    expect(fieldByLabel("form.command")!.value).toBe("synthese_v2-bis");
+    typeInto(fieldByLabel("weaverPrompts.logicalName")!, "synthese_v2-bis");
+    expect(fieldByLabel("weaverPrompts.logicalName")!.value).toBe("synthese_v2-bis");
+    expect(button("rework.create")?.disabled).toBe(false);
   });
 
   it("sends the command with the create payload", async () => {
     openCreateForm();
     typeInto(fieldByLabel("form.name")!, "Weekly");
-    typeInto(fieldByLabel("form.command")!, "weekly");
-    const editor = document.querySelector('[role="dialog"] .cm-editor');
-    act(() => {
-      const view = EditorView.findFromDOM(editor as HTMLElement);
-      view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "body" } });
-    });
-    const save = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
-      (b) => b.textContent?.trim() === "rework.create",
-    );
-    await act(async () => {
-      save?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
+    typeInto(fieldByLabel("weaverPrompts.logicalName")!, "weekly");
+    setText("body");
+    await save();
     expect(createCalls).toHaveLength(1);
-    expect((createCalls[0] as { createPromptRequest: { command: string } }).createPromptRequest.command).toBe("weekly");
+    expect((createCalls[0] as { createPromptRequest: { logical_name: string } }).createPromptRequest.logical_name).toBe(
+      "weekly",
+    );
     expect(toast.showSuccess).toHaveBeenLastCalledWith({ summary: "rework.teams.prompts.toasts.created" });
   });
 
   it("reports a failed save with a translated toast", async () => {
-    createRejectsWith = { data: { detail: "boom" } };
+    createRejectsWith = { status: 500, data: { detail: "boom" } };
     openCreateForm();
+    typeInto(fieldByLabel("weaverPrompts.logicalName")!, "weekly");
     typeInto(fieldByLabel("form.name")!, "Weekly");
-    const editor = document.querySelector('[role="dialog"] .cm-editor');
-    act(() => {
-      const view = EditorView.findFromDOM(editor as HTMLElement);
-      view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "body" } });
-    });
-    const save = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
-      (b) => b.textContent?.trim() === "rework.create",
-    );
-    await act(async () => {
-      save?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
+    setText("body");
+    await save();
     expect(toast.showError).toHaveBeenLastCalledWith({
-      summary: "rework.teams.prompts.toasts.saveFailed",
-      detail: "boom",
+      summary: "rework.weaverAgents.errors.server",
     });
   });
 
-  it("marks the command field, not a toast, when the backend reports a command conflict", async () => {
-    // A name conflict and a command conflict are both 409 here; only the
-    // code says which input to mark.
-    createRejectsWith = { data: { detail: { code: "prompt_command_conflict", message: "taken" } } };
+  it("marks only logical_name when the backend reports prompt_name_conflict", async () => {
+    createRejectsWith = { status: 409, data: { code: "prompt_name_conflict", detail: "taken" } };
     openCreateForm();
     typeInto(fieldByLabel("form.name")!, "Weekly");
-    typeInto(fieldByLabel("form.command")!, "weekly");
-    const editor = document.querySelector('[role="dialog"] .cm-editor');
-    act(() => {
-      const view = EditorView.findFromDOM(editor as HTMLElement);
-      view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "body" } });
-    });
-    const save = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
-      (b) => b.textContent?.trim() === "rework.create",
-    );
-    await act(async () => {
-      save?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
+    typeInto(fieldByLabel("weaverPrompts.logicalName")!, "weekly");
+    setText("body");
+    await save();
     // The form stays open on the conflict so the value can be corrected.
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     const dialogText = document.querySelector('[role="dialog"]')?.textContent ?? "";
-    expect(dialogText).toContain("form.commandConflict");
+    expect(dialogText).toContain("weaverPrompts.nameConflict");
+    expect(fieldByLabel("weaverPrompts.logicalName")?.getAttribute("aria-invalid")).toBe("true");
+    expect(fieldByLabel("form.name")?.getAttribute("aria-invalid")).not.toBe("true");
+    expect(toast.showError).not.toHaveBeenCalled();
   });
 });
 
 describe("PromptsPage delete", () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
-  const askToDelete = () => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-    act(() => {
-      root.render(<PromptsPage />);
-    });
-    const card = container.querySelectorAll('[role="button"]')[0] as HTMLElement;
-    const moreButton = Array.from(card.querySelectorAll("button")).find((b) => b.textContent?.includes("more_vert"));
-    act(() => {
-      moreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-    const deleteItem = Array.from(document.querySelectorAll("li")).find((el) =>
-      el.textContent?.includes("card.menu.delete"),
-    );
-    act(() => {
-      deleteItem?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-  };
-
-  afterEach(() => {
-    act(() => {
-      root.unmount();
-    });
-    container.remove();
-    confirmation.last = null;
-    deleteRejectsWith = null;
-  });
+  const askToDelete = () => cardAction("delete");
 
   it("asks for confirmation with translated wording", () => {
     askToDelete();
@@ -649,14 +482,198 @@ describe("PromptsPage delete", () => {
   });
 
   it("reports a failed deletion with a translated toast", async () => {
-    deleteRejectsWith = { data: { detail: "boom" } };
+    deleteRejectsWith = { status: 500, data: { detail: "boom" } };
     askToDelete();
     await act(async () => {
       await confirmation.last?.onConfirm();
     });
     expect(toast.showError).toHaveBeenLastCalledWith({
-      summary: "rework.teams.prompts.toasts.deleteFailed",
-      detail: "boom",
+      summary: "rework.weaverAgents.errors.server",
     });
+  });
+});
+
+describe("Weaver prompt management", () => {
+  it("uses the canonical personal space for the alias and asks the server for Write", async () => {
+    route.teamId = "personal";
+    await act(async () => render());
+    expect(catalogRead).toHaveBeenLastCalledWith({ spaceId: SPACE_B });
+    expect(authorize).toHaveBeenLastCalledWith({ spaceCheck: { space_id: SPACE_B, permission: "write" } });
+    expect(container.textContent).toContain("rework.teams.prompts.titlePersonal");
+  });
+
+  it("does not inherit a form or Write permission across spaces, even with an owner role", async () => {
+    cardAction("edit");
+    typeInto(fieldByLabel("form.name")!, "Unsaved draft");
+    let allow!: (value: { allowed: boolean }) => void;
+    const abort = vi.fn();
+    authorize.mockImplementationOnce(() => ({
+      unwrap: () =>
+        new Promise((resolve) => {
+          allow = resolve;
+        }),
+      abort,
+    }));
+    context = SPACES.map((space) => ({ ...space, roles: ["owner"] }));
+    route.teamId = SPACE_B;
+    render();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(button("rework.teams.prompts.create")).toBeUndefined();
+    await act(async () => allow({ allowed: false }));
+    expect(button("rework.teams.prompts.create")).toBeUndefined();
+    route.teamId = SPACE_A;
+    await act(async () => render());
+    expect(abort).toHaveBeenCalledOnce();
+    click(button("rework.teams.prompts.create"));
+    expect(formValues()).toEqual({ name: "", description: "", text: "" });
+  });
+
+  it("revokes editing immediately while refreshed server authority is unresolved", async () => {
+    cardAction("edit");
+    let answer!: (value: { allowed: boolean }) => void;
+    authorize.mockImplementationOnce(() => ({
+      unwrap: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      abort: vi.fn(),
+    }));
+    stamp++;
+    render();
+    expect(button("rework.save")?.disabled).toBe(true);
+    await act(async () => answer({ allowed: false }));
+    expect(fieldByLabel("form.name")?.disabled).toBe(true);
+    await save();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("copies the complete text and never the catalog preview", async () => {
+    click(container.querySelector('[role="button"]'));
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(PROMPT_DETAIL.text_preview);
+    await act(async () => click(document.querySelector('[aria-label="rework.teams.prompts.view.copyAria"]')));
+    expect(copy).toHaveBeenCalledExactlyOnceWith("", PROMPT_DETAIL.text);
+  });
+
+  it("keeps logical identity immutable and sends only useful PATCH fields", async () => {
+    cardAction("edit");
+    expect(fieldByLabel("weaverPrompts.logicalName")?.readOnly).toBe(true);
+    typeInto(fieldByLabel("form.name")!, "Independent title");
+    await save();
+    const args = update.mock.calls[0][0];
+    expect(args).toMatchObject({ spaceId: SPACE_A, promptId: PROMPT_DETAIL.prompt_id });
+    expect(JSON.parse(JSON.stringify(args.updatePromptRequest))).toEqual({ display_name: "Independent title" });
+  });
+
+  it("preserves all prompt whitespace and explicitly clears the description", async () => {
+    cardAction("edit");
+    typeInto(fieldByLabel("form.description")!, "");
+    setText("  Instructions 👋\n\n");
+    await save();
+    expect(JSON.parse(JSON.stringify(update.mock.calls[0][0].updatePromptRequest))).toEqual({
+      text: "  Instructions 👋\n\n",
+      description: null,
+    });
+  });
+
+  it("requires a new logical identity for duplication while preserving title and full text", async () => {
+    cardAction("duplicate");
+    expect(fieldByLabel("weaverPrompts.logicalName")?.value).toBe("");
+    const confirm = () => button("rework.teams.prompts.duplicateDialog.confirm");
+    expect(confirm()?.disabled).toBe(true);
+    typeInto(fieldByLabel("weaverPrompts.logicalName")!, "Summary");
+    expect(confirm()?.disabled).toBe(true);
+    typeInto(fieldByLabel("weaverPrompts.logicalName")!, "summary-copy");
+    await act(async () => click(confirm()));
+    expect(create).toHaveBeenCalledExactlyOnceWith({
+      spaceId: SPACE_A,
+      createPromptRequest: {
+        logical_name: "summary-copy",
+        display_name: PROMPT_DETAIL.display_name,
+        description: PROMPT_DETAIL.description,
+        text: PROMPT_DETAIL.text,
+      },
+    });
+  });
+
+  it.each(["title", "description"])("counts Unicode code points at the %s boundary", (field) => {
+    click(button("rework.teams.prompts.create"));
+    typeInto(fieldByLabel("weaverPrompts.logicalName")!, "valid");
+    typeInto(fieldByLabel("form.name")!, "Title");
+    const label = field === "title" ? "form.name" : "form.description";
+    const limit = field === "title" ? 255 : 500;
+    typeInto(fieldByLabel(label)!, "👋".repeat(limit));
+    expect(button("rework.create")?.disabled).toBe(false);
+    typeInto(fieldByLabel(label)!, "👋".repeat(limit + 1));
+    expect(button("rework.create")?.disabled).toBe(true);
+    if (field === "title") {
+      typeInto(fieldByLabel(label)!, "e\u0301".repeat(limit));
+      expect(button("rework.create")?.disabled).toBe(false);
+    }
+  });
+
+  it.each(["success", "conflict"])("ignores a late create %s after closing and reopening", async (outcome) => {
+    let resolve!: (value: unknown) => void;
+    let reject!: (reason: unknown) => void;
+    create.mockImplementationOnce(() => ({
+      unwrap: () =>
+        new Promise((yes, no) => {
+          resolve = yes;
+          reject = no;
+        }),
+    }));
+    click(button("rework.teams.prompts.create"));
+    typeInto(fieldByLabel("form.name")!, "Old title");
+    typeInto(fieldByLabel("weaverPrompts.logicalName")!, "old");
+    await save();
+    escape();
+    click(button("rework.teams.prompts.create"));
+    typeInto(fieldByLabel("form.name")!, "New draft");
+    await act(async () =>
+      outcome === "success" ? resolve(PROMPT_DETAIL) : reject({ status: 409, data: { code: "prompt_name_conflict" } }),
+    );
+    expect(formValues().name).toBe("New draft");
+    expect(document.body.textContent).not.toContain("weaverPrompts.nameConflict");
+    expect(toast.showSuccess).not.toHaveBeenCalled();
+    expect(toast.showError).not.toHaveBeenCalled();
+  });
+
+  it.each(["before", "during"])("ignores deletion when navigation happens %s the request", async (when) => {
+    let finish!: () => void;
+    remove.mockImplementationOnce(() => ({
+      unwrap: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    }));
+    cardAction("delete");
+    expect(remove).not.toHaveBeenCalled();
+    let pending: unknown;
+    if (when === "during")
+      act(() => {
+        pending = confirmation.last!.onConfirm();
+      });
+    route.teamId = SPACE_B;
+    await act(async () => render());
+    if (when === "before") {
+      await act(async () => {
+        await confirmation.last!.onConfirm();
+      });
+      expect(remove).not.toHaveBeenCalled();
+    } else {
+      await act(async () => {
+        finish();
+        await pending;
+      });
+      expect(remove).toHaveBeenCalledExactlyOnceWith({ spaceId: SPACE_A, promptId: PROMPT_DETAIL.prompt_id });
+    }
+    expect(toast.showSuccess).not.toHaveBeenCalled();
+    expect(toast.showError).not.toHaveBeenCalled();
+  });
+
+  it("does not display catalog rows after a failed refresh", () => {
+    catalogError = true;
+    render();
+    expect(container.querySelector('[role="button"]')).toBeNull();
+    expect(container.textContent).toContain("rework.weaverPrompts.catalogError");
   });
 });

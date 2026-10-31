@@ -15,6 +15,7 @@ use control_plane::{
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
+use support::request;
 use tokio::sync::Mutex;
 use tower::ServiceExt;
 
@@ -112,33 +113,6 @@ fn definition() -> Value {
                 {"key":"flag","type":"boolean"}, {"key":"choice","type":"select","enum":["a","b"]},
                 {"key":"code","type":"string","pattern":"[A-Z]+"}, {"key":"items","type":"array","item_type":"integer"},
                 {"key":"object","type":"object"}]}})
-}
-async fn request(
-    app: &Router,
-    identity: &support::IdentityServer,
-    actor: Option<&str>,
-    method: &str,
-    path: &str,
-    body: Value,
-) -> (u16, Value) {
-    let mut req = Request::builder()
-        .method(method)
-        .uri(path)
-        .header("content-type", "application/json");
-    if let Some(actor) = actor {
-        req = req.header("authorization", format!("Bearer {}", identity.token(actor)));
-    }
-    let response = app
-        .clone()
-        .oneshot(req.body(Body::from(body.to_string())).unwrap())
-        .await
-        .unwrap();
-    let status = response.status().as_u16();
-    let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-    )
 }
 async fn app(
     e: &Env,
