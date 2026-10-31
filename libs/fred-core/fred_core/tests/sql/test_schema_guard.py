@@ -50,7 +50,7 @@ async def test_missing_table_raises_with_the_fix_command(tmp_path) -> None:
     # reading the source.
     assert "session_history" in message
     assert "python -m fred_runtime migrate" in message
-    assert "DATABASE_MIGRATIONS.md" in message
+    assert "libs/fred-core/README.md#schema-migrations" in message
 
 
 @pytest.mark.asyncio
