@@ -276,8 +276,7 @@ impl Importer<'_> {
                 if roles.is_empty() {
                     continue;
                 }
-                // Declared or existing, the parent role must be direct: inherited access
-                // does not satisfy the parent/child invariant.
+                // Declared or existing, the parent content role must be direct.
                 if bundle.spaces[p]
                     .roles
                     .get(username)

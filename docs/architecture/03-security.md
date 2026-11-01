@@ -42,9 +42,9 @@ flowchart TB
     classDef default fill:#F1F5F9,stroke:#64748B,color:#0F172A
 ```
 
-**Editor, owner and analyst** roles apply to their space and its
-descendants. **Member** applies only to the space where it is granted. Platform
-and organization-admin roles do not pass down as content rights.
+**Owner, editor, analyst and member** apply only to the space where they are
+granted. No role reaches a child space. Platform and organization admins have
+no content rights from their technical role.
 
 A person belongs to one organization. Folders and documents use their owning
 space's permissions. **Personal spaces inherit no content rights** from the

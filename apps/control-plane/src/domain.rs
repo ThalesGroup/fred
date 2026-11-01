@@ -179,11 +179,6 @@ impl Role {
     pub fn grants_content(self) -> bool {
         matches!(self, Role::Member | Role::Editor | Role::Analyst)
     }
-
-    /// Roles the model extends to every descendant space.
-    pub fn descends(self) -> bool {
-        matches!(self, Role::Editor | Role::Owner | Role::Analyst)
-    }
 }
 
 /// Computed business permissions.

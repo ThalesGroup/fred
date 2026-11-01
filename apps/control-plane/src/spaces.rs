@@ -218,7 +218,7 @@ pub async fn require_context<'e>(
 }
 
 /// Search scope: the space and its ancestors, organization first, never descendants;
-/// a personal space's scope is itself. `levels` only removes spaces.
+/// each requires a direct reading role. A personal scope is itself; `levels` only narrows it.
 pub async fn scope(
     pool: &PgPool,
     user: &str,
@@ -230,19 +230,18 @@ pub async fn scope(
         .execute(&mut *tx)
         .await?;
     let space = authorize_locked(&mut tx, user, space_id, Permission::Read).await?;
-    let rows: Vec<(Uuid, SpaceKind, String, bool)> = sqlx::query_as("select s.id,s.kind,r.role,r.space_id=s.id from space s join space_role_grant r on r.space_id=s.id or (s.kind <> 'personal' and r.space_id in (s.parent_id,s.organization_id)) where s.id=any($1) and s.deletion_id is null and r.subject=$2")
+    let rows: Vec<(Uuid, SpaceKind, String)> = sqlx::query_as("select s.id,s.kind,r.role from space s join space_role_grant r on r.space_id=s.id where s.id=any($1) and s.deletion_id is null and r.subject=$2")
         .bind(&space.path).bind(user).fetch_all(&mut *tx).await?;
     let result = space
         .path
         .iter()
         .copied()
         .filter(|id| {
-            rows.iter().any(|(candidate, kind, role, direct)| {
+            rows.iter().any(|(candidate, kind, role)| {
                 candidate == id
                     && levels.is_none_or(|levels| levels.contains(kind))
-                    && Role::parse(role).is_some_and(|role| {
-                        authorization::grants(role, *direct, SpacePermission::Read)
-                    })
+                    && Role::parse(role)
+                        .is_some_and(|role| authorization::grants(role, SpacePermission::Read))
             })
         })
         .collect();
@@ -252,13 +251,11 @@ pub async fn scope(
 
 pub struct Membership {
     pub space: Space,
-    /// Effective roles: direct ones and those descending from an ancestor.
+    /// Roles held directly on this space.
     pub roles: Vec<Role>,
-    /// Roles held only through an ancestor.
-    pub inherited_roles: Vec<Role>,
 }
 
-/// Display memberships include direct roles and descending roles; access checks remain separate.
+/// Display active spaces with direct roles; access checks remain separate.
 pub async fn memberships(
     pool: &PgPool,
     authorization: &Authorization,
@@ -282,41 +279,6 @@ pub async fn memberships(
     rows.retain(|_, row| {
         row.kind != SpaceKind::Personal || personal_organizations.contains(&row.organization_id)
     });
-    let mut inherited: BTreeMap<Uuid, BTreeSet<Role>> = BTreeMap::new();
-    let descending = |id: Uuid, inherited: &BTreeMap<Uuid, BTreeSet<Role>>| -> BTreeSet<Role> {
-        direct
-            .iter()
-            .filter(|(s, r)| *s == id && r.descends())
-            .map(|(_, r)| *r)
-            .chain(inherited.get(&id).into_iter().flatten().copied())
-            .collect()
-    };
-    // Organizations reach teams, then teams reach projects; projects have no children.
-    for kind in [SpaceKind::Organization, SpaceKind::Team] {
-        let frontier: Vec<Uuid> = rows
-            .values()
-            .filter(|r| r.kind == kind)
-            .map(|r| r.id)
-            .filter(|id| !descending(*id, &inherited).is_empty())
-            .collect();
-        let children = authorization.children_of(&frontier).await?;
-        let found: Vec<Uuid> = children
-            .iter()
-            .flat_map(|(_, c)| c.iter().copied())
-            .collect();
-        let found: BTreeMap<Uuid, SpaceRow> = db::active_spaces(pool, &found)
-            .await?
-            .into_iter()
-            .map(|r| (r.id, r))
-            .collect();
-        for (up, kids) in children {
-            let carried = descending(up, &inherited);
-            for kid in kids.iter().filter(|k| found.contains_key(k)) {
-                inherited.entry(*kid).or_default().extend(&carried);
-                rows.insert(*kid, found[kid].clone());
-            }
-        }
-    }
     let mut out: Vec<Membership> = rows
         .into_values()
         .map(|row| {
@@ -325,10 +287,8 @@ pub async fn memberships(
                 .filter(|(s, _)| *s == row.id)
                 .map(|(_, r)| *r)
                 .collect();
-            let reached = inherited.remove(&row.id).unwrap_or_default();
             Membership {
-                roles: own.union(&reached).copied().collect(),
-                inherited_roles: reached.difference(&own).copied().collect(),
+                roles: own.into_iter().collect(),
                 space: row.into(),
             }
         })
@@ -366,8 +326,7 @@ async fn dependents(tx: &mut Transaction<'_, Postgres>, space: &Space) -> AppRes
     Ok(rows)
 }
 
-/// A role below the root requires a direct content role on the parent: inherited access
-/// would let an ancestor's revocation orphan this role unnoticed.
+/// A role below the root requires a direct content role on the parent.
 async fn holds_parent_content(
     conn: &mut PgConnection,
     user: &str,
@@ -380,7 +339,7 @@ async fn holds_parent_content(
 }
 
 /// Admins of an organization are named by platform admins, its owners by its admins or
-/// owners, every other role by the space's owners.
+/// direct owners, every other role by the space's direct owners.
 async fn may_change(
     conn: &mut PgConnection,
     caller: &str,
@@ -697,7 +656,7 @@ pub async fn update_managed_organization(
     })
 }
 
-/// A team or project, administered by `owner`; the caller gets nothing on it.
+/// The direct parent owner creates a team or project and names its owner; the caller gets nothing.
 pub async fn create_space(
     pool: &PgPool,
     caller: &str,

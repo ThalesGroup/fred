@@ -232,14 +232,11 @@ checks actual publication, lifecycle, generation and attachment provenance local
 
 ## Memberships
 
-`GET /me/spaces` lists every space where the caller holds a direct role or one
-descending from an ancestor, with its path and managing `organization_id`. `roles` holds the effective roles and
-`inherited_roles` those held only through an ancestor. Manager reads the caller's
-direct roles, each directly granted space's `parent` (or a personal space's
-`organization`) link, then the children of each organization and team where the
-caller holds a descending role. It does not use `ListObjects`, whose server-side
-result limit truncates silently. The computed roles serve display only; every
-decision remains an explicit permission check (I20).
+`GET /me/spaces` lists active spaces where the caller holds a direct role, with
+`path`, managing `organization_id` and directly held `roles`, ordered by path.
+It preserves the unique organization context and personal-space eligibility checks.
+No child traversal grants membership. Display roles do not replace the permission
+check for each operation (I20).
 
 
 ## Role and space mutations
@@ -356,8 +353,8 @@ on it, and replacing the admin revokes admins the organization's owners appointe
 The alternative under review limits `PATCH` to the name and owner, leaving admins
 to the organization's own governance.
 
-Team creation requires management of the parent organization, project creation
-management of the parent team. The nominated admin must hold a direct content
+Team creation requires a direct owner role on the parent organization, project
+creation a direct owner role on the parent team. The nominated owner must hold a direct content
 role on the parent, and no sibling may have the same name. The caller receives no
 implicit role.
 

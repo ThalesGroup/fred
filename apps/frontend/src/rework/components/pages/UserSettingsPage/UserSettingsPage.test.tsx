@@ -276,7 +276,6 @@ it.each(["member", "owner", "organization_admin"] as const)(
         parent_id: null,
         personal_owner: null,
         roles: [role],
-        inherited_roles: [],
       },
     ];
     render();

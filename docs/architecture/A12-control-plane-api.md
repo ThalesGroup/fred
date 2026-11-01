@@ -893,6 +893,8 @@ Operation `team_supervision`.
 | GET | [/spaces/{space_id}/prompts/{prompt_id}](#get-spacesspace_idpromptsprompt_id) | Read the current definition for editing, duplication or chat insertion/sending |
 | PATCH | [/spaces/{space_id}/prompts/{prompt_id}](#patch-spacesspace_idpromptsprompt_id) | Edit display_name, description, text and category |
 | DELETE | [/spaces/{space_id}/prompts/{prompt_id}](#delete-spacesspace_idpromptsprompt_id) |  |
+| PUT | [/spaces/{space_id}/prompts/{prompt_id}/favorite](#put-spacesspace_idpromptsprompt_idfavorite) |  |
+| DELETE | [/spaces/{space_id}/prompts/{prompt_id}/favorite](#delete-spacesspace_idpromptsprompt_idfavorite) |  |
 | GET | [/spaces/{space_id}/sessions](#get-spacesspace_idsessions) |  |
 | POST | [/spaces/{space_id}/sessions](#post-spacesspace_idsessions) |  |
 | GET | [/spaces/{space_id}/sessions/{session_id}](#get-spacesspace_idsessionssession_id) |  |
@@ -1006,8 +1008,9 @@ Operation `list_agent_instances`.
 | Parameter | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `space_id` | path | string (uuid) | yes |  |
+| `after` | query | string |  | Previous page cursor |
 
-- 200: array of [`ManagedAgentInstanceSummary`](#managedagentinstancesummary)
+- 200: [`AgentInstancePage`](#agentinstancepage)
 - 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
 ### POST /spaces/{space_id}/agent-instances
@@ -1229,6 +1232,30 @@ Operation `delete_prompt`.
 | `prompt_id` | path | string (uuid) | yes |  |
 
 - 204: no body — Prompt deleted
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### PUT /spaces/{space_id}/prompts/{prompt_id}/favorite
+
+Operation `add_prompt_favorite`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `prompt_id` | path | string (uuid) | yes |  |
+
+- 204: no body — Favorite set for the caller (idempotent)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### DELETE /spaces/{space_id}/prompts/{prompt_id}/favorite
+
+Operation `remove_prompt_favorite`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `prompt_id` | path | string (uuid) | yes |  |
+
+- 204: no body — Favorite removed for the caller (idempotent)
 - 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
 ### GET /spaces/{space_id}/sessions
@@ -1465,6 +1492,13 @@ The existing admin row's identity and organization default, without invented ins
 | `team_scope` | [`AgentScopePolicy`](#agentscopepolicy) | yes |  |
 | `version` | string | yes |  |
 
+### AgentInstancePage
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | array of [`ManagedAgentInstanceSummary`](#managedagentinstancesummary), max items 100 | yes | Authorized instances in immutable logical-name order; at most 100 rows. |
+| `next_cursor` | string or null | yes | Follow until null. Pages are current reads, not a snapshot. |
+
 ### AgentInstanceStatus
 
 One of: `enabled`, `disabled`.
@@ -1675,6 +1709,7 @@ One of: `organization`, `team`, `project`.
 | `capability_ids` | array of string or null |  | Omitted/null inherits template defaults; [] selects no optional capabilities. |
 | `description` | string, max length 500 or null |  |  |
 | `display_name` | string, min length 1, max length 255 | yes |  |
+| `logical_name` | string, min length 1, max length 64 | yes | Immutable space-local reference, independent of the mutable display label. |
 | `model_options` | [`ModelOptions`](#modeloptions) or null |  |  |
 | `recommended_chat_profile_id` | string or null |  | Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key. |
 | `recommended_model` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
@@ -1713,7 +1748,8 @@ One of: `organization`, `team`, `project`.
 | `description` | string, max length 500 or null |  | Omitted/null means no description. NUL characters are rejected. |
 | `display_name` | string, min length 1, max length 255 | yes | NFC-normalized and trimmed, nonblank, without control characters. |
 | `logical_name` | string, min length 1, max length 64 | yes | Immutable; "skill" is reserved. Invalid names are rejected, never normalized. |
-| `text` | string | yes | Preserved verbatim, including whitespace and empty strings. NUL is rejected. |
+| `tags` | array of string, max items 20 |  | Up to 20 nonblank labels, each at most 64 characters. NFC-normalized and deduplicated. |
+| `text` | string | yes | Nonblank text, preserved verbatim. NUL is rejected. |
 
 ### CreateSessionRequest
 
@@ -1959,9 +1995,10 @@ One of: `en`, `fr`.
 | `agent_instance_id` | string (uuid) | yes |  |
 | `capability_config` | map of map of any | yes |  |
 | `created_at` | string (date-time) | yes |  |
-| `created_by` | string or null |  |  |
+| `created_by` | string | yes |  |
 | `description` | string or null |  |  |
 | `display_name` | string | yes |  |
+| `logical_name` | string | yes |  |
 | `model_options` | [`ModelOptions`](#modeloptions) or null |  |  |
 | `recommended_chat_profile_id` | string or null |  | Diagnostic only; requires explicit re-selection if no recommended_model is saved. |
 | `recommended_model` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
@@ -1974,7 +2011,7 @@ One of: `en`, `fr`.
 | `template_id` | string (uuid) | yes |  |
 | `tuning_field_values` | map of any | yes |  |
 | `updated_at` | string (date-time) | yes |  |
-| `updated_by` | string or null |  |  |
+| `updated_by` | string | yes |  |
 | `usage_statement` | string | yes |  |
 
 ### Manifest
@@ -2081,9 +2118,8 @@ Extends [`Space`](#space) with:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `inherited_roles` | array of [`Role`](#role) | yes | The subset of `roles` held only through an ancestor. |
 | `organization_id` | string (uuid) | yes |  |
-| `roles` | array of [`Role`](#role) | yes | Effective roles, including those descending from an ancestor. |
+| `roles` | array of [`Role`](#role) | yes | Roles held directly on this space. |
 
 ### OnboardingStatus
 
@@ -2298,6 +2334,7 @@ Extends [`PromptMetadata`](#promptmetadata) with:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `is_favorite` | boolean | yes |  |
 | `text` | string | yes | Current full text, preserved verbatim. |
 
 ### PromptCategory
@@ -2333,6 +2370,7 @@ Extends [`PromptMetadata`](#promptmetadata) with:
 | `logical_name` | string | yes | Immutable space-local identity. The slash command is "/" + logical_name. |
 | `prompt_id` | string (uuid) | yes |  |
 | `space_id` | string (uuid) | yes |  |
+| `tags` | array of string | yes |  |
 | `updated_at` | string (date-time) | yes |  |
 | `updated_by` | string | yes |  |
 
@@ -2349,6 +2387,7 @@ Extends [`PromptMetadata`](#promptmetadata) with:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `is_favorite` | boolean | yes |  |
 | `text_preview` | string, max length 240 | yes | First 240 characters, selected in PostgreSQL without fetching the full body. |
 
 ### ProvisioningUpload
@@ -2462,7 +2501,7 @@ One of: `member`, `editor`, `owner`, `analyst`, `organization_admin`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `assignments` | integer (int64), >= 0 | yes | Direct (user, space, role) tuples, never effective/inherited grants. |
+| `assignments` | integer (int64), >= 0 | yes | Direct (user, space, role) tuples. |
 | `role` | [`Role`](#role) | yes |  |
 
 ### RuntimeAgent
@@ -2734,7 +2773,7 @@ One of: `recent`, `alpha`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `counts` | [`SupervisionCounts`](#supervisioncounts) | yes | Includes the team's projects, without inherited organization roles. |
+| `counts` | [`SupervisionCounts`](#supervisioncounts) | yes | Includes the team's projects; organization roles are excluded. |
 | `id` | string (uuid) | yes |  |
 | `name` | string | yes |  |
 
@@ -2806,7 +2845,8 @@ Absent fields stay unchanged. A named account becomes the role's sole direct hol
 | `category_id` | string (uuid) or null |  | Omitted keeps the category; null removes it. |
 | `description` | string, max length 500 or null |  | Omitted keeps the value; null clears it; a string replaces it (including ""). |
 | `display_name` | string, min length 1, max length 255 or null |  | Omitted/null keeps the value. Supplied strings follow creation's label rules. |
-| `text` | string or null |  | Omitted/null keeps the value; a string replaces it verbatim (including ""). |
+| `tags` | array of string, max items 20 or null |  | Omitted/null keeps tags; [] clears them. |
+| `text` | string or null |  | Omitted/null keeps the value; a nonblank string replaces it verbatim. |
 
 ### UpdateSessionRequest
 

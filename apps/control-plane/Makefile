@@ -50,8 +50,9 @@ build-demo-bundle: ## Build the Acme/Globex demo provisioning ZIP without runnin
 test-browser: ## Run the real provisioning browser journey and integration regressions (frontend dependencies and Chromium required)
 	$(MAKE) test-integration CARGO_TEST_OPTS="--test browser_provisioning"
 
-# Fixed secret belongs only to disposable integration fixtures.
+# Fixed secrets belong only to disposable integration fixtures.
 test-integration: export CONTROL_PLANE_TEST_BOOTSTRAP_TOKEN := integration-bootstrap-secret
+test-integration: export FRED_TEST_INFERENCE_CREDENTIAL := synthetic-inference-key
 
 LIFECYCLE_TEMPORAL_IMAGE ?= mirror.gcr.io/temporalio/admin-tools:1.28
 .PHONY: test-lifecycle-temporal

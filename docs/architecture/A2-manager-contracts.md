@@ -485,6 +485,7 @@ erDiagram
 "organization_model_source" }o--|| "model_source" : "source_id"
 "organization_model_initialization" |o--|| "space" : "organization_id"
 "prompt_category" }o--|| "space" : "space_id"
+"prompt_favorite" }o--|| "prompt" : "prompt_id"
 
 "deletion" {
   uuid id
@@ -815,6 +816,7 @@ erDiagram
   timestamp_with_time_zone updated_at
   text updated_by
   uuid category_id FK
+  text__ tags
 }
 "document_move" {
   uuid id
@@ -841,6 +843,10 @@ erDiagram
   uuid id
   uuid space_id FK
   varchar_120_ name
+}
+"prompt_favorite" {
+  text user_id
+  uuid prompt_id FK
 }
 ```
 <!-- end generated -->
@@ -889,7 +895,7 @@ For deployment and schema inspection, see
 `space.organization_id` and `space.parent_id` define the bounded hierarchy.
 `agent_template_policy` records each organization's enabled template defaults.
 The typed evaluator in [`authorization.rs`](../../apps/control-plane/src/authorization.rs)
-implements the role matrix; inherited roles are evaluated, never copied as grants.
+implements the role matrix using only grants on the requested space.
 Personal spaces have no parent and inherit no content permission.
 
 `POST /authorize/space` and `/authorize/platform` return `{allowed}`.
@@ -918,9 +924,8 @@ other files are arrays:
 A roles object maps declared usernames to arrays of `member`, `editor`, `analyst`,
 `owner`, and on organizations `organization_admin`. Roles accumulate and equivalent grants are
 deduplicated. Admin and owner confer no implicit content role. Every new space
-requires a declared admin, and every new organization a declared owner. Every child-role
-holder requires a declared or existing direct parent content role; inherited access
-does not count. Existing direct roles are read from PostgreSQL; no space grant is synthesized. The demo explicitly declares
+requires a declared owner, and every new organization a declared admin. Every child-role
+holder requires a declared or existing direct parent content role. Existing direct roles are read from PostgreSQL; no space grant is synthesized. The demo explicitly declares
 organization membership for team-role holders.
 
 References are nonempty and unique across the entire bundle. Parents and role

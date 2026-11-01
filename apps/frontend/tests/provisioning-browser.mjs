@@ -174,11 +174,15 @@ async function assertAccountPages({ page, context, bearer }, owner) {
   await expect(page.getByText(owner ? "Root Admin" : "Bob Rigg", { exact: true })).toBeVisible();
   await expect(page.getByText(owner ? "root@example.com" : "bob@acme.example", { exact: true })).toBeVisible();
   if (!owner) await expect(page.getByText("root@example.com", { exact: true })).toHaveCount(0);
-  const roles = page.getByText(/^Platform roles:/);
-  await expect(roles).toContainText(owner ? "platform_admin" : "None");
-  if (!owner) {
-    await expect(page.getByText(/platform_admin/)).toHaveCount(0);
-    await expect(page.getByText("Organization: Acme", { exact: true })).toBeVisible();
+  const access = page.getByRole("region", { name: "My roles and spaces", exact: true });
+  const roles = access.getByText(/^Platform roles:/);
+  await expect(roles).toBeVisible();
+  if (owner) {
+    await expect(access.getByText("Platform admin", { exact: true })).toBeVisible();
+  } else {
+    await expect(roles).toHaveText("Platform roles: None");
+    await expect(page.getByText("Platform admin", { exact: true })).toHaveCount(0);
+    await expect(access.getByText(/^Organization\s*:\s*Acme$/)).toBeVisible();
   }
   await expect(page.getByText("Profile picture", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "UI theme", exact: true }).click();
@@ -331,6 +335,17 @@ try {
     assert.equal(first.identities_resolved, 14);
     assert.equal(first.identities_created, 14);
     assert.equal(first.spaces_reconciled, 4);
+    // Registry metadata needs its own platform role, not platform-admin inheritance.
+    const registryDenied = await root.context.request.get(`${origin}/control-plane/v1/admin/teams`, {
+      headers: { Authorization: root.bearer },
+    });
+    assert.equal(registryDenied.status(), 403);
+    const rootIdentity = await get(root.context, root.bearer, "/me");
+    const registryGrant = await root.context.request.put(
+      `${origin}/control-plane/v1/users/${rootIdentity.user_id}/platform-roles/feature_manager`,
+      { headers: { Authorization: root.bearer } },
+    );
+    assert.equal(registryGrant.status(), 204);
     const teamsBefore = await get(root.context, root.bearer, "/admin/teams");
     const grantsBefore = await get(root.context, root.bearer, "/users/platform-roles");
     const replay = await importFile(root.page, bundle);
@@ -423,8 +438,7 @@ try {
     const north = spaces.find((space) => space.name === "Research");
     const organization = spaces.find((space) => space.name === "Acme");
     assert.deepEqual(project.path, [organization.id, north.id, project.id]);
-    assert.deepEqual([...project.roles].sort(), ["editor", "member", "owner"]);
-    assert.deepEqual(project.inherited_roles, ["editor"]);
+    assert.deepEqual([...project.roles].sort(), ["member", "owner"]);
     assert.deepEqual(north.roles, ["editor"]);
     const denied = await bob.context.request.post(`${origin}/control-plane/v1/import-export/import`, {
       headers: { Authorization: bob.bearer },
@@ -432,8 +446,17 @@ try {
     });
     assert.equal(denied.status(), 403);
 
+    // Organization ownership alone cannot import; explicitly appoint the second platform admin.
+    const governance = await get(root.context, root.bearer, `/admin/organizations/${organization.id}`);
+    const aliceIdentity = governance.owners.find((owner) => owner.username === "alice");
+    assert(aliceIdentity);
+    const adminGrant = await root.context.request.put(
+      `${origin}/control-plane/v1/users/${aliceIdentity.id}/platform-roles/platform_admin`,
+      { headers: { Authorization: root.bearer } },
+    );
+    assert.equal(adminGrant.status(), 204);
     const alice = await login("alice", "Azerty123_");
-    // Another platform owner reaches the page and replays the bundle without changes.
+    // Another platform admin reaches the page and replays the bundle without changes.
     await expect(alice.page.locator('input[type="file"]')).toHaveCount(1);
     await importFile(alice.page, bundle, 200);
     assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);

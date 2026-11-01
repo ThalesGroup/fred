@@ -100,7 +100,7 @@ one administrator.
 The [action/role matrix](A7-action-role-matrix.md) enumerates every manager HTTP
 action, operator entry point and evaluable permission, including additional gates. The following explains the security model.
 
-The [roles annex](A11-roles.md) defines the complete role inventory, inheritance
+The [roles annex](A11-roles.md) defines the complete role inventory, local scope
 (I20), owner/content separation (I21), required organization admins and owners
 (I14), and attribution constraints. It distinguishes the agreed responsibilities
 from the permissions currently enforced. Teams and projects have no technical admin role.
@@ -120,8 +120,8 @@ reuse of a personal space writes no new role. See the
 [role-attribution rules](A11-roles.md#attribution-accumulation-and-removal).
 
 Direct role grants and immutable hierarchy live in PostgreSQL. The typed Rust
-permission evaluator applies local roles and the descending editor, owner and
-analyst roles; personal spaces inherit nothing. Child role grants require direct
+permission evaluator applies only roles granted on the requested space; no role
+reaches a child. Personal spaces inherit nothing. Child role grants require direct
 parent content membership. Business access also checks the person's unique
 organization context, which itself grants no content access.
 

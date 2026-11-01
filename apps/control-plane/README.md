@@ -625,8 +625,8 @@ Admin is technical: `platform_admin` governs the platform and
 `organization_admin` appoints its organization's business owners. Neither role
 reads content. `owner` is the business governance role (French: **Responsable**).
 Space roles `member`, `editor`, `analyst` and `owner` are business roles. They are
-cumulative; owner alone does not read content. Editor, owner and analyst also apply
-to every descendant space; member stays local, and a personal space inherits nothing.
+cumulative and apply only to the space where they are granted; no role reaches a
+child space. Owner alone does not read content. A personal space inherits nothing.
 Personal spaces have `kind: personal`, an organization attachment and an owner,
 but no parent or child projects. `team` denotes collective teams only, including
 in scope filters and lifecycle policy selectors; use `[team, personal]` explicitly

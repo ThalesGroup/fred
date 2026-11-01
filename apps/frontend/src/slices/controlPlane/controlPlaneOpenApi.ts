@@ -1587,10 +1587,8 @@ export type CreatePersonalSpace = {
 };
 export type Role = "member" | "editor" | "owner" | "analyst" | "organization_admin";
 export type MySpace = Space & {
-  /** The subset of `roles` held only through an ancestor. */
-  inherited_roles: Role[];
   organization_id: string;
-  /** Effective roles, including those descending from an ancestor. */
+  /** Roles held directly on this space. */
   roles: Role[];
 };
 export type AgentCapabilityKind = "agent";
@@ -1769,7 +1767,7 @@ export type DocumentCounts = {
   documents: number;
 };
 export type RoleAssignments = {
-  /** Direct (user, space, role) tuples, never effective/inherited grants. */
+  /** Direct (user, space, role) tuples. */
   assignments: number;
   role: Role;
 };
@@ -1804,7 +1802,7 @@ export type SupervisionCounts = {
   published: PublicationCounts;
 };
 export type TeamSupervision = {
-  /** Includes the team's projects, without inherited organization roles. */
+  /** Includes the team's projects; organization roles are excluded. */
   counts: SupervisionCounts;
   id: string;
   name: string;

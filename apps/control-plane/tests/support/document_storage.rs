@@ -394,6 +394,7 @@ async fn document_contract_guards_and_shared_project_quota() {
     )
     .await
     .unwrap();
+    crate::grant(&d.e, project.id, Role::Editor, "writer").await;
     let folder = control_plane::spaces::create_folder(
         &d.e.pool,
         "writer",

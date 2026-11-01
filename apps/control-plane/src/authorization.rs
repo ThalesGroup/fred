@@ -15,21 +15,18 @@ pub struct Authorization {
 }
 pub const READ_CONCURRENCY: usize = 8;
 
-/// The role matrix is shared by probes and mutation checks, never copied by consumers.
-pub fn grants(role: Role, direct: bool, permission: SpacePermission) -> bool {
+/// Direct roles on the requested space grant permissions through this shared matrix.
+pub fn grants(role: Role, permission: SpacePermission) -> bool {
     use Role::*;
     use SpacePermission::*;
-    if !direct && !role.descends() {
-        return false;
-    }
     match permission {
         Read => matches!(role, Member | Editor | Analyst),
         Write => role == Editor,
         Manage => role == Owner,
         RunEvaluations | ManageEvaluationCorpus => matches!(role, Analyst | Owner),
         ReadConversationsForEvaluation => role == Analyst,
-        AdministerOrganization => direct && role == OrganizationAdmin,
-        CreatePersonalSpace => direct && (role == Owner || role.grants_content()),
+        AdministerOrganization => role == OrganizationAdmin,
+        CreatePersonalSpace => role == Owner || role.grants_content(),
     }
 }
 impl From<Permission> for SpacePermission {
@@ -48,11 +45,16 @@ pub async fn check_space<'e>(
     permission: SpacePermission,
     space: Uuid,
 ) -> sqlx::Result<bool> {
-    let roles: Vec<(String,bool)> = sqlx::query_as("select r.role, r.space_id = s.id from space s join space_role_grant r on r.space_id = s.id or (s.kind <> 'personal' and r.space_id in (s.parent_id,s.organization_id)) where s.id = $1 and r.subject = $2")
-        .bind(space).bind(subject).fetch_all(ex).await?;
+    let roles: Vec<String> = sqlx::query_scalar(
+        "select role from space_role_grant where space_id = $1 and subject = $2",
+    )
+    .bind(space)
+    .bind(subject)
+    .fetch_all(ex)
+    .await?;
     Ok(roles
         .iter()
-        .any(|(role, direct)| Role::parse(role).is_some_and(|r| grants(r, *direct, permission))))
+        .any(|role| Role::parse(role).is_some_and(|r| grants(r, permission))))
 }
 pub use fred_rust_sdk::security::platform::platform_roles;
 
@@ -197,25 +199,6 @@ impl Authorization {
         .bind(parent)
         .fetch_all(&self.pool)
         .await
-    }
-    pub async fn children_of(&self, ids: &[Uuid]) -> sqlx::Result<Vec<(Uuid, Vec<Uuid>)>> {
-        let rows: Vec<(Uuid, Uuid)> =
-            sqlx::query_as("select parent_id,id from space where parent_id=any($1)")
-                .bind(ids)
-                .fetch_all(&self.pool)
-                .await?;
-        Ok(ids
-            .iter()
-            .map(|id| {
-                (
-                    *id,
-                    rows.iter()
-                        .filter(|(p, _)| p == id)
-                        .map(|(_, c)| *c)
-                        .collect(),
-                )
-            })
-            .collect())
     }
     pub async fn agent_default_on(&self, organization: Uuid, template: Uuid) -> sqlx::Result<bool> {
         sqlx::query_scalar("select exists(select 1 from agent_template_policy where organization_id=$1 and template_id=$2)").bind(organization).bind(template).fetch_one(&self.pool).await

@@ -335,6 +335,7 @@ async fn prompts_authorization_admission_and_placement() {
     .await
     .unwrap();
     grant(&e, org.id, Role::Editor, "alice").await;
+    grant(&e, project.id, Role::Editor, "alice").await;
     // The foreign team is writable by Carol, so a 404 there tests the identifier pair.
     let foreign = spaces::create_space(
         &e.pool,

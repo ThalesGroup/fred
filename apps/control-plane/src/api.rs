@@ -294,10 +294,8 @@ struct MySpace {
     organization_id: Uuid,
     #[serde(flatten)]
     space: Space,
-    /// Effective roles, including those descending from an ancestor.
+    /// Roles held directly on this space.
     roles: Vec<Role>,
-    /// The subset of `roles` held only through an ancestor.
-    inherited_roles: Vec<Role>,
 }
 
 #[utoipa::path(
@@ -322,7 +320,6 @@ async fn my_spaces(
                 organization_id: m.space.organization,
                 space: m.space,
                 roles: m.roles,
-                inherited_roles: m.inherited_roles,
             })
             .collect(),
     ))

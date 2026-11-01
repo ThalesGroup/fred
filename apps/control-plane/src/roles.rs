@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! Typed platform roles and scoped capabilities. Direct roles and effective permissions
-//! are separate: an inherited permission must never be presented as a direct role.
+//! are separate: permissions come only from roles held on the requested space.
 
 use serde::{Deserialize, Serialize};
 

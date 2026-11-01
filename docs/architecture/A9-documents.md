@@ -23,7 +23,7 @@ is immutable and its folder belongs to the same space.
 
 The owning space is the authorization boundary. Folders and documents have no
 individual grants or permission lists. Increasing their number adds no role rows.
-Folder depth is limited to 15 independently of space-role inheritance.
+Folder depth is limited to 15 independently of the space hierarchy.
 
 Every request requires personal admission, the caller's unique organization and
 current space authority. Members and effective editors/analysts read; effective

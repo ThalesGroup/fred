@@ -677,6 +677,59 @@ async fn teams_are_created_by_organization_owners_only() {
     .await
     .unwrap();
     assert!(!reads(&e, "alice", created.id).await);
+    grant(&e, org.id, Role::Owner, "organization_owner").await;
+    let owned = spaces::create_space(
+        &e.pool,
+        "organization_owner",
+        SpaceKind::Team,
+        org.id,
+        "Delegated".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    assert!(
+        e.authorization
+            .direct_roles_on("organization_owner", owned.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        spaces::create_space(
+            &e.pool,
+            "organization_owner",
+            SpaceKind::Project,
+            team.id,
+            "Denied owner".into(),
+            "alice"
+        )
+        .await,
+        Err(AppError::Forbidden)
+    ));
+    assert!(matches!(
+        spaces::create_space(
+            &e.pool,
+            "alice-owner",
+            SpaceKind::Team,
+            org.id,
+            "Denied admin".into(),
+            "alice"
+        )
+        .await,
+        Err(AppError::Forbidden)
+    ));
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Allowed project".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    assert_eq!(project.parent_id, Some(team.id));
     assert!(matches!(
         spaces::create_space(
             &e.pool,
@@ -967,9 +1020,27 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         ))
         .await
         .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let result: serde_json::Value =
         serde_json::from_slice(&to_bytes(response.into_body(), 65536).await.unwrap()).unwrap();
-    assert_eq!(result["allowed"], false);
+    assert_eq!(result["code"], "invalid_fields");
+    // A valid probe evaluates the authenticated caller, never a body-supplied user.
+    for (actor, allowed) in [("observer", false), ("root", true)] {
+        let response = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/authorize/platform",
+                Some(actor),
+                r#"{"permission":"manage_platform"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let result: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 65536).await.unwrap()).unwrap();
+        assert_eq!(result["allowed"], allowed);
+    }
     let direct = app
         .oneshot(request("GET", "/users/platform-roles", Some("root"), ""))
         .await
@@ -2512,56 +2583,85 @@ async fn tree(e: &Env) -> (Space, Space, Space) {
 // Proves: I6, I8, I20
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn descending_roles_reach_projects_and_member_stays_local() {
+async fn roles_stay_on_their_space() {
     use control_plane::roles::SpacePermission as P;
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     for (user, role) in [
         ("bob", Role::Editor),
         ("ana", Role::Analyst),
+        ("claire", Role::Owner),
         ("max", Role::Member),
-        ("claire", Role::Member),
-        ("pat", Role::Member),
     ] {
         grant(&e, org.id, role, user).await;
-    }
-    for space in [org.id, team.id, project.id] {
-        assert!(reads(&e, "bob", space).await);
-        assert!(
-            e.authorization
-                .check("bob", Permission::Write, space)
-                .await
-                .unwrap()
-        );
-        assert!(reads(&e, "ana", space).await);
-        assert!(
-            !e.authorization
-                .check("ana", Permission::Write, space)
-                .await
-                .unwrap()
-        );
-        for p in [
+        for space in [team.id, project.id] {
+            for permission in [
+                P::Read,
+                P::Write,
+                P::Manage,
+                P::RunEvaluations,
+                P::ManageEvaluationCorpus,
+                P::ReadConversationsForEvaluation,
+            ] {
+                assert!(
+                    !e.authorization
+                        .check_space(user, permission, space)
+                        .await
+                        .unwrap()
+                );
+            }
+        }
+        let memberships = spaces::memberships(&e.pool, &e.authorization, user)
+            .await
+            .unwrap();
+        assert_eq!(memberships.len(), 1);
+        assert_eq!(memberships[0].space.id, org.id);
+
+        // Parent content membership is structural; the business role stays local.
+        grant(&e, org.id, Role::Member, user).await;
+        grant(&e, team.id, role, user).await;
+        for permission in [
+            P::Read,
+            P::Write,
+            P::Manage,
             P::RunEvaluations,
             P::ManageEvaluationCorpus,
             P::ReadConversationsForEvaluation,
         ] {
-            assert!(e.authorization.check_space("ana", p, space).await.unwrap());
-            assert!(!e.authorization.check_space("bob", p, space).await.unwrap());
+            assert!(
+                !e.authorization
+                    .check_space(user, permission, project.id)
+                    .await
+                    .unwrap()
+            );
+        }
+        grant(&e, team.id, Role::Member, user).await;
+        grant(&e, project.id, role, user).await;
+        for (permission, allowed) in [
+            (P::Read, role != Role::Owner),
+            (P::Write, role == Role::Editor),
+            (P::Manage, role == Role::Owner),
+            (
+                P::RunEvaluations,
+                matches!(role, Role::Analyst | Role::Owner),
+            ),
+            (
+                P::ManageEvaluationCorpus,
+                matches!(role, Role::Analyst | Role::Owner),
+            ),
+            (P::ReadConversationsForEvaluation, role == Role::Analyst),
+        ] {
+            assert_eq!(
+                e.authorization
+                    .check_space(user, permission, project.id)
+                    .await
+                    .unwrap(),
+                allowed
+            );
         }
     }
-    assert!(reads(&e, "max", org.id).await);
-    assert!(!reads(&e, "max", team.id).await && !reads(&e, "max", project.id).await);
 
-    // A team owner manages its projects and reads none of their content.
-    grant(&e, team.id, Role::Owner, "claire").await;
-    assert!(
-        e.authorization
-            .check("claire", Permission::Manage, project.id)
-            .await
-            .unwrap()
-    );
-    assert!(!reads(&e, "claire", team.id).await && !reads(&e, "claire", project.id).await);
-
+    grant(&e, org.id, Role::Member, "pat").await;
     // A personal space inherits nothing, and its organization still manages it.
     grant(&e, org.id, Role::Owner, "pat").await;
     let personal = spaces::create_personal_space(&e.pool, "pat", org.id)
@@ -2591,11 +2691,11 @@ async fn descending_roles_reach_projects_and_member_stays_local() {
 // Proves: I4
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn inherited_access_does_not_replace_parent_membership() {
+async fn child_roles_require_direct_parent_content() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     grant(&e, org.id, Role::Editor, "bob").await;
-    assert!(reads(&e, "bob", team.id).await);
+    assert!(!reads(&e, "bob", team.id).await);
     let refused = spaces::grant(
         &e.pool,
         &e.subjects(),
@@ -2638,11 +2738,21 @@ async fn inherited_access_does_not_replace_parent_membership() {
 // Proves: I20
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn memberships_list_inherited_spaces_with_their_paths() {
+async fn memberships_list_direct_spaces_with_their_paths() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     grant(&e, org.id, Role::Analyst, "ana").await;
     grant(&e, org.id, Role::Owner, "ana").await;
+    let organization_only = spaces::memberships(&e.pool, &e.authorization, "ana")
+        .await
+        .unwrap();
+    assert_eq!(organization_only.len(), 1);
+    assert_eq!(organization_only[0].space.id, org.id);
+    assert!(!organization_only.iter().any(|m| m.space.id == team.id));
+    for space in [team.id, project.id] {
+        grant(&e, space, Role::Analyst, "ana").await;
+        grant(&e, space, Role::Owner, "ana").await;
+    }
     let personal = spaces::create_personal_space(&e.pool, "ana", org.id)
         .await
         .unwrap()
@@ -2655,47 +2765,38 @@ async fn memberships_list_inherited_spaces_with_their_paths() {
             .map(|m| (m.space.id, m))
             .collect();
     assert_eq!(listed.len(), 4);
-    let expect = |id: Uuid, path: Vec<Uuid>, roles: Vec<Role>, inherited: Vec<Role>| {
+    let expect = |id: Uuid, path: Vec<Uuid>, roles: Vec<Role>| {
         let m = &listed[&id];
         assert_eq!(m.space.path, path);
         assert_eq!(
             m.space.parent_id,
             path.len().checked_sub(2).map(|i| path[i])
         );
-        assert_eq!((&m.roles, &m.inherited_roles), (&roles, &inherited));
+        assert_eq!(m.roles, roles);
     };
-    expect(
-        org.id,
-        vec![org.id],
-        vec![Role::Owner, Role::Analyst],
-        vec![],
-    );
+    expect(org.id, vec![org.id], vec![Role::Owner, Role::Analyst]);
     expect(
         team.id,
         vec![org.id, team.id],
-        vec![Role::Owner, Role::Analyst],
         vec![Role::Owner, Role::Analyst],
     );
     expect(
         project.id,
         vec![org.id, team.id, project.id],
         vec![Role::Owner, Role::Analyst],
-        vec![Role::Owner, Role::Analyst],
     );
     expect(
         personal.id,
         vec![personal.id],
         vec![Role::Member, Role::Editor],
-        vec![],
     );
 
-    // Direct and inherited owner collapse into one effective, non-inherited role.
+    // Each membership reports exactly its direct roles.
     let alice = spaces::memberships(&e.pool, &e.authorization, "alice")
         .await
         .unwrap();
     let on_team = alice.iter().find(|m| m.space.id == team.id).unwrap();
     assert_eq!(on_team.roles, vec![Role::Member, Role::Owner]);
-    assert!(on_team.inherited_roles.is_empty());
 }
 
 // Proves: I7
@@ -2766,6 +2867,7 @@ async fn space_and_folder_names_are_unique_in_canonical_form() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, org.id, Role::Editor, "writer").await;
+    grant(&e, team.id, Role::Editor, "writer").await;
     // Surrounding whitespace and Unicode composition do not make a different name.
     for name in [" TSN", "TSN\u{a0}"] {
         let refused =
@@ -2854,16 +2956,35 @@ async fn organization_admins_name_owners_and_read_nothing() {
     .await;
     assert!(matches!(on_team, Err(AppError::Conflict(_))));
 
-    // The owner names admins, whose role descends; the owner reads and manages nothing.
+    // The admin names organization owners; neither role grants authority on the team.
     spaces::grant(&e.pool, &e.subjects(), "olga", org.id, Role::Owner, "bob")
         .await
         .unwrap();
     assert!(
-        e.authorization
+        !e.authorization
             .check("bob", Permission::Manage, team.id)
             .await
             .unwrap()
     );
+    assert!(
+        e.authorization
+            .check("bob", Permission::Manage, org.id)
+            .await
+            .unwrap()
+    );
+    assert!(!reads(&e, "bob", org.id).await);
+    assert!(matches!(
+        spaces::grant(
+            &e.pool,
+            &e.subjects(),
+            "bob",
+            team.id,
+            Role::Member,
+            "carol"
+        )
+        .await,
+        Err(AppError::Forbidden)
+    ));
     for space in [org.id, team.id] {
         assert!(!reads(&e, "olga", space).await);
         assert!(
@@ -2888,7 +3009,7 @@ async fn organization_admins_name_owners_and_read_nothing() {
         "olga",
         SpaceKind::Team,
         org.id,
-        "By owner".into(),
+        "By admin".into(),
         "alice",
     )
     .await;
@@ -2968,6 +3089,7 @@ async fn business_routes_share_one_authorization_answer() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, org.id, Role::Editor, "writer").await;
+    grant(&e, team.id, Role::Editor, "writer").await;
     grant(&e, org.id, Role::Member, "bystander").await;
     crate::support::member_organization(&e.pool, &e.authorization, "Other", "carol")
         .await
@@ -2985,6 +3107,7 @@ async fn business_routes_share_one_authorization_answer() {
     )
     .await
     .unwrap();
+    grant(&e, retired.id, Role::Editor, "writer").await;
     let retired_folder = spaces::create_folder(&e.pool, "writer", retired.id, None, "old".into())
         .await
         .unwrap();

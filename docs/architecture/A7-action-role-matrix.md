@@ -8,7 +8,7 @@ The [managed chat section](#model-administration-and-the-first-managed-chat)
 connects these permissions to the Agent Pod admission boundary; other Python
 surfaces are not inferred to share the same contract.
 
-The [roles annex](A11-roles.md) defines responsibilities, scope, inheritance,
+The [roles annex](A11-roles.md) defines responsibilities, local scope,
 attribution and the differences between the agreed mandate and current permissions.
 This annex is organized by action and retains the actual permission answers.
 
@@ -151,7 +151,7 @@ Import is additive. Its broader role-assignment authority is described in
 | Accept own CGU - `POST /gcu` | Yes | Yes | Authenticated human, current version; cannot act for another person |
 | Claim initial platform administration - `POST /bootstrap/platform-admin` | Yes | Yes | Real human authentication, CGU, deployment secret, unfinished bootstrap; failed reservation retry belongs to claimant |
 | Own platform-role metadata - `GET /me` | Yes | Yes | Authenticated and CGU; returns own effective platform roles |
-| Own spaces - `GET /me/spaces` | Yes | Yes | Authenticated and CGU; own direct/inherited roles; empty allowed; contradictory organization attachment, or a space role without its parent membership, returns 409 |
+| Own spaces - `GET /me/spaces` | Yes | Yes | Authenticated and CGU; own direct roles on active spaces; empty allowed; contradictory organization attachment, or a space role without its parent membership, returns 409 |
 | Probe own platform permission - `POST /authorize/platform` | Yes | Yes | Authenticated and CGU; result may be false |
 | Probe own space permission - `POST /authorize/space` | Yes | Yes | Authenticated and CGU; a missing, foreign or retired target, or a missing permission, gives false; contradictory context gives 409 |
 | Probe own document permission - `POST /authorize/document` | Yes | Yes | Authenticated and CGU; a missing document, or the owning space's refusal, gives false; requested read/write/manage determines true/false |

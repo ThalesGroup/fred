@@ -12,9 +12,11 @@ Its owner manages the community and common resources, such as an organization co
 or assistant, with analysts, editors and members. Teams and projects use these
 resources under their access rules.
 
-The admin's separate mandate is to execute limited steering committee decisions.
-The [roles annex](A11-roles.md) defines that mandate and its differences from
-current permissions, including team creation and organization access.
+The organization admin names and replaces organization owners and reads supervision
+aggregates, without content access or business-structure authority. The organization
+owner creates teams; the team owner creates projects, naming their initial owner.
+The [roles annex](A11-roles.md) details the mandate and the organization access allowlist
+that remains unimplemented.
 
 ## Spaces and memberships
 
@@ -28,8 +30,8 @@ flowchart TB
 ```
 
 Each team belongs to one organization, and each project to one team. People see
-and use these spaces according to their roles. A project's place in the hierarchy
-also determines which rights it inherits; see [Security](03-security.md).
+and use these spaces according to roles held directly on each space. The hierarchy
+grants no child-space rights; see [Security](03-security.md).
 Folders organize documents within a space; they do not create another access boundary.
 
 ## One person, one organization

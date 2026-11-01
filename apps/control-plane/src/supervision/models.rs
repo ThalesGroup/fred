@@ -43,7 +43,7 @@ pub struct PublicationCounts {
 #[derive(Serialize, ToSchema)]
 pub struct RoleAssignments {
     pub role: Role,
-    /// Direct (user, space, role) tuples, never effective/inherited grants.
+    /// Direct (user, space, role) tuples.
     pub assignments: u64,
 }
 
@@ -66,7 +66,7 @@ pub struct SupervisionCounts {
 pub struct TeamSupervision {
     pub id: Uuid,
     pub name: String,
-    /// Includes the team's projects, without inherited organization roles.
+    /// Includes the team's projects; organization roles are excluded.
     pub counts: SupervisionCounts,
 }
 

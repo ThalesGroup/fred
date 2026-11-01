@@ -112,7 +112,13 @@ export async function documentStorageJourney({ page, context, bearer, origin, sp
   const row = documentRow("original.txt");
   await expect(row).toBeVisible();
   await expect(row).toContainText("Stored");
-  await expect(row.getByRole("button", { name: "Preview", exact: true })).toBeDisabled();
+  // The preview action explains why this stored, unprocessed text has no preview yet.
+  await row.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(page.getByText("Preview not ready", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("This document has not generated a preview yet. Run processing to create it.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("complementary", { name: file.name, exact: true })).toHaveCount(0);
   await row.getByRole("button", { name: "More actions", exact: true }).click();
   const downloading = page.waitForEvent("download");
   await page.getByRole("option", { name: "Download", exact: true }).click();

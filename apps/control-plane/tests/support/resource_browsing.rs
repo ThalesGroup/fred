@@ -231,7 +231,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
         grant(&e, org.id, Role::Member, user).await;
         grant(&e, team.id, role, user).await;
     }
-    grant(&e, org.id, Role::Editor, "inherited").await;
+    grant(&e, org.id, Role::Editor, "organization_editor").await;
     grant(&e, org.id, Role::Owner, "writer").await;
     let personal = spaces::create_personal_space(&e.pool, "writer", org.id)
         .await
@@ -341,7 +341,7 @@ async fn folder_creation_governance_contract_and_request_budget() {
     assert_eq!(
         create(
             &app,
-            &identity.token("inherited"),
+            &identity.token("organization_editor"),
             personal.id,
             None,
             "private"
@@ -353,14 +353,14 @@ async fn folder_creation_governance_contract_and_request_budget() {
     assert_eq!(
         create(
             &app,
-            &identity.token("inherited"),
+            &identity.token("organization_editor"),
             team.id,
             None,
-            "inherited"
+            "organization_editor"
         )
         .await
         .0,
-        201
+        403
     );
 }
 
@@ -463,6 +463,7 @@ async fn folder_directory_pages_and_atomic_subtree_lifecycle() {
     let identity = support::IdentityServer::start().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, org.id, Role::Editor, "writer").await;
+    grant(&e, team.id, Role::Editor, "writer").await;
     grant(&e, org.id, Role::Member, "reader").await;
     grant(&e, team.id, Role::Member, "reader").await;
     let app = content_app(&e, &identity).await;

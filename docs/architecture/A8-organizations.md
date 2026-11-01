@@ -70,15 +70,14 @@ compare this stored form, so names differing only by surrounding whitespace or U
 composition collide. Invalid API names return 422, and invalid ZIP
 declarations are rejected before external writes. Existing names are not rewritten.
 
-Editor, owner and analyst reach every descendant space; member stays local. An
-analyst of an organization therefore sees all its teams and projects, and a
-project cannot be hidden from its team's editors, owners or analysts.
-Management and content roles remain separate: an owner manages the space
-and its descendants and reads none of their content without a content role.
+Owner, editor, analyst and member apply only to their granted space. An
+organization role grants no access to a team or project. An owner manages only
+that space and creates its children, naming their owner, without receiving a role
+there. Owner alone grants no content access.
 
-A role on a child requires a direct content role on its parent: a person is a
-member of a team before holding a project role, even when an ancestor role already
-lets them read the team. A personal space accepts no additional member and inherits
+A role on a child requires a direct content role on its parent: a person holds
+member, editor or analyst on a team before holding a project role. A personal
+space accepts no additional member and inherits
 nothing; its organization can revoke its owner's access, and the owner leaves the
 organization only after leaving the personal space and removing their remaining organization roles. Every non-personal space
 retains an owner.
@@ -100,7 +99,7 @@ SQL stores each space's identity, kind, name, personal owner and immutable place
 organization for every other space. `parent_id` is null for roots and personal
 spaces, the organization for a team, and the team for a project. Creation validates
 parent kinds and writes placement and initial direct roles atomically.
-Permission evaluation follows SQL placement. Personal spaces have no parent and
+Permission evaluation reads only grants on the requested space. Personal spaces have no parent and
 inherit nothing. Corpus scope contains only readable anchor/ancestor spaces;
 level selection can remove candidates but never add them.
 
@@ -187,10 +186,10 @@ their remaining documents contribute to organization-level purge totals.
 | `published.documents`, `chunks`, `vectors` | Unique succeeded attempt per active document; committed column sums | Independent of latest attempt; no sum of generations, extracted fragments or physical index query |
 | `published.tabular_datasets` | Count of `datasets/*.parquet` paths in successful manifests, aggregated before joining document counts | Published artifacts, not CSV filenames or persistent SQL tables |
 | `known_rows`, `datasets_with_unknown_rows`, `total_rows` | Rows are attributable only when a successful manifest has exactly one Parquet and nonnull rows | Multiple Parquet artifacts or null rows make those datasets unknown; total is null if any are unknown. No dataset means zero; known zero remains zero |
-| `distinct_users`, `direct_roles` | All direct SQL grants on active scoped spaces; distinct subjects and distinct `(subject, space, role)` assignments | All five canonical roles; omitted roles mean zero. No effective/inherited roles, SQL-owner-derived grants or IdP active-account inference |
+| `distinct_users`, `direct_roles` | All direct SQL grants on active scoped spaces; distinct subjects and distinct `(subject, space, role)` assignments | All five canonical roles; omitted roles mean zero. No SQL-owner-derived grants or IdP active-account inference |
 
 Distinct users are unioned, not summed across roles or compartments. Team role
-counts include direct grants on its projects but not inherited organization grants.
+counts include direct grants on its projects, excluding organization grants.
 Personal member/editor assignments are read from PostgreSQL like other grants.
 Ingestion refuses reprocessing after success; independent publication selection
 does not introduce a new reprocessing capability.

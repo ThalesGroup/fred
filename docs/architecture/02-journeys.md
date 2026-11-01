@@ -36,11 +36,10 @@ behind these examples.
 
 Each of the four paired team personas also holds `member` directly on their organization,
 the prerequisite for a team role. This parent role grants organization-level read
-access but does not descend into teams. Organization admins and owners
+access only on the organization. Organization admins and owners
 hold only their listed roles; none of these thirteen people holds a
-platform role. Carl can administer Research without reading its documents; Bob
-can read and contribute; Carol and Elena can read. Member stays local, whereas
-analyst also reaches descendant projects when a scenario introduces one.
+platform role. Carl can manage Research without reading its documents; Bob
+can read and contribute; Carol and Elena can read. Every business role stays local; working in a project requires a direct role there.
 
 Léa illustrates read access across Acme and Research through two explicit `member`
 grants. These grant neither editing nor administration, and no access to Globex

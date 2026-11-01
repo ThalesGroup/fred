@@ -147,6 +147,21 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
                 "configuration_updated_at": "2026-10-26T00:00:00Z",
                 "configuration": tuning.model_dump(mode="json"),
             },
+            "inference": {
+                "selection": {
+                    "key": key,
+                    "source": "instance_recommendation",
+                    "options": {},
+                    "source_revision": 1,
+                    "snapshot_revision": 1,
+                    "policy_revision": 1,
+                },
+                "connection": {
+                    "provider": "openai",
+                    "api_root": "https://model.invalid/v1",
+                    "credential_binding": "offline",
+                },
+            },
             "models": {
                 "policy": {
                     "organization_id": org,
@@ -189,11 +204,6 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
                             "last_success_at": None,
                             "snapshot_revision": 1,
                             "snapshot_source_revision": 1,
-                        },
-                        "connection": {
-                            "provider": "openai",
-                            "api_root": "https://model.invalid/v1",
-                            "credential_binding": "offline",
                         },
                     }
                 ],

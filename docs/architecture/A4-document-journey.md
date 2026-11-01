@@ -198,7 +198,7 @@ SELECT space_id, subject, role FROM space_role_grant WHERE subject = :'subject';
 SELECT id, organization_id, parent_id, kind FROM space WHERE id = :'space'::uuid;
 ```
 
-To evaluate inherited authority, use Control Plane's `POST /authorize/space`
+To evaluate space permissions, use Control Plane's `POST /authorize/space`
 with the person's bearer and `{space_id, permission: "write"}`. A permission
 probe does not authorize a later mutation; that mutation checks again under lock.
 Folders and documents do not carry independent role grants.

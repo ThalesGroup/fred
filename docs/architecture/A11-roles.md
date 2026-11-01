@@ -12,18 +12,18 @@ actions, endpoints and exact permission answers, use [A7](A7-action-role-matrix.
 
 ## Reference roles
 
-**Admin** denotes a limited institutional mandate. **Owner** denotes business
-management. Owner, analyst, editor and member have the same meaning in an
+**Admin** denotes technical administration. **Owner** denotes business
+management (French: **Admin** / **Responsable**). Owner, analyst, editor and member have the same meaning in an
 organization, team or project; scope changes where they apply, not their purpose.
 There is no team-admin or project-admin role.
 
-| Role | Scope of grant | Agreed responsibility | Current permissions and limits, role alone | Current inheritance |
+| Role | Scope of grant | Agreed responsibility | Current permissions and limits, role alone | Permission scope |
 | --- | --- | --- | --- | --- |
 | **Platform admin** (`platform_admin`) | Platform | Bootstrap platform administration and create organizations, selecting their admin and initial owner; no business role or right to know their contents. | Organization creation, platform-role and organization-admin assignment, provisioning and space retirement. Does not imply observer, feature-manager or prompt-editor roles. No direct space-content access. Platform-role assignment and standalone team/project retirement remain broader than organization-only governance. | Platform only; no space role or content inheritance. |
-| **Organization admin** (`organization_admin`) | Organization only | Execute express steering committee decisions within a limited mandate, such as team creation and organization access-allowlist changes. No model choices, business activity or right to inspect business data and agents. | Assign/revoke organization owners and read organization supervision aggregates. No content read/write, model management or evaluation permissions. Team creation and access-allowlist changes are **not granted**; see the comparison below. | Organization only; does not descend. |
-| **Owner** (`owner`) | Organization, team or project | Manage the business workspace and its community. At organization level, manage model choices and shared resources with analysts, editors and members. | Space management and role assignment; creation of teams/projects under an authorized parent. Organization owner manages model inventory/policy and template governance. Evaluation run/corpus permissions; no content read/write or evaluation-conversation read. | Granted space and all team/project descendants. |
-| **Analyst** (`analyst`) | Organization, team or project | Consult content and evaluate the space's agents and their use. | Content read; evaluation run, corpus management and evaluation-conversation-read permissions. No ordinary content write, space management or organization model management. | Granted space and all team/project descendants. |
-| **Editor** (`editor`) | Organization, team or project; personal space at creation | Contribute to the space's content. | Content read/write, including agent-instance authoring where supported and template-authorized. No role management, evaluation permissions or organization model management. | Granted space and all team/project descendants; personal space stays isolated. |
+| **Organization admin** (`organization_admin`) | Organization only | Name and replace organization owners, manage the organization access allowlist (not yet implemented), and read supervision aggregates. No content access or business-structure management. | Assign/revoke organization owners and read organization supervision aggregates. No content read/write, model management or evaluation permissions. Access-allowlist changes are **not implemented**. No team creation. | Organization only. |
+| **Owner** (`owner`) | Organization, team or project | Manage the business workspace and its community; create teams under an organization or projects under a team, naming their initial owner. At organization level, manage model choices and shared resources with analysts, editors and members. | Space management and role assignment; creation of teams/projects under an authorized parent. Organization owner manages model inventory/policy and template governance. Evaluation run/corpus permissions; no content read/write or evaluation-conversation read. | Granted space only. |
+| **Analyst** (`analyst`) | Organization, team or project | Consult content and evaluate the space's agents and their use. | Content read; evaluation run, corpus management and evaluation-conversation-read permissions. No ordinary content write, space management or organization model management. | Granted space only. |
+| **Editor** (`editor`) | Organization, team or project; personal space at creation | Contribute to the space's content. | Content read/write, including agent-instance authoring where supported and template-authorized. No role management, evaluation permissions or organization model management. | Granted space only. |
 | **Member** (`member`) | Organization, team or project; personal space at creation | Consult the space's content and use its authorized assistants. | Content read and assistant access subject to template-use and execution checks. No content write, role management, evaluation permissions or organization model management. | Granted space only. |
 
 Content read also lets an editor or analyst use an authorized assistant under the
@@ -46,36 +46,35 @@ These roles complete the current inventory. Their implementation is recorded her
 without implying that their long-term place in the agreed governance model has
 been settled. The responsibility column describes their current purpose.
 
-| Role | Scope of grant | Current purpose | Current permissions and limits, role alone | Current inheritance |
+| Role | Scope of grant | Current purpose | Current permissions and limits, role alone | Permission scope |
 | --- | --- | --- | --- | --- |
 | **Platform observer** (`platform_observer`) | Platform | Hold platform observation authority. | `observe_platform`; no space membership or content access. A permission declaration does not establish an observation UI or unrestricted access to logs. | Platform only; also implied by platform admin. |
 | **Feature manager** (`feature_manager`) | Platform | Hold capability-management and global team-registry authority. | `manage_capabilities` and `list_all_teams`; registry access exposes team metadata, not content. No organization model-management permission. | Platform only; also implied by platform admin. |
 | **Prompt editor** (`prompt_editor`) | Platform | Hold platform-prompt editing authority. | `edit_platform_prompt`; no right to edit a space's resources or read its content. This permission alone does not establish a wired prompt-editing journey. | Platform only; also implied by platform admin. |
 
-Inheritance follows the organization -> team -> project hierarchy, never upwards
-or to siblings. A personal space has **no parent link** and inherits no role from
-its organization. Its initial grants are `member` and `editor`, not owner or
+Business roles apply only to the space where they are granted; none reaches a
+child space. Roles held at several levels are independent. A personal space has
+**no parent link** and inherits no role from its organization. Its initial grants are `member` and `editor`, not owner or
 organization admin. Folders and documents use their owning space's permissions;
 they introduce no additional role scope.
 
 ## Attribution, accumulation and removal
 
 This table describes **current ordinary role-management authority**, not the
-agreed institutional mandate. Effective owner includes an inherited owner role.
+agreed institutional mandate.
 
 | Role being assigned or removed | Current authority | Conditions and limits |
 | --- | --- | --- |
 | Platform admin, observer, feature manager, prompt editor | Platform admin | First admin established by bootstrap; subsequent grants through platform-role management. The last platform admin cannot be removed. |
 | Organization admin | Platform admin | Appointed at organization creation or through role management; the last organization admin cannot be removed. The actor need not belong to that organization. |
 | Organization owner | Organization admin or organization owner | Initial owner selected by platform admin at organization creation. The organization must retain an owner. |
-| Team/project owner | Effective owner of the target space | Initial owner selected by the creator, who currently needs owner on the parent. Every non-personal space retains a direct owner. |
-| Member, editor, analyst in a collective space | Effective owner of the target space | Child-space grants require direct parent content membership. |
+| Team/project owner | Direct owner of the target space | Initial owner selected by the creator, who needs a direct owner role on the parent. Every non-personal space retains a direct owner. |
+| Member, editor, analyst in a collective space | Direct owner of the target space | Child-space grants require direct parent content membership. |
 | Personal-space member/editor | System at creation; organization owner for removal | No role additions afterwards, including by the person themselves or an organization owner. Reopening restores no removed role. |
 
 All space-role recipients must belong to at most one organization, including
 admin-only or owner-only attachments. Every direct team/project role requires a
-direct parent content role (`member`, `editor` or `analyst`); inherited access
-alone is insufficient. Removing the last direct content role is refused while
+direct parent content role (`member`, `editor` or `analyst`). Removing the last direct content role is refused while
 dependent child roles or personal content roles remain. No replacement
 membership is synthesized. Grant recipients must exist in the configured user
 directory; [A6](A6-security.md#roles-permissions-and-rebac) details identity checks.
@@ -84,8 +83,7 @@ directory; [A6](A6-security.md#roles-permissions-and-rebac) details identity che
 accepts the same identity as admin and owner. Ordinary role routes do not forbid
 self-assignment: an organization admin can grant themselves owner, and an owner
 can grant themselves editor under the normal scope and parent-membership rules.
-Revoking one role leaves other direct or inherited authority effective; inherited
-permissions are not separate grants that can be revoked on a child.
+Revoking one role leaves the permissions of other directly held roles unchanged.
 
 **Provisioning is a separate, broader path.** A platform admin can import business
 and platform grants without local space-management authority. Lack of direct
@@ -102,12 +100,12 @@ organizational decisions; it does not change the permission model.
 | Boundary | Current implementation | Assessment against the agreed responsibilities |
 | --- | --- | --- |
 | Model choices | Model inventory, policy changes and source refresh require organization `Manage`, supplied by `owner`, not `organization_admin`. | Aligned: Alice manages Acme's models; Oscar's admin role alone does not. |
-| Team creation | `create_space` requires `Manage` on the parent organization. An organization admin alone cannot create a team. | Gap: this institutional action is assigned to the admin executing the committee's decision. Project creation remains governed by the current team-owner permission; no new project-admin role is implied. |
+| Team creation | `create_space` requires `Manage` on the parent organization. An organization admin alone cannot create a team. | Aligned: the direct organization owner creates teams and the direct team owner creates projects, naming their initial owner. The organization admin does not create teams. |
 | Organization access allowlist | Membership derives from committed roles; `context` and `may_attach` enforce a single organization. The inspected contracts have no admin-operated allowlist or cross-organization guest-policy operation. | Gap: the agreed access-allowlist action is not available. Cross-organization admission remains refused. |
 | Steering committee mandate | The inspected mutation paths check the caller's roles and lifecycle constraints; they do not require a committee decision or approval reference. | Process boundary: the mandate is an organizational rule. No application approval workflow is implemented or implied by this vocabulary. |
 | Platform-admin remit | Platform admin implies all platform permissions. Role management, provisioning of business and platform grants, global team metadata and space retirement exceed bootstrap and organization creation. | Gap: the implementation is broader than the agreed limited remit. No direct content read does not mean no ability to grant it. |
 | Admin/business separation | Organization creation permits the same identity as admin and owner. An organization admin can grant themselves owner, then an owner can grant themselves editor under the normal conditions. | The code enforces no content access from admin alone, but no exclusive separation of duties. The intended limits on cumulative roles and self-assignment require explicit resolution. |
-| Organization supervision | `can_administer_organization` exposes document/processing/role counts, team names and scoped aggregates, without document content or named users. | Mandate question: this reveals activity metadata. Its compatibility with the admin's lack of business right-to-know must be decided explicitly; it is not equivalent to content access. |
+| Organization supervision | `can_administer_organization` exposes document/processing/role counts, team names and scoped aggregates, without document content or named users. | Aligned: technical supervision aggregates are within the organization admin mandate; they grant no content access. |
 
 ## Responsibilities that are not additional roles
 

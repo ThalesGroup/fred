@@ -175,7 +175,6 @@ describe("generated control-plane client", () => {
         personal_owner: null,
         path: ["org-id"],
         roles: ["owner", "analyst"],
-        inherited_roles: [],
       },
     ];
     fetch.mockImplementationOnce(

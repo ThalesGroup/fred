@@ -40,7 +40,8 @@ def provision(**changes):
             source_revision=1,
             api_root="https://source.invalid/v1",
             credential_binding="source-account",
-            api_key_env="FRED_TEST_INFERENCE_KEY",
+            # Environment variable name, not a credential.
+            api_key_env="FRED_TEST_INFERENCE_KEY",  # pragma: allowlist secret
             **changes,
         )
     )

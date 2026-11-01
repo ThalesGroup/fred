@@ -70,11 +70,13 @@ authorization engine or generic relationship graph should be reintroduced.
 - Example: the owner of team E in organization A invites Florian from B as analyst
   and Bill from C as editor. Each gets the functional rights of that role. Invited
   status records provenance and duration; it is not a reduced functional role.
-- Make inherited access and access to common resources explicit. A local invitation
+- Business roles apply only to the space where they are granted; no role reaches a child space.
+  Access to an ancestor's common resources requires a direct role on that ancestor. A local invitation
   does not imply permanent global membership. Organization governance may reserve
   invitation administration to central admins without changing the data mechanism.
-- Vocabulary: admin is technical responsibility; owner/responsible person is
-  business responsibility, including agents, prompts, skills and members.
+- The direct parent Owner creates teams/projects and names their initial Owner, receiving no role there.
+- Admin exists only at platform/organization level: platform Admin creates organizations and names Admin/Owner; organization Admin names/replaces organization Owners and reads supervision aggregates, with no content or business-structure access.
+- Vocabulary: EN Admin/Owner, FR Admin/Responsable; Admin is technical, Owner is business responsibility.
 
 ### Agent execution
 
