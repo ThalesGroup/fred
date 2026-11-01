@@ -4883,8 +4883,6 @@
         "error_one": "Problème · {{count}} point",
         "error_other": "Problème · {{count}} points"
       },
-      "inactive_one": "{{count}} inactif",
-      "inactive_other": "{{count}} inactifs",
       "findings": {
         "degraded": "{{ready}}/{{desired}} prêts",
         "updating": "Mise à jour en cours ({{ready}}/{{desired}} prêts)",
@@ -4897,7 +4895,9 @@
         "updating": "Mise à jour",
         "unknown": "Inconnu",
         "restarted": "Redémarré",
-        "partial": "Incomplet"
+        "partial": "Incomplet",
+        "ready": "Prêt",
+        "inactive": "Inactif"
       },
       "sources": {
         "deployments": "Deployments",
@@ -4905,7 +4905,11 @@
         "daemon_sets": "DaemonSets",
         "pods": "Pods",
         "events": "Événements"
-      }
+      },
+      "components": "Composants",
+      "global": "Points globaux",
+      "selectComponent": "Cliquez sur un composant pour voir ses détails, puis à nouveau pour les refermer.",
+      "replicas": "{{ready}}/{{desired}} réplicas prêts"
     }
   },
   "runtime": {

@@ -1,9 +1,14 @@
-.page {
+.page,
+.overview,
+.detail {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-l);
-  width: 100%;
   min-width: 0;
+}
+
+.page {
+  width: 100%;
 }
 
 .secondary {
@@ -12,20 +17,65 @@
   font: var(--font-body-medium);
 }
 
-.details {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-s);
+.heading {
   margin: 0;
-  padding: 0;
-  list-style: none;
-  max-height: calc(4 * var(--spacing-4xl));
-  overflow: auto;
+  font: var(--font-title-medium);
   overflow-wrap: anywhere;
 }
 
-.details p {
-  margin: var(--spacing-xs) 0 0;
+.chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(4 * var(--spacing-4xl))), 1fr));
+  gap: var(--spacing-m);
+}
+
+.chip {
+  border-radius: var(--radius-full);
+  min-width: 0;
+  height: auto;
+  min-height: var(--spacing-4xl);
+}
+
+.chip[aria-expanded="true"] {
+  --btn-outline: var(--on-surface);
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--spacing-xs) 0;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.state {
+  font: var(--font-label-small);
+}
+
+.detail {
+  border-radius: var(--radius-m);
+  background: var(--surface-container-low);
+  padding: var(--spacing-l);
+  color: var(--on-surface);
+  overflow-wrap: anywhere;
+}
+
+.findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.findings p {
+  margin-top: var(--spacing-xs);
 }
 
 .finding {
@@ -33,5 +83,4 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-s);
-  min-width: 0;
 }

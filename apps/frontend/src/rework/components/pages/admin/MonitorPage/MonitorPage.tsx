@@ -1,6 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
@@ -15,6 +16,7 @@ import styles from "./MonitorPage.module.css";
 
 export default function MonitorPage() {
   const { t, i18n } = useTranslation();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const access = useManagerPlatformAdmin();
   const query = useMonitorStatusQuery(undefined, {
     skip: !access.isAdmin,
@@ -25,6 +27,19 @@ export default function MonitorPage() {
   // Never retain protected data on a failed authorization or failed refresh.
   const snapshot = access.isAdmin && !query.isError ? query.currentData : undefined;
   const verdict = snapshot ? monitorVerdict(snapshot) : undefined;
+  const globalFindings = verdict?.findings.filter((finding) => !finding.service) ?? [];
+  const components = [
+    ...(snapshot?.services.map((service) => ({
+      id: `${service.kind}/${service.name}`,
+      name: service.name,
+      service,
+      findings: verdict?.findings.filter((finding) => finding.service === service.name) ?? [],
+    })) ?? []),
+    ...(globalFindings.length
+      ? [{ id: "global", name: t("rework.monitor.global"), service: undefined, findings: globalFindings }]
+      : []),
+  ];
+  const selected = components.find((component) => component.id === selectedId);
   const time = (value: string) => new Date(value).toLocaleString(i18n.resolvedLanguage);
   const errorStatus = query.error && "status" in query.error ? query.error.status : undefined;
   const errorKey = errorStatus === 403 ? "forbidden" : errorStatus === 503 ? "authorizationUnavailable" : "unavailable";
@@ -74,41 +89,79 @@ export default function MonitorPage() {
               {t("rework.monitor.unavailable")}
             </ExpandableInfoContainer>
           ) : verdict ? (
-            <ExpandableInfoContainer
-              color={verdict.level === "ok" ? "success" : verdict.level}
-              icon={verdict.level === "ok" ? "check_circle" : verdict.level}
-              title={t(`rework.monitor.verdict.${verdict.level}`, {
-                count: verdict.level === "ok" ? verdict.ready.length : verdict.findings.length,
-              })}
-            >
-              {verdict.level === "ok" ? (
-                <div className={styles.details}>
-                  {verdict.ready.join(" · ")}
-                  {verdict.inactive > 0 && <p>{t("rework.monitor.inactive", { count: verdict.inactive })}</p>}
-                </div>
-              ) : (
-                <ul className={styles.details}>
-                  {verdict.findings.map((finding) => (
-                    <li key={`${finding.service}/${finding.kind}`}>
-                      <div className={styles.finding}>
-                        <StatusBadge tone={finding.level} label={t(`rework.monitor.states.${finding.kind}`)} />
-                        {finding.service && <strong>{finding.service}</strong>}
-                        <span>
-                          {t(`rework.monitor.findings.${finding.kind}`, {
-                            ready: finding.ready,
-                            desired: finding.desired,
-                            time: finding.at ? time(finding.at) : "",
-                            sources: finding.sources?.map((source) => t(`rework.monitor.sources.${source}`)).join(", "),
-                          })}
-                          {finding.reason && ` (${finding.reason})`}
+            <div className={styles.overview}>
+              <h2 className={styles.heading}>
+                {t(`rework.monitor.verdict.${verdict.level}`, {
+                  count: verdict.level === "ok" ? verdict.ready.length : verdict.findings.length,
+                })}
+              </h2>
+              {components.length > 0 && <p className={styles.secondary}>{t("rework.monitor.selectComponent")}</p>}
+              <div className={styles.chips} role="group" aria-label={t("rework.monitor.components")}>
+                {components.map((component) => {
+                  const finding = component.findings[0];
+                  const state = finding?.kind ?? component.service?.state ?? "unknown";
+                  const color = finding?.level ?? (state === "ready" ? "success" : "on-surface-retreat");
+                  return (
+                    <Button
+                      key={component.id}
+                      className={styles.chip}
+                      color={color}
+                      variant="tonal"
+                      size="medium"
+                      data-color={color}
+                      aria-expanded={selected?.id === component.id}
+                      aria-controls={selected?.id === component.id ? "monitor-component-detail" : undefined}
+                      icon={{
+                        category: "outlined",
+                        type: color === "success" ? "check_circle" : finding?.level ?? "remove",
+                      }}
+                      onClick={() => setSelectedId(selectedId === component.id ? null : component.id)}
+                      onKeyDown={(event) => event.key === "Escape" && setSelectedId(null)}
+                    >
+                      <span className={styles.label}>
+                        <span className={styles.name} title={component.name}>
+                          {component.name}
                         </span>
-                      </div>
-                      {finding.event && <p className={styles.secondary}>&quot;{finding.event}&quot;</p>}
-                    </li>
-                  ))}
-                </ul>
+                        <span className={styles.state}>{t(`rework.monitor.states.${state}`)}</span>
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+              {selected && (
+                <section id="monitor-component-detail" className={styles.detail} aria-labelledby="monitor-component-name">
+                  <h3 id="monitor-component-name" className={styles.heading}>
+                    {selected.name}
+                  </h3>
+                  {selected.service && (
+                    <p className={styles.secondary}>
+                      {selected.service.kind} · {t("rework.monitor.replicas", selected.service)}
+                    </p>
+                  )}
+                  {selected.findings.length > 0 && (
+                    <ul className={styles.findings}>
+                      {selected.findings.map((finding) => (
+                        <li key={finding.kind}>
+                          <div className={styles.finding}>
+                            <StatusBadge tone={finding.level} label={t(`rework.monitor.states.${finding.kind}`)} />
+                            <span>
+                              {t(`rework.monitor.findings.${finding.kind}`, {
+                                ready: finding.ready,
+                                desired: finding.desired,
+                                time: finding.at ? time(finding.at) : "",
+                                sources: finding.sources?.map((source) => t(`rework.monitor.sources.${source}`)).join(", "),
+                              })}
+                              {finding.reason && ` (${finding.reason})`}
+                            </span>
+                          </div>
+                          {finding.event && <p className={styles.secondary}>&quot;{finding.event}&quot;</p>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
               )}
-            </ExpandableInfoContainer>
+            </div>
           ) : null}
         </div>
       )}

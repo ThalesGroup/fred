@@ -4883,8 +4883,6 @@
         "error_one": "Problem · {{count}} item",
         "error_other": "Problem · {{count}} items"
       },
-      "inactive_one": "{{count}} inactive",
-      "inactive_other": "{{count}} inactive",
       "findings": {
         "degraded": "{{ready}}/{{desired}} ready",
         "updating": "Update in progress ({{ready}}/{{desired}} ready)",
@@ -4897,7 +4895,9 @@
         "updating": "Updating",
         "unknown": "Unknown",
         "restarted": "Restarted",
-        "partial": "Incomplete"
+        "partial": "Incomplete",
+        "ready": "Ready",
+        "inactive": "Inactive"
       },
       "sources": {
         "deployments": "Deployments",
@@ -4905,7 +4905,11 @@
         "daemon_sets": "DaemonSets",
         "pods": "Pods",
         "events": "Events"
-      }
+      },
+      "components": "Components",
+      "global": "Global findings",
+      "selectComponent": "Select a component to view its details. Select it again to close them.",
+      "replicas": "{{ready}}/{{desired}} replicas ready"
     }
   },
   "runtime": {

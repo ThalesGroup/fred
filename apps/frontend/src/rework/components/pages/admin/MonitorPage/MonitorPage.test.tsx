@@ -62,30 +62,75 @@ afterEach(() => {
   host.remove();
 });
 const render = () => act(() => root.render(<MonitorPage />));
-const card = () => host.querySelector('[aria-live="polite"] > [data-color]')!;
-const expand = () => {
-  const header = card().querySelector("button")!;
-  expect(header.getAttribute("aria-expanded")).toBe("false");
-  const body = header.nextElementSibling!;
-  const collapsedClass = body.className;
-  act(() => header.click());
-  expect(header.getAttribute("aria-expanded")).toBe("true");
-  expect(body.className).not.toBe(collapsedClass);
-  return body;
+const chip = (name: string) =>
+  Array.from(host.querySelectorAll<HTMLButtonElement>('[role="group"] button')).find(
+    (button) => button.querySelector("[title]")?.getAttribute("title") === name,
+  )!;
+const openComponent = (name: string) => {
+  const button = chip(name);
+  expect(button.getAttribute("aria-expanded")).toBe("false");
+  act(() => button.click());
+  expect(button.getAttribute("aria-expanded")).toBe("true");
+  expect(button.getAttribute("aria-controls")).toBe("monitor-component-detail");
+  return host.querySelector("#monitor-component-detail")!;
 };
 
 it.each([
   ["ready", "success", "All systems operational · 1 service ready"],
   ["updating", "warning", "Needs attention · 1 item"],
   ["degraded", "error", "Problem · 1 item"],
-] as const)("renders %s with the expected verdict and expandable detail", (state, color, title) => {
+  ["inactive", "on-surface-retreat", "All systems operational · 0 services ready"],
+] as const)("renders %s as a colored component chip with details on click", (state, color, title) => {
   h.query.currentData!.services[0].state = state;
   render();
-  expect(card().getAttribute("data-color")).toBe(color);
-  expect(card().querySelector("button")!.textContent).toContain(title);
-  expect(expand().textContent).toContain("control-plane");
+  expect(host.querySelector("h2")!.textContent).toBe(title);
+  expect(chip("control-plane").getAttribute("data-color")).toBe(color);
+  expect(chip("control-plane").textContent).toContain(en.rework.monitor.states[state]);
+  expect(host.querySelector("#monitor-component-detail")).toBeNull();
+  const detail = openComponent("control-plane");
+  expect(detail.textContent).toContain("Deployment · 1/1 replicas ready");
   expect(host.textContent).not.toContain("private-namespace");
   expect(host.querySelector("table")).toBeNull();
+});
+
+it("switches between components and closes details on a second click or Escape", () => {
+  h.query.currentData!.services.push({ name: "frontend", kind: "Deployment", state: "ready", desired: 2, ready: 2 });
+  render();
+  openComponent("control-plane");
+  expect(openComponent("frontend").textContent).toContain("2/2 replicas ready");
+  expect(chip("control-plane").getAttribute("aria-expanded")).toBe("false");
+  act(() => chip("frontend").click());
+  expect(host.querySelector("#monitor-component-detail")).toBeNull();
+  openComponent("frontend");
+  act(() => {
+    chip("frontend").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  expect(host.querySelector("#monitor-component-detail")).toBeNull();
+});
+
+it("keeps healthy components visible alongside degraded ones", () => {
+  h.query.currentData!.services[0].state = "degraded";
+  h.query.currentData!.services.push({ name: "frontend", kind: "Deployment", state: "ready", desired: 1, ready: 1 });
+  render();
+  expect(chip("control-plane").getAttribute("data-color")).toBe("error");
+  expect(chip("frontend").getAttribute("data-color")).toBe("success");
+  expect(openComponent("frontend").querySelector("li")).toBeNull();
+});
+
+it("refreshes selected details from the current snapshot and hides a removed component", () => {
+  render();
+  openComponent("control-plane");
+  h.query.currentData = {
+    ...h.query.currentData!,
+    services: [{ name: "control-plane", kind: "Deployment", state: "degraded", desired: 1, ready: 0 }],
+  };
+  render();
+  expect(chip("control-plane").getAttribute("data-color")).toBe("error");
+  expect(host.querySelector("#monitor-component-detail")!.textContent).toContain("0/1 replicas ready");
+  h.query.currentData = { ...h.query.currentData, services: [] };
+  render();
+  expect(host.querySelector("#monitor-component-detail")).toBeNull();
+  expect(host.textContent).not.toContain("control-plane");
 });
 
 it("keeps polling, window focus and manual refresh", () => {
@@ -136,8 +181,9 @@ it("renders restart evidence and its Warning below the finding", () => {
     count: 2,
   }];
   render();
-  expect(card().getAttribute("data-color")).toBe("warning");
-  const detail = expand();
+  expect(chip("control-plane").getAttribute("data-color")).toBe("warning");
+  expect(host.textContent).not.toContain("OOMKilled");
+  const detail = openComponent("control-plane");
   expect(detail.querySelectorAll("li")).toHaveLength(1);
   expect(detail.textContent).toContain("Restarted at");
   expect(detail.textContent).toContain("(OOMKilled)");
@@ -148,23 +194,26 @@ it("shows a single partial finding for failed and truncated sources", () => {
   h.query.currentData!.unavailable_sources = ["events"];
   h.query.currentData!.truncated_sources = ["pods"];
   render();
-  expect(card().getAttribute("data-color")).toBe("warning");
-  const detail = expand();
+  expect(chip("Global findings").getAttribute("data-color")).toBe("warning");
+  expect(chip("control-plane").getAttribute("data-color")).toBe("success");
+  const detail = openComponent("Global findings");
   expect(detail.querySelectorAll("li")).toHaveLength(1);
   expect(detail.textContent).toContain("Incomplete data: Events, Pods");
 });
 
-it.each(["en", "fr"])("uses plural verdict titles and inactive counts in %s", (language) => {
+it.each(["en", "fr"])("shows all components, including inactive ones, in %s", (language) => {
   void i18n.changeLanguage(language);
   h.query.currentData!.services.push(
     { name: "frontend", kind: "Deployment", state: "ready", desired: 1, ready: 1 },
     { name: "worker", kind: "Deployment", state: "inactive", desired: 0, ready: 0 },
   );
   render();
-  expect(card().querySelector("button")!.textContent).toContain(
+  expect(host.querySelector("h2")!.textContent).toContain(
     language === "fr" ? "Tout fonctionne · 2 services prêts" : "All systems operational · 2 services ready",
   );
-  expect(expand().textContent).toContain(language === "fr" ? "1 inactif" : "1 inactive");
+  expect(host.querySelectorAll('[role="group"] button')).toHaveLength(3);
+  expect(chip("worker").textContent).toContain(language === "fr" ? "Inactif" : "Inactive");
+  expect(openComponent("worker").textContent).toContain("0/0");
 });
 
 it("does not query or disclose cached data to an organization admin", () => {
@@ -180,7 +229,7 @@ it.each([
   [503, en.rework.monitor.authorizationUnavailable],
 ] as const)("hides the previous snapshot on access failure %s", (status, message) => {
   render();
-  expand();
+  openComponent("control-plane");
   h.query.isError = true;
   h.query.error = { status };
   render();
@@ -191,12 +240,17 @@ it.each([
 
 it("shows unknown status and removes protected data when the monitor is unreachable", () => {
   render();
+  openComponent("control-plane");
   h.query.isError = true;
   h.query.error = { status: 502 };
   render();
-  expect(card().getAttribute("data-color")).toBe("warning");
-  expect(card().querySelector("button")!.textContent).toContain(en.rework.monitor.unreachable);
-  expect(expand().textContent).toContain(en.rework.monitor.unavailable);
+  const card = host.querySelector('[aria-live="polite"] > [data-color]')!;
+  expect(card.getAttribute("data-color")).toBe("warning");
+  expect(card.querySelector("button")!.textContent).toContain(en.rework.monitor.unreachable);
+  act(() => card.querySelector("button")!.click());
+  expect(card.querySelector("button")!.getAttribute("aria-expanded")).toBe("true");
+  expect(card.textContent).toContain(en.rework.monitor.unavailable);
+  expect(host.querySelector("#monitor-component-detail")).toBeNull();
   expect(host.textContent).not.toContain("control-plane");
 });
 
