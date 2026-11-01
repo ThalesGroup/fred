@@ -25,8 +25,8 @@ The owning space is the authorization boundary. Folders and documents have no
 individual grants or permission lists. Increasing their number adds no role rows.
 Folder depth is limited to 15 independently of the space hierarchy.
 
-Every request requires personal admission, the caller's unique organization and
-current space authority. Members and effective editors/analysts read; effective
+Every request requires personal admission, a direct role in the space's organization
+and current space authority. Members and effective editors/analysts read; effective
 editors write. Admin and owner titles confer no content access. Personal
 spaces inherit no organization or team authority. The
 [action/role matrix](A7-action-role-matrix.md) defines these distinctions.

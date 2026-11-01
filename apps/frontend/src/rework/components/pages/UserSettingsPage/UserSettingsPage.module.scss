@@ -118,6 +118,35 @@
   gap: var(--spacing-m);
 }
 
+.spaceRoles {
+  margin: 0;
+}
+
+.accessScope {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding-block: var(--spacing-s);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.spaceRoles .accessScope {
+  border-top: 1px solid var(--outline-muted);
+}
+
+.roleBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin: 0;
+
+  > span {
+    max-width: 100%;
+    white-space: normal;
+  }
+}
+
 .userSettingsThemeSelect {
   width: 200px;
 }

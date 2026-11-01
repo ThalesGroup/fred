@@ -3586,7 +3586,7 @@ async fn import_checks_distinct_admins_once_with_bounded_concurrency() {
 // Proves: I23
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn concurrent_attachments_choose_one_organization_and_creation_cannot_bypass_it() {
+async fn a_person_may_hold_roles_in_several_organizations() {
     let e = env().await;
     let a = crate::support::member_organization(&e.pool, &e.authorization, "A", "alice")
         .await
@@ -3599,53 +3599,50 @@ async fn concurrent_attachments_choose_one_organization_and_creation_cannot_bypa
         spaces::grant(&e.pool, &subjects, "alice", a.id, Role::Owner, "bob"),
         spaces::grant(&e.pool, &subjects, "carol", b.id, Role::Member, "bob"),
     );
-    assert_ne!(first.is_ok(), second.is_ok());
-    let (winner, loser) = if first.is_ok() {
-        (a.id, second)
-    } else {
-        (b.id, first)
-    };
-    assert!(matches!(loser, Err(AppError::Conflict(_))));
-    assert_eq!(
-        spaces::organization(&e.pool, "bob").await.unwrap(),
-        Some(winner)
-    );
-    assert!(matches!(
-        crate::support::member_organization(&e.pool, &e.authorization, "Third", "bob").await,
-        Err((409, _))
-    ));
+    first.unwrap();
+    second.unwrap();
+    for organization in [a.id, b.id] {
+        assert!(
+            spaces::in_organization(&e.pool, "bob", organization)
+                .await
+                .unwrap()
+        );
+    }
     assert!(
-        named_space(&e.pool, &e.authorization, None, "Third")
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert_eq!(
-        spaces::organization(&e.pool, "unattached").await.unwrap(),
-        None
-    );
-    // Governance-only attachment is still an attachment, never content permission.
-    assert!(
-        !spaces::in_organization(&e.pool, "bob", if winner == a.id { b.id } else { a.id })
+        !spaces::in_organization(&e.pool, "unattached", a.id)
             .await
             .unwrap()
     );
+    // Each organization answers from the roles held there: owner of A reads nothing,
+    // member of B reads B.
+    assert!(!reads(&e, "bob", a.id).await);
+    assert!(reads(&e, "bob", b.id).await);
+    let listed: Vec<_> = spaces::memberships(&e.pool, &e.authorization, "bob")
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|m| (m.space.id, m.roles))
+        .collect();
+    assert!(listed.contains(&(a.id, vec![Role::Owner])));
+    assert!(listed.contains(&(b.id, vec![Role::Member])));
+    // A third organization can name the same person.
+    crate::support::member_organization(&e.pool, &e.authorization, "Third", "bob")
+        .await
+        .unwrap();
 }
 
 // Proves: I23, I8
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn ambiguous_context_fails_closed_and_remains_repairable() {
+async fn organization_context_follows_direct_grants() {
     let e = env().await;
     let (a, _, project) = tree(&e).await;
     let b = crate::support::member_organization(&e.pool, &e.authorization, "B", "carol")
         .await
         .unwrap();
     grant(&e, a.id, Role::Owner, "bob").await;
-    assert_eq!(
-        spaces::organization(&e.pool, "bob").await.unwrap(),
-        Some(a.id)
-    );
+    assert!(spaces::in_organization(&e.pool, "bob", a.id).await.unwrap());
+    assert!(!spaces::in_organization(&e.pool, "bob", b.id).await.unwrap());
     assert!(!reads(&e, "bob", a.id).await);
     // Context resolution agrees with direct SQL grants; it does not repair missing parent roles.
     control_plane::authorization::write_role(
@@ -3657,9 +3654,10 @@ async fn ambiguous_context_fails_closed_and_remains_repairable() {
     )
     .await
     .unwrap();
-    assert_eq!(
-        spaces::organization(&e.pool, "orphan").await.unwrap(),
-        Some(a.id)
+    assert!(
+        spaces::in_organization(&e.pool, "orphan", a.id)
+            .await
+            .unwrap()
     );
     let memberships = spaces::memberships(&e.pool, &e.authorization, "orphan")
         .await
@@ -3672,48 +3670,36 @@ async fn ambiguous_context_fails_closed_and_remains_repairable() {
         e.authorization.roles_of("orphan").await.unwrap(),
         vec![(project.id, Role::Editor)]
     );
-    // Simulate a corrupt second organization attachment.
-    control_plane::authorization::write_role(
-        &mut e.pool.acquire().await.unwrap(),
-        "bob",
-        Role::Member,
-        b.id,
-        true,
-    )
-    .await
-    .unwrap();
-    {
-        let subject = "bob";
-        assert!(matches!(
-            spaces::organization(&e.pool, subject).await,
-            Err(AppError::Conflict(_))
-        ));
-        assert!(matches!(
-            spaces::memberships(&e.pool, &e.authorization, subject).await,
-            Err(AppError::Conflict(_))
-        ));
-        assert!(matches!(
-            spaces::scope(&e.pool, subject, b.id, None).await,
-            Err(AppError::Conflict(_))
-        ));
-        assert!(matches!(
-            spaces::authorized_write(&e.pool, subject, b.id).await,
-            Err(AppError::Conflict(_))
-        ));
-        spaces::revoke(&e.pool, "carol", b.id, Role::Member, subject)
+    // A second organization adds its own context without changing the first.
+    spaces::grant(&e.pool, &e.subjects(), "carol", b.id, Role::Member, "bob")
+        .await
+        .unwrap();
+    assert_eq!(
+        spaces::memberships(&e.pool, &e.authorization, "bob")
             .await
-            .unwrap();
-        assert_eq!(
-            spaces::organization(&e.pool, subject).await.unwrap(),
-            Some(a.id)
-        );
-    }
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        spaces::scope(&e.pool, "bob", b.id, None).await.unwrap(),
+        vec![b.id]
+    );
+    assert!(matches!(
+        spaces::authorized_write(&e.pool, "bob", b.id).await,
+        Err(AppError::Forbidden)
+    ));
+    spaces::revoke(&e.pool, "carol", b.id, Role::Member, "bob")
+        .await
+        .unwrap();
+    assert!(!spaces::in_organization(&e.pool, "bob", b.id).await.unwrap());
+    assert!(spaces::in_organization(&e.pool, "bob", a.id).await.unwrap());
 }
 
-// Proves: I23, I18
+// Proves: I23
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn import_rejects_cross_organization_declarations_before_identity_writes() {
+async fn import_accepts_one_person_in_several_organizations() {
     use control_plane::provisioning::Importer;
     let e = env().await;
     let server = support::IdentityServer::start().await;
@@ -3721,51 +3707,34 @@ async fn import_rejects_cross_organization_declarations_before_identity_writes()
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let value = serde_json::json!({"users":[{"username":"bob","password":"private-password"}],"organizations":[{"ref":"a","name":"A","roles":{"bob":["owner","organization_admin","member"]}},{"ref":"b","name":"B","roles":{"bob":["owner","organization_admin","member"]}}],"teams":[],"projects":[]});
     let bundle = parse_blueprint(&serde_json::to_vec(&value).unwrap()).unwrap();
-    let importer = Importer {
+    Importer {
         pool: &e.pool,
         authorization: &e.authorization,
         directory: &directory,
         operator: "root",
-    };
-    let failure = importer.run(&bundle).await.unwrap_err();
-    assert!(failure.to_string().contains("preflight"));
-    assert!(server.users.lock().await.is_empty());
-    assert!(server.control.lock().await.created.is_empty());
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("select count(*) from space")
-            .fetch_one(&e.pool)
+    }
+    .run(&bundle)
+    .await
+    .unwrap();
+    let bob = directory.find_username("bob").await.unwrap().unwrap();
+    for name in ["A", "B"] {
+        let organization = named_space(&e.pool, &e.authorization, None, name)
             .await
-            .unwrap(),
-        0
-    );
-    server.users.lock().await.insert("bob".into(), "bob".into());
-    crate::support::member_organization(&e.pool, &e.authorization, "Existing", "bob")
-        .await
-        .unwrap();
-    let mut other = value;
-    other["organizations"].as_array_mut().unwrap().truncate(1);
-    let bundle = parse_blueprint(&serde_json::to_vec(&other).unwrap()).unwrap();
-    assert!(
-        importer
-            .run(&bundle)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("preflight")
-    );
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("select count(*) from space")
-            .fetch_one(&e.pool)
-            .await
-            .unwrap(),
-        1
-    );
+            .unwrap()
+            .unwrap();
+        assert!(
+            spaces::in_organization(&e.pool, &bob.id, organization.id)
+                .await
+                .unwrap()
+        );
+        assert!(reads(&e, &bob.id, organization.id).await);
+    }
 }
 
 // Proves: I23
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn business_http_checks_context_while_platform_metadata_stays_available() {
+async fn business_http_checks_each_organization_while_platform_metadata_stays_available() {
     use serde_json::json;
     use tower::ServiceExt;
     let e = env().await;
@@ -3794,16 +3763,22 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
         .await,
         404
     );
-    // A corrupt legacy second grant must not make either organization readable.
-    control_plane::authorization::write_role(
-        &mut e.pool.acquire().await.unwrap(),
-        "bob",
-        Role::Editor,
-        b.id,
-        true,
-    )
-    .await
-    .unwrap();
+    // Outside B, its space does not exist for Bob.
+    assert_eq!(
+        content_request(
+            app.clone(),
+            &token,
+            "GET",
+            &format!("/spaces/{}/entries", b.id),
+            ""
+        )
+        .await,
+        404
+    );
+    // A role in B adds B's context; each probe answers from the roles held there.
+    spaces::grant(&e.pool, &e.subjects(), "carol", b.id, Role::Editor, "bob")
+        .await
+        .unwrap();
     for (path, body) in [
         (
             "/authorize/document",
@@ -3817,13 +3792,13 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
     ] {
         assert_eq!(
             content_request(app.clone(), &token, "POST", path, &body.to_string()).await,
-            409,
+            200,
             "{path}"
         );
     }
     assert_eq!(
         content_request(app.clone(), &token, "GET", "/me/spaces", "").await,
-        409
+        200
     );
     // /me exposes platform-role metadata independently; no content or tenant choice.
     let response = app
@@ -3839,10 +3814,10 @@ async fn business_http_checks_context_while_platform_metadata_stays_available() 
     assert_eq!(response.status(), 200);
 }
 
-// Proves: I23, I18
+// Proves: I23
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn import_rechecks_attachment_after_preflight_against_a_waiting_grant() {
+async fn import_and_a_waiting_grant_both_commit_across_organizations() {
     let e = env().await;
     let a = crate::support::member_organization(&e.pool, &e.authorization, "A", "alice")
         .await
@@ -3885,18 +3860,18 @@ async fn import_rechecks_attachment_after_preflight_against_a_waiting_grant() {
     wait_for_advisory_waiter(&e.pool).await;
     gate.release.notify_one();
     grant.await.unwrap().unwrap();
-    let failure = import.await.unwrap().unwrap_err();
-    assert!(failure.to_string().contains("roles/spaces"), "{failure}");
-    assert_eq!(
-        spaces::organization(&e.pool, "bob").await.unwrap(),
-        Some(a.id)
-    );
-    assert!(
-        named_space(&e.pool, &e.authorization, None, "B")
-            .await
-            .unwrap()
-            .is_none()
-    );
+    import.await.unwrap().unwrap();
+    let b = named_space(&e.pool, &e.authorization, None, "B")
+        .await
+        .unwrap()
+        .unwrap();
+    for organization in [a.id, b.id] {
+        assert!(
+            spaces::in_organization(&e.pool, "bob", organization)
+                .await
+                .unwrap()
+        );
+    }
 }
 
 // Proves: I4, I6, I20, I23

@@ -83,8 +83,8 @@ agreed institutional mandate.
 | Member, editor, analyst in a collective space | Direct owner of the target space | Child-space grants require direct parent content membership. |
 | Personal-space member/editor | System at creation; organization owner for removal | No role additions afterwards, including by the person themselves or an organization owner. Reopening restores no removed role. |
 
-All space-role recipients must belong to at most one organization, including
-admin-only or owner-only attachments. Every direct team/project role requires a
+A person may hold roles in several organizations, admin and owner roles
+included; each organization is reached only through the roles held there. Every direct team/project role requires a
 direct parent content role (`member`, `editor` or `analyst`). Removing the last direct content role is refused while
 dependent child roles or personal content roles remain. No replacement
 membership is synthesized. Grant recipients must exist in the configured user
@@ -112,7 +112,7 @@ organizational decisions; it does not change the permission model.
 | --- | --- | --- |
 | Model choices | Model inventory, policy changes and source refresh require organization `Manage`, supplied by `owner`, not `organization_admin`. | Aligned: Alice manages Acme's models; Oscar's admin role alone does not. |
 | Team creation | `create_space` requires `Manage` on the parent organization. An organization admin alone cannot create a team. | Aligned: the direct organization owner creates teams and the direct team owner creates projects, naming their initial owner. The organization admin does not create teams. |
-| Organization access allowlist | Membership derives from committed roles; `context` and `may_attach` enforce a single organization. The inspected contracts have no admin-operated allowlist or cross-organization guest-policy operation. | Gap: the agreed access-allowlist action is not available. Cross-organization admission remains refused. |
+| Organization access allowlist | Membership derives from committed roles; any person known to the directory can receive a role in any organization from an authorized grantor. The inspected contracts have no admin-operated allowlist. | Gap: the agreed access-allowlist action is not available. |
 | Steering committee mandate | The inspected mutation paths check the caller's roles and lifecycle constraints; they do not require a committee decision or approval reference. | Process boundary: the mandate is an organizational rule. No application approval workflow is implemented or implied by this vocabulary. |
 | Platform-admin remit | Platform admin implies all platform permissions. Role management, provisioning of business and platform grants, global team metadata and space retirement exceed bootstrap and organization creation. | Gap: the implementation is broader than the agreed limited remit. No direct content read does not mean no ability to grant it. |
 | Admin/business separation | Organization creation permits the same identity as admin and owner. An organization admin can grant themselves owner, then an owner can grant themselves editor under the normal conditions. | The code enforces no content access from admin alone, but no exclusive separation of duties. The intended limits on cumulative roles and self-assignment require explicit resolution. |
@@ -141,8 +141,8 @@ Role definitions and implication rules are recorded in the
 [typed permissions](../../apps/control-plane/src/roles.rs).
 The comparison above is grounded in [`model_catalog/http.rs`](../../apps/control-plane/src/model_catalog/http.rs)
 (`authorize`, `authorized_transaction`);
-[`spaces.rs`](../../apps/control-plane/src/spaces.rs) (`create_space`, `context`,
-`may_attach`, `may_change`, `grant`, `create_managed_organization`);
+[`spaces.rs`](../../apps/control-plane/src/spaces.rs) (`create_space`, `in_organization`,
+`may_change`, `grant`, `create_managed_organization`);
 [`typed permission evaluator`](../../apps/control-plane/src/authorization.rs);
 [`platform.rs`](../../apps/control-plane/src/platform.rs);
 [`provisioning.rs`](../../apps/control-plane/src/provisioning.rs);

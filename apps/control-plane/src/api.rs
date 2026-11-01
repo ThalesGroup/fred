@@ -304,7 +304,6 @@ struct MySpace {
         (status = 200, description = "Success", body = [MySpace]),
         (status = 401, description = "Request failed", body = crate::error::ErrorBody),
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Ambiguous organization context, or a space role without its parent membership", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -588,7 +587,6 @@ struct Allowed {
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
 )]
@@ -679,7 +677,6 @@ struct Scope {
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 503, description = "Authorization storage unavailable", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )
@@ -850,7 +847,6 @@ struct SpaceCheck {
         (status = 403, description = "Request failed", body = crate::error::ErrorBody),
         (status = 404, description = "Request failed", body = crate::error::ErrorBody),
         (status = 422, description = "Request failed", body = crate::error::ErrorBody),
-        (status = 409, description = "Ambiguous organization context", body = crate::error::ErrorBody),
         (status = 503, description = "Authorization storage unavailable", body = crate::error::ErrorBody),
         (status = 500, description = "Request failed", body = crate::error::ErrorBody),
     )

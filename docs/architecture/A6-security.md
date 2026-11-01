@@ -122,8 +122,8 @@ reuse of a personal space writes no new role. See the
 Direct role grants and immutable hierarchy live in PostgreSQL. The typed Rust
 permission evaluator applies only roles granted on the requested space; no role
 reaches a child. Personal spaces inherit nothing. Child role grants require direct
-parent content membership. Business access also checks the person's unique
-organization context, which itself grants no content access.
+parent content membership. Business access also checks that the person holds a direct
+role in the target's organization, which itself grants no content access.
 
 See [permission storage](A2-manager-contracts.md#permission-storage-and-evaluation)
 and [role semantics](A11-roles.md).
@@ -207,7 +207,7 @@ In this manager journey, a valid personal credential from the configured issuer
 allows access to onboarding. After accepting the active CGU, a person with no
 organization or platform roles can reach an empty Home view. This creates no
 membership, personal space or content access. Business operations still require
-one organization context and the operation's Control Plane permission; platform actions
+a direct role in the target organization and the operation's Control Plane permission; platform actions
 require their separate platform permission.
 
 Python control-plane additionally has configurable platform-access filtering and
@@ -229,8 +229,8 @@ All retired descendants are marked in the same SQL transaction. Mutation waiters
 recheck retirement after their lock; reads already authorized may finish. Existing
 role revocation remains an immediate role operation without a purge request.
 The worker executes the accepted durable scope without retaining a user token.
-Remaining grants on retired rows still count towards the unique organization
-attachment, using `space.organization_id` throughout retirement.
+Remaining grants on retired rows still count towards organization attachment,
+using `space.organization_id` throughout retirement.
 
 ## Managed agent turn authority
 

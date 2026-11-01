@@ -15,15 +15,14 @@ For the OpenSearch checkpoints, the KF `manager_processing.vector_store` must
 select OpenSearch and its dedicated index. Another configured vector backend
 does not write these chunks to OpenSearch.
 
-Bob's authenticated subject, current CGU acceptance, unique Acme attachment and
+Bob's authenticated subject, current CGU acceptance, Acme attachment and
 Research `can_write` permission are prerequisites. Admin alone does not grant
 content write access. The repository's
 [demo provisioning fixture](../../apps/control-plane/tests/fixtures/import_export/demo_provisioning/organizations.json)
 assigns Bob `member` on Acme and `editor` on Research, matching this journey.
 Confirm actual identity and placement before reproducing it on an existing
-installation: import is additive and does not move a person from another
-organization. See
-[one person, one organization](04-organizations.md#one-person-one-organization).
+installation: import is additive and never removes roles. See
+[people in several organizations](04-organizations.md#people-in-several-organizations).
 
 Record the API/worker revisions, effective configuration, PDF byte count and
 SHA-256, selected profile and these identifiers once, then reuse them at every

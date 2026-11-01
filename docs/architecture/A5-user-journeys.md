@@ -67,8 +67,8 @@ The server resolves the selected usernames again when creating the organization.
 The name is stored in NFC without surrounding whitespace and must then contain 1..180
 characters, without control characters.
 An existing or pending-deletion organization reserves its name. An unknown or
-ambiguous account, or a nominee already attached to another organization, prevents
-creation. The selected people receive only the organization's owner/admin roles:
+ambiguous account prevents creation; a nominee may already belong to other
+organizations. The selected people receive only the organization's owner/admin roles:
 no implicit content membership, team, folder or personal space. The creator receives
 no additional role simply for submitting the form.
 

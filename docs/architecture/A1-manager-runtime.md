@@ -154,7 +154,7 @@ There is no synthetic Python team or permission mapping. Non-migrated service
 consumers keep their original calls, including task polling and announcements;
 service failure does not remove routes. Theme presentation uses startup configuration.
 
-## Frontend organization owneristration
+## Frontend organization administration
 
 `ManagerArea`, after consent and bootstrap, resolves current `/me` authority.
 Platform admins enter `/admin/organizations`; business URLs redirect there even
@@ -214,9 +214,8 @@ The [content chapter](05-documents.md) defines this boundary and lifecycle.
 
 ## Content access
 
-Control Plane resolves the caller's unique organization and the target's placement,
-then evaluates the typed permission against direct SQL grants. Ambiguous attachment
-returns 409. Unknown or foreign targets return 404, retired targets 409, and missing
+Control Plane checks that the caller holds a direct role in the target's organization,
+then evaluates the typed permission against direct SQL grants. Unknown or foreign targets return 404, retired targets 409, and missing
 rights 403. Folder, original-content and document-metadata routes share this rule.
 
 ## Search scope
@@ -234,7 +233,7 @@ checks actual publication, lifecycle, generation and attachment provenance local
 
 `GET /me/spaces` lists active spaces where the caller holds a direct role, with
 `path`, managing `organization_id` and directly held `roles`, ordered by path.
-It preserves the unique organization context and personal-space eligibility checks.
+It spans all the caller's organizations and preserves personal-space eligibility checks.
 No child traversal grants membership. Display roles do not replace the permission
 check for each operation (I20).
 

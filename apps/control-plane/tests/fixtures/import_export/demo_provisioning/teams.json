@@ -34,6 +34,12 @@
       ],
       "zoe": [
         "editor"
+      ],
+      "boss": [
+        "owner",
+        "member",
+        "editor",
+        "analyst"
       ]
     }
   }

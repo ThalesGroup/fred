@@ -139,7 +139,6 @@ Request: [`AuthorizeDocument`](#authorizedocument).
 - 200: [`Allowed`](#allowed) — Success
 - 400: [`ErrorBody`](#errorbody) — Malformed JSON body
 - 401, 403, 404, 422, 500: [`ErrorBody`](#errorbody) — Request failed
-- 409: [`ErrorBody`](#errorbody) — Ambiguous organization context
 
 ### POST /authorize/platform
 
@@ -173,7 +172,6 @@ Request: [`AuthorizeScope`](#authorizescope).
 - 200: [`Scope`](#scope) — Success
 - 400: [`ErrorBody`](#errorbody) — Malformed JSON body
 - 401, 403, 404, 422, 500: [`ErrorBody`](#errorbody) — Request failed
-- 409: [`ErrorBody`](#errorbody) — Ambiguous organization context
 - 503: [`ErrorBody`](#errorbody) — Authorization storage unavailable
 
 ### POST /authorize/space
@@ -191,7 +189,6 @@ Request: [`SpaceCheck`](#spacecheck).
 - 200: [`Allowed`](#allowed) — Success
 - 400: [`ErrorBody`](#errorbody) — Malformed JSON body
 - 401, 403, 404, 422, 500: [`ErrorBody`](#errorbody) — Request failed
-- 409: [`ErrorBody`](#errorbody) — Ambiguous organization context
 - 503: [`ErrorBody`](#errorbody) — Authorization storage unavailable
 
 ## /bootstrap routes
@@ -680,7 +677,6 @@ Operation `my_spaces`.
 
 - 200: array of [`MySpace`](#myspace) — Success
 - 401, 403, 500: [`ErrorBody`](#errorbody) — Request failed
-- 409: [`ErrorBody`](#errorbody) — Ambiguous organization context, or a space role without its parent membership
 
 ## /organizations routes
 

@@ -59,8 +59,8 @@ on its parent. This prerequisite grants nothing on the child. In the other
 direction, a search from a space may include its ancestors' common resources, but
 only those the person can read through a direct role on that ancestor.
 
-A person belongs to one organization. Folders and documents use their owning
-space's permissions. **Personal spaces inherit no content rights** from the
+A person may hold roles in several organizations; each one is reached only through
+the roles held there. Folders and documents use their owning space's permissions. **Personal spaces inherit no content rights** from the
 organization or teams. Any business role (owner, member, editor or analyst) on an
 active organization, team or project lets a person open their own personal space;
 an admin role alone does not. Losing the last business role hides and closes

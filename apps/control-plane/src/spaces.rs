@@ -148,61 +148,14 @@ fn in_context(inside: bool) -> AppResult<()> {
     }
 }
 
-/// I23: all direct roles count, including governance and roles on retired spaces.
-/// Foreign keys keep every direct grant attached to its existing space.
-pub async fn organization<'e>(
-    ex: impl sqlx::PgExecutor<'e>,
-    user: &str,
-) -> AppResult<Option<Uuid>> {
-    let organizations: Vec<Uuid> = sqlx::query_scalar("select distinct s.organization_id from space s join space_role_grant r on r.space_id=s.id where r.subject=$1").bind(user).fetch_all(ex).await?;
-    if organizations.len() > 1 {
-        return Err(AppError::Conflict(
-            "multiple organization attachments".into(),
-        ));
-    }
-    Ok(organizations.first().copied())
-}
-
-async fn context<'e>(
-    ex: impl sqlx::PgExecutor<'e>,
-    roles: &[(Uuid, Role)],
-) -> AppResult<Option<Uuid>> {
-    let ids: Vec<_> = roles.iter().map(|(id, _)| *id).collect();
-    let organizations: Vec<Uuid> =
-        sqlx::query_scalar("select distinct organization_id from space where id = any($1)")
-            .bind(&ids)
-            .fetch_all(ex)
-            .await?;
-    if organizations.len() > 1 {
-        return Err(AppError::Conflict(
-            "multiple organization attachments".into(),
-        ));
-    }
-    Ok(organizations.first().copied())
-}
-
-/// Call under the platform lock before granting a role.
-/// The same check is usable with the importer's transaction-local rows.
-pub(crate) async fn may_attach<'e>(
-    ex: impl sqlx::PgExecutor<'e>,
-    user: &str,
-    target: Uuid,
-) -> AppResult<()> {
-    if organization(ex, user).await?.is_some_and(|id| id != target) {
-        return Err(AppError::Conflict(
-            "the user already belongs to another organization".into(),
-        ));
-    }
-    Ok(())
-}
-
-/// Organization context is independent of the requested permission.
+/// I23: a person belongs to every organization where they hold a direct role, governance
+/// and roles on retired spaces included. Context is independent of the requested permission.
 pub async fn in_organization<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     user: &str,
     target: Uuid,
 ) -> AppResult<bool> {
-    Ok(organization(ex, user).await? == Some(target))
+    Ok(sqlx::query_scalar("select exists(select 1 from space s join space_role_grant r on r.space_id=s.id where r.subject=$1 and s.organization_id=$2)").bind(user).bind(target).fetch_one(ex).await?)
 }
 
 pub async fn require_context<'e>(
@@ -262,7 +215,6 @@ pub async fn memberships(
     user: &str,
 ) -> AppResult<Vec<Membership>> {
     let direct = authorization.roles_of(user).await?;
-    context(pool, &direct).await?;
     let ids: Vec<Uuid> = direct.iter().map(|(id, _)| *id).collect();
     let mut rows: BTreeMap<Uuid, SpaceRow> = db::active_spaces(pool, &ids)
         .await?
@@ -540,10 +492,6 @@ pub async fn create_managed_organization(
         return Err(AppError::Conflict(SIBLING_NAME.into()));
     }
     crate::platform::require_admin_locked(&mut tx, caller).await?;
-    let targets: BTreeSet<_> = initial_roles.iter().map(|(user, _)| *user).collect();
-    for target in targets {
-        may_attach(&mut *tx, target, id).await?;
-    }
     persist(tx, &org, &grants, Some(caller)).await?;
     Ok(org)
 }
@@ -608,7 +556,6 @@ pub async fn update_managed_organization(
     let (mut writes, mut deletes) = (Vec::new(), Vec::new());
     for (target, role, current) in &holders {
         if !current.iter().any(|holder| holder == target) {
-            may_attach(&mut *tx, target, id).await?;
             writes.push(RoleGrant {
                 user: target,
                 role: *role,
@@ -719,8 +666,7 @@ pub async fn create_personal_space(
     }
     let mut tx = pool.begin().await?;
     lock_organization(&mut tx, &org).await?;
-    let direct = authorization::roles_of(&mut *tx, caller).await?;
-    in_context(context(&mut *tx, &direct).await? == Some(org.id))?;
+    in_context(in_organization(&mut *tx, caller, org.id).await?)?;
     crate::lifecycle::store::require_active(&mut *tx, org.id).await?;
     if !can_open_personal(&mut *tx, caller, org.id).await? {
         return Err(AppError::Forbidden);
@@ -788,7 +734,6 @@ pub async fn grant(
     {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
-    may_attach(&mut *tx, target, space.organization).await?;
     write_grants(
         &mut tx,
         &[RoleGrant {

@@ -50,7 +50,7 @@ Unregistered paths and unsupported methods use the router's 404/405 responses.
 | 403 | Permission denied (`forbidden`), wrong bootstrap secret, `user_not_accept_gcu` |
 | 404 | Unknown id or unregistered path |
 | 405 | Unsupported method on a registered path |
-| 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, `gcu_version_changed`, second or ambiguous organization attachment |
+| 409 | Unique or foreign-key violation, invariant refusal, bootstrap completed, `gcu_version_changed` |
 | 413 | Import exceeds 50 MiB compressed or 100 MiB expanded |
 | 422 | Invalid ZIP/declarations, `not_yet_supported` import format; invalid JSON body, short bootstrap token, half a cursor |
 | 503 | Bootstrap or platform-role administration with authentication disabled; grant with no directory or incompatible subject/realm mapping |
@@ -63,29 +63,6 @@ binding and retry-state conflicts use distinct 409 codes. Pending upload conflic
 include `Retry-After` and `Location`; successes include the receipt location.
 Streaming download errors after headers abort the body rather than append JSON.
 
-
-## Organization conflict recovery
-
-A `multiple organization attachments` conflict means existing canonical roles place
-the subject in more than one organization. It is invalid data, not a supported
-multi-organization mode. Manager blocks business context instead of choosing one.
-An attachment conflict during import is reported through the sanitized preflight
-or roles/spaces error and existing acknowledgment counters.
-
-Inspect the subject's direct SQL roles and the committed SQL spaces, including
-personal links and governance-only roles. Agree the intended organization, then
-have owners authorized in each affected organization revoke its unwanted
-grants bottom-up:
-projects, teams/personal spaces, then organization. Keep the required owner
-in every non-personal space and an admin in every organization. Platform admins can correct organization
-admin grants through their independent platform authority. Revocation does not
-require the target to have a valid unique context; it still checks the caller.
-No role or content is deleted automatically, and granting platform administration does
-not bypass content or ordinary space-administration checks.
-
-Upgrade all manager role writers together; an old writer can still create conflicting
-data. There is no SQL schema migration for this rule. Deployment and rollback
-commands are in the [local deployment guide](../../deploy/k3d/README.md).
 
 ## Configuration
 

@@ -59,9 +59,12 @@ authorization engine or generic relationship graph should be reintroduced.
 
 - Initial hierarchy: organization -> team -> project. Personal spaces belong to
   an organization and are strictly individual, with no invitations.
-- Do not anticipate nested teams/projects or generic cross-organization sharing.
-  The specific cross-organization invitations below are an agreed exception to
-  that absence of generic sharing, not permission to build a generic graph.
+- A person may hold roles in several organizations; governance decides, and each
+  organization is reached only through the roles held there. One personal space per
+  person and organization.
+- Do not anticipate nested teams/projects or generic cross-organization sharing of
+  resources. The specific cross-organization invitations below are an agreed exception
+  to that absence of generic sharing, not permission to build a generic graph.
 - Invitations use the same mechanism for organizations, teams and projects.
   Invite an already known user; access starts at the responsible person's decision,
   with no acceptance step. Expiration is mandatory. Record invited status, author

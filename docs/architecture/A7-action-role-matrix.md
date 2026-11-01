@@ -22,7 +22,7 @@ the parent or organization. Platform roles apply to `platform:root` only.
 
 All non-public business HTTP operations require an authenticated caller and current
 personal CGU acceptance when configured. Space business actions also require the
-caller's unique organization to match the target. Roles do not bypass admission.
+caller to hold a direct role in the target's organization. Roles do not bypass admission.
 `GET /me/spaces` can list governance-only spaces: seeing an entry is not permission
 to read its Resources. Organization context is derived from committed spaces and
 SQL direct grants, never selected by a request URL or a token group.
@@ -151,7 +151,7 @@ Import is additive. Its broader role-assignment authority is described in
 | Accept own CGU - `POST /gcu` | Yes | Yes | Authenticated human, current version; cannot act for another person |
 | Claim initial platform administration - `POST /bootstrap/platform-admin` | Yes | Yes | Real human authentication, CGU, deployment secret, unfinished bootstrap; failed reservation retry belongs to claimant |
 | Own platform-role metadata - `GET /me` | Yes | Yes | Authenticated and CGU; returns own effective platform roles |
-| Own spaces - `GET /me/spaces` | Yes | Yes | Authenticated and CGU; own direct roles on active spaces; empty allowed; contradictory organization attachment, or a space role without its parent membership, returns 409 |
+| Own spaces - `GET /me/spaces` | Yes | Yes | Authenticated and CGU; own direct roles on active spaces, across all the caller's organizations; empty allowed |
 | Probe own platform permission - `POST /authorize/platform` | Yes | Yes | Authenticated and CGU; result may be false |
 | Probe own space permission - `POST /authorize/space` | Yes | Yes | Authenticated and CGU; a missing, foreign or retired target, or a missing permission, gives false; contradictory context gives 409 |
 | Probe own document permission - `POST /authorize/document` | Yes | Yes | Authenticated and CGU; a missing document, or the owning space's refusal, gives false; requested read/write/manage determines true/false |

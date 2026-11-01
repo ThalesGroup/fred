@@ -124,7 +124,7 @@ is rejected, even when disabled.
 
 The existing Administration Console -> Features -> Agents tab reads this same
 catalog through `GET /control-plane/v1/organizations/{organization_id}/agents`.
-Admission, unique organization context, active lifecycle and `can_manage` on an
+Admission, a direct role in that organization, active lifecycle and `can_manage` on an
 organization are required; neither organization attachment alone nor platform
 roles bypass this check. The page reads projected template identities and their organization defaults.
 Its existing switch writes `PUT /organizations/{organization_id}/agents/{agent_id}/default-on`.
@@ -141,7 +141,7 @@ if any source fails, without printing a partial catalog. It does not start the A
 connect to SQL, persist definitions or enroll instances. `serve` does not
 poll runtimes. This command does not enroll or execute agents.
 
-## Platform model inventory and organization owneristration
+## Platform model inventory and organization administration
 
 `platform.model_sources` defaults to `[]` in the schema. The host development
 configuration and checkout-owned k3d overlay opt into the Mistral test source;

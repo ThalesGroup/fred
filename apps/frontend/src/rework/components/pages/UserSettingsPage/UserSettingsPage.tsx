@@ -18,7 +18,6 @@ import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge.tsx";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
-import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import type { MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { useContext, useRef } from "react";
@@ -54,31 +53,14 @@ export default function UserSettingsPage() {
   useRefetchOnWindowFocus(memberships.refetch, false);
   const spacesById = new Map(memberships.currentData?.map((space) => [space.id, space]));
   const { notifyApiError } = useApiErrorToast();
-  const spaceColumns: DataTableColumn<MySpace>[] = [
-    {
-      label: t("rework.userSettings.spaceColumn"),
-      size: "minmax(12rem, 1fr)",
-      cellRenderer: (space) => {
-        const path = (space.kind === "personal" ? [space.organization_id, ...space.path] : space.path)
-          .map((id) => spacesById.get(id))
-          .filter((ancestor) => ancestor !== undefined)
-          .map((ancestor) => (ancestor.kind === "personal" ? t("rework.userSettings.personalSpace") : ancestor.name))
-          .join(" / ");
-        return `${t(`rework.userSettings.spaceKinds.${space.kind}`)} : ${path}`;
-      },
-    },
-    {
-      label: t("rework.userSettings.rolesColumn"),
-      size: "minmax(14rem, 1fr)",
-      cellRenderer: (space) => (
-        <div className={styles.userSettingsCardRow}>
-          {space.roles.map((role) => (
-            <StatusBadge key={role} label={t(`rework.supervision.roleNames.${role}`)} tone="neutral" />
-          ))}
-        </div>
-      ),
-    },
-  ];
+  const spaceLabel = (space: MySpace) => {
+    const path = (space.kind === "personal" ? [space.organization_id, ...space.path] : space.path)
+      .map((id) => spacesById.get(id))
+      .filter((ancestor) => ancestor !== undefined)
+      .map((ancestor) => (ancestor.kind === "personal" ? t("rework.userSettings.personalSpace") : ancestor.name))
+      .join(" / ");
+    return `${t(`rework.userSettings.spaceKinds.${space.kind}`)} : ${path}`;
+  };
 
   const notifyPreferenceError = (error: unknown) =>
     notifyApiError(error, {
@@ -150,15 +132,19 @@ export default function UserSettingsPage() {
               </Button>
             </div>
           ) : (
-            <div className={styles.userSettingsCardRow}>
+            <div className={styles.accessScope}>
               <span className={styles.userSettingsIdentityRole}>
                 {t("rework.userSettings.platformRoles", {
                   roles: me.data.platform_roles.length ? "" : t("rework.userSettings.noPlatformRoles"),
                 })}
               </span>
-              {me.data.platform_roles.map((role) => (
-                <StatusBadge key={role} label={t(`rework.platformRoles.roles.${role}`)} tone="neutral" />
-              ))}
+              {me.data.platform_roles.length > 0 && (
+                <div className={styles.roleBadges}>
+                  {me.data.platform_roles.map((role) => (
+                    <StatusBadge key={role} label={t(`rework.platformRoles.roles.${role}`)} tone="neutral" />
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {!me.isError &&
@@ -177,12 +163,18 @@ export default function UserSettingsPage() {
                 </Button>
               </div>
             ) : memberships.currentData?.length ? (
-              <DataTable
-                columns={spaceColumns}
-                data={memberships.currentData}
-                rowKey={(space) => space.id}
-                size="small"
-              />
+              <dl className={styles.spaceRoles}>
+                {memberships.currentData.map((space) => (
+                  <div key={space.id} className={styles.accessScope}>
+                    <dt className={styles.userSettingsIdentityRole}>{spaceLabel(space)}</dt>
+                    <dd className={styles.roleBadges}>
+                      {space.roles.map((role) => (
+                        <StatusBadge key={role} label={t(`rework.supervision.roleNames.${role}`)} tone="neutral" />
+                      ))}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             ) : (
               <div className={styles.userSettingsIdentityRole}>{t("rework.userSettings.noSpaces")}</div>
             ))}

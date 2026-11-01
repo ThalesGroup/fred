@@ -130,7 +130,7 @@ The inherited factory settings are retained:
 | Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
 | Control Plane | Pod URL `http://control-plane-backend:8222/control-plane/v1` comes from the chart. The pod resolves each turn through the Rust resolver using trusted delegation. |
 
-After deploying, use organization owneristration -> Agents to find and activate
+After deploying, use organization administration -> Agents to find and activate
 `fred.github.assistant`, then verify the list after reload. The deployment does
 not enable templates in organizations or alter instance settings. The explicit
 organization model declarations below initialize model policy once.

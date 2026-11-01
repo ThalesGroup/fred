@@ -253,11 +253,10 @@ async fn invitations_are_inert_and_permanent_grants_survive_their_revocation() {
             .await
             .unwrap()
     );
-    assert_eq!(
-        control_plane::spaces::organization(&pool, "alice")
+    assert!(
+        control_plane::spaces::in_organization(&pool, "alice", org)
             .await
-            .unwrap(),
-        Some(org)
+            .unwrap()
     );
     // The same role can have a permanent grant and a separate invitation origin.
     sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'alice','editor')")

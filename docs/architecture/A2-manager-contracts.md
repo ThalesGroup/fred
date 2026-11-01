@@ -7,9 +7,10 @@ Read [Security](03-security.md) and [Organizations](04-organizations.md) for mea
 
 Health and frontend configuration are public. Other routes require a bearer token
 ([security](03-security.md)); business routes also require current personal CGU acceptance
-and the unique organization context described in [Organizations](04-organizations.md#one-person-one-organization).
-`/me` remains platform-role metadata; `/me/spaces` validates business context and
-returns 409 for contradictory attachments. No organization request parameter
+and a direct role in the target space's organization, as described in
+[Organizations](04-organizations.md#people-in-several-organizations).
+`/me` remains platform-role metadata; `/me/spaces` lists the caller's active spaces
+across their organizations. No organization request parameter
 selects a tenant. Business routes answer a missing or foreign space with 404, then a
 retired one with 409 `space_pending_deletion`, then a missing permission with 403
 ([security](A6-security.md#business-authorization-answer)). Authorization probes return
@@ -19,8 +20,9 @@ and 503 when the directory is unavailable.
 
 `GET /organizations/{organization_id}/agents` reuses runtime discovery after
 `spaces::authorize(..., Manage)` and an organization-kind check. The target must
-belong to the admitted caller's unique organization and be active. Organization
-ownership alone, team/project owneristration and platform roles confer no access.
+belong to an organization where the admitted caller holds a direct role, and be
+active. Organization attachment alone, team/project ownership and platform roles
+confer no access.
 The response contains `AgentEnablement` rows with runtime/template provenance and
 the SQL default enablement for this organization. The UI reuses the existing
 switch and confirmation with organization-scoped messages.
@@ -215,7 +217,7 @@ shared policy operations. This is implemented with isolated SQL/provider-fixture
 coverage; it is not a claim of a validated k3d/provider journey or Rust inference.
 The schema alone does not initialize an installation: explicit mappings and a
 successful bounded initialization pass are required.
-The [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-owneristration)
+The [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-administration)
 defines source approval, payloads, eligibility, errors and concurrency.
 
 The organization Models tab is bound through

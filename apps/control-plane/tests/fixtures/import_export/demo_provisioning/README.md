@@ -13,8 +13,9 @@ two organizations (Acme, Globex), two teams (Research, Support) and one project
 personal space is created during import; the platform account is bootstrapped
 separately.
 
-`boss` is a test convenience account, not a persona: it holds every role on Acme,
-Research and Atlas plus all platform roles. Never use it to demonstrate or test a rule.
+`boss` is a test convenience account, not a persona: it holds every role on every
+space of both organizations plus all platform roles. Never use it to demonstrate or
+test a rule.
 
 | Test | What it checks against the demo |
 | --- | --- |

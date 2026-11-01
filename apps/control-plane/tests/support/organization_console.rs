@@ -55,7 +55,7 @@ async fn state(
 // Proves: I5, I23
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn organization_console_rechecks_waiting_creator_and_serializes_attachment() {
+async fn organization_console_rechecks_waiting_creator_and_allows_several_organizations() {
     use control_plane::roles::PlatformRole;
     let e = env().await;
     let identity = support::IdentityServer::start().await;
@@ -128,8 +128,9 @@ async fn organization_console_rechecks_waiting_creator_and_serializes_attachment
             "target"
         )
     );
-    assert_ne!(a.is_ok(), b.is_ok());
-    assert!(matches!(a.err().or(b.err()), Some(AppError::Conflict(_))));
+    // The same person may govern several organizations.
+    a.unwrap();
+    b.unwrap();
 }
 
 #[tokio::test]

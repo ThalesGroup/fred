@@ -46,15 +46,18 @@ and use these spaces according to roles held directly on each space. The hierarc
 grants no child-space rights; see [Security](03-security.md).
 Folders organize documents within a space; they do not create another access boundary.
 
-## One person, one organization
+## People in several organizations
 
-One Fred installation can host several organizations. A person is attached to
-**at most one organization** and may participate in several of its teams and
-projects. Signing in does not create that attachment. Platform administration
-roles are separate from organization membership.
+One Fred installation can host several organizations. A person may hold roles in
+several of them; governance decides. Each organization stays isolated: a person
+sees and uses its spaces only through the roles held there. Signing in creates no
+attachment, and platform administration roles are separate from organization
+membership.
 
-The UI shows the organization in Profile and lets the user choose accessible
-working spaces. It does not offer an organization switcher.
+The UI lists the person's accessible working spaces. It was designed for one
+organization per person: the personal-space entry on Home and the organization
+administration area still use the first organization listed. Choosing among
+several organizations is not offered yet.
 
 ## Personal spaces
 

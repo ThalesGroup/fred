@@ -3767,8 +3767,6 @@
       }
     },
     "userSettings": {
-      "spaceColumn": "Space",
-      "rolesColumn": "Roles",
       "accessTitle": "My roles and spaces",
       "spaceKinds": {
         "organization": "Organization",

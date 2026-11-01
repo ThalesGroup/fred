@@ -46,6 +46,13 @@
       ],
       "zoe": [
         "member"
+      ],
+      "boss": [
+        "organization_admin",
+        "owner",
+        "member",
+        "editor",
+        "analyst"
       ]
     }
   }

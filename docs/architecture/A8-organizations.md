@@ -5,49 +5,37 @@ and coding assistants. It preserves context resolution, placement, membership,
 provisioning and retirement contracts for the Control Plane organization model.
 See [Security](03-security.md) for the reader-facing explanation of roles and rights.
 
-## One person, one organization
+## People and organizations
 
-A Fred instance can host several organizations, but a person belongs to at most one
-of them (I23). Before assignment, the person belongs to none. An organization is the
-person's business context, not a space selector or a login preference.
+A Fred instance can host several organizations. A person belongs to every
+organization where they hold a direct role, and to none before any assignment
+(I23). Organizations stay isolated by roles: holding roles in Acme and Globex gives
+access in each according to the roles held there, never across them.
 
 | Concept | Meaning |
 | --- | --- |
 | Identity | The authenticated UID from the configured identity provider, not an email domain or a browser parameter. |
-| Organization | The unique organization containing the person's committed direct space roles, including owner and admin roles. |
-| Team and project | Selectable workspaces inside that organization, subject to their own permissions. |
-| Personal space | A private workspace managed by the same organization; attachment does not create it. |
+| Organization | Each organization containing at least one of the person's committed direct space roles, including owner and admin roles. |
+| Team and project | Selectable workspaces inside an organization, subject to their own permissions. |
+| Personal space | A private workspace managed by one organization; a person may have one per organization. Attachment does not create it. |
 | Platform role | Authority to administer Fred independently of organization membership; no implicit access to business content. |
 
-Manager reads all pages of canonical SQL direct roles, then resolves their
-distinct organization IDs with one SQL query over existing space rows, including
-retired rows. Tuples without a SQL row confer no attachment. SQL holds immutable
-placement, not a second membership record.
-Every granted role counts towards attachment, including governance-only roles;
-attachment itself grants no extra permission. The same resolver validates
-`/me/spaces`, which subsequently excludes retired spaces from display. An empty
-visible list does not free a person from an attachment retained during deletion.
-Removing the last role in an
-organization removes attachment, subject to the existing dependent-role rules.
-Context resolution does not repair or revalidate parent membership prerequisites
-for existing grants: those checks run when assigning roles. An isolated direct
-project role therefore resolves to its SQL organization in both context and
-membership discovery; permission remains a Control Plane decision.
+`spaces::in_organization` answers whether a person holds any direct role on a space
+of an organization, retired rows included. Every granted role counts, including
+governance-only roles; attachment itself grants no extra permission. Removing the
+last role in an organization removes attachment, subject to the existing
+dependent-role rules. Context resolution does not repair or revalidate parent
+membership prerequisites for existing grants: those checks run when assigning
+roles. An isolated direct project role therefore resolves to its SQL organization
+in both context and membership discovery; permission remains a Control Plane decision.
 
-Bob's provisioning roles attach him to Acme. After authentication and personal CGU,
-`GET /me/spaces` returns his authorized memberships within that context. Home
-retains its usual dashboard and team/personal navigation at `/home`; the organization
-name appears in Profile. Team/project selection uses a space identifier. There is
-no organization picker, switch or organization identifier in the landing URL. A supplied identifier never
-changes server authority. An explicit invalid space selection shows no space.
-
-Creation, direct grants and ZIP import reject a second organization attachment,
-including concurrent attempts. Business reads, authorization probes and mutations
-check context as well as Control Plane permissions. Unattached people receive no business
-access; platform-only people retain their authorized administration paths.
-Contradictory existing grants cause a conflict, not an arbitrary tenant choice.
-Admins can remove unwanted grants using the existing revocation rules;
-no data or roles are automatically removed. See [operations](A3-manager-operations.md#organization-conflict-recovery).
+Business reads, authorization probes and mutations check that context as well as
+Control Plane permissions: outside an organization, its spaces do not exist for the
+caller (404). Unattached people receive no business access; platform-only people
+retain their authorized administration paths. `GET /me/spaces` lists the person's
+active spaces across all their organizations, each with its `organization_id`.
+Team/project selection uses a space identifier; a supplied identifier never changes
+server authority.
 
 ## Spaces and memberships
 
@@ -253,7 +241,7 @@ row count. Personal spaces remain aggregated. Existing PageHeader, StatusBadge,
 DataTable, Disclosure, InlineDrawer, navigation, buttons and formatters provide the
 UI controls, with French and English translations.
 
-## Platform organization owneristration
+## Platform organization administration
 
 The platform registry exposes active organizations, independently of content
 membership, in pages of at most 100 names/identifiers. Only admitted platform admins
@@ -263,8 +251,8 @@ the local OIDC directory searches personal profiles already observed during
 authenticated onboarding, before or after consent, by literal case-insensitive prefix
 of username, first name, last name or email. HTTP creation resolves the exact existing owner/admin
 usernames and writes those two direct roles, with no implicit member grant. One
-account may hold both roles. Name uniqueness and each nominee's single organization
-attachment are rechecked under the platform lock before guarded publication.
+account may hold both roles, and may already belong to other organizations. Name
+uniqueness is rechecked under the platform lock before guarded publication.
 Retired organizations reserve their name until cleanup, and are absent from the list.
 Organization creation does not create a personal space.
 
