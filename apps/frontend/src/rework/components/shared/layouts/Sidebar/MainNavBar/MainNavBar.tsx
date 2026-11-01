@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
-import type { CSSProperties } from "react";
 import styles from "./MainNavBar.module.scss";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
@@ -21,10 +20,6 @@ import type { IconType } from "@shared/utils/Type.ts";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { useMediaQuery } from "@core/hooks/useMediaQuery";
 
-// Medium button footprint (40px) but with the `small` tier's 1.25rem glyph.
-// `--icon-size` is set on `.btn-medium`, so an inline override (higher
-// precedence than the class) is what shrinks just the icon, not the hit area.
-const ICON_STYLE = { "--icon-size": "1.25rem" } as CSSProperties;
 import { useTranslation } from "react-i18next";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
@@ -162,7 +157,6 @@ function NavRail({ entries }: { entries: MainNavEntry[] }) {
             <IconButton
               variant="icon"
               size="medium"
-              style={ICON_STYLE}
               color={entry.active ? "primary" : "on-surface-retreat"}
               icon={{ category: "outlined", type: entry.icon, filled: entry.active }}
               aria-label={entry.label}

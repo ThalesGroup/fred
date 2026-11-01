@@ -82,7 +82,14 @@ export const UserTurn = memo(function UserTurn({
   const actions: Action[] = useMemo(
     () => [
       ...(onEdit
-        ? [{ id: "edit", icon: "edit", label: t("chatbot.editMessage"), onClick: () => onEdit(invocationText) }]
+        ? [
+            {
+              id: "edit",
+              icon: "edit" as const,
+              label: t("chatbot.editMessage"),
+              onClick: () => onEdit(invocationText),
+            },
+          ]
         : []),
       {
         id: "copy",
