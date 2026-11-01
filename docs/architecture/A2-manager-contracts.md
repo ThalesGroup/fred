@@ -349,6 +349,7 @@ access, then evaluates the model facts already read in its transaction.
 `ExecutionPreparation` returns `model_choice`, nullable `model_error` and a public
 `inference` selection alongside the offers, controls and approved runtime URLs. A readable response may be HTTP 200
 with an unusable model choice: callers must check the diagnostic before sending.
+Capability routes are derived from the approved public base.
 No inference connection or secret is exposed in this browser response.
 
 [`model_catalog/instance.rs`](../../apps/control-plane/src/model_catalog/instance.rs),

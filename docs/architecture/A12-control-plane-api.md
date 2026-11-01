@@ -1884,6 +1884,7 @@ JSON error envelope shared by application, authentication and import failures.
 | --- | --- | --- | --- |
 | `agent_configuration_revision` | integer (int64) | yes |  |
 | `agent_instance_id` | string (uuid) | yes |  |
+| `capability_base_urls` | map of string | yes | Browser-reachable router of each selected capability that ships one. |
 | `chat_controls` | array of [`ChatControlDescriptor`](#chatcontroldescriptor) | yes |  |
 | `execute_stream_url` | string | yes |  |
 | `execute_url` | string | yes |  |

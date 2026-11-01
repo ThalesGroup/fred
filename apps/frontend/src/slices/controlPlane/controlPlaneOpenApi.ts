@@ -2174,6 +2174,10 @@ export type PreparationModels = {
 export type ExecutionPreparation = {
   agent_configuration_revision: number;
   agent_instance_id: string;
+  /** Browser-reachable router of each selected capability that ships one. */
+  capability_base_urls: {
+    [key: string]: string;
+  };
   chat_controls: ChatControlDescriptor[];
   execute_stream_url: string;
   execute_url: string;
