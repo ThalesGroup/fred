@@ -522,7 +522,18 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const isTurnActive = useCallback(() => waitResponseRef.current, []);
   const getCurrentMessages = useCallback(() => latestMessagesRef.current, []);
 
-  const composer = useComposerSettings(sessionId, chatControls, preparation?.models, `${spaceId}:${agentInstanceId}`);
+  const handleModelChoiceDropped = useCallback(
+    (model: string) => showWarn({ summary: t("chatbot.composerSettings.modelChoiceLost", { model }) }),
+    [showWarn, t],
+  );
+  // A conversation that cannot run must not judge the stored choice.
+  const composer = useComposerSettings(
+    sessionId,
+    chatControls,
+    executionDisabled ? undefined : preparation?.models,
+    `${spaceId}:${agentInstanceId}`,
+    handleModelChoiceDropped,
+  );
   composerRef.current = composer;
   useEffect(() => {
     visibleSessionRef.current = sessionId;

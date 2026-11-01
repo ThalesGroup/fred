@@ -16,7 +16,7 @@ import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 
 // Bounded per-tab snapshots keyed by authenticated session, space and conversation.
 // A snapshot is not proof of access: useSessionHistory only displays the result
-// of a current authorized pod read and evicts the entry on failure.
+// of a current authorized pod read and evicts the entry on a refusal or a failed first read.
 const MAX_CACHED_SESSIONS = 20;
 const STORAGE_PREFIX = "chat.history.";
 const STORAGE_INDEX_KEY = "chat.history#index";

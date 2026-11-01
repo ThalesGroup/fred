@@ -57,7 +57,8 @@ export function useSessionHistory({
     const unavailable = (errorKey = "rework.weaverAgents.errors.server") => {
       loadedKey.current = null;
       deleteCachedSessionHistory(key);
-      onLoaded([]);
+      // An admitted turn may finish: only its end hides what it streamed.
+      if (!isTurnActive()) onLoaded([]);
       setResult({ key, status: "unavailable", errorKey });
     };
     // Local content is never evidence of current history access.
@@ -86,12 +87,9 @@ export function useSessionHistory({
         });
         await handlePlatformAccessResponse(response);
         if (!response.ok) {
-          if (current())
-            unavailable(
-              [401, 403, 404].includes(response.status)
-                ? "rework.weaverAgents.scopeUnavailable"
-                : "rework.weaverAgents.errors.server",
-            );
+          if (!current()) return;
+          if ([401, 403, 404].includes(response.status)) unavailable("rework.weaverAgents.scopeUnavailable");
+          else if (loadedKey.current !== key) unavailable();
           return;
         }
         const messages: ChatMessage[] = await response.json();
@@ -107,7 +105,8 @@ export function useSessionHistory({
         loadedKey.current = key;
         setResult({ key, status: "ready" });
       } catch {
-        if (current()) unavailable();
+        // A failed reload proves nothing about access: the loaded thread and its cache stay.
+        if (current() && loadedKey.current !== key) unavailable();
       }
     };
     void load();

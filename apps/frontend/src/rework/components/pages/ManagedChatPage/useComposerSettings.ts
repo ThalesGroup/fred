@@ -38,6 +38,21 @@ interface ComposerState {
   chatModelLabel: string | null;
 }
 
+/** `state` without a model choice the offers no longer hold or permit; `dropped` names it.
+ *  An empty list proves nothing, and a withdrawn offer stays: the server runs its fallback. */
+function withoutStaleChoice(
+  state: ComposerState,
+  model: PreparationModels | undefined,
+): { state: ComposerState; dropped: string | null } {
+  const rows = model?.offers ?? [];
+  const kept = rows.some((row) => modelChoiceKey(row.key) === state.chatProfileId && row.permitted);
+  if (!state.chatProfileId || rows.length === 0 || kept) return { state, dropped: null };
+  return {
+    state: { ...state, chatProfileId: null, chatModelLabel: null, reasoning: false },
+    dropped: state.chatModelLabel ?? state.chatProfileId,
+  };
+}
+
 /** Reads a stock widget's `params.default` (RFC §3.3), e.g. `search_policy` /
  * `rag_scope`, from the ordered `chat_controls` list. */
 function findDefault<T>(chatControls: readonly ChatControlDescriptor[], widget: string): T | undefined {
@@ -121,6 +136,7 @@ export function useComposerSettings(
   chatControls: readonly ChatControlDescriptor[],
   effectiveModel?: PreparationModels,
   scopeKey = "",
+  onChoiceDropped?: (modelLabel: string) => void,
 ) {
   const scopedSession = useCallback((id: string | null) => `${scopeKey}:${id ?? "draft"}`, [scopeKey]);
   const [state, setState] = useState<ComposerState>(() => buildInitial(scopedSession(sessionId), chatControls));
@@ -129,6 +145,8 @@ export function useComposerSettings(
   sessionIdRef.current = scopedSession(sessionId);
   const effectiveModelRef = useRef(effectiveModel);
   effectiveModelRef.current = effectiveModel;
+  const onChoiceDroppedRef = useRef(onChoiceDropped);
+  onChoiceDroppedRef.current = onChoiceDropped;
   // Read by bindSession() below, which fires from a callback and so cannot
   // close over the render-time state.
   const stateRef = useRef(state);
@@ -148,6 +166,16 @@ export function useComposerSettings(
     if (Object.keys(readStorage(sessionIdRef.current)).length > 0) return;
     setState(buildInitial(sessionIdRef.current, chatControls));
   }, [chatControls]);
+
+  // The offers arrive or refresh after mount: a choice they no longer hold goes, visibly.
+  useEffect(() => {
+    const { state: checked, dropped } = withoutStaleChoice(stateRef.current, effectiveModel);
+    if (dropped === null) return;
+    stateRef.current = checked;
+    writeStorage(sessionIdRef.current, checked);
+    setState(checked);
+    onChoiceDroppedRef.current?.(dropped);
+  }, [effectiveModel]);
 
   const update = useCallback(
     (patch: Partial<ComposerState>) => {
