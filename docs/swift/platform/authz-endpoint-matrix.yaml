@@ -1270,6 +1270,41 @@ operations:
     review_status: pending_review
     required_permission: authenticated # Records that the caller saw that announcement (one row per user); idempotent, 404 unless the id is an announced package, and never moves the caller back to an older announcement. The user id comes from the token, never the request, so no caller can write another user's record.
   - service: control-plane
+    method: GET
+    path: /control-plane/v1/notifications/summary
+    review_status: approved
+    required_permission: authenticated # The caller's unseen, unexpired notification count; the recipient is the token's uid, never a request field. Polled by the badge every 15 s per visible tab: one count on the partial unseen index.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/notifications
+    review_status: approved
+    required_permission: authenticated # The caller's own unexpired notifications, newest first, at most 50 per page with an opaque cursor. No route creates a notification or chooses its recipients: control-plane services compute them (published_by of a marketplace entry).
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/notifications/seen
+    review_status: approved
+    required_permission: authenticated # Marks the caller's notifications seen up to `up_to`; 404 unless `up_to` is one of the caller's unexpired notifications, so another user's id reveals nothing.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/notifications/{notification_id}
+    review_status: approved
+    required_permission: authenticated # Deletes one of the caller's notifications; another user's id answers 404. The user's own data: not audited.
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/notifications
+    review_status: approved
+    required_permission: authenticated # Clear all: deletes the caller's notifications and nobody else's. Not audited.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/platform/notification-types
+    review_status: approved
+    required_permission: can_manage_platform # NotificationService._require_manage_platform, same catch-all gate as the UI theme settings. Every type of the NotificationType enum with its platform-wide switch; no row means on.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/notification-types/{notification_type}
+    review_status: approved
+    required_permission: can_manage_platform # NotificationService._require_manage_platform. Off hides every notification of the type from everyone, without deleting it; on shows them again. Unknown type answers 422 at parsing. Emits audit event platform.notification_type.updated.
+  - service: control-plane
     method: PUT
     path: /control-plane/v1/admin/platform/announcements/patch-notes/order
     review_status: pending_review

@@ -24,6 +24,8 @@ une conversation les fait travailler ensemble :
   et la façon dont un agent les lit.
 - **[Les prompts](/help/fr/features/prompts)** — les demandes récurrentes,
   enregistrées une fois pour toutes.
+- **[Les notifications](/help/fr/features/notifications)** — la cloche qui vous
+  prévient quand quelque chose vous concerne.
 
 Deux pages traitent des droits plutôt que des outils :
 

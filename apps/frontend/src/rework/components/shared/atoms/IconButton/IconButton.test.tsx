@@ -99,6 +99,18 @@ describe("IconButton badge", () => {
     expect(badge()?.textContent).toBe("999");
   });
 
+  it("caps the label at a caller-chosen badgeMax", () => {
+    render(<IconButton {...base} aria-label="Attachments" badgeCount={100} badgeMax={99} />);
+
+    expect(badge()?.textContent).toBe("99+");
+  });
+
+  it("shows badgeMax itself unabbreviated", () => {
+    render(<IconButton {...base} aria-label="Attachments" badgeCount={99} badgeMax={99} />);
+
+    expect(badge()?.textContent).toBe("99");
+  });
+
   it("keeps the badge out of the accessible name", () => {
     // aria-hidden: the caller's label carries the count, so a screen reader
     // does not read a bare digit after the button name.

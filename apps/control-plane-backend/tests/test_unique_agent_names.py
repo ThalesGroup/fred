@@ -23,6 +23,7 @@ import importlib.util
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -39,6 +40,7 @@ from control_plane_backend.agent_instances.store import (
     AgentNameAlreadyExistsError,
 )
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.notifications.service import NotificationService
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -95,7 +97,7 @@ async def store(tmp_path: Path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'agents.db'}")
     async with engine.begin() as conn:
         await conn.run_sync(cast(sa.Table, AgentInstanceRow.__table__).create)
-    yield AgentInstanceStore(engine)
+    yield AgentInstanceStore(engine, notifications=AsyncMock(spec=NotificationService))
     await engine.dispose()
 
 

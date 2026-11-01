@@ -80,6 +80,8 @@ from control_plane_backend.model_discovery.store import (
     PodChatDefaultStore,
 )
 from control_plane_backend.models.task_models import TASK_TABLES
+from control_plane_backend.notifications.service import NotificationService
+from control_plane_backend.notifications.store import NotificationStore
 from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
     PlatformPromptStore,
@@ -137,6 +139,8 @@ class ApplicationContext:
         self._marketplace_settings_store: PlatformMarketplaceSettingsStore | None = None
         self._agent_marketplace_store: AgentMarketplaceStore | None = None
         self._announcement_store: AnnouncementStore | None = None
+        self._notification_store: NotificationStore | None = None
+        self._notification_service: NotificationService | None = None
         self._knowledge_base_instance_store: KnowledgeBaseInstanceStore | None = None
         self._knowledge_base_definition_store: KnowledgeBaseDefinitionStore | None = (
             None
@@ -410,7 +414,8 @@ class ApplicationContext:
     def get_agent_instance_store(self) -> AgentInstanceStore:
         if self._agent_instance_store is None:
             self._agent_instance_store = AgentInstanceStore(
-                engine=self.get_pg_async_engine()
+                engine=self.get_pg_async_engine(),
+                notifications=self.get_notification_service(),
             )
         return self._agent_instance_store
 
@@ -490,6 +495,22 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._announcement_store
+
+    def get_notification_store(self) -> NotificationStore:
+        if self._notification_store is None:
+            self._notification_store = NotificationStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._notification_store
+
+    def get_notification_service(self) -> NotificationService:
+        if self._notification_service is None:
+            self._notification_service = NotificationService(
+                self.get_notification_store(),
+                get_kpi_writer=self.get_kpi_writer,
+                get_rebac=self.get_rebac_engine,
+            )
+        return self._notification_service
 
     def get_knowledge_base_definition_store(self) -> KnowledgeBaseDefinitionStore:
         if self._knowledge_base_definition_store is None:

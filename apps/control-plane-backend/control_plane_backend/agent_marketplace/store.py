@@ -143,6 +143,7 @@ class MarketplaceEntry:
     first_published_at: datetime
     published_at: datetime
     snapshot_source_updated_at: datetime
+    published_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -167,6 +168,12 @@ class RemovedEntry:
     agent_instance_id: str
     team_id: TeamId
     reason: RemovalReason
+    state: EntryState = EntryState.REMOVED
+    display_name: str = ""
+    published_by: str | None = None
+    removed_at: datetime | None = None
+    message: str | None = None
+    team_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +211,7 @@ def _to_entry(row: AgentMarketplaceEntryRow) -> MarketplaceEntry:
         first_published_at=row.first_published_at,
         published_at=row.published_at,
         snapshot_source_updated_at=row.snapshot_source_updated_at,
+        published_by=row.published_by,
     )
 
 
@@ -249,12 +257,30 @@ async def remove_published_entries(
         )
     )
     await session.flush()
+    # Names for the publishers' notifications, read in the same transaction.
+    notified_teams = {
+        row.team_id for row in rows if row.published_by and state == EntryState.REMOVED
+    }
+    team_names: dict[str, str] = {}
+    if notified_teams:
+        names = await session.execute(
+            select(TeamMetadataRow.id, TeamMetadataRow.name).where(
+                TeamMetadataRow.id.in_(notified_teams)
+            )
+        )
+        team_names = {team_id: name for team_id, name in names.all()}
     return [
         RemovedEntry(
             entry_id=row.entry_id,
             agent_instance_id=row.agent_instance_id,
             team_id=TeamId(row.team_id),
             reason=reason,
+            state=state,
+            display_name=row.display_name,
+            published_by=row.published_by,
+            removed_at=now,
+            message=message,
+            team_name=team_names.get(row.team_id),
         )
         for row in rows
     ]
@@ -382,6 +408,7 @@ class AgentMarketplaceStore:
         team_id: TeamId,
         snapshot: Snapshot,
         expected_version: int | None,
+        published_by: str,
     ) -> tuple[MarketplaceEntry, bool]:
         """Publish or republish; returns the entry and whether it was a new
         publication (first one, or after a removal), the only kind the quota limits."""
@@ -428,6 +455,7 @@ class AgentMarketplaceStore:
                 row.version += 1
                 row.published_at = now
                 row.snapshot_source_updated_at = snapshot.source_updated_at
+                row.published_by = published_by
                 await s.flush()
                 s.add_all(
                     AgentMarketplaceEntryFileRow(

@@ -415,7 +415,8 @@ menu keeps the default rhythm. Opt-in `quietUnselected` (same chip only): unsele
 (the accent state layer and check stay).
 Sub-menu rows are rows with a chevron whose anchored panel is rendered by the parent as a
 sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface*`,
-`--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`.
+`--outline-variant`, `--radius-*`). Current instances: `UserProfile`, `SearchConfig`,
+`NotificationsPopover`.
 
 - **M3 alignment (2026-08-03)** — container corner moved from `--radius-m` to `--radius-s`
   (the M3 menu/text-field/chip radius), and a picked row now carries the dedicated
@@ -1101,8 +1102,9 @@ _(none yet)_
 **Status:** `Functional`
 
 `badgeCount` puts an M3 _large badge_ on the button's top-right corner. Nothing
-renders below 1 — a "0" pill is noise, not information — and counts above 999
-show as `999+`, M3's three-digit cap.
+renders below 1 — a "0" pill is noise, not information — and counts above
+`badgeMax` (default 999, M3's three-digit cap) show as `${badgeMax}+`; the
+notification bell sets 99.
 
 Spec mapped onto existing tokens, no invented values: 16px min box
 (`--spacing-m`), `--radius-full`, 4px side padding (`--spacing-2xs`), Label
@@ -1122,6 +1124,32 @@ call site keeps rendering a bare `<button>`.
 It is `aria-hidden`. The caller passes an `aria-label` carrying the count —
 otherwise a screen reader announces the button with no number, or reads a bare
 digit after the name.
+
+---
+
+### Notifications: bell, `NotificationsPopover`, `NotificationTile`, admin `NotificationsPage` (2026-10-22)
+
+**Location:** `src/rework/features/notifications/`,
+`src/rework/components/shared/molecules/NotificationTile/`,
+`src/rework/components/pages/admin/NotificationsPage/`
+
+**Status:** `Functional`
+
+- **Bell** — in the `Sidebar` rail between `MainNavBar` and the profile, same medium
+  IconButton as the nav entries, `badgeMax={99}`, count repeated in the `aria-label`.
+  The bell and the profile menu open in `RailPopoverLayer` (a portal beside the rail).
+- **`NotificationsPopover`** — `MenuPopover` surface (`role="dialog"`): title, "Clear all",
+  tiles newest first, "Show more", `PageEmptyState`. Full-screen sheet at 600px and below.
+- **`NotificationTile`** — props-only molecule: category icon well, title, body, time,
+  outlined "View", type buttons, "Handled by" line instead of buttons, always-visible
+  close button. The card itself is not clickable.
+- **Admin `NotificationsPage`** — one `Switch` per type; turning one off asks first in a
+  critical `ConfirmationDialog`.
+
+#### Open UX issues
+
+- Not design-reviewed. The icon well uses `--spacing-2xl` (40px) instead of the
+  mockup's 36px.
 
 ---
 

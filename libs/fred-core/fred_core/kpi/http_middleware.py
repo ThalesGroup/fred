@@ -28,7 +28,7 @@ from fred_core.security.oidc import decode_jwt
 logger = logging.getLogger(__name__)
 
 # Paths whose suffixes are skipped — health and readiness probes add no analytics value.
-_SKIP_SUFFIXES = ("/healthz", "/ready")
+DEFAULT_SKIP_SUFFIXES = ("/healthz", "/ready")
 
 KPIWriterSource = Union[BaseKPIWriter, Callable[[], BaseKPIWriter]]
 _UNHANDLED_EXCEPTION_TYPE = "fred.unhandled_exception_type"
@@ -47,11 +47,18 @@ class KPIMiddleware(BaseHTTPMiddleware):
 
     `kpi` can be a BaseKPIWriter instance (eager) or a zero-arg callable that
     returns one (lazy — for backends where the writer is initialised in lifespan).
+    `skip_suffixes` lists the paths, by suffix, that emit nothing.
     """
 
-    def __init__(self, app, kpi: KPIWriterSource) -> None:
+    def __init__(
+        self,
+        app,
+        kpi: KPIWriterSource,
+        skip_suffixes: tuple[str, ...] = DEFAULT_SKIP_SUFFIXES,
+    ) -> None:
         super().__init__(app)
         self._kpi_source = kpi
+        self._skip_suffixes = skip_suffixes
 
     def _get_kpi(self) -> BaseKPIWriter:
         if callable(self._kpi_source) and not isinstance(
@@ -61,7 +68,7 @@ class KPIMiddleware(BaseHTTPMiddleware):
         return self._kpi_source  # type: ignore[return-value]
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path.endswith(_SKIP_SUFFIXES):
+        if request.url.path.endswith(self._skip_suffixes):
             return await call_next(request)
 
         t0 = time.perf_counter()

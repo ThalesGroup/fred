@@ -23,6 +23,7 @@ import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap.
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
+import RailPopoverLayer from "@shared/molecules/RailPopoverLayer/RailPopoverLayer.tsx";
 import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog.tsx";
 import { usePatchNoteHistory } from "../../../../features/announcements/usePatchNoteHistory.ts";
 
@@ -41,6 +42,7 @@ export default function UserProfile() {
   const { notes: patchNotes } = usePatchNoteHistory();
   const [readingPatchNotes, setReadingPatchNotes] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
 
   const userFullName = KeyCloakService.GetUserFullName();
   const { bootstrap } = useFrontendBootstrap();
@@ -49,7 +51,8 @@ export default function UserProfile() {
   useEffect(() => {
     if (!open) return;
     const onPointer = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!containerRef.current?.contains(target) && !layerRef.current?.contains(target)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -70,61 +73,63 @@ export default function UserProfile() {
   return (
     <div className={styles.container} ref={containerRef}>
       {open && (
-        <div className={styles.popoverWrap}>
-          <MenuPopover
-            className={styles.popoverBox}
-            headerTitle={userFullName}
-            headerSubtitle={userEmail}
-            groups={[
-              [
-                <MenuPopoverItem
-                  key="profile"
-                  icon={{ category: "outlined", type: "person" }}
-                  label={t("rework.profileMenu.profile")}
-                  onClick={() => goTo("/settings")}
-                />,
-                ...(patchNotes.length > 0
+        <RailPopoverLayer anchor={containerRef} ref={layerRef}>
+          <div className={styles.popoverWrap}>
+            <MenuPopover
+              className={styles.popoverBox}
+              headerTitle={userFullName}
+              headerSubtitle={userEmail}
+              groups={[
+                [
+                  <MenuPopoverItem
+                    key="profile"
+                    icon={{ category: "outlined", type: "person" }}
+                    label={t("rework.profileMenu.profile")}
+                    onClick={() => goTo("/settings")}
+                  />,
+                  ...(patchNotes.length > 0
+                    ? [
+                        <MenuPopoverItem
+                          key="whatsNew"
+                          icon={{ category: "outlined", type: "new_releases" }}
+                          label={t("rework.profileMenu.whatsNew")}
+                          onClick={() => {
+                            setOpen(false);
+                            setReadingPatchNotes(true);
+                          }}
+                        />,
+                      ]
+                    : []),
+                ],
+                contactSupportLink
                   ? [
                       <MenuPopoverItem
-                        key="whatsNew"
-                        icon={{ category: "outlined", type: "new_releases" }}
-                        label={t("rework.profileMenu.whatsNew")}
+                        key="support"
+                        icon={{ category: "outlined", type: "chat" }}
+                        label={t("rework.profileMenu.contactSupport")}
                         onClick={() => {
                           setOpen(false);
-                          setReadingPatchNotes(true);
+                          window.open(contactSupportLink, "_blank", "noopener,noreferrer");
                         }}
                       />,
                     ]
-                  : []),
-              ],
-              contactSupportLink
-                ? [
-                    <MenuPopoverItem
-                      key="support"
-                      icon={{ category: "outlined", type: "chat" }}
-                      label={t("rework.profileMenu.contactSupport")}
-                      onClick={() => {
-                        setOpen(false);
-                        window.open(contactSupportLink, "_blank", "noopener,noreferrer");
-                      }}
-                    />,
-                  ]
-                : [],
-              [
-                <MenuPopoverItem
-                  key="logout"
-                  icon={{ category: "outlined", type: "logout" }}
-                  label={t("rework.userSettings.disconnect")}
-                  danger
-                  onClick={KeyCloakService.CallLogout}
-                />,
-              ],
-            ]}
-          />
-        </div>
+                  : [],
+                [
+                  <MenuPopoverItem
+                    key="logout"
+                    icon={{ category: "outlined", type: "logout" }}
+                    label={t("rework.userSettings.disconnect")}
+                    danger
+                    onClick={KeyCloakService.CallLogout}
+                  />,
+                ],
+              ]}
+            />
+          </div>
+        </RailPopoverLayer>
       )}
 
-      <Tooltip text={t("rework.profileMenu.trigger", { name: userFullName })} placement="right">
+      <Tooltip text={t("rework.profileMenu.trigger", { name: userFullName })} placement="right" disabled={open}>
         <button
           type="button"
           className={styles.trigger}

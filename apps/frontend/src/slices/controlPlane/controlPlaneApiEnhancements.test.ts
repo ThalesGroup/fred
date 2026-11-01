@@ -501,3 +501,82 @@ describe("team models save", () => {
     agents.unsubscribe();
   });
 });
+
+describe("notification tags", () => {
+  const summaryPath = "/control-plane/v1/notifications/summary";
+  const listPath = "/control-plane/v1/notifications";
+  let gets: string[] = [];
+
+  beforeEach(() => {
+    gets = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (request: Request) => {
+        const { pathname } = new URL(request.url);
+        if (request.method === "GET") gets.push(pathname);
+        if (pathname === summaryPath) return json({ unseen_count: 0 });
+        if (pathname === listPath && request.method === "GET") return json({ items: [], next_cursor: null });
+        return json({ unseen_count: 0 });
+      }),
+    );
+  });
+
+  const getsOf = (path: string) => gets.filter((pathname) => pathname === path).length;
+
+  /** Subscribes the bell and the open list, runs `mutate`, then reports which refetched. */
+  async function refreshedBy(mutate: (store: ReturnType<typeof makeStore>) => Promise<unknown>) {
+    const store = makeStore();
+    const summary = store.dispatch(
+      api.endpoints.getNotificationSummaryControlPlaneV1NotificationsSummaryGet.initiate(),
+    );
+    const list = store.dispatch(api.endpoints.listNotificationsControlPlaneV1NotificationsGet.initiate({ limit: 50 }));
+    try {
+      await Promise.all([summary, list]);
+      await mutate(store);
+      // Let any refetch the mutation triggered go out.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return { summary: getsOf(summaryPath) > 1, list: getsOf(listPath) > 1 };
+    } finally {
+      summary.unsubscribe();
+      list.unsubscribe();
+      store.dispatch(api.util.resetApiState());
+    }
+  }
+
+  it("marking seen refreshes the badge only, not the open list", async () => {
+    const refreshed = await refreshedBy((store) =>
+      store
+        .dispatch(
+          api.endpoints.markNotificationsSeenControlPlaneV1NotificationsSeenPost.initiate({
+            markNotificationsSeenRequest: { up_to: "n1" },
+          }),
+        )
+        .unwrap(),
+    );
+
+    expect(refreshed).toEqual({ summary: true, list: false });
+  });
+
+  it.each([
+    [
+      "deleting one",
+      (store: ReturnType<typeof makeStore>) =>
+        store
+          .dispatch(
+            api.endpoints.deleteNotificationControlPlaneV1NotificationsNotificationIdDelete.initiate({
+              notificationId: "n1",
+            }),
+          )
+          .unwrap(),
+    ],
+    [
+      "clearing all",
+      (store: ReturnType<typeof makeStore>) =>
+        store.dispatch(api.endpoints.clearNotificationsControlPlaneV1NotificationsDelete.initiate()).unwrap(),
+    ],
+  ])("%s refreshes the list", async (_label, mutate) => {
+    const refreshed = await refreshedBy(mutate);
+
+    expect(refreshed.list).toBe(true);
+  });
+});

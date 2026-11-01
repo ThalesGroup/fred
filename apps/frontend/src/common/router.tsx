@@ -22,6 +22,7 @@ import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAudit
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
+import NotificationsPage from "@components/pages/admin/NotificationsPage/NotificationsPage.tsx";
 import MarketplacesPage from "@components/pages/admin/MarketplacesPage/MarketplacesPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
@@ -276,6 +277,16 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <AnnouncementsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Platform-wide switch per notification type; same platform-admin gate as
+        // the backend's `can_manage_platform` on /admin/platform/notification-types.
+        path: "admin/notifications",
+        element: (
+          <Protected requires="admin">
+            <NotificationsPage />
           </Protected>
         ),
       },

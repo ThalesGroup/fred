@@ -23,6 +23,8 @@ conversation makes them work together:
 - **[Resources](/help/en/features/resources)** — the team's documents, and how an
   agent reads them.
 - **[Prompts](/help/en/features/prompts)** — recurring requests, saved once.
+- **[Notifications](/help/en/features/notifications)** — the bell that tells you
+  when something concerns you.
 
 Two pages are about permissions rather than tools:
 

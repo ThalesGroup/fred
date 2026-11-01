@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import MainNavBar from "./MainNavBar/MainNavBar.tsx";
+import NotificationsEntry from "@rework/features/notifications/NotificationsEntry";
 import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
 import styles from "./Sidebar.module.scss";
@@ -37,6 +38,7 @@ export default function Sidebar() {
         <div className={styles["main-nav-bar-container"]}>
           <MainNavBar />
         </div>
+        <NotificationsEntry />
         <div className={styles["user-profile-container"]}>
           <UserProfile />
         </div>

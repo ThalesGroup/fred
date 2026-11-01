@@ -15,7 +15,8 @@
 
 // What these pin: "What's new" appears only while there is a patch note to
 // read, and opens the history on its first entry, whether or not an
-// announcement is pending for the user.
+// announcement is pending for the user; the menu is portaled out of the rail
+// and the trigger's tooltip stays hidden while it is open.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -85,5 +86,35 @@ describe("UserProfile What's new entry", () => {
     expect(dialog.textContent).toContain("Version 3.4");
     expect(dialog.querySelector("nav")?.textContent).toContain("1 / 2");
     expect(dialog.querySelector('input[type="checkbox"]')).toBeNull();
+  });
+});
+
+describe("UserProfile menu layer", () => {
+  const trigger = () => container!.querySelector<HTMLButtonElement>("button[aria-haspopup]")!;
+  const menu = () => document.body.querySelector('[role="menu"]');
+
+  it("opens outside the rail, stays open on a click inside and closes on one outside", () => {
+    mountWith([]);
+
+    expect(menu()).not.toBeNull();
+    expect(container!.contains(menu())).toBe(false);
+
+    act(() => menu()!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+    expect(menu()).not.toBeNull();
+
+    act(() => document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+    expect(menu()).toBeNull();
+  });
+
+  it("hides the trigger's tooltip while the menu is open", () => {
+    mountWith([]);
+    const hover = () => act(() => trigger().dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+
+    hover();
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+
+    act(() => trigger().click());
+    hover();
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
   });
 });

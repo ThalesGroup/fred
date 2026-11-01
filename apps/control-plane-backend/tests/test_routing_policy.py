@@ -27,8 +27,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy import service as routing_policy_service
 from control_plane_backend.routing_policy.schemas import (
@@ -140,7 +142,9 @@ async def _seed_instance(
     )
     from control_plane_backend.config.models import ManagedAgentTuning
 
-    await AgentInstanceStore(engine).create(
+    await AgentInstanceStore(
+        engine, notifications=AsyncMock(spec=NotificationService)
+    ).create(
         AgentInstanceRecord(
             agent_instance_id=agent_instance_id,
             team_id=TeamId(team_id),
@@ -161,7 +165,9 @@ async def _seed_instance(
 async def _recommendation(engine: AsyncEngine, agent_instance_id: str) -> str | None:
     from control_plane_backend.agent_instances.store import AgentInstanceStore
 
-    record = await AgentInstanceStore(engine).get(agent_instance_id)
+    record = await AgentInstanceStore(
+        engine, notifications=AsyncMock(spec=NotificationService)
+    ).get(agent_instance_id)
     assert record is not None
     return record.tuning.recommended_chat_profile_id
 
@@ -202,7 +208,9 @@ async def test_an_agent_save_rechecks_its_recommendation_in_the_write(
         "team-1",
         disabled_model_ids=["model__b"],
     )
-    instances = AgentInstanceStore(control_plane_sql_engine)
+    instances = AgentInstanceStore(
+        control_plane_sql_engine, notifications=AsyncMock(spec=NotificationService)
+    )
     record = await instances.get("x")
     assert record is not None
 
@@ -231,7 +239,9 @@ async def _seed_instance_checked(
     )
     from control_plane_backend.config.models import ManagedAgentTuning
 
-    await AgentInstanceStore(engine).create(
+    await AgentInstanceStore(
+        engine, notifications=AsyncMock(spec=NotificationService)
+    ).create(
         AgentInstanceRecord(
             agent_instance_id=agent_instance_id,
             team_id=TeamId("team-1"),
@@ -260,7 +270,9 @@ async def test_an_unrelated_agent_save_never_resurrects_a_cleared_recommendation
     from control_plane_backend.agent_instances.store import AgentInstanceStore
 
     await _seed_instance(control_plane_sql_engine, "x", "team-1", "chat.b")
-    instances = AgentInstanceStore(control_plane_sql_engine)
+    instances = AgentInstanceStore(
+        control_plane_sql_engine, notifications=AsyncMock(spec=NotificationService)
+    )
     loaded = await instances.get("x")
     assert loaded is not None
     await _upsert(

@@ -61,6 +61,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.store import TeamAgentsDeletion
+from control_plane_backend.agent_marketplace.notifications import notify_unpublished
 from control_plane_backend.agent_marketplace.store import (
     RemovalReason,
     RemovedEntry,
@@ -73,6 +74,7 @@ from control_plane_backend.marketplace_settings.effective import (
     load_marketplace_default,
 )
 from control_plane_backend.marketplace_settings.schemas import TeamMarketplaceView
+from control_plane_backend.notifications.service import display_name
 from control_plane_backend.product.prompt_starter_kit import (
     STARTER_CATEGORY_NAMES,
     STARTER_PROMPTS,
@@ -343,6 +345,8 @@ async def delete_team(
             if deps.get_agent_instance_store is not None
             else None
         )
+        # Before the team row, so a failure here is retried rather than orphaned.
+        await deps.get_notification_service().delete_for_team(team_id)
         await store.delete(team_id)
 
     if deleted is not None:
@@ -644,6 +648,7 @@ async def reconcile_team_admin_charter_roles(deps: TeamServiceDependencies) -> i
                         await _swap_team_admin_relation(
                             deps.rebac, metadata.id, user_id, promote=False
                         )
+                        await _on_team_access_changed(deps, metadata.id, user_id)
                         moved += 1
         await charter_store.set_applied_version(version or "")
     return moved
@@ -1151,6 +1156,12 @@ async def update_team(
         except IntegrityError as exc:
             raise _name_conflict_or(exc, patch_data) from exc
         emit_unpublished(removed, actor_uid=user.uid)
+        await notify_unpublished(
+            deps.get_notification_service(),
+            removed,
+            actor_uid=user.uid,
+            actor_name=display_name(user),
+        )
         _log_rename(team_id, renamed_from, patch_data, user)
         if updated is not None:
             metadata = updated
@@ -1284,6 +1295,8 @@ async def edit_team_registry(
                 _audit_registry_edit(user, team_id, [], added, removed_ids)
             raise
 
+    for user_id in removed_ids:
+        await _on_team_access_changed(deps, team_id, user_id)
     _log_rename(team_id, renamed_from, patch_data, user)
     if patch_data or added or removed_ids:
         _audit_registry_edit(user, team_id, sorted(patch_data), added, removed_ids)
@@ -1753,6 +1766,7 @@ async def remove_team_member(
         await forget_free_joins(team_id, user_id)
         # Favorites are personal data about this team's prompts: they go with the access.
         await deps.get_prompt_store().delete_favorites_for_team(user_id, team_id)
+        await deps.get_notification_service().delete_for_member(user_id, team_id)
 
     policy = evaluate_policy_for_request(
         PolicyResolutionRequest(
@@ -1852,6 +1866,7 @@ async def grant_team_member_role(
     )
     relation = await resolve_granted_team_relation(user_id, request.relation, deps)
     await _add_team_member_relation(rebac, team_id, user_id, relation)
+    await _on_team_access_changed(deps, team_id, user_id)
 
     logger.info(
         "Granted role %s to user %s on team %s",
@@ -1933,6 +1948,7 @@ async def revoke_team_member_role(
                 rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
             )
         await _remove_team_member_relation(rebac, team_id, user_id, relation)
+        await _on_team_access_changed(deps, team_id, user_id)
 
     logger.info(
         "Revoked role %s from user %s on team %s",
@@ -2560,6 +2576,14 @@ async def _add_team_member_relation(
     )
     invalidate_team_relations_cache(team_id)
     return result
+
+
+async def _on_team_access_changed(
+    deps: TeamServiceDependencies, team_id: TeamId, user_id: str
+) -> None:
+    """Call after a role change: the notifications the user can no longer act
+    on go. Best effort, never raises."""
+    await deps.get_notification_service().forget_lost_access(user_id, team_id)
 
 
 def _get_administer_permission_for_team_role_relation(

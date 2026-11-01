@@ -27,8 +27,10 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
+    ExpireNotificationsInput,
     ListConversationCandidatesInput,
     ListWikiProposalCandidatesInput,
+    NotificationExpiryResult,
     RejectWikiProposalInput,
     WikiProposalActionResult,
     WikiProposalCandidateBatch,
@@ -44,6 +46,7 @@ LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME = "list_conversation_candidates"
 DELETE_CONVERSATION_ACTIVITY_NAME = "delete_conversation"
 LIST_WIKI_PROPOSAL_CANDIDATES_ACTIVITY_NAME = "list_wiki_proposal_candidates"
 REJECT_WIKI_PROPOSAL_ACTIVITY_NAME = "reject_wiki_proposal"
+EXPIRE_NOTIFICATIONS_ACTIVITY_NAME = "expire_notifications"
 
 
 def _activity_logger():
@@ -181,6 +184,19 @@ async def reject_wiki_proposal(
     return await reject_stale_wiki_proposal(candidate=input_data.candidate, deps=deps)
 
 
+async def expire_notifications(
+    input_data: ExpireNotificationsInput,
+    deps: LifecycleActionDependencies | None = None,
+) -> NotificationExpiryResult:
+    """Delete at most `limit` expired notifications (memory mode and Temporal)."""
+    if deps is None:
+        raise RuntimeError(
+            "LifecycleActionDependencies are required for notification expiry."
+        )
+    deleted = await deps.get_notification_store().delete_expired(limit=input_data.limit)
+    return NotificationExpiryResult(deleted=deleted)
+
+
 class LifecycleActivities:
     """
     Bind lifecycle Temporal activities to one explicit dependency bundle.
@@ -291,3 +307,10 @@ class LifecycleActivities:
         - `activities=[activities.reject_wiki_proposal]`
         """
         return await reject_wiki_proposal(input_data, deps=self._deps)
+
+    @activity.defn(name=EXPIRE_NOTIFICATIONS_ACTIVITY_NAME)
+    async def expire_notifications(
+        self,
+        input_data: ExpireNotificationsInput,
+    ) -> NotificationExpiryResult:
+        return await expire_notifications(input_data, deps=self._deps)

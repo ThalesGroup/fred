@@ -5175,3 +5175,29 @@ personal localStorage values do not seed the row or serve as a fallback; the
 frontend applies the database response or defaults to in-memory controls and
 does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
+
+## 72. Contract Notes — in-app notifications (2026-10-22, #3232)
+
+Caller-scoped routes, `authenticated`; the recipient is the token's uid and
+another user's id answers 404. No route creates a notification.
+
+| Route                                                        | Body / query                          | Response                   |
+| ------------------------------------------------------------ | ------------------------------------- | -------------------------- |
+| `GET /notifications/summary`                                 | —                                     | `NotificationSummary`      |
+| `GET /notifications`                                         | `limit` 1-50 (default 50), `before`   | `NotificationPage`         |
+| `POST /notifications/seen`                                   | `MarkNotificationsSeenRequest.up_to`  | `NotificationSummary`      |
+| `DELETE /notifications/{notification_id}`                    | —                                     | 204                        |
+| `DELETE /notifications`                                      | —                                     | 204 (clear all)            |
+| `GET /admin/platform/notification-types`                     | — (`can_manage_platform`)             | `NotificationTypeSettings` |
+| `PUT /admin/platform/notification-types/{notification_type}` | `SetNotificationTypeRequest.enabled`  | `NotificationTypeSetting`  |
+
+`NotificationPage.items` is a union discriminated by `type`
+(`agent.republish_needed`, `agent.marketplace_removed`), one payload model per
+type; `next_cursor` is opaque and goes back as `before` (malformed: 422). A
+handled row carries `handled_at`, `handled_by_name`, `handled_outcome`.
+`agent_marketplace_entry.published_by` (nullable uid) is written on every
+publish. Turning a type off hides its rows from the list, the count and clear
+all; audit event `platform.notification_type.updated`. Rows expire after 30
+days; `LifecycleManagerResult.notifications.deleted` reports the lifecycle
+delete. fred-core `KPIMiddleware` gains `skip_suffixes`; control-plane skips
+`/notifications/summary`. Behavior: OpenSpec `add-in-app-notifications`.

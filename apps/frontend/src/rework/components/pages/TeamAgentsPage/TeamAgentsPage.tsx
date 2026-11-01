@@ -19,9 +19,9 @@ import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import { capabilityValidationErrorText } from "./capabilityValidationErrors";
 import type { OptionModel } from "@models/Option.model.ts";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -51,6 +51,7 @@ import {
   publishBlockedText,
   teamCanPublish,
 } from "./agentMarketplace.ts";
+import { AGENT_DEEP_LINK_PARAM } from "./agentDeepLink.ts";
 import { filterAgents } from "./agentFilter.ts";
 import {
   AGENT_NAME_CONFLICT,
@@ -185,6 +186,23 @@ export default function TeamAgentsPage() {
     { teamId: teamId || "" },
     { skip: !teamId },
   );
+
+  // `?agent=<id>` deep link (notifications): open that agent's edit form once
+  // the list has it, then drop the param so closing the form stays closed.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkedAgentId = searchParams.get(AGENT_DEEP_LINK_PARAM);
+  useEffect(() => {
+    if (!deepLinkedAgentId || isLoadingInstances || !team) return;
+    const target = managedInstances.find((instance) => instance.agent_instance_id === deepLinkedAgentId);
+    if (target && canManageAgents) setEditingInstance(target);
+    setSearchParams(
+      (params) => {
+        params.delete(AGENT_DEEP_LINK_PARAM);
+        return params;
+      },
+      { replace: true },
+    );
+  }, [deepLinkedAgentId, isLoadingInstances, team, managedInstances, canManageAgents, setSearchParams]);
 
   const {
     data: availableTemplates = [],

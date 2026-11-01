@@ -14,7 +14,7 @@
 
 import styles from "./IndicatorDot.module.css";
 
-export type IndicatorStatus = "idle" | "active" | "streaming" | "error";
+export type IndicatorStatus = "idle" | "active" | "streaming" | "error" | "unread";
 
 export interface IndicatorDotProps {
   status: IndicatorStatus;
@@ -27,6 +27,7 @@ const STATUS_COLOR: Record<IndicatorStatus, string> = {
   active: "var(--success)",
   streaming: "var(--primary)",
   error: "var(--error)",
+  unread: "var(--primary)",
 };
 
 export function IndicatorDot({ status, label }: IndicatorDotProps) {

@@ -42,6 +42,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from _rebac_test_doubles import CountingRebacEngine
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
@@ -145,6 +146,7 @@ def _deps(
         }
 
     return TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),

@@ -76,6 +76,12 @@ class AgentMarketplaceEntryRow(Base):
     snapshot_source_updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+    published_by: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment="Uid of the last publisher; null for entries published before it "
+        "was recorded.",
+    )
 
 
 class AgentMarketplaceEntryFileRow(Base):
