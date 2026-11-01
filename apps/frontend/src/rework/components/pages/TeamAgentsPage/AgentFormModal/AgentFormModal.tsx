@@ -28,13 +28,12 @@ import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
 import { applyDocumentAccessConfigChange } from "./toolPackLogic.ts";
 import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
-import { reservedTagInPromptField, isLogicalNameValid } from "@rework/utils/promptValidation";
+import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { hasTuningChanges } from "../weaverAgents";
 import { isAgentNameTaken } from "../agentNames.ts";
 
 export type AgentFormPayload = {
   templateId: string;
-  logicalName: string;
   displayName: string;
   role: string;
   description: string;
@@ -73,13 +72,12 @@ type AgentFormModalProps = {
   onClose: () => void;
   onSubmit: (payload: AgentFormPayload) => Promise<void>;
   onDelete?: () => void;
-  /** Immutable logical names already used in the space. */
+  /** Normalized display names already used in the space, excluding the edited agent. */
   takenNames?: ReadonlySet<string>;
 };
 
 type FormState = {
   templateId: string;
-  logicalName: string;
   displayName: string;
   role: string;
   description: string;
@@ -124,7 +122,6 @@ export function buildAgentFormSubmitPayload(
 ): AgentFormPayload {
   return {
     templateId: form.templateId,
-    logicalName: form.logicalName,
     displayName: form.displayName.trim(),
     role: form.role,
     description: form.description,
@@ -178,7 +175,6 @@ export default function AgentFormModal({
 
   const [form, setForm] = useState<FormState>({
     templateId: "",
-    logicalName: "",
     displayName: "",
     role: "",
     description: "",
@@ -192,12 +188,12 @@ export default function AgentFormModal({
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>("general");
-  // Logical-name conflicts are shown after leaving the field; display labels
-  // need not be unique. Server constraints arbitrate concurrent creates.
-  const [logicalNameChecked, setLogicalNameChecked] = useState(false);
+  // Display-name conflicts are shown after blur or submit. SQL remains authoritative
+  // for names outside this catalog and concurrent creation/rename.
+  const [displayNameChecked, setDisplayNameChecked] = useState(false);
 
   useEffect(() => {
-    setLogicalNameChecked(isOpen);
+    setDisplayNameChecked(isOpen);
     if (!isOpen) {
       setSubmitAttempted(false);
       setActiveSection("general");
@@ -206,7 +202,6 @@ export default function AgentFormModal({
     if (mode === "edit" && editInstance) {
       setForm({
         templateId: editInstance.template_id,
-        logicalName: editInstance.logical_name,
         displayName: editInstance.display_name,
         role: editInstance.role,
         description: editInstance.description ?? "",
@@ -224,7 +219,6 @@ export default function AgentFormModal({
     } else {
       setForm({
         templateId: "",
-        logicalName: "",
         displayName: "",
         role: "",
         description: "",
@@ -245,7 +239,6 @@ export default function AgentFormModal({
     const lang = i18n.language.split("-")[0];
     setForm({
       templateId: id,
-      logicalName: "",
       displayName: tpl?.display_name ?? "",
       role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
@@ -259,7 +252,7 @@ export default function AgentFormModal({
     });
     setActiveSection("general");
     setSubmitAttempted(false);
-    setLogicalNameChecked(true);
+    setDisplayNameChecked(true);
     setStep(2);
   };
 
@@ -317,13 +310,12 @@ export default function AgentFormModal({
   const reservedTagFields = ((selectedTemplate?.default_tuning_fields ?? []) as ManagedAgentFieldSpec[]).filter(
     (f) => validateTuning && !f.ui?.hide && reservedTagInPromptField(f, form.tuningValues[f.key]) !== null,
   );
-  const nameTaken = mode === "create" && logicalNameChecked && isAgentNameTaken(form.logicalName, takenNames);
-  const validLogicalName = isLogicalNameValid(form.logicalName);
+  const nameTaken = isAgentNameTaken(form.displayName, takenNames);
+  const showNameTaken = nameTaken && (displayNameChecked || submitAttempted);
   const recommendedChatProfileId = form.recommendedChatProfileId;
   const isFormValid =
     !!form.templateId &&
     !!form.displayName.trim() &&
-    validLogicalName &&
     !!form.usageStatement.trim() &&
     !missingRequired &&
     reservedTagFields.length === 0 &&
@@ -342,7 +334,7 @@ export default function AgentFormModal({
       )
       .map((f) => sectionOfField(f)),
     ...reservedTagFields.map((f) => sectionOfField(f)),
-    ...(!form.displayName.trim() || !validLogicalName || nameTaken ? (["general"] as const) : []),
+    ...(!form.displayName.trim() || nameTaken ? (["general"] as const) : []),
     ...(!form.usageStatement.trim() ? (["commitments"] as const) : []),
   ]);
   const errorSections = submitAttempted ? sectionsWithErrors : new Set<SectionKey>();
@@ -403,7 +395,7 @@ export default function AgentFormModal({
               color={submitAttempted && !isFormValid ? "warning" : "primary"}
               variant="filled"
               size="medium"
-              disabled={nameTaken || isSubmitting}
+              disabled={showNameTaken || isSubmitting}
               onClick={handleSubmit}
             >
               {mode === "edit" ? t("rework.save") : t("rework.create")}
@@ -426,7 +418,6 @@ export default function AgentFormModal({
           mode={mode}
           templates={templates}
           templateId={form.templateId}
-          logicalName={form.logicalName}
           displayName={form.displayName}
           role={form.role}
           description={form.description}
@@ -443,15 +434,12 @@ export default function AgentFormModal({
           errorSections={errorSections}
           editInstance={editInstance}
           teamId={teamId}
-          nameTaken={nameTaken}
+          nameTaken={showNameTaken}
           onDisplayNameChange={(v) => {
             setForm((prev) => ({ ...prev, displayName: v }));
+            setDisplayNameChecked(false);
           }}
-          onLogicalNameChange={(logicalName) => {
-            setForm((prev) => ({ ...prev, logicalName }));
-            setLogicalNameChecked(false);
-          }}
-          onLogicalNameBlur={() => setLogicalNameChecked(true)}
+          onDisplayNameBlur={() => setDisplayNameChecked(true)}
           onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
           onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
           onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}

@@ -277,6 +277,22 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.createPersonalSpace,
       }),
     }),
+    promptMarketplaces: build.query<PromptMarketplacesApiResponse, PromptMarketplacesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/prompt-marketplaces`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    promptPublicationTeams: build.query<PromptPublicationTeamsApiResponse, PromptPublicationTeamsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/prompt-publication-teams`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
     mySpaces: build.query<MySpacesApiResponse, MySpacesApiArg>({
       query: () => ({ url: `/control-plane/v1/me/spaces` }),
     }),
@@ -344,6 +360,19 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     organizationModels: build.query<OrganizationModelsApiResponse, OrganizationModelsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/models` }),
+    }),
+    publishedPrompts: build.query<PublishedPromptsApiResponse, PublishedPromptsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/published-prompts`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    publishedPrompt: build.query<PublishedPromptApiResponse, PublishedPromptApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/published-prompts/${queryArg.promptId}`,
+      }),
     }),
     organizationSupervision: build.query<OrganizationSupervisionApiResponse, OrganizationSupervisionApiArg>({
       query: (queryArg) => ({
@@ -532,6 +561,13 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}/favorite`,
         method: "DELETE",
+      }),
+    }),
+    setPromptPublication: build.mutation<SetPromptPublicationApiResponse, SetPromptPublicationApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}/publication`,
+        method: "PUT",
+        body: queryArg.promptPublicationRequest,
       }),
     }),
     listSessions: build.query<ListSessionsApiResponse, ListSessionsApiArg>({
@@ -830,6 +866,14 @@ export type CreatePersonalSpaceApiResponse = /** status 200 Existing personal sp
 export type CreatePersonalSpaceApiArg = {
   createPersonalSpace: CreatePersonalSpace;
 };
+export type PromptMarketplacesApiResponse = /** status 200 undefined */ PromptMarketplacePage;
+export type PromptMarketplacesApiArg = {
+  after?: string;
+};
+export type PromptPublicationTeamsApiResponse = /** status 200 undefined */ PromptPublicationTeamPage;
+export type PromptPublicationTeamsApiArg = {
+  after?: string;
+};
 export type MySpacesApiResponse = /** status 200 Success */ MySpace[];
 export type MySpacesApiArg = void;
 export type OrganizationAgentsApiResponse = /** status 200 undefined */ AgentEnablement[];
@@ -882,6 +926,16 @@ export type RefreshModelSourceApiArg = {
 export type OrganizationModelsApiResponse = /** status 200 undefined */ OrganizationModelInventory;
 export type OrganizationModelsApiArg = {
   organizationId: string;
+};
+export type PublishedPromptsApiResponse = /** status 200 undefined */ PublishedPromptPage;
+export type PublishedPromptsApiArg = {
+  organizationId: string;
+  after?: string;
+};
+export type PublishedPromptApiResponse = /** status 200 undefined */ PublishedPrompt;
+export type PublishedPromptApiArg = {
+  organizationId: string;
+  promptId: string;
 };
 export type OrganizationSupervisionApiResponse = /** status 200 undefined */ OrganizationSupervision;
 export type OrganizationSupervisionApiArg = {
@@ -1060,6 +1114,12 @@ export type RemovePromptFavoriteApiResponse = unknown;
 export type RemovePromptFavoriteApiArg = {
   spaceId: string;
   promptId: string;
+};
+export type SetPromptPublicationApiResponse = unknown;
+export type SetPromptPublicationApiArg = {
+  spaceId: string;
+  promptId: string;
+  promptPublicationRequest: PromptPublicationRequest;
 };
 export type ListSessionsApiResponse = /** status 200 undefined */ SessionDetails[];
 export type ListSessionsApiArg = {
@@ -1585,6 +1645,21 @@ export type OnboardingStatus = {
 export type CreatePersonalSpace = {
   organization_id: string;
 };
+export type PromptMarketplace = {
+  name: string;
+  organization_id: string;
+};
+export type PromptMarketplacePage = {
+  items: PromptMarketplace[];
+  next_cursor: string | null;
+};
+export type PromptPublicationTeam = Space & {
+  organization_id: string;
+};
+export type PromptPublicationTeamPage = {
+  items: PromptPublicationTeam[];
+  next_cursor: string | null;
+};
 export type Role = "member" | "editor" | "owner" | "analyst" | "organization_admin";
 export type MySpace = Space & {
   organization_id: string;
@@ -1761,6 +1836,45 @@ export type OrganizationModelInventory = {
   /** Assigned source observations. Presence/chat/discovery are independent of permission. */
   sources: ModelInventory[];
 };
+export type PromptMetadata = {
+  category_id: string | null;
+  created_at: string;
+  created_by: string;
+  description: string | null;
+  display_name: string;
+  /** Immutable space-local identity. The slash command is "/" + logical_name. */
+  logical_name: string;
+  prompt_id: string;
+  published: boolean;
+  space_id: string;
+  tags: string[];
+  updated_at: string;
+  updated_by: string;
+};
+export type PromptSummary = PromptMetadata & {
+  is_favorite: boolean;
+  /** First 240 characters, selected in PostgreSQL without fetching the full body. */
+  text_preview: string;
+};
+export type PublishedPromptSummary = PromptSummary & {
+  /** Advisory UI decision; writes always recheck the current source-team title. */
+  can_publish: boolean;
+  team_name: string;
+};
+export type PublishedPromptPage = {
+  items: PublishedPromptSummary[];
+  /** Exclusive immutable UUID cursor. Pages are current reads, not a snapshot
+    across requests; restart to see concurrent publications before the cursor. */
+  next_cursor: string | null;
+};
+export type Prompt = PromptMetadata & {
+  is_favorite: boolean;
+  /** Current full text, preserved verbatim. */
+  text: string;
+};
+export type PublishedPrompt = Prompt & {
+  team_name: string;
+};
 export type DocumentCounts = {
   /** Logical original bytes recorded in SQL, not physical storage usage. */
   bytes: number;
@@ -1930,9 +2044,12 @@ export type CreateAgentInstanceRequest = {
   /** Omitted/null inherits template defaults; [] selects no optional capabilities. */
   capability_ids?: string[] | null;
   description?: string | null;
+  /** Unique within the space, ignoring case. Surrounding whitespace is trimmed. */
   display_name: string;
-  /** Immutable space-local reference, independent of the mutable display label. */
-  logical_name: string;
+  /** Immutable space-local reference, independent of the mutable display label.
+    Omitted/null generates "agent-" followed by the new instance UUID's 32 hex digits.
+    Explicit references are preserved; collisions return 409 agent_name_conflict. */
+  logical_name?: string | null;
   model_options?: ModelOptions | null;
   /** Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key. */
   recommended_chat_profile_id?: string | null;
@@ -1968,7 +2085,8 @@ export type UpdateAgentInstanceRequest = {
   capability_ids?: string[] | null;
   /** An empty string is an explicit description. */
   description?: string | null;
-  /** Omitted/null metadata leaves the saved value unchanged. */
+  /** Omitted/null metadata leaves the saved value unchanged.
+    A new display name must remain unique within the space, ignoring case. */
   display_name?: string | null;
   model_options?: ModelOptions | null;
   /** Omitted keeps the recommendation; null clears it; other values return 422. */
@@ -2186,36 +2304,12 @@ export type PromptCategoryRequest = {
   /** NFC-normalized, trimmed, nonblank, without control characters. */
   name: string;
 };
-export type PromptMetadata = {
-  category_id: string | null;
-  created_at: string;
-  created_by: string;
-  description: string | null;
-  display_name: string;
-  /** Immutable space-local identity. The slash command is "/" + logical_name. */
-  logical_name: string;
-  prompt_id: string;
-  space_id: string;
-  tags: string[];
-  updated_at: string;
-  updated_by: string;
-};
-export type PromptSummary = PromptMetadata & {
-  is_favorite: boolean;
-  /** First 240 characters, selected in PostgreSQL without fetching the full body. */
-  text_preview: string;
-};
 export type PromptPage = {
   /** At most 100 entries, ordered by immutable logical_name in ASCII order. */
   items: PromptSummary[];
   /** Pass as `after` until null, including for search, pickers and command menus.
     Pages are not a snapshot; restart to include concurrent inserts before the cursor. */
   next_cursor: string | null;
-};
-export type Prompt = PromptMetadata & {
-  is_favorite: boolean;
-  /** Current full text, preserved verbatim. */
-  text: string;
 };
 export type CreatePromptRequest = {
   /** Optional category belonging to this same space. */
@@ -2242,6 +2336,9 @@ export type UpdatePromptRequest = {
   tags?: string[] | null;
   /** Omitted/null keeps the value; a nonblank string replaces it verbatim. */
   text?: string | null;
+};
+export type PromptPublicationRequest = {
+  published: boolean;
 };
 export type SessionDetails = {
   agent_configuration_changed: boolean;
@@ -2373,6 +2470,10 @@ export const {
   useOnboardingStatusQuery,
   useLazyOnboardingStatusQuery,
   useCreatePersonalSpaceMutation,
+  usePromptMarketplacesQuery,
+  useLazyPromptMarketplacesQuery,
+  usePromptPublicationTeamsQuery,
+  useLazyPromptPublicationTeamsQuery,
   useMySpacesQuery,
   useLazyMySpacesQuery,
   useOrganizationAgentsQuery,
@@ -2390,6 +2491,10 @@ export const {
   useRefreshModelSourceMutation,
   useOrganizationModelsQuery,
   useLazyOrganizationModelsQuery,
+  usePublishedPromptsQuery,
+  useLazyPublishedPromptsQuery,
+  usePublishedPromptQuery,
+  useLazyPublishedPromptQuery,
   useOrganizationSupervisionQuery,
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
@@ -2430,6 +2535,7 @@ export const {
   useUpdatePromptMutation,
   useAddPromptFavoriteMutation,
   useRemovePromptFavoriteMutation,
+  useSetPromptPublicationMutation,
   useListSessionsQuery,
   useLazyListSessionsQuery,
   useCreateSessionMutation,

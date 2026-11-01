@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
@@ -27,6 +29,7 @@ import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Conf
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useMySpacesQuery,
+  usePromptPublicationTeamsQuery,
   useAuthorizeSpaceMutation,
   usePromptCatalogQuery,
   useListPromptCategoriesQuery,
@@ -34,6 +37,7 @@ import {
   useCreatePromptMutation,
   useUpdatePromptMutation,
   useDeletePromptMutation,
+  useSetPromptPublicationMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
   CreatePromptRequest,
@@ -58,15 +62,42 @@ const emptyForm: CreatePromptRequest = {
 export default function PromptsPage() {
   const { teamId } = useParams();
   const { t } = useTranslation();
-  const context = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
-  const space = resolveAgentSpace(context.currentData, teamId);
+  const context = useMySpacesQuery(undefined, {
+    ...crossSessionRefreshOptions(false),
+    refetchOnMountOrArgChange: true,
+  });
+  const publication = usePromptPublicationTeamsQuery(
+    {},
+    { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
+  );
+  useRefetchOnWindowFocus(context.refetch, false);
+  useRefetchOnWindowFocus(publication.refetch, false);
+  const team = !publication.isError ? publication.currentData?.items.find((item) => item.id === teamId) : undefined;
+  const ordinarySpace = !context.isError ? resolveAgentSpace(context.currentData, teamId) : undefined;
+  const space = ordinarySpace ?? team;
   if (context.isError) return <ServiceNotice icon="info" title={agentErrorText(context.error, t)} />;
-  if (!context.currentData) return <Spinner size={20} />;
+  if (!context.currentData || (!ordinarySpace && !publication.currentData && !publication.isError))
+    return <Spinner size={20} />;
   if (!space) return <ServiceNotice icon="lock" title={t("rework.weaverAgents.scopeUnavailable")} centered />;
-  return <SpacePrompts key={space.id} space={space} contextStamp={context.fulfilledTimeStamp} />;
+  return (
+    <SpacePrompts
+      key={space.id}
+      space={space}
+      contextStamp={context.fulfilledTimeStamp}
+      canPublish={!!team && !publication.isFetching}
+    />
+  );
 }
 
-function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: number }) {
+function SpacePrompts({
+  space,
+  contextStamp,
+  canPublish,
+}: {
+  space: Pick<MySpace, "id" | "kind" | "name">;
+  contextStamp?: number;
+  canPublish: boolean;
+}) {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -78,30 +109,44 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
       live.current = false;
     };
   }, []);
+  const [mutationError, setMutationError] = useState<unknown>();
   const [authorize] = useAuthorizeSpaceMutation();
-  const [access, setAccess] = useState<{ stamp?: number; allowed: boolean; error?: unknown }>();
+  const [access, setAccess] = useState<{ stamp?: number; allowed: boolean; readable?: boolean; error?: unknown }>();
   useEffect(() => {
     let current = true;
-    const request = authorize({ spaceCheck: { space_id: spaceId, permission: "write" } });
-    void request.unwrap().then(
-      ({ allowed }) => {
-        if (current) setAccess({ stamp: contextStamp, allowed });
+    const write = authorize({ spaceCheck: { space_id: spaceId, permission: "write" } });
+    const read = authorize({ spaceCheck: { space_id: spaceId, permission: "read" } });
+    void Promise.all([write.unwrap(), read.unwrap()]).then(
+      ([writer, reader]) => {
+        if (current) setAccess({ stamp: contextStamp, allowed: writer.allowed, readable: reader.allowed });
       },
       (error: unknown) => {
-        if (current) setAccess({ stamp: contextStamp, allowed: false, error });
+        if (current) setAccess({ stamp: contextStamp, allowed: false, readable: false, error });
       },
     );
     return () => {
       current = false;
-      request.abort();
+      write.abort();
+      read.abort();
     };
   }, [authorize, spaceId, contextStamp]);
-  const canManage = access?.stamp === contextStamp && access?.allowed === true;
+  const canManage = access?.stamp === contextStamp && access?.allowed === true && access?.readable === true;
+  const canFavorite = access?.stamp === contextStamp && access?.readable === true;
+  const canPublishRef = useRef(canPublish);
+  canPublishRef.current = canPublish;
   const canManageRef = useRef(canManage);
   canManageRef.current = canManage;
-  const catalog = usePromptCatalogQuery({ spaceId }, { refetchOnMountOrArgChange: true });
+  const catalog = usePromptCatalogQuery(
+    { spaceId },
+    { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
+  );
   const prompts = catalog.currentData?.items ?? [];
-  const categoryCatalog = useListPromptCategoriesQuery({ spaceId }, { refetchOnMountOrArgChange: true });
+  const categoryCatalog = useListPromptCategoriesQuery(
+    { spaceId },
+    { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
+  );
+  useRefetchOnWindowFocus(catalog.refetch, false);
+  useRefetchOnWindowFocus(categoryCatalog.refetch, false);
   const categories = categoryCatalog.currentData?.items ?? [];
   const categoryNameById = useMemo(
     () => new Map(categories.map((category) => [category.id, category.name])),
@@ -135,7 +180,8 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
   const [create, creating] = useCreatePromptMutation();
   const [update, updating] = useUpdatePromptMutation();
   const [remove, removing] = useDeletePromptMutation();
-  const busy = creating.isLoading || updating.isLoading || removing.isLoading;
+  const [setPublication, publishing] = useSetPromptPublicationMutation();
+  const busy = creating.isLoading || updating.isLoading || removing.isLoading || publishing.isLoading;
   const detail = useGetPromptQuery(
     { spaceId, promptId: editingId ?? "" },
     {
@@ -178,7 +224,10 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
     setEditingId(prompt?.prompt_id);
   };
   const notifyError = (error: unknown) => {
-    if (live.current) showError({ summary: agentErrorText(error, t) });
+    if (live.current) {
+      setMutationError(error);
+      showError({ summary: agentErrorText(error, t) });
+    }
   };
   const saveError = (error: unknown) => {
     if ((error as { data?: { code?: string } })?.data?.code === "prompt_name_conflict") {
@@ -205,9 +254,21 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
     Boolean(categoryCatalog.currentData) &&
     !categoryCatalog.isError &&
     (mode === "create" || (seeded && !detail.isFetching && !detail.isError));
-  const save = async () => {
+  const save = async (confirmed = false) => {
     if (!canManage || busy || !ready || !validName || !validTitle || !validDescription || !validText || !validTags)
       return;
+    if (mode === "edit" && detail.currentData?.published && !confirmed) {
+      const version = dialogVersion.current;
+      showConfirmationDialog({
+        title: t("rework.teams.prompts.editPublishedDialog.title"),
+        message: t("rework.teams.prompts.editPublishedDialog.message"),
+        confirmButtonLabel: t("rework.teams.prompts.editPublishedDialog.confirm"),
+        onConfirm: async () => {
+          if (live.current && canManageRef.current && dialogVersion.current === version) await save(true);
+        },
+      });
+      return;
+    }
     const version = dialogVersion.current;
     try {
       if (mode === "edit" && editingId && detail.currentData) {
@@ -233,6 +294,29 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
     } catch (error) {
       if (live.current && dialogVersion.current === version) saveError(error);
     }
+  };
+  const changePublication = (prompt: PromptMetadata, published: boolean) => {
+    if (!canPublish || busy || space.kind !== "team") return;
+    const key = published ? "publishDialog" : "unpublishDialog";
+    showConfirmationDialog({
+      criticalAction: !published,
+      title: t(`rework.teams.prompts.${key}.title`),
+      message: t(`rework.teams.prompts.${key}.message`),
+      confirmButtonLabel: t(`rework.teams.prompts.${key}.confirm`),
+      onConfirm: async () => {
+        if (!live.current || !canPublishRef.current) return;
+        try {
+          await setPublication({
+            spaceId,
+            promptId: prompt.prompt_id,
+            promptPublicationRequest: { published },
+          }).unwrap();
+          if (live.current) showSuccess({ summary: t(`rework.teams.prompts.${key}.successToast`) });
+        } catch (error) {
+          notifyError(error);
+        }
+      },
+    });
   };
   const handleDelete = (prompt: PromptMetadata) => {
     if (!canManage || busy) return;
@@ -278,8 +362,34 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
       if (live.current && dialogVersion.current === version) saveError(error);
     }
   };
-  const filtered = filterPrompts(prompts, { search, categoryId: activeCategory, favoritesOnly });
-  const unavailable = t("rework.weaverAgents.notConnected");
+  const filtered = filterPrompts(prompts, {
+    search,
+    categoryId: activeCategory,
+    favoritesOnly: canFavorite && favoritesOnly,
+  });
+  // A known refusal invalidates the entire displayed source, including an
+  // already-open form. A fresh page admission is required before reusing data.
+  const refused = [
+    mutationError,
+    ...[catalog, categoryCatalog, detail, duplicate].map((query) => (query.isError ? query.error : undefined)),
+  ]
+    .map(normalizeApiError)
+    .some((error) => error.status === 403 || error.status === 404 || error.code === "space_pending_deletion");
+  if (refused || (access?.stamp === contextStamp && access && !access.readable && !canPublish)) {
+    canManageRef.current = false;
+    canPublishRef.current = false;
+    return (
+      <ServiceNotice
+        icon="lock"
+        title={t("rework.weaverAgents.scopeUnavailable")}
+        action={
+          <Button color="primary" variant="text" size="small" onClick={() => window.location.reload()}>
+            {t("rework.weaverPrompts.retry")}
+          </Button>
+        }
+      />
+    );
+  }
   return (
     <div className={styles.pageContainer}>
       <PageHeader
@@ -327,11 +437,13 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
         }
       />
       <ServiceNotice icon="info" title={t("rework.weaverPrompts.deferred")} />
-      <FavoritesFilterChip
-        label={t("rework.teams.prompts.favorite.filter")}
-        active={favoritesOnly}
-        onToggle={() => setFavoritesOnly((value) => !value)}
-      />
+      {canFavorite && (
+        <FavoritesFilterChip
+          label={t("rework.teams.prompts.favorite.filter")}
+          active={favoritesOnly}
+          onToggle={() => setFavoritesOnly((value) => !value)}
+        />
+      )}
       {categoryCatalog.currentData && !categoryCatalog.isError && catalog.currentData && !catalog.isError && (
         <FilterChips
           aria-label={t("rework.promptCategories.pickerTitle")}
@@ -353,7 +465,7 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
           maxVisible={6}
         />
       )}
-      {access?.error != null && <ServiceNotice icon="info" title={agentErrorText(access.error, t)} />}
+      {!canPublish && access?.error != null && <ServiceNotice icon="info" title={agentErrorText(access.error, t)} />}
       {catalog.isError || categoryCatalog.isError ? (
         <ServiceNotice
           icon="cloud_off"
@@ -394,9 +506,11 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
               prompt={prompt}
               categoryName={prompt.category_id ? categoryNameById.get(prompt.category_id) : null}
               canManage={canManage && !busy}
-              publishable={false}
-              unavailableReason={unavailable}
-              onToggleFavorite={() => void toggleFavorite(prompt)}
+              publishable={canPublish && !busy}
+              published={prompt.published}
+              onPublish={() => changePublication(prompt, true)}
+              onUnpublish={() => changePublication(prompt, false)}
+              onToggleFavorite={canFavorite ? () => void toggleFavorite(prompt) : undefined}
               onView={() => setViewingId(prompt.prompt_id)}
               onEdit={() => open(prompt)}
               onDuplicate={() => {
@@ -502,7 +616,7 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
                 color="primary"
                 variant="filled"
                 size="medium"
-                onClick={save}
+                onClick={() => void save()}
                 disabled={
                   !canManage ||
                   busy ||

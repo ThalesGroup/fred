@@ -32,7 +32,6 @@ export function agentErrorText(error: unknown, t: TFunction): string {
 export function createAgentRequest(payload: AgentFormPayload): CreateAgentInstanceRequest {
   return {
     template_id: payload.templateId,
-    logical_name: payload.logicalName,
     display_name: payload.displayName,
     role: payload.role || undefined,
     description: payload.description,

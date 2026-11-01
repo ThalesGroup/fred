@@ -15,7 +15,7 @@
 import MainNavBar from "./MainNavBar/MainNavBar.tsx";
 import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
-import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
+import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
 import { useLocation } from "react-router-dom";
@@ -53,7 +53,7 @@ export default function Sidebar({
         </div>
         <div className={styles["user-profile-container"]}>
           <UserProfile
-            agentManagement={isAgentManagementRoute(pathname)}
+            agentManagement={isWeaverContentRoute(pathname)}
             admitted={navigation}
             platformArea={platformArea}
             organizationArea={organizationArea}

@@ -62,19 +62,19 @@ vi.mock("./TemplateBrowser/TemplateBrowser.tsx", () => ({
 // Keep the required usage statement fillable so only name validation blocks Create.
 vi.mock("./AgentFormBody.tsx", () => ({
   AgentFormBody: (props: {
-    logicalName: string;
+    displayName: string;
     usageStatement: string;
     onUsageStatementChange: (v: string) => void;
     nameTaken?: boolean;
-    onLogicalNameChange: (v: string) => void;
-    onLogicalNameBlur?: () => void;
+    onDisplayNameChange: (v: string) => void;
+    onDisplayNameBlur?: () => void;
   }) => (
     <div>
       <input
         data-testid="name"
-        value={props.logicalName}
-        onChange={(e) => props.onLogicalNameChange(e.target.value)}
-        onBlur={props.onLogicalNameBlur}
+        value={props.displayName}
+        onChange={(e) => props.onDisplayNameChange(e.target.value)}
+        onBlur={props.onDisplayNameBlur}
       />
       <input
         data-testid="usage"
@@ -87,6 +87,7 @@ vi.mock("./AgentFormBody.tsx", () => ({
 }));
 
 import AgentFormModal from "./AgentFormModal";
+import { INSTANCE } from "../weaverAgentFixtures";
 
 const TEMPLATE = {
   template_id: "tpl",
@@ -95,7 +96,7 @@ const TEMPLATE = {
   available_capabilities: [],
 } as unknown as AgentTemplateSummary;
 
-const onSubmit = vi.fn(async () => undefined);
+const onSubmit = vi.fn<(payload: import("./AgentFormModal").AgentFormPayload) => Promise<void>>(async () => undefined);
 let container: HTMLDivElement;
 let root: Root;
 
@@ -171,14 +172,38 @@ describe("agent form name check", () => {
     expect(submitButton().disabled).toBe(false);
   });
 
-  it("requires an explicit logical name independent of the template label", () => {
+  it("requires a free display name when the template label is already used", () => {
     render({ mode: "create", takenNames: new Set(["analyst"]) });
     chooseTemplate();
+    expect(isTaken()).toBe(true);
+    expect(nameInput().value).toBe("Analyst");
+    expect(submitButton().disabled).toBe(true);
+    type("Eva");
+    leaveField();
+    act(() => submitButton().click());
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ displayName: "Eva" }));
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty("logicalName");
+  });
 
-    expect(isTaken()).toBe(false);
-    expect(nameInput().value).toBe("");
+  it("blocks a taken name on submit even before blur", () => {
+    render({ mode: "create", takenNames: new Set(["simon"]) });
+    chooseTemplate();
+    type(" SIMON ");
     act(() => submitButton().click());
     expect(onSubmit).not.toHaveBeenCalled();
+    expect(isTaken()).toBe(true);
+  });
+
+  it("checks display names on rename as well as creation", () => {
+    render({ mode: "edit", takenNames: new Set(["simon"]), editInstance: INSTANCE });
+    type(" SIMON ");
+    leaveField();
+    expect(isTaken()).toBe(true);
+    expect(submitButton().disabled).toBe(true);
+    type("Eva");
+    leaveField();
+    act(() => submitButton().click());
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ displayName: "Eva" }));
   });
 
   it("shows a name the server refused once the page adds it to the taken names", () => {

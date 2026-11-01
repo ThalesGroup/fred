@@ -105,15 +105,6 @@ function capability(id: string) {
 function createForm(tpl = template) {
   render(tpl);
   click(button("choose"));
-  const name =
-    container.querySelector<HTMLInputElement>('input[aria-label="rework.weaverAgents.logicalName"]') ??
-    Array.from(container.querySelectorAll("label"))
-      .find((label) => label.textContent?.includes("rework.weaverAgents.logicalName"))
-      ?.parentElement?.querySelector("input");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(name, "test-agent");
-    name!.dispatchEvent(new Event("input", { bubbles: true }));
-  });
   section("commitments");
   const input = container.querySelector("textarea")!;
   act(() => {

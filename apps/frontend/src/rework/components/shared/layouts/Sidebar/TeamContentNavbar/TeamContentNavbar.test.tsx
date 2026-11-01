@@ -46,6 +46,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePromptPublicationTeamsQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
   useMySpacesQuery: () => ({ currentData: [], isError: false }),
 }));
 

@@ -29,6 +29,7 @@ vi.mock("react-i18next", () => ({
 }));
 import { SPACES, SPACE_A, SPACE_B } from "../TeamAgentsPage/weaverAgentFixtures";
 import { promptFixture, promptSummaryFixture } from "./weaverPromptFixtures";
+import PromptViewDialog from "./PromptViewDialog/PromptViewDialog";
 import type { Prompt, MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 const route = vi.hoisted(() => ({ teamId: "" }));
 vi.mock("react-router-dom", () => ({ useParams: () => route }));
@@ -58,6 +59,7 @@ let promptBReady = false;
 let context: MySpace[] = SPACES;
 let stamp = 1;
 let catalogError = false;
+let publishedFailure = false;
 const createCalls: unknown[] = [];
 let createRejectsWith: unknown = null;
 let deleteRejectsWith: unknown = null;
@@ -75,6 +77,20 @@ vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () =>
   useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => ({}),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePublishedPromptQuery: (_args: unknown, options: { skip: boolean }) =>
+    options.skip
+      ? {}
+      : {
+          currentData: { ...PROMPT_DETAIL, team_name: "Source" },
+          isError: publishedFailure,
+          isFetching: false,
+          refetch: vi.fn(),
+        },
+  usePromptPublicationTeamsQuery: () => ({
+    currentData: { items: context.filter((space) => space.kind === "team"), next_cursor: null },
+    refetch: vi.fn(),
+  }),
+  useSetPromptPublicationMutation: () => [vi.fn(() => ({ unwrap: async () => undefined })), { isLoading: false }],
   useListPromptCategoriesQuery: () => ({
     currentData: { items: [{ id: "cat-a", space_id: SPACE_A, name: "Analysis" }], next_cursor: null },
     refetch: vi.fn(),
@@ -115,7 +131,6 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
 
 import { EditorView } from "@codemirror/view";
 import PromptsPage from "./PromptsPage";
-import PromptViewDialog from "./PromptViewDialog/PromptViewDialog";
 
 // FullPageModal renders through a `createPortal` into a div appended
 // directly to `document.body` (see Portal.tsx) — it is NOT a descendant of
@@ -376,21 +391,6 @@ describe("PromptsPage view dialog", () => {
     expect(dialog.textContent).toContain("/summary");
     expect(dialog.textContent!.indexOf("/summary")).toBeLessThan(dialog.textContent!.indexOf("Real description"));
   });
-
-  it("shows nothing of the sort on a prompt that carries no command", () => {
-    act(() =>
-      root.render(
-        <PromptViewDialog
-          open
-          onClose={() => {}}
-          preloadedDetail={{ id: "legacy", name: "Other Name", text: "Other prompt text", command: null }}
-        />,
-      ),
-    );
-    const dialog = document.querySelector('[role="dialog"]')!;
-    expect(dialog.textContent).toContain("Other prompt text");
-    expect(dialog.textContent).not.toContain("/summary");
-  });
 });
 
 describe("PromptsPage command field", () => {
@@ -507,7 +507,7 @@ describe("Weaver prompt management", () => {
     route.teamId = "personal";
     await act(async () => render());
     expect(catalogRead).toHaveBeenLastCalledWith({ spaceId: SPACE_B });
-    expect(authorize).toHaveBeenLastCalledWith({ spaceCheck: { space_id: SPACE_B, permission: "write" } });
+    expect(authorize).toHaveBeenCalledWith({ spaceCheck: { space_id: SPACE_B, permission: "write" } });
     expect(container.textContent).toContain("rework.teams.prompts.titlePersonal");
   });
 
@@ -719,5 +719,37 @@ describe("Weaver prompt metadata and preferences", () => {
     const star = container.querySelector('button[aria-label="rework.teams.prompts.favorite.add"]');
     await act(async () => click(star));
     expect(addFavorite).toHaveBeenCalledWith({ spaceId: SPACE_A, promptId: PROMPT_DETAIL.prompt_id });
+  });
+});
+
+describe("Published prompt access", () => {
+  it("hides cached text and copy actions after a detail refusal", () => {
+    publishedFailure = false;
+    act(() => root.render(<PromptViewDialog open organizationId="org" promptId="prompt-1" onClose={() => {}} />));
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(PROMPT_DETAIL.text);
+    publishedFailure = true;
+    act(() => root.render(<PromptViewDialog open organizationId="org" promptId="prompt-1" onClose={() => {}} />));
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).not.toContain(PROMPT_DETAIL.text);
+    expect(dialog?.textContent).toContain("chatbot.commandTurn.previewError");
+    expect(dialog?.querySelector('[aria-label="rework.teams.prompts.view.copyAria"]')).toBeNull();
+    publishedFailure = false;
+  });
+});
+
+describe("Source prompt access refusal", () => {
+  it("removes the open form and cached cards after a rejected edit", async () => {
+    update.mockImplementationOnce(() => ({
+      unwrap: async () => {
+        throw { status: 403 };
+      },
+    }));
+    cardAction("edit");
+    expect(formValues().text).toBe(PROMPT_DETAIL.text);
+    await save();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector('[role="button"]')).toBeNull();
+    expect(container.textContent).not.toContain(PROMPT_DETAIL.display_name);
+    expect(container.textContent).toContain("rework.weaverAgents.scopeUnavailable");
   });
 });

@@ -15,6 +15,51 @@ pub struct Authorization {
 }
 pub const READ_CONCURRENCY: usize = 8;
 
+/// Publication-only access facts, evaluated at the SQL statement's admission
+/// time. Do not use this to enable invitations in general space authorization.
+/// $1 is the authenticated subject; permanent and temporary titles accumulate.
+macro_rules! prompt_publication_access {
+    () => {
+        "
+with prompt_titles as (
+    select space_id, role from space_role_grant where subject = $1
+    union all
+    select i.space_id, r.role from space_invitation i
+    join space_invitation_role r on r.invitation_id = i.id
+    where i.subject = $1 and i.revoked_at is null
+      and i.created_at <= statement_timestamp() and i.expires_at > statement_timestamp()
+), prompt_access as (
+    select s.id as space_id, s.organization_id, bool_or(t.role = 'editor') as can_publish
+    from prompt_titles t join space s on s.id = t.space_id
+    join space o on o.id = s.organization_id
+    left join space parent on parent.id = s.parent_id
+    where t.role in ('owner', 'member', 'editor', 'analyst')
+      and s.kind in ('organization', 'team', 'project')
+      and s.deletion_id is null and o.deletion_id is null
+      and (parent.id is null or parent.deletion_id is null)
+    group by s.id, s.organization_id
+) "
+    };
+}
+pub(crate) use prompt_publication_access;
+
+/// Source-team editor authority for prompt reading and publication only.
+pub(crate) async fn can_publish_prompts<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    subject: &str,
+    space: Uuid,
+) -> sqlx::Result<bool> {
+    sqlx::query_scalar(concat!(
+        prompt_publication_access!(),
+        "select exists(select 1 from prompt_access a join space s on s.id=a.space_id
+         where a.space_id=$2 and s.kind='team' and a.can_publish)"
+    ))
+    .bind(subject)
+    .bind(space)
+    .fetch_one(ex)
+    .await
+}
+
 /// Direct roles on the requested space grant permissions through this shared matrix.
 pub fn grants(role: Role, permission: SpacePermission) -> bool {
     use Role::*;

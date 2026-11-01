@@ -323,10 +323,18 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
         .await;
         assert_eq!(response.0, 422, "{values}: {response:?}");
     }
-    // Display labels can collide; immutable logical names alone are unique.
-    let same_label = create(&app, &identity, team.id, creation(template, "My Agent")).await;
-    assert_ne!(same_label["logical_name"], first["logical_name"]);
-    assert_eq!(same_label["display_name"], first["display_name"]);
+    // Display names are unique even when the caller supplies a different logical reference.
+    let conflict = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &collection(team.id),
+        creation(template, "My Agent"),
+    )
+    .await;
+    assert_eq!(conflict.0, 409);
+    assert_eq!(conflict.1["code"], "agent_name_conflict");
     let before = saved(&e, team.id, &first).await;
     for patch in [
         json!({}),
@@ -1066,7 +1074,7 @@ async fn instances_store_tuning_opaquely() {
     let org = org.id;
     let mut conn = e.pool.acquire().await.unwrap();
     for (n,tuning) in [Value::Null,json!({"unknown":{"nested":[null,{},[]]},"selected_capability_ids":null,"capability_config":{"tool":{"schema_version":2,"config":{"nested":{"list":[1,false]}}}}}),json!({"selected_capability_ids":[]})].into_iter().enumerate() {
-        let record=storage::create(&mut *conn,&storage::NewAgentInstance{agent_instance_id:Uuid::new_v4(),space_id:org,template_id:Uuid::new_v4(),source_runtime_id:"fixture".into(),source_agent_id:"opaque".into(),logical_name:format!("opaque-{n}"),display_name:format!("  Opaque {n}  "),description:None,enabled:false,created_by:"fixture-author".into(),tuning:tuning.clone()}).await.unwrap();
+        let record=storage::create(&mut *conn,&storage::NewAgentInstance{agent_instance_id:Uuid::new_v4(),space_id:org,template_id:Uuid::new_v4(),source_runtime_id:"fixture".into(),source_agent_id:"opaque".into(),logical_name:Some(format!("opaque-{n}")),display_name:format!("  Opaque {n}  "),description:None,enabled:false,created_by:"fixture-author".into(),tuning:tuning.clone()}).await.unwrap();
         assert_eq!(record.tuning.0,tuning);assert_eq!(record.display_name,format!("Opaque {n}"));
         assert_eq!(storage::get_for_space(&mut *conn,org,record.agent_instance_id).await.unwrap().unwrap().tuning.0,tuning);
     }
@@ -1607,6 +1615,155 @@ mod model_catalog;
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
+async fn instances_generate_references_for_creation_and_copies_but_keep_them_on_rename() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let catalog = Catalog::start().await;
+    let identity = support::IdentityServer::start().await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    enable_capability(&e, org.id, "tool").await;
+
+    for label in [
+        "Assistant commercial",
+        "Équipe de rédaction",
+        "東京 助手",
+        "مساعد",
+    ] {
+        let mut body = creation(template, label);
+        body.as_object_mut().unwrap().remove("logical_name");
+        let source = create(&app, &identity, team.id, body.clone()).await;
+        assert_eq!(source["display_name"], label);
+        let source_id = Uuid::parse_str(source["agent_instance_id"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            source["logical_name"],
+            format!("agent-{}", source_id.simple())
+        );
+        assert_eq!(
+            saved(&e, team.id, &source).await.logical_name,
+            source["logical_name"]
+        );
+
+        // Duplication uses creation with copied editable fields, without the source identity.
+        // Null has the same generation contract as omission; a copy needs its own display name.
+        body["logical_name"] = Value::Null;
+        body["display_name"] = json!(format!("{label} (copie)"));
+        let copy = create(&app, &identity, team.id, body).await;
+        assert_eq!(copy["display_name"], format!("{label} (copie)"));
+        assert_ne!(copy["agent_instance_id"], source["agent_instance_id"]);
+        assert_ne!(copy["logical_name"], source["logical_name"]);
+        let (status, renamed) = request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &item(team.id, &source),
+            json!({"display_name":format!("Nouveau nom {label}")}),
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(renamed["logical_name"], source["logical_name"]);
+        assert_eq!(renamed["agent_instance_id"], source["agent_instance_id"]);
+        assert_eq!(
+            saved(&e, team.id, &source).await.logical_name,
+            source["logical_name"]
+        );
+    }
+    let body = json!({"template_id":template,"display_name":"Concurrent label","usage_statement":"Use me"});
+    let mut other = body.clone();
+    other["display_name"] = json!("Another concurrent label");
+    let path = collection(team.id);
+    let (left, right) = tokio::join!(
+        request(&app, &identity, Some("alice"), "POST", &path, body.clone()),
+        request(&app, &identity, Some("alice"), "POST", &path, other),
+    );
+    assert_eq!((left.0, right.0), (201, 201));
+    assert_ne!(left.1["logical_name"], right.1["logical_name"]);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn instances_display_names_are_unique_per_space_on_create_and_rename() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let catalog = Catalog::start().await;
+    let identity = support::IdentityServer::start().await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    enable_capability(&e, org.id, "tool").await;
+    let body =
+        |name: &str| json!({"template_id":template,"display_name":name,"usage_statement":"Use me"});
+    let simon = create(&app, &identity, team.id, body(" Simon ")).await;
+    assert_eq!(simon["display_name"], "Simon");
+    for name in ["Simon", "sIMON", " Simon "] {
+        let conflict = request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &collection(team.id),
+            body(name),
+        )
+        .await;
+        assert_eq!(conflict.0, 409);
+        assert_eq!(conflict.1["code"], "agent_name_conflict");
+        assert_eq!(
+            conflict.1["detail"],
+            "An agent with this display name already exists in this space."
+        );
+    }
+    let eva = create(&app, &identity, team.id, body("Eva")).await;
+    let before = saved(&e, team.id, &eva).await;
+    let conflict = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PATCH",
+        &item(team.id, &eva),
+        json!({"display_name":" simon "}),
+    )
+    .await;
+    assert_eq!(conflict.0, 409);
+    assert_eq!(conflict.1["code"], "agent_name_conflict");
+    let after = saved(&e, team.id, &eva).await;
+    assert_eq!(after.display_name, "Eva");
+    assert_eq!(after.logical_name, before.logical_name);
+    assert_eq!(after.configuration_revision, before.configuration_revision);
+    assert_eq!(after.updated_at, before.updated_at);
+    let (status, renamed) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PATCH",
+        &item(team.id, &simon),
+        json!({"display_name":"SIMON"}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(renamed["logical_name"], simon["logical_name"]);
+    assert_eq!(renamed["agent_instance_id"], simon["agent_instance_id"]);
+
+    let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
+        .await
+        .unwrap();
+    let other = create(&app, &identity, personal.id, body("Simon")).await;
+    assert_ne!(other["agent_instance_id"], simon["agent_instance_id"]);
+    let path = collection(team.id);
+    let (left, right) = tokio::join!(
+        request(&app, &identity, Some("alice"), "POST", &path, body("Nora")),
+        request(&app, &identity, Some("alice"), "POST", &path, body("nora")),
+    );
+    let conflict = match (left, right) {
+        ((201, _), (409, conflict)) | ((409, conflict), (201, _)) => conflict,
+        results => panic!("expected one creation and one conflict: {results:?}"),
+    };
+    assert_eq!(conflict["code"], "agent_name_conflict");
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
 async fn instances_logical_identity_and_authorized_catalog_pagination() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
@@ -1620,6 +1777,8 @@ async fn instances_logical_identity_and_authorized_catalog_pagination() {
     body["logical_name"] = json!("b-reference");
     let source = create(&app, &identity, team.id, body.clone()).await;
     assert_eq!(source["logical_name"], "b-reference");
+    // Isolate the logical-reference conflict from the display-name constraint.
+    body["display_name"] = json!("Another label");
     assert_eq!(
         request(
             &app,
@@ -1669,15 +1828,15 @@ async fn instances_logical_identity_and_authorized_catalog_pagination() {
         .0,
         422
     );
-    // Identical labels are legal. Copy the validated saved tuning, while assigning
-    // independent UUIDs and names, to exercise a complete page plus continuation.
+    // Copy the validated saved tuning with independent identities and display names
+    // to exercise a complete page plus continuation.
     sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,logical_name,display_name,tuning,created_by)
-        select gen_random_uuid(),space_id,template_id,source_runtime_id,source_agent_id,'a-'||lpad(n::text,3,'0'),display_name,tuning,'alice'
+        select gen_random_uuid(),space_id,template_id,source_runtime_id,source_agent_id,'a-'||lpad(n::text,3,'0'),display_name||' '||n,tuning,'alice'
         from agent_instance cross join generate_series(1,101) n where agent_instance_id=$1")
         .bind(Uuid::parse_str(source["agent_instance_id"].as_str().unwrap()).unwrap()).execute(&e.pool).await.unwrap();
     // A disabled template must not leak its rows or its names into page cursors.
     sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,logical_name,display_name,tuning,created_by)
-        select gen_random_uuid(),space_id,$2,source_runtime_id,source_agent_id,'a-hidden',display_name,tuning,'alice'
+        select gen_random_uuid(),space_id,$2,source_runtime_id,source_agent_id,'a-hidden','Hidden label',tuning,'alice'
         from agent_instance where agent_instance_id=$1")
         .bind(Uuid::parse_str(source["agent_instance_id"].as_str().unwrap()).unwrap()).bind(Uuid::new_v4()).execute(&e.pool).await.unwrap();
     let (status, first) = request(

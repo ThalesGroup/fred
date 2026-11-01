@@ -1168,7 +1168,7 @@
       "tags": "Tags",
       "textRequired": "Text must contain a non-whitespace character and no NUL characters.",
       "tagsLimit": "At most 20 tags, each with 1-64 characters and no control characters.",
-      "deferred": "Marketplace and usage counters are not connected yet.",
+      "deferred": "Import and usage counters are not yet available.",
       "catalogError": "The complete prompt catalog could not be loaded."
     },
     "weaverAgents": {
@@ -3738,7 +3738,7 @@
         },
         "publishDialog": {
           "title": "Publish this prompt to the marketplace?",
-          "message": "This prompt will become public to every user of the application. They will be able to use it and import it into their own spaces to edit it. The usage counter will also reflect uses outside your team, and any change you make will be immediately visible on the marketplace.",
+          "message": "This prompt will be visible to people with an active business role in your organization, including guests. Changes to its definition will be immediately visible in the marketplace.",
           "confirm": "Publish",
           "successToast": "Prompt published to the marketplace",
           "errorToast": "Failed to publish prompt"
@@ -3752,7 +3752,7 @@
         },
         "editPublishedDialog": {
           "title": "Save changes?",
-          "message": "This prompt is published on the marketplace. Your changes will be immediately visible there to every user.",
+          "message": "This prompt is published. Your changes will immediately be visible to authorized readers in your organization.",
           "confirm": "Save"
         },
         "titlePersonal": "Your personal prompts",
@@ -4908,6 +4908,14 @@
       "global": "Global findings",
       "selectComponent": "Select a component to view its details. Select it again to close them.",
       "replicas": "{{ready}}/{{desired}} replicas ready"
+    },
+    "promptPublication": {
+      "noAccess": "No active business role gives you access to a prompt marketplace.",
+      "importUnavailable": "Import is not available yet.",
+      "title": "Published prompts",
+      "metricsUnavailable": "Published prompts are available. Usage ranking, counters and charts are not yet available.",
+      "usageUnavailable": "Usage unavailable",
+      "libraries": "Prompt libraries you can publish from"
     }
   },
   "runtime": {

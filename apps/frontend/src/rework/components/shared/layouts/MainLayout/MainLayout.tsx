@@ -17,7 +17,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
 import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate";
 import { usePlatformArea } from "@core/hooks/usePlatformArea";
-import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
+import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import styles from "./MainLayout.module.css";
 
 function AdmittedWorkspace() {
@@ -45,7 +45,7 @@ export default function MainLayout({ children, navigation = true }: PropsWithChi
       </div>
       <main className={styles.content}>
         {navigation ? (
-          platformArea || organizationArea || isAgentManagementRoute(pathname) ? (
+          platformArea || organizationArea || isWeaverContentRoute(pathname) ? (
             <Outlet />
           ) : (
             <AdmittedWorkspace />

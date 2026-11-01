@@ -255,7 +255,7 @@ The resource schema distinguishes three names with different responsibilities:
 | --- | --- | --- |
 | UUID (`agent_instance_id` or `prompt_id`) | Technical identity of one resource; used by stored associations. | Immutable. A promotion creates a different UUID. |
 | `logical_name` | Readable reference within one resource type and deployment space, such as `bid-assistant` or `resume`. A prompt's command is `/` followed by this name. | Immutable once assigned. Unique on `(space_id, logical_name)` in each table. |
-| `display_name` | Human-facing label, such as "Bid assistant". It carries no authority. | Editable without changing identity. |
+| `display_name` | Human-facing label, such as "Bid assistant". It carries no authority. | Editable without changing identity. Agent display names are unique within their space, ignoring case. |
 
 The agreed role of the logical name is stable references, including future
 agent-to-agent calls, not a globally unique agent address or a permission. A
@@ -266,16 +266,29 @@ silently trimming, lowercasing or adding a suffix. The same name can exist in tw
 spaces or in the agent and prompt tables. Prompt name `skill` remains reserved
 for the existing slash-command convention. This does not introduce a skill table.
 
-**Schema-only boundary.**
 [`0008_resource_identity.sql`](../../apps/control-plane/migrations/0008_resource_identity.sql)
-implements these constraints. Prompts require a logical name. The existing agent
-writer does not supply it: the agent column remains nullable, with one assignment
-permitted before immutability applies. The old unique index on agent display names
-also remains. Making the logical name mandatory and removing that old index belong
-to the application activation step; the current API does not resolve logical names.
-No prompt library, agent-to-agent call or skill journey is claimed as integrated
-by this schema change. Automatic name suggestions in the creation UI are likewise
-outside this SQL lot.
+implements these constraints; [`0014_agent_logical_identity.sql`](../../apps/control-plane/migrations/0014_agent_logical_identity.sql)
+makes persisted agent references and authors mandatory.
+[`0015_agent_display_name_uniqueness.sql`](../../apps/control-plane/migrations/0015_agent_display_name_uniqueness.sql)
+restores the unique index on `(space_id, lower(display_name))`: two agents in one
+space cannot share a display name, including case variants. The API trims surrounding
+whitespace on creation and rename. The same display name is allowed in different
+spaces. Migration fails on existing duplicates without renaming or deleting them;
+they require explicit resolution before retrying. Prompts still require an explicit logical name.
+
+The agent creation API accepts an omitted or null `logical_name`.
+[`agent_instances::create`](../../apps/control-plane/src/agent_instances.rs)
+generates `agent-` followed by the new instance UUID's 32 lowercase hexadecimal
+digits, independently of the display name. Explicit references retain the same
+validation and are persisted unchanged. Both forms use the existing SQL uniqueness
+constraint; a collision returns `409 agent_name_conflict`, without replacing a row
+or silently changing the requested reference. Renaming never changes either identity.
+A display-name conflict also returns `409 agent_name_conflict`, on creation or rename.
+A copy submitted through creation must choose an available display name and omit
+the source UUID and logical reference to receive new ones.
+There is no dedicated Weaver agent-copy endpoint. The provisioning
+ZIP does not import agents; catalog template identities remain independent of instance
+references. Logical-name resolution for agent-to-agent calls is not exposed by this API.
 
 Each table holds one current definition. Promoting it means inserting an independent
 row in another space, not maintaining a source link or synchronizing later edits.
@@ -284,9 +297,8 @@ Creation initializes the last-edit timestamp and author from creation metadata.
 A changed definition receives a database timestamp and the authenticated author
 supplied by the writer; no-op updates preserve both. SQL cannot authenticate that
 author. Subject strings do not reference the observed `user_identity` cache.
-Unknown historical agent authors remain null; new agent creation and edits require
-an author. Prompt deletion follows definitive space purge; agent deletion remains
-explicit in the existing lifecycle cleanup.
+Agent creation and edits require an author. Prompt deletion follows definitive
+space purge; agent deletion remains explicit in the existing lifecycle cleanup.
 
 `session_metadata.space_id` is the conversation's immutable space.
 `agent_space_id` records the associated agent's deployment space, independently.

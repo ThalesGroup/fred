@@ -17,7 +17,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { OptionModel } from "@models/Option.model.ts";
-import { type PromptSummary as LegacyPromptSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import type { PromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTranslation } from "react-i18next";
 import Chip from "@shared/atoms/Chip/Chip";
 import styles from "./PromptCard.module.scss";
@@ -27,9 +27,7 @@ export type PromptCardVariant = "team" | "marketplace";
 type MoreAction = "edit" | "duplicate" | "publish" | "unpublish" | "delete" | "import" | "removeFromMarketplace";
 
 export interface PromptCardProps {
-  prompt:
-    | Pick<LegacyPromptSummary, "name" | "description" | "text_preview" | "is_favorite" | "session_count">
-    | import("../../../../../slices/controlPlane/controlPlaneOpenApi").PromptSummary;
+  prompt: PromptSummary;
   unavailableReason?: string;
   /** "team" (library management) or "marketplace" (community discovery). Default "team". */
   variant?: PromptCardVariant;
@@ -65,7 +63,7 @@ export default function PromptCard({
   categoryName,
   teamName,
   canManage = false,
-  publishable = true,
+  publishable = false,
   published = false,
   canRemoveFromMarketplace = false,
   onView,
@@ -79,7 +77,7 @@ export default function PromptCard({
   onToggleFavorite,
 }: PromptCardProps) {
   const { t } = useTranslation();
-  const name = "display_name" in prompt ? prompt.display_name : prompt.name;
+  const name = prompt.display_name;
   const body = prompt.description && prompt.description !== name ? prompt.description : null;
   const preview = !body && prompt.text_preview ? prompt.text_preview : null;
   const isMarketplace = variant === "marketplace";
@@ -96,6 +94,8 @@ export default function PromptCard({
       key: "import",
       value: "import",
       label: t("rework.teams.prompts.card.menu.import"),
+      disabled: !onImport,
+      tooltip: !onImport ? t("rework.promptPublication.importUnavailable") : undefined,
       icon: { category: "outlined", type: "download" },
     });
     if (canRemoveFromMarketplace) {
@@ -122,32 +122,21 @@ export default function PromptCard({
         icon: { category: "outlined", type: "content_copy" },
       },
     );
-    // Personal-space prompts are not publishable — no publish/unpublish action.
-    if (publishable || unavailableReason) {
-      options.push(
-        published
-          ? {
-              key: "unpublish",
-              value: "unpublish",
-              label: t("rework.teams.prompts.card.menu.unpublish"),
-              icon: { category: "outlined", type: "storefront" },
-            }
-          : {
-              disabled: Boolean(unavailableReason),
-              tooltip: unavailableReason,
-              key: "publish",
-              value: "publish",
-              label: t("rework.teams.prompts.card.menu.publish"),
-              icon: { category: "outlined", type: "storefront" },
-            },
-      );
-    }
     options.push({
       key: "delete",
       value: "delete",
       label: t("rework.teams.prompts.card.menu.delete"),
       icon: { category: "outlined", type: "delete" },
       destructive: true,
+    });
+  }
+
+  if (!isMarketplace && publishable) {
+    options.push({
+      key: published ? "unpublish" : "publish",
+      value: published ? "unpublish" : "publish",
+      label: t(published ? "rework.teams.prompts.card.menu.unpublish" : "rework.teams.prompts.card.menu.publish"),
+      icon: { category: "outlined", type: "storefront" },
     });
   }
 
@@ -247,11 +236,6 @@ export default function PromptCard({
 
       {/* ── Footer: usage count + optional "published" chip ── */}
       <div className={styles.footer}>
-        {!unavailableReason && "session_count" in prompt && (
-          <span className={styles.uses}>
-            {t("rework.teams.prompts.card.uses", { count: prompt.session_count ?? 0 })}
-          </span>
-        )}
         {!isMarketplace && published && (
           <span className={styles.publishedChip}>
             <Icon category="outlined" type="storefront" />

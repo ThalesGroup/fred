@@ -19,8 +19,8 @@ import { freeAgentName, isAgentNameConflict, isAgentNameTaken, takenAgentNames }
 const agent = (id: string, name: string) =>
   ({
     agent_instance_id: id,
-    display_name: "Same label",
-    logical_name: name.trim().toLowerCase(),
+    display_name: name,
+    logical_name: `agent-${id}`,
   }) as ManagedAgentInstanceSummary;
 
 describe("agent names", () => {

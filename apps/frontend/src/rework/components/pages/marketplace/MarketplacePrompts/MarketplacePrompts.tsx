@@ -1,154 +1,105 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
 import { useMemo, useState } from "react";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
+import { useNavigate } from "react-router-dom";
+import Select from "@shared/molecules/Select/Select";
 import { useTranslation } from "react-i18next";
-import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
-import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
-import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
-import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
-import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
-import { getQueryUiState } from "@core/utils/queryUiState.ts";
-import { canEditTeamContent } from "@hooks/teamCapabilities";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput";
+import FilterChips from "@shared/molecules/FilterChips/FilterChips";
+import PromptCard from "@shared/organisms/PromptCard/PromptCard";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
 import {
-  type MarketplacePromptSummary,
-  useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery,
-  useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
-  usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation,
-  usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import PromptViewDialog from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
-import ImportPromptDialog from "./ImportPromptDialog/ImportPromptDialog.tsx";
+  usePublishedPromptsQuery,
+  usePromptPublicationTeamsQuery,
+  useSetPromptPublicationMutation,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { PublishedPromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import PromptViewDialog from "../../PromptsPage/PromptViewDialog/PromptViewDialog";
+import PromptMarketplaceScope from "./PromptMarketplaceScope";
 import styles from "./MarketplacePrompts.module.scss";
 
-/** "Prompts de la communauté" — every published prompt across all teams, a
- * live view of the team rows. Actions: copy to clipboard (records a use),
- * import into one of the caller's spaces, and — for editors of the author
- * team — remove from the marketplace. */
 export default function MarketplacePrompts() {
+  return (
+    <PromptMarketplaceScope>
+      {(organizationId) => <OrganizationPrompts key={organizationId} organizationId={organizationId} />}
+    </PromptMarketplaceScope>
+  );
+}
+
+function OrganizationPrompts({ organizationId }: { organizationId: string }) {
   const { t } = useTranslation();
-  const { availableTeams } = useFrontendBootstrap();
+  const navigate = useNavigate();
+  const teamsQuery = usePromptPublicationTeamsQuery(
+    {},
+    { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
+  );
+  useRefetchOnWindowFocus(teamsQuery.refetch, false);
+  const publishingTeams = teamsQuery.isError
+    ? []
+    : (teamsQuery.currentData?.items ?? []).filter((team) => team.organization_id === organizationId);
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
-
   const [search, setSearch] = useState("");
   const [activeTeam, setActiveTeam] = useState<string | null>(null);
-  const [viewingPrompt, setViewingPrompt] = useState<MarketplacePromptSummary | null>(null);
-  const [importingPrompt, setImportingPrompt] = useState<MarketplacePromptSummary | null>(null);
-  const FILTER_VISIBLE = 4;
-
-  const {
-    data: prompts = [],
-    isLoading,
-    isUninitialized,
-    isError,
-  } = useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery();
-
-  const [recordUse] = usePostMarketplacePromptUseControlPlaneV1MarketplacePromptsPromptIdUsePostMutation();
-  const [unpublishPrompt] = usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation();
-
-  // The listing carries only previews; fetch the full text on demand when a
-  // card is opened, for the read-only view's copy-to-clipboard action.
-  const { data: rawViewDetail } = useGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery(
-    { promptId: viewingPrompt?.id || "" },
-    { skip: !viewingPrompt },
+  const [viewingId, setViewingId] = useState<string>();
+  const catalog = usePublishedPromptsQuery(
+    { organizationId },
+    { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
   );
-  // Guard against RTK Query serving the previous prompt's detail while the new
-  // one is still in flight (same stale-result guard as PromptViewDialog).
-  const viewDetail = rawViewDetail && rawViewDetail.id === viewingPrompt?.id ? rawViewDetail : undefined;
-
-  // Teams the caller can edit → they may remove that team's prompts from the
-  // marketplace directly from here (UX convenience).
-  const editableTeamIds = useMemo(
-    () => new Set(availableTeams.filter(canEditTeamContent).map((team) => team.id)),
-    [availableTeams],
-  );
-
-  // One filter chip per distinct author team present in the marketplace.
-  const teamChips = useMemo(() => {
-    const byId = new Map<string, { id: string; label: string; count: number }>();
-    for (const prompt of prompts) {
-      const existing = byId.get(prompt.team_id);
-      if (existing) existing.count += 1;
-      else byId.set(prompt.team_id, { id: prompt.team_id, label: prompt.team_name, count: 1 });
-    }
+  useRefetchOnWindowFocus(catalog.refetch, false);
+  const prompts = catalog.currentData?.items;
+  const [setPublication] = useSetPromptPublicationMutation();
+  const teams = useMemo(() => {
+    const byId = new Map<string, { id: string; label: string }>();
+    for (const prompt of prompts ?? []) byId.set(prompt.space_id, { id: prompt.space_id, label: prompt.team_name });
     return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
   }, [prompts]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return prompts.filter((p) => {
-      const matchSearch =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        (p.description ?? "").toLowerCase().includes(q) ||
-        p.team_name.toLowerCase().includes(q);
-      const matchTeam = !activeTeam || p.team_id === activeTeam;
-      return matchSearch && matchTeam;
-    });
-  }, [prompts, search, activeTeam]);
-
-  const handleRemoveFromMarketplace = (prompt: MarketplacePromptSummary) => {
+  const filtered = (prompts ?? []).filter((prompt) => {
+    const query = search.trim().toLowerCase();
+    return (
+      (!activeTeam || prompt.space_id === activeTeam) &&
+      (!query ||
+        [prompt.display_name, prompt.description, prompt.logical_name, prompt.team_name, ...prompt.tags].some((value) =>
+          value?.toLowerCase().includes(query),
+        ))
+    );
+  });
+  const remove = (prompt: PublishedPromptSummary) => {
     showConfirmationDialog({
       criticalAction: true,
       title: t("rework.marketplace.prompts.unpublish.title"),
-      message: t("rework.marketplace.prompts.unpublish.message", { name: prompt.name }),
+      message: t("rework.marketplace.prompts.unpublish.message", { name: prompt.display_name }),
       confirmButtonLabel: t("rework.marketplace.prompts.unpublish.confirm"),
       onConfirm: async () => {
         try {
-          await unpublishPrompt({ teamId: prompt.team_id, promptId: prompt.id }).unwrap();
+          await setPublication({
+            spaceId: prompt.space_id,
+            promptId: prompt.prompt_id,
+            promptPublicationRequest: { published: false },
+          }).unwrap();
+          setViewingId(undefined);
           showSuccess({ summary: t("rework.marketplace.prompts.unpublish.successToast") });
-        } catch (error: unknown) {
-          const err = error as { data?: { detail?: string }; message?: string };
-          showError({
-            summary: t("rework.marketplace.prompts.unpublish.errorToast"),
-            detail: err?.data?.detail || err?.message || String(error),
-          });
+        } catch {
+          setViewingId(undefined);
+          showError({ summary: t("rework.marketplace.prompts.unpublish.errorToast") });
         }
       },
     });
   };
 
-  // Only gate the full-page spinner on the initial load (no data yet) — a
-  // background refetch (e.g. after recording a marketplace "use" on copy, or an
-  // unpublish/import) must not blank the page and unmount the open dialog,
-  // which caused a visible flicker. `isFetching` is intentionally omitted.
-  const queryState = getQueryUiState({ isLoading, isUninitialized, isError });
-
-  if (queryState === "loading") {
+  if (catalog.isError) return <ServiceNotice icon="lock" title={t("rework.manager.unavailable")} centered />;
+  if (!prompts)
     return (
       <div className={styles.loadingState}>
         <Spinner size={20} />
         {t("rework.marketplace.prompts.loading")}
       </div>
     );
-  }
-
-  if (queryState === "error") {
-    return (
-      <ServiceNotice
-        icon="cloud_off"
-        title={t("rework.serviceNotice.controlPlane.title")}
-        description={t("rework.serviceNotice.controlPlane.description")}
-        centered
-      />
-    );
-  }
-
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -158,73 +109,59 @@ export default function MarketplacePrompts() {
             value={search}
             onChange={setSearch}
             placeholder={t("rework.marketplace.prompts.searchPlaceholder")}
+            ariaLabel={t("rework.marketplace.prompts.searchPlaceholder")}
             clearAriaLabel={t("rework.marketplace.prompts.clearSearch")}
             size="small"
           />
         </div>
       </div>
-
       <div className={styles.content}>
-        {teamChips.length > 0 && (
-          <FilterChips
-            options={teamChips}
-            value={activeTeam}
-            onChange={(v) => setActiveTeam(v)}
-            allLabel={t("rework.teams.agents.podFilter.all")}
-            maxVisible={FILTER_VISIBLE}
-            showMoreLabel={(count) => `+${count}`}
-            showLessLabel="−"
+        {publishingTeams.length > 0 && (
+          <Select
+            size="small"
+            compact
+            label={t("rework.promptPublication.libraries")}
+            placeholder={t("rework.promptPublication.libraries")}
+            options={publishingTeams.map((team) => ({ key: team.id, value: team.id, label: team.name }))}
+            onChange={(id) => navigate(`/team/${id}/prompts`)}
           />
         )}
 
-        {prompts.length === 0 ? (
-          <div className={styles.empty}>{t("rework.marketplace.prompts.empty")}</div>
+        <FilterChips
+          options={teams}
+          value={activeTeam}
+          onChange={setActiveTeam}
+          allLabel={t("rework.teams.agents.podFilter.all")}
+          maxVisible={4}
+          aria-label={t("rework.manager.kinds.team")}
+        />
+        {catalog.isFetching ? (
+          <Spinner size={20} />
         ) : filtered.length === 0 ? (
-          <div className={styles.empty}>{t("rework.marketplace.prompts.emptySearch")}</div>
+          <div className={styles.empty}>
+            {t(prompts.length ? "rework.marketplace.prompts.emptySearch" : "rework.marketplace.prompts.empty")}
+          </div>
         ) : (
           <div className={styles.promptList}>
             {filtered.map((prompt) => (
               <PromptCard
-                key={prompt.id}
+                key={prompt.prompt_id}
                 prompt={prompt}
                 variant="marketplace"
                 teamName={prompt.team_name}
-                canRemoveFromMarketplace={editableTeamIds.has(prompt.team_id)}
-                onView={() => setViewingPrompt(prompt)}
-                onImport={() => setImportingPrompt(prompt)}
-                onRemoveFromMarketplace={() => handleRemoveFromMarketplace(prompt)}
+                canRemoveFromMarketplace={prompt.can_publish}
+                onView={() => setViewingId(prompt.prompt_id)}
+                onRemoveFromMarketplace={() => remove(prompt)}
               />
             ))}
           </div>
         )}
       </div>
-
       <PromptViewDialog
-        open={!!viewingPrompt}
-        preloadedDetail={
-          viewDetail
-            ? {
-                id: viewDetail.id,
-                name: viewDetail.name,
-                description: viewDetail.description,
-                text: viewDetail.text,
-                command: viewDetail.command,
-              }
-            : null
-        }
-        chipLabel={viewingPrompt?.team_name ?? null}
-        onCopied={() => {
-          if (viewingPrompt) recordUse({ promptId: viewingPrompt.id });
-        }}
-        onClose={() => setViewingPrompt(null)}
-      />
-
-      <ImportPromptDialog
-        open={!!importingPrompt}
-        promptId={importingPrompt?.id ?? null}
-        promptName={importingPrompt?.name ?? ""}
-        originTeamId={importingPrompt?.team_id ?? null}
-        onClose={() => setImportingPrompt(null)}
+        open={!!viewingId && prompts.some((prompt) => prompt.prompt_id === viewingId)}
+        organizationId={organizationId}
+        promptId={viewingId}
+        onClose={() => setViewingId(undefined)}
       />
     </div>
   );

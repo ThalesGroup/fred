@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
+import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import type { CSSProperties } from "react";
 import styles from "./MainNavBar.module.scss";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -56,7 +56,7 @@ function BusinessMainNavBar() {
   const { pathname } = useLocation();
   // Platform pages never mount the business bootstrap; the platform role alone shows Admin there.
   const capabilities = useUserCapabilities(
-    isAgentManagementRoute(pathname) ||
+    isWeaverContentRoute(pathname) ||
       isPlatformAdminRoute(pathname) ||
       ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
   );
@@ -81,7 +81,7 @@ function BusinessMainNavBar() {
       icon: "storefront",
       label: t("rework.mainNav.marketplace"),
       active: pathname.startsWith("/marketplace"),
-      onClick: () => navigate("/marketplace/teams"),
+      onClick: () => navigate(organization.currentData?.length === 0 ? "/marketplace/prompts" : "/marketplace/teams"),
     },
     {
       key: "help",

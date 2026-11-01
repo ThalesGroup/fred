@@ -17,7 +17,6 @@ import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { IconType } from "@shared/utils/Type.ts";
-import { isLogicalNameValid } from "@rework/utils/promptValidation";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDispatch } from "react-redux";
@@ -100,7 +99,6 @@ type AgentFormBodyProps = {
   mode: "create" | "edit";
   templates: AgentTemplateSummary[];
   templateId: string;
-  logicalName: string;
   displayName: string;
   role: string;
   description: string;
@@ -123,9 +121,8 @@ type AgentFormBodyProps = {
   teamId?: string;
   /** Another agent of the team has this name; shown once the name field was left. */
   nameTaken?: boolean;
-  onLogicalNameChange: (v: string) => void;
   onDisplayNameChange: (v: string) => void;
-  onLogicalNameBlur?: () => void;
+  onDisplayNameBlur?: () => void;
   onRoleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onUsageStatementChange: (v: string) => void;
@@ -146,7 +143,6 @@ export function AgentFormBody({
   mode,
   templates,
   templateId,
-  logicalName,
   displayName,
   role,
   description,
@@ -164,9 +160,8 @@ export function AgentFormBody({
   editInstance,
   teamId,
   nameTaken = false,
-  onLogicalNameChange,
   onDisplayNameChange,
-  onLogicalNameBlur,
+  onDisplayNameBlur,
   onRoleChange,
   onDescriptionChange,
   onUsageStatementChange,
@@ -222,11 +217,10 @@ export function AgentFormBody({
   const effectiveSection = visibleSections.includes(activeSection) ? activeSection : (visibleSections[0] ?? "general");
   const activeSectionIndex = Math.max(0, visibleSections.indexOf(effectiveSection));
 
-  const nameError = submitAttempted && !displayName.trim() ? t("rework.teams.formAgent.fields.name.label") : undefined;
-  const logicalNameError = nameTaken
-    ? t("rework.weaverAgents.logicalNameTaken")
-    : (logicalName || submitAttempted) && !isLogicalNameValid(logicalName)
-      ? t("rework.weaverAgents.logicalNameHelp")
+  const nameError = nameTaken
+    ? t("rework.teams.formAgent.fields.name.taken")
+    : submitAttempted && !displayName.trim()
+      ? t("rework.teams.formAgent.fields.name.label")
       : undefined;
   const usageStatementError =
     submitAttempted && !usageStatement.trim() ? t("rework.teams.formAgent.fields.usageStatement.label") : undefined;
@@ -405,27 +399,12 @@ export function AgentFormBody({
           <div className={styles.sectionContent}>
             {effectiveSection === "general" && (
               <>
-                <TextInput
-                  label={t("rework.weaverAgents.logicalName")}
-                  explanation={t(
-                    mode === "edit"
-                      ? "rework.weaverAgents.logicalNameImmutable"
-                      : "rework.weaverAgents.logicalNameHelp",
-                  )}
-                  value={logicalName}
-                  required
-                  readOnly={mode === "edit"}
-                  maxLength={64}
-                  disabled={isSubmitting}
-                  error={logicalNameError}
-                  onChange={(event) => onLogicalNameChange(event.target.value)}
-                  onBlur={onLogicalNameBlur}
-                />
                 <div className={styles.fieldRow}>
                   <TextInput
                     label={t("rework.teams.formAgent.fields.name.label")}
                     value={displayName}
                     onChange={(e) => onDisplayNameChange(e.target.value)}
+                    onBlur={onDisplayNameBlur}
                     maxLength={255}
                     required
                     disabled={isSubmitting}

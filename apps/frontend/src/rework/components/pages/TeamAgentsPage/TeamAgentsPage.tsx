@@ -30,7 +30,7 @@ import AgentFormModal, { type AgentFormPayload } from "./AgentFormModal/AgentFor
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState";
 import { filterAgents } from "./agentFilter";
 import { sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort";
-import { isAgentNameConflict, takenAgentNames } from "./agentNames";
+import { isAgentNameConflict, normalizeAgentName, takenAgentNames } from "./agentNames";
 import { agentErrorText, createAgentRequest, resolveAgentSpace, updateAgentRequest } from "./weaverAgents";
 import styles from "./TeamAgentsPage.module.css";
 
@@ -133,7 +133,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
       setIsEnrollOpen(false);
     } catch (error) {
       if (live.current && isAgentNameConflict(error))
-        setRefusedNames((names) => new Set([...names, payload.logicalName]));
+        setRefusedNames((names) => new Set([...names, normalizeAgentName(payload.displayName)]));
       notifyError(error);
     }
   };

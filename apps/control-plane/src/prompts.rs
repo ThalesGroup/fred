@@ -17,6 +17,7 @@ use uuid::Uuid;
 mod categories;
 mod favorites;
 pub mod http;
+mod publication;
 
 pub(super) const PAGE_SIZE: usize = 100;
 
@@ -60,6 +61,28 @@ pub struct UpdatePromptRequest {
     pub tags: Option<Vec<String>>,
     /// Omitted/null keeps the value; a nonblank string replaces it verbatim.
     pub text: Option<String>,
+}
+
+/// The invited editor exception opens only prompt/category reads and publication.
+/// It neither grants ordinary space Read/Write nor enables favorites or CRUD.
+/// Authorization is admitted before the read, like existing space prompt reads.
+pub(super) async fn authorize_read(
+    pool: &sqlx::PgPool,
+    authorization: &crate::authorization::Authorization,
+    actor: &str,
+    space_id: Uuid,
+) -> AppResult<crate::domain::Space> {
+    if crate::authorization::can_publish_prompts(pool, actor, space_id).await? {
+        return crate::spaces::load(pool, space_id).await;
+    }
+    crate::spaces::authorize(
+        pool,
+        authorization,
+        actor,
+        space_id,
+        crate::domain::Permission::Read,
+    )
+    .await
 }
 
 pub(super) fn require_prompt_space(kind: SpaceKind) -> AppResult<()> {
@@ -136,6 +159,7 @@ pub(super) fn validate_content(
 pub struct PromptMetadata {
     pub prompt_id: Uuid,
     pub space_id: Uuid,
+    pub published: bool,
     /// Immutable space-local identity. The slash command is "/" + logical_name.
     pub logical_name: String,
     pub display_name: String,
@@ -180,7 +204,7 @@ pub(super) async fn list_by_space<'e>(
     actor: &str,
 ) -> sqlx::Result<Vec<PromptSummary>> {
     sqlx::query_as(
-        "select prompt_id, space_id, logical_name, display_name, description, category_id, tags,
+        "select prompt_id, space_id, published, logical_name, display_name, description, category_id, tags,
             created_at, created_by, updated_at, updated_by, left(text, 240) as text_preview,
             exists(select 1 from prompt_favorite f where f.prompt_id = prompt.prompt_id and f.user_id = $4) as is_favorite
         from prompt where space_id = $1 and logical_name > coalesce($2, '')

@@ -14,7 +14,6 @@ use uuid::Uuid;
 use crate::{
     api::AppState,
     db,
-    domain::Permission,
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath, ApiQuery},
     onboarding::AdmittedUser,
@@ -61,6 +60,7 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
     utoipa_axum::router::OpenApiRouter::new()
         .merge(super::categories::routes())
         .merge(super::favorites::routes())
+        .merge(super::publication::routes())
         .routes(utoipa_axum::routes!(list_prompts, create_prompt))
         .routes(utoipa_axum::routes!(
             get_prompt,
@@ -95,14 +95,7 @@ async fn list_prompts(
     ApiPath(space_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<PromptQuery>,
 ) -> AppResult<Json<PromptPage>> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    let space = super::authorize_read(&s.pool, &s.authorization, &user.uid, space_id).await?;
     require_prompt_space(space.kind)?;
     if let Some(after) = &query.after {
         validate_logical_name(after)?;
@@ -136,14 +129,7 @@ async fn get_prompt(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, prompt_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<Json<Prompt>> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    let space = super::authorize_read(&s.pool, &s.authorization, &user.uid, space_id).await?;
     require_prompt_space(space.kind)?;
     Ok(Json(
         super::get_for_space(&s.pool, space_id, prompt_id, &user.uid)

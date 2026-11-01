@@ -11,8 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     api::AppState,
-    db,
-    domain::{self, Permission},
+    db, domain,
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath, ApiQuery},
     onboarding::AdmittedUser,
@@ -105,14 +104,7 @@ async fn list_prompt_categories(
     ApiPath(space_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<CategoryQuery>,
 ) -> AppResult<Json<PromptCategoryPage>> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    let space = super::authorize_read(&s.pool, &s.authorization, &user.uid, space_id).await?;
     require_prompt_space(space.kind)?;
     let mut items: Vec<PromptCategory> = sqlx::query_as(
         "select id, space_id, name from prompt_category

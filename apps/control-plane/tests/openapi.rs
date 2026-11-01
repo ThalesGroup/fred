@@ -181,6 +181,11 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "delete /spaces/{space_id}/prompt-categories/{category_id}",
         "put /spaces/{space_id}/prompts/{prompt_id}/favorite",
         "delete /spaces/{space_id}/prompts/{prompt_id}/favorite",
+        "get /me/prompt-marketplaces",
+        "get /me/prompt-publication-teams",
+        "get /organizations/{organization_id}/published-prompts",
+        "get /organizations/{organization_id}/published-prompts/{prompt_id}",
+        "put /spaces/{space_id}/prompts/{prompt_id}/publication",
         "get /spaces/{space_id}/prompts",
         "post /spaces/{space_id}/prompts",
         "get /spaces/{space_id}/prompts/{prompt_id}",
@@ -601,7 +606,9 @@ fn document_receipts_and_lifecycle_receipts_have_distinct_generated_contracts() 
 
 #[test]
 fn instance_operations_and_nullable_patch_match_the_wire_contract() {
-    use control_plane::agent_instances::http::UpdateAgentInstanceRequest;
+    use control_plane::agent_instances::http::{
+        CreateAgentInstanceRequest, UpdateAgentInstanceRequest,
+    };
     let api = schema();
     let schemas = &api["components"]["schemas"];
     let collection = "/control-plane/v1/spaces/{space_id}/agent-instances";
@@ -658,14 +665,9 @@ fn instance_operations_and_nullable_patch_match_the_wire_contract() {
         .unwrap();
     assert_eq!(
         create,
-        json!([
-            "template_id",
-            "display_name",
-            "logical_name",
-            "usage_statement"
-        ])
-        .as_array()
-        .unwrap()
+        json!(["template_id", "display_name", "usage_statement"])
+            .as_array()
+            .unwrap()
     );
     let patch = &schemas["UpdateAgentInstanceRequest"];
     assert!(patch["required"].as_array().is_none_or(Vec::is_empty));
@@ -683,6 +685,24 @@ fn instance_operations_and_nullable_patch_match_the_wire_contract() {
     for (name, property) in patch["properties"].as_object().unwrap() {
         assert!(nullable(property), "{name}: {property}");
     }
+    let logical_name = &schemas["CreateAgentInstanceRequest"]["properties"]["logical_name"];
+    assert!(nullable(logical_name));
+    assert_eq!(logical_name["pattern"], "^[a-z0-9_-]{1,64}$");
+    assert!(!nullable(
+        &schemas["ManagedAgentInstanceSummary"]["properties"]["logical_name"]
+    ));
+    let mut body = json!({"template_id":uuid::Uuid::new_v4(),"display_name":"Équipe 東京","usage_statement":"Help"});
+    let omitted: CreateAgentInstanceRequest = serde_json::from_value(body.clone()).unwrap();
+    assert!(omitted.logical_name.is_none());
+    body["logical_name"] = Value::Null;
+    let null: CreateAgentInstanceRequest = serde_json::from_value(body.clone()).unwrap();
+    assert!(null.logical_name.is_none());
+    body["logical_name"] = json!("integration-reference");
+    let explicit: CreateAgentInstanceRequest = serde_json::from_value(body).unwrap();
+    assert_eq!(
+        explicit.logical_name.as_deref(),
+        Some("integration-reference")
+    );
     assert_eq!(
         schemas["AgentInstanceStatus"]["enum"],
         json!(["enabled", "disabled"])
@@ -823,4 +843,49 @@ fn prompt_operations_preserve_strict_requests_and_flattened_responses() {
             assert_eq!(parts[1]["properties"][field]["maxLength"], 240);
         }
     }
+}
+
+#[test]
+fn prompt_publication_contract_has_no_snapshot_import_or_usage_fields() {
+    let api = schema();
+    let schemas = &api["components"]["schemas"];
+    assert_eq!(
+        schemas["PromptMetadata"]["properties"]["published"]["type"],
+        "boolean"
+    );
+    assert!(
+        schemas["PromptMetadata"]["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("published"))
+    );
+    assert_eq!(
+        schemas["PromptPublicationRequest"]["additionalProperties"],
+        false
+    );
+    assert_eq!(
+        schemas["PromptPublicationRequest"]["required"],
+        json!(["published"])
+    );
+    assert_eq!(
+        schemas["PromptPublicationRequest"]["properties"]
+            .as_object()
+            .unwrap()
+            .len(),
+        1
+    );
+    for name in [
+        "PublishedPromptPage",
+        "PromptMarketplacePage",
+        "PromptPublicationTeamPage",
+    ] {
+        assert_eq!(schemas[name]["properties"]["items"]["maxItems"], 100);
+        assert_eq!(schemas[name]["properties"]["next_cursor"]["format"], "uuid");
+    }
+    let paths = api["paths"].as_object().unwrap();
+    assert!(
+        !paths
+            .keys()
+            .any(|path| path.contains("/marketplace/prompts"))
+    );
 }

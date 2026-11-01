@@ -11,7 +11,6 @@ import { INSTANCE, SPACES, TEMPLATE } from "../weaverAgentFixtures";
 
 const form = () => ({
   templateId: TEMPLATE.template_id,
-  logicalName: INSTANCE.logical_name,
   displayName: INSTANCE.display_name,
   role: INSTANCE.role,
   description: INSTANCE.description ?? "",
@@ -29,6 +28,16 @@ describe("Weaver form fidelity", () => {
     expect(payload.tuningFieldValues).toBe(INSTANCE.tuning_field_values);
     expect(updateAgentRequest(payload, INSTANCE)).toEqual({});
   });
+  it.each(["Eva", "Équipe de rédaction", "東京 助手", "مساعد"])(
+    "creates %s without a technical name",
+    (displayName) => {
+      const payload = buildAgentFormSubmitPayload({ ...form(), displayName }, TEMPLATE);
+      expect(payload).not.toHaveProperty("logicalName");
+      const request = createAgentRequest(payload);
+      expect(request.display_name).toBe(displayName);
+      expect(request).not.toHaveProperty("logical_name");
+    },
+  );
   it("omits tuning when an edit is reverted before a metadata save", () => {
     const payload = buildAgentFormSubmitPayload(
       { ...form(), displayName: "New", tuningValues: { ...INSTANCE.tuning_field_values } },

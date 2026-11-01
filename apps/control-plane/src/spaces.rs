@@ -856,6 +856,17 @@ pub(crate) async fn authorized_mutation(
     space_id: Uuid,
     permission: Permission,
 ) -> AppResult<Transaction<'static, Postgres>> {
+    let mut tx = mutation_transaction(pool, space_id).await?;
+    authorize_locked(&mut tx, caller, space_id, permission).await?;
+    Ok(tx)
+}
+
+/// Shared cross-replica mutation boundary. A domain using this directly must
+/// authorize on this connection after the lock, before reading private content.
+pub(crate) async fn mutation_transaction(
+    pool: &PgPool,
+    space_id: Uuid,
+) -> AppResult<Transaction<'static, Postgres>> {
     let space = load(pool, space_id).await?;
     let mut tx = tokio::time::timeout(Duration::from_secs(5), async {
         let key = i64::from_be_bytes(space.organization.as_bytes()[..8].try_into().unwrap());
@@ -881,7 +892,6 @@ pub(crate) async fn authorized_mutation(
     sqlx::query("set local statement_timeout = '15s'")
         .execute(&mut *tx)
         .await?;
-    authorize_locked(&mut tx, caller, space_id, permission).await?;
     Ok(tx)
 }
 

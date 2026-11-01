@@ -57,7 +57,7 @@ async fn prompt(pool: &PgPool, space: Uuid, name: &str) -> Result<Uuid, sqlx::Er
 
 async fn named_agent(pool: &PgPool, space: Uuid, name: &str) -> Result<Uuid, sqlx::Error> {
     let id = Uuid::new_v4();
-    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$1,'native','assistant','Shared label','{}','alice',$3)")
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$1,'native','assistant',$1::text,'{}','alice',$3)")
         .bind(id).bind(space).bind(name).execute(pool).await?;
     Ok(id)
 }
@@ -66,6 +66,81 @@ async fn agent(pool: &PgPool, space: Uuid) -> Uuid {
     named_agent(pool, space, &Uuid::new_v4().to_string())
         .await
         .unwrap()
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn agent_reference_collisions_are_atomic_for_generated_and_explicit_names() {
+    use control_plane::agent_instances::{self, NewAgentInstance};
+
+    let pool = database().await;
+    let [_, team, _, personal] = spaces(&pool).await;
+    let instance = NewAgentInstance {
+        agent_instance_id: Uuid::new_v4(),
+        space_id: team,
+        template_id: Uuid::new_v4(),
+        source_runtime_id: "native".into(),
+        source_agent_id: "assistant".into(),
+        logical_name: None,
+        display_name: "Shared label".into(),
+        description: None,
+        enabled: true,
+        created_by: "alice".into(),
+        tuning: serde_json::json!({}),
+    };
+    // An integration may explicitly occupy a generated candidate; never overwrite it.
+    let candidate = format!("agent-{}", instance.agent_instance_id.simple());
+    let existing = named_agent(&pool, team, &candidate).await.unwrap();
+    let error = agent_instances::create(&pool, &instance)
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        error.as_database_error().unwrap().constraint(),
+        Some("agent_instance_space_logical_name_key")
+    );
+    violation(error, "23505");
+    assert!(
+        agent_instances::get_for_space(&pool, team, instance.agent_instance_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        agent_instances::get_for_space(&pool, team, existing)
+            .await
+            .unwrap()
+            .unwrap()
+            .logical_name,
+        candidate
+    );
+    // The exact same reference is legal in a different deployment space.
+    let other = NewAgentInstance {
+        space_id: personal,
+        ..instance
+    };
+    assert_eq!(
+        agent_instances::create(&pool, &other)
+            .await
+            .unwrap()
+            .logical_name,
+        candidate
+    );
+
+    // Bypass HTTP's space lock: SQL alone arbitrates concurrent writers/replicas.
+    let (left, right) = tokio::join!(
+        named_agent(&pool, team, "integration-reference"),
+        named_agent(&pool, team, "integration-reference"),
+    );
+    let error = match (left, right) {
+        (Ok(_), Err(error)) | (Err(error), Ok(_)) => error,
+        results => panic!("expected exactly one insert: {results:?}"),
+    };
+    assert_eq!(
+        error.as_database_error().unwrap().constraint(),
+        Some("agent_instance_space_logical_name_key")
+    );
+    violation(error, "23505");
 }
 
 async fn session(
@@ -78,6 +153,67 @@ async fn session(
     sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,agent_space_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$3,$4,$3,'native','Assistant',1)")
         .bind(id).bind(space).bind(agent).bind(deployment).execute(pool).await?;
     Ok(id)
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn agent_display_name_uniqueness_arbitrates_concurrent_writers_without_http_locks() {
+    use control_plane::agent_instances::{self, NewAgentInstance};
+
+    let pool = database().await;
+    let [_, team, _, personal] = spaces(&pool).await;
+    let instance = |space, name: &str| NewAgentInstance {
+        agent_instance_id: Uuid::new_v4(),
+        space_id: space,
+        template_id: Uuid::new_v4(),
+        source_runtime_id: "native".into(),
+        source_agent_id: "assistant".into(),
+        logical_name: None,
+        display_name: name.into(),
+        description: None,
+        enabled: true,
+        created_by: "alice".into(),
+        tuning: serde_json::json!({}),
+    };
+    let first = instance(team, "Simon");
+    let second = instance(team, "simon");
+    let (left, right) = tokio::join!(
+        agent_instances::create(&pool, &first),
+        agent_instances::create(&pool, &second),
+    );
+    let error = match (left, right) {
+        (Ok(_), Err(error)) | (Err(error), Ok(_)) => error,
+        _ => panic!("expected exactly one insert"),
+    };
+    assert_eq!(
+        error.as_database_error().unwrap().constraint(),
+        Some("uq_agent_instance_space_name")
+    );
+    violation(error, "23505");
+    agent_instances::create(&pool, &instance(personal, "Simon"))
+        .await
+        .unwrap();
+    let mut eva = agent_instances::create(&pool, &instance(team, "Eva"))
+        .await
+        .unwrap();
+    eva.display_name = "SIMON".into();
+    let error = agent_instances::update(&pool, &eva, "alice")
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        error.as_database_error().unwrap().constraint(),
+        Some("uq_agent_instance_space_name")
+    );
+    violation(error, "23505");
+    assert_eq!(
+        agent_instances::get_for_space(&pool, team, eva.agent_instance_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .display_name,
+        "Eva"
+    );
 }
 
 #[tokio::test]

@@ -5,6 +5,14 @@ import type { FetchBaseQueryMeta, FetchBaseQueryError, QueryReturnValue } from "
 import {
   controlPlaneApi,
   type PromptSummary,
+  type PublishedPromptSummary,
+  type PublishedPromptsApiArg,
+  type PromptMarketplace,
+  type PromptPublicationTeam,
+  type PromptPublicationTeamsApiArg,
+  type PromptMarketplacesApiArg,
+  type ListPromptsApiArg,
+  type ListPromptCategoriesApiArg,
   type ManagedAgentInstanceSummary,
   type PromptCategory,
   type OrganizationDetail,
@@ -14,11 +22,14 @@ type CatalogDefinition = typeof controlPlaneApi.endpoints.listPrompts.Types.Quer
 type CatalogPage<Item> = { items: Item[]; next_cursor: string | null };
 
 // One bounded traversal for space resource catalogs. No partial success.
-function catalogQuery<Item>(
-  query: NonNullable<CatalogDefinition["query"]>,
+function catalogQuery<Item, Args extends { after?: string } = ListPromptsApiArg>(
+  query: (args: Args) => ReturnType<NonNullable<CatalogDefinition["query"]>>,
   key: (item: Item) => string,
 ): (
-  ...args: Parameters<NonNullable<CatalogDefinition["queryFn"]>>
+  args: Args,
+  api: Parameters<NonNullable<CatalogDefinition["queryFn"]>>[1],
+  extra: Parameters<NonNullable<CatalogDefinition["queryFn"]>>[2],
+  baseQuery: Parameters<NonNullable<CatalogDefinition["queryFn"]>>[3],
 ) => Promise<QueryReturnValue<CatalogPage<Item>, FetchBaseQueryError>> {
   return async (args, api, _extra, baseQuery) => {
     const items = new Map<string, Item>();
@@ -78,6 +89,9 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "OrganizationModels",
     "AgentInstances",
     "Prompts",
+    "PublishedPrompts",
+    "PublishedPrompt",
+    "PromptMarketplaces",
     "PromptCategories",
     "AgentTemplates",
     "Sessions",
@@ -86,11 +100,64 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   endpoints: {
     // All three consumers need the complete catalog. Keep its pages in one RTK
     // result, never a component store. A failed page publishes no partial list.
+    promptMarketplaces(endpoint) {
+      endpoint.keepUnusedDataFor = 0;
+      endpoint.providesTags = ["PromptMarketplaces"];
+      endpoint.queryFn = catalogQuery<PromptMarketplace, PromptMarketplacesApiArg>(
+        endpoint.query!,
+        (organization) => organization.organization_id,
+      );
+      Object.assign(endpoint, { query: undefined });
+    },
+    promptPublicationTeams(endpoint) {
+      endpoint.keepUnusedDataFor = 0;
+      endpoint.providesTags = ["PromptMarketplaces"];
+      endpoint.queryFn = catalogQuery<PromptPublicationTeam, PromptPublicationTeamsApiArg>(
+        endpoint.query!,
+        (team) => team.id,
+      );
+      Object.assign(endpoint, { query: undefined });
+    },
+    publishedPrompts(endpoint) {
+      endpoint.keepUnusedDataFor = 0;
+      endpoint.providesTags = (_result, _error, { organizationId }) => [
+        { type: "PublishedPrompts", id: organizationId },
+      ];
+      endpoint.queryFn = catalogQuery<PublishedPromptSummary, PublishedPromptsApiArg>(
+        endpoint.query!,
+        (prompt) => prompt.prompt_id,
+      );
+      Object.assign(endpoint, { query: undefined });
+    },
+    publishedPrompt: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { organizationId }) => [{ type: "PublishedPrompt", id: organizationId }],
+      async onQueryStarted({ organizationId }, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+        } catch {
+          // Revalidate previews after a detail refusal. Use a distinct list tag
+          // so a missing detail never triggers an endless self-refetch loop.
+          dispatch(enhancedControlPlaneApi.util.invalidateTags([{ type: "PublishedPrompts", id: organizationId }]));
+        }
+      },
+    },
+    setPromptPublication: {
+      extraOptions: { retryUnauthorized: false },
+      // A refused mutation also revalidates previously displayed access/content.
+      invalidatesTags: (_result, _error, { spaceId, promptId }) => [
+        "PublishedPrompts",
+        "PublishedPrompt",
+        "PromptMarketplaces",
+        { type: "Prompts", id: spaceId },
+        { type: "Prompts", id: `${spaceId}:${promptId}` },
+      ],
+    },
     listPrompts(endpoint) {
       const query = endpoint.query!;
       endpoint.keepUnusedDataFor = 0;
       endpoint.providesTags = (_result, _error, { spaceId }) => [{ type: "Prompts", id: spaceId }];
-      endpoint.queryFn = catalogQuery<PromptSummary>(query, (prompt) => prompt.prompt_id);
+      endpoint.queryFn = catalogQuery<PromptSummary, ListPromptsApiArg>(query, (prompt) => prompt.prompt_id);
       // RTK must use queryFn; every page still uses the generated request builder.
       Object.assign(endpoint, { query: undefined });
       endpoint.onCacheEntryAdded = async (args, { cacheEntryRemoved, dispatch, getCacheEntry }) => {
@@ -100,7 +167,10 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       };
     },
     listPromptCategories(endpoint) {
-      const query = catalogQuery<PromptCategory>(endpoint.query!, (category) => category.id);
+      const query = catalogQuery<PromptCategory, ListPromptCategoriesApiArg>(
+        endpoint.query!,
+        (category) => category.id,
+      );
       endpoint.keepUnusedDataFor = 0;
       endpoint.providesTags = (_result, _error, { spaceId }) => [{ type: "PromptCategories", id: spaceId }];
       endpoint.queryFn = async (...args) => {
@@ -171,6 +241,8 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         error
           ? []
           : [
+              "PublishedPrompts",
+              "PublishedPrompt",
               { type: "Prompts", id: spaceId },
               { type: "Prompts", id: `${spaceId}:${promptId}` },
             ],
@@ -181,6 +253,8 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         error
           ? []
           : [
+              "PublishedPrompts",
+              "PublishedPrompt",
               { type: "Prompts", id: spaceId },
               { type: "Prompts", id: `${spaceId}:${promptId}` },
             ],
@@ -403,6 +477,11 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  usePromptMarketplacesQuery,
+  usePromptPublicationTeamsQuery,
+  usePublishedPromptsQuery,
+  usePublishedPromptQuery,
+  useSetPromptPublicationMutation,
   useListPromptsQuery: usePromptCatalogQuery,
   useListPromptCategoriesQuery,
   useCreatePromptCategoryMutation,

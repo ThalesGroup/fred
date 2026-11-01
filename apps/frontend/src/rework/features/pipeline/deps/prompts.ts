@@ -14,6 +14,7 @@
 
 import { useMemo } from "react";
 import { legacyControlPlaneApi } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { enhancedControlPlaneApi } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { PromptsDeps } from "../scenarios/promptsScenario";
 import type { PipelineDeps } from "../types";
 import { FRESH, useApiDispatch } from "./api";
@@ -101,12 +102,13 @@ export function usePromptsDeps(base: PipelineDeps): PromptsDeps {
           }),
         ).unwrap();
       },
-      marketplaceCount: async () =>
-        (
-          await dispatch(
-            cp.getMarketplacePromptsControlPlaneV1MarketplacePromptsGet.initiate(undefined, FRESH),
-          ).unwrap()
-        ).length,
+      marketplaceCount: async () => {
+        const weaver = enhancedControlPlaneApi.endpoints;
+        const spaces = await dispatch(weaver.mySpaces.initiate(undefined, FRESH)).unwrap();
+        const organizationId = spaces.find((space) => space.id === teamId)?.organization_id;
+        if (!organizationId) throw new Error("Prompt marketplace organization unavailable");
+        return (await dispatch(weaver.publishedPrompts.initiate({ organizationId }, FRESH)).unwrap()).items.length;
+      },
     };
   }, [base, dispatch]);
 }

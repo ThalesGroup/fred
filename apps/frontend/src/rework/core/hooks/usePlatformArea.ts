@@ -1,8 +1,9 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { isPromptPublicationRoute } from "../utils/weaverContentRoute";
 import { useLocation } from "react-router-dom";
-import { useMySpacesQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useMySpacesQuery, usePromptMarketplacesQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useManagerPlatformAdmin } from "./useManagerPlatformAdmin";
 
 /** Pages of the platform admin space; every other admin page belongs to the organization. */
@@ -20,9 +21,21 @@ export function usePlatformArea(skip = false) {
   const spaces = useMySpacesQuery(undefined, { skip: skip || !manager.isAdmin });
   // Last known membership: a failed refetch keeps it; an error before any data means none.
   const member = !!spaces.data?.length;
+  const publications = usePromptMarketplacesQuery(
+    {},
+    {
+      skip: skip || !manager.isAdmin || member,
+      refetchOnMountOrArgChange: true,
+    },
+  );
+  const promptReader = !publications.isError && !!publications.currentData?.items.length;
   return {
-    platformArea: manager.isAdmin && (isPlatformAdminRoute(pathname) || !member),
-    platformOnly: manager.isAdmin && !member,
-    loading: manager.isAdmin && (spaces.isLoading || (spaces.isFetching && !spaces.data)),
+    platformArea:
+      manager.isAdmin &&
+      (isPlatformAdminRoute(pathname) || (!member && !(promptReader && isPromptPublicationRoute(pathname)))),
+    platformOnly: manager.isAdmin && !member && !promptReader,
+    loading:
+      manager.isAdmin &&
+      (spaces.isLoading || (spaces.isFetching && !spaces.data) || (!member && publications.isLoading)),
   };
 }

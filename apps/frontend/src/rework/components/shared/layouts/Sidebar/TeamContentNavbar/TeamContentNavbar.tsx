@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
+import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import { useEffect } from "react";
-import { useMySpacesQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useMySpacesQuery,
+  usePromptPublicationTeamsQuery,
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -57,7 +60,7 @@ export default function TeamContentNavbar() {
   const { t } = useTranslation();
   const location = useLocation();
   const { pathname } = location;
-  const agentManagement = isAgentManagementRoute(pathname);
+  const agentManagement = isWeaverContentRoute(pathname);
   const navigate = useNavigate();
 
   const {
@@ -71,6 +74,16 @@ export default function TeamContentNavbar() {
     ? memberships.currentData?.find((item) =>
         agentManagement && teamId === "personal" ? item.kind === "personal" : item.id === teamId,
       )
+    : undefined;
+  const publicationTeams = usePromptPublicationTeamsQuery(
+    {},
+    {
+      skip: !/^\/team\/[^/]+\/prompts\/?$/.test(pathname),
+      refetchOnMountOrArgChange: true,
+    },
+  );
+  const publicationTeam = !publicationTeams.isError
+    ? publicationTeams.currentData?.items.find((team) => team.id === teamId)
     : undefined;
   const isPersonalTeam = space ? space.kind === "personal" : legacyPersonalTeam;
   const { bootstrap } = useFrontendBootstrap(agentManagement);
@@ -164,7 +177,7 @@ export default function TeamContentNavbar() {
   // is you" signal — sized down to fit this compact header.
   const teamDisplayName = isPersonalTeam
     ? t("rework.sidebar.team.userTeam")
-    : (space?.name ?? selectedTeam?.name ?? "");
+    : (space?.name ?? publicationTeam?.name ?? selectedTeam?.name ?? "");
   const teamAvatar = isPersonalTeam ? (
     <UserAvatar
       name={KeyCloakService.GetUserFullName()}

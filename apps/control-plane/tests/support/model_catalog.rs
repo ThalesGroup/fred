@@ -717,7 +717,7 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
             template_id: native,
             source_runtime_id: "control-plane".into(),
             source_agent_id: fred_rust_agent::AGENT_ID.into(),
-            logical_name: "managed-inference".into(),
+            logical_name: Some("managed-inference".into()),
             display_name: "Managed inference fixture".into(),
             description: None,
             enabled: true,

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useLocation } from "react-router-dom";
 import styles from "./MarketplaceNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
@@ -24,6 +25,7 @@ import { useMySpacesQuery } from "../../../../../../slices/controlPlane/controlP
 export default function MarketplaceNavbar() {
   const { t } = useTranslation();
   const { agentIconName, agentsNicknamePlural } = useFrontendProperties();
+  const { pathname } = useLocation();
   const organization = useMySpacesQuery().currentData?.find((space) => space.kind === "organization");
 
   const navigationItems: NavigationMenuItemProps[] = [
@@ -51,7 +53,10 @@ export default function MarketplaceNavbar() {
   return (
     <div className={styles["marketplace-navbar-container"]}>
       {/* The marketplace of the person's organization; without one, just the section. */}
-      <SpaceHeader eyebrow={organization?.name} title={t("rework.sidebar.marketplace.title")} />
+      <SpaceHeader
+        eyebrow={pathname.startsWith("/marketplace/prompts") ? undefined : organization?.name}
+        title={t("rework.sidebar.marketplace.title")}
+      />
       <NavigationMenu items={navigationItems} />
     </div>
   );

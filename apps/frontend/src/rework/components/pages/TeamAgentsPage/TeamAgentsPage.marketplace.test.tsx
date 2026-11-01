@@ -158,6 +158,7 @@ beforeEach(() => {
           ...body,
           space_id: spaceId,
           agent_instance_id: "created",
+          logical_name: "agent-backend-generated",
           tuning_field_values: body.tuning_field_values ?? {},
           selected_capability_ids: body.capability_ids,
           capability_config: {},
@@ -357,7 +358,8 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     await mount();
     await click("rework.teams.agents.firstCreate");
     await click("Custom");
-    await input("rework.weaverAgents.logicalName", "custom-agent");
+    expect(document.querySelector('[aria-label="rework.weaverAgents.logicalName"]')).toBeNull();
+    await input("rework.teams.formAgent.fields.name.label", "Équipe 東京");
     expect(button("rework.teams.formAgent.creationAssistant.open").disabled).toBe(true);
     await click("rework.teams.formAgent.sections.commitments");
     await input("rework.teams.formAgent.fields.usageStatement.label", "My use");
@@ -367,10 +369,17 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
       capability_ids: [],
       tuning_field_values: { prompt: "CATALOG DEFAULT", temperature: 0.8 },
     });
+    expect(writes()[0].body).not.toHaveProperty("logical_name");
+    expect(writes()[0].body?.display_name).toBe("Équipe 東京");
     expect(writes()[0].body).not.toHaveProperty("recommended_chat_profile_id");
     expect(writes()[0].body).not.toHaveProperty("recommended_model");
     await menu("rework.agentCard.edit");
     expect(calls.some((call) => call.path.endsWith("/agent-instances/created") && call.method === "GET")).toBe(true);
+    expect(document.querySelector('[aria-label="rework.weaverAgents.logicalName"]')).toBeNull();
+    await input("rework.teams.formAgent.fields.name.label", "Eva");
+    await click("rework.save");
+    expect(writes()[writes().length - 1]?.body).toEqual({ display_name: "Eva" });
+    expect(rows[0].logical_name).toBe("agent-backend-generated");
   });
   it.each([
     [401, "unauthorized"],
@@ -391,6 +400,31 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     });
     expect(notices.success).not.toHaveBeenCalled();
     expect([...document.querySelectorAll("input")].some((node) => node.value === "My draft")).toBe(true);
+  });
+  it.each(["create", "edit"])("lets the user correct a server-refused display name on %s", async (mode) => {
+    if (mode === "create") rows = [];
+    await mount();
+    if (mode === "create") {
+      await click("rework.teams.agents.firstCreate");
+      await click("Custom");
+      await click("rework.teams.formAgent.sections.commitments");
+      await input("rework.teams.formAgent.fields.usageStatement.label", "My use");
+      await click("rework.teams.formAgent.sections.general");
+    } else {
+      await menu("rework.agentCard.edit");
+    }
+    await input("rework.teams.formAgent.fields.name.label", " SIMON ");
+    failure = { target: "write", status: 409 };
+    const submit = mode === "create" ? "rework.create" : "rework.save";
+    await click(submit);
+    expect(host.textContent).toContain("rework.teams.formAgent.fields.name.taken");
+    expect(button(submit).disabled).toBe(true);
+    failure = undefined;
+    await input("rework.teams.formAgent.fields.name.label", "Eva");
+    await click(submit);
+    expect(writes()[writes().length - 1]?.body?.display_name).toBe("Eva");
+    expect(writes()[writes().length - 1]?.body).not.toHaveProperty("logical_name");
+    expect(notices.success).toHaveBeenCalled();
   });
   it("does not infer lost space Write from an instance-level 403", async () => {
     await mount();

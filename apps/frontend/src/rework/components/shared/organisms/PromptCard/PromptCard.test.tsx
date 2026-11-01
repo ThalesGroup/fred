@@ -17,7 +17,6 @@ import { promptSummaryFixture } from "../../../pages/PromptsPage/weaverPromptFix
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PromptSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -31,7 +30,7 @@ vi.mock("react-i18next", () => ({
 
 import PromptCard from "./PromptCard.tsx";
 
-const PROMPT = { id: "p-1", name: "Weekly report", session_count: 0 } as PromptSummary;
+const PROMPT = promptSummaryFixture({ prompt_id: "p-1", display_name: "Weekly report" });
 
 let container: HTMLDivElement;
 let root: Root;

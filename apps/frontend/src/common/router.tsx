@@ -1,5 +1,5 @@
 import WeaverFeaturePage from "@rework/features/weaver/WeaverFeaturePage";
-import { isAgentManagementRoute } from "@core/utils/agentManagementRoute";
+import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import PlatformAccessPage from "@components/pages/admin/PlatformAccessPage/PlatformAccessPage";
 import PlatformAccessDeniedPage from "@components/pages/PlatformAccessPage/PlatformAccessDeniedPage";
 import FreeEnrollmentPage from "@components/pages/PlatformAccessPage/FreeEnrollmentPage";
@@ -80,7 +80,7 @@ const basename = getConfig().frontend_basename;
 
 function AdmittedContent() {
   const { pathname } = useLocation();
-  const agentManagement = isAgentManagementRoute(pathname);
+  const agentManagement = isWeaverContentRoute(pathname);
   return (
     <GcuGuard>
       <BootstrapGuard>

@@ -11,6 +11,11 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock("react-redux", () => ({ useSelector: () => 0 }));
 vi.mock("../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: false }) }));
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePromptMarketplacesQuery: () => ({
+    currentData: { items: [], next_cursor: null },
+    isError: false,
+    isLoading: false,
+  }),
   useMySpacesQuery: () => ({ data: ORG, currentData: ORG, isLoading: false, isFetching: false, isError: false }),
 }));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({

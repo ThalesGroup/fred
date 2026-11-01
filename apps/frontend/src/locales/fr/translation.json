@@ -1168,7 +1168,7 @@
       "tags": "Tags",
       "textRequired": "Le texte doit contenir au moins un caractère non blanc, sans caractère NUL.",
       "tagsLimit": "20 tags maximum, de 1 à 64 caractères chacun, sans caractères de contrôle.",
-      "deferred": "Le marketplace et les compteurs d’utilisation ne sont pas encore raccordés.",
+      "deferred": "L’import et les compteurs d’usage ne sont pas encore disponibles.",
       "catalogError": "Le catalogue complet des prompts n’a pas pu être chargé."
     },
     "weaverAgents": {
@@ -3738,7 +3738,7 @@
         },
         "publishDialog": {
           "title": "Publier ce prompt sur la marketplace ?",
-          "message": "Ce prompt deviendra public pour tous les utilisateurs de l'application. Ils pourront l'utiliser et l'importer dans leurs espaces pour le modifier. Le compteur d'utilisation reflétera aussi les usages extérieurs à votre équipe, et toute modification que vous ferez sera immédiatement visible sur la marketplace.",
+          "message": "Ce prompt sera visible par les personnes ayant un rôle métier actif dans votre organisation, y compris les invités. Toute modification de sa définition sera immédiatement visible dans le marketplace.",
           "confirm": "Publier",
           "successToast": "Prompt publié sur la marketplace",
           "errorToast": "Échec de la publication"
@@ -3752,7 +3752,7 @@
         },
         "editPublishedDialog": {
           "title": "Enregistrer les modifications ?",
-          "message": "Ce prompt est publié sur la marketplace. Vos modifications y seront immédiatement visibles pour tous les utilisateurs.",
+          "message": "Ce prompt est publié. Vos modifications seront immédiatement visibles par les lecteurs autorisés de votre organisation.",
           "confirm": "Enregistrer"
         },
         "titlePersonal": "Vos prompts personnels",
@@ -4908,6 +4908,14 @@
       "global": "Points globaux",
       "selectComponent": "Cliquez sur un composant pour voir ses détails, puis à nouveau pour les refermer.",
       "replicas": "{{ready}}/{{desired}} réplicas prêts"
+    },
+    "promptPublication": {
+      "noAccess": "Aucun rôle métier actif ne vous donne accès à un catalogue de prompts publiés.",
+      "importUnavailable": "L’import n’est pas encore disponible.",
+      "title": "Prompts publiés",
+      "metricsUnavailable": "Les prompts publiés sont consultables. Le classement, les compteurs et les courbes d’usage ne sont pas encore disponibles.",
+      "usageUnavailable": "Usage indisponible",
+      "libraries": "Bibliothèques de prompts que vous pouvez publier"
     }
   },
   "runtime": {

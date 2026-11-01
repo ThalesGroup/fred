@@ -25,6 +25,11 @@ const h = vi.hoisted(() => ({
 }));
 // RTK keeps the last successful `data` when a refetch fails.
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePromptMarketplacesQuery: () => ({
+    currentData: { items: [], next_cursor: null },
+    isError: false,
+    isLoading: false,
+  }),
   useMySpacesQuery: () => ({ ...h.spaces, data: h.spaces.currentData }),
 }));
 vi.mock("@core/hooks/useOrganizationOwner", () => ({

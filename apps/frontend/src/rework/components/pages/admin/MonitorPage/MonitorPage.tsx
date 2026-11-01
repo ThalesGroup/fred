@@ -113,7 +113,7 @@ export default function MonitorPage() {
                       aria-controls={selected?.id === component.id ? "monitor-component-detail" : undefined}
                       icon={{
                         category: "outlined",
-                        type: color === "success" ? "check_circle" : finding?.level ?? "remove",
+                        type: color === "success" ? "check_circle" : (finding?.level ?? "remove"),
                       }}
                       onClick={() => setSelectedId(selectedId === component.id ? null : component.id)}
                       onKeyDown={(event) => event.key === "Escape" && setSelectedId(null)}
@@ -129,7 +129,11 @@ export default function MonitorPage() {
                 })}
               </div>
               {selected && (
-                <section id="monitor-component-detail" className={styles.detail} aria-labelledby="monitor-component-name">
+                <section
+                  id="monitor-component-detail"
+                  className={styles.detail}
+                  aria-labelledby="monitor-component-name"
+                >
                   <h3 id="monitor-component-name" className={styles.heading}>
                     {selected.name}
                   </h3>
@@ -149,7 +153,9 @@ export default function MonitorPage() {
                                 ready: finding.ready,
                                 desired: finding.desired,
                                 time: finding.at ? time(finding.at) : "",
-                                sources: finding.sources?.map((source) => t(`rework.monitor.sources.${source}`)).join(", "),
+                                sources: finding.sources
+                                  ?.map((source) => t(`rework.monitor.sources.${source}`))
+                                  .join(", "),
                               })}
                               {finding.reason && ` (${finding.reason})`}
                             </span>

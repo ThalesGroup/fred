@@ -35,11 +35,14 @@ use super::{AgentInstance, NewAgentInstance, PAGE_SIZE, tuning};
 pub struct CreateAgentInstanceRequest {
     /// Canonical UUID returned by this space's template catalog.
     pub template_id: Uuid,
+    /// Unique within the space, ignoring case. Surrounding whitespace is trimmed.
     #[schema(min_length = 1, max_length = 255)]
     pub display_name: String,
     /// Immutable space-local reference, independent of the mutable display label.
+    /// Omitted/null generates "agent-" followed by the new instance UUID's 32 hex digits.
+    /// Explicit references are preserved; collisions return 409 agent_name_conflict.
     #[schema(min_length = 1, max_length = 64, pattern = "^[a-z0-9_-]{1,64}$")]
-    pub logical_name: String,
+    pub logical_name: Option<String>,
     #[schema(max_length = 500)]
     pub description: Option<String>,
     #[schema(min_length = 1, max_length = 255)]
@@ -64,6 +67,7 @@ pub struct CreateAgentInstanceRequest {
 #[serde(deny_unknown_fields)]
 pub struct UpdateAgentInstanceRequest {
     /// Omitted/null metadata leaves the saved value unchanged.
+    /// A new display name must remain unique within the space, ignoring case.
     #[schema(min_length = 1, max_length = 255)]
     pub display_name: Option<String>,
     /// An empty string is an explicit description.
@@ -405,17 +409,22 @@ async fn get_agent_instance(
 }
 
 fn instance_write_error(error: sqlx::Error) -> AppError {
-    if error.as_database_error().is_some_and(|db| {
-        db.is_unique_violation() && db.constraint() == Some("agent_instance_space_logical_name_key")
-    }) {
-        AppError::problem(
-            StatusCode::CONFLICT,
-            "agent_name_conflict",
-            "An agent with this logical name already exists in this space.",
-        )
-    } else {
-        error.into()
+    if let Some(db) = error
+        .as_database_error()
+        .filter(|db| db.is_unique_violation())
+    {
+        let detail = match db.constraint() {
+            Some("agent_instance_space_logical_name_key") => {
+                "An agent with this logical name already exists in this space."
+            }
+            Some("uq_agent_instance_space_name") => {
+                "An agent with this display name already exists in this space."
+            }
+            _ => return error.into(),
+        };
+        return AppError::problem(StatusCode::CONFLICT, "agent_name_conflict", detail);
     }
+    error.into()
 }
 
 #[utoipa::path(

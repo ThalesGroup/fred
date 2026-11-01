@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Space-scoped instance persistence. Callers supply canonical identities, enforce
+//! Space-scoped instance persistence. Callers supply UUID identities, enforce
 //! authorization/lifecycle rules and validate tuning before calling this module.
 
 use chrono::{DateTime, Utc};
@@ -26,7 +26,8 @@ pub struct NewAgentInstance {
     pub template_id: Uuid,
     pub source_runtime_id: String,
     pub source_agent_id: String,
-    pub logical_name: String,
+    /// None generates a stable reference from this new instance's UUID.
+    pub logical_name: Option<String>,
     pub display_name: String,
     pub description: Option<String>,
     pub enabled: bool,
@@ -55,11 +56,16 @@ pub struct AgentInstance {
 }
 
 /// Returns the inserted row in the same statement, including database timestamps.
-/// Logical-name collisions use the space-local unique constraint.
+/// Omitted logical names use the new UUID, never the mutable display label.
+/// All logical-name collisions fail through the space-local unique constraint.
 pub async fn create<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     instance: &NewAgentInstance,
 ) -> sqlx::Result<AgentInstance> {
+    let logical_name = instance
+        .logical_name
+        .clone()
+        .unwrap_or_else(|| format!("agent-{}", instance.agent_instance_id.simple()));
     sqlx::query_as(
         "insert into agent_instance (
             agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
@@ -78,7 +84,7 @@ pub async fn create<'e>(
     .bind(instance.enabled)
     .bind(&instance.created_by)
     .bind(Json(&instance.tuning))
-    .bind(&instance.logical_name)
+    .bind(logical_name)
     .fetch_one(ex)
     .await
 }

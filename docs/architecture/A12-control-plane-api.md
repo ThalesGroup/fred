@@ -1704,8 +1704,8 @@ One of: `organization`, `team`, `project`.
 | `capability_config_values` | map of map of any or null |  | Values for unselected capabilities are ignored. |
 | `capability_ids` | array of string or null |  | Omitted/null inherits template defaults; [] selects no optional capabilities. |
 | `description` | string, max length 500 or null |  |  |
-| `display_name` | string, min length 1, max length 255 | yes |  |
-| `logical_name` | string, min length 1, max length 64 | yes | Immutable space-local reference, independent of the mutable display label. |
+| `display_name` | string, min length 1, max length 255 | yes | Unique within the space, ignoring case. Surrounding whitespace is trimmed. |
+| `logical_name` | string, min length 1, max length 64 or null |  | Immutable space-local reference, independent of the mutable display label. Omitted/null generates "agent-" followed by the new instance UUID's 32 hex digits. Explicit references are preserved; collisions return 409 agent_name_conflict. |
 | `model_options` | [`ModelOptions`](#modeloptions) or null |  |  |
 | `recommended_chat_profile_id` | string or null |  | Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key. |
 | `recommended_model` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
@@ -2815,7 +2815,7 @@ Type: [`TuningScalar`](#tuningscalar) or array of [`TuningScalar`](#tuningscalar
 | `capability_config_values` | map of map of any or null |  | Omitted keeps config for an unchanged selection; null resets selected config. |
 | `capability_ids` | array of string or null |  | Omitted keeps selection; null resolves current defaults; [] selects none. |
 | `description` | string, max length 500 or null |  | An empty string is an explicit description. |
-| `display_name` | string, min length 1, max length 255 or null |  | Omitted/null metadata leaves the saved value unchanged. |
+| `display_name` | string, min length 1, max length 255 or null |  | Omitted/null metadata leaves the saved value unchanged. A new display name must remain unique within the space, ignoring case. |
 | `model_options` | [`ModelOptions`](#modeloptions) or null |  |  |
 | `recommended_chat_profile_id` | string or null |  | Omitted keeps the recommendation; null clears it; other values return 422. |
 | `recommended_model` | [`ModelOfferKey`](#modelofferkey) or null |  |  |

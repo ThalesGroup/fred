@@ -13,6 +13,7 @@ export function promptFixture(overrides: Partial<Prompt & PromptSummary> = {}): 
     category_id: null,
     tags: [],
     is_favorite: false,
+    published: false,
     description: "Real description",
     text_preview: "Truncated preview",
     text: "Real prompt text",

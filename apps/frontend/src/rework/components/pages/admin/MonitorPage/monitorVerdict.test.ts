@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { expect, it } from "vitest";
-import type { ContainerStatus, RecentEvent, ServiceStatus, Snapshot } from "../../../../../slices/monitor/monitorOpenApi";
+import type {
+  ContainerStatus,
+  RecentEvent,
+  ServiceStatus,
+  Snapshot,
+} from "../../../../../slices/monitor/monitorOpenApi";
 import { monitorVerdict } from "./monitorVerdict";
 
 const service = (name: string, state: ServiceStatus["state"] = "ready"): ServiceStatus => ({
@@ -45,7 +50,9 @@ const snapshot = (overrides: Partial<Snapshot> = {}): Snapshot => ({
 });
 
 it("returns ready names and counts inactive services without findings", () => {
-  expect(monitorVerdict(snapshot({ services: [service("api"), service("ui"), service("worker", "inactive")] }))).toEqual({
+  expect(
+    monitorVerdict(snapshot({ services: [service("api"), service("ui"), service("worker", "inactive")] })),
+  ).toEqual({
     level: "ok",
     findings: [],
     ready: ["api", "ui"],
@@ -93,7 +100,9 @@ it("keeps only the most recent restart per service across pods and containers", 
       ],
     }),
   );
-  expect(verdict.findings).toEqual([{ service: "control-plane", level: "warning", kind: "restarted", at, reason: "Error" }]);
+  expect(verdict.findings).toEqual([
+    { service: "control-plane", level: "warning", kind: "restarted", at, reason: "Error" },
+  ]);
 });
 
 it("does not create findings from Warning events or an event display limit alone", () => {
@@ -156,16 +165,16 @@ it("retains unmatched restarts as a global warning without attaching unrelated e
   expect(verdict.findings[0].event).toBeUndefined();
 });
 
-it.each<Partial<Snapshot>>([
-  { unavailable_sources: ["events"] },
-  { truncated_sources: ["pods"] },
-])("reports partial data for %o", (sources) => {
-  const verdict = monitorVerdict(snapshot(sources));
-  expect(verdict.level).toBe("warning");
-  expect(verdict.findings).toEqual([
-    { service: "", level: "warning", kind: "partial", sources: Object.values(sources)[0] },
-  ]);
-});
+it.each<Partial<Snapshot>>([{ unavailable_sources: ["events"] }, { truncated_sources: ["pods"] }])(
+  "reports partial data for %o",
+  (sources) => {
+    const verdict = monitorVerdict(snapshot(sources));
+    expect(verdict.level).toBe("warning");
+    expect(verdict.findings).toEqual([
+      { service: "", level: "warning", kind: "partial", sources: Object.values(sources)[0] },
+    ]);
+  },
+);
 
 it("merges unavailable and truncated sources without duplicates", () => {
   const verdict = monitorVerdict(snapshot({ unavailable_sources: ["events"], truncated_sources: ["events", "pods"] }));

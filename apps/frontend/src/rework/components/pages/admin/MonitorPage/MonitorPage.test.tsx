@@ -157,29 +157,33 @@ it("shows refreshing during the first snapshot request", () => {
   h.query.isFetching = true;
   render();
   expect(host.querySelector('[role="status"]')!.textContent).toBe("Refreshing…");
-  expect(host.querySelector('[aria-expanded]')).toBeNull();
+  expect(host.querySelector("[aria-expanded]")).toBeNull();
 });
 
 it("renders restart evidence and its Warning below the finding", () => {
-  h.query.currentData!.containers = [{
-    pod: "control-plane-abc",
-    container: "api",
-    init: false,
-    phase: "Running",
-    ready: true,
-    restarts: 2,
-    last_exit_reason: "OOMKilled",
-    last_exit_at: "2026-10-31T11:59:00Z",
-  }];
-  h.query.currentData!.events = [{
-    uid: "event-1",
-    observed_at: "2026-10-31T11:59:00Z",
-    severity: "Warning",
-    reason: "BackOff",
-    object: "Pod/control-plane-abc",
-    message: "Container restarted",
-    count: 2,
-  }];
+  h.query.currentData!.containers = [
+    {
+      pod: "control-plane-abc",
+      container: "api",
+      init: false,
+      phase: "Running",
+      ready: true,
+      restarts: 2,
+      last_exit_reason: "OOMKilled",
+      last_exit_at: "2026-10-31T11:59:00Z",
+    },
+  ];
+  h.query.currentData!.events = [
+    {
+      uid: "event-1",
+      observed_at: "2026-10-31T11:59:00Z",
+      severity: "Warning",
+      reason: "BackOff",
+      object: "Pod/control-plane-abc",
+      message: "Container restarted",
+      count: 2,
+    },
+  ];
   render();
   expect(chip("control-plane").getAttribute("data-color")).toBe("warning");
   expect(host.textContent).not.toContain("OOMKilled");
@@ -235,7 +239,7 @@ it.each([
   render();
   expect(host.querySelector('[role="alert"]')!.textContent).toContain(message);
   expect(host.textContent).not.toContain("control-plane");
-  expect(host.querySelector('[aria-expanded]')).toBeNull();
+  expect(host.querySelector("[aria-expanded]")).toBeNull();
 });
 
 it("shows unknown status and removes protected data when the monitor is unreachable", () => {

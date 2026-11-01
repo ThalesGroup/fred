@@ -18,44 +18,24 @@ import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useEffect, useState } from "react";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { useTranslation } from "react-i18next";
-import { useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { useGetPromptQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useGetPromptQuery,
+  usePublishedPromptQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import Chip from "@shared/atoms/Chip/Chip";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import styles from "./PromptViewDialog.module.scss";
 
-/** Minimal prompt shape the read-only view can render without a team fetch. */
-export interface PromptViewDetail {
-  id: string;
-  name: string;
-  description?: string | null;
-  text: string;
-  category_id?: string | null;
-  /** Shown ahead of the description when set — in the team library and on the
-   *  marketplace alike. On the marketplace it is the author team's command: an
-   *  import into a team already holding it gets the first free `-N` suffix. */
-  command?: string | null;
-}
-
 interface PromptViewDialogProps {
   open: boolean;
   onClose: () => void;
-  /** team variant: fetches the prompt detail for this team. */
-  teamId?: string;
   spaceId?: string;
+  organizationId?: string;
   promptId?: string | null;
   categories?: { id: string; name: string }[];
-  /**
-   * Marketplace variant: the prompt is already loaded (the caller may not be a
-   * member of the author team, so the team fetch would 403). When set, the
-   * dialog renders this directly and skips the query.
-   */
-  preloadedDetail?: PromptViewDetail | null;
-  /** Overrides the chip label (e.g. the author team name on the marketplace). */
   chipLabel?: string | null;
-  /** Fired after a successful clipboard copy, so the caller can record a use. */
-  onCopied?: () => void;
 }
 
 /** Read-only view of one prompt, reached by clicking a `PromptCard`. Editing
@@ -63,52 +43,51 @@ interface PromptViewDialogProps {
  * marketplace the only action is copy-to-clipboard. */
 export default function PromptViewDialog({
   open,
-  teamId,
   spaceId,
+  organizationId,
   promptId,
   categories = [],
-  preloadedDetail,
   chipLabel,
-  onCopied,
   onClose,
 }: PromptViewDialogProps) {
   const { t } = useTranslation();
   const { showSuccess } = useToast();
   const [copied, setCopied] = useState(false);
 
-  const { currentData: rawDetail, isError: legacyError } =
-    useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery(
-      { teamId: teamId || "", promptId: promptId || "" },
-      { skip: !!spaceId || !open || !promptId || !teamId || !!preloadedDetail },
-    );
-  // Keep the marketplace/home consumers on their own contract. Weaver never
-  // converts its definition to a legacy DTO or starts the legacy query.
-  const fetched = rawDetail && rawDetail.id === promptId ? rawDetail : undefined;
   const weaver = useGetPromptQuery(
     { spaceId: spaceId ?? "", promptId: promptId ?? "" },
     {
-      skip: !open || !spaceId || !promptId,
+      ...crossSessionRefreshOptions(!!organizationId || !open || !spaceId || !promptId),
       refetchOnMountOrArgChange: true,
     },
   );
-  const detail = spaceId
-    ? !weaver.isError && !weaver.isFetching
-      ? weaver.currentData
+  useRefetchOnWindowFocus(weaver.refetch, !!organizationId || !open || !spaceId || !promptId);
+  const published = usePublishedPromptQuery(
+    { organizationId: organizationId ?? "", promptId: promptId ?? "" },
+    { ...crossSessionRefreshOptions(!open || !organizationId || !promptId), refetchOnMountOrArgChange: true },
+  );
+  useRefetchOnWindowFocus(published.refetch, !open || !organizationId || !promptId);
+  const detail = organizationId
+    ? !published.isError && !published.isFetching
+      ? published.currentData
       : undefined
-    : (preloadedDetail ?? fetched);
-  const failed = spaceId ? weaver.isError : legacyError;
-  const name = detail && ("display_name" in detail ? detail.display_name : detail.name);
-  const command = detail && ("logical_name" in detail ? detail.logical_name : detail.command);
+    : spaceId
+      ? !weaver.isError && !weaver.isFetching
+        ? weaver.currentData
+        : undefined
+      : undefined;
+  const failed = organizationId ? published.isError : spaceId ? weaver.isError : false;
+  const name = detail?.display_name;
+  const command = detail?.logical_name;
 
   useEffect(() => {
     setCopied(false);
-  }, [open, promptId, preloadedDetail?.id]);
+  }, [open, promptId, organizationId, spaceId]);
 
-  const category = categories.find(
-    (c) => c.id === (detail && "category_id" in detail ? detail.category_id : undefined),
-  );
-  const resolvedChipLabel =
-    chipLabel !== undefined ? chipLabel : (category?.name ?? t("rework.promptCategories.noCategory"));
+  const category = categories.find((category) => category.id === detail?.category_id);
+  const resolvedChipLabel = organizationId
+    ? published.currentData?.team_name
+    : (chipLabel ?? category?.name ?? t("rework.promptCategories.noCategory"));
 
   const handleCopy = () => {
     if (!detail) return;
@@ -117,7 +96,6 @@ export default function PromptViewDialog({
         setCopied(true);
         showSuccess({ summary: t("rework.teams.prompts.view.copiedToast"), duration: 2000 });
         setTimeout(() => setCopied(false), 2000);
-        onCopied?.();
       }
     });
   };

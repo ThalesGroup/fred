@@ -22,15 +22,15 @@ export function normalizeAgentName(name: string): string {
   return name.trim().toLowerCase();
 }
 
-/** Immutable logical names, excluding the instance being edited. */
+/** Normalized display names, excluding the instance being edited. */
 export function takenAgentNames(
-  instances: Pick<ManagedAgentInstanceSummary, "agent_instance_id" | "logical_name">[],
+  instances: Pick<ManagedAgentInstanceSummary, "agent_instance_id" | "display_name">[],
   excludeAgentInstanceId?: string,
 ): Set<string> {
   return new Set(
     instances
       .filter((instance) => instance.agent_instance_id !== excludeAgentInstanceId)
-      .map((instance) => instance.logical_name),
+      .map((instance) => normalizeAgentName(instance.display_name)),
   );
 }
 

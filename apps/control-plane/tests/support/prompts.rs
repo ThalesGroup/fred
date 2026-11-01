@@ -1201,3 +1201,322 @@ async fn prompt_tags_and_caller_favorites_preserve_access_and_attribution() {
         404
     );
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn publication_uses_current_definition_and_scoped_temporary_titles() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let other = support::member_organization(&e.pool, &e.authorization, "Other", "carol")
+        .await
+        .unwrap();
+    for (actor, role) in [
+        ("owner-only", "owner"),
+        ("technical-only", "organization_admin"),
+    ] {
+        sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,$2,$3)")
+            .bind(org.id)
+            .bind(actor)
+            .bind(role)
+            .execute(&e.pool)
+            .await
+            .unwrap();
+    }
+    let editor_invite = Uuid::new_v4();
+    let reader_invite = Uuid::new_v4();
+    for (id, actor, role) in [
+        (editor_invite, "guest-editor", "editor"),
+        (reader_invite, "guest-reader", "member"),
+    ] {
+        sqlx::query("insert into space_invitation(id,space_id,subject,invited_by,created_at,expires_at) values($1,$2,$3,'alice',now()-interval '1 day',now()+interval '1 day')")
+            .bind(id).bind(team.id).bind(actor).execute(&e.pool).await.unwrap();
+        sqlx::query("insert into space_invitation_role(invitation_id,role) values($1,$2)")
+            .bind(id)
+            .bind(role)
+            .execute(&e.pool)
+            .await
+            .unwrap();
+    }
+    for actor in [
+        "alice",
+        "owner-only",
+        "technical-only",
+        "guest-editor",
+        "guest-reader",
+        "carol",
+    ] {
+        admit(&e, actor).await;
+    }
+    let identity = IdentityServer::start().await;
+    let app = app(&e, &identity).await;
+    let prompt = create(&app, &identity, team.id, creation("publication")).await;
+    assert_eq!(prompt["published"], false);
+    let id = prompt["prompt_id"].as_str().unwrap();
+    let private = format!("{}/{id}", collection(team.id));
+    let publication = format!("{private}/publication");
+    let catalog = format!("/organizations/{}/published-prompts", org.id);
+    let detail = format!("{catalog}/{id}");
+
+    let (status, page) = request(
+        &app,
+        &identity,
+        Some("owner-only"),
+        "GET",
+        &catalog,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(page["items"], json!([]));
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("guest-editor"),
+            "GET",
+            &private,
+            Value::Null
+        )
+        .await
+        .0,
+        200
+    );
+    assert!(
+        request(
+            &app,
+            &identity,
+            Some("guest-reader"),
+            "GET",
+            &private,
+            Value::Null
+        )
+        .await
+        .0 >= 400
+    );
+    // The exception does not activate permanent roles, CRUD or favorites.
+    for (method, path, body) in [
+        ("POST", collection(team.id), creation("denied")),
+        ("PATCH", private.clone(), json!({"text":"denied"})),
+        ("PUT", format!("{private}/favorite"), Value::Null),
+    ] {
+        assert!(
+            request(&app, &identity, Some("guest-editor"), method, &path, body)
+                .await
+                .0
+                >= 400
+        );
+    }
+    for actor in ["owner-only", "technical-only", "guest-reader", "carol"] {
+        assert!(
+            request(
+                &app,
+                &identity,
+                Some(actor),
+                "PUT",
+                &publication,
+                json!({"published":true})
+            )
+            .await
+            .0 >= 400
+        );
+    }
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("guest-editor"),
+            "PUT",
+            &publication,
+            json!({"published":true})
+        )
+        .await
+        .0,
+        204
+    );
+    for actor in ["owner-only", "guest-editor", "guest-reader"] {
+        assert_eq!(
+            request(&app, &identity, Some(actor), "GET", &detail, Value::Null)
+                .await
+                .0,
+            200
+        );
+    }
+    for actor in ["technical-only", "carol"] {
+        for path in [&catalog, &detail] {
+            assert_eq!(
+                request(&app, &identity, Some(actor), "GET", path, Value::Null)
+                    .await
+                    .0,
+                404
+            );
+        }
+    }
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("carol"),
+            "GET",
+            &format!("/organizations/{}/published-prompts/{id}", other.id),
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &private,
+            json!({"text":"Current text"})
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("guest-reader"),
+            "GET",
+            &detail,
+            Value::Null
+        )
+        .await
+        .1["text"],
+        "Current text"
+    );
+
+    sqlx::query("update space_invitation set expires_at=now()-interval '1 second' where id=$1")
+        .bind(reader_invite)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("guest-reader"),
+            "GET",
+            &detail,
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    // Another title remains sufficient; expiration is not an account-wide denial.
+    sqlx::query(
+        "insert into space_role_grant(space_id,subject,role) values($1,'guest-reader','owner')",
+    )
+    .bind(org.id)
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("guest-reader"),
+            "GET",
+            &detail,
+            Value::Null
+        )
+        .await
+        .0,
+        200
+    );
+    sqlx::query("update space_invitation set revoked_at=now(),revoked_by='alice' where id=$1")
+        .bind(editor_invite)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("guest-editor"),
+            "GET",
+            &private,
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("guest-editor"),
+            "PUT",
+            &publication,
+            json!({"published":false})
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &publication,
+            json!({"published":false})
+        )
+        .await
+        .0,
+        204
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("owner-only"),
+            "GET",
+            &detail,
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "GET", &private, Value::Null)
+            .await
+            .0,
+        200
+    );
+
+    let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
+        .await
+        .unwrap();
+    let personal_prompt = create(&app, &identity, personal.id, creation("private")).await;
+    let personal_id = personal_prompt["prompt_id"].as_str().unwrap();
+    assert!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &format!("/spaces/{}/prompts/{personal_id}/publication", personal.id),
+            json!({"published":true})
+        )
+        .await
+        .0 >= 400
+    );
+    let grants: i64 =
+        sqlx::query_scalar("select count(*) from space_role_grant where subject='guest-editor'")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(grants, 0);
+    e.pool.close().await;
+}
