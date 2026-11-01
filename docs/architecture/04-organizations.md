@@ -5,18 +5,30 @@ support shared work; **projects** organize work within a team. A **personal spac
 is dedicated to one person while remaining under the organization's governance.
 It is a distinct kind of space, not a collective team.
 
-## Institutional governance and business work
+## Who creates and names whom
 
 The organization is both an institutional boundary and a shared business workspace.
-Its owner manages the community and common resources, such as an organization corpus
-or assistant, with analysts, editors and members. Teams and projects use these
-resources under their access rules.
+Admins are technical and stop at the organization; from the organization's owner
+down, everything is business work, including how a team is divided into projects.
 
-The organization admin names and replaces organization owners and reads supervision
-aggregates, without content access or business-structure authority. The organization
-owner creates teams; the team owner creates projects, naming their initial owner.
-The [roles annex](A11-roles.md) details the mandate and the organization access allowlist
-that remains unimplemented.
+```mermaid
+flowchart TB
+    platform["Platform admin"] -->|"creates, naming its admin<br/>and initial owner"| organization["Organization<br/>admin: Oscar · owner: Alice"]
+    organization -->|"organization admin names<br/>and replaces owners"| organization
+    organization -->|"organization owner creates,<br/>naming the team owner"| team["Team Research<br/>owner: Carl"]
+    team -->|"team owner creates,<br/>naming the project owner"| project["Project Atlas<br/>owner: Bob"]
+
+    classDef default fill:#F1F5F9,stroke:#64748B,color:#0F172A
+```
+
+The organization owner manages the community and common resources, such as an
+organization corpus or assistant, with analysts, editors and members. A team or
+project owner does the same for their space. The creator of a space receives no
+role there: Alice created Research but holds no role in it. The organization
+admin names and replaces the organization's owners and reads supervision
+aggregates, without content access or business-structure authority. The
+[roles annex](A11-roles.md) details each mandate and the organization access
+allowlist that remains unimplemented.
 
 ## Spaces and memberships
 
@@ -46,17 +58,17 @@ working spaces. It does not offer an organization switcher.
 
 ## Personal spaces
 
-An entitled user opens Personal space to create it once; later openings reuse it.
+Any person with a business role (owner, member, editor or analyst) in the organization
+opens Personal space to create it once; later openings reuse it. An admin role alone
+does not qualify.
 It has no projects, accepts no additional members and inherits no content rights
 from the organization or teams. The organization can revoke the user's access.
 Creating an account or organization does not automatically create a personal space.
 
 ## Organization supervision
 
-In the current implementation, the organization admin opens **Organization
-supervision** from Administration. This aggregate visibility is recorded as a
-[mandate question](A11-roles.md#responsibility-boundaries-and-current-enforcement).
-The summary covers documents, processing, published results and direct role counts,
+The organization admin opens **Organization supervision** from Administration.
+These technical aggregates are part of the admin's mandate. The summary covers documents, processing, published results and direct role counts,
 without exposing content or personal identities. Selecting a team opens its detail
 in a side panel; Refresh reloads the summary and the open detail.
 
@@ -75,9 +87,9 @@ Team details include their projects. Organization totals cover all teams,
 regardless of the page consulted. Retired documents awaiting purge are counted
 separately. Published counts describe recorded results, not live storage health.
 
-## Platform organization owneristration
+## Platform administration
 
-A platform admin creates an organization and appoints its owner and admin.
+A platform admin creates an organization and names its admin and initial owner.
 Those responsibilities do not automatically grant access to documents. Provisioning
 can also import accounts, teams, projects and explicit roles together; the
 [user journey](02.1-user-journeys.md) illustrates this setup.

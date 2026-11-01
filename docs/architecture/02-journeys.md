@@ -16,36 +16,44 @@ or use of external tools.
 
 ## Example people and spaces
 
-The following fictional people and spaces keep examples consistent. Acme contains
-Research; Globex contains Support. Each person belongs to only one organization.
-Names identify the examples; permissions come from explicit role grants.
+These fictional people and spaces are the only cast used by the examples and by the
+demo provisioning bundle. Each person illustrates one rule; their rights come only
+from the roles listed here. The [roles annex](A11-roles.md) defines each role.
 
-The [roles annex](A11-roles.md) defines the responsibilities and current permissions
-behind these examples.
+```mermaid
+flowchart TB
+    acme["Acme (organization)<br/>Oscar: admin · Alice: owner · Léa: editor<br/>Carl, Bob, Elena, Carol: member"]
+    research["Research (team)<br/>Carl: owner · Bob: editor<br/>Elena: analyst · Carol: member"]
+    atlas["Atlas (project)<br/>Bob: owner, editor · Carol: editor"]
+    globex["Globex (organization)<br/>Olivia: admin · Grace: owner, member<br/>Zoe: member"]
+    support["Support (team)<br/>Grace: owner · Zoe: editor"]
+    acme --> research --> atlas
+    globex --> support
 
-| Function | Acme | Globex | Direct role at that scope |
-| --- | --- | --- | --- |
-| Organization admin | **Oscar** (`oscar`) | **Olivia** (`olivia`) | `organization_admin` on the organization |
-| Organization owner | **Alice** (`alice`) | **Grace** (`grace`) | `owner` on the organization |
-| Team | **Research** | **Support** | - |
-| Team owner | **Carl** (`carl`) | **Marc** (`marc`) | `owner` on the team |
-| Team analyst | **Elena** (`elena`) | **Nadia** (`nadia`) | `analyst` on the team |
-| Team member | **Carol** (`carol`) | **Phil** (`phil`) | `member` on the team |
-| Team editor | **Bob** (`bob`) | **Zoe** (`zoe`) | `editor` on the team |
-| Organization and team reader | **Léa** (`lea`) | - | `member` on Acme and on Research |
+    classDef default fill:#F1F5F9,stroke:#64748B,color:#0F172A
+```
 
-Each of the four paired team personas also holds `member` directly on their organization,
-the prerequisite for a team role. This parent role grants organization-level read
-access only on the organization. Organization admins and owners
-hold only their listed roles; none of these thirteen people holds a
-platform role. Carl can manage Research without reading its documents; Bob
-can read and contribute; Carol and Elena can read. Every business role stays local; working in a project requires a direct role there.
+| Person | Acme | Research | Atlas | What the example shows | Spaces they see |
+| --- | --- | --- | --- | --- | --- |
+| **Oscar** (`oscar`) | `organization_admin` | - | - | Technical admin: names Acme's owners. No content, no personal space. | Acme |
+| **Alice** (`alice`) | `owner` | - | - | Acme's owner: manages models and created Research, naming Carl its owner. An owner reads no content. | Acme |
+| **Léa** (`lea`) | `editor` | - | - | Maintains Acme's common resources but does not see Research: a role stays on its space. | Acme |
+| **Carl** (`carl`) | `member` | `owner` | - | Research's owner: manages its members and created Atlas, naming Bob its owner. Reads no Research content. | Acme, Research |
+| **Bob** (`bob`) | `member` | `editor` | `owner`, `editor` | Contributes to Research. Holds two roles on Atlas. | Acme, Research, Atlas |
+| **Elena** (`elena`) | `member` | `analyst` | - | Evaluates Research and does not see Atlas: a team role does not reach its projects. | Acme, Research |
+| **Carol** (`carol`) | `member` | `member` | `editor` | Reader in Research, editor in Atlas: roles at different levels are independent. | Acme, Research, Atlas |
 
-Léa illustrates read access across Acme and Research through two explicit `member`
-grants. These grant neither editing nor administration, and no access to Globex
-or to other people's personal spaces and private conversations.
+| Person | Globex | Support | What the example shows | Spaces they see |
+| --- | --- | --- | --- | --- |
+| **Olivia** (`olivia`) | `organization_admin` | - | The same technical admin role in another organization. | Globex |
+| **Grace** (`grace`) | `owner`, `member` | `owner` | One person holding roles at two levels. | Globex, Support |
+| **Zoe** (`zoe`) | `member` | `editor` | Globex content, invisible from Acme and the reverse. | Globex, Support |
 
-The demo bundle supplies these thirteen organization accounts and two teams. The
-platform account is bootstrapped separately. Additional projects and role combinations
-are stated explicitly in the relevant examples; the bundle creates no projects or
-personal spaces.
+Every team or project role above rests on a direct content role (`member`,
+`editor` or `analyst`) on the parent: Carl, Bob, Elena and Carol are members of
+Acme, Grace and Zoe of Globex. That prerequisite grants nothing on the child.
+Everyone except Oscar and Olivia may open a personal space. None of these people
+holds a platform role; the platform account is bootstrapped separately. Dana, the
+infrastructure operator of chapter 2.3, configures model sources outside Fred and
+has no Fred account. The demo bundle creates these accounts, spaces and roles, and
+no personal space.

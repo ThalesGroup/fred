@@ -665,23 +665,13 @@ make build-demo-bundle DEMO_PROVISIONING_FIXTURE_DIR="/path/to/fixtures" DEMO_BU
 The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
 `teams.json` and `projects.json`. The manifest declares `format_version: 2`,
 `users_schema_version: 2`, `source_platform: "swift"`. The four data files are arrays.
-The demo contains 14 identities, two organizations (Acme and Globex), two teams
-(Research and Support) and an empty project array. Léa (`lea`) holds `member` on
-Acme and Research. `make build-demo-bundle` is the only demo build target.
-Demo passwords are test credentials. The
-[declaration contract](../../docs/architecture/A2-manager-contracts.md#provisioning-declarations)
+The demo's people, spaces and roles are listed once in
+[Example people and spaces](../../docs/architecture/02-journeys.md#example-people-and-spaces);
+the [fixture README](tests/fixtures/import_export/demo_provisioning/README.md) gives
+its counts and test password. `make build-demo-bundle` is the only demo build target.
+The [declaration contract](../../docs/architecture/A2-manager-contracts.md#provisioning-declarations)
 defines explicit parent references and roles, including projects. Old JSON and
 Python version-1 ZIPs return `not_yet_supported`; no conversion is performed.
-
-For a complete Acme/Research demo journey, sign in as **Priya** (`priya`, demo
-password `Azerty123_`). She combines `organization_admin`, `owner`, `member`,
-`editor` and `analyst` on Acme, and `owner`, `member`, `editor` and `analyst` on
-Research. This covers organization/model management, shared content, agent
-authoring and evaluation permissions, plus opening her own personal space.
-These are ordinary cumulative grants, not a new role or authorization bypass.
-Model availability and capability configuration still apply. She has no platform
-roles, Globex access or access to other people's personal spaces.
-Keep the other demo accounts for testing each role's restricted experience.
 
 After compatible initialization, personal CGU acceptance and root bootstrap, save a platform admin's
 access token in a private file and run:

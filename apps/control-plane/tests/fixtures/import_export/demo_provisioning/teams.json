@@ -4,14 +4,11 @@
     "name": "Research",
     "organization": "acme",
     "roles": {
-      "priya": [
-        "owner",
-        "member",
-        "editor",
-        "analyst"
-      ],
       "carl": [
         "owner"
+      ],
+      "bob": [
+        "editor"
       ],
       "elena": [
         "analyst"
@@ -19,11 +16,11 @@
       "carol": [
         "member"
       ],
-      "bob": [
-        "editor"
-      ],
-      "lea": [
-        "member"
+      "boss": [
+        "owner",
+        "member",
+        "editor",
+        "analyst"
       ]
     }
   },
@@ -32,14 +29,8 @@
     "name": "Support",
     "organization": "globex",
     "roles": {
-      "marc": [
+      "grace": [
         "owner"
-      ],
-      "nadia": [
-        "analyst"
-      ],
-      "phil": [
-        "member"
       ],
       "zoe": [
         "editor"

@@ -3,20 +3,19 @@
     "ref": "acme",
     "name": "Acme",
     "roles": {
-      "priya": [
-        "organization_admin",
-        "owner",
-        "member",
-        "editor",
-        "analyst"
-      ],
       "oscar": [
         "organization_admin"
       ],
       "alice": [
         "owner"
       ],
+      "lea": [
+        "editor"
+      ],
       "carl": [
+        "member"
+      ],
+      "bob": [
         "member"
       ],
       "elena": [
@@ -25,11 +24,12 @@
       "carol": [
         "member"
       ],
-      "bob": [
-        "member"
-      ],
-      "lea": [
-        "member"
+      "boss": [
+        "organization_admin",
+        "owner",
+        "member",
+        "editor",
+        "analyst"
       ]
     }
   },
@@ -41,15 +41,7 @@
         "organization_admin"
       ],
       "grace": [
-        "owner"
-      ],
-      "marc": [
-        "member"
-      ],
-      "nadia": [
-        "member"
-      ],
-      "phil": [
+        "owner",
         "member"
       ],
       "zoe": [

@@ -374,7 +374,7 @@ defines platform-approved discovery and inference destinations separately.
 Control Plane uses the configured discovery authentication; the inference
 connection contains a binding reference that the pod resolves locally, not a secret
 value. Alice, Acme's organization owner, may refresh an approved source and
-change Acme's model policy; this is business responsibility, not Oscar's owner
+change Acme's model policy; this is business responsibility, not Oscar's admin
 mandate. Her organization role cannot rewrite platform connections. Dana must
 provision both discovery and inference access; discovering an offer proves neither permission nor
 a successful model call.

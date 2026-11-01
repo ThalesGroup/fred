@@ -686,14 +686,19 @@ mod tests {
         assert!(status.success());
         let bytes = std::fs::read(&output).unwrap();
         let b = Bundle::parse(&bytes).unwrap();
-        assert_eq!(b.users.len(), 14);
-        assert!(b.users.iter().all(|entry| entry.platform.is_empty()));
+        assert_eq!(b.users.len(), 11);
+        // Only the undocumented `boss` convenience account carries platform roles.
+        assert!(
+            b.users
+                .iter()
+                .all(|entry| entry.platform.is_empty() == (entry.identity.username != "boss"))
+        );
         assert!(
             b.users
                 .iter()
                 .all(|entry| entry.identity.username != "owner")
         );
-        assert_eq!(b.spaces.len(), 4);
+        assert_eq!(b.spaces.len(), 5);
         let archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
         assert_eq!(archive.len(), 5);
         // A missing source file cannot replace a previously valid artifact.

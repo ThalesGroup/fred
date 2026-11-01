@@ -172,7 +172,7 @@ async fn provisioning_browser_journey() {
         .await
         .unwrap()
         .unwrap();
-    let project = named_space(&e.pool, &e.authorization, Some(north.id), "Browser project")
+    let project = named_space(&e.pool, &e.authorization, Some(north.id), "Atlas")
         .await
         .unwrap()
         .unwrap();

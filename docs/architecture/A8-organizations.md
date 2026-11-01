@@ -82,17 +82,16 @@ nothing; its organization can revoke its owner's access, and the owner leaves th
 organization only after leaving the personal space and removing their remaining organization roles. Every non-personal space
 retains an owner.
 
-Personal spaces are available to business owners of an active organization, team
-or project in their organization. Technical admins alone, members, editors and
-analysts do not qualify. Combining a technical admin role with business ownership
-is allowed. First activation creates one private workspace; later openings reuse
-it while ownership and personal read authority remain current. Losing the last
-owner role hides the space and refuses new Control Plane access without erasing
-its data; restoring ownership makes the same space available again. A missing
+Personal spaces are available to anyone holding a business role (owner, member,
+editor or analyst) on an active organization, team or project in their organization.
+A technical admin role alone does not qualify; combining it with a business role is
+allowed. First activation creates one private workspace; later openings reuse it
+while that eligibility and personal read authority remain current. Losing the last
+business role hides the space and refuses new Control Plane access without erasing
+its data; restoring a business role makes the same space available again. A missing
 organization link is refused (409) rather than repaired or duplicated. No personal
-space is created by import or organization creation.
-The demo makes Alice, Grace, Carl and Marc eligible through their existing owner
-roles. See the [personal-space journey](02.1-user-journeys.md#carl-opens-his-personal-space).
+space is created by import or organization creation. In the demo, everyone except
+Oscar and Olivia is eligible. See the [personal-space journey](02.1-user-journeys.md#carl-opens-his-personal-space).
 
 SQL stores each space's identity, kind, name, personal owner and immutable placement:
 `organization_id` is the root's own ID for an organization, and the containing
@@ -108,7 +107,7 @@ flowchart TB
     acme["Acme<br/>organization<br/>path: O"]
     research["Research<br/>team<br/>path: O, T"]
     personal["Bob's personal space<br/>path: P"]
-    project["Study<br/>project<br/>path: O, T, J"]
+    project["Atlas<br/>project<br/>path: O, T, J"]
     acme -- parent --> research
     research -- parent --> project
     acme -. organization .-> personal
@@ -117,16 +116,16 @@ flowchart TB
     class acme,research,personal,project neutral
 ```
 
-| Scope requested from | Search scope (`space_id` in) |
+| Bob's scope requested from | Search scope (`space_id` in) |
 | --- | --- |
 | Research | Acme, Research |
-| Study | Acme, Research, Study |
-| Study, levels `project` | Study |
+| Atlas | Acme, Research, Atlas |
+| Atlas, levels `project` | Atlas |
 | Bob's personal space | Bob's personal space |
 
-The letters stand for canonical space IDs, not display-name paths. This example
-introduces Study as a project in Research and assumes Bob's personal-space
-eligibility explicitly; neither is created merely by signing in.
+Bob reads Acme, Research and Atlas through his own direct roles, so each ancestor
+is included. An ancestor the caller cannot read directly is left out. The letters
+stand for canonical space IDs, not display-name paths.
 
 A caller may restrict a scope to `organization`, `team`, `project` or `personal`;
 levels only remove spaces from it. `team` excludes personal spaces. Retention

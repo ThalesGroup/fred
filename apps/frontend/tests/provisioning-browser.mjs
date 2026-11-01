@@ -3,9 +3,8 @@
 
 // Real manager journey with unavailable non-migrated services and the complete Fred UI.
 import assert from "node:assert/strict";
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { mkdir, readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import JSZip from "jszip";
 import { documentStorageJourney } from "./document-storage-browser.mjs";
@@ -332,9 +331,9 @@ try {
     await expect(root.page.getByRole("heading", { name: "Import completed" })).toHaveCount(0);
     release();
     const first = await firstPromise;
-    assert.equal(first.identities_resolved, 14);
-    assert.equal(first.identities_created, 14);
-    assert.equal(first.spaces_reconciled, 4);
+    assert.equal(first.identities_resolved, 11);
+    assert.equal(first.identities_created, 11);
+    assert.equal(first.spaces_reconciled, 5);
     // Registry metadata needs its own platform role, not platform-admin inheritance.
     const registryDenied = await root.context.request.get(`${origin}/control-plane/v1/admin/teams`, {
       headers: { Authorization: root.bearer },
@@ -353,24 +352,6 @@ try {
     assert.equal(replay.grants_acknowledged, first.grants_acknowledged);
     assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);
     assert.deepEqual(await get(root.context, root.bearer, "/users/platform-roles"), grantsBefore);
-
-    // The same public builder produces a variant containing a project.
-    const fixture = resolve(dirname(bundle), "project-fixture");
-    await cp("../control-plane/tests/fixtures/import_export/demo_provisioning", fixture, { recursive: true });
-    await writeFile(
-      `${fixture}/projects.json`,
-      JSON.stringify([
-        { ref: "browser-project", name: "Browser project", team: "research", roles: { bob: ["owner", "member"] } },
-      ]),
-    );
-    const projectZip = resolve(dirname(bundle), "project.zip");
-    execFileSync("make", ["-C", "../control-plane", "build-demo-bundle"], {
-      env: { ...process.env, DEMO_PROVISIONING_FIXTURE_DIR: fixture, DEMO_BUNDLE_FILE: projectZip },
-      stdio: "pipe",
-    });
-    const projectResult = await importFile(root.page, projectZip);
-    assert.equal(projectResult.spaces_reconciled, 5);
-    assert.equal(projectResult.identities_created, 0);
 
     await mkdir("target", { recursive: true });
     await root.page.screenshot({ path: "target/provisioning-browser.png", fullPage: true });
@@ -406,7 +387,7 @@ try {
     await root.page.locator("#kc-login").click();
     await root.page.goto(origin + "/home");
     await expect(root.page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
-    await expect(root.page.getByRole("heading", { name: "Browser project", exact: true })).toHaveCount(0);
+    await expect(root.page.getByRole("heading", { name: "Atlas", exact: true })).toHaveCount(0);
     await logout(root.page);
     await root.page.locator("#username").fill("bob");
     await root.page.locator("#password").fill("Azerty123_");
@@ -415,7 +396,7 @@ try {
     await root.page.getByRole("button", { name: "Home", exact: true }).click();
     await expect(root.page.getByRole("heading", { name: /^Hello / })).toBeVisible();
     await expect(root.page.getByRole("link", { name: "Acme", exact: true })).toHaveCount(0);
-    const projectLink = root.page.getByRole("link", { name: "Browser project", exact: true });
+    const projectLink = root.page.getByRole("link", { name: "Atlas", exact: true });
     const projectHref = await projectLink.getAttribute("href");
     assert.match(projectHref, /^\/team\/[^/]+\/agents$/);
     await projectLink.click();
@@ -434,11 +415,11 @@ try {
     await expect(bob.page.locator('input[type="file"]')).toHaveCount(0);
     await expect(bob.page.getByRole("link", { name: "Provisioning", exact: true })).toHaveCount(0);
     const spaces = await get(bob.context, bob.bearer, "/me/spaces");
-    const project = spaces.find((space) => space.name === "Browser project");
+    const project = spaces.find((space) => space.name === "Atlas");
     const north = spaces.find((space) => space.name === "Research");
     const organization = spaces.find((space) => space.name === "Acme");
     assert.deepEqual(project.path, [organization.id, north.id, project.id]);
-    assert.deepEqual([...project.roles].sort(), ["member", "owner"]);
+    assert.deepEqual([...project.roles].sort(), ["editor", "owner"]);
     assert.deepEqual(north.roles, ["editor"]);
     const denied = await bob.context.request.post(`${origin}/control-plane/v1/import-export/import`, {
       headers: { Authorization: bob.bearer },
@@ -461,7 +442,7 @@ try {
     await importFile(alice.page, bundle, 200);
     assert.deepEqual(await get(root.context, root.bearer, "/admin/teams"), teamsBefore);
     assert.deepEqual(await get(bob.context, bob.bearer, "/me/spaces"), spaces);
-    // Project ownership also qualifies: Bob gained owner on Browser project.
+    // Any business role qualifies for a personal space; Bob is an editor of Research.
     await bob.page.goto(origin + "/home");
     await expect(bob.page.getByRole("button", { name: "Personal space", exact: true })).toHaveCount(1);
     const bobOpen = await bob.context.request.post(`${origin}/control-plane/v1/me/personal-space`, {

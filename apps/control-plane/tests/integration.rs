@@ -1766,8 +1766,8 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     });
     let (status, report) = http_import(&app, &token, &bytes).await;
     assert_eq!(status, 200, "{report}");
-    assert_eq!(report["identities_created"], 12); // Alice and Bob already exist.
-    assert_eq!(report["spaces_reconciled"], 4);
+    assert_eq!(report["identities_created"], 9); // Alice and Bob already exist.
+    assert_eq!(report["spaces_reconciled"], 5);
     let acme = named_space(&e.pool, &e.authorization, None, "Acme")
         .await
         .unwrap()
@@ -1795,14 +1795,20 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
             .await
             .unwrap()
     );
-    // Demo provisioning does not add platform authority to any persona.
-    assert_eq!(
-        e.authorization.platform_grants().await.unwrap(),
-        vec![(
+    // Demo provisioning adds platform authority only to the `boss` convenience account.
+    let boss = directory.find_username("boss").await.unwrap().unwrap();
+    let mut platform = e.authorization.platform_grants().await.unwrap();
+    platform.sort();
+    let mut expected: Vec<_> = control_plane::roles::PlatformRole::ALL
+        .into_iter()
+        .map(|role| (boss.id.clone(), role))
+        .chain([(
             root.uid.clone(),
-            control_plane::roles::PlatformRole::PlatformAdmin
-        )]
-    );
+            control_plane::roles::PlatformRole::PlatformAdmin,
+        )])
+        .collect();
+    expected.sort();
+    assert_eq!(platform, expected);
     let globex = named_space(&e.pool, &e.authorization, None, "Globex")
         .await
         .unwrap()

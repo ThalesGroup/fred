@@ -12,10 +12,21 @@ actions, endpoints and exact permission answers, use [A7](A7-action-role-matrix.
 
 ## Reference roles
 
-**Admin** denotes technical administration. **Owner** denotes business
-management (French: **Admin** / **Responsable**). Owner, analyst, editor and member have the same meaning in an
-organization, team or project; scope changes where they apply, not their purpose.
-There is no team-admin or project-admin role.
+**Admin** denotes technical administration and exists only for the platform and
+organizations. **Owner** denotes business management. Owner, analyst, editor and
+member have the same meaning in an organization, team or project, apply only to the
+space where they are granted, and never reach a child space. There is no team-admin
+or project-admin role.
+
+| Identifier | English label | French label | Nature |
+| --- | --- | --- | --- |
+| `platform_admin`, `organization_admin` | Admin | Admin | Technical |
+| `owner` | Owner | Responsable | Business management |
+| `editor` | Editor | Éditeur | Content read and write |
+| `analyst` | Analyst | Analyste | Content read and evaluation |
+| `member` | Member | Membre | Content read |
+
+The [example people](02-journeys.md#example-people-and-spaces) illustrate each role.
 
 | Role | Scope of grant | Agreed responsibility | Current permissions and limits, role alone | Permission scope |
 | --- | --- | --- | --- | --- |

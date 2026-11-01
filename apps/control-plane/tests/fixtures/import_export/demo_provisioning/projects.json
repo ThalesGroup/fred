@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "ref": "atlas",
+    "name": "Atlas",
+    "team": "research",
+    "roles": {
+      "bob": [
+        "owner",
+        "editor"
+      ],
+      "carol": [
+        "editor"
+      ],
+      "boss": [
+        "owner",
+        "member",
+        "editor",
+        "analyst"
+      ]
+    }
+  }
+]

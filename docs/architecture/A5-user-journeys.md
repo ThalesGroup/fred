@@ -100,12 +100,12 @@ and does not remove grants absent from the bundle.
 
 ## Carl opens his personal space
 
-A business owner of an active organization, team or project can open Personal
-space. A technical admin role alone does not qualify; mixed admin and owner roles
-do. The first opening creates the space, later openings reuse its identity.
-The menu and the Control Plane require current ownership, including for an
-existing personal space. Losing the last owner role removes access without
-deleting data. Control Plane also checks this admission when resolving a new
+Anyone holding a business role (owner, member, editor or analyst) on an active
+organization, team or project can open Personal space. A technical admin role alone
+does not qualify; mixed admin and business roles do. The first opening creates the
+space, later openings reuse its identity. The menu and the Control Plane require a
+current business role, including for an existing personal space. Losing the last
+business role removes access without deleting data. Control Plane also checks this admission when resolving a new
 agent turn; the existing policy for already admitted turns is unchanged.
 
 The personal space belongs to the organization for governance but inherits no
