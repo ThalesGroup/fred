@@ -1165,11 +1165,17 @@
       "nameConflict": "Ce nom logique est déjà utilisé dans cet espace.",
       "titleLimit": "Le titre doit contenir de 1 à 255 caractères.",
       "descriptionLimit": "La description ne peut pas dépasser 500 caractères Unicode.",
-      "deferred": "Les catégories, tags, favoris, le marketplace et les compteurs d’utilisation ne sont pas encore raccordés.",
-      "filtersDeferred": "Les filtres par catégorie et favoris ne sont pas encore raccordés.",
+      "tags": "Tags",
+      "textRequired": "Le texte doit contenir au moins un caractère non blanc, sans caractère NUL.",
+      "tagsLimit": "20 tags maximum, de 1 à 64 caractères chacun, sans caractères de contrôle.",
+      "deferred": "Le marketplace et les compteurs d’utilisation ne sont pas encore raccordés.",
       "catalogError": "Le catalogue complet des prompts n’a pas pu être chargé."
     },
     "weaverAgents": {
+      "logicalName": "Nom logique",
+      "logicalNameHelp": "Référence stable : 1 à 64 lettres minuscules ASCII, chiffres, tirets ou tirets bas.",
+      "logicalNameImmutable": "Ce nom logique est immuable. Le nom affiché reste modifiable.",
+      "logicalNameTaken": "Ce nom logique existe déjà dans cet espace.",
       "documentSelectionUnknown": "La sélection des sous-dossiers n'est pas encore entièrement connue. Un clic vérifie toute l'arborescence, puis la retire si elle est entièrement sélectionnée ou la sélectionne en entier sinon.",
       "documentSelectionUnavailable": "La sélection de dossiers et de documents n'est pas encore disponible. L'agent recherche dans son périmètre d'espaces autorisé.",
       "documentSelectionFailed": "La sélection complète n'a pas pu être chargée. Aucun changement effectué. Réessayez.",
@@ -2593,6 +2599,9 @@
       "whatsNew": "Nouveautés"
     },
     "promptCategories": {
+      "loadError": "Impossible de charger les catégories.",
+      "nameConflict": "Une catégorie porte déjà ce nom dans cet espace.",
+      "categoryConflict": "La catégorie doit appartenir à cet espace et ne peut pas être supprimée tant que des prompts lui sont rattachés.",
       "pickerTitle": "Catégorie",
       "noCategory": "Sans catégorie",
       "manage": {
@@ -2600,7 +2609,7 @@
         "title": "Gérer les catégories",
         "createPlaceholder": "Nouvelle catégorie...",
         "create": "Créer",
-        "empty": "Aucune catégorie pour cette équipe.",
+        "empty": "Aucune catégorie pour cet espace.",
         "saveAria": "Enregistrer",
         "cancelEditAria": "Annuler",
         "editAria": "Renommer {{name}}",

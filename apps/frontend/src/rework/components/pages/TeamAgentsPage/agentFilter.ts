@@ -19,8 +19,13 @@ import type { ManagedAgentInstanceSummary } from "../../../../slices/legacyContr
 
 /** Fields the card shows, so the fields a search is expected to reach:
  * the name, the role rendered under it, and the description. */
-function haystack(instance: Pick<ManagedAgentInstanceSummary, "display_name" | "role" | "description">): string {
-  return [instance.display_name, instance.role, instance.description].filter(Boolean).join("\n").toLowerCase();
+function haystack(
+  instance: Pick<ManagedAgentInstanceSummary, "display_name" | "role" | "description"> & { logical_name?: string },
+): string {
+  return [instance.display_name, instance.logical_name, instance.role, instance.description]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
 }
 
 /**
@@ -28,10 +33,9 @@ function haystack(instance: Pick<ManagedAgentInstanceSummary, "display_name" | "
  * whitespace-only query matches everything, so the caller can pass the raw
  * input value straight through.
  */
-export function filterAgents<T extends Pick<ManagedAgentInstanceSummary, "display_name" | "role" | "description">>(
-  instances: T[],
-  query: string,
-): T[] {
+export function filterAgents<
+  T extends Pick<ManagedAgentInstanceSummary, "display_name" | "role" | "description"> & { logical_name?: string },
+>(instances: T[], query: string): T[] {
   const q = query.trim().toLowerCase();
   if (!q) return instances;
   return instances.filter((instance) => haystack(instance).includes(q));

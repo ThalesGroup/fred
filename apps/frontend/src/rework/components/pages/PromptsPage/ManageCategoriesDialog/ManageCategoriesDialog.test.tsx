@@ -38,35 +38,35 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 }));
 
 const calls = {
-  create: [] as { teamId: string; createPromptCategoryRequest: { name: string } }[],
-  update: [] as { teamId: string; categoryId: string; updatePromptCategoryRequest: { name: string } }[],
-  delete: [] as { teamId: string; categoryId: string }[],
+  create: [] as { spaceId: string; promptCategoryRequest: { name: string } }[],
+  update: [] as { spaceId: string; categoryId: string; promptCategoryRequest: { name: string } }[],
+  delete: [] as { spaceId: string; categoryId: string }[],
 };
 
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation: () => [
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useCreatePromptCategoryMutation: () => [
     (args: (typeof calls.create)[number]) => {
       calls.create.push(args);
       return {
-        unwrap: async () => ({ id: "new-id", team_id: args.teamId, name: args.createPromptCategoryRequest.name }),
+        unwrap: async () => ({ id: "new-id", space_id: args.spaceId, name: args.promptCategoryRequest.name }),
       };
     },
     { isLoading: false },
   ],
-  usePutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutMutation: () => [
+  useRenamePromptCategoryMutation: () => [
     (args: (typeof calls.update)[number]) => {
       calls.update.push(args);
       return {
         unwrap: async () => ({
           id: args.categoryId,
-          team_id: args.teamId,
-          name: args.updatePromptCategoryRequest.name,
+          space_id: args.spaceId,
+          name: args.promptCategoryRequest.name,
         }),
       };
     },
     { isLoading: false },
   ],
-  useDeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteMutation: () => [
+  useDeletePromptCategoryMutation: () => [
     (args: (typeof calls.delete)[number]) => {
       calls.delete.push(args);
       return { unwrap: async () => undefined };
@@ -77,8 +77,8 @@ vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", ()
 import ManageCategoriesDialog from "./ManageCategoriesDialog";
 
 const CATEGORIES = [
-  { id: "cat-1", team_id: "team-1", name: "Analyse" },
-  { id: "cat-2", team_id: "team-1", name: "Communication" },
+  { id: "cat-1", space_id: "team-1", name: "Analyse" },
+  { id: "cat-2", space_id: "team-1", name: "Communication" },
 ];
 
 function flush() {
@@ -116,7 +116,7 @@ describe("ManageCategoriesDialog", () => {
       root.render(
         <ManageCategoriesDialog
           open
-          teamId="team-1"
+          spaceId="team-1"
           categories={CATEGORIES}
           usedCategoryIds={new Set()}
           onClose={onClose}
@@ -188,10 +188,10 @@ describe("ManageCategoriesDialog", () => {
     await flush();
 
     expect(calls.update).toEqual([
-      { teamId: "team-1", categoryId: "cat-1", updatePromptCategoryRequest: { name: "Analyse et synthèse" } },
+      { spaceId: "team-1", categoryId: "cat-1", promptCategoryRequest: { name: "Analyse et synthèse" } },
     ]);
-    expect(calls.delete).toEqual([{ teamId: "team-1", categoryId: "cat-2" }]);
-    expect(calls.create).toEqual([{ teamId: "team-1", createPromptCategoryRequest: { name: "Support client" } }]);
+    expect(calls.delete).toEqual([{ spaceId: "team-1", categoryId: "cat-2" }]);
+    expect(calls.create).toEqual([{ spaceId: "team-1", promptCategoryRequest: { name: "Support client" } }]);
     expect(onChanged).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
@@ -204,7 +204,7 @@ describe("ManageCategoriesDialog", () => {
       root.render(
         <ManageCategoriesDialog
           open
-          teamId="team-1"
+          spaceId="team-1"
           categories={CATEGORIES}
           usedCategoryIds={new Set()}
           onClose={onClose}
@@ -243,7 +243,7 @@ describe("ManageCategoriesDialog", () => {
       root.render(
         <ManageCategoriesDialog
           open
-          teamId="team-1"
+          spaceId="team-1"
           categories={CATEGORIES}
           usedCategoryIds={new Set(["cat-2"])}
           onClose={vi.fn()}

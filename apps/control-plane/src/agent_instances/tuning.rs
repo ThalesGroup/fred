@@ -29,6 +29,11 @@ use super::{
 };
 
 pub(super) fn validate_request(body: &mut CreateAgentInstanceRequest) -> AppResult<()> {
+    if !crate::domain::valid_logical_name(&body.logical_name) {
+        return Err(AppError::Unprocessable(
+            "logical_name must contain 1..64 lowercase ASCII letters, digits, '_' or '-'".into(),
+        ));
+    }
     validate_metadata(
         Some(&mut body.display_name),
         body.description.as_deref(),

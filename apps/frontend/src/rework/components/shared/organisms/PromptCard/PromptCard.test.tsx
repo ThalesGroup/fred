@@ -46,7 +46,9 @@ function mount(props: Partial<React.ComponentProps<typeof PromptCard>> = {}) {
 }
 
 function star(): HTMLButtonElement | null {
-  return container.querySelector('button[aria-label="rework.teams.prompts.favorite.filter"]');
+  return container.querySelector(
+    'button[aria-label="rework.teams.prompts.favorite.add"], button[aria-label="rework.teams.prompts.favorite.remove"]',
+  );
 }
 
 afterEach(() => {

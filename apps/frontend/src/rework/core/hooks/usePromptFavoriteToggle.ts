@@ -18,11 +18,11 @@ import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import {
   useAddPromptFavoriteMutation,
   useRemovePromptFavoriteMutation,
-} from "../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+} from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 
-/** Stars or unstars a prompt of `teamId` for the caller. The listings update
- *  at once (optimistic cache patch); a failure puts the star back and says so. */
-export function usePromptFavoriteToggle(teamId: string | undefined) {
+/** Stars or unstars a prompt of `spaceId` for the caller. The listings update
+ *  after the acknowledged write; failures are surfaced without local divergence. */
+export function usePromptFavoriteToggle(spaceId: string | undefined) {
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
   const [addFavorite] = useAddPromptFavoriteMutation();
@@ -30,10 +30,10 @@ export function usePromptFavoriteToggle(teamId: string | undefined) {
   // A second click before the first answers would race it on the server.
   const inFlight = useRef(new Set<string>());
 
-  return async (prompt: { id: string; is_favorite?: boolean }) => {
-    if (!teamId || inFlight.current.has(prompt.id)) return;
-    inFlight.current.add(prompt.id);
-    const arg = { teamId, promptId: prompt.id };
+  return async (prompt: { prompt_id: string; is_favorite?: boolean }) => {
+    if (!spaceId || inFlight.current.has(prompt.prompt_id)) return;
+    inFlight.current.add(prompt.prompt_id);
+    const arg = { spaceId, promptId: prompt.prompt_id };
     try {
       await (prompt.is_favorite ? removeFavorite(arg) : addFavorite(arg)).unwrap();
     } catch (error) {
@@ -42,7 +42,7 @@ export function usePromptFavoriteToggle(teamId: string | undefined) {
         fallbackDetail: t("rework.teams.prompts.favorite.errorDetail"),
       });
     } finally {
-      inFlight.current.delete(prompt.id);
+      inFlight.current.delete(prompt.prompt_id);
     }
   };
 }

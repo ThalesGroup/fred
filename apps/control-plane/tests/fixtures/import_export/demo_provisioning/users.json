@@ -1,5 +1,13 @@
 [
   {
+    "username": "priya",
+    "email": "priya@acme.example",
+    "first_name": "Priya",
+    "last_name": "Shah",
+    "password": "Azerty123_",
+    "platform_roles": []
+  },
+  {
     "username": "oscar",
     "email": "oscar@acme.example",
     "first_name": "Oscar",

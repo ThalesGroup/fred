@@ -479,10 +479,12 @@ erDiagram
 "space_invitation_role" }o--|| "space_invitation" : "invitation_id"
 "storage_budget" }o--|| "space" : "space_id"
 "prompt" }o--|| "space" : "space_id"
+"prompt" }o--|| "prompt_category" : "space_id, category_id"
 "document_move" }o--|| "document" : "document_id"
 "organization_model_source" }o--|| "space" : "organization_id"
 "organization_model_source" }o--|| "model_source" : "source_id"
 "organization_model_initialization" |o--|| "space" : "organization_id"
+"prompt_category" }o--|| "space" : "space_id"
 
 "deletion" {
   uuid id
@@ -812,6 +814,7 @@ erDiagram
   text created_by
   timestamp_with_time_zone updated_at
   text updated_by
+  uuid category_id FK
 }
 "document_move" {
   uuid id
@@ -833,6 +836,11 @@ erDiagram
 "organization_model_initialization" {
   uuid organization_id FK
   timestamp_with_time_zone completed_at
+}
+"prompt_category" {
+  uuid id
+  uuid space_id FK
+  varchar_120_ name
 }
 ```
 <!-- end generated -->

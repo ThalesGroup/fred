@@ -137,6 +137,8 @@ beforeEach(() => {
       if (path.endsWith("/me/spaces")) return json(emptyContext ? [] : SPACES);
       if (target === "authorize") return json({ allowed: writable });
       if (target === "catalog") return json(catalogEmpty ? [] : [TEMPLATE]);
+      if (path.endsWith("/prompts") || path.endsWith("/prompt-categories"))
+        return json({ items: [], next_cursor: null });
       const match = path.match(/\/spaces\/([^/]+)\/agent-instances(?:\/([^/]+))?$/);
       if (!match) throw new Error(`Unexpected request ${path}`);
       const [, spaceId, id] = match;
@@ -148,7 +150,7 @@ beforeEach(() => {
         return json(
           id
             ? rows.find((row) => row.space_id === spaceId && row.agent_instance_id === id)
-            : rows.filter((row) => row.space_id === spaceId),
+            : { items: rows.filter((row) => row.space_id === spaceId), next_cursor: null },
         );
       if (request.method === "POST") {
         const row = {
@@ -185,7 +187,9 @@ afterEach(() => {
   host.remove();
   expect(
     calls.every(({ path }) =>
-      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/agent-(instances|templates))/.test(path),
+      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/(agent-(instances|templates)|prompts|prompt-categories))/.test(
+        path,
+      ),
     ),
   ).toBe(true);
   vi.unstubAllGlobals();
@@ -341,7 +345,7 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     await menu("rework.agentCard.edit");
     await click("rework.teams.formAgent.sections.prompts");
     expect((document.querySelector('[aria-label="Prompt"]') as HTMLTextAreaElement).value).toBe("SAVED PROMPT");
-    expect(button("rework.teams.formAgent.promptField.pickFromLibrary").disabled).toBe(true);
+    expect(button("rework.teams.formAgent.promptField.pickFromLibrary").disabled).toBe(false);
     await input("Prompt", "Edited prompt");
     await click("rework.save");
     expect(writes()[writes().length - 1]?.body).toEqual({
@@ -353,6 +357,7 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     await mount();
     await click("rework.teams.agents.firstCreate");
     await click("Custom");
+    await input("rework.weaverAgents.logicalName", "custom-agent");
     expect(button("rework.teams.formAgent.creationAssistant.open").disabled).toBe(true);
     await click("rework.teams.formAgent.sections.commitments");
     await input("rework.teams.formAgent.fields.usageStatement.label", "My use");
@@ -431,7 +436,7 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     expect(document.querySelector("[data-form]")).toBeNull();
     expect(calls.some((call) => call.path === `/control-plane/v1/spaces/${SPACE_B}/agent-instances`)).toBe(true);
     const queries = Object.values(store.getState()[api.reducerPath].queries);
-    expect(queries.filter((query) => query?.endpointName === "listAgentInstances")).toHaveLength(2);
+    expect(queries.filter((query) => query?.endpointName === "listAgentInstances")).toHaveLength(1);
   });
   it("invalidates only the mutated space and rereads an edited instance", async () => {
     await mount();

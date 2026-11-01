@@ -19,11 +19,9 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  type PromptCategorySummary,
-  useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { useGetPromptQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import Chip from "@shared/atoms/Chip/Chip";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import styles from "./PromptViewDialog.module.scss";
 
@@ -47,7 +45,7 @@ interface PromptViewDialogProps {
   teamId?: string;
   spaceId?: string;
   promptId?: string | null;
-  categories?: PromptCategorySummary[];
+  categories?: { id: string; name: string }[];
   /**
    * Marketplace variant: the prompt is already loaded (the caller may not be a
    * member of the author team, so the team fetch would 403). When set, the
@@ -109,11 +107,8 @@ export default function PromptViewDialog({
   const category = categories.find(
     (c) => c.id === (detail && "category_id" in detail ? detail.category_id : undefined),
   );
-  const resolvedChipLabel = spaceId
-    ? null
-    : chipLabel !== undefined
-      ? chipLabel
-      : (category?.name ?? t("rework.promptCategories.noCategory"));
+  const resolvedChipLabel =
+    chipLabel !== undefined ? chipLabel : (category?.name ?? t("rework.promptCategories.noCategory"));
 
   const handleCopy = () => {
     if (!detail) return;
@@ -160,6 +155,13 @@ export default function PromptViewDialog({
               </div>
             )}
 
+            {"tags" in detail && detail.tags.length > 0 && (
+              <div className={styles.tags} aria-label={t("rework.weaverPrompts.tags")}>
+                {detail.tags.map((tag) => (
+                  <Chip key={tag} label={tag} />
+                ))}
+              </div>
+            )}
             {resolvedChipLabel && <span className={styles.categoryChip}>{resolvedChipLabel}</span>}
 
             <div className={styles.textSection}>

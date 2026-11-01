@@ -1165,11 +1165,17 @@
       "nameConflict": "This logical name is already used in this space.",
       "titleLimit": "The title must contain 1 to 255 characters.",
       "descriptionLimit": "The description cannot exceed 500 Unicode characters.",
-      "deferred": "Categories, tags, favorites, marketplace and usage counts are not connected yet.",
-      "filtersDeferred": "Category and favorite filters are not connected yet.",
+      "tags": "Tags",
+      "textRequired": "Text must contain a non-whitespace character and no NUL characters.",
+      "tagsLimit": "At most 20 tags, each with 1-64 characters and no control characters.",
+      "deferred": "Marketplace and usage counters are not connected yet.",
       "catalogError": "The complete prompt catalog could not be loaded."
     },
     "weaverAgents": {
+      "logicalName": "Logical name",
+      "logicalNameHelp": "Stable reference: 1-64 lowercase ASCII letters, digits, hyphens or underscores.",
+      "logicalNameImmutable": "This logical name is immutable. The display name remains editable.",
+      "logicalNameTaken": "This logical name already exists in this space.",
       "documentSelectionUnknown": "Subfolder selection is not fully known yet. Clicking checks the entire subtree, then clears it if fully selected or selects it all otherwise.",
       "documentSelectionUnavailable": "Folder and document selection is not available yet. The agent searches its authorized space scope.",
       "documentSelectionFailed": "The complete selection could not be loaded. Nothing was changed. Try again.",
@@ -2593,6 +2599,9 @@
       "whatsNew": "What's new"
     },
     "promptCategories": {
+      "loadError": "Could not load categories.",
+      "nameConflict": "A category with this name already exists in this space.",
+      "categoryConflict": "The category must belong to this space and cannot be deleted while prompts use it.",
       "pickerTitle": "Category",
       "noCategory": "No category",
       "manage": {

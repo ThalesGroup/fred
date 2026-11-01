@@ -37,6 +37,7 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useListPromptCategoriesQuery: () => ({ currentData: { items: [], next_cursor: null }, refetch: vi.fn() }),
   usePromptCatalogQuery: ({ spaceId }: { spaceId: string }, { skip }: { skip?: boolean }) => ({
     currentData: skip || h.pending ? undefined : { items: h.promptsByTeam[spaceId] ?? [], next_cursor: null },
     isFetching: !skip && h.pending,

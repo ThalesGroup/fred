@@ -402,7 +402,12 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/storage` }),
     }),
     listAgentInstances: build.query<ListAgentInstancesApiResponse, ListAgentInstancesApiArg>({
-      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances` }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
     }),
     createAgentInstance: build.mutation<CreateAgentInstanceApiResponse, CreateAgentInstanceApiArg>({
       query: (queryArg) => ({
@@ -458,6 +463,34 @@ const injectedRtkApi = api.injectEndpoints({
     spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
     }),
+    listPromptCategories: build.query<ListPromptCategoriesApiResponse, ListPromptCategoriesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompt-categories`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    createPromptCategory: build.mutation<CreatePromptCategoryApiResponse, CreatePromptCategoryApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompt-categories`,
+        method: "POST",
+        body: queryArg.promptCategoryRequest,
+      }),
+    }),
+    deletePromptCategory: build.mutation<DeletePromptCategoryApiResponse, DeletePromptCategoryApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompt-categories/${queryArg.categoryId}`,
+        method: "DELETE",
+      }),
+    }),
+    renamePromptCategory: build.mutation<RenamePromptCategoryApiResponse, RenamePromptCategoryApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompt-categories/${queryArg.categoryId}`,
+        method: "PATCH",
+        body: queryArg.promptCategoryRequest,
+      }),
+    }),
     listPrompts: build.query<ListPromptsApiResponse, ListPromptsApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts`,
@@ -487,6 +520,18 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}`,
         method: "PATCH",
         body: queryArg.updatePromptRequest,
+      }),
+    }),
+    addPromptFavorite: build.mutation<AddPromptFavoriteApiResponse, AddPromptFavoriteApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}/favorite`,
+        method: "PUT",
+      }),
+    }),
+    removePromptFavorite: build.mutation<RemovePromptFavoriteApiResponse, RemovePromptFavoriteApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompts/${queryArg.promptId}/favorite`,
+        method: "DELETE",
       }),
     }),
     listSessions: build.query<ListSessionsApiResponse, ListSessionsApiArg>({
@@ -895,9 +940,11 @@ export type SummaryApiResponse = /** status 200 undefined */ StorageSummary;
 export type SummaryApiArg = {
   id: string;
 };
-export type ListAgentInstancesApiResponse = /** status 200 undefined */ ManagedAgentInstanceSummary[];
+export type ListAgentInstancesApiResponse = /** status 200 undefined */ AgentInstancePage;
 export type ListAgentInstancesApiArg = {
   spaceId: string;
+  /** Previous page cursor */
+  after?: string;
 };
 export type CreateAgentInstanceApiResponse = /** status 201 undefined */ ManagedAgentInstanceSummary;
 export type CreateAgentInstanceApiArg = {
@@ -956,6 +1003,27 @@ export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTe
 export type SpaceAgentTemplatesApiArg = {
   spaceId: string;
 };
+export type ListPromptCategoriesApiResponse = /** status 200 undefined */ PromptCategoryPage;
+export type ListPromptCategoriesApiArg = {
+  spaceId: string;
+  after?: string;
+};
+export type CreatePromptCategoryApiResponse = /** status 201 undefined */ PromptCategory;
+export type CreatePromptCategoryApiArg = {
+  spaceId: string;
+  promptCategoryRequest: PromptCategoryRequest;
+};
+export type DeletePromptCategoryApiResponse = unknown;
+export type DeletePromptCategoryApiArg = {
+  spaceId: string;
+  categoryId: string;
+};
+export type RenamePromptCategoryApiResponse = /** status 200 undefined */ PromptCategory;
+export type RenamePromptCategoryApiArg = {
+  spaceId: string;
+  categoryId: string;
+  promptCategoryRequest: PromptCategoryRequest;
+};
 export type ListPromptsApiResponse = /** status 200 undefined */ PromptPage;
 export type ListPromptsApiArg = {
   spaceId: string;
@@ -982,6 +1050,16 @@ export type UpdatePromptApiArg = {
   spaceId: string;
   promptId: string;
   updatePromptRequest: UpdatePromptRequest;
+};
+export type AddPromptFavoriteApiResponse = unknown;
+export type AddPromptFavoriteApiArg = {
+  spaceId: string;
+  promptId: string;
+};
+export type RemovePromptFavoriteApiResponse = unknown;
+export type RemovePromptFavoriteApiArg = {
+  spaceId: string;
+  promptId: string;
 };
 export type ListSessionsApiResponse = /** status 200 undefined */ SessionDetails[];
 export type ListSessionsApiArg = {
@@ -1802,9 +1880,10 @@ export type ManagedAgentInstanceSummary = {
     };
   };
   created_at: string;
-  created_by?: string | null;
+  created_by: string;
   description?: string | null;
   display_name: string;
+  logical_name: string;
   model_options?: ModelOptions | null;
   /** Diagnostic only; requires explicit re-selection if no recommended_model is saved. */
   recommended_chat_profile_id?: string | null;
@@ -1821,8 +1900,14 @@ export type ManagedAgentInstanceSummary = {
     [key: string]: any;
   };
   updated_at: string;
-  updated_by?: string | null;
+  updated_by: string;
   usage_statement: string;
+};
+export type AgentInstancePage = {
+  /** Authorized instances in immutable logical-name order; at most 100 rows. */
+  items: ManagedAgentInstanceSummary[];
+  /** Follow until null. Pages are current reads, not a snapshot. */
+  next_cursor: string | null;
 };
 export type TuningScalar = string | number | boolean;
 export type TuningValue =
@@ -1848,6 +1933,8 @@ export type CreateAgentInstanceRequest = {
   capability_ids?: string[] | null;
   description?: string | null;
   display_name: string;
+  /** Immutable space-local reference, independent of the mutable display label. */
+  logical_name: string;
   model_options?: ModelOptions | null;
   /** Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key. */
   recommended_chat_profile_id?: string | null;
@@ -2087,7 +2174,22 @@ export type AgentTemplateSummary = {
   team_instantiable: boolean;
   template_id: string;
 };
+export type PromptCategory = {
+  id: string;
+  name: string;
+  space_id: string;
+};
+export type PromptCategoryPage = {
+  items: PromptCategory[];
+  /** Exclusive UUID cursor. Follow until null before displaying category filters. */
+  next_cursor: string | null;
+};
+export type PromptCategoryRequest = {
+  /** NFC-normalized, trimmed, nonblank, without control characters. */
+  name: string;
+};
 export type PromptMetadata = {
+  category_id: string | null;
   created_at: string;
   created_by: string;
   description: string | null;
@@ -2096,10 +2198,12 @@ export type PromptMetadata = {
   logical_name: string;
   prompt_id: string;
   space_id: string;
+  tags: string[];
   updated_at: string;
   updated_by: string;
 };
 export type PromptSummary = PromptMetadata & {
+  is_favorite: boolean;
   /** First 240 characters, selected in PostgreSQL without fetching the full body. */
   text_preview: string;
 };
@@ -2111,25 +2215,34 @@ export type PromptPage = {
   next_cursor: string | null;
 };
 export type Prompt = PromptMetadata & {
+  is_favorite: boolean;
   /** Current full text, preserved verbatim. */
   text: string;
 };
 export type CreatePromptRequest = {
+  /** Optional category belonging to this same space. */
+  category_id?: string | null;
   /** Omitted/null means no description. NUL characters are rejected. */
   description?: string | null;
   /** NFC-normalized and trimmed, nonblank, without control characters. */
   display_name: string;
   /** Immutable; "skill" is reserved. Invalid names are rejected, never normalized. */
   logical_name: string;
-  /** Preserved verbatim, including whitespace and empty strings. NUL is rejected. */
+  /** Up to 20 nonblank labels, each at most 64 characters. NFC-normalized and deduplicated. */
+  tags?: string[];
+  /** Nonblank text, preserved verbatim. NUL is rejected. */
   text: string;
 };
 export type UpdatePromptRequest = {
+  /** Omitted keeps the category; null removes it. */
+  category_id?: string | null;
   /** Omitted keeps the value; null clears it; a string replaces it (including ""). */
   description?: string | null;
   /** Omitted/null keeps the value. Supplied strings follow creation's label rules. */
   display_name?: string | null;
-  /** Omitted/null keeps the value; a string replaces it verbatim (including ""). */
+  /** Omitted/null keeps tags; [] clears them. */
+  tags?: string[] | null;
+  /** Omitted/null keeps the value; a nonblank string replaces it verbatim. */
   text?: string | null;
 };
 export type SessionDetails = {
@@ -2305,6 +2418,11 @@ export const {
   useLazyResolveRuntimeQuery,
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
+  useListPromptCategoriesQuery,
+  useLazyListPromptCategoriesQuery,
+  useCreatePromptCategoryMutation,
+  useDeletePromptCategoryMutation,
+  useRenamePromptCategoryMutation,
   useListPromptsQuery,
   useLazyListPromptsQuery,
   useCreatePromptMutation,
@@ -2312,6 +2430,8 @@ export const {
   useLazyGetPromptQuery,
   useDeletePromptMutation,
   useUpdatePromptMutation,
+  useAddPromptFavoriteMutation,
+  useRemovePromptFavoriteMutation,
   useListSessionsQuery,
   useLazyListSessionsQuery,
   useCreateSessionMutation,

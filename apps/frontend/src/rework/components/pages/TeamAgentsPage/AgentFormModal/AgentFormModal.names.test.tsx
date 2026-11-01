@@ -62,19 +62,19 @@ vi.mock("./TemplateBrowser/TemplateBrowser.tsx", () => ({
 // Keep the required usage statement fillable so only name validation blocks Create.
 vi.mock("./AgentFormBody.tsx", () => ({
   AgentFormBody: (props: {
-    displayName: string;
+    logicalName: string;
     usageStatement: string;
     onUsageStatementChange: (v: string) => void;
     nameTaken?: boolean;
-    onDisplayNameChange: (v: string) => void;
-    onDisplayNameBlur?: () => void;
+    onLogicalNameChange: (v: string) => void;
+    onLogicalNameBlur?: () => void;
   }) => (
     <div>
       <input
         data-testid="name"
-        value={props.displayName}
-        onChange={(e) => props.onDisplayNameChange(e.target.value)}
-        onBlur={props.onDisplayNameBlur}
+        value={props.logicalName}
+        onChange={(e) => props.onLogicalNameChange(e.target.value)}
+        onBlur={props.onLogicalNameBlur}
       />
       <input
         data-testid="usage"
@@ -157,7 +157,7 @@ describe("agent form name check", () => {
     render({ mode: "create", takenNames: new Set(["writer"]) });
     chooseTemplate();
 
-    type("  WRITER");
+    type("writer");
     expect(isTaken()).toBe(false);
     expect(submitButton().disabled).toBe(false);
 
@@ -165,18 +165,20 @@ describe("agent form name check", () => {
     expect(isTaken()).toBe(true);
     expect(submitButton().disabled).toBe(true);
 
-    type("Writer 2");
+    type("writer-2");
     leaveField();
     expect(isTaken()).toBe(false);
     expect(submitButton().disabled).toBe(false);
   });
 
-  it("flags a template name already used in the team as soon as the form opens on it", () => {
+  it("requires an explicit logical name independent of the template label", () => {
     render({ mode: "create", takenNames: new Set(["analyst"]) });
     chooseTemplate();
 
-    expect(isTaken()).toBe(true);
-    expect(submitButton().disabled).toBe(true);
+    expect(isTaken()).toBe(false);
+    expect(nameInput().value).toBe("");
+    act(() => submitButton().click());
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("shows a name the server refused once the page adds it to the taken names", () => {
@@ -184,9 +186,11 @@ describe("agent form name check", () => {
     chooseTemplate();
     expect(isTaken()).toBe(false);
 
+    type("analyst");
+    leaveField();
     render({ mode: "create", takenNames: new Set(["analyst"]) });
 
     expect(isTaken()).toBe(true);
-    expect(nameInput().value).toBe("Analyst");
+    expect(nameInput().value).toBe("analyst");
   });
 });

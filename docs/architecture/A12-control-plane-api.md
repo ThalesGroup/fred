@@ -884,10 +884,14 @@ Operation `team_supervision`.
 | POST | [/spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution](#post-spacesspace_idagent-instancesagent_instance_idprepare-execution) |  |
 | GET | [/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime](#get-spacesspace_idagent-instancesagent_instance_idruntime) |  |
 | GET | [/spaces/{space_id}/agent-templates](#get-spacesspace_idagent-templates) |  |
+| GET | [/spaces/{space_id}/prompt-categories](#get-spacesspace_idprompt-categories) |  |
+| POST | [/spaces/{space_id}/prompt-categories](#post-spacesspace_idprompt-categories) |  |
+| PATCH | [/spaces/{space_id}/prompt-categories/{category_id}](#patch-spacesspace_idprompt-categoriescategory_id) |  |
+| DELETE | [/spaces/{space_id}/prompt-categories/{category_id}](#delete-spacesspace_idprompt-categoriescategory_id) |  |
 | GET | [/spaces/{space_id}/prompts](#get-spacesspace_idprompts) | List metadata for management and chat |
 | POST | [/spaces/{space_id}/prompts](#post-spacesspace_idprompts) | Create a prompt, or duplicate one by supplying a new logical_name and copied content |
 | GET | [/spaces/{space_id}/prompts/{prompt_id}](#get-spacesspace_idpromptsprompt_id) | Read the current definition for editing, duplication or chat insertion/sending |
-| PATCH | [/spaces/{space_id}/prompts/{prompt_id}](#patch-spacesspace_idpromptsprompt_id) | Edit only display_name, description and text |
+| PATCH | [/spaces/{space_id}/prompts/{prompt_id}](#patch-spacesspace_idpromptsprompt_id) | Edit display_name, description, text and category |
 | DELETE | [/spaces/{space_id}/prompts/{prompt_id}](#delete-spacesspace_idpromptsprompt_id) |  |
 | GET | [/spaces/{space_id}/sessions](#get-spacesspace_idsessions) |  |
 | POST | [/spaces/{space_id}/sessions](#post-spacesspace_idsessions) |  |
@@ -1104,6 +1108,57 @@ Operation `space_agent_templates`.
 - 400, 401, 403, 404, 409, 500, 503: [`ErrorBody`](#errorbody)
 - 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
 
+### GET /spaces/{space_id}/prompt-categories
+
+Operation `list_prompt_categories`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `after` | query | string (uuid) |  |  |
+
+- 200: [`PromptCategoryPage`](#promptcategorypage)
+- 400, 401, 403, 404, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### POST /spaces/{space_id}/prompt-categories
+
+Operation `create_prompt_category`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+
+Request: [`PromptCategoryRequest`](#promptcategoryrequest).
+
+- 201: [`PromptCategory`](#promptcategory)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### PATCH /spaces/{space_id}/prompt-categories/{category_id}
+
+Operation `rename_prompt_category`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `category_id` | path | string (uuid) | yes |  |
+
+Request: [`PromptCategoryRequest`](#promptcategoryrequest).
+
+- 200: [`PromptCategory`](#promptcategory)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### DELETE /spaces/{space_id}/prompt-categories/{category_id}
+
+Operation `delete_prompt_category`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `category_id` | path | string (uuid) | yes |  |
+
+- 204: no body — Unused category deleted
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
 ### GET /spaces/{space_id}/prompts
 
 List metadata for management and chat. Follow next_cursor until null to load the complete catalog. Fetch a definition to obtain current, untruncated text.
@@ -1150,7 +1205,7 @@ Operation `get_prompt`.
 
 ### PATCH /spaces/{space_id}/prompts/{prompt_id}
 
-Edit only display_name, description and text. Identity, placement, authorship and unknown fields are rejected. An empty patch preserves update attribution.
+Edit display_name, description, text and category. Identity, placement, authorship and unknown fields are rejected. An empty patch preserves update attribution.
 
 Operation `update_prompt`.
 
@@ -1654,6 +1709,7 @@ One of: `organization`, `team`, `project`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `category_id` | string (uuid) or null |  | Optional category belonging to this same space. |
 | `description` | string, max length 500 or null |  | Omitted/null means no description. NUL characters are rejected. |
 | `display_name` | string, min length 1, max length 255 | yes | NFC-normalized and trimmed, nonblank, without control characters. |
 | `logical_name` | string, min length 1, max length 64 | yes | Immutable; "skill" is reserved. Invalid names are rejected, never normalized. |
@@ -2244,10 +2300,32 @@ Extends [`PromptMetadata`](#promptmetadata) with:
 | --- | --- | --- | --- |
 | `text` | string | yes | Current full text, preserved verbatim. |
 
+### PromptCategory
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string (uuid) | yes |  |
+| `name` | string | yes |  |
+| `space_id` | string (uuid) | yes |  |
+
+### PromptCategoryPage
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | array of [`PromptCategory`](#promptcategory), max items 100 | yes |  |
+| `next_cursor` | string (uuid) or null | yes | Exclusive UUID cursor. Follow until null before displaying category filters. |
+
+### PromptCategoryRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string, min length 1, max length 120 | yes | NFC-normalized, trimmed, nonblank, without control characters. |
+
 ### PromptMetadata
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `category_id` | string (uuid) or null | yes |  |
 | `created_at` | string (date-time) | yes |  |
 | `created_by` | string | yes |  |
 | `description` | string or null | yes |  |
@@ -2725,6 +2803,7 @@ Absent fields stay unchanged. A named account becomes the role's sole direct hol
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `category_id` | string (uuid) or null |  | Omitted keeps the category; null removes it. |
 | `description` | string, max length 500 or null |  | Omitted keeps the value; null clears it; a string replaces it (including ""). |
 | `display_name` | string, min length 1, max length 255 or null |  | Omitted/null keeps the value. Supplied strings follow creation's label rules. |
 | `text` | string or null |  | Omitted/null keeps the value; a string replaces it verbatim (including ""). |

@@ -686,7 +686,7 @@ mod tests {
         assert!(status.success());
         let bytes = std::fs::read(&output).unwrap();
         let b = Bundle::parse(&bytes).unwrap();
-        assert_eq!(b.users.len(), 13);
+        assert_eq!(b.users.len(), 14);
         assert!(b.users.iter().all(|entry| entry.platform.is_empty()));
         assert!(
             b.users

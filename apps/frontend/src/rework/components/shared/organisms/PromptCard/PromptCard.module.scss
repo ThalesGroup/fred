@@ -150,3 +150,9 @@
     height: 14px;
   }
 }
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}

@@ -194,6 +194,7 @@ const fetchPrompt = (args: { spaceId: string; promptId: string }, preferCache: b
   );
 };
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useListPromptCategoriesQuery: () => ({ currentData: { items: [], next_cursor: null }, isFetching: false }),
   useMySpacesQuery: () => ({
     currentData: spaces.map((s) => (s.kind === "team" ? { ...s, roles: spaceRoles.current } : s)),
   }),

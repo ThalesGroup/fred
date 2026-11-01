@@ -39,6 +39,15 @@ pub(crate) fn canonical_name(raw: &str, max: usize) -> Option<String> {
         .then(|| name.to_owned())
 }
 
+/// Immutable space-local resource names. Resource-specific reservations stay
+/// with the domain that owns them (for example the prompt command "skill").
+pub(crate) fn valid_logical_name(name: &str) -> bool {
+    (1..=64).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
+
 /// A canonical subject identifier: no whitespace, `:` or `#`.
 pub(crate) fn valid_subject(subject: &str) -> bool {
     (1..=255).contains(&subject.chars().count())

@@ -11,6 +11,7 @@ import { INSTANCE, SPACES, TEMPLATE } from "../weaverAgentFixtures";
 
 const form = () => ({
   templateId: TEMPLATE.template_id,
+  logicalName: INSTANCE.logical_name,
   displayName: INSTANCE.display_name,
   role: INSTANCE.role,
   description: INSTANCE.description ?? "",

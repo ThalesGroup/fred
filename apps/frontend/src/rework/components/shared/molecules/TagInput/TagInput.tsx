@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import React, { useRef, useState } from "react";
+import React, { useId, useRef, useState } from "react";
 import styles from "./TagInput.module.scss";
 
 export interface TagInputProps {
@@ -36,6 +36,7 @@ export default function TagInput({
   label,
   removeTagAriaLabel,
 }: TagInputProps) {
+  const errorId = useId();
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -83,6 +84,9 @@ export default function TagInput({
         ))}
         <input
           ref={inputRef}
+          aria-label={label}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           className={styles.chipInput}
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -92,7 +96,11 @@ export default function TagInput({
           placeholder={tags.length === 0 ? placeholder : undefined}
         />
       </div>
-      {error && <p className={styles.error}>{error}</p>}
+      {error && (
+        <p id={errorId} className={styles.error}>
+          {error}
+        </p>
+      )}
     </div>
   );
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ManagedAgentInstanceSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 /** Code of the server's 409 when another agent of the team has the name. */
 export const AGENT_NAME_CONFLICT = "agent_name_conflict";
@@ -22,15 +22,15 @@ export function normalizeAgentName(name: string): string {
   return name.trim().toLowerCase();
 }
 
-/** The team's names, normalised, without the agent being edited. */
+/** Immutable logical names, excluding the instance being edited. */
 export function takenAgentNames(
-  instances: Pick<ManagedAgentInstanceSummary, "agent_instance_id" | "display_name">[],
+  instances: Pick<ManagedAgentInstanceSummary, "agent_instance_id" | "logical_name">[],
   excludeAgentInstanceId?: string,
 ): Set<string> {
   return new Set(
     instances
       .filter((instance) => instance.agent_instance_id !== excludeAgentInstanceId)
-      .map((instance) => normalizeAgentName(instance.display_name)),
+      .map((instance) => instance.logical_name),
   );
 }
 

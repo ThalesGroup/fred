@@ -245,7 +245,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     { spaceId },
     { skip: !spaceId, refetchOnMountOrArgChange: true },
   );
-  const agentInstance = agentInstances?.find((i) => i.agent_instance_id === agentInstanceId);
+  const agentInstance = agentInstances?.items.find((i) => i.agent_instance_id === agentInstanceId);
   // Capabilities active in this session — drives the capability side-panel slot
   // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
   const capabilityIds: string[] = [];

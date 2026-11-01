@@ -1,19 +1,25 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel";
+import Select from "@shared/molecules/Select/Select";
+import FavoritesFilterChip from "@shared/molecules/FavoritesFilterChip/FavoritesFilterChip";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
-import { filterPrompts } from "@shared/utils/promptFilter";
-import { usePromptCatalogQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { filterPrompts, countPromptsByCategory, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter";
+import {
+  usePromptCatalogQuery,
+  useListPromptCategoriesQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { PromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PromptSelectionChatPanel.module.css";
 
 type Space = "team" | "personal";
+const ALL_CATEGORIES = "__all_categories__";
 const SPACES: Space[] = ["team", "personal"];
 
 export interface PromptSelectionChatPanelProps {
@@ -37,6 +43,8 @@ export default function PromptSelectionChatPanel({
 }: PromptSelectionChatPanelProps) {
   const { t } = useTranslation();
   const [space, setSpace] = useState<Space>(isPersonalChat ? "personal" : "team");
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [insertingId, setInsertingId] = useState<string | null>(null);
   const canPickSpace = !isPersonalChat && Boolean(personalTeamId);
@@ -52,10 +60,28 @@ export default function PromptSelectionChatPanel({
   useEffect(() => {
     setSearch("");
     setInsertingId(null);
+    setCategoryId(null);
+    setFavoritesOnly(false);
   }, [scope]);
   const catalog = usePromptCatalogQuery({ spaceId }, { skip: !open || !spaceId, refetchOnMountOrArgChange: true });
+  const categoryCatalog = useListPromptCategoriesQuery(
+    { spaceId },
+    { skip: !open || !spaceId, refetchOnMountOrArgChange: true },
+  );
+  const categories = categoryCatalog.currentData?.items ?? [];
+  useEffect(() => {
+    if (
+      categoryCatalog.currentData &&
+      !categoryCatalog.isFetching &&
+      categoryId &&
+      categoryId !== NO_CATEGORY_FILTER_ID &&
+      !categoryCatalog.currentData.items.some((category) => category.id === categoryId)
+    )
+      setCategoryId(null);
+  }, [categoryCatalog.currentData, categoryCatalog.isFetching, categoryId]);
   const prompts = catalog.currentData?.items ?? [];
-  const visible = filterPrompts(prompts, { search, categoryId: null });
+  const counts = useMemo(() => countPromptsByCategory(prompts), [prompts]);
+  const visible = filterPrompts(prompts, { search, categoryId, favoritesOnly });
   const handlePick = async (prompt: PromptSummary) => {
     if (insertingId) return;
     setInsertingId(prompt.prompt_id);
@@ -86,6 +112,12 @@ export default function PromptSelectionChatPanel({
           onSelectedIndexChange={(index) => setSpace(SPACES[index])}
         />
       )}
+      <FavoritesFilterChip
+        size="xs"
+        label={t("rework.teams.prompts.favorite.filter")}
+        active={favoritesOnly}
+        onToggle={() => setFavoritesOnly((value) => !value)}
+      />
       <div className={styles.filters}>
         <SearchInput
           value={search}
@@ -94,16 +126,44 @@ export default function PromptSelectionChatPanel({
           clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
           size="xs"
         />
-        <p className={styles.state}>{t("rework.weaverPrompts.filtersDeferred")}</p>
+        <Select
+          size="small"
+          compact
+          ariaLabel={t("rework.promptCategories.pickerTitle")}
+          disabled={!categoryCatalog.currentData || categoryCatalog.isError || !catalog.currentData || catalog.isError}
+          value={categoryId ?? ALL_CATEGORIES}
+          onChange={(value) => setCategoryId(value === ALL_CATEGORIES ? null : value)}
+          options={[
+            { key: ALL_CATEGORIES, value: ALL_CATEGORIES, label: t("rework.teams.agents.podFilter.all") },
+            {
+              key: NO_CATEGORY_FILTER_ID,
+              value: NO_CATEGORY_FILTER_ID,
+              label: `${t("rework.promptCategories.noCategory")} (${counts.get(null) ?? 0})`,
+            },
+            ...categories.map((category) => ({
+              key: category.id,
+              value: category.id,
+              label: `${category.name} (${counts.get(category.id) ?? 0})`,
+            })),
+          ]}
+        />
       </div>
-      {catalog.isError ? (
+      {catalog.isError || categoryCatalog.isError ? (
         <div className={styles.state} role="alert">
-          {t("rework.weaverPrompts.catalogError")}
-          <Button color="primary" variant="text" size="small" onClick={() => void catalog.refetch()}>
+          {t(categoryCatalog.isError ? "rework.promptCategories.loadError" : "rework.weaverPrompts.catalogError")}
+          <Button
+            color="primary"
+            variant="text"
+            size="small"
+            onClick={() => {
+              void catalog.refetch();
+              void categoryCatalog.refetch();
+            }}
+          >
             {t("rework.weaverPrompts.retry")}
           </Button>
         </div>
-      ) : !catalog.currentData ? (
+      ) : !catalog.currentData || !categoryCatalog.currentData ? (
         <div className={styles.state}>
           <Spinner size={20} />
         </div>

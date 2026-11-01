@@ -4,7 +4,7 @@
 use sqlx::{AssertSqlSafe, PgPool};
 use uuid::Uuid;
 
-async fn database(version: Option<i64>) -> PgPool {
+async fn database() -> PgPool {
     let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES")
         .expect("needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES");
     let name = format!("t_{}", Uuid::new_v4().simple());
@@ -18,12 +18,7 @@ async fn database(version: Option<i64>) -> PgPool {
     let pool = PgPool::connect(&format!("{postgres}/{name}"))
         .await
         .unwrap();
-    let migrator = sqlx::migrate!();
-    if let Some(version) = version {
-        migrator.run_to(version, &pool).await.unwrap();
-    } else {
-        migrator.run(&pool).await.unwrap();
-    }
+    sqlx::migrate!().run(&pool).await.unwrap();
     pool
 }
 
@@ -60,11 +55,17 @@ async fn prompt(pool: &PgPool, space: Uuid, name: &str) -> Result<Uuid, sqlx::Er
     Ok(id)
 }
 
-async fn agent(pool: &PgPool, space: Uuid) -> Uuid {
+async fn named_agent(pool: &PgPool, space: Uuid, name: &str) -> Result<Uuid, sqlx::Error> {
     let id = Uuid::new_v4();
-    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by) values($1,$2,$1,'native','assistant',$1::text,'{}','alice')")
-        .bind(id).bind(space).execute(pool).await.unwrap();
-    id
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$1,'native','assistant','Shared label','{}','alice',$3)")
+        .bind(id).bind(space).bind(name).execute(pool).await?;
+    Ok(id)
+}
+
+async fn agent(pool: &PgPool, space: Uuid) -> Uuid {
+    named_agent(pool, space, &Uuid::new_v4().to_string())
+        .await
+        .unwrap()
 }
 
 async fn session(
@@ -82,7 +83,7 @@ async fn session(
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn prompt_names_and_promotions_are_local_and_independent() {
-    let pool = database(None).await;
+    let pool = database().await;
     let spaces = spaces(&pool).await;
     let source = prompt(&pool, spaces[0], "resume").await.unwrap();
     for space in &spaces[1..] {
@@ -142,7 +143,7 @@ async fn prompt_names_and_promotions_are_local_and_independent() {
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn prompt_identity_and_edit_metadata_are_protected() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, _, _, _] = spaces(&pool).await;
     let id = prompt(&pool, org, "resume").await.unwrap();
     let initial: (String, String, bool) = sqlx::query_as(
@@ -204,7 +205,7 @@ async fn prompt_identity_and_edit_metadata_are_protected() {
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn chat_space_survives_agent_deletion_and_owns_attachments() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, team, project, _] = spaces(&pool).await;
     let instance = agent(&pool, org).await;
     let chat = session(&pool, project, instance, Some(org)).await.unwrap();
@@ -260,7 +261,7 @@ async fn chat_space_survives_agent_deletion_and_owns_attachments() {
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn session_requires_real_same_organization_association() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, _, project, _] = spaces(&pool).await;
     let other = spaces(&pool).await[0];
     let instance = agent(&pool, org).await;
@@ -303,75 +304,9 @@ async fn session_requires_real_same_organization_association() {
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
-async fn migration_recovers_known_deployment_without_inventing_deleted_agents() {
-    let pool = database(Some(7)).await;
-    let [org, _, project, _] = spaces(&pool).await;
-    let instance = agent(&pool, org).await;
-    let missing = Uuid::new_v4();
-    for agent in [instance, missing] {
-        sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$1,$1,'native','Assistant',1)")
-            .bind(agent).bind(project).execute(&pool).await.unwrap();
-    }
-    sqlx::migrate!().run(&pool).await.unwrap();
-    for (id, expected) in [(instance, Some(org)), (missing, None)] {
-        assert_eq!(
-            sqlx::query_scalar::<_, Option<Uuid>>(
-                "select agent_space_id from session_metadata where session_id=$1"
-            )
-            .bind(id)
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
-            expected
-        );
-        sqlx::query("update session_metadata set title='History' where session_id=$1")
-            .bind(id)
-            .execute(&pool)
-            .await
-            .unwrap();
-    }
-}
-
-#[tokio::test]
-#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
-async fn agent_metadata_preserves_unknown_history_and_requires_future_authors() {
-    let pool = database(Some(7)).await;
+async fn agent_metadata_requires_authors_and_protects_identity() {
+    let pool = database().await;
     let [org, _, _, _] = spaces(&pool).await;
-    let old = agent(&pool, org).await;
-    sqlx::query(
-        "update agent_instance set created_by=null,updated_by=null where agent_instance_id=$1",
-    )
-    .bind(old)
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
-    let history: (Option<String>, Option<String>) = sqlx::query_as(
-        "select created_by,updated_by from agent_instance where agent_instance_id=$1",
-    )
-    .bind(old)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(history, (None, None));
-    violation(
-        sqlx::query("update agent_instance set tuning='{\"x\":1}' where agent_instance_id=$1")
-            .bind(old)
-            .execute(&pool)
-            .await
-            .unwrap_err(),
-        "23514",
-    );
-    sqlx::query(
-        "update agent_instance set tuning='{\"x\":1}',updated_by='bob' where agent_instance_id=$1",
-    )
-    .bind(old)
-    .execute(&pool)
-    .await
-    .unwrap();
-    let edited: (Option<String>, String, bool) = sqlx::query_as("select created_by,updated_by,updated_at>created_at from agent_instance where agent_instance_id=$1")
-        .bind(old).fetch_one(&pool).await.unwrap();
-    assert_eq!(edited, (None, "bob".into(), true));
     let new = agent(&pool, org).await;
     assert!(sqlx::query_scalar::<_, bool>("select created_by=updated_by and created_at=updated_at from agent_instance where agent_instance_id=$1").bind(new).fetch_one(&pool).await.unwrap());
     for statement in [
@@ -401,7 +336,7 @@ async fn agent_metadata_preserves_unknown_history_and_requires_future_authors() 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn association_creation_holds_agent_until_commit_but_not_afterward() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, _, project, _] = spaces(&pool).await;
     let instance = agent(&pool, org).await;
     let mut creation = pool.begin().await.unwrap();
@@ -442,26 +377,14 @@ async fn association_creation_holds_agent_until_commit_but_not_afterward() {
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn assigned_agent_names_are_canonical_local_and_immutable() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, team, _, _] = spaces(&pool).await;
-    let source = agent(&pool, org).await;
-    let promoted = agent(&pool, team).await;
-    let duplicate = agent(&pool, org).await;
-    for instance in [source, promoted] {
-        sqlx::query("update agent_instance set logical_name='resume' where agent_instance_id=$1")
-            .bind(instance)
-            .execute(&pool)
-            .await
-            .unwrap();
-    }
+    let source = named_agent(&pool, org, "resume").await.unwrap();
+    let promoted = named_agent(&pool, team, "resume").await.unwrap();
     // Types have separate namespaces in the same space.
     prompt(&pool, org, "resume").await.unwrap();
     violation(
-        sqlx::query("update agent_instance set logical_name='resume' where agent_instance_id=$1")
-            .bind(duplicate)
-            .execute(&pool)
-            .await
-            .unwrap_err(),
+        named_agent(&pool, org, "resume").await.unwrap_err(),
         "23505",
     );
     for invalid in [
@@ -473,15 +396,7 @@ async fn assigned_agent_names_are_canonical_local_and_immutable() {
         "resume\n",
         &"a".repeat(65),
     ] {
-        violation(
-            sqlx::query("update agent_instance set logical_name=$2 where agent_instance_id=$1")
-                .bind(duplicate)
-                .bind(invalid)
-                .execute(&pool)
-                .await
-                .unwrap_err(),
-            "23514",
-        );
+        violation(named_agent(&pool, org, invalid).await.unwrap_err(), "23514");
     }
     for name in [Some("other"), None] {
         violation(

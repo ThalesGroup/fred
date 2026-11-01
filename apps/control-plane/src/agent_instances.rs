@@ -18,17 +18,19 @@ mod runtime;
 pub(crate) use runtime::{require_executable, resolve_person_runtime_binding};
 mod tuning;
 
+const PAGE_SIZE: usize = 100;
+
 pub struct NewAgentInstance {
     pub agent_instance_id: Uuid,
     pub space_id: Uuid,
     pub template_id: Uuid,
     pub source_runtime_id: String,
     pub source_agent_id: String,
+    pub logical_name: String,
     pub display_name: String,
     pub description: Option<String>,
     pub enabled: bool,
-    pub created_by: Option<String>,
-    pub updated_by: Option<String>,
+    pub created_by: String,
     /// Complete, already validated Swift tuning, including opaque capability envelopes.
     pub tuning: Value,
 }
@@ -40,11 +42,12 @@ pub struct AgentInstance {
     pub template_id: Uuid,
     pub source_runtime_id: String,
     pub source_agent_id: String,
+    pub logical_name: String,
     pub display_name: String,
     pub description: Option<String>,
     pub enabled: bool,
-    pub created_by: Option<String>,
-    pub updated_by: Option<String>,
+    pub created_by: String,
+    pub updated_by: String,
     pub configuration_revision: i64,
     pub tuning: Json<Value>,
     pub created_at: DateTime<Utc>,
@@ -52,7 +55,7 @@ pub struct AgentInstance {
 }
 
 /// Returns the inserted row in the same statement, including database timestamps.
-/// A name collision is SQLSTATE 23505 on `uq_agent_instance_space_name`.
+/// Logical-name collisions use the space-local unique constraint.
 pub async fn create<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     instance: &NewAgentInstance,
@@ -60,10 +63,10 @@ pub async fn create<'e>(
     sqlx::query_as(
         "insert into agent_instance (
             agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            display_name, description, enabled, created_by, updated_by, tuning
+            display_name, description, enabled, created_by, tuning, logical_name
         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         returning agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at",
+            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at",
     )
     .bind(instance.agent_instance_id)
     .bind(instance.space_id)
@@ -74,8 +77,8 @@ pub async fn create<'e>(
     .bind(&instance.description)
     .bind(instance.enabled)
     .bind(&instance.created_by)
-    .bind(&instance.updated_by)
     .bind(Json(&instance.tuning))
+    .bind(&instance.logical_name)
     .fetch_one(ex)
     .await
 }
@@ -87,7 +90,7 @@ pub async fn get_for_space<'e>(
 ) -> sqlx::Result<Option<AgentInstance>> {
     sqlx::query_as(
         "select agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at
+            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at
         from agent_instance where space_id = $1 and agent_instance_id = $2",
     )
     .bind(space_id)
@@ -96,16 +99,27 @@ pub async fn get_for_space<'e>(
     .await
 }
 
-pub async fn list_by_space<'e>(
+/// Policy filtering happens before pagination: neither a row nor a cursor can
+/// disclose an agent whose template is disabled in this organization. This uses
+/// the same authoritative policy relation as authorization::can_use_agent.
+pub(super) async fn list_by_space<'e>(
     ex: impl sqlx::PgExecutor<'e>,
-    space_id: Uuid,
+    space: &Space,
+    after: Option<&str>,
 ) -> sqlx::Result<Vec<AgentInstance>> {
     sqlx::query_as(
-        "select agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at
-        from agent_instance where space_id = $1 order by created_at, agent_instance_id",
+        "select a.agent_instance_id, a.space_id, a.template_id, a.source_runtime_id, a.source_agent_id,
+            a.logical_name, a.display_name, a.description, a.enabled, a.created_by, a.updated_by,
+            a.tuning, a.configuration_revision, a.created_at, a.updated_at
+        from agent_instance a join agent_template_policy policy
+            on policy.template_id = a.template_id and policy.organization_id = $2
+        where a.space_id = $1 and a.logical_name > coalesce($3, '')
+        order by a.logical_name limit $4",
     )
-    .bind(space_id)
+    .bind(space.id)
+    .bind(space.organization)
+    .bind(after)
+    .bind((PAGE_SIZE + 1) as i64)
     .fetch_all(ex)
     .await
 }
@@ -161,6 +175,8 @@ pub async fn selecting_in_organization<'e>(
 
 /// Writes only editable data; a no-op keeps both update attribution and timestamp.
 /// Callers must reread and patch under the existing space mutation lock.
+/// The database trigger owns update timestamps and no-op attribution; this
+/// statement owns the execution revision used to reject stale conversations.
 pub async fn update<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     instance: &AgentInstance,
@@ -171,13 +187,10 @@ pub async fn update<'e>(
             display_name = $3, description = $4, enabled = $5, tuning = $6,
             configuration_revision = case when (display_name, description, enabled, tuning)
                 is distinct from ($3, $4, $5, $6) then configuration_revision + 1 else configuration_revision end,
-            updated_at = case when (display_name, description, enabled, tuning)
-                is distinct from ($3, $4, $5, $6) then clock_timestamp() else updated_at end,
-            updated_by = case when (display_name, description, enabled, tuning)
-                is distinct from ($3, $4, $5, $6) then $7 else updated_by end
+            updated_by = $7
         where space_id = $1 and agent_instance_id = $2
         returning agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at",
+            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at",
     )
     .bind(instance.space_id)
     .bind(instance.agent_instance_id)

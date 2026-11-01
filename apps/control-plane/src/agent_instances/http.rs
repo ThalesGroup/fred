@@ -3,7 +3,7 @@
 
 //! Space-scoped instance management, without execution admission.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use anyhow::Context;
 use axum::{
@@ -12,7 +12,6 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
 };
 use chrono::{DateTime, Utc};
-use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;
@@ -23,13 +22,13 @@ use crate::{
     api::AppState,
     domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
-    extract::{ApiJson, ApiPath, present},
+    extract::{ApiJson, ApiPath, ApiQuery, present},
     model_catalog::instance::{self as models, ModelOfferKey, ModelOptions, SavedModelSettings},
     onboarding::AdmittedUser,
     spaces,
 };
 
-use super::{AgentInstance, NewAgentInstance, tuning};
+use super::{AgentInstance, NewAgentInstance, PAGE_SIZE, tuning};
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -38,6 +37,9 @@ pub struct CreateAgentInstanceRequest {
     pub template_id: Uuid,
     #[schema(min_length = 1, max_length = 255)]
     pub display_name: String,
+    /// Immutable space-local reference, independent of the mutable display label.
+    #[schema(min_length = 1, max_length = 64, pattern = "^[a-z0-9_-]{1,64}$")]
+    pub logical_name: String,
     #[schema(max_length = 500)]
     pub description: Option<String>,
     #[schema(min_length = 1, max_length = 255)]
@@ -116,6 +118,7 @@ pub struct ManagedAgentInstanceSummary {
     pub template_id: Uuid,
     pub source_runtime_id: String,
     pub source_agent_id: String,
+    pub logical_name: String,
     pub display_name: String,
     pub description: Option<String>,
     pub role: String,
@@ -129,8 +132,8 @@ pub struct ManagedAgentInstanceSummary {
     pub status: AgentInstanceStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub created_by: Option<String>,
-    pub updated_by: Option<String>,
+    pub created_by: String,
+    pub updated_by: String,
     pub tuning_field_values: BTreeMap<String, Value>,
     pub selected_capability_ids: Option<Vec<String>>,
     pub capability_config: BTreeMap<String, BTreeMap<String, Value>>,
@@ -166,6 +169,7 @@ fn record_to_summary(record: AgentInstance) -> AppResult<ManagedAgentInstanceSum
         template_id: record.template_id,
         source_runtime_id: record.source_runtime_id,
         source_agent_id: record.source_agent_id,
+        logical_name: record.logical_name,
         display_name: record.display_name,
         description: record.description,
         role: tuning.role,
@@ -268,11 +272,11 @@ async fn create_agent_instance(
         template_id: template.template_id,
         source_runtime_id: template.source_runtime_id,
         source_agent_id: template.source_agent_id,
+        logical_name: body.logical_name,
         display_name: body.display_name,
         description: body.description,
         enabled: true,
-        created_by: Some(user.uid.clone()),
-        updated_by: None,
+        created_by: user.uid.clone(),
         tuning,
     };
     let mut tx = spaces::lock_for(&s.pool, &space).await?;
@@ -291,11 +295,27 @@ async fn create_agent_instance(
     Ok((StatusCode::CREATED, Json(summary)))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentQuery {
+    after: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct AgentInstancePage {
+    /// Authorized instances in immutable logical-name order; at most 100 rows.
+    #[schema(max_items = 100)]
+    pub items: Vec<ManagedAgentInstanceSummary>,
+    /// Follow until null. Pages are current reads, not a snapshot.
+    #[schema(required = true)]
+    pub next_cursor: Option<String>,
+}
+
 #[utoipa::path(
     get, path = "/spaces/{space_id}/agent-instances",
-    params(("space_id" = Uuid, Path)),
+    params(("space_id" = Uuid, Path), ("after" = Option<String>, Query, description = "Previous page cursor")),
     responses(
-        (status = 200, body = [ManagedAgentInstanceSummary]),
+        (status = 200, body = AgentInstancePage),
         (status = 400, body = crate::error::ErrorBody),
         (status = 401, body = crate::error::ErrorBody),
         (status = 403, body = crate::error::ErrorBody),
@@ -310,7 +330,8 @@ async fn list_agent_instances(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(space_id): ApiPath<Uuid>,
-) -> AppResult<Json<Vec<ManagedAgentInstanceSummary>>> {
+    ApiQuery(query): ApiQuery<AgentQuery>,
+) -> AppResult<Json<AgentInstancePage>> {
     let space = spaces::authorize(
         &s.pool,
         &s.authorization,
@@ -320,26 +341,25 @@ async fn list_agent_instances(
     )
     .await?;
     require_instance_space(space.kind)?;
-    let records = super::list_by_space(&s.pool, space_id).await?;
-    let template_ids: BTreeSet<_> = records.iter().map(|record| record.template_id).collect();
-    let authorization = &s.authorization;
-    let space = &space;
-    let template_use: BTreeMap<_, _> = futures::stream::iter(template_ids)
-        .map(|template_id| async move {
-            authorization
-                .can_use_agent(template_id, space)
-                .await
-                .map(|allowed| (template_id, allowed))
-        })
-        .buffered(crate::authorization::READ_CONCURRENCY)
-        .try_collect()
-        .await?;
-    let instances = records
+    if query
+        .after
+        .as_deref()
+        .is_some_and(|name| !crate::domain::valid_logical_name(name))
+    {
+        return Err(AppError::BadRequest("invalid agent catalog cursor".into()));
+    }
+    let mut records = super::list_by_space(&s.pool, &space, query.after.as_deref()).await?;
+    let next_cursor = if records.len() > PAGE_SIZE {
+        records.truncate(PAGE_SIZE);
+        records.last().map(|record| record.logical_name.clone())
+    } else {
+        None
+    };
+    let items = records
         .into_iter()
-        .filter(|record| template_use.get(&record.template_id) == Some(&true))
         .map(record_to_summary)
         .collect::<AppResult<Vec<_>>>()?;
-    Ok(Json(instances))
+    Ok(Json(AgentInstancePage { items, next_cursor }))
 }
 
 #[utoipa::path(
@@ -386,12 +406,12 @@ async fn get_agent_instance(
 
 fn instance_write_error(error: sqlx::Error) -> AppError {
     if error.as_database_error().is_some_and(|db| {
-        db.is_unique_violation() && db.constraint() == Some("uq_agent_instance_space_name")
+        db.is_unique_violation() && db.constraint() == Some("agent_instance_space_logical_name_key")
     }) {
         AppError::problem(
             StatusCode::CONFLICT,
             "agent_name_conflict",
-            "An agent with this name already exists in this space.",
+            "An agent with this logical name already exists in this space.",
         )
     } else {
         error.into()

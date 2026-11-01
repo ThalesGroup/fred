@@ -18,21 +18,22 @@ import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { PromptCategory } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  type PromptCategorySummary,
-  useDeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteMutation,
-  usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation,
-  usePutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutMutation,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+  useDeletePromptCategoryMutation,
+  useCreatePromptCategoryMutation,
+  useRenamePromptCategoryMutation,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { agentErrorText } from "../../TeamAgentsPage/weaverAgents";
 import styles from "./ManageCategoriesDialog.module.scss";
 
 interface ManageCategoriesDialogProps {
   open: boolean;
-  teamId: string;
-  categories: PromptCategorySummary[];
-  /** Category ids currently referenced by at least one prompt in the team —
+  spaceId: string;
+  categories: PromptCategory[];
+  /** Category ids currently referenced by at least one prompt in the space —
    *  their delete action is disabled (matches the backend's 409 rule, but
    *  pre-empts the round trip). */
   usedCategoryIds: Set<string>;
@@ -50,13 +51,9 @@ interface DraftCategory {
   originalName: string;
 }
 
-function apiErrorDetail(error: unknown): string | undefined {
-  return (error as { data?: { detail?: string }; message?: string } | undefined)?.data?.detail;
-}
-
 export default function ManageCategoriesDialog({
   open,
-  teamId,
+  spaceId,
   categories,
   usedCategoryIds,
   onClose,
@@ -72,25 +69,34 @@ export default function ManageCategoriesDialog({
   const [editingName, setEditingName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const [createCategory] = usePostTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesPostMutation();
-  const [updateCategory] = usePutTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdPutMutation();
-  const [deleteCategory] =
-    useDeleteTeamPromptCategoryControlPlaneV1TeamsTeamIdPromptCategoriesCategoryIdDeleteMutation();
+  const [createCategory] = useCreatePromptCategoryMutation();
+  const [updateCategory] = useRenamePromptCategoryMutation();
+  const [deleteCategory] = useDeletePromptCategoryMutation();
+
+  const wasOpen = useRef(false);
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
 
   // Fresh draft from the latest server state every time the dialog opens —
   // never leaks the previous run's uncommitted edits into a new session.
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpen.current) {
       setDrafts(categories.map((c) => ({ key: c.id, id: c.id, name: c.name, originalName: c.name })));
       setDeletedIds(new Set());
       setNewName("");
       setEditingKey(null);
       setEditingName("");
     }
+    wasOpen.current = open;
   }, [open, categories]);
 
   const cancel = () => {
-    onClose();
+    if (!isSaving) onClose();
   };
 
   const handleAddDraft = () => {
@@ -126,64 +132,57 @@ export default function ManageCategoriesDialog({
   };
 
   const handleSave = async () => {
+    if (isSaving || editingKey) return;
     setIsSaving(true);
-
-    const operations: Promise<unknown>[] = [];
-
+    let failed = false;
+    // Deletions free names before renames/creates. Successful writes are removed
+    // from the draft, so a partial failure can be retried without replaying them.
+    const apply = async (operation: () => Promise<void>, errorKey: string) => {
+      try {
+        await operation();
+      } catch (error) {
+        failed = true;
+        const code = (error as { data?: { code?: string } })?.data?.code;
+        const detail =
+          code === "prompt_category_name_conflict"
+            ? t("rework.promptCategories.nameConflict")
+            : code === "prompt_category_conflict"
+              ? t("rework.promptCategories.categoryConflict")
+              : agentErrorText(error, t);
+        if (live.current) showError({ summary: t(errorKey), detail });
+      }
+    };
     for (const id of deletedIds) {
-      operations.push(
-        deleteCategory({ teamId, categoryId: id })
-          .unwrap()
-          .catch((error: unknown) => {
-            showError({
-              summary: t("rework.promptCategories.manage.deleteError"),
-              detail: apiErrorDetail(error) ?? t("rework.promptCategories.manage.genericError"),
-            });
-            throw error;
-          }),
-      );
+      if (!live.current) break;
+      await apply(async () => {
+        await deleteCategory({ spaceId, categoryId: id }).unwrap();
+        setDeletedIds((ids) => new Set([...ids].filter((value) => value !== id)));
+      }, "rework.promptCategories.manage.deleteError");
     }
     for (const draft of drafts) {
+      if (!live.current) break;
       const name = draft.name.trim();
-      if (!name) continue;
-      if (draft.id) {
-        if (name !== draft.originalName) {
-          operations.push(
-            updateCategory({ teamId, categoryId: draft.id, updatePromptCategoryRequest: { name } })
-              .unwrap()
-              .catch((error: unknown) => {
-                showError({
-                  summary: t("rework.promptCategories.manage.renameError"),
-                  detail: apiErrorDetail(error) ?? t("rework.promptCategories.manage.genericError"),
-                });
-                throw error;
-              }),
+      if (!name || (draft.id && name === draft.originalName)) continue;
+      await apply(
+        async () => {
+          const saved = await (
+            draft.id
+              ? updateCategory({ spaceId, categoryId: draft.id, promptCategoryRequest: { name } })
+              : createCategory({ spaceId, promptCategoryRequest: { name } })
+          ).unwrap();
+          setDrafts((rows) =>
+            rows.map((row) =>
+              row.key === draft.key ? { ...row, id: saved.id, name: saved.name, originalName: saved.name } : row,
+            ),
           );
-        }
-      } else {
-        operations.push(
-          createCategory({ teamId, createPromptCategoryRequest: { name } })
-            .unwrap()
-            .catch((error: unknown) => {
-              showError({
-                summary: t("rework.promptCategories.manage.createError"),
-                detail: apiErrorDetail(error) ?? t("rework.promptCategories.manage.genericError"),
-              });
-              throw error;
-            }),
-        );
-      }
+        },
+        draft.id ? "rework.promptCategories.manage.renameError" : "rework.promptCategories.manage.createError",
+      );
     }
-
-    const results = await Promise.allSettled(operations);
+    if (!live.current) return;
     setIsSaving(false);
     onChanged();
-    // Only close on a fully clean save — a partial failure leaves the dialog
-    // open, already-committed rows shown by their next `onChanged()` refetch,
-    // so the user can see what still needs fixing and retry just that.
-    if (results.every((r) => r.status === "fulfilled")) {
-      onClose();
-    }
+    if (!failed) onClose();
   };
 
   return (
@@ -195,6 +194,7 @@ export default function ManageCategoriesDialog({
 
         <div className={styles.createRow}>
           <TextInput
+            disabled={isSaving}
             compact
             size="small"
             value={newName}
@@ -203,7 +203,13 @@ export default function ManageCategoriesDialog({
             maxLength={120}
             onKeyDown={(e) => e.key === "Enter" && handleAddDraft()}
           />
-          <Button color="primary" variant="filled" size="medium" disabled={!newName.trim()} onClick={handleAddDraft}>
+          <Button
+            color="primary"
+            variant="filled"
+            size="medium"
+            disabled={isSaving || !newName.trim()}
+            onClick={handleAddDraft}
+          >
             {t("rework.promptCategories.manage.create")}
           </Button>
         </div>
@@ -219,6 +225,7 @@ export default function ManageCategoriesDialog({
                 <li key={draft.key} className={styles.row}>
                   {isEditing ? (
                     <TextInput
+                      disabled={isSaving}
                       compact
                       size="small"
                       value={editingName}
@@ -231,7 +238,9 @@ export default function ManageCategoriesDialog({
                       }}
                     />
                   ) : (
-                    <span className={styles.name}>{draft.name}</span>
+                    <span className={styles.name} title={draft.name}>
+                      {draft.name}
+                    </span>
                   )}
                   <div className={styles.actions}>
                     {isEditing ? (
@@ -242,7 +251,7 @@ export default function ManageCategoriesDialog({
                             color="primary"
                             variant="filled"
                             icon={{ category: "outlined", type: "check" }}
-                            disabled={!editingName.trim()}
+                            disabled={isSaving || !editingName.trim()}
                             aria-label={t("rework.promptCategories.manage.saveAria")}
                             onClick={commitEdit}
                           />
@@ -254,6 +263,7 @@ export default function ManageCategoriesDialog({
                             variant="icon"
                             icon={{ category: "outlined", type: "close" }}
                             aria-label={t("rework.promptCategories.manage.cancelEditAria")}
+                            disabled={isSaving}
                             onClick={cancelEdit}
                           />
                         </Tooltip>
@@ -267,6 +277,7 @@ export default function ManageCategoriesDialog({
                             variant="icon"
                             icon={{ category: "outlined", type: "edit" }}
                             aria-label={t("rework.promptCategories.manage.editAria", { name: draft.name })}
+                            disabled={isSaving}
                             onClick={() => startEdit(draft)}
                           />
                         </Tooltip>
@@ -282,7 +293,7 @@ export default function ManageCategoriesDialog({
                             color="error"
                             variant="icon"
                             icon={{ category: "outlined", type: "delete" }}
-                            disabled={isInUse}
+                            disabled={isSaving || isInUse}
                             aria-label={t("rework.promptCategories.manage.deleteAria", { name: draft.name })}
                             onClick={() => removeDraft(draft)}
                           />
@@ -300,7 +311,13 @@ export default function ManageCategoriesDialog({
           <Button color="on-surface" variant="text" size="medium" disabled={isSaving} onClick={cancel}>
             {t("rework.cancel")}
           </Button>
-          <Button color="primary" variant="filled" size="medium" disabled={isSaving} onClick={handleSave}>
+          <Button
+            color="primary"
+            variant="filled"
+            size="medium"
+            disabled={isSaving || editingKey !== null}
+            onClick={handleSave}
+          >
             {t("rework.save")}
           </Button>
         </div>

@@ -45,19 +45,22 @@ vi.mock("react-i18next", () => {
   };
 });
 
-// One context prompt → the library exists (hasLibrary), so auto-open logic applies.
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({
-    data: [{ id: "p1", name: "Prompt 1", scope: "team" }],
+const fetchPrompt = vi.hoisted(() => vi.fn());
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePromptCatalogQuery: () => ({
+    currentData: { items: [{ prompt_id: "p1", display_name: "Prompt 1" }], next_cursor: null },
   }),
-  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: () => ({ data: [] }),
-  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [vi.fn(), { isLoading: false }],
-  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation: () => [vi.fn()],
+  useListPromptCategoriesQuery: () => ({ currentData: { items: [], next_cursor: null } }),
+  useLazyGetPromptQuery: () => [fetchPrompt, { isLoading: false }],
 }));
 
 // Keep the picker a simple marker so its presence is trivial to assert.
 vi.mock("@shared/molecules/PromptPicker/PromptPicker", () => ({
-  PromptPicker: () => <div data-testid="prompt-picker" />,
+  PromptPicker: ({ onSelect }: { onSelect: (id: string) => void }) => (
+    <button data-testid="prompt-picker" onClick={() => onSelect("p1")}>
+      Pick
+    </button>
+  ),
 }));
 
 // Stand in for the CodeMirror editor with a textarea: what is under test here
@@ -252,4 +255,30 @@ describe("TuningFieldRenderer when the form is read-only", () => {
 
     expect((container.querySelector('input[type="checkbox"]') as HTMLInputElement).disabled).toBe(false);
   });
+});
+
+it("does not insert a prompt fetched for a previous space", async () => {
+  let resolve!: (detail: { text: string }) => void;
+  const abort = vi.fn();
+  fetchPrompt.mockReturnValueOnce({
+    abort,
+    unwrap: () =>
+      new Promise<{ text: string }>((done) => {
+        resolve = done;
+      }),
+  });
+  const onChange = vi.fn();
+  const render = (teamId: string) =>
+    act(() =>
+      root.render(
+        <TuningFieldRenderer field={PROMPT_FIELD} value="" disabled={false} teamId={teamId} onChange={onChange} />,
+      ),
+    );
+  render("old-space");
+  act(() => container.querySelector<HTMLButtonElement>('[data-testid="prompt-picker"]')!.click());
+  expect(fetchPrompt).toHaveBeenCalledWith({ spaceId: "old-space", promptId: "p1" }, false);
+  render("new-space");
+  expect(abort).toHaveBeenCalledOnce();
+  await act(async () => resolve({ text: "Old space content" }));
+  expect(onChange).not.toHaveBeenCalled();
 });

@@ -208,6 +208,8 @@ async fn prompts_lifecycle_preserves_content_and_server_attribution() {
     for (field, value) in [
         ("created_by", json!("forged")),
         ("text", json!("\0")),
+        ("text", json!("")),
+        ("text", json!(" \r\n\t\u{a0}")),
         ("description", json!("\0")),
         ("description", json!("🙂".repeat(501))),
     ] {
@@ -238,7 +240,7 @@ async fn prompts_lifecycle_preserves_content_and_server_attribution() {
         json!({"description":"é".repeat(499)}),
         json!({"description":"🙂".repeat(500)}),
         json!({"description":null}),
-        json!({"description":"","text":""}),
+        json!({"description":"","text":"nonblank"}),
         json!({"display_name":"Renamed"}),
     ] {
         let (status, edited) =
@@ -261,10 +263,10 @@ async fn prompts_lifecycle_preserves_content_and_server_attribution() {
         &app,
         &identity,
         team.id,
-        json!({"logical_name":"a".repeat(64),"display_name":"Empty","text":""}),
+        json!({"logical_name":"a".repeat(64),"display_name":"No description","text":"Text"}),
     )
     .await;
-    assert_eq!(empty["text"], "");
+    assert_eq!(empty["text"], "Text");
     assert_eq!(empty["description"], Value::Null);
     assert_eq!(
         request(&app, &identity, Some("alice"), "DELETE", &path, Value::Null).await,
@@ -372,12 +374,18 @@ async fn prompts_authorization_admission_and_placement() {
     ] {
         let catalog = collection(space);
         let item = format!("{catalog}/{id}");
+        let categories = format!("/spaces/{space}/prompt-categories");
+        let category = format!("{categories}/{id}");
         for (method, path, body, expected) in [
             ("GET", &catalog, Value::Null, read),
             ("GET", &item, Value::Null, read),
             ("POST", &catalog, creation("denied"), write),
             ("PATCH", &item, json!({"text":"denied"}), write),
             ("DELETE", &item, Value::Null, write),
+            ("GET", &categories, Value::Null, read),
+            ("POST", &categories, json!({"name":"Denied"}), write),
+            ("PATCH", &category, json!({"name":"Denied"}), write),
+            ("DELETE", &category, Value::Null, write),
         ] {
             let (status, result) = request(&app, &identity, actor, method, path, body).await;
             assert_eq!(status, expected, "{label} {method} {path}: {result}");
@@ -659,4 +667,536 @@ async fn prompts_competing_creates_and_independent_patches_persist() {
     assert_eq!(status, 200, "{read}");
     assert_eq!(read["description"], persisted.0);
     assert_eq!(read["text"], persisted.1);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn prompt_categories_are_space_owned_and_protect_used_categories() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    grant(&e, org.id, Role::Member, "reader").await;
+    grant(&e, team.id, Role::Member, "reader").await;
+    for actor in ["alice", "reader"] {
+        admit(&e, actor).await;
+    }
+    let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
+        .await
+        .unwrap();
+    let identity = IdentityServer::start().await;
+    let app = app(&e, &identity).await;
+    let categories = format!("/spaces/{}/prompt-categories", team.id);
+    let (status, category) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &categories,
+        json!({"name":"  Analyse  "}),
+    )
+    .await;
+    assert_eq!(status, 201, "{category}");
+    assert_eq!(category["name"], "Analyse");
+    let category_path = format!("{categories}/{}", category["id"].as_str().unwrap());
+    let (status, duplicate) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &categories,
+        json!({"name":"Analyse"}),
+    )
+    .await;
+    assert_eq!(status, 409);
+    assert_eq!(duplicate["code"], "prompt_category_name_conflict");
+    for invalid in ["".to_owned(), " ".into(), "x".repeat(121), "a\nb".into()] {
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "POST",
+                &categories,
+                json!({"name":invalid})
+            )
+            .await
+            .0,
+            422
+        );
+    }
+    let (status, listed) = request(
+        &app,
+        &identity,
+        Some("reader"),
+        "GET",
+        &categories,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(listed["items"], json!([category.clone()]));
+    for (method, path, body) in [
+        ("POST", &categories, json!({"name":"Denied"})),
+        ("PATCH", &category_path, json!({"name":"Denied"})),
+        ("DELETE", &category_path, Value::Null),
+    ] {
+        assert_eq!(
+            request(&app, &identity, Some("reader"), method, path, body)
+                .await
+                .0,
+            403
+        );
+    }
+    let personal_categories = format!("/spaces/{}/prompt-categories", personal.id);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("reader"),
+            "GET",
+            &personal_categories,
+            Value::Null
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &personal_categories,
+            json!({"name":"Analyse"})
+        )
+        .await
+        .0,
+        201
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &format!("{personal_categories}/{}", category["id"].as_str().unwrap()),
+            json!({"name":"Foreign"})
+        )
+        .await
+        .0,
+        404
+    );
+
+    let mut body = creation("classified");
+    body["category_id"] = category["id"].clone();
+    let prompt = create(&app, &identity, team.id, body.clone()).await;
+    assert_eq!(prompt["category_id"], category["id"]);
+    // Even a writer of both spaces cannot assign another space's category.
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &collection(personal.id),
+            body
+        )
+        .await
+        .0,
+        409
+    );
+    let item = format!(
+        "{}/{}",
+        collection(team.id),
+        prompt["prompt_id"].as_str().unwrap()
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "DELETE",
+            &category_path,
+            Value::Null
+        )
+        .await
+        .0,
+        409
+    );
+    let (status, kept) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PATCH",
+        &item,
+        json!({"description":"Changed"}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(kept["category_id"], category["id"]);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &category_path,
+            json!({"name":"Research"})
+        )
+        .await
+        .0,
+        200
+    );
+    let (status, cleared) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PATCH",
+        &item,
+        json!({"category_id":null}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert!(cleared["category_id"].is_null());
+    assert_ne!(cleared["updated_at"], kept["updated_at"]);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &item,
+            json!({"category_id":null})
+        )
+        .await,
+        (200, cleared)
+    );
+
+    // Assignment and deletion serialize; either assignment wins and deletion is
+    // refused, or deletion wins and assignment is refused. Never a dangling id.
+    let (assignment, deletion) = tokio::join!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &item,
+            json!({"category_id":category["id"]})
+        ),
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "DELETE",
+            &category_path,
+            Value::Null
+        ),
+    );
+    assert!(matches!(
+        (assignment.0, deletion.0),
+        (200, 409) | (409, 204)
+    ));
+    // Restore a used category to exercise both cascades on enclosing-space purge.
+    let (status, purge_category) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &categories,
+        json!({"name":"Purge"}),
+    )
+    .await;
+    assert_eq!(status, 201);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &item,
+            json!({"category_id":purge_category["id"]})
+        )
+        .await
+        .0,
+        200
+    );
+    sqlx::query("delete from space where id=$1")
+        .bind(team.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    for query in [
+        "select count(*) from prompt where space_id=$1",
+        "select count(*) from prompt_category where space_id=$1",
+    ] {
+        let count: i64 = sqlx::query_scalar(query)
+            .bind(team.id)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn prompt_category_pagination_survives_renaming() {
+    let e = env().await;
+    let (_, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    admit(&e, "alice").await;
+    let identity = IdentityServer::start().await;
+    let app = app(&e, &identity).await;
+    let ids: Vec<Uuid> = (1..=101).map(Uuid::from_u128).collect();
+    sqlx::query("insert into prompt_category(id,space_id,name) select id,$1,id::text from unnest($2::uuid[]) id")
+        .bind(team.id).bind(&ids).execute(&e.pool).await.unwrap();
+    let path = format!("/spaces/{}/prompt-categories", team.id);
+    let (status, first) = request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await;
+    assert_eq!(status, 200);
+    assert_eq!(first["items"].as_array().unwrap().len(), 100);
+    assert_eq!(first["next_cursor"], ids[99].to_string());
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &format!("{path}/{}", ids[99]),
+            json!({"name":"Renamed"})
+        )
+        .await
+        .0,
+        200
+    );
+    let (status, last) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!("{path}?after={}", ids[99]),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(last["items"].as_array().unwrap().len(), 1);
+    assert_eq!(last["items"][0]["id"], ids[100].to_string());
+    assert!(last["next_cursor"].is_null());
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn prompt_tags_and_caller_favorites_preserve_access_and_attribution() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    grant(&e, org.id, Role::Member, "reader").await;
+    grant(&e, team.id, Role::Member, "reader").await;
+    for actor in ["alice", "reader", "outsider"] {
+        admit(&e, actor).await;
+    }
+    let identity = IdentityServer::start().await;
+    let app = app(&e, &identity).await;
+    let mut body = creation("tagged");
+    body["tags"] = json!(["  Re\u{301}sume\u{301} ", "Résumé", "work"]);
+    let initial = create(&app, &identity, team.id, body).await;
+    assert_eq!(initial["tags"], json!(["Résumé", "work"]));
+    assert_eq!(initial["is_favorite"], false);
+    let id = initial["prompt_id"].as_str().unwrap();
+    let path = format!("{}/{id}", collection(team.id));
+    let favorite = format!("{path}/favorite");
+    for method in ["PUT", "PUT"] {
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("reader"),
+                method,
+                &favorite,
+                Value::Null
+            )
+            .await
+            .0,
+            204
+        );
+    }
+    // A reader can change their preference, never the authored content.
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("reader"),
+            "PATCH",
+            &path,
+            json!({"tags":[]})
+        )
+        .await
+        .0,
+        403
+    );
+    let (_, mut read) = request(&app, &identity, Some("reader"), "GET", &path, Value::Null).await;
+    assert_eq!(read["is_favorite"], true);
+    read["is_favorite"] = json!(false);
+    assert_eq!(read, initial);
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "GET", &path, Value::Null)
+            .await
+            .1,
+        initial
+    );
+    let (_, listed) = request(
+        &app,
+        &identity,
+        Some("reader"),
+        "GET",
+        &collection(team.id),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(listed["items"][0]["is_favorite"], true);
+    assert_eq!(listed["items"][0]["tags"], initial["tags"]);
+    for method in ["PUT", "DELETE"] {
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("outsider"),
+                method,
+                &favorite,
+                Value::Null
+            )
+            .await
+            .0,
+            404
+        );
+        let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
+            .await
+            .unwrap();
+        let wrong_space = format!("{}/{id}/favorite", collection(personal.id));
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                method,
+                &wrong_space,
+                Value::Null
+            )
+            .await
+            .0,
+            404
+        );
+    }
+    spaces::revoke(&e.pool, "alice", team.id, Role::Member, "reader")
+        .await
+        .unwrap();
+    assert_eq!(
+        request(&app, &identity, Some("reader"), "GET", &path, Value::Null)
+            .await
+            .0,
+        403
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("reader"),
+            "PUT",
+            &favorite,
+            Value::Null
+        )
+        .await
+        .0,
+        403
+    );
+    grant(&e, team.id, Role::Member, "reader").await;
+    assert_eq!(
+        request(&app, &identity, Some("reader"), "GET", &path, Value::Null)
+            .await
+            .1["is_favorite"],
+        true
+    );
+    for tags in [
+        json!([""]),
+        json!(["\n"]),
+        json!(["x\0"]),
+        json!(["a".repeat(65)]),
+        json!(vec!["a"; 21]),
+    ] {
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PATCH",
+                &path,
+                json!({"tags":tags})
+            )
+            .await
+            .0,
+            422
+        );
+    }
+    let (status, cleared) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PATCH",
+        &path,
+        json!({"tags":[]}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(cleared["tags"], json!([]));
+    assert!(cleared["updated_at"].as_str().unwrap() > initial["updated_at"].as_str().unwrap());
+    for patch in [json!({}), json!({"tags":null}), json!({"tags":[]})] {
+        assert_eq!(
+            request(&app, &identity, Some("alice"), "PATCH", &path, patch)
+                .await
+                .1,
+            cleared
+        );
+    }
+    for method in ["DELETE", "DELETE", "PUT"] {
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("reader"),
+                method,
+                &favorite,
+                Value::Null
+            )
+            .await
+            .0,
+            204
+        );
+    }
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "DELETE", &path, Value::Null)
+            .await
+            .0,
+        204
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from prompt_favorite where prompt_id=$1")
+            .bind(Uuid::parse_str(id).unwrap())
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("reader"),
+            "PUT",
+            &favorite,
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
 }

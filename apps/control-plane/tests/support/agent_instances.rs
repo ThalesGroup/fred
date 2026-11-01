@@ -172,7 +172,7 @@ fn item(space: Uuid, instance: &Value) -> String {
     )
 }
 fn creation(template: Uuid, name: &str) -> Value {
-    json!({"template_id":template,"display_name":name,"usage_statement":"Use me"})
+    json!({"template_id":template,"logical_name":Uuid::new_v4().to_string(),"display_name":name,"usage_statement":"Use me"})
 }
 async fn saved(e: &Env, space: Uuid, instance: &Value) -> storage::AgentInstance {
     storage::get_for_space(
@@ -269,7 +269,7 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
             Value::Null
         )
         .await,
-        (200, json!([first]))
+        (200, json!({"items":[first],"next_cursor":null}))
     );
     body["display_name"] = json!("my AGENT");
     let conflict = request(
@@ -323,24 +323,10 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
         .await;
         assert_eq!(response.0, 422, "{values}: {response:?}");
     }
-    for patch in [
-        json!({"display_name":"Second"}),
-        json!({"display_name":" second "}),
-    ] {
-        assert_eq!(
-            request(
-                &app,
-                &identity,
-                Some("alice"),
-                "PATCH",
-                &item(team.id, &first),
-                patch
-            )
-            .await
-            .0,
-            409
-        );
-    }
+    // Display labels can collide; immutable logical names alone are unique.
+    let same_label = create(&app, &identity, team.id, creation(template, "My Agent")).await;
+    assert_ne!(same_label["logical_name"], first["logical_name"]);
+    assert_eq!(same_label["display_name"], first["display_name"]);
     let before = saved(&e, team.id, &first).await;
     for patch in [
         json!({}),
@@ -405,7 +391,7 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
     )
     .await;
     assert_eq!(listed.0, 200);
-    assert_eq!(listed.1[0], renamed.1);
+    assert!(listed.1["items"].as_array().unwrap().contains(&renamed.1));
     assert_eq!(catalog.state.lock().await.calls, calls);
     // Tuning alone falls back; capabilities always require the current catalog.
     let replaced = request(
@@ -520,11 +506,11 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
             Value::Null
         )
         .await
-        .1
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|v| v["agent_instance_id"] != first["agent_instance_id"])
+        .1["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|v| v["agent_instance_id"] != first["agent_instance_id"])
     );
     create(&app, &identity, team.id, creation(template, "Renamed")).await;
 }
@@ -770,7 +756,7 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
             Value::Null
         )
         .await,
-        (200, json!([personal_instance]))
+        (200, json!({"items":[personal_instance],"next_cursor":null}))
     );
     let other = support::member_organization(&e.pool, &e.authorization, "Other", "bob")
         .await
@@ -891,10 +877,11 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
         assert_eq!(pending.await.unwrap().0, 404);
     }
     assert_eq!(
-        storage::list_by_space(&e.pool, team.id)
+        sqlx::query_scalar::<_, i64>("select count(*) from agent_instance where space_id=$1")
+            .bind(team.id)
+            .fetch_one(&e.pool)
             .await
-            .unwrap()
-            .len(),
+            .unwrap(),
         1
     );
     assert_eq!(
@@ -911,7 +898,7 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
             Value::Null
         )
         .await,
-        (200, json!([]))
+        (200, json!({"items":[],"next_cursor":null}))
     );
     for method in ["GET", "PATCH"] {
         assert_eq!(
@@ -999,10 +986,11 @@ async fn instances_retention_and_exact_space_purge() {
     assert_eq!(pending.await.unwrap().0, 409);
     cleanup::batch(&e.pool, receipt.id).await.unwrap();
     assert_eq!(
-        storage::list_by_space(&e.pool, team.id)
+        sqlx::query_scalar::<_, i64>("select count(*) from agent_instance where space_id=$1")
+            .bind(team.id)
+            .fetch_one(&e.pool)
             .await
-            .unwrap()
-            .len(),
+            .unwrap(),
         1
     );
     for method in ["GET", "PATCH", "DELETE"] {
@@ -1056,11 +1044,13 @@ async fn instances_retention_and_exact_space_purge() {
             .status,
         Status::Completed
     );
-    assert!(
-        storage::list_by_space(&e.pool, team.id)
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from agent_instance where space_id=$1")
+            .bind(team.id)
+            .fetch_one(&e.pool)
             .await
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        0
     );
     assert_eq!(
         saved(&e, personal.id, &other).await.display_name,
@@ -1076,12 +1066,16 @@ async fn instances_store_tuning_opaquely() {
     let org = org.id;
     let mut conn = e.pool.acquire().await.unwrap();
     for (n,tuning) in [Value::Null,json!({"unknown":{"nested":[null,{},[]]},"selected_capability_ids":null,"capability_config":{"tool":{"schema_version":2,"config":{"nested":{"list":[1,false]}}}}}),json!({"selected_capability_ids":[]})].into_iter().enumerate() {
-        let record=storage::create(&mut *conn,&storage::NewAgentInstance{agent_instance_id:Uuid::new_v4(),space_id:org,template_id:Uuid::new_v4(),source_runtime_id:"fixture".into(),source_agent_id:"opaque".into(),display_name:format!("  Opaque {n}  "),description:None,enabled:false,created_by:Some("fixture-author".into()),updated_by:None,tuning:tuning.clone()}).await.unwrap();
+        let record=storage::create(&mut *conn,&storage::NewAgentInstance{agent_instance_id:Uuid::new_v4(),space_id:org,template_id:Uuid::new_v4(),source_runtime_id:"fixture".into(),source_agent_id:"opaque".into(),logical_name:format!("opaque-{n}"),display_name:format!("  Opaque {n}  "),description:None,enabled:false,created_by:"fixture-author".into(),tuning:tuning.clone()}).await.unwrap();
         assert_eq!(record.tuning.0,tuning);assert_eq!(record.display_name,format!("Opaque {n}"));
         assert_eq!(storage::get_for_space(&mut *conn,org,record.agent_instance_id).await.unwrap().unwrap().tuning.0,tuning);
     }
     assert_eq!(
-        storage::list_by_space(&mut *conn, org).await.unwrap().len(),
+        sqlx::query_scalar::<_, i64>("select count(*) from agent_instance where space_id=$1")
+            .bind(org)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap(),
         3
     );
 }
@@ -1128,10 +1122,11 @@ async fn instances_space_revocation_during_discovery_preserves_configuration() {
         assert_eq!(pending.await.unwrap().0, 403);
     }
     assert_eq!(
-        storage::list_by_space(&e.pool, team.id)
+        sqlx::query_scalar::<_, i64>("select count(*) from agent_instance where space_id=$1")
+            .bind(team.id)
+            .fetch_one(&e.pool)
             .await
-            .unwrap()
-            .len(),
+            .unwrap(),
         1
     );
     assert_eq!(
@@ -1609,3 +1604,154 @@ async fn runtime_binding_lists_all_eligible_conversation_attachments() {
 
 #[path = "model_catalog.rs"]
 mod model_catalog;
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn instances_logical_identity_and_authorized_catalog_pagination() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let catalog = Catalog::start().await;
+    let identity = support::IdentityServer::start().await;
+    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    enable_capability(&e, org.id, "tool").await;
+    let mut body = creation(template, "Shared label");
+    body["logical_name"] = json!("b-reference");
+    let source = create(&app, &identity, team.id, body.clone()).await;
+    assert_eq!(source["logical_name"], "b-reference");
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &collection(team.id),
+            body.clone()
+        )
+        .await
+        .0,
+        409
+    );
+    for name in [
+        "",
+        "Upper",
+        "white space",
+        "/agent",
+        "référence",
+        &"a".repeat(65),
+    ] {
+        body["logical_name"] = json!(name);
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "POST",
+                &collection(team.id),
+                body.clone()
+            )
+            .await
+            .0,
+            422
+        );
+    }
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &item(team.id, &source),
+            json!({"logical_name":"changed"})
+        )
+        .await
+        .0,
+        422
+    );
+    // Identical labels are legal. Copy the validated saved tuning, while assigning
+    // independent UUIDs and names, to exercise a complete page plus continuation.
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,logical_name,display_name,tuning,created_by)
+        select gen_random_uuid(),space_id,template_id,source_runtime_id,source_agent_id,'a-'||lpad(n::text,3,'0'),display_name,tuning,'alice'
+        from agent_instance cross join generate_series(1,101) n where agent_instance_id=$1")
+        .bind(Uuid::parse_str(source["agent_instance_id"].as_str().unwrap()).unwrap()).execute(&e.pool).await.unwrap();
+    // A disabled template must not leak its rows or its names into page cursors.
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,logical_name,display_name,tuning,created_by)
+        select gen_random_uuid(),space_id,$2,source_runtime_id,source_agent_id,'a-hidden',display_name,tuning,'alice'
+        from agent_instance where agent_instance_id=$1")
+        .bind(Uuid::parse_str(source["agent_instance_id"].as_str().unwrap()).unwrap()).bind(Uuid::new_v4()).execute(&e.pool).await.unwrap();
+    let (status, first) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &collection(team.id),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(first["items"].as_array().unwrap().len(), 100);
+    assert_eq!(first["next_cursor"], "a-100");
+    let first_id = first["items"][0]["agent_instance_id"].as_str().unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PATCH",
+            &format!("{}/{first_id}", collection(team.id)),
+            json!({"display_name":"New label"})
+        )
+        .await
+        .0,
+        200
+    );
+    let (_, last) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!("{}?after=a-100", collection(team.id)),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        last["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["logical_name"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["a-101", "b-reference"]
+    );
+    assert_eq!(last["next_cursor"], Value::Null);
+    for (query, expected) in [("?after=Upper", 400), ("?unexpected=1", 422)] {
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "GET",
+                &format!("{}{query}", collection(team.id)),
+                Value::Null
+            )
+            .await
+            .0,
+            expected
+        );
+    }
+    enable(&e, org.id, "custom", false).await;
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &collection(team.id),
+            Value::Null
+        )
+        .await
+        .1,
+        json!({"items":[],"next_cursor":null})
+    );
+}

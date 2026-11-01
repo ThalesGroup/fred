@@ -18,9 +18,8 @@
 
 import type {
   ManagedAgentInstanceSummary,
-  MarketplacePromptSummary,
   PromptSummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 /** Max results shown per group (Agents / Teams / Prompts). */
 export const HOME_SEARCH_GROUP_CAP = 5;
@@ -62,11 +61,12 @@ export interface PromptHit {
   id: string;
   name: string;
   description: string;
-  source: "team" | "marketplace";
+  logicalName: string;
+  tags: string[];
   /** Set for team prompts — drives the PromptViewDialog team variant. */
-  teamId?: string;
+  teamId: string;
   /** Author/owner team name — the dialog chip + a result sublabel. */
-  teamName?: string;
+  teamName: string;
 }
 export type SearchHit = AgentHit | TeamHit | PromptHit;
 
@@ -82,38 +82,25 @@ export interface HomeSearchResults {
   prompts: PromptHit[];
 }
 
-/** Merge each team's own prompts with the published marketplace prompts into one
- * searchable list, de-duplicated by id (a team prompt the user can already open
- * wins over its marketplace copy, since the team variant needs no extra fetch). */
-export function unifyPrompts(teamGroups: TeamPromptGroup[], marketplace: MarketplacePromptSummary[]): PromptHit[] {
+/** Project complete space catalogs into the common search-result shape. */
+export function unifyPrompts(teamGroups: TeamPromptGroup[]): PromptHit[] {
   const seen = new Set<string>();
   const out: PromptHit[] = [];
   for (const group of teamGroups) {
     for (const prompt of group.prompts) {
-      if (seen.has(prompt.id)) continue;
-      seen.add(prompt.id);
+      if (seen.has(prompt.prompt_id)) continue;
+      seen.add(prompt.prompt_id);
       out.push({
         kind: "prompt",
-        id: prompt.id,
-        name: prompt.name,
+        id: prompt.prompt_id,
+        name: prompt.display_name,
         description: prompt.description ?? "",
-        source: "team",
+        logicalName: prompt.logical_name,
+        tags: prompt.tags,
         teamId: group.teamId,
         teamName: group.teamName,
       });
     }
-  }
-  for (const prompt of marketplace) {
-    if (seen.has(prompt.id)) continue;
-    seen.add(prompt.id);
-    out.push({
-      kind: "prompt",
-      id: prompt.id,
-      name: prompt.name,
-      description: prompt.description ?? "",
-      source: "marketplace",
-      teamName: prompt.team_name,
-    });
   }
   return out;
 }
@@ -136,7 +123,7 @@ export function filterHomeSearch(
   const agents: AgentHit[] = [];
   for (const entry of sources.agents) {
     const { instance } = entry;
-    if (matches(query, instance.display_name, instance.role, instance.description)) {
+    if (matches(query, instance.display_name, instance.logical_name, instance.role, instance.description)) {
       agents.push({
         kind: "agent",
         id: instance.agent_instance_id,
@@ -160,7 +147,7 @@ export function filterHomeSearch(
 
   const prompts: PromptHit[] = [];
   for (const prompt of sources.prompts) {
-    if (matches(query, prompt.name, prompt.description)) {
+    if (matches(query, prompt.name, prompt.logicalName, prompt.description, ...prompt.tags)) {
       prompts.push(prompt);
       if (prompts.length >= cap) break;
     }

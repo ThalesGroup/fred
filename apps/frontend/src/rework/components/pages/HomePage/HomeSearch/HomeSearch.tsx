@@ -15,12 +15,14 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import Button from "@shared/atoms/Button/Button";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import PromptViewDialog, { type PromptViewDetail } from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
-import { useLazyGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import PromptViewDialog from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
 import {
   filterHomeSearch,
   flattenResults,
@@ -31,9 +33,7 @@ import {
 import { useHomeSearchIndex } from "./useHomeSearchIndex.ts";
 import styles from "./HomeSearch.module.scss";
 
-type PromptDialogState =
-  | { mode: "team"; teamId: string; promptId: string }
-  | { mode: "marketplace"; detail: PromptViewDetail; chipLabel?: string | null };
+type PromptDialogState = { teamId: string; promptId: string; teamName: string };
 
 /**
  * Home "Spotlight" — one search field over agents, teams and prompts. There is
@@ -66,12 +66,13 @@ export default function HomeSearch() {
   }, []);
 
   const sources = useHomeSearchIndex(active);
+  useEffect(() => {
+    setPromptDialog(null);
+  }, [sources.scope]);
   const results = useMemo(() => filterHomeSearch(sources, query), [sources, query]);
   const flat = useMemo(() => flattenResults(results), [results]);
   const count = totalResultCount(results);
   const showMenu = menuOpen && query.trim() !== "";
-
-  const [fetchPromptDetail] = useLazyGetMarketplacePromptDetailControlPlaneV1MarketplacePromptsPromptIdGetQuery();
 
   // Keep the highlighted row in range as results change; top hit pre-selected so
   // Enter fires it (focus stays in the input — only the visual highlight moves).
@@ -94,30 +95,8 @@ export default function HomeSearch() {
     setQuery("");
   };
 
-  const openPrompt = async (hit: PromptHit) => {
-    if (hit.source === "team" && hit.teamId) {
-      setPromptDialog({ mode: "team", teamId: hit.teamId, promptId: hit.id });
-    } else {
-      // Marketplace prompt: the view dialog's marketplace variant wants the full
-      // text preloaded (the caller may not be a member of the author team).
-      try {
-        const detail = await fetchPromptDetail({ promptId: hit.id }).unwrap();
-        setPromptDialog({
-          mode: "marketplace",
-          detail: {
-            id: detail.id,
-            name: detail.name,
-            description: detail.description,
-            text: detail.text,
-            command: detail.command,
-          },
-          chipLabel: hit.teamName ?? null,
-        });
-      } catch {
-        return; // fetch failed — leave the search as-is rather than opening an empty dialog
-      }
-    }
-  };
+  const openPrompt = (hit: PromptHit) =>
+    setPromptDialog({ teamId: hit.teamId, promptId: hit.id, teamName: hit.teamName });
 
   const activate = (hit: SearchHit) => {
     if (hit.kind === "agent") {
@@ -247,7 +226,19 @@ export default function HomeSearch() {
 
       {showMenu && (
         <div id="home-search-listbox" role="listbox" className={styles.menu}>
-          {count === 0 ? (
+          {sources.isError ? (
+            <ServiceNotice
+              icon="cloud_off"
+              title={t("rework.weaverPrompts.catalogError")}
+              action={
+                <Button color="primary" variant="text" size="small" onClick={sources.retry}>
+                  {t("rework.weaverPrompts.retry")}
+                </Button>
+              }
+            />
+          ) : sources.isLoading ? (
+            <Spinner size={20} />
+          ) : count === 0 ? (
             <div className={styles.empty}>{t("rework.home.search.empty")}</div>
           ) : (
             <>
@@ -262,10 +253,9 @@ export default function HomeSearch() {
       <PromptViewDialog
         open={!!promptDialog}
         onClose={() => setPromptDialog(null)}
-        teamId={promptDialog?.mode === "team" ? promptDialog.teamId : undefined}
-        promptId={promptDialog?.mode === "team" ? promptDialog.promptId : null}
-        preloadedDetail={promptDialog?.mode === "marketplace" ? promptDialog.detail : null}
-        chipLabel={promptDialog?.mode === "marketplace" ? promptDialog.chipLabel : null}
+        spaceId={promptDialog?.teamId}
+        promptId={promptDialog?.promptId}
+        chipLabel={promptDialog?.teamName}
       />
     </div>
   );

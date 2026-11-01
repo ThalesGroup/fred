@@ -43,5 +43,10 @@ export function reservedTagInPromptField(field: { type?: string | null }, value:
 
 /** Immutable Weaver prompt identity, also used as its slash command. */
 export function isPromptLogicalNameValid(name: string): boolean {
-  return /^[a-z0-9_-]{1,64}$/.test(name) && name !== "skill";
+  return isLogicalNameValid(name) && name !== "skill";
+}
+
+/** Shared lexical contract for immutable Weaver resource names. */
+export function isLogicalNameValid(name: string): boolean {
+  return /^[a-z0-9_-]{1,64}$/.test(name);
 }

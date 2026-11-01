@@ -631,9 +631,9 @@ Personal spaces have `kind: personal`, an organization attachment and an owner,
 but no parent or child projects. `team` denotes collective teams only, including
 in scope filters and lifecycle policy selectors; use `[team, personal]` explicitly
 when both kinds are intended. Personal creation keeps its dedicated endpoint. Opening, listing and new Control
-Plane access require an owner role on an active organization, team or project.
-Technical admin alone is insufficient; mixed admin/owner roles qualify.
-The demo makes Alice, Grace, Carl and Marc eligible; it creates no personal spaces.
+Plane access require a business role (`owner`, `member`, `editor` or `analyst`)
+on an active organization, team or project. Technical admin alone is insufficient;
+mixed admin/business roles qualify. The demo creates no personal spaces.
 Organization owners create teams, team owners create projects. The last owner of a
 non-personal space, and the last technical admin of an organization, cannot be revoked. Capability checks and their contracts are in the
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
@@ -665,13 +665,23 @@ make build-demo-bundle DEMO_PROVISIONING_FIXTURE_DIR="/path/to/fixtures" DEMO_BU
 The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
 `teams.json` and `projects.json`. The manifest declares `format_version: 2`,
 `users_schema_version: 2`, `source_platform: "swift"`. The four data files are arrays.
-The demo contains 13 identities, two organizations (Acme and Globex), two teams
+The demo contains 14 identities, two organizations (Acme and Globex), two teams
 (Research and Support) and an empty project array. Léa (`lea`) holds `member` on
-Acme and Research. `make build-demo-zip` invokes the same builder. Demo passwords
-are test credentials. The
+Acme and Research. `make build-demo-bundle` is the only demo build target.
+Demo passwords are test credentials. The
 [declaration contract](../../docs/architecture/A2-manager-contracts.md#provisioning-declarations)
 defines explicit parent references and roles, including projects. Old JSON and
 Python version-1 ZIPs return `not_yet_supported`; no conversion is performed.
+
+For a complete Acme/Research demo journey, sign in as **Priya** (`priya`, demo
+password `Azerty123_`). She combines `organization_admin`, `owner`, `member`,
+`editor` and `analyst` on Acme, and `owner`, `member`, `editor` and `analyst` on
+Research. This covers organization/model management, shared content, agent
+authoring and evaluation permissions, plus opening her own personal space.
+These are ordinary cumulative grants, not a new role or authorization bypass.
+Model availability and capability configuration still apply. She has no platform
+roles, Globex access or access to other people's personal spaces.
+Keep the other demo accounts for testing each role's restricted experience.
 
 After compatible initialization, personal CGU acceptance and root bootstrap, save a platform admin's
 access token in a private file and run:

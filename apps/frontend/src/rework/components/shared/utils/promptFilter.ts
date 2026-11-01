@@ -21,13 +21,14 @@ interface LegacyFilterablePrompt {
   description?: string | null;
   category_id?: string | null;
   is_favorite?: boolean;
+  tags?: string[];
 }
 
 export type FilterablePrompt =
   | LegacyFilterablePrompt
   | Pick<
       import("../../../../slices/controlPlane/controlPlaneOpenApi").PromptSummary,
-      "display_name" | "logical_name" | "description"
+      "display_name" | "logical_name" | "description" | "category_id" | "tags" | "is_favorite"
     >;
 
 /**
@@ -59,6 +60,7 @@ function matchesSearch(prompt: FilterablePrompt, query: string): boolean {
     "display_name" in prompt ? prompt.display_name : prompt.name,
     "logical_name" in prompt ? prompt.logical_name : "",
     prompt.description,
+    ...(prompt.tags ?? []),
   ]
     .filter(Boolean)
     .some((field) => (field as string).toLowerCase().includes(query));
@@ -85,4 +87,14 @@ export function filterPrompts<T extends FilterablePrompt>(prompts: T[], criteria
       matchesSearch(prompt, query) &&
       matchesCategory(prompt, criteria.categoryId, criteria.knownCategoryIds),
   );
+}
+
+/** Counts the complete space catalog, independently of the active filters. */
+export function countPromptsByCategory(prompts: FilterablePrompt[]): Map<string | null, number> {
+  const counts = new Map<string | null, number>();
+  for (const prompt of prompts) {
+    const id = prompt.category_id ?? null;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
 }

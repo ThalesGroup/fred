@@ -15,33 +15,23 @@
 import { describe, expect, it } from "vitest";
 import type {
   ManagedAgentInstanceSummary,
-  MarketplacePromptSummary,
   PromptSummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { filterHomeSearch, HOME_SEARCH_GROUP_CAP, type SearchSources, unifyPrompts } from "./homeSearchIndex";
 
 const agent = (id: string, name: string, role = "", description = ""): ManagedAgentInstanceSummary =>
   ({ agent_instance_id: id, display_name: name, role, description, status: "enabled" }) as ManagedAgentInstanceSummary;
 
 const teamPrompt = (id: string, name: string, description = ""): PromptSummary =>
-  ({ id, name, description }) as PromptSummary;
-
-const marketPrompt = (id: string, name: string, teamName = "Bids"): MarketplacePromptSummary =>
-  ({ id, name, team_id: "t9", team_name: teamName }) as MarketplacePromptSummary;
+  ({ prompt_id: id, display_name: name, logical_name: id, tags: ["search-tag"], description }) as PromptSummary;
 
 describe("unifyPrompts", () => {
-  it("de-dupes by id, keeping the team variant over its marketplace copy", () => {
-    const out = unifyPrompts(
-      [{ teamId: "t1", teamName: "Alpha", prompts: [teamPrompt("p1", "Shared"), teamPrompt("p2", "Only team")] }],
-      [marketPrompt("p1", "Shared"), marketPrompt("p3", "Only market")],
-    );
-    expect(out.map((p) => [p.id, p.source])).toEqual([
-      ["p1", "team"],
-      ["p2", "team"],
-      ["p3", "marketplace"],
+  it("keeps the canonical space and identity and deduplicates repeated catalog entries", () => {
+    const out = unifyPrompts([
+      { teamId: "t1", teamName: "Alpha", prompts: [teamPrompt("p1", "Shared"), teamPrompt("p1", "Shared")] },
     ]);
-    // The team variant carries its team id (drives the dialog's team fetch).
-    expect(out.find((p) => p.id === "p1")?.teamId).toBe("t1");
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ id: "p1", teamId: "t1", logicalName: "p1", tags: ["search-tag"] });
   });
 });
 
@@ -55,10 +45,9 @@ describe("filterHomeSearch", () => {
       { id: "t1", name: "Alpha" },
       { id: "t2", name: "Contracts Team", avatarImageUrl: "https://cdn/contracts.png" },
     ],
-    prompts: unifyPrompts(
-      [{ teamId: "t1", teamName: "Alpha", prompts: [teamPrompt("p1", "Contract summary", "summarize a contract")] }],
-      [marketPrompt("p2", "Budget outline")],
-    ),
+    prompts: unifyPrompts([
+      { teamId: "t1", teamName: "Alpha", prompts: [teamPrompt("p1", "Contract summary", "summarize a contract")] },
+    ]),
   };
 
   it("returns nothing for an empty query (menu stays closed)", () => {

@@ -3,6 +3,13 @@
     "ref": "acme",
     "name": "Acme",
     "roles": {
+      "priya": [
+        "organization_admin",
+        "owner",
+        "member",
+        "editor",
+        "analyst"
+      ],
       "oscar": [
         "organization_admin"
       ],

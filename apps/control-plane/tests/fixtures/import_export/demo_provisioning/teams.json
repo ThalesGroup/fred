@@ -4,6 +4,12 @@
     "name": "Research",
     "organization": "acme",
     "roles": {
+      "priya": [
+        "owner",
+        "member",
+        "editor",
+        "analyst"
+      ],
       "carl": [
         "owner"
       ],

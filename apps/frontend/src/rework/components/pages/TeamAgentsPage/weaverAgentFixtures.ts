@@ -33,6 +33,7 @@ export const INSTANCE: ManagedAgentInstanceSummary = {
   template_id: TEMPLATE.template_id,
   source_runtime_id: "pod",
   source_agent_id: "custom",
+  logical_name: "saved-agent",
   display_name: "Saved Agent",
   role: "Analyst",
   description: "Saved description",
@@ -45,6 +46,7 @@ export const INSTANCE: ManagedAgentInstanceSummary = {
   created_at: "2026-10-25T10:00:00Z",
   updated_at: "2026-10-25T10:00:00Z",
   created_by: "author",
+  updated_by: "author",
 };
 export const SPACES: MySpace[] = [SPACE_A, SPACE_B].map((id, index) => ({
   id,

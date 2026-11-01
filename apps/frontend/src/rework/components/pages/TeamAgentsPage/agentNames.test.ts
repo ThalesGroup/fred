@@ -13,11 +13,15 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { ManagedAgentInstanceSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { freeAgentName, isAgentNameConflict, isAgentNameTaken, takenAgentNames } from "./agentNames";
 
 const agent = (id: string, name: string) =>
-  ({ agent_instance_id: id, display_name: name }) as ManagedAgentInstanceSummary;
+  ({
+    agent_instance_id: id,
+    display_name: "Same label",
+    logical_name: name.trim().toLowerCase(),
+  }) as ManagedAgentInstanceSummary;
 
 describe("agent names", () => {
   it("compares names without case or surrounding spaces, excluding the edited agent", () => {

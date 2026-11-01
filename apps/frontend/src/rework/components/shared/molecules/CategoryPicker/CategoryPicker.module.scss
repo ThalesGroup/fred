@@ -47,14 +47,22 @@
   border-radius: var(--radius-full);
   background: transparent;
   padding: 4px 14px;
+  max-width: 100%;
+  overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-label-large);
+  text-overflow: ellipsis;
   white-space: nowrap;
 
-  &:hover:not([data-selected="true"]) {
+  &:hover:not(:disabled):not([data-selected="true"]) {
     border-color: var(--outline);
     background: var(--state-on-surface-hover);
     color: var(--on-surface);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   &[data-selected="true"] {

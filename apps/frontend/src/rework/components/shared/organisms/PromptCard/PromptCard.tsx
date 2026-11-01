@@ -19,6 +19,7 @@ import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx"
 import { OptionModel } from "@models/Option.model.ts";
 import { type PromptSummary as LegacyPromptSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import { useTranslation } from "react-i18next";
+import Chip from "@shared/atoms/Chip/Chip";
 import styles from "./PromptCard.module.scss";
 
 export type PromptCardVariant = "team" | "marketplace";
@@ -182,7 +183,7 @@ export default function PromptCard({
           {(onToggleFavorite || unavailableReason) && (
             <Tooltip
               text={
-                unavailableReason ??
+                (!onToggleFavorite && unavailableReason) ||
                 t(isFavorite ? "rework.teams.prompts.favorite.remove" : "rework.teams.prompts.favorite.add")
               }
             >
@@ -191,9 +192,11 @@ export default function PromptCard({
                 size="small"
                 color={isFavorite ? "warning" : "on-surface-retreat"}
                 icon={{ category: "outlined", type: "star", filled: isFavorite }}
-                aria-label={t("rework.teams.prompts.favorite.filter")}
+                aria-label={t(
+                  isFavorite ? "rework.teams.prompts.favorite.remove" : "rework.teams.prompts.favorite.add",
+                )}
                 aria-pressed={isFavorite}
-                disabled={Boolean(unavailableReason)}
+                disabled={!onToggleFavorite}
                 onClick={onToggleFavorite}
               />
             </Tooltip>
@@ -216,21 +219,29 @@ export default function PromptCard({
 
       {/* ── Header: category (team) or author team (marketplace) + name ── */}
       <div className={styles.header}>
-        <span
-          className={styles.category}
-          data-uncategorized={!("logical_name" in prompt) && !label}
-          title={"logical_name" in prompt ? `/${prompt.logical_name}` : (label ?? undefined)}
-        >
-          {"logical_name" in prompt ? `/${prompt.logical_name}` : (label ?? t("rework.promptCategories.noCategory"))}
+        <span className={styles.category} data-uncategorized={!label} title={label ?? undefined}>
+          {label ?? t("rework.promptCategories.noCategory")}
         </span>
         <span className={styles.name} title={name}>
           {name}
         </span>
+        {"logical_name" in prompt && (
+          <span className={styles.category} title={`/${prompt.logical_name}`}>
+            /{prompt.logical_name}
+          </span>
+        )}
       </div>
 
       {/* ── Body ── */}
       <div className={styles.body}>
         {body && <p className={styles.description}>{body}</p>}
+        {"tags" in prompt && prompt.tags.length > 0 && (
+          <div className={styles.tags}>
+            {prompt.tags.map((tag) => (
+              <Chip key={tag} label={tag} />
+            ))}
+          </div>
+        )}
         {preview && <p className={styles.preview}>"{preview}"</p>}
       </div>
 

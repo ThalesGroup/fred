@@ -7,7 +7,7 @@ async fn conversation(d: &Documents, owner: &str, space: Uuid) -> Uuid {
     let id = Uuid::new_v4();
     let agent = Uuid::new_v4();
     let template = Uuid::new_v4();
-    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by) values($1,$2,$3,'native','assistant',$1::text,'{}',$4)")
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$3,'native','assistant',$1::text,'{}',$4,$1::text)")
         .bind(agent).bind(space).bind(template).bind(owner)
         .execute(&d.e.pool).await.unwrap();
     sqlx::query("insert into session_metadata (session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values ($1,$2,$3,$4,$5,'native','Assistant',1)")

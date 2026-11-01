@@ -30,7 +30,7 @@ import AgentFormModal, { type AgentFormPayload } from "./AgentFormModal/AgentFor
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState";
 import { filterAgents } from "./agentFilter";
 import { sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort";
-import { isAgentNameConflict, normalizeAgentName, takenAgentNames } from "./agentNames";
+import { isAgentNameConflict, takenAgentNames } from "./agentNames";
 import { agentErrorText, createAgentRequest, resolveAgentSpace, updateAgentRequest } from "./weaverAgents";
 import styles from "./TeamAgentsPage.module.css";
 
@@ -85,7 +85,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
   const canManageAgents = access?.stamp === contextStamp && access?.allowed === true;
   const instances = useListAgentInstancesQuery({ spaceId }, { refetchOnMountOrArgChange: true });
   const catalog = useSpaceAgentTemplatesQuery({ spaceId }, { skip: !canManageAgents, refetchOnMountOrArgChange: true });
-  const managedInstances = instances.isError ? [] : (instances.currentData ?? []);
+  const managedInstances = instances.isError ? [] : (instances.currentData?.items ?? []);
   // `data` survives skip while rights are revalidated, keeping the form mounted.
   // SpaceAgents is keyed by space; saving still requires canManageAgents.
   const templates = catalog.isError ? [] : (catalog.data ?? []);
@@ -133,7 +133,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
       setIsEnrollOpen(false);
     } catch (error) {
       if (live.current && isAgentNameConflict(error))
-        setRefusedNames((names) => new Set([...names, normalizeAgentName(payload.displayName)]));
+        setRefusedNames((names) => new Set([...names, payload.logicalName]));
       notifyError(error);
     }
   };

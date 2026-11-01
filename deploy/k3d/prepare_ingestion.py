@@ -80,10 +80,12 @@ def prepare() -> None:
         "knowledge-flow-worker",
         "frontend",
         "fred-agents",
+        "monitor",
     }
     if set(deploys) != expected_deployments:
         raise RuntimeError(
-            "Expected only control-plane-backend, knowledge-flow-backend, knowledge-flow-worker, frontend and fred-agents deployments"
+            f"Unexpected deployment topology: missing={sorted(expected_deployments - set(deploys))}, "
+            f"unexpected={sorted(set(deploys) - expected_deployments)}"
         )
     image = deploys["knowledge-flow-worker"]["spec"]["template"]["spec"]["containers"][
         0

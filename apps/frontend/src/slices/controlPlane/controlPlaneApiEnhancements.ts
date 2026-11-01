@@ -1,8 +1,70 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import type { FetchBaseQueryMeta } from "@reduxjs/toolkit/query";
-import { controlPlaneApi, type PromptPage, type OrganizationDetail } from "./controlPlaneOpenApi";
+import type { FetchBaseQueryMeta, FetchBaseQueryError, QueryReturnValue } from "@reduxjs/toolkit/query";
+import {
+  controlPlaneApi,
+  type PromptSummary,
+  type ManagedAgentInstanceSummary,
+  type PromptCategory,
+  type OrganizationDetail,
+} from "./controlPlaneOpenApi";
+
+type CatalogDefinition = typeof controlPlaneApi.endpoints.listPrompts.Types.QueryDefinition;
+type CatalogPage<Item> = { items: Item[]; next_cursor: string | null };
+
+// One bounded traversal for space resource catalogs. No partial success.
+function catalogQuery<Item>(
+  query: NonNullable<CatalogDefinition["query"]>,
+  key: (item: Item) => string,
+): (
+  ...args: Parameters<NonNullable<CatalogDefinition["queryFn"]>>
+) => Promise<QueryReturnValue<CatalogPage<Item>, FetchBaseQueryError>> {
+  return async (args, api, _extra, baseQuery) => {
+    const items = new Map<string, Item>();
+    let after = args.after;
+    const deadline = Date.now() + 60_000;
+    // Bound both work and memory, including a catalog growing during traversal.
+    // Reaching the bound is an error, never a supposedly complete catalog.
+    for (let page = 0; page < 100; page++) {
+      if (api.signal.aborted) return { error: { status: "CUSTOM_ERROR", error: "aborted" } };
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return { error: { status: "TIMEOUT_ERROR", error: "resource_catalog_timeout" } };
+      const request = query({ ...args, after });
+      // One budget for the page, including token refresh and its HTTP retry.
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<Awaited<ReturnType<typeof baseQuery>>>((resolve) => {
+        timer = setTimeout(
+          () => {
+            controller.abort(new DOMException("resource_catalog_timeout", "TimeoutError"));
+            resolve({ error: { status: "TIMEOUT_ERROR", error: "resource_catalog_timeout" } });
+          },
+          Math.min(15_000, remaining),
+        );
+      });
+      try {
+        const result = await Promise.race([
+          baseQuery({
+            ...(typeof request === "string" ? { url: request } : request),
+            signal: AbortSignal.any([api.signal, controller.signal]),
+          }),
+          timeout,
+        ]);
+        if (Date.now() >= deadline) return { error: { status: "TIMEOUT_ERROR", error: "resource_catalog_timeout" } };
+        if (result.error) return { error: result.error };
+        const data = result.data as CatalogPage<Item>;
+        for (const prompt of data.items) items.set(key(prompt), prompt);
+        if (data.next_cursor === null) return { data: { items: [...items.values()], next_cursor: null } };
+        if (after !== undefined && data.next_cursor <= after) break;
+        after = data.next_cursor;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    return { error: { status: "CUSTOM_ERROR", error: "resource_catalog_incomplete" } };
+  };
+}
 
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
@@ -16,6 +78,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "OrganizationModels",
     "AgentInstances",
     "Prompts",
+    "PromptCategories",
     "AgentTemplates",
     "Sessions",
     "Attachments",
@@ -27,50 +90,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       const query = endpoint.query!;
       endpoint.keepUnusedDataFor = 0;
       endpoint.providesTags = (_result, _error, { spaceId }) => [{ type: "Prompts", id: spaceId }];
-      endpoint.queryFn = async (args, api, _extra, baseQuery) => {
-        const items = new Map<string, PromptPage["items"][number]>();
-        let after = args.after;
-        const deadline = Date.now() + 60_000;
-        // Bound both work and memory, including a catalog growing during traversal.
-        // Reaching the bound is an error, never a supposedly complete catalog.
-        for (let page = 0; page < 100; page++) {
-          if (api.signal.aborted) return { error: { status: "CUSTOM_ERROR", error: "aborted" } };
-          const remaining = deadline - Date.now();
-          if (remaining <= 0) return { error: { status: "TIMEOUT_ERROR", error: "prompt_catalog_timeout" } };
-          const request = query({ ...args, after });
-          // One budget for the page, including token refresh and its HTTP retry.
-          const controller = new AbortController();
-          let timer: ReturnType<typeof setTimeout> | undefined;
-          const timeout = new Promise<Awaited<ReturnType<typeof baseQuery>>>((resolve) => {
-            timer = setTimeout(
-              () => {
-                controller.abort(new DOMException("prompt_catalog_timeout", "TimeoutError"));
-                resolve({ error: { status: "TIMEOUT_ERROR", error: "prompt_catalog_timeout" } });
-              },
-              Math.min(15_000, remaining),
-            );
-          });
-          try {
-            const result = await Promise.race([
-              baseQuery({
-                ...(typeof request === "string" ? { url: request } : request),
-                signal: AbortSignal.any([api.signal, controller.signal]),
-              }),
-              timeout,
-            ]);
-            if (Date.now() >= deadline) return { error: { status: "TIMEOUT_ERROR", error: "prompt_catalog_timeout" } };
-            if (result.error) return { error: result.error };
-            const data = result.data as PromptPage;
-            for (const prompt of data.items) items.set(prompt.prompt_id, prompt);
-            if (data.next_cursor === null) return { data: { items: [...items.values()], next_cursor: null } };
-            if (after !== undefined && data.next_cursor <= after) break;
-            after = data.next_cursor;
-          } finally {
-            clearTimeout(timer);
-          }
-        }
-        return { error: { status: "CUSTOM_ERROR", error: "prompt_catalog_incomplete" } };
-      };
+      endpoint.queryFn = catalogQuery<PromptSummary>(query, (prompt) => prompt.prompt_id);
       // RTK must use queryFn; every page still uses the generated request builder.
       Object.assign(endpoint, { query: undefined });
       endpoint.onCacheEntryAdded = async (args, { cacheEntryRemoved, dispatch, getCacheEntry }) => {
@@ -78,6 +98,37 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         const request = dispatch(controlPlaneApi.util.getRunningQueryThunk("listPrompts", args));
         if (getCacheEntry().isUninitialized) request?.abort();
       };
+    },
+    listPromptCategories(endpoint) {
+      const query = catalogQuery<PromptCategory>(endpoint.query!, (category) => category.id);
+      endpoint.keepUnusedDataFor = 0;
+      endpoint.providesTags = (_result, _error, { spaceId }) => [{ type: "PromptCategories", id: spaceId }];
+      endpoint.queryFn = async (...args) => {
+        const result = await query(...args);
+        result.data?.items.sort((a, b) => a.name.localeCompare(b.name));
+        return result;
+      };
+      Object.assign(endpoint, { query: undefined });
+      endpoint.onCacheEntryAdded = async (args, { cacheEntryRemoved, dispatch, getCacheEntry }) => {
+        await cacheEntryRemoved;
+        const request = dispatch(controlPlaneApi.util.getRunningQueryThunk("listPromptCategories", args));
+        if (getCacheEntry().isUninitialized) request?.abort();
+      };
+    },
+    createPromptCategory: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { spaceId }) => [{ type: "PromptCategories", id: spaceId }],
+    },
+    renamePromptCategory: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { spaceId }) => [{ type: "PromptCategories", id: spaceId }],
+    },
+    deletePromptCategory: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { spaceId }) => [
+        { type: "PromptCategories", id: spaceId },
+        { type: "Prompts", id: spaceId },
+      ],
     },
     getPrompt(endpoint) {
       const query = endpoint.query!;
@@ -89,6 +140,26 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       endpoint.providesTags = (_result, _error, { spaceId, promptId }) => [
         { type: "Prompts", id: `${spaceId}:${promptId}` },
       ];
+    },
+    addPromptFavorite: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { spaceId, promptId }) =>
+        error
+          ? []
+          : [
+              { type: "Prompts", id: spaceId },
+              { type: "Prompts", id: `${spaceId}:${promptId}` },
+            ],
+    },
+    removePromptFavorite: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { spaceId, promptId }) =>
+        error
+          ? []
+          : [
+              { type: "Prompts", id: spaceId },
+              { type: "Prompts", id: `${spaceId}:${promptId}` },
+            ],
     },
     createPrompt: {
       extraOptions: { retryUnauthorized: false },
@@ -166,8 +237,19 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       invalidatesTags: (_result, error, { spaceId }) => (error ? [] : [{ type: "Sessions", id: spaceId }]),
     },
 
-    listAgentInstances: {
-      providesTags: (_result, _error, { spaceId }) => [{ type: "AgentInstances", id: spaceId }],
+    listAgentInstances(endpoint) {
+      endpoint.keepUnusedDataFor = 0;
+      endpoint.providesTags = (_result, _error, { spaceId }) => [{ type: "AgentInstances", id: spaceId }];
+      endpoint.queryFn = catalogQuery<ManagedAgentInstanceSummary>(
+        endpoint.query!,
+        (instance) => instance.agent_instance_id,
+      );
+      Object.assign(endpoint, { query: undefined });
+      endpoint.onCacheEntryAdded = async (args, { cacheEntryRemoved, dispatch, getCacheEntry }) => {
+        await cacheEntryRemoved;
+        const request = dispatch(controlPlaneApi.util.getRunningQueryThunk("listAgentInstances", args));
+        if (getCacheEntry().isUninitialized) request?.abort();
+      };
     },
     getAgentInstance: {
       providesTags: (_result, _error, { spaceId, agentInstanceId }) => [
@@ -322,9 +404,15 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 
 export const {
   useListPromptsQuery: usePromptCatalogQuery,
+  useListPromptCategoriesQuery,
+  useCreatePromptCategoryMutation,
+  useRenamePromptCategoryMutation,
+  useDeletePromptCategoryMutation,
   useGetPromptQuery,
   useLazyGetPromptQuery,
   useCreatePromptMutation,
+  useAddPromptFavoriteMutation,
+  useRemovePromptFavoriteMutation,
   useUpdatePromptMutation,
   useDeletePromptMutation,
   useListAttachmentsQuery,

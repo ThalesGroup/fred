@@ -136,3 +136,9 @@
   white-space: pre-wrap;
   overflow-wrap: break-word;
 }
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}

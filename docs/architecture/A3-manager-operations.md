@@ -397,9 +397,9 @@ make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/
 `build-demo-bundle` packages the five checked-in JSON files with Python's standard
 ZIP library and atomically replaces its output. `DEMO_PROVISIONING_FIXTURE_DIR`
 and `DEMO_BUNDLE_FILE` override source/output paths, including paths with spaces;
-no running service is needed. `make build-demo-zip` and `make bundle-demo-zip`
-invoke the same builder. The ZIP contains the thirteen accounts from the
-[example roster](02-journeys.md#example-people-and-spaces), Acme/Research and
+no running service is needed. The bundle's current account roster is maintained
+in the [component README](../../apps/control-plane/README.md#import-a-provisioning-bundle).
+The ZIP provisions Acme/Research and
 Globex/Support, with no projects, platform grants or personal spaces. Usernames
 are the lowercase, unaccented first names; the demo password is
 `Azerty123_`. The `admin` account is created and bootstrapped separately and is

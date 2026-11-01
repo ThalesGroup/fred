@@ -13,16 +13,17 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import type { PromptCategorySummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import type { PromptCategory } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./CategoryPicker.module.scss";
 
 interface CategoryPickerProps {
-  categories: PromptCategorySummary[];
+  categories: PromptCategory[];
   value: string | null | undefined;
+  disabled?: boolean;
   onChange: (categoryId: string | null) => void;
 }
 
-export function CategoryPicker({ categories, value, onChange }: CategoryPickerProps) {
+export function CategoryPicker({ categories, value, onChange, disabled }: CategoryPickerProps) {
   const { t } = useTranslation();
 
   return (
@@ -31,6 +32,7 @@ export function CategoryPicker({ categories, value, onChange }: CategoryPickerPr
 
       <div className={styles.chips}>
         <button
+          disabled={disabled}
           type="button"
           className={styles.chip}
           data-selected={!value}
@@ -44,6 +46,8 @@ export function CategoryPicker({ categories, value, onChange }: CategoryPickerPr
           return (
             <button
               key={cat.id}
+              title={cat.name}
+              disabled={disabled}
               type="button"
               className={styles.chip}
               data-selected={selected}

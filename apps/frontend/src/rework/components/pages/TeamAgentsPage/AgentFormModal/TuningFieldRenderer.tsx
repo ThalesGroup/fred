@@ -24,21 +24,21 @@ import {
   DOCUMENT_SELECTION_SUPPORTED,
   type DocumentLibrarySelection,
 } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ManagedAgentFieldSpec } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
 import {
-  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
-  useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery,
-  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
-  usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+  usePromptCatalogQuery,
+  useListPromptCategoriesQuery,
+  useLazyGetPromptQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import styles from "./TuningFieldRenderer.module.css";
 
 type TuningFieldRendererProps = {
   field: ManagedAgentFieldSpec;
-  disconnected?: boolean;
   useDefaults?: boolean;
   value: unknown;
   onChange: (key: string, value: unknown) => void;
@@ -63,7 +63,6 @@ type TuningFieldRendererProps = {
 
 export function TuningFieldRenderer({
   field,
-  disconnected = false,
   useDefaults = true,
   value,
   onChange,
@@ -93,28 +92,53 @@ export function TuningFieldRenderer({
   const pickerExplicit = pickerExplicitProp !== undefined ? pickerExplicitProp : localPickerExplicit;
   const setPickerExplicit = onPickerExplicitChange ?? setLocalPickerExplicit;
 
-  const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
-    { teamId: teamId ?? "" },
-    { skip: disconnected || !teamId || !isPromptField },
+  const catalog = usePromptCatalogQuery(
+    { spaceId: teamId ?? "" },
+    { skip: !teamId || !isPromptField, refetchOnMountOrArgChange: true },
   );
-  const { data: promptCategories = [] } = useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery(
-    { teamId: teamId ?? "" },
-    { skip: disconnected || !teamId || !isPromptField },
+  const categoryCatalog = useListPromptCategoriesQuery(
+    { spaceId: teamId ?? "" },
+    { skip: !teamId || !isPromptField, refetchOnMountOrArgChange: true },
   );
-
-  const [fetchDetail, { isLoading: isLoadingDetail }] =
-    useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
-
-  const [recordUse] = usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation();
+  const contextPrompts = catalog.currentData?.items ?? [];
+  const promptCategories = categoryCatalog.currentData?.items ?? [];
+  const [fetchDetail, { isLoading: isLoadingDetail }] = useLazyGetPromptQuery();
+  const [pickFailed, setPickFailed] = useState(false);
+  const pending = useRef<ReturnType<typeof fetchDetail> | null>(null);
+  const scopeKey = JSON.stringify([teamId, field.key, disabled, value]);
+  const scope = useRef({ key: scopeKey });
+  if (scope.current.key !== scopeKey) scope.current = { key: scopeKey };
+  const scopeIdentity = scope.current;
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+      pending.current?.abort();
+    };
+  }, []);
+  useEffect(() => {
+    setPickFailed(false);
+    return () => {
+      pending.current?.abort();
+    };
+  }, [teamId, field.key, disabled]);
 
   const handlePickPrompt = async (promptId: string) => {
-    if (disconnected || !teamId) return;
-    const result = await fetchDetail({ teamId, promptId });
-    if (!result.data) return;
-    onChange(field.key, result.data.text);
-    setPickerExplicit(null);
-    // Fire-and-forget usage tracking.
-    recordUse({ teamId, promptId }).catch(() => {});
+    if (!teamId || disabled || pending.current) return;
+    setPickFailed(false);
+    const request = fetchDetail({ spaceId: teamId, promptId }, false);
+    pending.current = request;
+    try {
+      const detail = await request.unwrap();
+      if (!live.current || scope.current !== scopeIdentity) return;
+      onChange(field.key, detail.text);
+      setPickerExplicit(null);
+    } catch {
+      if (live.current && scope.current === scopeIdentity) setPickFailed(true);
+    } finally {
+      if (pending.current === request) pending.current = null;
+    }
   };
 
   if (field.ui?.hide) return null;
@@ -168,11 +192,12 @@ export function TuningFieldRenderer({
     field.ui?.multiline || field.ui?.textarea || field.type === "prompt" || field.type === "text-multiline";
 
   if (isMultiline) {
-    const hasLibrary = isPromptField && contextPrompts.length > 0;
+    const hasLibrary = isPromptField && Boolean(teamId);
     const hasValue = String(fieldValue).trim() !== "";
 
     // Show the picker grid when: explicitly requested, OR auto mode with empty field.
-    const showPicker = hasLibrary && (pickerExplicit === true || (pickerExplicit === null && !hasValue));
+    const showPicker =
+      hasLibrary && (pickerExplicit === true || (pickerExplicit === null && !hasValue && contextPrompts.length > 0));
 
     if (showPicker) {
       return (
@@ -191,12 +216,38 @@ export function TuningFieldRenderer({
                 {t("rework.teams.formAgent.promptField.closeLibrary")}
               </Button>
             </div>
-            <PromptPicker
-              prompts={contextPrompts}
-              categories={promptCategories}
-              disabled={disabled || isLoadingDetail}
-              onSelect={handlePickPrompt}
-            />
+            {catalog.isError || categoryCatalog.isError ? (
+              <ServiceNotice
+                icon="cloud_off"
+                title={t("rework.weaverPrompts.catalogError")}
+                action={
+                  <Button
+                    color="primary"
+                    variant="text"
+                    size="small"
+                    onClick={() => {
+                      void catalog.refetch();
+                      void categoryCatalog.refetch();
+                    }}
+                  >
+                    {t("rework.weaverPrompts.retry")}
+                  </Button>
+                }
+              />
+            ) : !catalog.currentData || !categoryCatalog.currentData ? (
+              <Spinner size={20} />
+            ) : contextPrompts.length === 0 ? (
+              <ServiceNotice icon="info" title={t("rework.teams.prompts.noPrompt")} />
+            ) : (
+              <PromptPicker
+                key={teamId}
+                prompts={contextPrompts}
+                categories={promptCategories}
+                disabled={disabled || isLoadingDetail}
+                onSelect={handlePickPrompt}
+              />
+            )}
+            {pickFailed && <ServiceNotice icon="info" title={t("chatbot.commandTurn.previewError")} />}
           </div>
           {error && <p className={styles.error}>{error}</p>}
         </div>
@@ -214,11 +265,6 @@ export function TuningFieldRenderer({
 
     return (
       <div className={styles.promptFieldWrapper}>
-        {isPromptField && disconnected && (
-          <Button color="primary" variant="text" size="small" disabled title={t("rework.weaverAgents.notConnected")}>
-            {t("rework.teams.formAgent.promptField.pickFromLibrary")}
-          </Button>
-        )}
         {hasLibrary && (
           <div className={styles.promptEditingHeader}>
             <Button

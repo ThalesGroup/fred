@@ -119,3 +119,9 @@ it.each(["real name", "SUMMARY", "description"])("searches Weaver title, identit
   expect(filterPrompts([prompt], { ...ALL, search })).toEqual([prompt]);
   expect(filterPrompts([prompt], { ...ALL, search: "Truncated preview" })).toEqual([]);
 });
+
+it("searches canonical Weaver tags alongside category and favorite filters", () => {
+  const prompt = promptSummaryFixture({ tags: ["Planning"], is_favorite: true, category_id: "work" });
+  expect(filterPrompts([prompt], { search: "planning", categoryId: "work", favoritesOnly: true })).toEqual([prompt]);
+  expect(filterPrompts([prompt], { search: "planning", categoryId: "other", favoritesOnly: true })).toEqual([]);
+});

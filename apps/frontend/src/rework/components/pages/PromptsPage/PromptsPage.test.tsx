@@ -46,7 +46,7 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () =>
 const toast = vi.hoisted(() => ({ showError: vi.fn(), showSuccess: vi.fn() }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => toast }));
 
-const PROMPT_DETAIL = promptFixture();
+const PROMPT_DETAIL = promptFixture({ category_id: "cat-a" });
 const PROMPT_B_DETAIL = promptFixture({
   prompt_id: "prompt-2",
   display_name: "Other Name",
@@ -65,6 +65,8 @@ const authorize = vi.fn();
 const update = vi.fn();
 const remove = vi.fn();
 const create = vi.fn();
+const addFavorite = vi.fn(() => ({ unwrap: async () => undefined }));
+const removeFavorite = vi.fn(() => ({ unwrap: async () => undefined }));
 const catalogRead = vi.fn();
 const detailRead = vi.fn();
 const copy = vi.hoisted(() => vi.fn());
@@ -73,6 +75,10 @@ vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () =>
   useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => ({}),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useListPromptCategoriesQuery: () => ({
+    currentData: { items: [{ id: "cat-a", space_id: SPACE_A, name: "Analysis" }], next_cursor: null },
+    refetch: vi.fn(),
+  }),
   useMySpacesQuery: () => ({ currentData: context, fulfilledTimeStamp: stamp, isError: false }),
   useAuthorizeSpaceMutation: () => [authorize],
   usePromptCatalogQuery: (args: unknown) => {
@@ -100,6 +106,8 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     if (currentData) lastData.current = currentData;
     return { data: lastData.current, currentData, isFetching: !opts.skip && !currentData, isError: false };
   },
+  useAddPromptFavoriteMutation: () => [addFavorite],
+  useRemovePromptFavoriteMutation: () => [removeFavorite],
   useCreatePromptMutation: () => [create, { isLoading: false }],
   useUpdatePromptMutation: () => [update, { isLoading: false }],
   useDeletePromptMutation: () => [remove, { isLoading: false }],
@@ -389,6 +397,7 @@ describe("PromptsPage command field", () => {
   const openCreateForm = () => {
     click(button("rework.teams.prompts.create"));
     typeInto(fieldByLabel("form.name")!, "Valid title");
+    setText("Required text");
     expect(button("rework.create")?.disabled).toBe(true);
   };
 
@@ -590,6 +599,8 @@ describe("Weaver prompt management", () => {
         logical_name: "summary-copy",
         display_name: PROMPT_DETAIL.display_name,
         description: PROMPT_DETAIL.description,
+        category_id: PROMPT_DETAIL.category_id,
+        tags: PROMPT_DETAIL.tags,
         text: PROMPT_DETAIL.text,
       },
     });
@@ -599,6 +610,7 @@ describe("Weaver prompt management", () => {
     click(button("rework.teams.prompts.create"));
     typeInto(fieldByLabel("weaverPrompts.logicalName")!, "valid");
     typeInto(fieldByLabel("form.name")!, "Title");
+    setText("Required text");
     const label = field === "title" ? "form.name" : "form.description";
     const limit = field === "title" ? 255 : 500;
     typeInto(fieldByLabel(label)!, "👋".repeat(limit));
@@ -623,6 +635,7 @@ describe("Weaver prompt management", () => {
     }));
     click(button("rework.teams.prompts.create"));
     typeInto(fieldByLabel("form.name")!, "Old title");
+    setText("Required text");
     typeInto(fieldByLabel("weaverPrompts.logicalName")!, "old");
     await save();
     escape();
@@ -675,5 +688,36 @@ describe("Weaver prompt management", () => {
     render();
     expect(container.querySelector('[role="button"]')).toBeNull();
     expect(container.textContent).toContain("rework.weaverPrompts.catalogError");
+  });
+  it("filters categorized and uncategorized prompts and clears an assignment explicitly", async () => {
+    const filter = container.querySelector('[aria-label="rework.promptCategories.pickerTitle"]')!;
+    click(Array.from(filter.querySelectorAll("button")).find((b) => b.textContent?.includes("Analysis")));
+    expect(container.querySelectorAll('[role="button"]')).toHaveLength(1);
+    expect(container.textContent).toContain("Real Name");
+    expect(container.textContent).not.toContain("Other Name");
+    cardAction("edit");
+    click(button("rework.promptCategories.noCategory"));
+    await save();
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ updatePromptRequest: expect.objectContaining({ category_id: null }) }),
+    );
+  });
+});
+
+describe("Weaver prompt metadata and preferences", () => {
+  it("rejects blank text, persists tags and keeps a favorite independent of management", async () => {
+    cardAction("edit");
+    await act(async () => {});
+    setText(" \n\t");
+    expect(button("rework.save")?.disabled).toBe(true);
+    setText("Meaningful text");
+    const tags = document.querySelector('input[aria-label="rework.weaverPrompts.tags"]') as HTMLInputElement;
+    typeInto(tags, "analysis");
+    act(() => tags.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    await save();
+    expect(update.mock.calls[update.mock.calls.length - 1]?.[0].updatePromptRequest.tags).toEqual(["analysis"]);
+    const star = container.querySelector('button[aria-label="rework.teams.prompts.favorite.add"]');
+    await act(async () => click(star));
+    expect(addFavorite).toHaveBeenCalledWith({ spaceId: SPACE_A, promptId: PROMPT_DETAIL.prompt_id });
   });
 });

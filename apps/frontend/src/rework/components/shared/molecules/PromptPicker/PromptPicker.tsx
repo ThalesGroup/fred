@@ -14,18 +14,17 @@
 
 import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type {
-  ContextPromptSummary,
-  PromptCategorySummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
-import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
+import type { PromptSummary, PromptCategory } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { filterPrompts, countPromptsByCategory, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput";
+import FavoritesFilterChip from "@shared/molecules/FavoritesFilterChip/FavoritesFilterChip";
 import styles from "./PromptPicker.module.css";
 
 type PromptPickerProps = {
-  prompts: ContextPromptSummary[];
-  categories: PromptCategorySummary[];
+  prompts: PromptSummary[];
+  categories: PromptCategory[];
   disabled?: boolean;
   onSelect: (id: string) => void;
 };
@@ -36,47 +35,52 @@ export function PromptPicker({ prompts, categories, disabled, onSelect }: Prompt
 
   const categoryNameById = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
 
-  // A prompt's category_id may point at a category outside this list (e.g. a
-  // personal-scope prompt's own category, since `prompts` pools personal +
-  // team scope but `categories` is this team's only) — treated as
-  // uncategorized for filtering purposes rather than crashing or mismatching.
-  const categoryCounts = useMemo(() => {
-    const byId = new Map<string, number>();
-    let noCategory = 0;
-    for (const p of prompts) {
-      if (p.category_id && categoryNameById.has(p.category_id)) {
-        byId.set(p.category_id, (byId.get(p.category_id) ?? 0) + 1);
-      } else {
-        noCategory += 1;
-      }
-    }
-    return { byId, noCategory };
-  }, [prompts, categoryNameById]);
+  const categoryCounts = useMemo(() => countPromptsByCategory(prompts), [prompts]);
+  const [search, setSearch] = useState("");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  useEffect(() => {
+    if (activeCategory && activeCategory !== NO_CATEGORY_FILTER_ID && !categoryNameById.has(activeCategory))
+      setActiveCategory(null);
+  }, [activeCategory, categoryNameById]);
 
   const filtered = useMemo(
     () =>
       filterPrompts(prompts, {
-        search: "",
+        search,
+        favoritesOnly,
         categoryId: activeCategory,
         knownCategoryIds: new Set(categoryNameById.keys()),
       }),
-    [prompts, activeCategory, categoryNameById],
+    [prompts, activeCategory, categoryNameById, search, favoritesOnly],
   );
 
   return (
     <div className={styles.wrapper}>
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder={t("rework.teams.prompts.searchPlaceholder")}
+        clearAriaLabel={t("rework.teams.prompts.clearSearch")}
+        size="xs"
+      />
+      <FavoritesFilterChip
+        label={t("rework.teams.prompts.favorite.filter")}
+        active={favoritesOnly}
+        onToggle={() => setFavoritesOnly((value) => !value)}
+      />
+      {filtered.length === 0 && <p>{t("rework.teams.prompts.emptySearch")}</p>}
       {categories.length > 0 && (
         <FilterChips
           options={[
             {
               id: NO_CATEGORY_FILTER_ID,
               label: t("rework.promptCategories.noCategory"),
-              count: categoryCounts.noCategory,
+              count: categoryCounts.get(null) ?? 0,
             },
             ...categories.map((cat) => ({
               id: cat.id,
               label: cat.name,
-              count: categoryCounts.byId.get(cat.id) ?? 0,
+              count: categoryCounts.get(cat.id) ?? 0,
             })),
           ]}
           value={activeCategory}
@@ -90,11 +94,11 @@ export function PromptPicker({ prompts, categories, disabled, onSelect }: Prompt
       <div className={styles.grid} data-disabled={disabled}>
         {filtered.map((p) => (
           <PromptCard
-            key={p.id}
+            key={p.prompt_id}
             prompt={p}
             categoryName={(p.category_id && categoryNameById.get(p.category_id)) || null}
             canManage={false}
-            onView={() => !disabled && onSelect(p.id)}
+            onView={() => !disabled && onSelect(p.prompt_id)}
             onEdit={() => {}}
           />
         ))}

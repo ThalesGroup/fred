@@ -175,6 +175,12 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "put /organizations/{organization_id}/model-policy",
         "post /organizations/{organization_id}/model-sources/{source_id}/refresh",
         "get /spaces/{space_id}/agent-templates",
+        "get /spaces/{space_id}/prompt-categories",
+        "post /spaces/{space_id}/prompt-categories",
+        "patch /spaces/{space_id}/prompt-categories/{category_id}",
+        "delete /spaces/{space_id}/prompt-categories/{category_id}",
+        "put /spaces/{space_id}/prompts/{prompt_id}/favorite",
+        "delete /spaces/{space_id}/prompts/{prompt_id}/favorite",
         "get /spaces/{space_id}/prompts",
         "post /spaces/{space_id}/prompts",
         "get /spaces/{space_id}/prompts/{prompt_id}",
@@ -604,7 +610,7 @@ fn instance_operations_and_nullable_patch_match_the_wire_contract() {
     for (path, method, status, response) in [
         (templates, "get", "200", "AgentTemplateSummary"),
         (collection, "post", "201", "ManagedAgentInstanceSummary"),
-        (collection, "get", "200", "ManagedAgentInstanceSummary"),
+        (collection, "get", "200", "AgentInstancePage"),
         (&instance, "get", "200", "ManagedAgentInstanceSummary"),
         (&instance, "patch", "200", "ManagedAgentInstanceSummary"),
         (&instance, "delete", "204", ""),
@@ -623,7 +629,7 @@ fn instance_operations_and_nullable_patch_match_the_wire_contract() {
             assert!(success.get("content").is_none());
         } else {
             let body = &success["content"]["application/json"]["schema"];
-            let body = if method == "get" && path != instance {
+            let body = if method == "get" && path == templates {
                 assert_eq!(body["type"], "array");
                 &body["items"]
             } else {
@@ -652,9 +658,14 @@ fn instance_operations_and_nullable_patch_match_the_wire_contract() {
         .unwrap();
     assert_eq!(
         create,
-        json!(["template_id", "display_name", "usage_statement"])
-            .as_array()
-            .unwrap()
+        json!([
+            "template_id",
+            "display_name",
+            "logical_name",
+            "usage_statement"
+        ])
+        .as_array()
+        .unwrap()
     );
     let patch = &schemas["UpdateAgentInstanceRequest"];
     assert!(patch["required"].as_array().is_none_or(Vec::is_empty));
@@ -721,13 +732,20 @@ fn prompt_operations_preserve_strict_requests_and_flattened_responses() {
             collection,
             "post",
             "CreatePromptRequest",
-            vec!["description", "display_name", "logical_name", "text"],
+            vec![
+                "category_id",
+                "description",
+                "display_name",
+                "logical_name",
+                "tags",
+                "text",
+            ],
         ),
         (
             item.as_str(),
             "patch",
             "UpdatePromptRequest",
-            vec!["description", "display_name", "text"],
+            vec!["category_id", "description", "display_name", "tags", "text"],
         ),
     ] {
         assert_eq!(
@@ -798,9 +816,9 @@ fn prompt_operations_preserve_strict_requests_and_flattened_responses() {
                 .keys()
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
-            [field]
+            ["is_favorite", field]
         );
-        assert_eq!(parts[1]["required"], json!([field]));
+        assert_eq!(parts[1]["required"], json!([field, "is_favorite"]));
         if field == "text_preview" {
             assert_eq!(parts[1]["properties"][field]["maxLength"], 240);
         }

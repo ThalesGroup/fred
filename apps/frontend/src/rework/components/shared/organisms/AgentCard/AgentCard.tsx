@@ -62,7 +62,7 @@ export interface AgentCardProps {
     | "suspension_reason"
     | "catalog_warnings"
     | "marketplace"
-  >;
+  > & { logical_name?: string };
   templateDisplayName?: string;
   runtimeId?: string;
   /** Needed to build the managed-chat route for the Chat button. */
@@ -278,6 +278,11 @@ export default function AgentCard({
           <div className={styles.agentIdentity}>
             <div className={styles.agentName}>{instance.display_name}</div>
             <div className={styles.agentRole}>{instance.role}</div>
+            {instance.logical_name && (
+              <div className={styles.agentRole} title={instance.logical_name}>
+                {instance.logical_name}
+              </div>
+            )}
           </div>
           {menuOptions.length > 0 && (
             <div className={styles.moreMenu}>

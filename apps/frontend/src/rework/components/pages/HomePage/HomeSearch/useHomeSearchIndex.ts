@@ -13,99 +13,112 @@
 // limitations under the License.
 
 import { useEffect, useMemo, useState } from "react";
-import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
-import { useLazyTeamAgentInstancesQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import { useDispatch } from "react-redux";
+import type { store } from "../../../../../common/store";
 import {
-  type ManagedAgentInstanceSummary,
-  type PromptSummary,
-  useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery,
-  useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import { type SearchSources, unifyPrompts } from "./homeSearchIndex.ts";
+  enhancedControlPlaneApi as api,
+  useMySpacesQuery,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { type SearchSources, unifyPrompts } from "./homeSearchIndex";
 
-/**
- * Aggregates the searchable universe for the Home Spotlight — there is no global
- * search endpoint, so it fans out per team (member teams from bootstrap). All
- * fetching is lazy and gated on `active` (the search field's first focus), so a
- * user who never opens the search pays nothing; results accumulate into state as
- * each team resolves and are reused from the RTK cache on later opens.
- *
- * Cost is 2N+1 requests on first open (N = member teams): agent instances +
- * prompts per team, plus the published marketplace prompts. Acceptable for a v1
- * launcher; a dedicated cross-team search endpoint would replace this later.
- */
-export function useHomeSearchIndex(active: boolean): SearchSources {
-  const { availableTeams } = useFrontendBootstrap();
+const EMPTY: SearchSources = { agents: [], teams: [], prompts: [] };
 
-  const teamMeta = useMemo(
-    () =>
-      availableTeams
-        .filter((team) => team.is_member)
-        .map((team) => ({ id: team.id, name: team.name, avatarImageUrl: team.avatar_image_url ?? null })),
-    [availableTeams],
+/** Home uses the same complete, authorized catalogs as resource management.
+ * Four spaces at a time, one minute and 10,000 resources overall; a failed traversal is never shown
+ * as a complete index. A denied scope contributes no resource data. */
+export function useHomeSearchIndex(active: boolean) {
+  const context = useMySpacesQuery(undefined, { skip: !active, refetchOnMountOrArgChange: true });
+  const dispatch = useDispatch<typeof store.dispatch>();
+  const [refresh, setRefresh] = useState(0);
+  const spaces = useMemo(
+    () => (context.currentData ?? []).filter((space) => space.kind === "team" || space.kind === "personal"),
+    [context.currentData],
   );
-
-  const [fetchAgents] = useLazyTeamAgentInstancesQuery();
-  const [fetchPrompts] = useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery();
-  const { data: marketplacePrompts } = useGetMarketplacePromptsControlPlaneV1MarketplacePromptsGetQuery(undefined, {
-    skip: !active,
-  });
-
-  const [agentsByTeam, setAgentsByTeam] = useState<Record<string, ManagedAgentInstanceSummary[]>>({});
-  const [promptsByTeam, setPromptsByTeam] = useState<Record<string, PromptSummary[]>>({});
+  const scope = useMemo(
+    () => ({ spaces, stamp: context.fulfilledTimeStamp, active, refresh, fetching: context.isFetching }),
+    [spaces, context.fulfilledTimeStamp, active, refresh, context.isFetching],
+  );
+  const [snapshot, setSnapshot] = useState<{ scope: typeof scope; sources: SearchSources; failed: boolean }>();
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || context.isFetching || !context.currentData || context.isError) return;
     let cancelled = false;
-    void Promise.all(
-      teamMeta.map(async ({ id }) => {
-        // preferCacheValue: reuse a warm cache (TeamAgentsPage / PromptsPage)
-        // rather than refetch. Each side degrades to [] on error so one
-        // unreachable team never sinks the whole index.
-        const [agents, prompts] = await Promise.all([
-          fetchAgents({ teamId: id }, true)
-            .unwrap()
-            .catch(() => [] as ManagedAgentInstanceSummary[]),
-          fetchPrompts({ teamId: id }, true)
-            .unwrap()
-            .catch(() => [] as PromptSummary[]),
-        ]);
-        return { id, agents, prompts };
-      }),
-    ).then((entries) => {
-      if (cancelled) return;
-      setAgentsByTeam((prev) => {
-        const next = { ...prev };
-        for (const entry of entries) next[entry.id] = entry.agents;
-        return next;
-      });
-      setPromptsByTeam((prev) => {
-        const next = { ...prev };
-        for (const entry of entries) next[entry.id] = entry.prompts;
-        return next;
-      });
+    let nextSpace = 0;
+    let failed = false;
+    const pending = new Set<{ abort: () => void; unsubscribe: () => void }>();
+    const sources: SearchSources = {
+      agents: [],
+      teams: spaces.map((space) => ({ id: space.id, name: space.name })),
+      prompts: [],
+    };
+    const stop = () => {
+      for (const request of pending) {
+        request.abort();
+        request.unsubscribe();
+      }
+    };
+    const timeout = setTimeout(() => {
+      cancelled = true;
+      stop();
+      setSnapshot({ scope, sources: EMPTY, failed: true });
+    }, 60_000);
+    const worker = async () => {
+      while (!cancelled && nextSpace < spaces.length) {
+        const space = spaces[nextSpace++];
+        const agents = dispatch(
+          api.endpoints.listAgentInstances.initiate({ spaceId: space.id }, { forceRefetch: true }),
+        );
+        const prompts = dispatch(api.endpoints.listPrompts.initiate({ spaceId: space.id }, { forceRefetch: true }));
+        pending.add(agents);
+        pending.add(prompts);
+        const results = await Promise.all([agents, prompts]);
+        for (const result of results) {
+          if (
+            result.error &&
+            !("status" in result.error && (result.error.status === 403 || result.error.status === 404))
+          )
+            failed = true;
+        }
+        if (!cancelled) {
+          for (const instance of results[0].data?.items ?? []) {
+            if (instance.status === "enabled")
+              sources.agents.push({ instance, teamId: space.id, teamName: space.name });
+          }
+          sources.prompts.push(
+            ...unifyPrompts([{ teamId: space.id, teamName: space.name, prompts: results[1].data?.items ?? [] }]),
+          );
+          if (sources.agents.length + sources.prompts.length > 10_000) {
+            cancelled = true;
+            stop();
+            setSnapshot({ scope, sources: EMPTY, failed: true });
+          }
+        }
+        agents.unsubscribe();
+        prompts.unsubscribe();
+        pending.delete(agents);
+        pending.delete(prompts);
+      }
+    };
+    void Promise.all(Array.from({ length: Math.min(4, spaces.length) }, worker)).then(() => {
+      clearTimeout(timeout);
+      if (!cancelled) setSnapshot({ scope, sources: failed ? EMPTY : sources, failed });
     });
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
+      stop();
     };
-  }, [active, teamMeta, fetchAgents, fetchPrompts]);
+  }, [active, context.currentData, context.isError, context.isFetching, dispatch, scope, spaces]);
 
-  return useMemo<SearchSources>(() => {
-    const agents = teamMeta.flatMap(({ id, name }) =>
-      (agentsByTeam[id] ?? [])
-        // Only usable agents belong in a launcher (mirrors the recent-agents row).
-        .filter((instance) => instance.status === "enabled" && !instance.suspension_reason)
-        .map((instance) => ({ instance, teamId: id, teamName: name })),
-    );
-    const teamPromptGroups = teamMeta.map(({ id, name }) => ({
-      teamId: id,
-      teamName: name,
-      prompts: promptsByTeam[id] ?? [],
-    }));
-    return {
-      agents,
-      teams: teamMeta,
-      prompts: unifyPrompts(teamPromptGroups, marketplacePrompts ?? []),
-    };
-  }, [teamMeta, agentsByTeam, promptsByTeam, marketplacePrompts]);
+  const current = snapshot?.scope === scope && !context.isError && !context.isFetching ? snapshot : undefined;
+  return {
+    ...(current?.sources ?? EMPTY),
+    scope,
+    isLoading: active && !context.isError && !current,
+    isError: context.isError || Boolean(current?.failed),
+    retry: () => {
+      if (context.isError) void context.refetch();
+      else setRefresh((value) => value + 1);
+    },
+  };
 }

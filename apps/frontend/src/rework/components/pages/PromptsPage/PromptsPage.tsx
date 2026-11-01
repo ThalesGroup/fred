@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
@@ -13,16 +13,23 @@ import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import PromptCard from "@shared/organisms/PromptCard/PromptCard";
+import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker";
+import TagInput from "@shared/molecules/TagInput/TagInput";
+import FavoritesFilterChip from "@shared/molecules/FavoritesFilterChip/FavoritesFilterChip";
+import { usePromptFavoriteToggle } from "@core/hooks/usePromptFavoriteToggle";
+import FilterChips from "@shared/molecules/FilterChips/FilterChips";
+import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import { isPromptLogicalNameValid } from "@rework/utils/promptValidation";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
-import { filterPrompts } from "@shared/utils/promptFilter";
+import { filterPrompts, countPromptsByCategory, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useMySpacesQuery,
   useAuthorizeSpaceMutation,
   usePromptCatalogQuery,
+  useListPromptCategoriesQuery,
   useGetPromptQuery,
   useCreatePromptMutation,
   useUpdatePromptMutation,
@@ -39,7 +46,14 @@ import PromptViewDialog from "./PromptViewDialog/PromptViewDialog";
 import DuplicatePromptDialog from "./DuplicatePromptDialog/DuplicatePromptDialog";
 import styles from "./PromptsPage.module.scss";
 
-const emptyForm: CreatePromptRequest = { display_name: "", logical_name: "", description: "", text: "" };
+const emptyForm: CreatePromptRequest = {
+  display_name: "",
+  logical_name: "",
+  description: "",
+  category_id: null,
+  tags: [],
+  text: "",
+};
 
 export default function PromptsPage() {
   const { teamId } = useParams();
@@ -87,6 +101,27 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
   canManageRef.current = canManage;
   const catalog = usePromptCatalogQuery({ spaceId }, { refetchOnMountOrArgChange: true });
   const prompts = catalog.currentData?.items ?? [];
+  const categoryCatalog = useListPromptCategoriesQuery({ spaceId }, { refetchOnMountOrArgChange: true });
+  const categories = categoryCatalog.currentData?.items ?? [];
+  const categoryNameById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category.name])),
+    [categories],
+  );
+  const [managingCategories, setManagingCategories] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const categoryCounts = useMemo(() => countPromptsByCategory(prompts), [prompts]);
+  useEffect(() => {
+    if (
+      categoryCatalog.currentData &&
+      !categoryCatalog.isFetching &&
+      activeCategory &&
+      activeCategory !== NO_CATEGORY_FILTER_ID &&
+      !categoryCatalog.currentData.items.some((category) => category.id === activeCategory)
+    )
+      setActiveCategory(null);
+  }, [categoryCatalog.currentData, categoryCatalog.isFetching, activeCategory]);
+  const toggleFavorite = usePromptFavoriteToggle(spaceId);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<"create" | "edit" | null>(null);
   const [editingId, setEditingId] = useState<string>();
@@ -122,6 +157,8 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
       logical_name: saved.logical_name,
       display_name: saved.display_name,
       description: saved.description,
+      category_id: saved.category_id,
+      tags: saved.tags,
       text: saved.text,
     });
     setSeeded(true);
@@ -146,15 +183,31 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
   const saveError = (error: unknown) => {
     if ((error as { data?: { code?: string } })?.data?.code === "prompt_name_conflict") {
       setNameError(t("rework.weaverPrompts.nameConflict"));
+    } else if ((error as { data?: { code?: string } })?.data?.code === "prompt_category_conflict") {
+      showError({ summary: t("rework.promptCategories.categoryConflict") });
+      void categoryCatalog.refetch();
     } else notifyError(error);
   };
   const validName = isPromptLogicalNameValid(form.logical_name);
   const validTitle =
     Boolean(form.display_name.trim()) && countUnicodeCodePoints(form.display_name.normalize("NFC").trim()) <= 255;
   const validDescription = countUnicodeCodePoints(form.description ?? "") <= 500;
-  const ready = mode === "create" || (seeded && !detail.isFetching && !detail.isError);
+  const validText = Boolean(form.text.trim()) && !form.text.includes("\0");
+  const validTags =
+    (form.tags ?? []).length <= 20 &&
+    (form.tags ?? []).every(
+      (tag) =>
+        Boolean(tag.trim()) &&
+        countUnicodeCodePoints(tag.normalize("NFC").trim()) <= 64 &&
+        !/[\u0000-\u001f\u007f-\u009f]/u.test(tag),
+    );
+  const ready =
+    Boolean(categoryCatalog.currentData) &&
+    !categoryCatalog.isError &&
+    (mode === "create" || (seeded && !detail.isFetching && !detail.isError));
   const save = async () => {
-    if (!canManage || busy || !ready || !validName || !validTitle || !validDescription) return;
+    if (!canManage || busy || !ready || !validName || !validTitle || !validDescription || !validText || !validTags)
+      return;
     const version = dialogVersion.current;
     try {
       if (mode === "edit" && editingId && detail.currentData) {
@@ -164,6 +217,8 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
           updatePromptRequest: {
             display_name: form.display_name === detail.currentData.display_name ? undefined : form.display_name,
             description: form.description === detail.currentData.description ? undefined : form.description || null,
+            category_id: form.category_id === detail.currentData.category_id ? undefined : form.category_id,
+            tags: JSON.stringify(form.tags) === JSON.stringify(detail.currentData.tags) ? undefined : form.tags,
             text: form.text === detail.currentData.text ? undefined : form.text,
           },
         }).unwrap();
@@ -211,6 +266,8 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
           logical_name: logicalName,
           display_name: source.display_name,
           description: source.description,
+          category_id: source.category_id,
+          tags: source.tags,
           text: source.text,
         },
       }).unwrap();
@@ -221,7 +278,7 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
       if (live.current && dialogVersion.current === version) saveError(error);
     }
   };
-  const filtered = filterPrompts(prompts, { search, categoryId: null });
+  const filtered = filterPrompts(prompts, { search, categoryId: activeCategory, favoritesOnly });
   const unavailable = t("rework.weaverAgents.notConnected");
   return (
     <div className={styles.pageContainer}>
@@ -253,8 +310,15 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
               color="on-surface"
               variant="text"
               size="small"
-              disabled
-              title={unavailable}
+              disabled={
+                !canManage ||
+                !categoryCatalog.currentData ||
+                categoryCatalog.isFetching ||
+                categoryCatalog.isError ||
+                !catalog.currentData ||
+                catalog.isError
+              }
+              onClick={() => setManagingCategories(true)}
               icon={{ category: "outlined", type: "tune" }}
             >
               {t("rework.promptCategories.manage.buttonAria")}
@@ -263,19 +327,53 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
         }
       />
       <ServiceNotice icon="info" title={t("rework.weaverPrompts.deferred")} />
+      <FavoritesFilterChip
+        label={t("rework.teams.prompts.favorite.filter")}
+        active={favoritesOnly}
+        onToggle={() => setFavoritesOnly((value) => !value)}
+      />
+      {categoryCatalog.currentData && !categoryCatalog.isError && catalog.currentData && !catalog.isError && (
+        <FilterChips
+          aria-label={t("rework.promptCategories.pickerTitle")}
+          options={[
+            {
+              id: NO_CATEGORY_FILTER_ID,
+              label: t("rework.promptCategories.noCategory"),
+              count: categoryCounts.get(null) ?? 0,
+            },
+            ...categories.map((category) => ({
+              id: category.id,
+              label: category.name,
+              count: categoryCounts.get(category.id) ?? 0,
+            })),
+          ]}
+          value={activeCategory}
+          onChange={setActiveCategory}
+          allLabel={t("rework.teams.agents.podFilter.all")}
+          maxVisible={6}
+        />
+      )}
       {access?.error != null && <ServiceNotice icon="info" title={agentErrorText(access.error, t)} />}
-      {catalog.isError ? (
+      {catalog.isError || categoryCatalog.isError ? (
         <ServiceNotice
           icon="cloud_off"
-          title={t("rework.weaverPrompts.catalogError")}
-          description={agentErrorText(catalog.error, t)}
+          title={t(categoryCatalog.isError ? "rework.promptCategories.loadError" : "rework.weaverPrompts.catalogError")}
+          description={agentErrorText(categoryCatalog.isError ? categoryCatalog.error : catalog.error, t)}
           action={
-            <Button color="primary" variant="text" size="small" onClick={() => void catalog.refetch()}>
+            <Button
+              color="primary"
+              variant="text"
+              size="small"
+              onClick={() => {
+                void catalog.refetch();
+                void categoryCatalog.refetch();
+              }}
+            >
               {t("rework.weaverPrompts.retry")}
             </Button>
           }
         />
-      ) : !catalog.currentData ? (
+      ) : !catalog.currentData || !categoryCatalog.currentData ? (
         <div className={styles.loadingState}>
           <Spinner size={20} />
           {t("rework.teams.prompts.loading")}
@@ -294,9 +392,11 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
             <PromptCard
               key={prompt.prompt_id}
               prompt={prompt}
+              categoryName={prompt.category_id ? categoryNameById.get(prompt.category_id) : null}
               canManage={canManage && !busy}
               publishable={false}
               unavailableReason={unavailable}
+              onToggleFavorite={() => void toggleFavorite(prompt)}
               onView={() => setViewingId(prompt.prompt_id)}
               onEdit={() => open(prompt)}
               onDuplicate={() => {
@@ -317,6 +417,8 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
           </div>
           {mode === "edit" && detail.isError ? (
             <ServiceNotice icon="info" title={agentErrorText(detail.error, t)} />
+          ) : categoryCatalog.isError ? (
+            <ServiceNotice icon="cloud_off" title={t("rework.promptCategories.loadError")} />
           ) : !ready ? (
             <Spinner size={20} />
           ) : (
@@ -324,6 +426,7 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
               <TextInput
                 label={t("rework.teams.prompts.form.name")}
                 required
+                explanation={`${countUnicodeCodePoints(form.display_name.normalize("NFC").trim())}/255`}
                 value={form.display_name}
                 disabled={!canManage || busy}
                 error={!validTitle && form.display_name ? t("rework.weaverPrompts.titleLimit") : undefined}
@@ -348,13 +451,31 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
               />
               <TextInput
                 label={t("rework.teams.prompts.form.description")}
+                explanation={`${countUnicodeCodePoints(form.description ?? "")}/500`}
                 value={form.description ?? ""}
                 disabled={!canManage || busy}
                 error={!validDescription ? t("rework.weaverPrompts.descriptionLimit") : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
+              <CategoryPicker
+                categories={categories}
+                value={form.category_id}
+                disabled={!canManage || busy}
+                onChange={(category_id) => setForm((current) => ({ ...current, category_id }))}
+              />
+              <TagInput
+                label={t("rework.weaverPrompts.tags")}
+                tags={form.tags ?? []}
+                disabled={!canManage || busy}
+                placeholder={t("rework.teams.prompts.form.tagsPlaceholder")}
+                error={!validTags ? t("rework.weaverPrompts.tagsLimit") : undefined}
+                removeTagAriaLabel={(tag) => t("rework.teams.prompts.form.removeTagAria", { tag })}
+                onChange={(tags) => setForm((current) => ({ ...current, tags }))}
+              />
               <PromptEditor
                 label={t("rework.teams.prompts.form.text")}
+                required
+                error={form.text && !validText ? t("rework.weaverPrompts.textRequired") : undefined}
                 value={form.text}
                 disabled={!canManage || busy}
                 onChange={(text) => setForm((f) => ({ ...f, text }))}
@@ -382,7 +503,16 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
                 variant="filled"
                 size="medium"
                 onClick={save}
-                disabled={!canManage || busy || !ready || !validName || !validTitle || !validDescription}
+                disabled={
+                  !canManage ||
+                  busy ||
+                  !ready ||
+                  !validName ||
+                  !validTitle ||
+                  !validDescription ||
+                  !validText ||
+                  !validTags
+                }
               >
                 {t(mode === "edit" ? "rework.save" : "rework.create")}
               </Button>
@@ -390,11 +520,25 @@ function SpacePrompts({ space, contextStamp }: { space: MySpace; contextStamp?: 
           </div>
         </div>
       </FullPageModal>
+      {managingCategories && canManage && categoryCatalog.currentData && (
+        <ManageCategoriesDialog
+          open
+          spaceId={spaceId}
+          categories={categories}
+          usedCategoryIds={new Set([...categoryCounts.keys()].filter((id): id is string => id !== null))}
+          onClose={() => setManagingCategories(false)}
+          onChanged={() => {
+            void categoryCatalog.refetch();
+            void catalog.refetch();
+          }}
+        />
+      )}
       <PromptViewDialog
         key={viewingId}
         open={Boolean(viewingId)}
         spaceId={spaceId}
         promptId={viewingId}
+        categories={categories}
         onClose={() => setViewingId(undefined)}
       />
       <DuplicatePromptDialog

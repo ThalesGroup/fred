@@ -1695,7 +1695,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     });
     let (status, report) = http_import(&app, &token, &bytes).await;
     assert_eq!(status, 200, "{report}");
-    assert_eq!(report["identities_created"], 11); // Alice and Bob already exist.
+    assert_eq!(report["identities_created"], 12); // Alice and Bob already exist.
     assert_eq!(report["spaces_reconciled"], 4);
     let acme = named_space(&e.pool, &e.authorization, None, "Acme")
         .await

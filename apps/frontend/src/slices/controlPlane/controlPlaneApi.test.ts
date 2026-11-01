@@ -8,6 +8,7 @@ import { Provider } from "react-redux";
 import { useComposerCommands } from "../../rework/components/pages/ManagedChatPage/useComposerCommands";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { promptFixture, promptSummaryFixture } from "../../rework/components/pages/PromptsPage/weaverPromptFixtures";
+import { INSTANCE } from "../../rework/components/pages/TeamAgentsPage/weaverAgentFixtures";
 import { configureStore } from "@reduxjs/toolkit";
 import type { ImportBlueprintApiResponse, MeApiResponse, MySpacesApiResponse } from "./controlPlaneOpenApi";
 
@@ -301,6 +302,28 @@ describe("Weaver prompt catalog", () => {
     store.dispatch(api.util.resetApiState());
   });
 
+  it("traverses the generated agent pages before exposing the catalog", async () => {
+    const first = { items: [{ ...INSTANCE, agent_instance_id: "a", logical_name: "first" }], next_cursor: "first" };
+    const last = { items: [{ ...INSTANCE, agent_instance_id: "z", logical_name: "last" }], next_cursor: null };
+    const { store, fetch } = setup(first);
+    fetch.mockResolvedValueOnce(response(first)).mockResolvedValueOnce(response(last));
+    const result = await store.dispatch(api.endpoints.listAgentInstances.initiate({ spaceId: "team" })).unwrap();
+    expect(new URL(fetch.mock.calls[1][0].url).searchParams.get("after")).toBe("first");
+    expect(result.items.map((instance) => instance.agent_instance_id)).toEqual(["a", "z"]);
+    store.dispatch(api.util.resetApiState());
+  });
+
+  it("loads all category pages and sorts names only after the complete traversal", async () => {
+    const first = { items: [{ id: "a", space_id: "team", name: "Zulu" }], next_cursor: "a" };
+    const last = { items: [{ id: "b", space_id: "team", name: "Alpha" }], next_cursor: null };
+    const { store, fetch } = setup(first);
+    fetch.mockResolvedValueOnce(response(first)).mockResolvedValueOnce(response(last));
+    const result = await store.dispatch(api.endpoints.listPromptCategories.initiate({ spaceId: "team" })).unwrap();
+    expect(new URL(fetch.mock.calls[1][0].url).searchParams.get("after")).toBe("a");
+    expect(result.items.map((c) => c.name)).toEqual(["Alpha", "Zulu"]);
+    store.dispatch(api.util.resetApiState());
+  });
+
   it.each(["http", "same", "backwards", "bound"])(
     "fails explicitly without publishing a partial catalog: %s",
     async (failure) => {
@@ -319,7 +342,7 @@ describe("Weaver prompt catalog", () => {
       const result = await store.dispatch(api.endpoints.listPrompts.initiate({ spaceId: "team" }));
       expect(result.data).toBeUndefined();
       expect(result.error).toMatchObject(
-        failure === "http" ? { status: 503 } : { status: "CUSTOM_ERROR", error: "prompt_catalog_incomplete" },
+        failure === "http" ? { status: 503 } : { status: "CUSTOM_ERROR", error: "resource_catalog_incomplete" },
       );
       expect(fetch.mock.calls.length).toBeLessThanOrEqual(100);
       store.dispatch(api.util.resetApiState());
@@ -392,7 +415,7 @@ describe("Weaver prompt catalog", () => {
     store.dispatch(api.util.resetApiState());
   });
 
-  it.each(["create", "update", "delete", "failed"])(
+  it.each(["create", "update", "delete", "favorite", "unfavorite", "failed"])(
     "invalidates only the affected space and prompt after %s",
     async (mutation) => {
       const { store, fetch } = setup(page(["a"]));
@@ -429,6 +452,8 @@ describe("Weaver prompt catalog", () => {
             createPromptRequest: { logical_name: "new", display_name: "New", text: "body" },
           }),
         );
+      else if (mutation === "favorite") await store.dispatch(api.endpoints.addPromptFavorite.initiate(args));
+      else if (mutation === "unfavorite") await store.dispatch(api.endpoints.removePromptFavorite.initiate(args));
       else if (mutation === "delete") await store.dispatch(api.endpoints.deletePrompt.initiate(args));
       else
         await store.dispatch(api.endpoints.updatePrompt.initiate({ ...args, updatePromptRequest: { text: "edited" } }));

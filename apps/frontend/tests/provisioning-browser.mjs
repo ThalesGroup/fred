@@ -328,8 +328,8 @@ try {
     await expect(root.page.getByRole("heading", { name: "Import completed" })).toHaveCount(0);
     release();
     const first = await firstPromise;
-    assert.equal(first.identities_resolved, 13);
-    assert.equal(first.identities_created, 13);
+    assert.equal(first.identities_resolved, 14);
+    assert.equal(first.identities_created, 14);
     assert.equal(first.spaces_reconciled, 4);
     const teamsBefore = await get(root.context, root.bearer, "/admin/teams");
     const grantsBefore = await get(root.context, root.bearer, "/users/platform-roles");
