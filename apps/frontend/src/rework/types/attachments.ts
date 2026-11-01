@@ -23,11 +23,12 @@ export interface ChatAttachment {
   size: number;
   mime: string;
   status: ChatAttachmentStatus;
-  isImage: boolean;
   documentUid?: string;
   error?: string;
   canRetry?: boolean;
   canRemove?: boolean;
+  /** Shown after the status, when there is room for more than the name. */
+  detail?: string;
 }
 
 export interface SessionAttachment {

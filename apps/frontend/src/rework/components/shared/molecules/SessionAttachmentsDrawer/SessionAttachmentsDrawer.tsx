@@ -14,8 +14,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Icon from "@shared/atoms/Icon/Icon";
-import IconButton from "@shared/atoms/IconButton/IconButton";
+import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
 import ChatSidePanel from "../ChatSidePanel/ChatSidePanel.tsx";
 import { MarkdownPreviewModal } from "../MarkdownPreviewModal/MarkdownPreviewModal";
@@ -78,61 +77,30 @@ export function SessionAttachmentsDrawer({
         fill
       >
         <UploadWarningBanner />
-        <p className={styles.rowMeta}>{t("chatbot.attachments.readyHint")}</p>
+        <div className={styles.hint}>{t("chatbot.attachments.readyHint")}</div>
         <div className={styles.list}>
           {isLoading && attachments.length === 0 ? (
             <div className={styles.empty}>{t("chatbot.sessionAttachments.loading")}</div>
           ) : attachments.length === 0 ? (
             <div className={styles.empty}>{t("chatbot.sessionAttachments.empty")}</div>
           ) : (
-            attachments.map((attachment) => {
-              const sizeLabel = formatBytes(attachment.sizeBytes);
-              const timestampLabel = formatTimestamp(attachment.createdAt);
-              const metaLabel = [attachment.mime, sizeLabel, timestampLabel].filter(Boolean).join(" · ");
-              // A <button> cannot nest another, so the delete control sits beside
-              // the preview target instead of inside it.
-              return (
-                <div key={attachment.attachmentId} className={styles.row}>
-                  <button
-                    type="button"
-                    className={styles.rowPreview}
-                    onClick={() => setPreviewAttachmentId(attachment.attachmentId)}
-                  >
-                    <span className={styles.rowIcon} aria-hidden>
-                      <Icon category="outlined" type="attach_file" />
-                    </span>
-                    <span className={styles.rowBody}>
-                      <span className={styles.rowName} title={attachment.name}>
-                        {attachment.name}
-                      </span>
-                      <span className={styles.rowMeta}>{metaLabel}</span>
-                      <span className={styles.rowMeta}>
-                        {t(
-                          `chatbot.attachmentChip.${attachment.status === "ready" ? "ready" : attachment.status === "ingesting" ? "processing" : "failed"}`,
-                        )}
-                      </span>
-                      {attachment.status === "error" && (
-                        <span className={styles.rowMeta}>
-                          {t("chatbot.attachments.processingUnavailable")}
-                          {attachment.error ? ` (${attachment.error})` : ""}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                  {!readOnly && (
-                    <span className={styles.rowButtons}>
-                      <IconButton
-                        variant="icon"
-                        size="2xs"
-                        icon={{ category: "outlined", type: "delete" }}
-                        aria-label={t("chatbot.sessionAttachments.deleteAria", { name: attachment.name })}
-                        onClick={() => onDelete(attachment.attachmentId)}
-                      />
-                    </span>
-                  )}
-                </div>
-              );
-            })
+            <AttachmentChips
+              stacked
+              attachments={attachments.map((attachment) => ({
+                id: attachment.attachmentId,
+                name: attachment.name,
+                size: attachment.sizeBytes ?? 0,
+                mime: attachment.mime ?? "",
+                status: attachment.status,
+                error: attachment.error,
+                canRemove: !readOnly && attachment.status !== "ingesting",
+                detail: [formatBytes(attachment.sizeBytes), formatTimestamp(attachment.createdAt)]
+                  .filter(Boolean)
+                  .join(" · "),
+              }))}
+              onRemove={onDelete}
+              onOpen={setPreviewAttachmentId}
+            />
           )}
         </div>
       </ChatSidePanel>

@@ -14,6 +14,7 @@
 
 import { KeyboardEvent, ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Tooltip } from "../../atoms/Tooltip/Tooltip";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { appendVoiceTranscript, audioFileExtensionForMimeType } from "./voiceInputUtils";
@@ -97,6 +98,8 @@ interface RichInputFieldProps {
   disabled?: boolean;
   /** Blocks sending (Enter + send button) while typing stays enabled — e.g. attachments still uploading. */
   sendDisabled?: boolean;
+  /** Why sending is blocked; shown as the send button's tooltip. */
+  sendHint?: string;
   /** Code-point count for the exact value the caller will submit. */
   characterCount?: number;
   /** Runtime-published code-point limit; omitted for older runtime pods. */
@@ -172,6 +175,7 @@ export function RichInputField({
   onInterrupt,
   disabled = false,
   sendDisabled = false,
+  sendHint,
   characterCount,
   characterLimit,
   placeholder,
@@ -426,6 +430,18 @@ export function RichInputField({
     }
   }, [stopRecording, voiceInputDisabled, voiceInputState]);
 
+  const sendButton = (
+    <IconButton
+      variant="filled"
+      color="primary"
+      size="small"
+      icon={{ category: "outlined", type: "arrow_upward" }}
+      onClick={onSend}
+      disabled={sendDisabled}
+      aria-label={t("chatbot.sendMessage")}
+    />
+  );
+
   const defaultActionSlot = (
     <div className={styles.actionGroup}>
       {canUseVoiceInput &&
@@ -469,17 +485,7 @@ export function RichInputField({
           aria-label={t("chatbot.stopResponse")}
         />
       )}
-      {showSend && (
-        <IconButton
-          variant="filled"
-          color="primary"
-          size="small"
-          icon={{ category: "outlined", type: "arrow_upward" }}
-          onClick={onSend}
-          disabled={sendDisabled}
-          aria-label={t("chatbot.sendMessage")}
-        />
-      )}
+      {showSend && (sendHint ? <Tooltip text={sendHint}>{sendButton}</Tooltip> : sendButton)}
     </div>
   );
 

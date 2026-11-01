@@ -22,6 +22,8 @@ export interface UploadScope {
   sessionId: string;
   entries: AttachmentUpload[];
   listeners: Set<() => void>;
+  // In memory only: a failed document chip dismissed here stays listed in the drawer.
+  dismissed: Set<string>;
 }
 const scopes = new Map<string, UploadScope>();
 const active = new Set<string>();
@@ -44,7 +46,7 @@ export function attachmentUploadScope(actor: string, spaceId: string, sessionId:
   } catch {
     // Local hints never replace the server list or receipts.
   }
-  const scope = { actor, spaceId, sessionId, entries, listeners: new Set<() => void>() };
+  const scope = { actor, spaceId, sessionId, entries, listeners: new Set<() => void>(), dismissed: new Set<string>() };
   scopes.set(key, scope);
   return scope;
 }
@@ -68,6 +70,10 @@ export function forgetAttachmentUpload(scope: UploadScope, key: string) {
     scope,
     scope.entries.filter((e) => e.key !== key),
   );
+}
+export function dismissAttachment(scope: UploadScope, documentId: string) {
+  scope.dismissed.add(documentId);
+  save(scope, [...scope.entries]);
 }
 export const attachmentErrorCode = (error: unknown) =>
   (error as { data?: { code?: string } })?.data?.code ??

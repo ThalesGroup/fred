@@ -781,6 +781,7 @@ function ManagedChatContent({
           !!chat.modelPreparationError ||
           chat.modelPreparationPending
         }
+        sendHint={chat.attachmentsUploading ? t("chatbot.attachments.waiting") : undefined}
         characterCount={chat.inputCharacterCount}
         characterLimit={chat.maxChatInputChars}
         enableVoiceInput={false}
@@ -804,7 +805,6 @@ function ManagedChatContent({
               onRemove={chat.removeAttachment}
               onRetry={allowChatAttachments ? chat.retryAttachmentUpload : undefined}
             />
-            {chat.attachmentsUploading && <p role="status">{t("chatbot.attachments.waiting")}</p>}
             {chat.attachmentListError && (
               <div role="alert">
                 <p>{t("chatbot.attachments.listFailed")}</p>
@@ -1274,7 +1274,7 @@ function ManagedChatContent({
           <SessionAttachmentsDrawer
             open={attachmentsDrawerOpen}
             onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
-            readOnly={chat.executionDisabled || !chat.supportsHitl}
+            readOnly={chat.executionDisabled}
             attachments={chat.persistedAttachments}
             isLoading={chat.isHydratingAttachments}
             onDelete={(attachmentId) => {

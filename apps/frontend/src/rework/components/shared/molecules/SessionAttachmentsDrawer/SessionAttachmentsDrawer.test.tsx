@@ -65,7 +65,7 @@ afterEach(() => {
   container.remove();
 });
 
-function renderDrawer(onDelete = vi.fn(), readOnly = false) {
+function renderDrawer(onDelete = vi.fn(), readOnly = false, shown = attachment) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -75,7 +75,7 @@ function renderDrawer(onDelete = vi.fn(), readOnly = false) {
         readOnly={readOnly}
         open
         onClose={() => {}}
-        attachments={[attachment]}
+        attachments={[shown]}
         onDelete={onDelete}
       />,
     );
@@ -112,14 +112,18 @@ describe("SessionAttachmentsDrawer - attachment row markup", () => {
   it("deletes without opening the preview when the delete button is clicked", () => {
     const onDelete = renderDrawer();
 
-    click(container.querySelector('button[aria-label="chatbot.sessionAttachments.deleteAria"]'));
+    click(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]'));
 
     expect(onDelete).toHaveBeenCalledWith("att-1");
     expect(previewOpen()).toBe("false");
   });
+  it("offers no delete action while the file is processing", () => {
+    renderDrawer(vi.fn(), false, { ...attachment, status: "ingesting" });
+    expect(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]')).toBeNull();
+  });
   it("keeps the preview accessible without a delete action in a read-only conversation", () => {
     const onDelete = renderDrawer(vi.fn(), true);
-    expect(container.querySelector('button[aria-label="chatbot.sessionAttachments.deleteAria"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]')).toBeNull();
     click(container.querySelector("button"));
     expect(previewOpen()).toBe("true");
     expect(onDelete).not.toHaveBeenCalled();

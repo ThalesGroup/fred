@@ -20,11 +20,47 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: var(--spacing-2xs);
+  gap: var(--spacing-xs);
   padding-bottom: 2px;
   width: 100%;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
+}
+
+.chips[data-stacked="true"] {
+  flex-direction: column;
+  align-items: stretch;
+  padding-bottom: 0;
+  overflow: visible;
+}
+
+.chips[data-stacked="true"] > span {
+  width: 100%;
+  max-width: none;
+}
+
+.chips > span {
+  gap: var(--spacing-xs);
+  border-radius: var(--radius-ms);
+  padding: var(--spacing-2xs) var(--spacing-s) var(--spacing-2xs) var(--spacing-xs);
+}
+
+.chips > span:has(> button) {
+  padding-right: var(--spacing-2xs);
+}
+
+/* Cancels the chip's gap: the buttons' own click areas already separate them. */
+.chips > span > button + button {
+  margin-left: calc(-1 * var(--spacing-xs));
+}
+
+.chips > [data-tone="error"] {
+  border-color: transparent;
+}
+
+.fileIcon {
+  display: flex;
+  font-size: 1.125rem;
 }
