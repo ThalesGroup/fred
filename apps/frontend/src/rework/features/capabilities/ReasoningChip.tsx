@@ -24,7 +24,7 @@ import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import type { ChatControlDescriptor, PreparationModels } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
-import { currentModelRow, offersReasoning, modelChoiceKey, offerLabel } from "./modelChoice";
+import { currentModelRow, offersReasoning, modelChoiceKey, offerLabel, parseModelChoice } from "./modelChoice";
 import styles from "./ReasoningChip.module.css";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
@@ -42,6 +42,16 @@ export function modelLabel(displayName: unknown, modelName: unknown, modelId: un
   if (typeof modelName === "string" && modelName.trim()) return prettifyModelName(modelName.trim());
   return modelLabelFromCapabilityId(modelId);
 }
+
+/** A saved choice before the offers load: readable, in the same shape as an offer. */
+const savedChoiceLabel = (choice: string): string => {
+  try {
+    const { source_id, upstream_model_id } = parseModelChoice(choice);
+    return `${upstream_model_id} (${source_id})`;
+  } catch {
+    return choice;
+  }
+};
 
 /** Fallback label derived from a `model__{provider}__{name}` capability id —
  *  "model__openai__gpt-4.1-mini" → "GPT 4.1 Mini". Used only when the catalog
@@ -139,7 +149,7 @@ export function ReasoningChip({
   const retainedKey = effectiveModel?.recommendation ?? effectiveModel?.default;
   const displayLabel = current
     ? offerLabel(current)
-    : (chatProfileId ??
+    : ((chatProfileId && savedChoiceLabel(chatProfileId)) ??
       effectiveModel?.legacy_profile_id ??
       (retainedKey
         ? `${retainedKey.upstream_model_id} (${retainedKey.source_id})`
@@ -147,7 +157,8 @@ export function ReasoningChip({
           ? t("chatbot.composerSettings.reasoningModelsSection")
           : null));
   const stateLabel = on ? onLabel : offLabel;
-  const unavailable = !!displayLabel && (!effectiveModel || !current || !current.candidate);
+  // No models yet means not prepared, not refused.
+  const unavailable = !!displayLabel && !!effectiveModel && (!current || !current.candidate);
   const unavailableLabel = t("chatbot.composerSettings.modelNotEnabledForTeam");
   const canPickModel = rows.length > 0 && !!onChatProfileChange;
 

@@ -193,6 +193,7 @@ const fetchPrompt = (args: { spaceId: string; promptId: string }, preferCache: b
     },
   );
 };
+vi.mock("@core/hooks/usePromptFavoriteToggle", () => ({ usePromptFavoriteToggle: () => vi.fn() }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListPromptCategoriesQuery: () => ({ currentData: { items: [], next_cursor: null }, isFetching: false }),
   useMySpacesQuery: () => ({
@@ -591,6 +592,14 @@ describe("ManagedChatPage new conversation action", () => {
     expect(button).toBeDefined();
     act(() => button?.click());
     expect(startNewConversation).toHaveBeenCalledOnce();
+    act(() => root.unmount());
+  });
+  it("keeps the composer and its stop button until the running turn ends", () => {
+    chatValue = { ...baseChatValue([]), agentConfigurationChanged: true, waitResponse: true };
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => root.render(<ManagedChatPage />));
+    expect(container.textContent).not.toContain("chatbot.agentConfigurationChanged");
     act(() => root.unmount());
   });
   it("keeps the header on a bound session whose history came back empty", () => {

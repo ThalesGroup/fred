@@ -34,8 +34,10 @@ const h = vi.hoisted(() => ({
   isError: false,
   pending: false,
   refetch: vi.fn(),
+  toggleFavorite: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@core/hooks/usePromptFavoriteToggle", () => ({ usePromptFavoriteToggle: () => h.toggleFavorite }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListPromptCategoriesQuery: () => ({ currentData: { items: [], next_cursor: null }, refetch: vi.fn() }),
   usePromptCatalogQuery: ({ spaceId }: { spaceId: string }, { skip }: { skip?: boolean }) => ({
@@ -102,6 +104,7 @@ beforeEach(() => {
   h.isError = false;
   h.pending = false;
   h.refetch.mockReset();
+  h.toggleFavorite.mockReset();
 });
 
 afterEach(() => {
@@ -169,6 +172,41 @@ describe("PromptSelectionChatPanel", () => {
     // Two different messages: "this space is empty" is not the same problem as
     // "your query excluded everything", and only the second is the user's to fix.
     mount();
+    const input = container.querySelector("input") as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, "nothing matches this");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(Array.from(container.querySelectorAll("p")).slice(-1)[0]?.textContent).toBe(
+      "chatbot.promptSelectionPanel.emptyFilters",
+    );
+  });
+
+  it("stars a prompt without picking it", async () => {
+    const onInsert = vi.fn(async () => true);
+    mount({ onInsert });
+
+    await click(container.querySelector('li button[aria-pressed="false"]') ?? undefined);
+
+    expect(h.toggleFavorite).toHaveBeenCalledWith(expect.objectContaining({ prompt_id: "t1" }));
+    expect(onInsert).not.toHaveBeenCalled();
+  });
+
+  it("explains how to add a favorite when the favorites filter empties the list", async () => {
+    mount();
+    await click(buttonWithText("rework.teams.prompts.favorite.filter"));
+
+    expect(Array.from(container.querySelectorAll("p")).slice(-1)[0]?.textContent).toBe(
+      "rework.teams.prompts.favorite.empty",
+    );
+  });
+
+  it("keeps the filters message when favorites exist but the search excludes them", async () => {
+    h.promptsByTeam[TEAM_ID][0] = { ...h.promptsByTeam[TEAM_ID][0], is_favorite: true };
+    mount();
+    await click(buttonWithText("rework.teams.prompts.favorite.filter"));
     const input = container.querySelector("input") as HTMLInputElement;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;

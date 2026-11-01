@@ -52,7 +52,7 @@ export function SessionTitleEditor({ title, onCommit, maxLength = 120 }: Session
     <>
       <IconButton
         variant="icon"
-        size="small"
+        size="medium"
         icon={{ category: "outlined", type: "edit" }}
         aria-label={t("chatbot.sessionTitleEditor.editAria", { title: title || placeholder })}
         aria-expanded={open}

@@ -529,9 +529,37 @@
   font: var(--font-body-large);
 }
 
+/* Stands in for the composer: same inset, width, radius and surface. */
+.agentChangedBar {
+  padding: 0 var(--spacing-m);
+}
+
+.agentChangedCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  margin-inline: auto;
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-l);
+  background: var(--surface-container-high);
+  padding: var(--spacing-m);
+  max-width: var(--composer-max-width);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.agentChangedCard > p {
+  margin: 0;
+}
+
+.agentChangedCard > button {
+  align-self: flex-end;
+}
+
 .modelPreparationNotice {
   margin-bottom: var(--spacing-s);
-  padding: 0 var(--spacing-l);
+  padding: 0 var(--spacing-m);
 }
 
 .modelPreparationNotice > * {
@@ -539,11 +567,14 @@
   max-width: var(--composer-max-width);
 }
 
+/* Lines up with the composer below it. */
 .conversationNotice {
-  margin: 0 0 12px;
+  margin: 0 auto var(--spacing-s);
   border-radius: var(--radius-ms);
   background: var(--surface-container);
   padding: 12px 16px;
+  width: calc(100% - 2 * var(--spacing-m));
+  max-width: var(--composer-max-width);
   color: var(--on-surface);
   font: var(--font-body-medium);
 }

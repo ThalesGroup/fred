@@ -387,7 +387,7 @@
     }
   },
   "chatbot": {
-    "agentConfigurationChanged": "This agent has changed since this conversation started. Start a new conversation to use its new configuration.",
+    "agentConfigurationChanged": "The agent has been modified since this conversation started. You can no longer continue this conversation. Please start a new conversation to use the latest version of the agent.",
     "artifactLinks": {
       "ariaLabel": "Generated files",
       "downloadAria": "Download {{name}}",
@@ -664,6 +664,8 @@
     "deletedAgentSuffix": "(deleted)",
     "modelPreparationErrorTitle": "Sending unavailable",
     "historyUnavailable": "Conversation history is unavailable. Please try again later.",
+    "preparationUnavailable": "The conversation could not be prepared. Check your connection and try again.",
+    "savedModelChoiceInvalid": "The saved model choice must be selected again in the Models menu.",
     "skipAllHitlQuestions": "Skip all",
     "hitlOtherAnswerHint": "write your answer…",
     "hitlQuestionState": {
