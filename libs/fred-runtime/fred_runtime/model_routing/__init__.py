@@ -19,14 +19,12 @@ from .contracts import (
     ModelSelectionSource,
 )
 from .provider import FredCoreModelProvider, ModelProvider, RoutedChatModelFactory
-from .resolver import ModelRoutingResolver
 
 __all__ = [
     "FredCoreModelProvider",
     "FrozenModel",
     "ModelCapability",
     "ModelProvider",
-    "ModelRoutingResolver",
     "ModelSelection",
     "ModelSelectionSource",
     "RoutedChatModelFactory",

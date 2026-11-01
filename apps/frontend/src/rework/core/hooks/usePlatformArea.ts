@@ -6,7 +6,7 @@ import { useMySpacesQuery } from "../../../slices/controlPlane/controlPlaneApiEn
 import { useManagerPlatformAdmin } from "./useManagerPlatformAdmin";
 
 /** Pages of the platform admin space; every other admin page belongs to the organization. */
-const PLATFORM_ADMIN_ROUTES = new Set(["/admin/organizations", "/admin/provisioning"]);
+const PLATFORM_ADMIN_ROUTES = new Set(["/admin/organizations", "/admin/provisioning", "/admin/monitor"]);
 
 export const isPlatformAdminRoute = (pathname: string) => PLATFORM_ADMIN_ROUTES.has(pathname.replace(/\/$/, ""));
 

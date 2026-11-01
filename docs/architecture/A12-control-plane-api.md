@@ -108,19 +108,18 @@ Operation `team_registry`.
 
 | Method | Path | Summary |
 | --- | --- | --- |
-| POST | [/agents/execute/stream](#post-agentsexecutestream) | Direct-template hello-world execution; no managed instance or business data access |
+| POST | [/agents/execute/stream](#post-agentsexecutestream) | Managed inference through common admission; direct demo remains fixed and never calls an LLM |
 
 ### POST /agents/execute/stream
 
-Direct-template hello-world execution; no managed instance or business data access.
+Managed inference through common admission; direct demo remains fixed and never calls an LLM.
 
 Operation `execute_stream`.
 
 Request: [`ExecuteRequest`](#executerequest).
 
 - 200: [`RuntimeEvent`](#runtimeevent) (`text/event-stream`) — SSE data frames containing RuntimeEvent JSON; final closes the stream without a sentinel
-- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
-- 401, 403, 404, 422, 501: [`ErrorBody`](#errorbody)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
 ## /authorize routes
 
@@ -885,6 +884,11 @@ Operation `team_supervision`.
 | POST | [/spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution](#post-spacesspace_idagent-instancesagent_instance_idprepare-execution) |  |
 | GET | [/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime](#get-spacesspace_idagent-instancesagent_instance_idruntime) |  |
 | GET | [/spaces/{space_id}/agent-templates](#get-spacesspace_idagent-templates) |  |
+| GET | [/spaces/{space_id}/prompts](#get-spacesspace_idprompts) | List metadata for management and chat |
+| POST | [/spaces/{space_id}/prompts](#post-spacesspace_idprompts) | Create a prompt, or duplicate one by supplying a new logical_name and copied content |
+| GET | [/spaces/{space_id}/prompts/{prompt_id}](#get-spacesspace_idpromptsprompt_id) | Read the current definition for editing, duplication or chat insertion/sending |
+| PATCH | [/spaces/{space_id}/prompts/{prompt_id}](#patch-spacesspace_idpromptsprompt_id) | Edit only display_name, description and text |
+| DELETE | [/spaces/{space_id}/prompts/{prompt_id}](#delete-spacesspace_idpromptsprompt_id) |  |
 | GET | [/spaces/{space_id}/sessions](#get-spacesspace_idsessions) |  |
 | POST | [/spaces/{space_id}/sessions](#post-spacesspace_idsessions) |  |
 | GET | [/spaces/{space_id}/sessions/{session_id}](#get-spacesspace_idsessionssession_id) |  |
@@ -1064,6 +1068,7 @@ Operation `prepare_execution`.
 | `session_id` | query | string |  | Registered conversation to verify before routing. |
 | `model_source_id` | query | string |  | Requested model source; supply together with model_upstream_id. |
 | `model_upstream_id` | query | string |  | Requested upstream model; never an authorization. |
+| `reasoning` | query | boolean |  | Requested reasoning; subject to policy and known capability. |
 
 - 200: [`ExecutionPreparation`](#executionpreparation)
 - 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
@@ -1079,7 +1084,10 @@ Operation `resolve_runtime`.
 | `person` | query | string |  | Canonical person; only a trusted delegated call may supply this assertion. |
 | `run` | query | string |  | Run identifier; required together with person and agent. |
 | `agent` | query | string |  | Delegated agent instance UUID; must match agent_instance_id. |
-| `conversation` | query | string |  | Registered conversation; this resolver checks its private canonical association, then the pod checks checkpoint provenance before loading history. |
+| `conversation` | query | string |  | Registered conversation; checked before loading history. |
+| `model_source_id` | query | string |  | Requested source; never authority. |
+| `model_upstream_id` | query | string |  | Requested model; supply with source. |
+| `reasoning` | query | boolean |  | Requested reasoning subject to policy. |
 
 - 200: [`RuntimeBinding`](#runtimebinding)
 - 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
@@ -1095,6 +1103,78 @@ Operation `space_agent_templates`.
 - 200: array of [`AgentTemplateSummary`](#agenttemplatesummary)
 - 400, 401, 403, 404, 409, 500, 503: [`ErrorBody`](#errorbody)
 - 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /spaces/{space_id}/prompts
+
+List metadata for management and chat. Follow next_cursor until null to load the complete catalog. Fetch a definition to obtain current, untruncated text.
+
+Operation `list_prompts`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `after` | query | string |  | Exclusive logical_name cursor from next_cursor. Omit for the first page; at most 100 entries per page. |
+
+- 200: [`PromptPage`](#promptpage)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### POST /spaces/{space_id}/prompts
+
+Create a prompt, or duplicate one by supplying a new logical_name and copied content.
+
+Operation `create_prompt`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+
+Request: [`CreatePromptRequest`](#createpromptrequest).
+
+- 201: [`Prompt`](#prompt)
+- 400, 401, 403, 404, 413, 422, 500, 503: [`ErrorBody`](#errorbody)
+- 409: [`ErrorBody`](#errorbody) — prompt_name_conflict on a duplicate logical_name; space lifecycle conflicts retain their shared codes
+
+### GET /spaces/{space_id}/prompts/{prompt_id}
+
+Read the current definition for editing, duplication or chat insertion/sending.
+
+Operation `get_prompt`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `prompt_id` | path | string (uuid) | yes |  |
+
+- 200: [`Prompt`](#prompt)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### PATCH /spaces/{space_id}/prompts/{prompt_id}
+
+Edit only display_name, description and text. Identity, placement, authorship and unknown fields are rejected. An empty patch preserves update attribution.
+
+Operation `update_prompt`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `prompt_id` | path | string (uuid) | yes |  |
+
+Request: [`UpdatePromptRequest`](#updatepromptrequest).
+
+- 200: [`Prompt`](#prompt)
+- 400, 401, 403, 404, 409, 413, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### DELETE /spaces/{space_id}/prompts/{prompt_id}
+
+Operation `delete_prompt`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `prompt_id` | path | string (uuid) | yes |  |
+
+- 204: no body — Prompt deleted
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
 ### GET /spaces/{space_id}/sessions
 
@@ -1570,6 +1650,15 @@ One of: `organization`, `team`, `project`.
 | --- | --- | --- | --- |
 | `organization_id` | string (uuid) | yes |  |
 
+### CreatePromptRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `description` | string, max length 500 or null |  | Omitted/null means no description. NUL characters are rejected. |
+| `display_name` | string, min length 1, max length 255 | yes | NFC-normalized and trimmed, nonblank, without control characters. |
+| `logical_name` | string, min length 1, max length 64 | yes | Immutable; "skill" is reserved. Invalid names are rejected, never normalized. |
+| `text` | string | yes | Preserved verbatim, including whitespace and empty strings. NUL is rejected. |
+
 ### CreateSessionRequest
 
 | Field | Type | Required | Description |
@@ -1651,6 +1740,15 @@ One of: `organization`, `team`, `project`.
 | `bytes` | integer (int64) | yes | Logical original bytes recorded in SQL, not physical storage usage. |
 | `documents` | integer (int64) | yes |  |
 
+### EffectiveModelOptions
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `max_tokens` | integer (int64), >= 0 or null |  |  |
+| `reasoning_effort` | [`ReasoningEffort`](#reasoningeffort) or null |  |  |
+| `temperature` | number (double) or null |  |  |
+| `top_p` | number (double) or null |  |  |
+
 ### Entry
 
 One of:
@@ -1702,6 +1800,7 @@ JSON error envelope shared by application, authentication and import failures.
 | `execute_stream_url` | string | yes |  |
 | `execute_url` | string | yes |  |
 | `execution_transport` | [`ExecutionTransport`](#executiontransport) | yes |  |
+| `inference` | [`InferenceSelection`](#inferenceselection) or null | yes |  |
 | `max_chat_input_chars` | integer (int64), >= 0 or null | yes |  |
 | `messages_url_template` | string | yes | RFC 6570 Level 1 template. Substitute the registered session ID. |
 | `model_choice` | [`ModelOfferKey`](#modelofferkey) or null | yes |  |
@@ -1771,6 +1870,28 @@ Multipart body: exactly one `file` part.
 | --- | --- | --- | --- |
 | `status` | string | yes |  |
 
+### InferenceAdmission
+
+Internal or trusted delegated response only. Never put this in browser preparation.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connection` | [`ModelConnection`](#modelconnection) | yes |  |
+| `selection` | [`InferenceSelection`](#inferenceselection) | yes |  |
+
+### InferenceSelection
+
+Browser-safe result; attribution to person/space/instance stays in RuntimeBinding.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `key` | [`ModelOfferKey`](#modelofferkey) | yes |  |
+| `options` | [`EffectiveModelOptions`](#effectivemodeloptions) | yes |  |
+| `policy_revision` | integer (int64) | yes |  |
+| `snapshot_revision` | integer (int64) | yes |  |
+| `source` | [`ModelSelectionSource`](#modelselectionsource) | yes |  |
+| `source_revision` | integer (int64) | yes |  |
+
 ### Language
 
 One of: `en`, `fr`.
@@ -1821,12 +1942,10 @@ One of: `en`, `fr`.
 
 ### ModelConnection
 
-Deliberately excludes discovery URL, authentication and secret references.
-
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `api_root` | string | yes |  |
-| `credential_binding` | string | yes | Platform-approved reference to pod-local inference provisioning, never a secret value. |
+| `credential_binding` | string | yes |  |
 | `provider` | string | yes |  |
 
 ### ModelDiagnostic
@@ -1896,6 +2015,10 @@ Only explicit overrides. Missing/null members supply no value, not a provider de
 
 One of: `selection_missing`, `reselection_required`, `offer_unknown`, `offer_forbidden`, `offer_unavailable`, `fallback_unavailable`.
 
+### ModelSelectionSource
+
+One of: `user_choice`, `instance_recommendation`, `default`, `withdrawal_fallback`.
+
 ### MySpace
 
 Extends [`Space`](#space) with:
@@ -1931,7 +2054,7 @@ Governance view of one organization: its technical admins and business owners.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `policy` | [`OrganizationModelPolicy`](#organizationmodelpolicy) | yes | Only this organization's choices; none is a proof of executability. |
-| `sources` | array of [`ModelInventory`](#modelinventory) | yes | Shared platform observations. Presence/chat/discovery are independent of permission. |
+| `sources` | array of [`ModelInventory`](#modelinventory) | yes | Assigned source observations. Presence/chat/discovery are independent of permission. |
 
 ### OrganizationModelPolicy
 
@@ -2113,6 +2236,43 @@ One of: `fast`, `medium`, `rich`.
 
 One of: `ready`, `writing`, `applied`.
 
+### Prompt
+
+Extends [`PromptMetadata`](#promptmetadata) with:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `text` | string | yes | Current full text, preserved verbatim. |
+
+### PromptMetadata
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `created_at` | string (date-time) | yes |  |
+| `created_by` | string | yes |  |
+| `description` | string or null | yes |  |
+| `display_name` | string | yes |  |
+| `logical_name` | string | yes | Immutable space-local identity. The slash command is "/" + logical_name. |
+| `prompt_id` | string (uuid) | yes |  |
+| `space_id` | string (uuid) | yes |  |
+| `updated_at` | string (date-time) | yes |  |
+| `updated_by` | string | yes |  |
+
+### PromptPage
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | array of [`PromptSummary`](#promptsummary), max items 100 | yes | At most 100 entries, ordered by immutable logical_name in ASCII order. |
+| `next_cursor` | string or null | yes | Pass as `after` until null, including for search, pickers and command menus. Pages are not a snapshot; restart to include concurrent inserts before the cursor. |
+
+### PromptSummary
+
+Extends [`PromptMetadata`](#promptmetadata) with:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `text_preview` | string, max length 240 | yes | First 240 characters, selected in PostgreSQL without fetching the full body. |
+
 ### ProvisioningUpload
 
 | Field | Type | Required | Description |
@@ -2141,6 +2301,10 @@ One of: `ready`, `writing`, `applied`.
 | `tabular_datasets` | integer (int64) | yes | Published datasets/*.parquet artifacts, not SQL tables. |
 | `total_rows` | integer (int64) or null | yes | Null when at least one dataset has no attributable row count. |
 | `vectors` | integer (int64) | yes |  |
+
+### ReasoningEffort
+
+One of: `high`.
 
 ### Receipt
 
@@ -2250,6 +2414,7 @@ One of: `member`, `editor`, `owner`, `analyst`, `organization_admin`.
 | `agent` | [`RuntimeAgent`](#runtimeagent) | yes |  |
 | `attachments` | array of [`RuntimeAttachment`](#runtimeattachment) | yes |  |
 | `conversation_id` | string or null | yes |  |
+| `inference` | [`InferenceAdmission`](#inferenceadmission) or null |  |  |
 | `models` | [`RuntimeModels`](#runtimemodels) | yes |  |
 | `run_id` | string or null | yes |  |
 | `space` | [`RuntimeSpace`](#runtimespace) | yes |  |
@@ -2275,6 +2440,14 @@ One of:
 | `kind` | `assistant_delta` | yes |  |
 | `sequence` | integer (int64), >= 0 | yes |  |
 
+- `kind` = `execution_error`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `execution_error` | yes |  |
+| `message` | string | yes |  |
+| `sequence` | integer (int64), >= 0 | yes |  |
+
 - `kind` = `final`
 
 | Field | Type | Required | Description |
@@ -2289,7 +2462,6 @@ One of:
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `candidate` | boolean | yes | Necessary known facts only; local support, credentials and connectivity remain unproven. |
-| `connection` | [`ModelConnection`](#modelconnection) or null |  |  |
 | `diagnostics` | array of [`ModelDiagnostic`](#modeldiagnostic) | yes |  |
 | `key` | [`ModelOfferKey`](#modelofferkey) | yes |  |
 | `metadata` | [`ModelMetadata`](#modelmetadata) or null |  |  |
@@ -2548,6 +2720,14 @@ Absent fields stay unchanged. A named account becomes the role's sole direct hol
 | `admin_username` | string or null |  |  |
 | `name` | string or null |  |  |
 | `owner_username` | string or null |  |  |
+
+### UpdatePromptRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `description` | string, max length 500 or null |  | Omitted keeps the value; null clears it; a string replaces it (including ""). |
+| `display_name` | string, min length 1, max length 255 or null |  | Omitted/null keeps the value. Supplied strings follow creation's label rules. |
+| `text` | string or null |  | Omitted/null keeps the value; a string replaces it verbatim (including ""). |
 
 ### UpdateSessionRequest
 

@@ -1037,6 +1037,7 @@ async fn create_organization(
         &req.owner_username,
     )
     .await?;
+    initialize_models(&s).await?;
     Ok((StatusCode::CREATED, Json(org)))
 }
 
@@ -1373,10 +1374,24 @@ async fn import_blueprint(
                 let status = error.downcast_ref::<crate::provisioning::Failure>().map(|e| e.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
                 (status, Json(serde_json::json!({"detail":error.to_string()}))).into_response()
             })?;
+        initialize_models(&s).await.map_err(IntoResponse::into_response)?;
         Ok::<_, axum::response::Response>(Json(report).into_response())
     }.await;
     result.unwrap_or_else(|response| response)
 }
+// Deployment-owned declaration, never fields or identities supplied in the import bundle.
+async fn initialize_models(state: &AppState) -> AppResult<()> {
+    crate::model_catalog::initialization::initialize(&state.pool, &state.agent_catalog, false)
+        .await
+        .map_err(|error| {
+            AppError::problem(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "model_initialization_failed",
+                error.to_string(),
+            )
+        })
+}
+
 fn upload_error(status: StatusCode) -> axum::response::Response {
     use axum::response::IntoResponse;
     let status = if status == StatusCode::PAYLOAD_TOO_LARGE {

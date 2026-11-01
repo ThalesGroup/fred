@@ -1,0 +1,48 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  width: 100%;
+  min-width: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+.section h2 {
+  margin: 0;
+  font: var(--font-label-large);
+}
+
+.description {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.events {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event {
+  border-bottom: 1px solid var(--outline);
+  padding: var(--spacing-m) 0;
+  overflow-wrap: anywhere;
+}
+
+.event p {
+  margin: var(--spacing-xs) 0 0;
+}
+
+.eventHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+}

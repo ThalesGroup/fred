@@ -1,74 +1,59 @@
 # Embedded Rust agent
 
-`fred-rust-agent` is a library linked into the control-plane binary. It validates
-one direct-template request and produces Fred runtime events. The host owns the
-Axum handler, authentication, consent checks, error envelope, CORS and logs.
-There is no separate listener, certificate, process, configuration or deployment.
-The library has no dependency on control-plane internals or SQL; SQLx and rig-core
-will be introduced only when persistence and model execution are implemented.
+`fred-rust-agent` executes admitted model calls inside the Control Plane workload.
+The host owns authentication, consent, instance/space authorization and the common
+`model_catalog::instance::decide` decision. The library owns local provisioning
+checks, Rig invocation, bounded execution and Fred event production. No separate
+listener, deployment, Ralph configuration, tools or memory is introduced.
 
-## Call the hello-world route
+## Managed execution
 
-Start the control-plane normally from `apps/control-plane` with `make run`.
-Its existing database and identity dependencies still apply. With the default
-local address and base URL:
+`POST {base_url}/agents/execute/stream` accepts an `agent_instance_id`, nonblank
+`input` (at most 65,536 bytes), optional `session_id`, and `runtime_context` containing
+`space_id`, optional `model_choice: {source_id, upstream_model_id}` and `reasoning`.
+The authenticated host resolves current identity and instance authority in process.
+It checks the instance's runtime/template, then passes the private admitted decision
+to the library. This does not make Ralph available in the UI selector: its existing
+catalog classification and creation/public-routing limitations remain unchanged.
 
-```sh
-curl --fail-with-body --no-buffer \
-  --header @/absolute/path/to/bearer-header.txt \
-  --header 'Content-Type: application/json' \
-  --header 'Accept: text/event-stream' \
-  --data '{"agent_id":"fred.github.ralph","input":"Bonjour"}' \
-  http://localhost:8222/control-plane/v1/agents/execute/stream
-```
+The library checks `platform.inference_credentials` against the admitted source,
+source revision, destination and credential binding before reading the named local
+environment variable. See the parent README for the common contract and coordinated
+rotation. An absent or mismatched binding returns 503 before opening the event
+stream; forbidden/unknown selections return 409 with the shared decision error.
+No failure substitutes another model, source, account or credential.
 
-The private header file contains `Authorization: Bearer <your token>`; keep it
-outside the repository. The caller must satisfy the control-plane's existing
-admission policy (authentication and CGU when enabled). In an explicitly configured
-no-auth development environment, omit the bearer header. Caller-supplied
-`runtime_context` never establishes identity or permission.
+The pinned `rig-core = 0.42.0` uses its OpenAI Chat Completions adapter, with an
+explicit API key, base URL and shared reqwest pool (redirects disabled; 5-second
+connect and 60-second HTTP timeouts). Its request builder consumes the admitted
+model, temperature, token ceiling, top-p and reasoning. Official versioned API:
+[completion request builder](https://docs.rs/rig-core/0.42.0/rig_core/completion/request/struct.CompletionRequestBuilder.html).
+The 120-second turn deadline starts at local admission. There are no tools or
+unbounded agent loops; calls within a turn retain the same credential and decision.
 
-Use the deployment's HTTPS origin instead of the local HTTP URL when going
-through its TLS proxy. The handler disables proxy buffering via
-`X-Accel-Buffering: no`; proxy-specific buffering and stream timeouts still need
-verification in that deployment. The frontend is not wired to this endpoint.
+The Fred SSE sequence is `status`, one `assistant_delta` with the completed provider
+text, then `final`. This currently buffers one completion; it is not token streaming
+from the upstream provider. The provider's finish reason is retained in Fred's
+normalized vocabulary. A failed/timed-out completion emits terminal
+`execution_error`, with a fixed public message and no provider body or credential.
+Dropping the stream cancels the in-flight future; no detached producer remains.
+No call can run after the turn closes. Attribution and revisions are logged through
+the host's tracing context; the host's existing logger strips dependency payloads.
 
-## Wire contract and limits
+## Direct demonstration
 
-`POST {control-plane base_url}/agents/execute/stream` accepts the direct-template
-subset of `libs/fred-sdk/fred_sdk/contracts/execution.py::RuntimeExecuteRequest`.
-`agent_id` must be `fred.github.ralph`, and `input` must be nonblank. The answer is fixed.
-The handler in `../src/embedded_agent.rs` uses the control-plane's `ApiJson` and
-`AdmittedUser` extractors; routes and OpenAPI share the same registration.
+The existing direct request `{"agent_id":"fred.github.ralph","input":"Bonjour"}`
+still replies `Hello world!` without any LLM or managed-instance authority. It cannot
+use inference provisioning. Default empty/null unsupported execution options remain
+accepted; nondefault capabilities, HITL and history options return 422.
 
-The library emits the following `RuntimeEvent` subset from
-`libs/fred-sdk/fred_sdk/contracts/runtime.py`. As in
-`libs/fred-runtime/fred_runtime/app/agent_app.py::_sse`, each JSON object is framed
-as `data: <JSON>` followed by a blank line, with `text/event-stream` content type:
+## Targeted verification
 
-```text
-data: {"kind":"status","sequence":1,"status":"running"}
-
-data: {"kind":"assistant_delta","sequence":2,"delta":"Hello "}
-
-data: {"kind":"assistant_delta","sequence":3,"delta":"world!"}
-
-data: {"kind":"final","sequence":4,"content":"Hello world!","finish_reason":"stop"}
-
-```
-
-Sequence numbers restart for each request. The stream ends after `final`, without
-`[DONE]` or `turn_persisted`. Missing optional event fields retain Fred's defaults.
-Each delta follows a 150 ms async delay to make streaming visible. Disconnecting
-drops the producer; no detached task or database connection belongs to the stream.
-
-Session/context metadata is accepted without history, retrieval or other effects
-and discarded before streaming. Default empty/null execution options are accepted;
-nondefault options (HITL, tuning, history seeding, capabilities) return 422.
-Managed execution returns 501, unknown agents 404, ambiguous/missing targets or
-blank input 422. All errors use the host's JSON `detail`/`code` envelope before
-streaming. No business resources are accessed and no team permission is inferred.
-
-The control-plane Cargo.lock resolves this path dependency and its Dockerfile
-copies the library sources. No agent-specific build command is needed. The former
-standalone HTTPS server and certificate commands have been removed.
+`cargo test -p fred-rust-agent --lib` exercises the real Rig HTTP adapter against a
+loopback provider: destination, model, options, fictitious credential, repeated
+calls, missing/mismatched provisioning, errors, deadlines and stream cancellation.
+Control Plane's `agent_instances::model_catalog` integration tests additionally
+exercise authenticated managed execution, delegated admission, browser projection,
+source removal and revocation against disposable PostgreSQL. No real provider or
+k3d validation is implied. Workspace Cargo.lock and the existing Docker build own
+the library dependency.

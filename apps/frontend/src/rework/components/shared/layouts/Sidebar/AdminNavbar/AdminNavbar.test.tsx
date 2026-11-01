@@ -51,7 +51,7 @@ const ACME = [
   { kind: "team", name: "Design", roles: ["owner"], id: "team-1" },
   { kind: "organization", name: "Acme", roles: ["owner", "organization_admin"], id: "org-1" },
 ];
-const PLATFORM_PAGES = ["/admin/organizations", "/admin/provisioning"];
+const PLATFORM_PAGES = ["/admin/organizations", "/admin/provisioning", "/admin/monitor"];
 
 let host: HTMLDivElement;
 let root: Root;

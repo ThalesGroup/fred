@@ -30,6 +30,8 @@ shared identity, permissions and organization governance.
 | [Frontend](apps/frontend/README.md) | User interface for the platform. |
 | [SDK](libs/fred-sdk/README.md), [runtime](libs/fred-runtime/README.md), [core](libs/fred-core/README.md) | Agent contracts, execution and shared infrastructure. |
 | [Frontend libraries](libs/frontend/README.md) | Shared UI packages and their release tooling. |
+| [Rust SDK](libs/fred-rust-sdk/README.md) | Internal shared JWT authentication and platform-role reads. |
+| [Monitor](apps/monitor/README.md) | Independent Rust Kubernetes monitor and platform-admin technical status page. |
 
 The architecture dossier describes integrated user journeys. A library or API
 being present in the repository does not by itself establish an available journey.

@@ -224,7 +224,7 @@ test-provisioning-browser: check-node node_modules ## Test provisioning through 
 # after changing a backend controller or model, and commit the regenerated
 # *OpenApi.ts alongside the backend change.
 .PHONY: update-all-apis
-update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api ## Regenerate the API client for ALL backends at once
+update-all-apis: update-knowledge-flow-api update-control-plane-api update-runtime-api update-monitor-api ## Regenerate the API client for ALL backends at once
 	@echo "All backend API clients regenerated"
 
 .PHONY: update-knowledge-flow-api
@@ -320,3 +320,9 @@ FRONTEND_APPLICATIONS_JSON_VALUE = $(patsubst '%',%,$(strip $(FRONTEND_APPLICATI
 .PHONY: swift-preview
 swift-preview: check-node node_modules ## Browse preserved Swift screens with local fixtures, no backend
 	npx vite --config vite.swift-preview.config.ts --mode swift-preview --open /swift-preview.html
+
+.PHONY: update-monitor-api
+update-monitor-api: check-node node_modules ## Regenerate the monitor API client and types
+	$(MAKE) -C ../monitor generate-openapi
+	npx --no-install @rtk-query/codegen-openapi src/slices/monitor/monitorOpenApiConfig.json
+	npx --no-install prettier --write src/slices/monitor/monitorOpenApi.ts

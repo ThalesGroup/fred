@@ -154,6 +154,11 @@
                 "title": "Source Id",
                 "type": "string"
               },
+              "source_revision": {
+                "exclusiveMinimum": 0,
+                "title": "Source Revision",
+                "type": "integer"
+              },
               "api_root": {
                 "minLength": 1,
                 "title": "Api Root",
@@ -172,6 +177,7 @@
             },
             "required": [
               "source_id",
+              "source_revision",
               "api_root",
               "credential_binding",
               "api_key_env"

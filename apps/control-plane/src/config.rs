@@ -185,8 +185,11 @@ impl Configuration {
         let path =
             std::env::var("CONFIG_FILE").unwrap_or_else(|_| "./config/configuration.yaml".into());
         let text = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
-        let config: Self =
-            serde_yaml_ng::from_str(&text).with_context(|| format!("invalid {path}"))?;
+        let config: Self = serde_yaml_ng::from_str(&text).map_err(|_| {
+            anyhow::anyhow!(
+                "invalid configuration YAML: check field names and types; input values are withheld"
+            )
+        })?;
         config.validate()?;
         Ok((path, config))
     }

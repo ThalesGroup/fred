@@ -72,7 +72,7 @@ async fn authorized_transaction(
 
 #[derive(Serialize, ToSchema)]
 pub struct OrganizationModelInventory {
-    /// Shared platform observations. Presence/chat/discovery are independent of permission.
+    /// Assigned source observations. Presence/chat/discovery are independent of permission.
     pub sources: Vec<ModelInventory>,
     /// Only this organization's choices; none is a proof of executability.
     pub policy: OrganizationModelPolicy,
@@ -102,7 +102,7 @@ async fn organization_models(
         .execute(&mut *tx)
         .await?;
     let inventory = OrganizationModelInventory {
-        sources: store::read_inventory(&mut tx, None).await?,
+        sources: store::read_inventory(&mut tx, None, Some(organization_id)).await?,
         policy: policy::read(&mut tx, organization_id).await?,
     };
     tx.commit().await?;
@@ -192,11 +192,17 @@ async fn refresh_model_source(
         .iter()
         .find(|source| source.source_id == source_id)
         .ok_or(AppError::NotFound)?;
-    if !source.enabled {
-        return Err(AppError::Conflict("model source is disabled".into()));
-    }
     let token = {
         let mut tx = authorized_transaction(&s, &user.uid, &org).await?;
+        policy::require_assigned(
+            &mut tx,
+            organization_id,
+            &std::collections::BTreeSet::from([source_id.clone()]),
+        )
+        .await?;
+        if !source.enabled {
+            return Err(AppError::Conflict("model source is disabled".into()));
+        }
         let token = store::claim(&mut tx, source)
             .await?
             .ok_or_else(|| AppError::Conflict("model source configuration changed".into()))?;
@@ -206,6 +212,12 @@ async fn refresh_model_source(
     // No SQL connection or transaction survives the bounded discovery call.
     let result = discovery::discover(source).await;
     let mut tx = authorized_transaction(&s, &user.uid, &org).await?;
+    policy::require_assigned(
+        &mut tx,
+        organization_id,
+        &std::collections::BTreeSet::from([source_id]),
+    )
+    .await?;
     let outcome = store::publish(&mut tx, source, token, result).await?;
     tx.commit().await?;
     match outcome {

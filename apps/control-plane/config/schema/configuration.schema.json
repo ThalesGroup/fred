@@ -361,6 +361,36 @@
         }
       ]
     },
+    "InferenceCredentialBinding": {
+      "additionalProperties": false,
+      "description": "Local deployment attestation, independent of the received admission.",
+      "properties": {
+        "api_key_env": {
+          "type": "string"
+        },
+        "api_root": {
+          "type": "string"
+        },
+        "credential_binding": {
+          "type": "string"
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "source_revision": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_revision",
+        "api_root",
+        "credential_binding",
+        "api_key_env"
+      ],
+      "type": "object"
+    },
     "InferenceDestination": {
       "additionalProperties": false,
       "properties": {
@@ -369,7 +399,7 @@
           "type": "string"
         },
         "credential_binding": {
-          "description": "Source-bound pod provisioning reference. Rust never resolves this credential.",
+          "description": "Source-bound workload provisioning reference; never a credential value.",
           "type": "string"
         },
         "provider": {
@@ -450,6 +480,22 @@
       ],
       "type": "object"
     },
+    "ModelOfferKey": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "type": "string"
+        },
+        "upstream_model_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "upstream_model_id"
+      ],
+      "type": "object"
+    },
     "ModelSource": {
       "additionalProperties": false,
       "description": "Platform approval of one source. Contains references only, never secret values.",
@@ -502,13 +548,82 @@
       ],
       "type": "object"
     },
+    "OrganizationModels": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelOfferKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fallback": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelOfferKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "organization": {
+          "description": "Exact existing organization name, resolved using the provisioning SQL lookup.",
+          "type": "string"
+        },
+        "permitted": {
+          "items": {
+            "$ref": "#/$defs/ModelOfferKey"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        },
+        "reasoning_enabled": {
+          "items": {
+            "$ref": "#/$defs/ModelOfferKey"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "organization",
+        "sources",
+        "permitted"
+      ],
+      "type": "object"
+    },
     "PlatformConfig": {
       "additionalProperties": false,
       "properties": {
+        "inference_credentials": {
+          "items": {
+            "$ref": "#/$defs/InferenceCredentialBinding"
+          },
+          "type": "array"
+        },
         "model_sources": {
           "items": {
             "$ref": "#/$defs/ModelSource"
           },
+          "type": "array"
+        },
+        "organization_models": {
+          "items": {
+            "$ref": "#/$defs/OrganizationModels"
+          },
+          "maxItems": 64,
           "type": "array"
         },
         "runtime_catalog_sources": {

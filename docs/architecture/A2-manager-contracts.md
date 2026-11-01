@@ -205,6 +205,16 @@ rechecks admission/Manage and fences authorization after HTTP, preserving the M1
 configuration/token fences. Turn admission consumes this policy through the
 [model contract below](#chat-model-preparation-and-turn-admission); saving the policy
 alone does not prove provider connectivity or pod credential provisioning.
+Migration [`0011`](../../apps/control-plane/migrations/0011_organization_model_sources.sql)
+adds explicit `organization_model_source` assignments and a durable initialization
+receipt independent of policy deletion. Historical permissions are retained, but
+unassigned sources are filtered from inventory and admission and refused on new
+writes/refresh. [`initialization.rs`](../../apps/control-plane/src/model_catalog/initialization.rs)
+resolves exact organization names after provisioning and publishes once using the
+shared policy operations. This is implemented with isolated SQL/provider-fixture
+coverage; it is not a claim of a validated k3d/provider journey or Rust inference.
+The schema alone does not initialize an installation: explicit mappings and a
+successful bounded initialization pass are required.
 The [component contract](../../apps/control-plane/README.md#platform-model-inventory-and-organization-owneristration)
 defines source approval, payloads, eligibility, errors and concurrency.
 
@@ -229,11 +239,10 @@ and [`tuning.rs`](../../apps/control-plane/src/agent_instances/tuning.rs).
 [`model_catalog/instance.rs`](../../apps/control-plane/src/model_catalog/instance.rs)
 reuses M2 selection locks and defines the three typed invocation options. The
 [existing resolver](../../apps/control-plane/src/agent_instances/runtime.rs) reads
-policy/catalog/configuration in one snapshot and exposes approved inference
-connections only to trusted delegated workloads. Legacy profiles remain diagnostic
-references, never selectable aliases. Control Plane supplies the complete model
-facts and a browser preparation diagnostic; final selection and invocation remain
-in the Python pod. [Component semantics](../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3)
+policy/catalog/configuration in one snapshot and reads the selected inference
+connection only for trusted delegated or internal admission. Legacy profiles remain diagnostic
+references, never selectable aliases. Control Plane owns the shared selection and effective options. Python and Rust
+execute that admitted decision; browser preparation receives its public projection. [Component semantics](../../apps/control-plane/README.md#instance-recommendations-and-resolver-data-m3)
 define omission/null, known limits, candidate diagnostics and connection visibility.
 
 ### Resource identity and conversation placement
@@ -312,23 +321,24 @@ instance recommendation and organization default are optional.
 
 A missing or forbidden selected offer cannot trigger substitution. An approved
 fallback applies only to confirmed withdrawal without another disqualifying
-condition, and must itself be permitted and a candidate. Failed discovery alone
+condition, and must itself be permitted and a candidate within the same source
+and approved provisioning account. Failed discovery alone
 is not withdrawal: an existing candidate may remain usable, while new administrative selection
 writes require successful observation at the current source revision. A retained
 legacy profile requires explicit offer re-selection unless a recommendation exists.
 
 **Browser preparation.**
 [`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs)
-accepts paired `model_source_id` / `model_upstream_id` query parameters and an
-optional registered `session_id`. It verifies space, instance, template and session
+accepts paired `model_source_id` / `model_upstream_id` query parameters, a requested
+`reasoning` flag and an optional registered `session_id`. It verifies space, instance, template and session
 access, then evaluates the model facts already read in its transaction.
-`ExecutionPreparation` returns `model_choice` and nullable `model_error` alongside
-the offers, controls and approved runtime URLs. A readable response may be HTTP 200
+`ExecutionPreparation` returns `model_choice`, nullable `model_error` and a public
+`inference` selection alongside the offers, controls and approved runtime URLs. A readable response may be HTTP 200
 with an unusable model choice: callers must check the diagnostic before sending.
 No inference connection or secret is exposed in this browser response.
 
 [`model_catalog/instance.rs`](../../apps/control-plane/src/model_catalog/instance.rs),
-`preparation_error`, distinguishes `selection_missing`, `reselection_required`,
+`decide`, distinguishes `selection_missing`, `reselection_required`,
 `offer_unknown`, `offer_forbidden`, `offer_unavailable` and `fallback_unavailable`.
 These are safe fixed messages. Preparation does not verify pod-local credentials
 or make an inference request.
@@ -336,13 +346,16 @@ or make an inference request.
 **Turn admission.** The browser sends canonical `runtime_context.space_id` and
 its requested model choice to Agent Pod. It does not invent a `team_id` to establish
 authority. The pod obtains a fresh trusted binding from Control Plane; it does not
-reuse browser preparation as a grant. The pure Python
-[`ModelRoutingResolver`](../../libs/fred-runtime/fred_runtime/model_routing/resolver.py)
-selects over that binding, and `TurnAuthority` enforces it within the admitted turn.
+reuse browser preparation as a grant. Control Plane's same `decide` function fixes
+the selected model, effective options and revisions. Python's `TurnAuthority` and
+[Rust execution library](../../apps/control-plane/agent/README.md) retain this
+context through the turn. Both verify the source, destination, binding and exact
+source revision against local provisioning before resolving the credential.
 The [security annex](A6-security.md#managed-agent-turn-authority) describes identity,
 conversation binding and the turn boundary. No per-LLM-call authority refresh is
-added. Catalogue management and policy are centralized; the final resolver remains
-in Python.
+added. This implementation contract does not establish Ralph selector availability
+or k3d/provider validation; rotation and current runtime limits are documented in
+the [component README](../../apps/control-plane/README.md#workload-provisioning-and-rotation).
 
 **UI consumers.** The generated
 [`Control Plane client`](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts)
@@ -456,6 +469,7 @@ erDiagram
 "organization_model_policy" }o--|| "organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
 "organization_model_permission" }o--|| "model_offer" : "source_id, upstream_model_id"
 "organization_model_permission" }o--|| "organization_model_policy" : "organization_id"
+"organization_model_permission" }o--|| "organization_model_source" : "organization_id, source_id"
 "session_metadata" }o--o| "deletion" : "deletion_id"
 "organization_capability" }o--|| "space" : "organization_id"
 "organization_capability" }o--|| "runtime_capability" : "runtime_id, capability_id"
@@ -465,6 +479,10 @@ erDiagram
 "space_invitation_role" }o--|| "space_invitation" : "invitation_id"
 "storage_budget" }o--|| "space" : "space_id"
 "prompt" }o--|| "space" : "space_id"
+"document_move" }o--|| "document" : "document_id"
+"organization_model_source" }o--|| "space" : "organization_id"
+"organization_model_source" }o--|| "model_source" : "source_id"
+"organization_model_initialization" |o--|| "space" : "organization_id"
 
 "deletion" {
   uuid id
@@ -794,6 +812,27 @@ erDiagram
   text created_by
   timestamp_with_time_zone updated_at
   text updated_by
+}
+"document_move" {
+  uuid id
+  uuid document_id FK
+  text actor
+  uuid source_space_id
+  uuid source_folder_id
+  uuid destination_space_id
+  uuid destination_folder_id
+  uuid generation_id
+  text phase
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone finished_at
+}
+"organization_model_source" {
+  uuid organization_id FK
+  text source_id FK
+}
+"organization_model_initialization" {
+  uuid organization_id FK
+  timestamp_with_time_zone completed_at
 }
 ```
 <!-- end generated -->

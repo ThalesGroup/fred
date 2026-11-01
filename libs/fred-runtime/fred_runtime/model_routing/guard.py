@@ -9,7 +9,6 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 import httpx
-from fred_sdk.contracts.weaver import RuntimeModelOffer
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -128,22 +127,20 @@ class _CheckedAsyncClient(httpx.AsyncClient):
         return await self._shared.send(request, **kwargs)
 
 
-def checked_clients(authority: TurnAuthority, offer: RuntimeModelOffer, api_key: str):
-    connection = offer.connection
-    if connection is None:
-        raise AuthorityLostError()
+def checked_clients(authority: TurnAuthority, api_key: str):
+    admission = authority.binding.inference
+    selection = admission.selection
+    connection = admission.connection
     allowed_urls = {
         connection.api_root.rstrip("/") + suffix
         for suffix in ("/chat/completions", "/responses")
     }
-    options = authority.binding.models.options
+    options = selection.options
 
     def check(request: httpx.Request) -> None:
         authority.check()
         if (
-            not offer.permitted
-            or not offer.candidate
-            or request.method != "POST"
+            request.method != "POST"
             or str(request.url) not in allowed_urls
             or request.headers.get("authorization") != f"Bearer {api_key}"
         ):
@@ -154,7 +151,7 @@ def checked_clients(authority: TurnAuthority, offer: RuntimeModelOffer, api_key:
             raise AuthorityLostError() from None
         if (
             not isinstance(payload, dict)
-            or payload.get("model") != offer.key.upstream_model_id
+            or payload.get("model") != selection.key.upstream_model_id
         ):
             raise AuthorityLostError()
         # Transformations may narrow a token ceiling, never change the resolved knobs.
@@ -168,10 +165,6 @@ def checked_clients(authority: TurnAuthority, offer: RuntimeModelOffer, api_key:
             if k in payload
         ]
         limits = [options.max_tokens]
-        if offer.metadata is not None:
-            limits.extend(
-                [offer.metadata.max_output_tokens, offer.metadata.context_window_tokens]
-            )
         if any(
             not isinstance(v, int)
             or isinstance(v, bool)
@@ -182,7 +175,7 @@ def checked_clients(authority: TurnAuthority, offer: RuntimeModelOffer, api_key:
             raise AuthorityLostError()
         if options.max_tokens is not None and not tokens:
             raise AuthorityLostError()
-        effort = authority.reasoning_effort(offer)
+        effort = options.reasoning_effort
         if (
             "reasoning" in payload
             or payload.get("reasoning_effort") != effort

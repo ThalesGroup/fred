@@ -5,9 +5,12 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
+use fred_rust_sdk::inference::ModelOfferKey;
 use futures::{Stream, StreamExt, stream};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+pub mod inference;
 
 pub const AGENT_ID: &str = "fred.github.ralph";
 
@@ -28,17 +31,29 @@ pub const DEFINITION: AgentDefinition = AgentDefinition {
     description: "Demonstration agent replying Hello world! without an LLM or data access.",
 };
 
-// Direct-template subset of fred-sdk/contracts/execution.py::RuntimeExecuteRequest.
+// Fixed-response subset of fred-sdk/contracts/execution.py::RuntimeExecuteRequest.
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct ExecuteRequest {
     agent_id: Option<String>,
     agent_instance_id: Option<String>,
     #[serde(default)]
-    input: String,
+    pub input: String,
     session_id: Option<String>,
     runtime_context: Option<BTreeMap<String, Value>>,
     #[serde(flatten)]
     options: BTreeMap<String, Value>,
+}
+
+/// Validated request shape, not authority. The host must admit managed targets.
+pub enum RequestedTarget<'a> {
+    Direct,
+    Managed {
+        instance_id: &'a str,
+        space_id: &'a str,
+        session_id: Option<&'a str>,
+        choice: Option<ModelOfferKey>,
+        reasoning: bool,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -47,22 +62,22 @@ pub enum ExecuteError {
     Invalid(&'static str),
     #[error("Unknown agent_id.")]
     UnknownAgent,
-    #[error("Managed execution is unavailable for the embedded hello-world agent.")]
-    ManagedUnsupported,
 }
 
 impl ExecuteRequest {
-    pub fn validate(&self) -> Result<(), ExecuteError> {
+    pub fn validate(&self) -> Result<RequestedTarget<'_>, ExecuteError> {
         if self.agent_id.is_some() == self.agent_instance_id.is_some() {
             return Err(ExecuteError::Invalid(
                 "Provide exactly one of agent_id or agent_instance_id.",
             ));
         }
-        if self.agent_instance_id.is_some() {
-            return Err(ExecuteError::ManagedUnsupported);
-        }
-        if self.agent_id.as_deref() != Some(AGENT_ID) {
+        if self.agent_id.as_deref().is_some_and(|id| id != AGENT_ID) {
             return Err(ExecuteError::UnknownAgent);
+        }
+        if self.input.len() > 65_536 {
+            return Err(ExecuteError::Invalid(
+                "input exceeds the embedded runtime limit.",
+            ));
         }
         if self.input.trim().is_empty() {
             return Err(ExecuteError::Invalid("input is required."));
@@ -85,9 +100,46 @@ impl ExecuteRequest {
                 ));
             }
         }
-        // Session/context are accepted as wire metadata; this step has no memory or tools.
-        let _ = (&self.session_id, &self.runtime_context);
-        Ok(())
+        if let Some(instance_id) = self.agent_instance_id.as_deref() {
+            let context = self.runtime_context.as_ref().ok_or(ExecuteError::Invalid(
+                "runtime_context.space_id is required for managed execution.",
+            ))?;
+            let space_id = context
+                .get("space_id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.trim().is_empty())
+                .ok_or(ExecuteError::Invalid(
+                    "runtime_context.space_id must be a non-blank string.",
+                ))?;
+            if context
+                .keys()
+                .any(|key| !matches!(key.as_str(), "space_id" | "model_choice" | "reasoning"))
+            {
+                return Err(ExecuteError::Invalid(
+                    "Unsupported runtime context for embedded execution.",
+                ));
+            }
+            let choice = context
+                .get("model_choice")
+                .filter(|v| !v.is_null())
+                .map(|v| serde_json::from_value::<ModelOfferKey>(v.clone()))
+                .transpose()
+                .map_err(|_| ExecuteError::Invalid("Invalid model_choice."))?;
+            let reasoning = match context.get("reasoning") {
+                None | Some(Value::Null) => false,
+                Some(Value::Bool(value)) => *value,
+                _ => return Err(ExecuteError::Invalid("reasoning must be a boolean.")),
+            };
+            return Ok(RequestedTarget::Managed {
+                instance_id,
+                space_id,
+                session_id: self.session_id.as_deref(),
+                choice,
+                reasoning,
+            });
+        }
+        // Direct-demo session/context remain inert metadata: no memory or tools.
+        Ok(RequestedTarget::Direct)
     }
 }
 
@@ -101,20 +153,22 @@ pub enum RuntimeEvent {
     },
     AssistantDelta {
         sequence: u64,
-        delta: &'static str,
+        delta: String,
+    },
+    #[serde(rename = "execution_error")]
+    Error {
+        sequence: u64,
+        message: &'static str,
     },
     Final {
         sequence: u64,
-        content: &'static str,
+        content: String,
         finish_reason: &'static str,
     },
 }
 
-/// Validate before sending headers, then produce one finite Fred event stream.
-pub fn execute(request: ExecuteRequest) -> Result<impl Stream<Item = RuntimeEvent>, ExecuteError> {
-    request.validate()?;
-    // Do not retain caller metadata (which can contain credentials) during streaming.
-    drop(request);
+/// Produce the fixed response after host admission; no caller context enters the stream.
+pub fn execute() -> impl Stream<Item = RuntimeEvent> {
     let events = [
         RuntimeEvent::Status {
             sequence: 1,
@@ -122,23 +176,23 @@ pub fn execute(request: ExecuteRequest) -> Result<impl Stream<Item = RuntimeEven
         },
         RuntimeEvent::AssistantDelta {
             sequence: 2,
-            delta: "Hello ",
+            delta: "Hello ".into(),
         },
         RuntimeEvent::AssistantDelta {
             sequence: 3,
-            delta: "world!",
+            delta: "world!".into(),
         },
         RuntimeEvent::Final {
             sequence: 4,
-            content: "Hello world!",
+            content: "Hello world!".into(),
             finish_reason: "stop",
         },
     ];
     // Dropping the stream cancels the async delay; there is no detached producer.
-    Ok(stream::iter(events).then(|event| async move {
+    stream::iter(events).then(|event| async move {
         if matches!(&event, RuntimeEvent::AssistantDelta { .. }) {
             tokio::time::sleep(Duration::from_millis(150)).await;
         }
         event
-    }))
+    })
 }

@@ -14,14 +14,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, ToSchema, sqlx::FromRow,
-)]
-#[serde(deny_unknown_fields)]
-pub struct ModelOfferKey {
-    pub source_id: String,
-    pub upstream_model_id: String,
-}
+pub use fred_rust_sdk::inference::ModelOfferKey;
 
 #[derive(Serialize, ToSchema)]
 pub struct OrganizationModelPolicy {
@@ -92,8 +85,9 @@ pub(super) async fn read(
          from organization_model_policy where organization_id = $1",
     ).bind(organization_id).fetch_optional(&mut *conn).await?;
     let permissions: Vec<(String, String, bool)> = sqlx::query_as(
-        "select source_id, upstream_model_id, reasoning_enabled from organization_model_permission
-         where organization_id = $1 order by source_id, upstream_model_id",
+        "select p.source_id, p.upstream_model_id, p.reasoning_enabled from organization_model_permission p
+         join organization_model_source a using (organization_id, source_id)
+         where p.organization_id = $1 order by p.source_id, p.upstream_model_id",
     )
     .bind(organization_id)
     .fetch_all(conn)
@@ -139,7 +133,7 @@ pub(super) async fn read(
 }
 
 impl ReplaceModelPolicy {
-    fn validate(&self) -> AppResult<BTreeSet<ModelOfferKey>> {
+    pub(super) fn validate(&self) -> AppResult<BTreeSet<ModelOfferKey>> {
         let permitted: BTreeSet<_> = self.permitted.iter().cloned().collect();
         if self.expected_revision < 0
             || self.permitted.len() > 4096
@@ -188,12 +182,44 @@ struct Candidate {
     eligible: bool,
 }
 
+/// Shared source boundary for policy writes, recommendations and refresh admission.
+/// Lock assignments until the caller commits; no remote work under these locks.
+pub(super) async fn require_assigned(
+    conn: &mut PgConnection,
+    organization_id: Uuid,
+    sources: &BTreeSet<String>,
+) -> AppResult<()> {
+    let assigned: Vec<String> = sqlx::query_scalar(
+        "select source_id from organization_model_source
+         where organization_id = $1 and source_id = any($2) order by source_id for share",
+    )
+    .bind(organization_id)
+    .bind(sources.iter().collect::<Vec<_>>())
+    .fetch_all(conn)
+    .await?;
+    if assigned.len() != sources.len() {
+        return Err(AppError::problem(
+            StatusCode::FORBIDDEN,
+            "model_source_not_assigned",
+            "A model source is not assigned to this organization. Ask the platform operator for an explicit source assignment.",
+        ));
+    }
+    Ok(())
+}
+
 /// Locks only newly permitted/selected offers and their sources, in source/key order.
 /// Publication and configuration cannot invalidate the facts before this policy commits.
 pub(super) async fn require_selectable(
     conn: &mut PgConnection,
+    organization_id: Uuid,
     candidates: &BTreeSet<ModelOfferKey>,
 ) -> AppResult<()> {
+    require_assigned(
+        conn,
+        organization_id,
+        &candidates.iter().map(|k| k.source_id.clone()).collect(),
+    )
+    .await?;
     if candidates.is_empty() {
         return Ok(());
     }
@@ -242,6 +268,12 @@ pub(super) async fn replace(
     request: ReplaceModelPolicy,
 ) -> AppResult<OrganizationModelPolicy> {
     let permitted = request.validate()?;
+    require_assigned(
+        conn,
+        organization_id,
+        &permitted.iter().map(|k| k.source_id.clone()).collect(),
+    )
+    .await?;
     let current = read(conn, organization_id).await?;
     if current.revision != request.expected_revision {
         return Err(AppError::problem(
@@ -266,7 +298,7 @@ pub(super) async fn replace(
     let reasoning: BTreeSet<_> = request.reasoning_enabled.into_iter().collect();
     let newly_enabled: BTreeSet<_> = reasoning.difference(&previous_reasoning).cloned().collect();
     candidates.extend(newly_enabled.iter().cloned());
-    require_selectable(conn, &candidates).await?;
+    require_selectable(conn, organization_id, &candidates).await?;
     if !newly_enabled.is_empty() {
         let supported: i64 = sqlx::query_scalar(
             "select count(*) from model_offer o
@@ -335,4 +367,76 @@ pub(super) async fn replace(
     .execute(&mut *conn)
     .await?;
     read(conn, organization_id).await
+}
+
+/// Deployment or future administration can initialize using business values only.
+/// Caller holds the organization lock. A receipt survives policy deletion and a
+/// completed receipt prevents recreating assignments or decisions on replay.
+pub(super) async fn initialize(
+    conn: &mut PgConnection,
+    organization: Uuid,
+    source_ids: &[String],
+    request: ReplaceModelPolicy,
+) -> AppResult<()> {
+    request.validate()?;
+    let receipt: Option<Option<chrono::DateTime<chrono::Utc>>> = sqlx::query_scalar(
+        "select completed_at from organization_model_initialization where organization_id = $1",
+    )
+    .bind(organization)
+    .fetch_optional(&mut *conn)
+    .await?;
+    if receipt.as_ref().is_some_and(Option::is_some) {
+        return Ok(());
+    }
+    let missing: bool = sqlx::query_scalar(
+        "select exists(select 1 from organization_model_permission
+         where organization_id = $1 and not (source_id = any($2)))",
+    )
+    .bind(organization)
+    .bind(source_ids)
+    .fetch_one(&mut *conn)
+    .await?;
+    if missing {
+        return Err(AppError::problem(
+            StatusCode::CONFLICT,
+            "historical_model_source_mapping_missing",
+            "Explicit source mapping must cover every retained permission.",
+        ));
+    }
+    let sources: Vec<String> = sqlx::query_scalar(
+        "select source_id from model_source where source_id = any($1) order by source_id for share",
+    )
+    .bind(source_ids)
+    .fetch_all(&mut *conn)
+    .await?;
+    if sources.len() != source_ids.len() {
+        return Err(AppError::problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "model_source_unknown",
+            "An assigned source does not exist.",
+        ));
+    }
+    sqlx::query(
+        "insert into organization_model_source (organization_id, source_id)
+         select $1, source_id from unnest($2::text[]) as source_id
+         on conflict (organization_id, source_id) do nothing",
+    )
+    .bind(organization)
+    .bind(&sources)
+    .execute(&mut *conn)
+    .await?;
+    if receipt.is_none() {
+        replace(
+            conn,
+            organization,
+            "deployment:model-initialization",
+            request,
+        )
+        .await?;
+    }
+    sqlx::query(
+        "insert into organization_model_initialization (organization_id, completed_at) values ($1, now())
+         on conflict (organization_id) do update set completed_at = excluded.completed_at",
+    ).bind(organization).execute(&mut *conn).await?;
+    Ok(())
 }

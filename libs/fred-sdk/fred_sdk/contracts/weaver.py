@@ -34,9 +34,29 @@ class ModelOptions(ResolverFact):
 
 
 class ModelConnection(ResolverFact):
-    provider: str
-    api_root: str
-    credential_binding: str
+    provider: Literal["openai"]
+    api_root: str = Field(min_length=1)
+    credential_binding: str = Field(min_length=1)
+
+
+class EffectiveModelOptions(ModelOptions):
+    reasoning_effort: Literal["high"] | None = None
+
+
+class InferenceSelection(ResolverFact):
+    key: ModelOfferKey
+    source: Literal[
+        "default", "user_choice", "instance_recommendation", "withdrawal_fallback"
+    ]
+    options: EffectiveModelOptions
+    source_revision: int = Field(gt=0, strict=True)
+    snapshot_revision: int = Field(gt=0, strict=True)
+    policy_revision: int = Field(gt=0, strict=True)
+
+
+class InferenceAdmission(ResolverFact):
+    selection: InferenceSelection
+    connection: ModelConnection
 
 
 class ModelMetadata(ResolverFact):
@@ -94,7 +114,6 @@ class RuntimeModelOffer(ResolverFact):
     ]
     metadata: ModelMetadata | None
     observation: ModelObservation | None
-    connection: ModelConnection | None = None
 
 
 class RuntimeModels(ResolverFact):
@@ -137,8 +156,6 @@ class RuntimeModels(ResolverFact):
                     or any(d != "discovery_unavailable" for d in offer.diagnostics)
                 ):
                     raise ValueError("Inconsistent model candidate")
-            if offer.connection is not None and not offer.candidate:
-                raise ValueError("Connection outside candidate set")
         return self
 
 
@@ -173,6 +190,7 @@ class WeaverRuntimeBinding(ResolverFact):
     space: RuntimeSpace
     agent: RuntimeAgent
     models: RuntimeModels
+    inference: InferenceAdmission
     attachments: tuple[RuntimeAttachment, ...]
 
     @model_validator(mode="after")

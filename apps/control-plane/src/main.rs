@@ -22,7 +22,7 @@ use control_plane::{
     api, auth, authorization::Authorization, config::Configuration as Config, logging,
 };
 
-const USAGE: &str = "usage: control-plane [serve | discover-agents | migrate | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | initialize-models | discover-agents | migrate | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -116,6 +116,13 @@ async fn main() -> Result<()> {
         .as_slice()
     {
         [] | ["serve"] => serve(config).await,
+        ["initialize-models"] => {
+            let pool = pool(&config).await?;
+            control_plane::model_catalog::configure_sources(&pool, &config.platform.model_sources)
+                .await?;
+            control_plane::model_catalog::initialization::initialize(&pool, &config.platform, true)
+                .await
+        }
         ["import-provisioning", bundle, "--token-file", token] => {
             import(config, bundle, token).await
         }
@@ -148,6 +155,8 @@ async fn pool(config: &Config) -> Result<sqlx::PgPool> {
 async fn serve(config: Config) -> Result<()> {
     let pool = pool(&config).await?;
     control_plane::model_catalog::configure_sources(&pool, &config.platform.model_sources).await?;
+    control_plane::model_catalog::initialization::initialize(&pool, &config.platform, false)
+        .await?;
     let authorization = Authorization::new(pool.clone());
     let content = if let Some(content) = config.storage.content.clone() {
         let access =
@@ -374,6 +383,10 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
     .run(&bundle)
     .await?;
     println!("{}", serde_json::to_string(&report)?);
+    // Separate deployment stage, outside the Swift bundle format and its transactions.
+    control_plane::model_catalog::configure_sources(&pool, &config.platform.model_sources).await?;
+    control_plane::model_catalog::initialization::initialize(&pool, &config.platform, false)
+        .await?;
     Ok(())
 }
 

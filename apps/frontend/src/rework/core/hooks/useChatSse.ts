@@ -1079,6 +1079,7 @@ export function useChatSse(
           ...(sessionId ? { sessionId } : {}),
           modelSourceId: runtimeContext?.model_choice?.source_id,
           modelUpstreamId: runtimeContext?.model_choice?.upstream_model_id,
+          reasoning: runtimeContext?.reasoning === true,
         }).unwrap();
         if (ac.signal.aborted || isTurnCurrent?.(sessionId ?? "draft") === false || isExecutionAllowed?.() === false) {
           console.debug(`[useChatSse][${sendId}] aborted right after prepare-execution — never reaching onTurnStarted`);
@@ -1089,8 +1090,8 @@ export function useChatSse(
           `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
         );
         applyPreparation(prep);
-        if (prep.model_error) {
-          onError?.(prep.model_error.message);
+        if (prep.model_error || !prep.inference) {
+          onError?.(prep.model_error?.message ?? "Inference preparation is incomplete.");
           releasePreflightLock();
           return false;
         }
@@ -1356,6 +1357,7 @@ export function useChatSse(
           sessionId: pending.session_id,
           modelSourceId: runtimeContext?.model_choice?.source_id,
           modelUpstreamId: runtimeContext?.model_choice?.upstream_model_id,
+          reasoning: runtimeContext?.reasoning === true,
         }).unwrap();
         if (!prep.supports_hitl) throw new Error("HITL is unavailable for this execution");
       } catch (err) {
@@ -1397,8 +1399,8 @@ export function useChatSse(
         reportRequestError(error, "Could not resume this turn.");
         return bailOut(false);
       }
-      if (prep.model_error) {
-        onError?.(prep.model_error.message);
+      if (prep.model_error || !prep.inference) {
+        onError?.(prep.model_error?.message ?? "Inference preparation is incomplete.");
         return bailOut(false);
       }
 
@@ -1663,7 +1665,7 @@ export function useChatSse(
   );
 
   const prepareChatControls = useCallback(
-    (sessionId?: string | null, modelChoice?: RuntimeContext["model_choice"]) => {
+    (sessionId?: string | null, modelChoice?: RuntimeContext["model_choice"], reasoning = false) => {
       const generation = ++preparationGeneration.current;
       const request = prepareExecution({
         spaceId,
@@ -1671,6 +1673,7 @@ export function useChatSse(
         ...(sessionId ? { sessionId } : {}),
         modelSourceId: modelChoice?.source_id,
         modelUpstreamId: modelChoice?.upstream_model_id,
+        reasoning,
       });
       const result = request
         .unwrap()

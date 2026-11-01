@@ -122,9 +122,18 @@ descendant, cancellation and terminal authority are unchanged.
 
 ### `fred_runtime.model_routing` — LLM routing
 
-Multi-provider model resolution with per-agent tuning overrides.  
-Supports routing by agent ID, execution category, or explicit model name.  
-Providers: OpenAI, Azure OpenAI, Mistral, Ollama, and any LangChain-compatible backend.
+The Weaver chat factory consumes Control Plane's admitted `inference` decision.
+Selection and reasoning are evaluated once by Control Plane; this runtime supplies
+no independent fallback or model policy. `TurnAuthority` preserves provenance and
+lifetime, and invocation/HTTP guards enforce the admitted model and options.
+
+Each `inference_credentials` entry binds `source_id`, `source_revision`, `api_root`,
+`credential_binding` and `api_key_env`. All four admitted identity/revision fields
+must match before reading the environment variable. The OpenAI-compatible client
+uses that source's credential and the shared bounded HTTP pools. No global-key or
+Swift profile fallback is available. See the Control Plane README's workload
+provisioning and rotation contract; environment changes require a coordinated
+workload restart, while already-admitted clients retain their context.
 
 ---
 

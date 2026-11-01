@@ -5,7 +5,7 @@
 
 ##@ Dependency Management
 
-$(TARGET)/.fetched: Cargo.toml Cargo.lock
+$(TARGET)/.fetched: Cargo.toml ../../Cargo.toml ../../Cargo.lock ../../libs/fred-rust-sdk/Cargo.toml
 	@test -x "$(CARGO)" || { echo "❌ cargo not found at $(CARGO). Install rustup: https://rustup.rs"; exit 1; }
 	@test -x "$(PROTOC)" || { echo "❌ protoc not found at $(PROTOC). Set PROTOC or install protobuf-compiler."; exit 1; }
 	$(CARGO) fetch --locked

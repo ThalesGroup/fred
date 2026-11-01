@@ -226,4 +226,8 @@ assert_contains "${config}" 'proxy_pass $fred_agentic_upstream;'
 assert_contains "${config}" 'proxy_pass $fred_control_plane_upstream;'
 assert_contains "${config}" 'location /fred/agents/v2 {'
 assert_contains "${config}" 'location /control-plane/ {'
+assert_contains "${config}" 'location /monitor/ {'
+assert_contains "${config}" 'proxy_pass $fred_monitor_upstream;'
+FRONTEND_MONITOR_UPSTREAM=http://monitor.invalid:8223 run_entrypoint "${config}" '[]' 'false'
+assert_contains "${config}" 'set $fred_monitor_upstream http://monitor.invalid:8223;'
 echo "Application proxy smoke checks passed"

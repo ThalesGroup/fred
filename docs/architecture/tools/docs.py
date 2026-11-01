@@ -55,7 +55,7 @@ PROVES = re.compile(
     r"//\s*Proves:\s*([I\d, ]+)\n(?:\s*#\[[^\n]*\]\n)*\s*(?:pub )?(?:async )?fn (\w+)"
 )
 # Rust sources that may prove an invariant; extend as components are ported.
-TEST_SOURCES = ["apps/control-plane/src", "apps/control-plane/tests"]
+TEST_SOURCES = ["apps/control-plane/src", "apps/control-plane/tests", "libs/fred-rust-sdk/src"]
 
 
 def chapters() -> list[Path]:

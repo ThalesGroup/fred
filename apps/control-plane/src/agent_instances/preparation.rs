@@ -1,8 +1,8 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Browser routing and model facts, never a turn grant. Model decisions remain
-//! owned by M2/M3; runtime independently admits every turn through the resolver.
+//! Browser routing and a public projection of the common inference decision.
+//! Informative only: runtime admission observes a fresh snapshot.
 
 use axum::{
     Json,
@@ -38,6 +38,8 @@ struct PreparationQuery {
     session_id: Option<String>,
     model_source_id: Option<String>,
     model_upstream_id: Option<String>,
+    #[serde(default)]
+    reasoning: bool,
 }
 
 impl PreparationQuery {
@@ -147,6 +149,8 @@ pub struct ExecutionPreparation {
     /// A readable preparation may be blocked; callers must check before sending a turn.
     #[schema(required = true)]
     pub model_error: Option<ModelPreparationError>,
+    #[schema(required = true)]
+    pub inference: Option<fred_rust_sdk::inference::InferenceSelection>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -182,7 +186,8 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
     params(("space_id" = Uuid, Path), ("agent_instance_id" = Uuid, Path),
         ("session_id" = Option<String>, Query, description = "Registered conversation to verify before routing."),
         ("model_source_id" = Option<String>, Query, description = "Requested model source; supply together with model_upstream_id."),
-        ("model_upstream_id" = Option<String>, Query, description = "Requested upstream model; never an authorization.")),
+        ("model_upstream_id" = Option<String>, Query, description = "Requested upstream model; never an authorization."),
+        ("reasoning" = Option<bool>, Query, description = "Requested reasoning; subject to policy and known capability.")),
     responses((status = 200, body = ExecutionPreparation),
         (status = 401, body = crate::error::ErrorBody), (status = 403, body = crate::error::ErrorBody),
         (status = 404, body = crate::error::ErrorBody), (status = 409, body = crate::error::ErrorBody),
@@ -259,8 +264,12 @@ async fn prepare_execution(
     let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
     enablement::require_usable(&policy, &space, &current.source_runtime_id, &selected)?;
     let model_choice = query.model_choice()?;
-    let models = models::resolve(&mut tx, space.organization, &current.tuning.0, false).await?;
-    let model_error = models::preparation_error(&models, model_choice.as_ref());
+    let models = models::resolve(&mut tx, space.organization, &current.tuning.0).await?;
+    let decision = models::decide(&models, model_choice.as_ref(), query.reasoning);
+    let (inference, model_error) = match decision {
+        Ok(selection) => (Some(selection), None),
+        Err(error) => (None, Some(error)),
+    };
     tx.commit().await?;
     onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
     let space = spaces::authorize(
@@ -314,6 +323,7 @@ async fn prepare_execution(
         models,
         model_choice,
         model_error,
+        inference,
     };
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(result)))
 }

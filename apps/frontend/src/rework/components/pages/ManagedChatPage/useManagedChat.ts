@@ -580,7 +580,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     (preparingExecution && !preparationUnavailable && !modelPreparationCurrent);
   useEffect(() => {
     if (executionDisabled || !sameSession || !preparingExecution || (sessionId && locallyCreatingSession)) return;
-    const request = prepareChatControls(sessionId, requestedModel.choice);
+    const request = prepareChatControls(sessionId, requestedModel.choice, composer.reasoning);
     void request.catch(() => refetchSessionRef.current());
     return () => request.abort();
   }, [
@@ -591,6 +591,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     sameSession,
     locallyCreatingSession,
     requestedModel,
+    composer.reasoning,
   ]);
 
   useEffect(() => {

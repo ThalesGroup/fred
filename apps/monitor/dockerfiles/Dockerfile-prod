@@ -1,0 +1,22 @@
+FROM mirror.gcr.io/rust:1.99.0-slim-trixie AS builder
+WORKDIR /workspace
+
+COPY Cargo.toml Cargo.lock ./
+COPY libs/fred-rust-sdk ./libs/fred-rust-sdk
+# Cargo loads every workspace manifest; the Control Plane is not compiled here.
+COPY apps/control-plane/Cargo.toml ./apps/control-plane/Cargo.toml
+COPY apps/control-plane/agent ./apps/control-plane/agent
+RUN mkdir -p apps/control-plane/src && echo "fn main() {}" > apps/control-plane/src/main.rs
+COPY apps/monitor ./apps/monitor
+RUN cargo build --release --locked -p monitor
+
+FROM mirror.gcr.io/debian:13.1-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd --gid 1000 fred-user && \
+    useradd --uid 1000 --gid 1000 --no-create-home fred-user
+COPY --from=builder /workspace/target/release/monitor /usr/local/bin/monitor
+USER fred-user
+ENV MONITOR_BIND=0.0.0.0:8223
+EXPOSE 8223
+ENTRYPOINT ["monitor"]

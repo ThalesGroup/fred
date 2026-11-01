@@ -69,6 +69,11 @@ async fn open_directory() -> OpenDirectory {
 }
 
 pub async fn env() -> Env {
+    env_at(i64::MAX).await
+}
+
+/// Isolated pre-upgrade fixtures; never connects to an existing application database.
+pub async fn env_at(version: i64) -> Env {
     let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES").expect(IGNORE);
     let name = format!("t_{}", Uuid::new_v4().simple());
     let admin = PgPool::connect(&format!("{postgres}/postgres"))
@@ -81,7 +86,12 @@ pub async fn env() -> Env {
     let pool = PgPool::connect(&format!("{postgres}/{name}"))
         .await
         .unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
+    let mut migrations = sqlx::migrate!();
+    migrations
+        .migrations
+        .to_mut()
+        .retain(|m| m.version <= version);
+    migrations.run(&pool).await.unwrap();
     let authorization = Authorization::new(pool.clone());
     Env {
         pool,

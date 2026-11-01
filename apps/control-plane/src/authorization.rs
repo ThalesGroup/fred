@@ -54,20 +54,8 @@ pub async fn check_space<'e>(
         .iter()
         .any(|(role, direct)| Role::parse(role).is_some_and(|r| grants(r, *direct, permission))))
 }
-pub async fn platform_roles<'e>(
-    ex: impl sqlx::PgExecutor<'e>,
-    subject: &str,
-) -> sqlx::Result<Vec<PlatformRole>> {
-    let roles: Vec<String> =
-        sqlx::query_scalar("select role from platform_role_grant where subject=$1")
-            .bind(subject)
-            .fetch_all(ex)
-            .await?;
-    Ok(roles
-        .iter()
-        .filter_map(|r| PlatformRole::parse(r))
-        .collect())
-}
+pub use fred_rust_sdk::security::platform::platform_roles;
+
 pub async fn write_role(
     conn: &mut PgConnection,
     subject: &str,
@@ -136,9 +124,7 @@ impl Authorization {
         check_space(&self.pool, user, p, id).await
     }
     pub async fn is_platform_admin(&self, user: &str) -> sqlx::Result<bool> {
-        Ok(platform_roles(&self.pool, user)
-            .await?
-            .contains(&PlatformRole::PlatformAdmin))
+        fred_rust_sdk::security::platform::is_platform_admin(&self.pool, user).await
     }
     pub async fn effective_platform_roles(&self, user: &str) -> sqlx::Result<Vec<PlatformRole>> {
         // Platform governance never implies delegated business or observer roles.

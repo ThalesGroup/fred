@@ -227,7 +227,7 @@ pub async fn inventory(pool: &PgPool, source_id: &str) -> Result<Option<ModelInv
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
         .await?;
-    let result = read_inventory(&mut tx, Some(source_id)).await?.pop();
+    let result = read_inventory(&mut tx, Some(source_id), None).await?.pop();
     tx.commit().await?;
     Ok(result)
 }
@@ -236,22 +236,29 @@ pub async fn inventory(pool: &PgPool, source_id: &str) -> Result<Option<ModelInv
 pub(super) async fn read_inventory(
     conn: &mut PgConnection,
     source_id: Option<&str>,
+    organization_id: Option<Uuid>,
 ) -> Result<Vec<ModelInventory>> {
     let observations: Vec<ModelObservation> = sqlx::query_as(
         "select source_id, (configuration->>'revision')::bigint as source_revision,
              (configuration->>'enabled')::boolean as enabled, state, error_code, checked_at,
              last_success_at, snapshot_revision, snapshot_source_revision
-         from model_source where ($1::text is null or source_id = $1) order by source_id",
+         from model_source s where ($1::text is null or source_id = $1)
+             and ($2::uuid is null or exists (select 1 from organization_model_source a
+                 where a.organization_id = $2 and a.source_id = s.source_id)) order by source_id",
     )
     .bind(source_id)
+    .bind(organization_id)
     .fetch_all(&mut *conn)
     .await?;
     let offers: Vec<StoredModelOffer> = sqlx::query_as(
         "select source_id, upstream_model_id, metadata, first_seen_at, last_seen_at,
-             advertised, withdrawn_at from model_offer
-         where ($1::text is null or source_id = $1) order by source_id, upstream_model_id",
+             advertised, withdrawn_at from model_offer o
+         where ($1::text is null or source_id = $1)
+             and ($2::uuid is null or exists (select 1 from organization_model_source a
+                 where a.organization_id = $2 and a.source_id = o.source_id)) order by source_id, upstream_model_id",
     )
     .bind(source_id)
+    .bind(organization_id)
     .fetch_all(conn)
     .await?;
     let mut by_source = std::collections::BTreeMap::<String, Vec<StoredModelOffer>>::new();

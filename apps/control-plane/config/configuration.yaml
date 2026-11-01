@@ -56,6 +56,13 @@ scheduler:
 
 # Agent discovery and local model test source.
 platform:
+  # Workload-local attestation. Source revision and destination must match admission.
+  inference_credentials:
+    - source_id: mistral
+      source_revision: 1
+      api_root: https://api.mistral.ai/v1
+      credential_binding: mistral
+      api_key_env: OPENAI_API_KEY
   # Local test source, replacing Swift's Small/Medium static profiles.
   # Discovery lists all offers; authorize mistral-small-latest and
   # mistral-medium-latest for the organization in the Models tab.

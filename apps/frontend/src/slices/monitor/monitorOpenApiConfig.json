@@ -1,0 +1,8 @@
+{
+  "schemaFile": "../../../../monitor/openapi.json",
+  "apiFile": "./monitorApi.ts",
+  "apiImport": "monitorApi",
+  "outputFile": "monitorOpenApi.ts",
+  "exportName": "monitorApi",
+  "hooks": { "queries": true, "lazyQueries": false, "mutations": false }
+}

@@ -40,6 +40,11 @@ pub struct PlatformConfig {
     #[serde(default)]
     pub model_sources: Vec<crate::model_catalog::config::ModelSource>,
     #[serde(default)]
+    pub inference_credentials: Vec<fred_rust_sdk::inference::InferenceCredentialBinding>,
+    #[serde(default)]
+    #[schema(max_items = 64)]
+    pub organization_models: Vec<crate::model_catalog::initialization::OrganizationModels>,
+    #[serde(default)]
     pub runtime_catalog_sources: Vec<RuntimeCatalogSource>,
 }
 
@@ -59,6 +64,15 @@ pub struct RuntimeCatalogSource {
 impl PlatformConfig {
     pub fn validate(&self) -> Result<()> {
         crate::model_catalog::config::validate_sources(&self.model_sources)?;
+        crate::model_catalog::initialization::validate(&self.organization_models)?;
+        let mut bindings = std::collections::HashSet::new();
+        for binding in &self.inference_credentials {
+            binding.validate()?;
+            ensure!(
+                bindings.insert(&binding.source_id),
+                "Duplicate inference source provisioning"
+            );
+        }
         let mut ids = std::collections::HashSet::new();
         for source in &self.runtime_catalog_sources {
             let id = &source.runtime_id;
@@ -132,7 +146,7 @@ fn native_catalog() -> RuntimeCatalog {
             // Fixed response, with no ReAct loop or graph execution engine.
             kind: "static".into(),
             public_version: Some(definition.version.into()),
-            // This runtime explicitly rejects managed instances.
+            // The native template is not exposed for catalog-based instantiation.
             metadata: BTreeMap::from([
                 ("team_instantiable".into(), serde_json::Value::Bool(false)),
                 (

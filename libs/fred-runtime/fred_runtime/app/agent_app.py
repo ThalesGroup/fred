@@ -1606,6 +1606,20 @@ async def _resolve_agent_instance(
     conversation = ctx.get("session_id")
     if conversation:
         params["conversation"] = conversation
+    try:
+        choice = (
+            ModelOfferKey.model_validate(ctx["model_choice"])
+            if ctx.get("model_choice") is not None
+            else None
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail="Invalid requested model choice"
+        ) from None
+    if choice is not None:
+        params["model_source_id"] = choice.source_id
+        params["model_upstream_id"] = choice.upstream_model_id
+    params["reasoning"] = "true" if ctx.get("reasoning") is True else "false"
     # UUID validation prevents URL path interpolation from changing the target.
     try:
         space_id = str(UUID(space_id))
@@ -1642,6 +1656,21 @@ async def _resolve_agent_instance(
                         "message": "This agent has changed since this conversation started. Start a new conversation to use its new configuration.",
                     },
                 )
+            if isinstance(problem, dict) and problem.get("code") in {
+                "model_selection_missing",
+                "model_reselection_required",
+                "model_offer_unknown",
+                "model_offer_forbidden",
+                "model_offer_unavailable",
+                "model_fallback_unavailable",
+            }:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": problem["code"],
+                        "message": "Inference admission was refused. Refresh the model selection and retry.",
+                    },
+                )
         if response.status_code != 200:
             raise HTTPException(
                 status_code=403 if response.status_code in (401, 403, 404) else 503,
@@ -1671,10 +1700,6 @@ async def _resolve_agent_instance(
         )
     ):
         raise HTTPException(status_code=403, detail="Weaver runtime binding mismatch")
-    if any(o.candidate and o.connection is None for o in resolution.models.offers):
-        raise HTTPException(
-            status_code=503, detail="Incomplete trusted inference connections"
-        )
     definition = registry.get(resolution.agent.template_key)
     if definition is None:
         raise HTTPException(
@@ -1682,14 +1707,8 @@ async def _resolve_agent_instance(
             detail="Resolved template is not registered in this runtime",
         )
     try:
-        # Prompt/capability tuning only. M3 recommendation and model options remain
-        # authoritative in resolution.models, consumed by the existing model router.
+        # Inference is already admitted; tuning only assembles prompt/capabilities.
         tuning = AgentTuning.model_validate(resolution.agent.configuration)
-        choice = (
-            ModelOfferKey.model_validate(ctx["model_choice"])
-            if ctx.get("model_choice")
-            else None
-        )
     except ValueError:
         raise HTTPException(
             status_code=503, detail="Invalid resolved agent configuration"
@@ -1723,9 +1742,7 @@ async def _resolve_agent_instance(
                 status_code=403,
                 detail="Conversation binding mismatch or missing provenance",
             )
-    request._turn_authority = TurnAuthority(
-        resolution, choice, reasoning=ctx.get("reasoning") is True
-    )
+    request._turn_authority = TurnAuthority(resolution, choice)
     request.context = {
         **ctx,
         "space_id": space_id,

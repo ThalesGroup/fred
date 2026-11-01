@@ -561,3 +561,12 @@ For interactive development, Vite proxies `/control-plane` to `http://localhost:
 `FRONTEND_CONTROL_PLANE_UPSTREAM` (default `http://control-plane-backend:8222`).
 It resolves that service at request time. Browser calls retain `/control-plane/v1`
 and the bearer header in both cases.
+
+## Technical monitor
+
+Platform administrators have a technical status page at `/admin/monitor`. It uses
+the separate Rust [monitor](../monitor/README.md), via `/monitor/v1/status`.
+`make update-monitor-api` regenerates its client from the Rust OpenAPI contract.
+Vite proxies `/monitor` to `VITE_BACKEND_URL_MONITOR` (default port 8223); the
+production image uses `FRONTEND_MONITOR_UPSTREAM`. The server also enforces the
+platform-admin permission; hiding the navigation item is not an access boundary.

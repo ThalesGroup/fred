@@ -13,7 +13,7 @@
 {{- $storageClass := .root.Values.global.persistence.storageClass }}
 {{- $hostPath := .root.Values.global.persistence.hostPath }}
 
-{{- range $name, $store := .app.configuration.storage }}
+{{- range $name, $store := (.app.configuration | default dict).storage }}
   {{- $isDuckDB := and (hasSuffix "_store" $name) (eq $store.type "duckdb") }}
 
   {{- if and $isDuckDB $persistenceEnabled }}

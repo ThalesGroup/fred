@@ -9,6 +9,11 @@ invariants and decisions are in the architecture dossier:
 Same targets as the other apps (`make help` lists them). Building needs `protoc`;
 `PROTOC` defaults to `~/bin/tools/protoc/bin/protoc`.
 
+Rust packages share the repository-root Cargo workspace and `Cargo.lock`.
+Authentication and platform-role reads come from the internal
+[`fred-rust-sdk`](../../libs/fred-rust-sdk/README.md); Control Plane retains schema
+and role-mutation ownership. Docker builds use the repository root as context.
+
 ```
 cp config/.env.template config/.env   # once: the four secrets
 make run                              # http://localhost:8222/control-plane/v1
@@ -28,12 +33,13 @@ defines counters, privacy boundaries, pagination and failure behavior; the
 documents SQL costs. The [HTTP catalogue](../../docs/architecture/A2-manager-contracts.md#organization-supervision-api)
 is generated from the handlers. There is no supervision UI or separate service.
 
-## Embedded hello-world agent
+## Embedded Rust agent
 
 The same process serves `POST /control-plane/v1/agents/execute/stream` (under the
 configured base URL). It uses the existing authentication and consent checks and
-streams Fred runtime events for `agent_id: "fred.github.ralph"`. See the
-[agent library](agent/README.md) for the curl command and supported request subset.
+streams Fred runtime events. Managed instances use the common inference admission
+and Rig; direct `agent_id: "fred.github.ralph"` remains a fixed demonstration. See the
+[agent library](agent/README.md) for the contract and current integration limits.
 No additional server or deployment is required.
 
 ## From scratch (fred-deployment-factory)
@@ -109,8 +115,9 @@ no bearer. Output is a JSON array of `{runtime_id, templates}`; template payload
 retain tuning, capability metadata and additional runtime fields. Internal
 (non-public) templates are excluded. Disabled sources are not contacted; an
 omitted platform configuration yields only `control-plane`, with one `fred.github.ralph`
-template of the same name, version `0.1.0`. This demonstration agent replies `Hello world!`
-without an LLM or data access. Its `kind` is `static`: the Rust discovery field
+template of the same name, version `0.1.0`. Its direct demonstration path replies
+`Hello world!` without an LLM or data access. The managed path described below
+requires an admitted instance and local inference provisioning. Its `kind` is `static`: the Rust discovery field
 is a free string, and no ReAct or Graph engine runs this fixed response.
 `control-plane` is reserved: configuring an external source with that identifier
 is rejected, even when disabled.
@@ -139,10 +146,9 @@ poll runtimes. This command does not enroll or execute agents.
 `platform.model_sources` defaults to `[]` in the schema. The host development
 configuration and checkout-owned k3d overlay opt into the Mistral test source;
 see [the local model setup](../../deploy/k3d/README.md#models-for-local-testing).
-`serve` applies these non-secret
-approvals to SQL after checking migrations; it performs no model discovery.
-Organization APIs expose this inventory and persist explicit choices. There is no
-model CLI, polling or runtime enforcement. The internal `configure_sources`,
+`serve` applies these non-secret approvals to SQL after checking migrations, then
+runs the bounded organization initialization below. Organization APIs expose only
+assigned sources and persist explicit choices. There is no background model polling. The internal `configure_sources`,
 `refresh` and `inventory` operations remain available to trusted Rust callers;
 `refresh(pool, source)` requires the exact persisted platform configuration and
 carries no user authorization. Administrative routes instead own the claim and
@@ -170,6 +176,92 @@ platform:
       qualification: mixed_capabilities_v1
       complete_inventory_guaranteed: true
 ```
+
+### Initialize organization models once
+
+`platform.organization_models` declares exact existing organization names (the same
+PostgreSQL lookup as provisioning), explicit source IDs and exact offer keys. It
+never creates an organization. This fictitious example assumes the two separately
+approved, enabled sources have successfully discovered the named chat models:
+
+```yaml
+platform:
+  organization_models:
+    - organization: Example Research
+      sources: [research-account, shared-gateway]
+      permitted:
+        - {source_id: research-account, upstream_model_id: chat-v1}
+        - {source_id: shared-gateway, upstream_model_id: backup-v2}
+      default: {source_id: research-account, upstream_model_id: chat-v1}
+      fallback: {source_id: shared-gateway, upstream_model_id: backup-v2}
+      reasoning_enabled:
+        - {source_id: research-account, upstream_model_id: chat-v1}
+    - organization: Example Support
+      sources: [support-account]
+      permitted: []
+      default: null
+      fallback: null
+      reasoning_enabled: []
+```
+
+Different provider accounts require different `source_id` values even at the same
+URL. Sharing a source with two organizations requires two explicit assignments.
+At most 64 organizations, 64 sources per organization and 4096 permitted offers
+are accepted. Reasoning requires a permitted, source-reported reasoning-capable
+offer. A missing or unavailable model fails initialization; no substitute is picked.
+
+Deployment order:
+
+1. Provision existing Kubernetes Secrets/environment references and runtime-local
+   inference bindings; apply SQLx migrations through the existing deployment Job.
+2. Start Control Plane with platform source approvals and organization declarations.
+   The initial pass defers missing organizations, with a diagnostic.
+3. Provision organizations through the existing organization API, Provisioning UI
+   or `import-provisioning` CLI. After its commit, the caller runs a separate model
+   initialization pass; the Swift bundle format does not contain model settings.
+   The k3d overlay explicitly declares Acme and Globex, so the demo import requires
+   no additional model manipulation in the UI.
+
+For existing organizations, `serve` applies pending declarations on startup. For
+recovery or deployment automation after external organization provisioning, run
+`control-plane initialize-models` with the same `CONFIG_FILE` and environment as
+Control Plane (for k3d: `kubectl exec deployment/control-plane-backend --
+control-plane initialize-models`, with the deployment context/namespace). This trusted operator command uses deployment database credentials, not a
+browser token, starts no service and requires every declared organization to exist.
+Each pass has a 120-second deadline; discovery retains its five-second per-source
+limit and runs outside transactions. This is initialization, not ongoing YAML sync.
+
+**Initialize once, preserve afterwards.** Per organization, assignments, initial
+policy and completion receipt commit together under the existing organization lock.
+A successful replay performs no discovery and changes no decisions. UI edits,
+including an empty policy, survive restart. A separate durable receipt also remembers
+an administered policy after deletion; removing a policy or assignment cannot make
+the seed recreate it. Removing YAML is not revocation. Source revision changes,
+credential rotation and disabling remain handled by `configure_sources`, independently
+of the receipt. Keep identical declarations across replicas; a concurrent refresh
+may report `model_refresh_superseded`, which is safely replayable.
+
+Migration `0011` retains historical policies without assigning any source. Before
+cutover, declare an exact source mapping covering all permissions of every existing
+organization. Existing policies (including empty ones) are preserved instead of
+being replaced by YAML. Missing mappings produce `model_source_assignment_missing`
+or `historical_model_source_mapping_missing`; unmapped offers are denied by inventory,
+policy writes, recommendations and admission. The added permission foreign key is
+`NOT VALID` solely to retain those old rows during transition; every new write must
+reference an assignment. Once all historical mappings are established, an operator
+may validate that constraint using the normal migration procedure.
+
+Failures identify the declaration index and a fixed diagnostic such as
+`unknown_model_offer`, `model_offer_not_selectable` or `model_discovery_failed`.
+Correct the exact ID, source configuration or discovery dependency and replay
+`initialize-models`. No failed organization receives partial permissions or a
+completion receipt; earlier successful organizations and the organization provisioning
+itself remain committed. Discovery failure retains the last inventory. No provider
+body, token or configuration value is included in initialization diagnostics.
+Do not delete receipts to retry. Changing an already initialized association requires
+an explicit administrative change; this lot adds no association-management UI.
+
+### Source approval and discovery
 
 The platform must review both destinations, the provider account/namespace,
 visibility, actual credential scopes and egress/TLS policy together. Discovery
@@ -235,8 +327,8 @@ source approval configuration.
 
 | Method/path | Contract |
 | --- | --- |
-| `GET /organizations/{organization_id}/models` | One repeatable-read snapshot of all persisted sources (including disabled ones), observations, retained offers and only this organization's policy. `advertised`, chat qualification/provenance, discovery state/revisions and permission are separate facts. |
-| `POST /organizations/{organization_id}/model-sources/{source_id}/refresh` | No body or destination override. Only an enabled source in this replica's approved configuration can be refreshed, and it must exactly match SQL. 204 on publication; 404 unknown; 409 disabled, obsolete or superseded; 502 invalid/incomplete discovery; 503 unavailable discovery. Failures retain the last success. |
+| `GET /organizations/{organization_id}/models` | One repeatable-read snapshot of explicitly assigned sources (including disabled ones), observations, retained offers and only this organization's policy. `advertised`, chat qualification/provenance, discovery state/revisions and permission are separate facts. |
+| `POST /organizations/{organization_id}/model-sources/{source_id}/refresh` | No body or destination override. Only an assigned, enabled source in this replica's approved configuration can be refreshed, and it must exactly match SQL. 204 on publication; 403 unassigned; 404 unknown; 409 disabled, obsolete or superseded; 502 invalid/incomplete discovery; 503 unavailable discovery. Failures retain the last success. |
 | `GET /organizations/{organization_id}/model-policy` | Explicit permitted composite keys, optional default/fallback, revision and creation/update attribution. Absent policy is revision 0, empty set, null choices and null attribution. |
 | `PUT /organizations/{organization_id}/model-policy` | Full replacement with `expected_revision`, `permitted`, `default` and `fallback`; all four fields required. Null clears each optional choice. 200 returns the saved policy; 409 on revision conflict or a newly selected unavailable offer; 422 on malformed policy, duplicates, unknown offers or choices outside the permitted set. |
 
@@ -246,7 +338,7 @@ and fallback must belong to the submitted permitted set, so revoking a selected
 offer also requires explicitly clearing or replacing that choice. No default,
 fallback, name-based match or permission is inferred.
 
-Only additions to `permitted` and changed non-null default/fallback selections
+Every submitted permission requires a source assignment. Only additions to `permitted` and changed non-null default/fallback selections
 need fresh eligibility: known offer, enabled source, `state=ok`,
 `snapshot_source_revision=source_revision`, advertised presence and `chat=true`.
 The affected source/offer rows are share-locked until commit. Retained choices are
@@ -257,7 +349,7 @@ restores a revoked permission. Permission alone establishes no execution readine
 
 Refresh checks admission/Manage before claiming a SQL token, commits, then performs
 HTTP without a SQL connection. After HTTP it reacquires the existing platform and
-organization locks, rechecks admission/placement/lifecycle/Manage inside the same SQL transaction
+organization locks, rechecks admission/placement/lifecycle/Manage and source assignment inside the same SQL transaction
 before calling the publication store on that same transaction. Revocation refuses
 publication of both successes and failures. Configuration equality and latest-token
 checks still fence M1 publication; an unauthorized or cancelled attempt leaves its
@@ -327,12 +419,12 @@ reasoning requires a selectable offer with discovery-reported `reasoning: true`;
 revoking permission removes its reasoning activation too. The same Manage gate,
 revision check and source/offer locks apply. No model-name inference is used.
 
-The pod captures the user's explicit `reasoning: true` at admission. It sends
-`reasoning_effort: high` only when the actual selected offer supports reasoning and
-its organization enables it, preserving Swift's on/off chat mode. Otherwise the
-parameter is omitted. The transport guard enforces that exact setting for calls,
-retries and descendants using the same turn snapshot, without additional authority
-reads. Mistral's existing native-reasoning replay remains combined with these guards.
+Control Plane evaluates the requested `reasoning: true` with the selected model's
+organization permission and known capability. The admitted options contain
+`reasoning_effort: high` only when all three allow it; otherwise it is omitted.
+Python and Rust consume those options unchanged. Known output/context ceilings
+bound `max_tokens`, even when the instance did not set an explicit override.
+Python's existing Mistral reasoning replay and transport guards remain active.
 
 `models.policy` includes revision, permitted and reasoning-enabled keys and explicit default/fallback;
 `recommendation`, `options`, `legacy_profile_id` and `requires_reselection` describe
@@ -345,23 +437,71 @@ upstream authorization. After discovery failure a retained candidate may remain;
 `selectable` is false until successful current discovery. Withdrawn, non-chat,
 disabled, revoked, unknown and obsolete-source references are not candidates.
 
-Only a trusted workload with the existing validated person/run/agent delegation
-receives candidate `connection` objects: approved provider, inference root and
-pod-local inference credential-binding reference. Person calls omit that property.
-No discovery URL/authentication/credential reference or secret value is exposed.
-Organization inventory and ordinary instance responses remain connection-free.
-The legacy profile is removed from the resolver's configuration copy and exposed
-only as `models.legacy_profile_id`; persisted tuning and ordinary reads retain it.
+`model_catalog::instance::decide` is the single inference decision used by public
+preparation, trusted Python delegation and internal Rust admission. Selection is
+explicit choice, then instance recommendation, then organization default. A present
+unknown/forbidden choice is refused without substitution; legacy-only profiles
+require explicit re-selection. Fallback requires confirmed withdrawal and stays
+within the same source and its approved provisioning/account. A discovery outage
+alone, disabled source, revoked permission or missing credential never triggers it.
 
-This is data resolution, not model selection or invocation authorization. The
-consumer contract remains explicit choice, then recommendation, then organization
-default; a legacy-only profile requires re-selection. No first-offer default or
-substitution of a forbidden explicit choice is allowed. A fallback reference is
-not an instruction to use it: only confirmed withdrawal of a still-permitted choice,
-with current approved source facts and a permitted/advertised/locally usable fallback,
-can justify it. Discovery failure alone never triggers fallback. M4 must check the
-actual choice before every invocation and compose any invocation overrides there;
-this binding is not an authorization lease. No Python routing or SQL access is added.
+The `/runtime` query accepts `model_source_id` and `model_upstream_id` together,
+and `reasoning`. These are requests, never authority. A trusted workload with the
+existing authenticated person/run/agent delegation receives `inference`:
+`selection` (effective key, selection origin, effective options and policy/source/
+snapshot revisions) plus `connection` (provider, API root, local credential-binding
+reference). Person calls receive facts without any connection or binding reference.
+The in-process Rust host uses an explicit private resolver path after authenticating
+the person, without manufacturing an HTTP delegation. Browser preparation returns
+only the safe `selection` as `inference`, or the common decision's `model_error`.
+No token value crosses these APIs or enters SQL.
+
+The surrounding `RuntimeBinding` supplies subject, space/organization, instance,
+configuration revision and conversation attribution. Python pins it to `RunScope`;
+Rust retains it through the turn's tracing context. Neither runtime refreshes
+permissions between LLM calls. New admissions observe changes; admitted turns can
+finish, subject to local cancellation/deadlines and upstream credential rejection.
+The legacy profile remains diagnostic data, never a connection lookup key.
+
+### Workload provisioning and rotation
+
+Python uses top-level `inference_credentials` in `AgentPodConfig`; the embedded
+Rust workload uses `platform.inference_credentials` in Control Plane configuration.
+Both use the same non-secret entry shape:
+
+```yaml
+inference_credentials:
+  - source_id: example-gateway
+    source_revision: 3
+    api_root: https://gateway.example.invalid/v1
+    credential_binding: example-account
+    api_key_env: FRED_EXAMPLE_INFERENCE_KEY
+```
+
+`source_revision` must equal the admitted source configuration revision, including
+rotation. Before reading the named environment variable, consumers check source,
+exact destination, binding and revision against their local configuration. Missing,
+duplicate, incomplete or inconsistent provisioning fails closed, with no HTTP
+inference request and no global-key/Swift fallback. Only the OpenAI-compatible
+adapter is connected. The variable name is an explicit source mapping, not a default.
+Kubernetes Secrets/environment still provision the value; no secret manager or API
+distribution was added. Deploy Control Plane and Python together for this contract:
+Python now requires the admitted `inference`, and candidate offers no longer carry
+private connections.
+
+For rotation, prepare the new Secret and matching workload configuration, increase
+the Control Plane source revision, refresh discovery for that revision, and roll
+both consuming workloads with the same revision and approved connection. Deployment
+ordering must prevent old/new mismatches from admitting work; mismatches fail closed
+while the rollout converges. Environment variables are process snapshots and are
+not automatically reloaded. Drain admitted turns before retiring the old credential
+if continuity matters; the provider may reject an already-admitted revoked key.
+An account/namespace/payer change requires a new source identity, not a fallback.
+
+Targeted tests use a shared fixture in
+`libs/fred-sdk/tests/fixtures/inference_admission.json`, real ChatOpenAI and Rig
+adapters with simulated providers, and disposable SQL for host admission. These
+checks do not establish k3d, provider or selector availability for Ralph.
 
 
 ## Conversation metadata and browser preparation (M5a)
@@ -415,12 +555,12 @@ The existing composer offers it only for the selected enabled model, initially o
 Active capabilities return 422, other execution families 409.
 No unsupported control is replaced with a default or hidden tool selection.
 
-`models` projects M3 `resolve(false)`: recommendation, default/fallback, options,
+`models` projects the common catalog facts: recommendation, default/fallback, options,
 legacy diagnostic and composite offers with permission/candidate/selectable and
 effective reasoning-enabled facts,
 metadata and diagnostics. The DTO has no inference URL, connection or credential
-binding. It does not select a model or certify provider connectivity. A preparation
-is `Cache-Control: no-store` product data, never a grant or a replacement for M4.
+binding. Its `inference` selection comes from the common decision, without certifying
+provider connectivity. A preparation is `Cache-Control: no-store` product data, never a grant or a replacement for M4.
 Session responses are also no-store.
 
 The existing `/runtime?conversation=...` checks the registered owner/space/instance/

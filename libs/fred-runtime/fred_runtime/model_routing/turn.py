@@ -12,7 +12,6 @@ from fred_core.documents.transport import DocumentAccessContext
 from fred_sdk.contracts.context import PortableContext, RuntimeContext
 from fred_sdk.contracts.weaver import (
     ModelOfferKey,
-    RuntimeModelOffer,
     WeaverRuntimeBinding,
 )
 
@@ -34,12 +33,9 @@ class TurnAuthority:
         self,
         binding: WeaverRuntimeBinding,
         choice: ModelOfferKey | None,
-        *,
-        reasoning: bool = False,
     ):
         self.binding = binding
         self.choice = choice
-        self._reasoning_requested = reasoning
         self._scope: RunScope | None = None
         self._ended = False
         self.models: dict[ModelOfferKey, BaseChatModel] = {}
@@ -106,19 +102,6 @@ class TurnAuthority:
             conversation_id=conversation,
             attachment_ids=attachments,
         )
-
-    def reasoning_effort(self, offer: RuntimeModelOffer) -> str | None:
-        if (
-            self._reasoning_requested
-            and offer.permitted
-            and offer.candidate
-            and offer.key in self.binding.models.policy.reasoning_enabled
-            and offer.metadata is not None
-            and offer.metadata.reasoning is True
-        ):
-            # Preserve Swift's on/off mode: its connected chat profiles use high.
-            return "high"
-        return None
 
     def start(self, scope: RunScope) -> None:
         if self._scope is not None or self._ended:

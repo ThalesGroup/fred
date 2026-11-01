@@ -51,10 +51,17 @@
     },
     {
       "name": "control-plane-backend",
-      "context": "apps/control-plane",
+      "context": ".",
       "dockerfile": "apps/control-plane/dockerfiles/Dockerfile-prod",
       "build_args": "",
       "publish": true
+    },
+    {
+      "name": "monitor",
+      "context": ".",
+      "dockerfile": "apps/monitor/dockerfiles/Dockerfile-prod",
+      "build_args": "",
+      "publish": false
     },
     {
       "name": "frontend",

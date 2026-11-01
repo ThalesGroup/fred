@@ -20,19 +20,12 @@ def test_weaver_instance_options_refuse_reasoning_settings() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("capable", [True, False, None])
-@pytest.mark.parametrize("enabled", [True, False])
-@pytest.mark.parametrize("requested", [True, False])
-async def test_reasoning_transport_requires_all_three_facts(
-    capable, enabled, requested
-):
+@pytest.mark.parametrize("effort", ["high", None])
+async def test_transport_preserves_admitted_reasoning(effort):
     data = resolved_binding().model_dump(mode="json")
-    key = data["models"]["offers"][0]["key"]
-    data["models"]["policy"]["reasoning_enabled"] = [key] if enabled else []
-    data["models"]["offers"][0]["metadata"]["reasoning"] = capable
+    data["inference"]["selection"]["options"]["reasoning_effort"] = effort
     binding = WeaverRuntimeBinding.model_validate(data)
-    authority = TurnAuthority(binding, None, reasoning=requested)
-    expected = "high" if capable is True and enabled and requested else None
+    authority = TurnAuthority(binding, None)
     sent = []
 
     def send(request):
@@ -43,22 +36,18 @@ async def test_reasoning_transport_requires_all_three_facts(
         with RunScope.open() as scope:
             authority.start(scope)
             scope.turn_authority = authority
-            offer = binding.models.offers[0]
-            assert authority.reasoning_effort(offer) == expected
-            # Another permitted model cannot inherit the selected model's ceiling.
-            assert authority.reasoning_effort(binding.models.offers[1]) is None
-            client, _ = checked_clients(authority, offer, "fixture")(
+            client, _ = checked_clients(authority, "fixture")(
                 shared, httpx.AsyncClient()
             )
             payload = {"model": "first", "max_tokens": 50}
-            if expected is not None:
-                payload["reasoning_effort"] = expected
+            if effort is not None:
+                payload["reasoning_effort"] = effort
             client.post(
                 "https://a.invalid/v1/chat/completions",
                 headers={"Authorization": "Bearer fixture"},
                 json=payload,
             )
-            payload["reasoning_effort"] = "low" if expected else "high"
+            payload["reasoning_effort"] = "low" if effort else "high"
             with pytest.raises(AuthorityLostError):
                 client.post(
                     "https://a.invalid/v1/chat/completions",

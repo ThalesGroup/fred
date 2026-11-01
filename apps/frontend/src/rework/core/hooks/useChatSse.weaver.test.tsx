@@ -44,6 +44,14 @@ const preparation: ExecutionPreparation = {
   supports_ui_parts: false,
   model_choice: null,
   model_error: null,
+  inference: {
+    key: { source_id: "source", upstream_model_id: "model" },
+    source: "default",
+    options: {},
+    source_revision: 1,
+    snapshot_revision: 1,
+    policy_revision: 1,
+  },
   models: {
     default: null,
     fallback: null,
@@ -131,20 +139,37 @@ describe("Weaver execution context and HTTP diagnostics", () => {
     expect(onError).toHaveBeenCalledWith(message);
   });
 
-  it.each(["send", "hitl", "controls"])("passes the explicit choice to preparation for %s", async (turn) => {
-    const choice = { source_id: "source", upstream_model_id: "model" };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("", { status: 403 })),
-    );
+  it.each(["send", "hitl", "controls"])(
+    "passes the explicit choice and requested reasoning to preparation for %s",
+    async (turn) => {
+      const choice = { source_id: "source", upstream_model_id: "model" };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response("", { status: 403 })),
+      );
+      await act(async () => {
+        if (turn === "hitl")
+          await latest.sendHitlResume(pending, "yes", undefined, { model_choice: choice, reasoning: true });
+        else if (turn === "controls") await latest.prepareChatControls("saved-session", choice, true);
+        else await latest.send("bonjour", "saved-session", { model_choice: choice, reasoning: true });
+      });
+      expect(prepare).toHaveBeenCalledWith(
+        expect.objectContaining({ modelSourceId: "source", modelUpstreamId: "model", reasoning: true }),
+      );
+    },
+  );
+
+  it("blocks runtime when preparation lacks an admitted selection", async () => {
+    prepare.mockImplementation(() => ({
+      unwrap: async () => ({ ...preparation, inference: null }),
+    }));
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
     await act(async () => {
-      if (turn === "hitl") await latest.sendHitlResume(pending, "yes", undefined, { model_choice: choice });
-      else if (turn === "controls") await latest.prepareChatControls("saved-session", choice);
-      else await latest.send("bonjour", "saved-session", { model_choice: choice });
+      expect(await latest.send("bonjour", null)).toBe(false);
     });
-    expect(prepare).toHaveBeenCalledWith(
-      expect.objectContaining({ modelSourceId: "source", modelUpstreamId: "model" }),
-    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onTurnStarted).not.toHaveBeenCalled();
   });
 
   it.each([

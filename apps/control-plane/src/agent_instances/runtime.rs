@@ -1,8 +1,8 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Canonical configuration for the Python pod. This resolves data and current
-//! rights only: definitions, runs, credential renewal and execution stay in Python.
+//! Canonical configuration and current rights for saved-instance admission.
+//! Execution and credential renewal remain the caller runtime's responsibility.
 
 use anyhow::Context;
 use axum::{
@@ -53,6 +53,10 @@ struct RuntimeQuery {
     run: Option<String>,
     agent: Option<String>,
     conversation: Option<String>,
+    model_source_id: Option<String>,
+    model_upstream_id: Option<String>,
+    #[serde(default)]
+    reasoning: bool,
 }
 
 impl RuntimeQuery {
@@ -104,6 +108,9 @@ pub struct RuntimeBinding {
     pub space: RuntimeSpace,
     pub agent: RuntimeAgent,
     pub models: RuntimeModels,
+    /// Present only for trusted delegated or in-process admission.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inference: Option<fred_rust_sdk::inference::InferenceAdmission>,
     pub attachments: Vec<RuntimeAttachment>,
 }
 
@@ -153,7 +160,10 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         ("person" = Option<String>, Query, description = "Canonical person; only a trusted delegated call may supply this assertion."),
         ("run" = Option<String>, Query, description = "Run identifier; required together with person and agent."),
         ("agent" = Option<String>, Query, description = "Delegated agent instance UUID; must match agent_instance_id."),
-        ("conversation" = Option<String>, Query, description = "Registered conversation; this resolver checks its private canonical association, then the pod checks checkpoint provenance before loading history.")
+        ("conversation" = Option<String>, Query, description = "Registered conversation; checked before loading history."),
+        ("model_source_id" = Option<String>, Query, description = "Requested source; never authority."),
+        ("model_upstream_id" = Option<String>, Query, description = "Requested model; supply with source."),
+        ("reasoning" = Option<bool>, Query, description = "Requested reasoning subject to policy.")
     ),
     responses(
         (status = 200, body = RuntimeBinding),
@@ -173,7 +183,45 @@ async fn resolve_runtime(
     ApiPath((space_id, instance_id)): ApiPath<(Uuid, Uuid)>,
     ApiQuery(query): ApiQuery<RuntimeQuery>,
 ) -> AppResult<impl IntoResponse> {
-    let subject = query.subject(&state, &caller, instance_id)?;
+    let private = query.person.is_some() && state.auth.accepts_runtime_delegation(&caller);
+    let binding =
+        resolve_runtime_binding(&state, &caller, space_id, instance_id, &query, private).await?;
+    // Current configuration and rights only; this response is no authorization lease.
+    Ok(([(header::CACHE_CONTROL, "no-store")], Json(binding)))
+}
+
+/// In-process admission for the authenticated person, without HTTP delegation.
+pub(crate) async fn resolve_person_runtime_binding(
+    state: &AppState,
+    caller: &CurrentUser,
+    space_id: Uuid,
+    instance_id: Uuid,
+    session_id: Option<Uuid>,
+    choice: Option<&models::ModelOfferKey>,
+    reasoning: bool,
+) -> AppResult<RuntimeBinding> {
+    let query = RuntimeQuery {
+        person: None,
+        run: None,
+        agent: None,
+        conversation: session_id.map(|id| id.to_string()),
+        model_source_id: choice.map(|k| k.source_id.clone()),
+        model_upstream_id: choice.map(|k| k.upstream_model_id.clone()),
+        reasoning,
+    };
+    resolve_runtime_binding(state, caller, space_id, instance_id, &query, true).await
+}
+
+/// Resolve from an authenticated caller; query assertions still require validation.
+async fn resolve_runtime_binding(
+    state: &AppState,
+    caller: &CurrentUser,
+    space_id: Uuid,
+    instance_id: Uuid,
+    query: &RuntimeQuery,
+    private: bool,
+) -> AppResult<RuntimeBinding> {
+    let subject = query.subject(state, caller, instance_id)?;
     if query
         .conversation
         .as_deref()
@@ -230,7 +278,7 @@ async fn resolve_runtime(
     } else {
         Vec::new()
     };
-    require_executable(&state, &space, &record)?;
+    require_executable(state, &space, &record)?;
     // Organization revocation is observed here, at the next turn, never during one.
     let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
     enablement::require_usable(
@@ -244,13 +292,28 @@ async fn resolve_runtime(
         .0
         .as_object()
         .context("invalid saved agent tuning")?;
-    let models = models::resolve(
-        &mut tx,
-        space.organization,
-        &record.tuning.0,
-        query.person.is_some() && state.auth.accepts_runtime_delegation(&caller),
-    )
-    .await?;
+    let models = models::resolve(&mut tx, space.organization, &record.tuning.0).await?;
+    let choice = match (&query.model_source_id, &query.model_upstream_id) {
+        (None, None) => None,
+        (Some(source_id), Some(upstream_model_id)) => Some(models::ModelOfferKey {
+            source_id: source_id.clone(),
+            upstream_model_id: upstream_model_id.clone(),
+        }),
+        _ => {
+            return Err(AppError::Unprocessable(
+                "Model source and upstream identifiers must be supplied together.".into(),
+            ));
+        }
+    };
+    let inference = if private {
+        let selection =
+            models::decide(&models, choice.as_ref(), query.reasoning).map_err(|error| {
+                AppError::problem(StatusCode::CONFLICT, error.code.as_str(), error.message)
+            })?;
+        Some(models::admit(&mut tx, space.organization, selection).await?)
+    } else {
+        None
+    };
     tx.commit().await?;
     // Recheck authority after reading; the response still grants no continuing lease.
     onboarding::require_accepted(
@@ -277,8 +340,9 @@ async fn resolve_runtime(
     if let Some(configuration) = record.tuning.0.as_object_mut() {
         configuration.remove("recommended_chat_profile_id");
     }
-    let binding = RuntimeBinding {
+    Ok(RuntimeBinding {
         models,
+        inference,
         attachments,
         subject_id: subject.to_owned(),
         run_id: query.run.clone(),
@@ -299,9 +363,7 @@ async fn resolve_runtime(
             configuration_updated_at: record.updated_at,
             configuration: record.tuning.0,
         },
-    };
-    // Current configuration and rights only; this response is no authorization lease.
-    Ok(([(header::CACHE_CONTROL, "no-store")], Json(binding)))
+    })
 }
 
 /// Shared saved-instance admission facts; no network calls or alternate policy.

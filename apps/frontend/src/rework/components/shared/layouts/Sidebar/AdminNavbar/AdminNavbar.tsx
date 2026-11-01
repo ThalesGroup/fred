@@ -105,6 +105,12 @@ function PlatformAdminNavbar() {
           icon: { category: "outlined", type: "upload", filled: false },
           linkProps: { to: "/admin/provisioning" },
         },
+        {
+          type: "link",
+          label: t("rework.monitor.title"),
+          icon: { category: "outlined", type: "monitoring", filled: false },
+          linkProps: { to: "/admin/monitor" },
+        },
       ]}
     />
   );

@@ -35,6 +35,7 @@ use jsonwebtoken::{
     errors::ErrorKind,
     jwk::{JwkSet, PublicKeyUse},
 };
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -76,10 +77,88 @@ impl Default for UserClaims {
     }
 }
 
+/// Shared identity classification and runtime-resolver delegation settings.
+/// Names and defaults match Python security.delegation; acceptance is route-scoped.
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct DirectoryDelegation {
+    /// Accept person/run/agent assertions at runtime and decision endpoints.
+    pub accept_delegated_calls: bool,
+    /// Keycloak client-credentials markers are mandatory when enabled.
+    pub service_accounts_only: bool,
+    /// Human login clients, in addition to security.user.client_id, cannot delegate.
+    pub user_clients: Vec<String>,
+    pub audience: String,
+    pub caller_role: String,
+    pub caller_roles_claim: Option<Vec<String>>,
+}
+impl Default for DirectoryDelegation {
+    fn default() -> Self {
+        Self {
+            accept_delegated_calls: false,
+            service_accounts_only: false,
+            user_clients: Vec::new(),
+            audience: "fred-delegation".into(),
+            caller_role: "delegation_caller".into(),
+            caller_roles_claim: None,
+        }
+    }
+}
+impl DirectoryDelegation {
+    pub fn validated(&self) -> anyhow::Result<Self> {
+        let identifier = |value: &str| -> anyhow::Result<String> {
+            let value = value.trim();
+            anyhow::ensure!(
+                (1..=256).contains(&value.chars().count()),
+                "invalid security.delegation identifier"
+            );
+            Ok(value.to_owned())
+        };
+        let caller_roles_claim = self
+            .caller_roles_claim
+            .as_ref()
+            .map(|path| {
+                anyhow::ensure!(
+                    !path.is_empty(),
+                    "security.delegation.caller_roles_claim must not be empty"
+                );
+                path.iter()
+                    .map(|part| identifier(part))
+                    .collect::<anyhow::Result<Vec<_>>>()
+            })
+            .transpose()?;
+        Ok(Self {
+            accept_delegated_calls: self.accept_delegated_calls,
+            service_accounts_only: self.service_accounts_only,
+            user_clients: self
+                .user_clients
+                .iter()
+                .map(|client| identifier(client))
+                .collect::<anyhow::Result<Vec<_>>>()?,
+            audience: identifier(&self.audience)?,
+            caller_role: identifier(&self.caller_role)?,
+            caller_roles_claim,
+        })
+    }
+
+    pub fn roles_path(&self) -> Vec<String> {
+        self.caller_roles_claim
+            .clone()
+            .filter(|path| !path.is_empty())
+            .unwrap_or_else(|| {
+                vec![
+                    "resource_access".into(),
+                    self.audience.clone(),
+                    "roles".into(),
+                ]
+            })
+    }
+}
+
 /// `security.user`, `security.m2m.realm_url`, `security.profile` and the FRED_JWT_* settings.
 #[derive(Debug, Clone)]
 pub struct SecuritySettings {
-    pub directory_delegation: crate::users::DirectoryDelegation,
+    pub directory_delegation: DirectoryDelegation,
     pub enabled: bool,
     pub provider: Provider,
     pub realm_url: String,
@@ -350,7 +429,7 @@ impl Authenticator {
     /// The Python runtime may use its renewable workload bearer instead of a
     /// person's bearer. Only this receiver accepts the extra delegation audience;
     /// ordinary UI and embedded-agent authentication keeps its existing contract.
-    pub(crate) async fn authenticate_runtime(
+    pub async fn authenticate_runtime(
         &self,
         token: Option<&str>,
     ) -> Result<CurrentUser, AuthError> {
@@ -386,7 +465,7 @@ impl Authenticator {
 
     /// Same trust predicate as fred-core is_delegation_caller. The asserted
     /// person never inherits the caller's roles or service-account privileges.
-    pub(crate) fn accepts_runtime_delegation(&self, caller: &CurrentUser) -> bool {
+    pub fn accepts_runtime_delegation(&self, caller: &CurrentUser) -> bool {
         let Some(v) = &self.verifier else {
             return false;
         };
@@ -649,7 +728,7 @@ fn check_times(
 }
 
 /// `OAuth2PasswordBearer(auto_error=False)`: only `Authorization: Bearer <token>`.
-pub(crate) fn bearer(parts: &Parts) -> Option<&str> {
+pub fn bearer(parts: &Parts) -> Option<&str> {
     let value = parts.headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = value.split_once(' ')?;
     scheme

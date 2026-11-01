@@ -51,7 +51,7 @@ class SelectionTest(unittest.TestCase):
         images = {entry["name"]: entry for entry in manifest["images"]}
         self.assertNotIn("control-plane", images)
         self.assertEqual(
-            images["control-plane-backend"]["context"], "apps/control-plane"
+            images["control-plane-backend"]["context"], "."
         )
         self.assertEqual(
             images["control-plane-backend"]["dockerfile"],

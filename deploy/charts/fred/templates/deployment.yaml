@@ -130,10 +130,29 @@ spec:
             - name: FRONTEND_KNOWLEDGE_FLOW_UPSTREAM
               value: {{ printf "http://knowledge-flow-backend.%s.svc.cluster.local:8000" .root.Release.Namespace | quote }}
             {{- end }}
+            {{- if not (hasKey $providedEnv "FRONTEND_MONITOR_UPSTREAM") }}
+            - name: FRONTEND_MONITOR_UPSTREAM
+              value: {{ printf "http://monitor.%s.svc.cluster.local:8223" .root.Release.Namespace | quote }}
+            {{- end }}
             - name: FRONTEND_ENABLE_APPLICATIONS
               value: {{ ternary "true" "false" $enableApplications | quote }}
             - name: FRONTEND_APPLICATIONS_JSON
               value: {{ (include "fred.registrations" .root | fromYaml).gateways | toJson | quote }}
+            {{- end }}
+            {{- if eq $applicationName "monitor" }}
+            {{- $user := $controlPlane.configuration.security.user }}
+            {{- $provided := dict }}
+            {{- range concat (.app.env | default list) (.app.extraEnvVars | default list) }}
+              {{- $_ := set $provided .name true }}
+            {{- end }}
+            {{- $defaults := dict "OIDC_ISSUER" $user.realm_url "OIDC_CLIENT_ID" $user.client_id "OIDC_AUDIENCE" ($user.audience | default $user.client_id) "OIDC_PROVIDER" ($user.provider | default "keycloak") }}
+            {{- if $user.jwks_url }}{{- $_ := set $defaults "OIDC_JWKS_URL" $user.jwks_url }}{{- end }}
+            {{- range $name, $value := $defaults }}
+            {{- if not (hasKey $provided $name) }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
             {{- end }}
           {{- end }}
 
@@ -159,7 +178,7 @@ spec:
 
           volumeMounts:
           {{- if eq .app.applicationName "control-plane-backend" }}
-          {{- with .app.configuration.storage.content }}
+          {{- with $configuration.storage.content }}
             - name: manager-document-spool
               mountPath: {{ .temp_dir | default "/tmp/control-plane-uploads" | quote }}
           {{- end }}
@@ -169,7 +188,7 @@ spec:
 {{ toYaml .app.extraVolumeMounts| nindent 12 }}
           {{- end }}
 
-          {{- range $name, $store := .app.configuration.storage }}
+          {{- range $name, $store := $configuration.storage }}
             {{- $isDuckDB := and (hasSuffix "_store" $name) (eq $store.type "duckdb") }}
 
               {{- if and $isDuckDB $persistenceEnabled }}
@@ -192,7 +211,7 @@ spec:
 
       volumes:
       {{- if eq .app.applicationName "control-plane-backend" }}
-      {{- with .app.configuration.storage.content }}
+      {{- with $configuration.storage.content }}
         - name: manager-document-spool
           emptyDir:
             sizeLimit: {{ (get (.limits | default dict) "temp_bytes") | default 838860800 | int64 | printf "%d" | quote }}
@@ -204,7 +223,7 @@ spec:
       {{- end }}
 
 
-        {{- range $name, $store := .app.configuration.storage }}
+        {{- range $name, $store := $configuration.storage }}
           {{- $isDuckDB := and (hasSuffix "_store" $name) (eq $store.type "duckdb") }}
           {{- if and $isDuckDB $persistenceEnabled }}
         - name: {{ $applicationName }}-{{ regexReplaceAll "_" $name "-" }}-pvc

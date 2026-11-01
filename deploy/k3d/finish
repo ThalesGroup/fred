@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-printf 'Fred manager + Knowledge Flow worker + frontend: %s\n' "$K3D_PUBLIC_URL"
+# On a fresh database the role-grant table appears during Control Plane migration.
+"${K3D_FACTORY_ROOT:?Run through fred-deployment-factory}/k3d-apps/fred/monitor-database" --require-table
+printf 'Fred manager + Knowledge Flow worker + monitor + frontend: %s\n' "$K3D_PUBLIC_URL"
+printf 'Platform administrator monitor: %s/admin/monitor\n' "$K3D_PUBLIC_URL"
 printf 'First login bootstrap token (retrieve locally):\n'
 printf 'kubectl --context %q -n %q get secret fred-secrets -o jsonpath="{.data.CONTROL_PLANE_BOOTSTRAP_TOKEN}" | base64 -d; echo\n' "$KUBE_CONTEXT" "$K3D_NAMESPACE"

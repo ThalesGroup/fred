@@ -48,13 +48,6 @@ def resolved_binding(
             diagnostics=reasons,
             metadata=metadata,
             observation=observation,
-            connection=dict(
-                provider="openai",
-                api_root=f"https://{source}.invalid/v1",
-                credential_binding=source,
-            )
-            if usable
-            else None,
         )
 
     org = "00000000-0000-0000-0000-000000000001"
@@ -79,6 +72,21 @@ def resolved_binding(
                 configuration_revision=1,
                 configuration_updated_at="2026-10-26T00:00:00Z",
                 configuration={"role": "Assistant", "description": "Example"},
+            ),
+            inference=dict(
+                selection=dict(
+                    key=key,
+                    source="instance_recommendation",
+                    options={"max_tokens": 50},
+                    source_revision=1,
+                    snapshot_revision=1,
+                    policy_revision=1,
+                ),
+                connection=dict(
+                    provider="openai",
+                    api_root=f"https://{source}.invalid/v1",
+                    credential_binding=source,
+                ),
             ),
             models=dict(
                 policy=dict(

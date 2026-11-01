@@ -13,6 +13,7 @@ import { usePlatformArea } from "@core/hooks/usePlatformArea";
 const platformRoutes = new Set([
   "/admin/organizations",
   "/admin/provisioning",
+  "/admin/monitor",
   "/settings",
   "/gcu",
   "/gdpr",

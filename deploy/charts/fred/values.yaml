@@ -1959,3 +1959,79 @@ applications:
         memory: 128Mi
       limits:
         memory: 512Mi
+  # Enable after provisioning monitor-database with a read-only DATABASE_URL.
+  # User authentication defaults to the Control Plane issuer/client/audience.
+  monitor:
+    enabled: false
+    applicationName: monitor
+    deployment: {enabled: true}
+    replicaCount: 1
+    autoscaling: *manager-autoscaling
+    statefulset: {enabled: false}
+    job: {enabled: false}
+    migration: {enabled: false}
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+    image:
+      repository: ghcr.io/thalesgroup/fred-agent/monitor
+      tag: ''
+      pullPolicy: IfNotPresent
+    command: {enabled: false}
+    env:
+      - name: MONITOR_BIND
+        value: '0.0.0.0:8223'
+      - name: MONITOR_NAMESPACE
+        valueFrom:
+          fieldRef: {fieldPath: metadata.namespace}
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef: {name: monitor-database, key: DATABASE_URL}
+      - name: RUST_LOG
+        value: info
+    extraEnvVars: []
+    ports: [{name: http, containerPort: 8223}]
+    service:
+      type: ClusterIP
+      ports: [{name: http, port: 8223, targetPort: 8223}]
+    metricsService: {enabled: false}
+    ingress: {enabled: false}
+    httpRoute: {enabled: false}
+    volumeMounts: []
+    volumes: []
+    probes:
+      lifecycle: {enabled: false}
+      livenessProbe:
+        enabled: true
+        data:
+          httpGet: {path: /healthz, port: 8223}
+          periodSeconds: 10
+      readinessProbe:
+        enabled: true
+        data:
+          httpGet: {path: /healthz, port: 8223}
+          periodSeconds: 10
+      startupProbe: {enabled: false}
+    securityContext: *manager-security-context
+    serviceAccount:
+      enabled: true
+      name: monitor
+      annotations: {}
+      labels: {}
+      automountServiceAccountToken: true
+      rbac:
+        enabled: true
+        permissions:
+          namespaced:
+            - apiGroups: ['']
+              resources: [pods]
+              verbs: [list]
+            - apiGroups: [apps]
+              resources: [deployments, statefulsets, daemonsets]
+              verbs: [list]
+            - apiGroups: [events.k8s.io]
+              resources: [events]
+              verbs: [list]
+    kubeconfig: {enabled: false}
+    configuration_type: {backend: false, frontend: false}
+    resources:
+      requests: {cpu: 25m, memory: 32Mi}
+      limits: {memory: 256Mi}

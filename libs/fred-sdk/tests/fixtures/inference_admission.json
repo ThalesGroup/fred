@@ -1,0 +1,11 @@
+{
+  "selection": {
+    "key": {"source_id": "source", "upstream_model_id": "model"},
+    "source": "instance_recommendation",
+    "options": {"temperature": 0.2, "max_tokens": 50, "top_p": 0.8, "reasoning_effort": "high"},
+    "source_revision": 1,
+    "snapshot_revision": 1,
+    "policy_revision": 1
+  },
+  "connection": {"provider": "openai", "api_root": "https://source.invalid/v1", "credential_binding": "source-account"}
+}

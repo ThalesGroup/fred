@@ -169,6 +169,13 @@ scheduler:
 
 # Agent discovery and local model test source.
 platform:
+  # Workload-local attestation. Source revision and destination must match admission.
+  inference_credentials:
+    - source_id: mistral
+      source_revision: 1
+      api_root: https://api.mistral.ai/v1
+      credential_binding: mistral
+      api_key_env: OPENAI_API_KEY
   # Local test source, replacing Swift's Small/Medium static profiles.
   # Discovery lists all offers; authorize mistral-small-latest and
   # mistral-medium-latest for the organization in the Models tab.
@@ -282,7 +289,9 @@ with Knowledge Flow worker and frontend. The chart validates control-plane
 configuration through its generated Rust schema. `generate-config-schema` runs
 offline; `make generate-chart-schema` embeds the application contracts.
 
-The image (`dockerfiles/Dockerfile-prod`) builds the release binary with `protoc` and
+The image (`dockerfiles/Dockerfile-prod`) uses the repository root as its build
+context, including the shared Rust SDK and workspace lockfile. It builds the
+release binary with `protoc` and
 `libprotobuf-dev`, then runs it as user 1000 on Debian slim; migrations are compiled into the binary.
 
 The factory's standard `control-plane` confidential client has the

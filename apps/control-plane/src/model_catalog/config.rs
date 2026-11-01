@@ -37,7 +37,7 @@ pub struct InferenceDestination {
     pub provider: String,
     /// Separately approved root; never derived from discovery_url.
     pub api_root: String,
-    /// Source-bound pod provisioning reference. Rust never resolves this credential.
+    /// Source-bound workload provisioning reference; never a credential value.
     pub credential_binding: String,
 }
 

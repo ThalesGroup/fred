@@ -86,7 +86,7 @@ pub(crate) async fn validate_write(
                 "The recommended model must be permitted by the owning organization.".into(),
             ));
         }
-        policy::require_selectable(conn, &BTreeSet::from([key.clone()])).await?;
+        policy::require_selectable(conn, organization, &BTreeSet::from([key.clone()])).await?;
     }
     // Check the known effective recommendation/default, never an arbitrary first offer.
     // A legacy profile has no offer identity and cannot be resolved by name.
@@ -99,8 +99,9 @@ pub(crate) async fn validate_write(
     });
     if let Some(key) = selected {
         let metadata: Option<Json<ModelMetadata>> = sqlx::query_scalar(
-            "select metadata from model_offer where source_id = $1 and upstream_model_id = $2 for share",
-        ).bind(&key.source_id).bind(&key.upstream_model_id).fetch_optional(conn).await?;
+            "select o.metadata from model_offer o join organization_model_source a using (source_id)
+             where o.source_id = $1 and o.upstream_model_id = $2 and a.organization_id = $3 for share of o, a",
+        ).bind(&key.source_id).bind(&key.upstream_model_id).bind(organization).fetch_optional(conn).await?;
         if metadata.is_some_and(|metadata| !settings.model_options.fits(&metadata)) {
             return Err(AppError::Unprocessable(
                 "max_tokens exceeds the model's known output or context limit.".into(),
@@ -134,19 +135,13 @@ pub struct RuntimeModelOffer {
     pub diagnostics: Vec<ModelDiagnostic>,
     pub metadata: Option<ModelMetadata>,
     pub observation: Option<ModelObservation>,
-    /// Only trusted delegated runtime callers receive this, and only for candidate offers.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub connection: Option<ModelConnection>,
 }
 
-/// Deliberately excludes discovery URL, authentication and secret references.
-#[derive(Deserialize, Serialize, ToSchema)]
-pub struct ModelConnection {
-    pub provider: String,
-    pub api_root: String,
-    /// Platform-approved reference to pod-local inference provisioning, never a secret value.
-    pub credential_binding: String,
-}
+pub use fred_rust_sdk::inference::ModelConnection;
+use fred_rust_sdk::inference::{
+    EffectiveModelOptions, InferenceAdmission, InferenceSelection, ModelSelectionSource,
+    ReasoningEffort,
+};
 
 #[derive(Serialize, ToSchema)]
 pub struct RuntimeModels {
@@ -160,29 +155,19 @@ pub struct RuntimeModels {
     pub offers: Vec<RuntimeModelOffer>,
 }
 
-/// All reads use the caller's repeatable-read snapshot, including connection approvals.
+/// Catalog facts use the caller's repeatable-read snapshot. No private connections here.
 pub(crate) async fn resolve(
     conn: &mut PgConnection,
     organization: Uuid,
     tuning: &Value,
-    include_connections: bool,
 ) -> AppResult<RuntimeModels> {
     let settings = SavedModelSettings::read(tuning)?;
     let policy = policy::read(conn, organization).await?;
-    let inventory = store::read_inventory(conn, None).await?;
+    let inventory = store::read_inventory(conn, None, Some(organization)).await?;
     let sources: BTreeMap<_, _> = inventory
         .into_iter()
         .map(|source| (source.observation.source_id.clone(), source))
         .collect();
-    let mut connections: BTreeMap<String, Json<ModelConnection>> = BTreeMap::new();
-    if include_connections {
-        let rows: Vec<(String, Json<ModelConnection>)> = sqlx::query_as(
-            "select source_id, configuration->'inference' from model_source order by source_id",
-        )
-        .fetch_all(&mut *conn)
-        .await?;
-        connections.extend(rows);
-    }
     let keys: BTreeSet<_> = policy
         .permitted
         .iter()
@@ -196,17 +181,7 @@ pub(crate) async fn resolve(
         .map(|key| {
             let source = sources.get(&key.source_id);
             let permitted = policy.permitted.contains(&key);
-            let mut offer = describe_offer(key, permitted, source, &settings.model_options);
-            if offer.candidate {
-                offer.connection = connections
-                    .get(&offer.key.source_id)
-                    .map(|c| ModelConnection {
-                        provider: c.provider.clone(),
-                        api_root: c.api_root.clone(),
-                        credential_binding: c.credential_binding.clone(),
-                    });
-            }
-            offer
+            describe_offer(key, permitted, source, &settings.model_options)
         })
         .collect();
     Ok(RuntimeModels {
@@ -279,7 +254,6 @@ fn describe_offer(
         diagnostics,
         metadata: stored.map(|o| o.metadata.0.clone()),
         observation: source.map(|s| s.observation.clone()),
-        connection: None,
     }
 }
 
@@ -294,13 +268,24 @@ pub enum ModelPreparationErrorCode {
     FallbackUnavailable,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ModelPreparationError {
     pub code: ModelPreparationErrorCode,
     pub message: String,
 }
 
 impl ModelPreparationErrorCode {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            Self::SelectionMissing => "model_selection_missing",
+            Self::ReselectionRequired => "model_reselection_required",
+            Self::OfferUnknown => "model_offer_unknown",
+            Self::OfferForbidden => "model_offer_forbidden",
+            Self::OfferUnavailable => "model_offer_unavailable",
+            Self::FallbackUnavailable => "model_fallback_unavailable",
+        }
+    }
+
     fn diagnostic(self) -> ModelPreparationError {
         let message = match self {
             Self::SelectionMissing => {
@@ -329,64 +314,137 @@ impl ModelPreparationErrorCode {
     }
 }
 
-/// Early diagnostic over the same model facts used at turn admission.
-/// Preparation is not a grant: the runtime still enforces its fresh turn snapshot.
-/// Existing candidates tolerate a discovery outage; newly selectable offers do not.
-pub(crate) fn preparation_error(
+/// One decision for public preparation, trusted delegation and internal Rust admission.
+/// Existing candidates tolerate discovery outages; fallback requires confirmed withdrawal.
+pub(crate) fn decide(
     models: &RuntimeModels,
     choice: Option<&ModelOfferKey>,
-) -> Option<ModelPreparationError> {
+    reasoning: bool,
+) -> Result<InferenceSelection, ModelPreparationError> {
     use ModelPreparationErrorCode as Error;
-    let reject = |code: Error| Some(code.diagnostic());
     if models.requires_reselection && choice.is_none() {
-        return reject(Error::ReselectionRequired);
+        return Err(Error::ReselectionRequired.diagnostic());
     }
-    let Some(key) = choice
+    let key = choice
         .or(models.recommendation.as_ref())
         .or(models.policy.default.as_ref())
-    else {
-        return reject(Error::SelectionMissing);
+        .ok_or_else(|| Error::SelectionMissing.diagnostic())?;
+    let mut source = if choice.is_some() {
+        ModelSelectionSource::UserChoice
+    } else if models.recommendation.is_some() {
+        ModelSelectionSource::InstanceRecommendation
+    } else {
+        ModelSelectionSource::Default
     };
-    let Some(offer) = models.offers.iter().find(|offer| &offer.key == key) else {
-        return reject(Error::OfferUnknown);
-    };
+    let mut offer = models
+        .offers
+        .iter()
+        .find(|offer| &offer.key == key)
+        .ok_or_else(|| Error::OfferUnknown.diagnostic())?;
     if !offer.permitted {
-        return reject(Error::OfferForbidden);
+        return Err(Error::OfferForbidden.diagnostic());
     }
     if offer
         .diagnostics
         .iter()
         .any(|d| matches!(d, ModelDiagnostic::UnknownOffer))
     {
-        return reject(Error::OfferUnknown);
+        return Err(Error::OfferUnknown.diagnostic());
     }
-    if offer.candidate {
-        return None;
-    }
-    let withdrawn = offer
-        .diagnostics
-        .iter()
-        .any(|d| matches!(d, ModelDiagnostic::Withdrawn));
-    if !withdrawn
-        || offer.diagnostics.iter().any(|d| {
-            !matches!(
-                d,
-                ModelDiagnostic::Withdrawn | ModelDiagnostic::DiscoveryUnavailable
-            )
-        })
-    {
-        return reject(Error::OfferUnavailable);
-    }
-    if models.policy.fallback.as_ref().is_some_and(|key| {
-        models
-            .offers
+    if !offer.candidate {
+        if !offer
+            .diagnostics
             .iter()
-            .any(|offer| &offer.key == key && offer.permitted && offer.candidate)
-    }) {
-        None
-    } else {
-        reject(Error::FallbackUnavailable)
+            .any(|d| matches!(d, ModelDiagnostic::Withdrawn))
+            || offer.diagnostics.iter().any(|d| {
+                !matches!(
+                    d,
+                    ModelDiagnostic::Withdrawn | ModelDiagnostic::DiscoveryUnavailable
+                )
+            })
+        {
+            return Err(Error::OfferUnavailable.diagnostic());
+        }
+        // A source has exactly one approved provisioning/account. Never change payer.
+        offer = models
+            .policy
+            .fallback
+            .as_ref()
+            .filter(|fallback| fallback.source_id == key.source_id)
+            .and_then(|fallback| {
+                models
+                    .offers
+                    .iter()
+                    .find(|o| &o.key == fallback && o.candidate)
+            })
+            .ok_or_else(|| Error::FallbackUnavailable.diagnostic())?;
+        source = ModelSelectionSource::WithdrawalFallback;
     }
+    let observation = offer
+        .observation
+        .as_ref()
+        .ok_or_else(|| Error::OfferUnavailable.diagnostic())?;
+    let metadata = offer
+        .metadata
+        .as_ref()
+        .ok_or_else(|| Error::OfferUnavailable.diagnostic())?;
+    // Materialize the known ceiling, including when no instance override was saved.
+    let max_tokens = [
+        models.options.max_tokens,
+        metadata.max_output_tokens,
+        metadata.context_window_tokens,
+    ]
+    .into_iter()
+    .flatten()
+    .min()
+    .and_then(|n| u64::try_from(n).ok());
+    Ok(InferenceSelection {
+        key: offer.key.clone(),
+        source,
+        options: EffectiveModelOptions {
+            temperature: models.options.temperature,
+            max_tokens,
+            top_p: models.options.top_p,
+            reasoning_effort: (reasoning
+                && models.policy.reasoning_enabled.contains(&offer.key)
+                && metadata.reasoning == Some(true))
+            .then_some(ReasoningEffort::High),
+        },
+        source_revision: observation.source_revision,
+        snapshot_revision: observation.snapshot_revision,
+        policy_revision: models.policy.revision,
+    })
+}
+
+/// Connection projection is explicit, separate from the browser-safe decision.
+pub(crate) async fn admit(
+    conn: &mut PgConnection,
+    organization: Uuid,
+    selection: InferenceSelection,
+) -> AppResult<InferenceAdmission> {
+    // Read only the selected connection, within the same organization snapshot.
+    let connection: Option<Json<ModelConnection>> = sqlx::query_scalar(
+        "select s.configuration->'inference' from model_source s
+         join organization_model_source a using (source_id)
+         where a.organization_id=$1 and s.source_id=$2",
+    )
+    .bind(organization)
+    .bind(&selection.key.source_id)
+    .fetch_optional(conn)
+    .await?;
+    let connection = connection
+        .ok_or_else(|| {
+            AppError::problem(
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "inference_connection_unavailable",
+                "Approved inference connection is unavailable.",
+            )
+        })?
+        .0;
+    Ok(InferenceAdmission {
+        selection,
+        connection,
+    })
 }
 
 #[cfg(test)]
@@ -407,9 +465,26 @@ mod preparation_tests {
             candidate: true,
             selectable: true,
             diagnostics: vec![],
-            metadata: None,
-            observation: None,
-            connection: None,
+            metadata: Some(ModelMetadata {
+                chat: Some(true),
+                chat_provenance: None,
+                reasoning: Some(true),
+                display_name: None,
+                context_window_tokens: Some(1000),
+                max_input_tokens: None,
+                max_output_tokens: Some(100),
+            }),
+            observation: Some(ModelObservation {
+                source_id: "source".into(),
+                source_revision: 1,
+                enabled: true,
+                state: "ok".into(),
+                error_code: None,
+                checked_at: None,
+                last_success_at: None,
+                snapshot_revision: 1,
+                snapshot_source_revision: Some(1),
+            }),
         }
     }
 
@@ -439,7 +514,7 @@ mod preparation_tests {
         models: &RuntimeModels,
         choice: Option<&ModelOfferKey>,
     ) -> Option<ModelPreparationErrorCode> {
-        preparation_error(models, choice).map(|error| error.code)
+        decide(models, choice, false).err().map(|error| error.code)
     }
 
     #[test]
@@ -512,5 +587,81 @@ mod preparation_tests {
         models.offers[0].selectable = false;
         models.offers[0].diagnostics = vec![ModelDiagnostic::DiscoveryUnavailable];
         assert_eq!(error(&models, Some(&key("model"))), None);
+    }
+    #[test]
+    fn common_decision_matches_the_fixture_consumed_by_both_adapters() {
+        let mut models = models();
+        models.recommendation = Some(key("model"));
+        models.options = ModelOptions {
+            temperature: Some(0.2),
+            top_p: Some(0.8),
+            max_tokens: Some(50),
+        };
+        models.policy.reasoning_enabled = vec![key("model")];
+        let connection = ModelConnection {
+            provider: "openai".into(),
+            api_root: "https://source.invalid/v1".into(),
+            credential_binding: "source-account".into(),
+        };
+        let public = decide(&models, None, true).unwrap();
+        let public_json = serde_json::to_string(&public).unwrap();
+        assert!(!public_json.contains("api_root") && !public_json.contains("credential_binding"));
+        let admitted = InferenceAdmission {
+            selection: public,
+            connection,
+        };
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../../libs/fred-sdk/tests/fixtures/inference_admission.json"
+        ))
+        .unwrap();
+        assert_eq!(serde_json::to_value(&admitted).unwrap(), fixture);
+        // A retained decision is stable; a new admission observes revocation.
+        models.offers[0].permitted = false;
+        models.offers[0].candidate = false;
+        assert_eq!(
+            error(&models, None),
+            Some(ModelPreparationErrorCode::OfferForbidden)
+        );
+        assert_eq!(serde_json::to_value(&admitted).unwrap(), fixture);
+    }
+
+    #[test]
+    fn reasoning_requires_request_permission_and_known_capability() {
+        for requested in [false, true] {
+            for enabled in [false, true] {
+                for capable in [None, Some(false), Some(true)] {
+                    let mut models = models();
+                    models.policy.default = Some(key("model"));
+                    if enabled {
+                        models.policy.reasoning_enabled.push(key("model"));
+                    }
+                    models.offers[0].metadata.as_mut().unwrap().reasoning = capable;
+                    let decision = decide(&models, None, requested).unwrap();
+                    assert_eq!(
+                        decision.options.reasoning_effort.is_some(),
+                        requested && enabled && capable == Some(true)
+                    );
+                    assert_eq!(decision.options.max_tokens, Some(100));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn withdrawal_never_changes_source_or_provisioning() {
+        let mut models = models();
+        models.policy.default = Some(key("model"));
+        models.offers[0].candidate = false;
+        models.offers[0].diagnostics = vec![ModelDiagnostic::Withdrawn];
+        assert_eq!(
+            decide(&models, None, false).unwrap().source,
+            ModelSelectionSource::WithdrawalFallback
+        );
+        models.offers[1].key.source_id = "another-account".into();
+        models.policy.fallback = Some(models.offers[1].key.clone());
+        assert_eq!(
+            error(&models, None),
+            Some(ModelPreparationErrorCode::FallbackUnavailable)
+        );
     }
 }

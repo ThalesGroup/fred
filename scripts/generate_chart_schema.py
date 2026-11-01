@@ -550,6 +550,7 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
             "applications": _obj({
                 "fred-agents": _fred_agents_app(fa_config),
                 "frontend": _frontend_app(),
+                "monitor": _obj(_base_app_props()),
                 "knowledge-flow-backend": _kf_app(kf_config),
                 "knowledge-flow-worker": _kf_worker_app(kf_config),
                 # Same shape, one per profile: each polls that profile's extraction

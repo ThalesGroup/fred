@@ -122,6 +122,7 @@ scheduler:
 # Execution still runs in the pod; match the control-plane source exactly.
 inference_credentials:
   - source_id: mistral
+    source_revision: 1
     api_root: https://api.mistral.ai/v1
     credential_binding: mistral
     api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)

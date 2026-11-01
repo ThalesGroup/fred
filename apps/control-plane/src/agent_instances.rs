@@ -15,7 +15,7 @@ mod chat_controls;
 pub mod http;
 pub(crate) mod preparation;
 mod runtime;
-pub(crate) use runtime::require_executable;
+pub(crate) use runtime::{require_executable, resolve_person_runtime_binding};
 mod tuning;
 
 pub struct NewAgentInstance {

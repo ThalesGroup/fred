@@ -59,6 +59,7 @@ import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.ts
 import { getConfig } from "./config";
 
 import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
+import MonitorPage from "@components/pages/admin/MonitorPage/MonitorPage";
 import OrganizationsPage from "@components/pages/admin/OrganizationsPage/OrganizationsPage";
 import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
 import ManagerArea from "@core/guards/ManagerArea";
@@ -263,6 +264,10 @@ const applicationRoutes: RouteObject[] = [
       {
         path: "admin/organizations",
         element: <OrganizationsPage />,
+      },
+      {
+        path: "admin/monitor",
+        element: <MonitorPage />,
       },
       {
         path: "admin/provisioning",

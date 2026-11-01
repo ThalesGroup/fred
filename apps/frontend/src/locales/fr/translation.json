@@ -4855,6 +4855,55 @@
           "next": "Définir et raccorder le service de transcription ; vérifier les erreurs et l’annulation."
         }
       }
+    },
+    "monitor": {
+      "title": "État technique",
+      "description": "Services, redémarrages et événements Kubernetes récents.",
+      "refresh": "Actualiser",
+      "refreshing": "Actualisation…",
+      "polling": "Actualisation toutes les 15 secondes",
+      "observed": "Namespace {{namespace}} · Observation du {{time}}",
+      "forbidden": "Seuls les administrateurs plateforme peuvent consulter l’état technique.",
+      "authorizationUnavailable": "La vérification des permissions est indisponible. Les données techniques ne peuvent pas être affichées.",
+      "unavailable": "Le moniteur est indisponible. Vérifiez qu’il est activé et accessible.",
+      "partial": "Certaines sources sont indisponibles : {{sources}}. Leur état est inconnu.",
+      "truncated": "Limite de collecte atteinte pour : {{sources}}. L’inventaire affiché est incomplet.",
+      "dataUnavailable": "Données indisponibles.",
+      "services": "Services",
+      "service": "Service",
+      "kind": "Type",
+      "replicas": "Prêts / attendus",
+      "state": "État",
+      "noServices": "Aucun service trouvé.",
+      "containers": "Conteneurs et redémarrages",
+      "restartExplanation": "Les compteurs couvrent toute la durée de vie des pods actuels. Un pod recréé repart avec un nouveau compteur. Les Jobs terminés avec succès sont omis.",
+      "pod": "Pod",
+      "container": "Conteneur",
+      "restarts": "Redémarrages",
+      "lastExit": "Arrêt précédent",
+      "noContainers": "Aucun conteneur actif trouvé.",
+      "events": "Événements récents",
+      "eventExplanation": "Événements observés dans les {{minutes}} dernières minutes, selon la rétention Kubernetes. Les occurrences répétées sont regroupées par Kubernetes.",
+      "eventsLimited": "Affichage des 100 événements collectés les plus récents.",
+      "noEvents": "Aucun événement observé sur cette période.",
+      "warning": "Avertissement",
+      "normal": "Information",
+      "occurrences_one": "{{count}} occurrence",
+      "occurrences_other": "{{count}} occurrences",
+      "states": {
+        "ready": "Prêt",
+        "degraded": "Dégradé",
+        "updating": "Mise à jour",
+        "inactive": "Inactif",
+        "unknown": "Inconnu"
+      },
+      "sources": {
+        "deployments": "Deployments",
+        "stateful_sets": "StatefulSets",
+        "daemon_sets": "DaemonSets",
+        "pods": "Pods",
+        "events": "Événements"
+      }
     }
   },
   "runtime": {

@@ -1216,6 +1216,13 @@ async fn preparation_combines_pod_controls_and_reasoning_after_capability_govern
     .execute(&e.pool)
     .await
     .unwrap();
+    sqlx::query(
+        "insert into organization_model_source (organization_id, source_id) values ($1, 'models')",
+    )
+    .bind(org.id)
+    .execute(&e.pool)
+    .await
+    .unwrap();
     sqlx::query("insert into organization_model_permission (organization_id, source_id, upstream_model_id, reasoning_enabled)
         values ($1, 'models', 'reasoner', true)")
         .bind(org.id).execute(&e.pool).await.unwrap();
@@ -1599,3 +1606,6 @@ async fn runtime_binding_lists_all_eligible_conversation_attachments() {
         200
     );
 }
+
+#[path = "model_catalog.rs"]
+mod model_catalog;

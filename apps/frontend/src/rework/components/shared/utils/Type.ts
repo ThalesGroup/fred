@@ -57,6 +57,7 @@ const customIcons = ["customAgent", "customPlatformSkill"] as const;
  * these values; extend the list to adopt a new glyph.
  */
 export const materialIcons = [
+  "monitoring",
   "add",
   "drag_indicator",
   "add_comment",

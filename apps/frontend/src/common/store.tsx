@@ -15,6 +15,7 @@
 import { platformAccessDenied } from "./platformAccess";
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
 import { legacyControlPlaneApi } from "../slices/legacyControlPlane/legacyControlPlaneApi.ts";
+import { monitorApi } from "../slices/monitor/monitorApi";
 import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi.ts";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 import { knowledgeFlowApi as legacyKnowledgeFlowApi } from "../slices/legacyKnowledgeFlow/knowledgeFlowApi";
@@ -55,6 +56,7 @@ const combinedReducer = combineReducers({
   [legacyKnowledgeFlowApi.reducerPath]: legacyKnowledgeFlowApi.reducer,
   [legacyControlPlaneApi.reducerPath]: legacyControlPlaneApi.reducer,
   [controlPlaneApi.reducerPath]: controlPlaneApi.reducer,
+  [monitorApi.reducerPath]: monitorApi.reducer,
   tasks: taskSlice.reducer,
   capabilityRouting: capabilityRoutingSlice.reducer,
   [writableDocumentCapabilityApi.reducerPath]: writableDocumentCapabilityApi.reducer,
@@ -74,6 +76,7 @@ export const store = configureStore({
       legacyKnowledgeFlowApi.middleware,
       legacyControlPlaneApi.middleware,
       controlPlaneApi.middleware,
+      monitorApi.middleware,
       writableDocumentCapabilityApi.middleware,
       pptFillerCapabilityApi.middleware,
       loggingMiddleware,

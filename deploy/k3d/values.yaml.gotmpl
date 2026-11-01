@@ -10,6 +10,9 @@ x-model: &model
   name: OPENAI_API_KEY
   valueFrom: {secretKeyRef: {name: fred-model-credentials, key: OPENAI_API_KEY}}
 applications:
+  monitor:
+    enabled: true
+
   frontend:
     # posture: use baked branding, without infrastructure credentials in the gateway.
     extraEnvVars:
@@ -33,6 +36,7 @@ applications:
       # Execution still runs in the pod; match the control-plane source exactly.
       inference_credentials:
         - source_id: mistral
+          source_revision: 1
           api_root: https://api.mistral.ai/v1
           credential_binding: mistral
           api_key_env: OPENAI_API_KEY
@@ -95,9 +99,14 @@ applications:
     configuration:
       # The chart defaults plus these k3d addresses; the factory supplies none of it.
       platform:
+        inference_credentials:
+          - source_id: mistral
+            source_revision: 1
+            api_root: https://api.mistral.ai/v1
+            credential_binding: mistral
+            api_key_env: OPENAI_API_KEY
         # Local test source, replacing Swift's Small/Medium static profiles.
-        # Discovery lists all offers; authorize mistral-small-latest and
-        # mistral-medium-latest for the organization in the Models tab.
+        # Discovery lists all offers; the explicit seed below grants only these keys.
         model_sources:
           - source_id: mistral
             revision: 1
@@ -118,6 +127,25 @@ applications:
               accept_inference_authority: true
             qualification: mixed_capabilities_v1
             complete_inventory_guaranteed: true
+        # Exact organization names from the existing demo provisioning bundle.
+        # Sharing this test account is explicit; separate accounts need separate source_id.
+        organization_models:
+          - organization: Acme
+            sources: [mistral]
+            permitted:
+              - {source_id: mistral, upstream_model_id: mistral-small-latest}
+              - {source_id: mistral, upstream_model_id: mistral-medium-latest}
+            default: {source_id: mistral, upstream_model_id: mistral-small-latest}
+            fallback: null
+            reasoning_enabled: []
+          - organization: Globex
+            sources: [mistral]
+            permitted:
+              - {source_id: mistral, upstream_model_id: mistral-small-latest}
+              - {source_id: mistral, upstream_model_id: mistral-medium-latest}
+            default: {source_id: mistral, upstream_model_id: mistral-small-latest}
+            fallback: null
+            reasoning_enabled: []
         runtime_catalog_sources:
           - runtime_id: fred-agents
             base_url: http://fred-agents/fred/agents/v2

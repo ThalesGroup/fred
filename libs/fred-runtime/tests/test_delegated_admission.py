@@ -918,7 +918,12 @@ async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_get(
             request=agent_app_module._AgentExecuteRequest(
                 agent_instance_id=INSTANCE_ID,
                 message="hello",
-                context={"user_id": "alice", "space_id": SPACE_ID},
+                context={
+                    "user_id": "alice",
+                    "space_id": SPACE_ID,
+                    "model_choice": {"source_id": "a", "upstream_model_id": "first"},
+                    "reasoning": True,
+                },
             ),
             registry={definition.agent_id: definition},
             access_token=None,
@@ -938,6 +943,9 @@ async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_get(
         GRANT_PARAM_PERSON: "alice",
         GRANT_PARAM_RUN: "run-9",
         GRANT_PARAM_AGENT: INSTANCE_ID,
+        "model_source_id": "a",
+        "model_upstream_id": "first",
+        "reasoning": "true",
     }
     assert sent[0].headers["Authorization"] == "Bearer workload-token"
     assert target.effective_agent_id == INSTANCE_ID

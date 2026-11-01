@@ -20,9 +20,13 @@ from pydantic import SecretStr
 
 from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
 
-from .contracts import ModelCapability, ModelRoutingError, ModelSelection
+from .contracts import (
+    ModelCapability,
+    ModelRoutingError,
+    ModelSelection,
+    ModelSelectionSource,
+)
 from .guard import checked_clients, guarded_model
-from .resolver import ModelRoutingResolver
 from .turn import current_turn
 
 if TYPE_CHECKING:
@@ -70,19 +74,13 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             raise ModelRoutingError(
                 "Legacy model profile requires explicit offer re-selection"
             )
-        offer, source = ModelRoutingResolver(authority.binding.models).resolve(
-            authority.choice
-        )
-        connection = offer.connection
-        if connection is None:
-            raise ModelRoutingError("Trusted inference connection is missing")
-        if connection.provider != "openai":
-            raise ModelRoutingError(
-                "Inference adapter is not connected; only OpenAI-compatible sources are supported"
-            )
-        local = self._credentials.get(offer.key.source_id)
+        admission = authority.binding.inference
+        selection = admission.selection
+        connection = admission.connection
+        local = self._credentials.get(selection.key.source_id)
         if (
             local is None
+            or local.source_revision != selection.source_revision
             or local.api_root != connection.api_root
             or local.credential_binding != connection.credential_binding
         ):
@@ -90,27 +88,24 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                 "Inference source provisioning does not match the approved connection"
             )
         # Explicit options only; do not inject core's default temperature.
-        options = authority.binding.models.options.model_dump(exclude_none=True)
+        options = selection.options.model_dump(exclude_none=True)
         options.setdefault("temperature", None)
-        effort = authority.reasoning_effort(offer)
-        if effort is not None:
-            options["reasoning_effort"] = effort
         config = ModelConfiguration(
             provider="openai",
-            name=offer.key.upstream_model_id,
+            name=selection.key.upstream_model_id,
             settings={"base_url": connection.api_root, **options},
         )
         identity = json.dumps(
-            offer.key.identity, ensure_ascii=False, separators=(",", ":")
+            selection.key.identity, ensure_ascii=False, separators=(",", ":")
         )
-        selection = ModelSelection(
-            source=source,
+        provenance = ModelSelection(
+            source=ModelSelectionSource(selection.source),
             capability=ModelCapability.CHAT,
             profile_id=identity,
             capability_id=identity,
             model=config,
         )
-        model = authority.models.get(offer.key)
+        model = authority.models.get(selection.key)
         if model is None:
             secret = os.environ.get(local.api_key_env)
             if not secret:
@@ -120,19 +115,19 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             built = get_model(
                 config,
                 inference_api_key=SecretStr(secret),
-                wrap_clients=checked_clients(authority, offer, secret),
+                wrap_clients=checked_clients(authority, secret),
             )
             if type(built) is not ChatOpenAI:
                 raise TypeError("Expected the connected OpenAI-compatible client")
             model = guarded_model(with_mistral_reasoning_replay(built), authority.check)
-            authority.models[offer.key] = model
+            authority.models[selection.key] = model
         logger.info(
-            "[MODEL_ROUTING] source=%s requested=%s actual=%s policy_revision=%s",
-            source.value,
-            authority.choice
-            or authority.binding.models.recommendation
-            or authority.binding.models.policy.default,
-            offer.key,
-            authority.binding.models.policy.revision,
+            "Inference source=%s requested=%s model=%s policy_revision=%s source_revision=%s snapshot_revision=%s",
+            selection.source,
+            authority.choice,
+            selection.key,
+            selection.policy_revision,
+            selection.source_revision,
+            selection.snapshot_revision,
         )
-        return model, selection
+        return model, provenance

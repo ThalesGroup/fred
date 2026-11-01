@@ -100,6 +100,14 @@ const preparation = {
   supports_hitl: true,
   model_choice: null,
   model_error: null,
+  inference: {
+    key: { source_id: "source", upstream_model_id: "model" },
+    source: "default",
+    options: {},
+    source_revision: 1,
+    snapshot_revision: 1,
+    policy_revision: 1,
+  },
 };
 
 let prepareExecutionImpl: (args: unknown) => Promise<unknown> = async () => ({

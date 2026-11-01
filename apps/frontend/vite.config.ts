@@ -50,6 +50,7 @@ const baseConfig = defineConfig({
       "/agentic": { target: process.env.VITE_BACKEND_URL || "http://localhost:8000", ws: true },
       "/fred": process.env.VITE_BACKEND_URL_FRED_AGENTS || "http://localhost:8000",
       "/knowledge-flow": process.env.VITE_BACKEND_URL_KNOWLEDGE || "http://localhost:8111",
+      "/monitor": process.env.VITE_BACKEND_URL_MONITOR || "http://localhost:8223",
       "/control-plane": process.env.VITE_BACKEND_URL_CONTROL_PLANE || "http://localhost:8222",
       "/rags/agents": process.env.VITE_BACKEND_URL_RAGS_AGENTS || "http://localhost:8013",
       "/samples": process.env.VITE_BACKEND_URL_SAMPLES || "http://localhost:8010",

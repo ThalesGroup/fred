@@ -437,6 +437,7 @@ const injectedRtkApi = api.injectEndpoints({
           session_id: queryArg.sessionId,
           model_source_id: queryArg.modelSourceId,
           model_upstream_id: queryArg.modelUpstreamId,
+          reasoning: queryArg.reasoning,
         },
       }),
     }),
@@ -448,6 +449,9 @@ const injectedRtkApi = api.injectEndpoints({
           run: queryArg.run,
           agent: queryArg.agent,
           conversation: queryArg.conversation,
+          model_source_id: queryArg.modelSourceId,
+          model_upstream_id: queryArg.modelUpstreamId,
+          reasoning: queryArg.reasoning,
         },
       }),
     }),
@@ -926,6 +930,8 @@ export type PrepareExecutionApiArg = {
   modelSourceId?: string;
   /** Requested upstream model; never an authorization. */
   modelUpstreamId?: string;
+  /** Requested reasoning; subject to policy and known capability. */
+  reasoning?: boolean;
 };
 export type ResolveRuntimeApiResponse = /** status 200 undefined */ RuntimeBinding;
 export type ResolveRuntimeApiArg = {
@@ -937,8 +943,14 @@ export type ResolveRuntimeApiArg = {
   run?: string;
   /** Delegated agent instance UUID; must match agent_instance_id. */
   agent?: string;
-  /** Registered conversation; this resolver checks its private canonical association, then the pod checks checkpoint provenance before loading history. */
+  /** Registered conversation; checked before loading history. */
   conversation?: string;
+  /** Requested source; never authority. */
+  modelSourceId?: string;
+  /** Requested model; supply with source. */
+  modelUpstreamId?: string;
+  /** Requested reasoning subject to policy. */
+  reasoning?: boolean;
 };
 export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
 export type SpaceAgentTemplatesApiArg = {
@@ -1090,6 +1102,11 @@ export type RuntimeEvent =
   | {
       delta: string;
       kind: "assistant_delta";
+      sequence: number;
+    }
+  | {
+      kind: "execution_error";
+      message: string;
       sequence: number;
     }
   | {
@@ -1665,7 +1682,7 @@ export type ModelInventory = {
 export type OrganizationModelInventory = {
   /** Only this organization's choices; none is a proof of executability. */
   policy: OrganizationModelPolicy;
-  /** Shared platform observations. Presence/chat/discovery are independent of permission. */
+  /** Assigned source observations. Presence/chat/discovery are independent of permission. */
   sources: ModelInventory[];
 };
 export type DocumentCounts = {
@@ -1896,6 +1913,22 @@ export type ChatControlDescriptor = {
   widget: string;
 };
 export type ExecutionTransport = "sse";
+export type ReasoningEffort = "high";
+export type EffectiveModelOptions = {
+  max_tokens?: number | null;
+  reasoning_effort?: ReasoningEffort | null;
+  temperature?: number | null;
+  top_p?: number | null;
+};
+export type ModelSelectionSource = "user_choice" | "instance_recommendation" | "default" | "withdrawal_fallback";
+export type InferenceSelection = {
+  key: ModelOfferKey;
+  options: EffectiveModelOptions;
+  policy_revision: number;
+  snapshot_revision: number;
+  source: ModelSelectionSource;
+  source_revision: number;
+};
 export type ModelPreparationErrorCode =
   | "selection_missing"
   | "reselection_required"
@@ -1942,6 +1975,7 @@ export type ExecutionPreparation = {
   execute_stream_url: string;
   execute_url: string;
   execution_transport: ExecutionTransport;
+  inference: InferenceSelection | null;
   max_chat_input_chars: number | null;
   /** RFC 6570 Level 1 template. Substitute the registered session ID. */
   messages_url_template: string;
@@ -1974,14 +2008,16 @@ export type RuntimeAttachment = {
 };
 export type ModelConnection = {
   api_root: string;
-  /** Platform-approved reference to pod-local inference provisioning, never a secret value. */
   credential_binding: string;
   provider: string;
+};
+export type InferenceAdmission = {
+  connection: ModelConnection;
+  selection: InferenceSelection;
 };
 export type RuntimeModelOffer = {
   /** Necessary known facts only; local support, credentials and connectivity remain unproven. */
   candidate: boolean;
-  connection?: ModelConnection | null;
   diagnostics: ModelDiagnostic[];
   key: ModelOfferKey;
   metadata?: ModelMetadata | null;
@@ -2012,6 +2048,7 @@ export type RuntimeBinding = {
   agent: RuntimeAgent;
   attachments: RuntimeAttachment[];
   conversation_id: string | null;
+  inference?: InferenceAdmission | null;
   models: RuntimeModels;
   run_id: string | null;
   space: RuntimeSpace;

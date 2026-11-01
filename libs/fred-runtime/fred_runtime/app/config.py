@@ -438,6 +438,7 @@ class InferenceCredentialBinding(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     source_id: str = Field(min_length=1)
+    source_revision: int = Field(gt=0, strict=True)
     api_root: str = Field(min_length=1)
     credential_binding: str = Field(min_length=1)
     api_key_env: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")

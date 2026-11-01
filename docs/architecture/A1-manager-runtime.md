@@ -52,13 +52,19 @@ flowchart LR
 A library crate (`src/lib.rs`) with a thin binary (`src/main.rs`): integration tests
 drive the library against real Postgres.
 
+Bearer verification and read-only platform-role evaluation are implemented in
+[`libs/fred-rust-sdk`](../../libs/fred-rust-sdk/README.md), a local dependency in
+the root Cargo workspace. Control Plane re-exports the shared authentication and
+role types; it retains schema migrations, grant mutations and scoped business
+authorization. The extraction does not change its HTTP security contract.
+
 ```mermaid
 flowchart TB
     main["main.rs<br/>serve, migrate, import-provisioning"]
     config["config.rs<br/>configuration.yaml + secrets"]
     logging["logging.rs<br/>stdout format, request ids"]
     api["api.rs<br/>routes, handlers"]
-    auth["auth.rs<br/>bearer verification"]
+    auth["SDK authentication<br/>bearer verification"]
     error["error.rs<br/>error contract"]
     spaces["spaces.rs<br/>space and role mutations"]
     provisioning["provisioning.rs<br/>preflight and reconciliation"]

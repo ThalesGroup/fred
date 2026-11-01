@@ -118,6 +118,7 @@ async def test_resolver_uses_workload_lease_and_grant_once(
     assert dict(sent.url.params) == {
         "person": admission.binding.subject_id,
         "run": "run",
+        "reasoning": "false",
         "agent": str(admission.binding.agent.instance_id),
     }
     assert sent.url.path == (
@@ -282,4 +283,32 @@ async def test_configuration_conflict_is_preserved_before_execution(
     }
     assert len(calls) == 1
     assert calls[0].url.params["conversation"] == "conversation"
+    assert admission.request._turn_authority is None
+
+
+async def test_new_admission_observes_model_revocation_without_substitution(admission):
+    def refused(request):
+        return httpx.Response(
+            409, json={"code": "model_offer_forbidden", "detail": "revoked"}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(refused)) as client:
+        with pytest.raises(HTTPException) as error:
+            await admission.resolve(client)
+    assert error.value.status_code == 409
+    assert error.value.detail == {
+        "code": "model_offer_forbidden",
+        "message": "Inference admission was refused. Refresh the model selection and retry.",
+    }
+    assert admission.request._turn_authority is None
+
+
+async def test_present_but_incomplete_choice_is_not_treated_as_absent(admission):
+    admission.request.context["model_choice"] = {}
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: pytest.fail("must not send"))
+    ) as client:
+        with pytest.raises(HTTPException) as error:
+            await admission.resolve(client)
+    assert error.value.status_code == 422
     assert admission.request._turn_authority is None

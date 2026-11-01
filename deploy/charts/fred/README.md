@@ -16,6 +16,7 @@ setting.
 | `control-plane-backend` | admission, governance, spaces, folders and authorization API | yes |
 | `control-plane-worker` | manager lifecycle work | yes |
 | `fred-agents` | legacy agent runtime | no |
+| `monitor` | read-only namespaced technical status for platform administrators | no |
 | `frontend` | web UI, behind your ingress | yes |
 | `knowledge-flow-backend` | document ingestion, search and storage API | yes |
 | `knowledge-flow-worker` | ingestion worker serving all roles | yes |
@@ -139,3 +140,12 @@ and its configuration only:
 Each validates the pod's configuration against the library's own model at `helm install`,
 and its README (`helm show readme oci://ghcr.io/thalesgroup/fred-helm/<chart>`) lists what
 a deployment must set. A pod's repository keeps only its image and its values.
+
+## Technical monitor
+
+Enable `applications.monitor.enabled` after making a monitor image available and
+provisioning the dedicated `monitor-database` Secret with its read-only
+`DATABASE_URL`. See the [monitor setup](../../../apps/monitor/README.md#enable-in-the-fred-chart)
+for image values, authentication and collection limits. The chart restricts its
+Kubernetes Role to namespaced list operations and routes the frontend directly to
+the monitor. It creates no database, database role or persistent volume.

@@ -55,6 +55,7 @@ class BuildImagesTests(unittest.TestCase):
                 set(applications),
                 {
                     "control-plane-backend",
+                    "monitor",
                     "knowledge-flow-backend",
                     "knowledge-flow-worker",
                     "frontend",
@@ -72,13 +73,13 @@ class BuildImagesTests(unittest.TestCase):
             self.assertEqual(
                 applications["frontend"]["image"]["tag"], "k3d-" + hashlib.sha256(json.dumps({"rootfs": {"Type": "layers", "Layers": ["sha256:" + "a" * 64]}, "config": {}, "os": "linux", "architecture": "amd64", "variant": ""}, sort_keys=True).encode()).hexdigest()[:16]
             )
-            self.assertEqual(len((output / "images.txt").read_text().splitlines()), 4)
+            self.assertEqual(len((output / "images.txt").read_text().splitlines()), 5)
             builds = [
                 call.args[0]
                 for call in run.call_args_list
                 if "docker-build" in call.args[0]
             ]
-            self.assertEqual(len(builds), 8)
+            self.assertEqual(len(builds), 10)
             self.assertEqual(builds[0][3], str(root / "apps/control-plane"))
 
     def test_runtime_changes_get_new_tags(self) -> None:

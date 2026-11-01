@@ -1,0 +1,23 @@
+[package]
+name = "fred-rust-sdk"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+jsonwebtoken.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx = { workspace = true, features = ["macros"] }
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+utoipa.workspace = true
+
+[dev-dependencies]
+base64 = "0.23.1"
+rsa = "=0.9.10"

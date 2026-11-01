@@ -6,7 +6,7 @@ Paths in the frontend column are relative to `apps/frontend/src/`.
 
 | Question / responsibility | Rust owner | Frontend entry or consumer | Focused evidence |
 | --- | --- | --- | --- |
-| Validate an authenticated caller | [auth.rs](auth.rs), [onboarding.rs](onboarding.rs) | `security/AuthContext.tsx` | `tests/integration.rs` |
+| Validate an authenticated caller | [shared authentication](../../../libs/fred-rust-sdk/src/security/authentication.rs), [onboarding.rs](onboarding.rs) | `security/AuthContext.tsx` | `tests/integration.rs` |
 | Accept current CGU | [onboarding.rs](onboarding.rs), handlers in [api.rs](api.rs) | `rework/core/guards/GcuGuard.tsx`, `rework/components/pages/GcuPage/GcuPage.tsx` | `tests/integration.rs`; `GcuGuard.test.tsx` beside the guard |
 | Claim the first platform admin | [bootstrap.rs](bootstrap.rs) | `rework/core/guards/BootstrapGuard.tsx`, `rework/components/pages/BootstrapPage/BootstrapPage.tsx` | `tests/integration.rs`; `BootstrapGuard.test.tsx` |
 | Select platform versus business navigation | [platform.rs](platform.rs), [api.rs](api.rs) | `rework/core/guards/ManagerArea.tsx`, `rework/components/shared/layouts/Sidebar/AdminNavbar/AdminNavbar.tsx` | `ManagerArea.test.tsx` beside the guard |

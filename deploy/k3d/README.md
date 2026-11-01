@@ -21,6 +21,16 @@ URLs, its shared base values and the generic build/import/sync sequence. Its
 `APP=fred DIR=...` command selects the checkout's Helmfile when present.
 No Rust-specific profile is added to the factory.
 
+## Technical monitor
+
+The profile also builds `apps/monitor`, enables the chart application and exposes
+`/admin/monitor` in the frontend for platform administrators. No additional port
+is required. `prepare` invokes the factory's `k3d-apps/fred/monitor-database` to
+create/reuse the dedicated SQL login and Secret. `finish` grants the role-table
+read after Control Plane migrations on a fresh database. The factory must include
+this hook; use its matching `weaver` branch. Repeated deployments keep credentials
+and work against existing PostgreSQL volumes.
+
 ## First start on k3d
 
 The path a new contributor follows, from an empty cluster to an assistant that
@@ -122,7 +132,8 @@ The inherited factory settings are retained:
 
 After deploying, use organization owneristration -> Agents to find and activate
 `fred.github.assistant`, then verify the list after reload. The deployment does
-not enable templates in organizations, select models or alter instance settings.
+not enable templates in organizations or alter instance settings. The explicit
+organization model declarations below initialize model policy once.
 Ralph and its embedded execution path are unchanged. Unavailable template
 dependencies still prevent their activation. Discovery still fails globally if
 an enabled catalog source cannot be reached, including while the pod is starting.
@@ -132,9 +143,8 @@ its configured delegation audience and caller role. This matches the pod's
 inherited outgoing delegation; the Keycloak `agentic` service account must carry
 those claims. User authorization is still resolved for the person on each turn.
 
-For the first chat check, authorize a discovered chat model and select the
-organization default in Models, then create a Custom assistant without active
-capabilities. A blank recommended model on the form uses the organization
+For the first chat check, verify the initialized organization default in Models,
+then create a Custom assistant without active capabilities. A blank recommended model on the form uses the organization
 default when no model is chosen in the chat. Validate a normal text exchange,
 a second turn and history after reload before testing reasoning or capabilities.
 These are deployment prerequisites, not evidence of a working end-to-end chat.
@@ -231,13 +241,27 @@ the existing `fred-model-credentials/OPENAI_API_KEY` for both operations; no
 secret value is stored in the configuration. The control plane uses the same
 node CA bundle as the pod for outgoing TLS.
 
-After deploying this configuration, open Models. The known inventory is shown
-and discovery refreshes automatically, as in Swift. Then permit
-`mistral-small-latest` and `mistral-medium-latest` for the organization. Choose
-Small as default in Models by default if that is the desired test setup.
+The overlay explicitly assigns `mistral` to the demo organizations `Acme` and
+`Globex`, resolved by their exact PostgreSQL names after the existing provisioning
+import. Each initially permits `mistral-small-latest` and `mistral-medium-latest`,
+selects Small as default, and leaves fallback/reasoning empty. The test account is
+shared deliberately; distinct accounts require distinct source IDs. Other
+organizations need their own explicit declaration, never an implicit global grant.
+
+Provision secrets, deploy the schema/configuration, then import the existing demo
+bundle. The post-provisioning pass discovers and initializes models automatically.
+Successful initialization is durable: restarts preserve subsequent UI decisions,
+even an empty or deleted policy. Missing models/discovery failures grant nothing
+for that organization. Correct the dependency and replay `control-plane
+initialize-models` in the manager's environment; already completed organizations
+are untouched. For historical policies, supply all source mappings explicitly;
+their administered choices are preserved. See the [initialization contract](../../apps/control-plane/README.md#initialize-organization-models-once)
+for diagnostics, bounds and recovery.
+
 Discovery lists the provider's complete visible inventory and grants no access.
-The provider may expose additional models; this is not a static three-row catalog.
-The old factory `models_catalog` is excluded from this Weaver overlay.
+Later discoveries do not extend the explicit permitted list. The old factory
+`models_catalog` remains excluded from this Weaver overlay. The isolated automated
+tests do not establish real k3d/provider validation; that remains a developer check.
 
 The host equivalent is `apps/control-plane/config/configuration.yaml`, with the
 existing Mistral key supplied through the control plane's environment or local

@@ -813,7 +813,7 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.modelPreparationError).toBe("The saved model choice must be selected again in the Models menu.");
     expect(registerSessionCalls).toEqual([]);
     expect(sendMock).not.toHaveBeenCalled();
-    expect(prepareChatControlsMock).toHaveBeenCalledWith(null, undefined);
+    expect(prepareChatControlsMock).toHaveBeenCalledWith(null, undefined, false);
   });
 
   it("sends combined selection on first and following messages, then explicit empty and reset", async () => {
