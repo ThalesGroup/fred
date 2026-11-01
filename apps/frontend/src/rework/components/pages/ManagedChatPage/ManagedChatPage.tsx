@@ -62,6 +62,7 @@ import { conversationTokenTotals } from "./toThreadMessages";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
 import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
+import { ChatNavPanelToggle } from "./ChatNavPanelToggle";
 import { hitlHoldsComposer } from "./hitlHoldsComposer";
 import { useManagedChat } from "./useManagedChat";
 import { useComposerCommands } from "./useComposerCommands";
@@ -77,6 +78,7 @@ import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { useGetAgentInstanceSkillDetailQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import Chip from "@shared/atoms/Chip/Chip";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Button from "@shared/atoms/Button/Button";
@@ -182,7 +184,7 @@ function ManagedChatContent({
   const pendingListId = useId();
   const [pendingExpanded, setPendingExpanded] = useState(true);
   const { t } = useTranslation();
-  const { agentsNicknameSingular } = useFrontendProperties();
+  const { agentsNicknameSingular, agentIconName } = useFrontendProperties();
   const teamId = space.id;
   const { showError } = useToast();
 
@@ -733,6 +735,16 @@ function ManagedChatContent({
     onRecall: recallLine,
   });
 
+  // A deleted agent has no instance left: its name alone still picks an icon.
+  const agentChipIcon = (
+    <span className={styles.agentChipIcon}>
+      <Icon
+        category="outlined"
+        type={resolveAgentIcon(chat.agentInstance ?? { display_name: chat.agentDisplayName, role: "" }, agentIconName)}
+      />
+    </span>
+  );
+
   const composer = (
     <>
       {chat.agentConfigurationChanged && (
@@ -938,75 +950,75 @@ function ManagedChatContent({
             event.currentTarget.value = "";
           }}
         />
-        {/* Page body — a row of [ left stack ][ full-height push drawers ]. A
-            side panel now reflows the WHOLE left stack (header included) instead
-            of sliding under the header, so viewers span the full page height. */}
+        {/* Conversation header. Spans the page above the chat body, independent of
+            the reading column; panels and the rail never reach it. On a new
+            conversation it only holds the panel toggle: the welcome block names the agent. */}
+        <div className={styles.topBar}>
+          <div className={styles.topBarInner}>
+            <ChatNavPanelToggle />
+            {!(isInitialState && chat.sessionId == null) && (
+              <>
+                <div className={styles.topBarTitle}>
+                  {chat.isReadOnly ? (
+                    <Tooltip
+                      text={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
+                    >
+                      <span
+                        className={styles.topBarAgentName}
+                        tabIndex={0}
+                        aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
+                      >
+                        <Chip
+                          size="large"
+                          leading={agentChipIcon}
+                          label={`${chat.agentDisplayName} ${t("chatbot.deletedAgentSuffix")}`}
+                        />
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <div className={styles.topBarAgentName}>
+                      <Chip size="large" leading={agentChipIcon} label={chat.agentDisplayName} />
+                    </div>
+                  )}
+                  {chat.sessionId && chat.sessionTitle != null && (
+                    <div className={styles.topBarTitleRow}>
+                      <span className={styles.titleLabel}>
+                        {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
+                      </span>
+                      <span className={styles.editButtonSlot}>
+                        <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className={styles.topBarRight}>
+                  {conversationTokens.total_tokens > 0 && (
+                    <span className={styles.conversationTokens}>
+                      {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
+                    </span>
+                  )}
+                  {chat.sessionId && (!chat.executionDisabled || chat.agentConfigurationChanged) && (
+                    <Tooltip text={t("chatbot.newConversation")}>
+                      <IconButton
+                        variant="icon"
+                        size="medium"
+                        color="on-surface-retreat"
+                        icon={{ category: "outlined", type: "add_comment" }}
+                        aria-label={t("chatbot.newConversation")}
+                        onClick={chat.startNewConversation}
+                      />
+                    </Tooltip>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Chat body — a row of [ left stack ][ push drawers ], below the header. */}
         <div className={styles.pageBody}>
           <div className={styles.leftStack}>
-            {/* Conversation header. When a side panel opens it reflows left
-            together with the content below — the panel sits at the page body's
-            right edge at full height, no longer under this bar. The inner row is
-            capped to the composer field width so title and composer stay
-            aligned. Hidden on a new conversation (no session yet), where the
-            welcome block already names the agent. */}
-            {!(isInitialState && chat.sessionId == null) && (
-              <div className={styles.topBar}>
-                <div className={styles.topBarInner}>
-                  <div className={styles.topBarTitle}>
-                    {chat.sessionId && chat.sessionTitle != null && (
-                      <div className={styles.topBarTitleRow}>
-                        <span className={styles.titleLabel}>
-                          {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
-                        </span>
-                        {/* Absolutely positioned: reserves no layout space, revealed on topBar hover */}
-                        <span className={styles.editButtonSlot}>
-                          <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
-                        </span>
-                      </div>
-                    )}
-                    {chat.isReadOnly ? (
-                      <Tooltip
-                        text={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
-                      >
-                        <span
-                          className={styles.topBarAgentName}
-                          data-agent-deleted="true"
-                          tabIndex={0}
-                          aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
-                        >
-                          <span className={styles.deletedAgentName}>{chat.agentDisplayName}</span>
-                          <span className={styles.deletedAgentSuffix}> {t("chatbot.deletedAgentSuffix")}</span>
-                        </span>
-                      </Tooltip>
-                    ) : (
-                      <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
-                    )}
-                  </div>
-                  <div className={styles.topBarRight}>
-                    {conversationTokens.total_tokens > 0 && (
-                      <span className={styles.conversationTokens}>
-                        {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
-                      </span>
-                    )}
-                    {chat.sessionId && (!chat.executionDisabled || chat.agentConfigurationChanged) && (
-                      <Tooltip text={t("chatbot.newConversation")}>
-                        <IconButton
-                          variant="outlined"
-                          size="medium"
-                          icon={{ category: "outlined", type: "add_comment" }}
-                          aria-label={t("chatbot.newConversation")}
-                          className={styles.newConversationButton}
-                          onClick={chat.startNewConversation}
-                        />
-                      </Tooltip>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Conversation column — holds only the main column now; the push drawers
-            moved up to the page body so they reflow the header too. */}
+            {/* Conversation column — holds only the main column now. */}
             <div className={styles.contentRow}>
               <div className={styles.mainColumn} data-chat-main>
                 {allowChatAttachments && dragActive && (
@@ -1202,8 +1214,8 @@ function ManagedChatContent({
             </div>
           </div>
 
-          {/* Capability side-panel slot — full-height sibling of the left stack:
-            its push drawer reflows the header and the conversation together. */}
+          {/* Capability side-panel slot — sibling of the left stack: its push
+            drawer reflows the conversation, never the header. */}
           <CapabilitySidePanelHost
             capabilityIds={chat.capabilityIds}
             activeKey={activeCapabilityKey}

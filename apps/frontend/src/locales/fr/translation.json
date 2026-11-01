@@ -435,6 +435,8 @@
       "forceUnavailable": "Envoi impossible pendant ce tour. Le message reste en attente."
     },
     "newConversation": "Nouvelle conversation",
+    "hideNavPanel": "Masquer le panneau de navigation",
+    "showNavPanel": "Afficher le panneau de navigation",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",

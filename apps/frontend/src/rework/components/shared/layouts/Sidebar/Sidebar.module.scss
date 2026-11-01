@@ -52,6 +52,35 @@
   min-height: 0;
 }
 
+/* Collapsed from the chat header; stays mounted so its state survives. */
+.nav-panel-card[hidden] {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  /* An `auto` width cannot animate. The panels inside keep their 254px while folding,
+   * so their content does not reflow. */
+  .nav-panel-card {
+    width: 254px;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: var(--duration-medium-1) var(--easing-standard);
+      transition-property: width, margin, opacity, visibility;
+    }
+  }
+
+  /* Clipped only when collapsed: the admin menu may overflow an open panel. The margin
+   * takes over from the panel's inset as the gap to the page card. */
+  .nav-panel-card[hidden] {
+    display: flex;
+    visibility: hidden;
+    opacity: 0;
+    margin-right: var(--spacing-s);
+    width: 0;
+    overflow-x: clip;
+  }
+}
+
 @media (pointer: coarse) {
   .rail {
     width: 80px;

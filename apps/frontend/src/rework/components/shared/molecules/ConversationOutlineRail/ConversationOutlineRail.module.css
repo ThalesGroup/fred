@@ -39,7 +39,7 @@
   display: flex;
   position: absolute;
   top: 50%;
-  left: var(--spacing-xs);
+  left: 0;
   flex-direction: column;
   transform: translateY(-50%);
   /* Widest a magnified mark gets, so magnifying never reflows anything. */

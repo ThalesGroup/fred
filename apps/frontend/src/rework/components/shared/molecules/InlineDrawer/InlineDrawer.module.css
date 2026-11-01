@@ -67,9 +67,6 @@
   position: relative;
   flex-shrink: 0;
   visibility: hidden;
-  /* Above the capability launcher rail (z-index 2): the panel opens over the
-     rail and, on close, finishes its width animation in front of it — the rail
-     only reappears once the panel is fully gone, never on top of it. */
   z-index: 3;
   transition:
     width var(--drawer-duration) var(--easing-standard),
@@ -111,7 +108,7 @@
      square corners, flush right against the viewport edge; clip the content
      (iframe, header, tabs) to the edge. */
   border-left: 1px solid var(--outline-muted);
-  background: var(--drawer-background, var(--surface-container-low));
+  background: var(--drawer-background, var(--surface-container));
   width: var(--drawer-width);
   overflow: hidden;
 }
@@ -134,19 +131,18 @@
   border-left-color: transparent;
 }
 
-/* Asymmetric on purpose: 12px against the page edges and the conversation, 8px
-   on the right where the launcher rail sits — a gap to a neighbouring control
-   wants to be tighter than a gap to the edge of the page. */
+/* Tight against the body's edges and the launcher rail. No inset on the left: the
+   resize handle sits on top of the card and takes no width of its own. */
 .drawer[data-floating="true"][data-layout="push"] .panel {
-  top: var(--spacing-s);
+  top: var(--spacing-xs);
   right: var(--spacing-xs);
-  bottom: var(--spacing-s);
+  bottom: var(--spacing-xs);
   left: auto;
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
   background: var(--drawer-background, var(--surface-container-high));
-  width: calc(var(--drawer-width) - var(--spacing-s) - var(--spacing-xs));
+  width: calc(var(--drawer-width) - var(--spacing-xs));
   overflow: hidden;
 }
 

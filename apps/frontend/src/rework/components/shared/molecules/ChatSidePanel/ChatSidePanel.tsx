@@ -27,8 +27,6 @@ export interface ChatSidePanelProps {
   titleSize?: "small" | "large";
   /** Storage key for the drag-to-resize width. Must be unique per panel. */
   persistKey: string;
-  /** Seeds the first-ever width only; the user's drag wins afterwards. */
-  width?: string;
   /** Rendered in the header, immediately left of the close button. */
   headerActions?: ReactNode;
   /**
@@ -45,7 +43,6 @@ export default function ChatSidePanel({
   title,
   titleSize = "small",
   persistKey,
-  width,
   headerActions,
   fill = false,
   children,
@@ -56,7 +53,6 @@ export default function ChatSidePanel({
       onClose={onClose}
       title={title}
       titleSize={titleSize}
-      width={width}
       headerActions={headerActions}
       layout="push"
       floating
@@ -67,7 +63,7 @@ export default function ChatSidePanel({
       // The body below owns its insets: the drawer's own padding would stack a
       // gap above the content on top of the one the header already leaves.
       flushBody
-      resizable={{ persistKey }}
+      resizable={{ persistKey, openFraction: 0.38 }}
     >
       <div className={`${styles.body}${fill ? ` ${styles.bodyFill}` : ""}`}>{children}</div>
     </InlineDrawer>

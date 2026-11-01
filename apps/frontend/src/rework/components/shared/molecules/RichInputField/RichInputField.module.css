@@ -28,7 +28,7 @@
   justify-content: center;
   /* Fade from transparent so the field appears to float above the thread */
   background: linear-gradient(to bottom, transparent 0%, var(--surface-main) 40%);
-  padding: 0 var(--spacing-l);
+  padding: 0 var(--spacing-m);
 }
 
 .field {
@@ -44,7 +44,7 @@
     box-shadow 120ms ease;
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--surface-container-high);
   /* Tighter at the bottom: the control row already carries its own spacing, so
      a full pad there read as a gap under the buttons. */
@@ -93,6 +93,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-2xs);
+}
+
+/* Nothing to show: without this the field's gap still pads the text from above. */
+.aboveTextSlot:empty {
+  display: none;
 }
 
 .textarea {
