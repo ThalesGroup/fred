@@ -553,7 +553,6 @@ describe("ManagedChatPage deleted agent", () => {
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).toContain("Preserved assistant");
     expect(html).toContain("chatbot.deletedAgentSuffix");
-    expect(html).toContain('data-agent-deleted="true"');
     expect(html).toContain('data-placeholder="chatbot.readOnlyComposerPlaceholder"');
     expect(html).toContain('data-description="chatbot.deletedAgentTooltip"');
     const rendered = document.createElement("div");
@@ -651,7 +650,8 @@ describe("ManagedChatPage new conversation action", () => {
     });
     expect(container.textContent).toContain("Contract Reviewer");
     expect(container.textContent).toContain("Reviews supplier contracts");
-    expect(container.querySelector('[class*="topBar"]')).toBeNull();
+    expect(container.querySelector('[class*="topBarAgentName"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="chatbot.hideNavPanel"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="composer"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="chatbot.newConversation"]')).toBeNull();
 

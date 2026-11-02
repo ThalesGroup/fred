@@ -101,7 +101,6 @@ export default function PromptSelectionChatPanel({
       onClose={onClose}
       title={t("chatbot.promptSelectionPanel.title")}
       persistKey="prompt-selection-panel"
-      width="340px"
       fill
     >
       {canPickSpace && (

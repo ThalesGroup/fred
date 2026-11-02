@@ -80,11 +80,12 @@ function RailButton({
   return (
     <Tooltip text={label} placement="left">
       <IconButton
-        // The open panel's launcher reads as selected through the M3 filled
-        // tonal variant, so the rail says which viewer is showing.
+        // The open panel's launcher reads as a nav rail's active item: tonal
+        // container, filled icon.
         variant={selected ? "tonal" : "icon"}
-        size="small"
-        icon={{ category: "outlined", type: icon, filled: iconFilled }}
+        color={selected ? "secondary" : undefined}
+        size="medium"
+        icon={{ category: "outlined", type: icon, filled: iconFilled || selected }}
         aria-label={label}
         aria-pressed={selected}
         badgeCount={badgeCount}

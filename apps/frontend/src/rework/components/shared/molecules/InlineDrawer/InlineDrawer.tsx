@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } from "react";
+import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
@@ -27,6 +27,10 @@ export interface InlineDrawerResizeSpec {
   /** Viewport-width cap as a fraction (0–1). Default 0.45; raise it for a drawer
    * meant to take most of the page (e.g. a full-height document preview). */
   maxViewportFraction?: number;
+  /** Share (0–1) of the parent's width taken on every opening, whatever was dragged before. */
+  openFraction?: number;
+  /** Runs before each opening is sized; returns the width it is freeing in the parent. */
+  onOpening?: (parentWidth: number) => number;
 }
 
 export interface InlineDrawerProps {
@@ -41,7 +45,7 @@ export interface InlineDrawerProps {
   headerActions?: ReactNode;
   /** Width in CSS units. Defaults to "480px". */
   width?: string;
-  /** Drawer shell background (CSS color/token). Defaults to `--surface-floating`, or `--surface-container-low` for a flush push panel. */
+  /** Drawer shell background (CSS color/token). Defaults to `--surface-floating`, or `--surface-container` for a flush push panel. */
   background?: string;
   /**
    * Open/close duration for the push layout (any CSS time, ideally a
@@ -123,6 +127,14 @@ export function InlineDrawer({
     paneRef: drawerRef,
   });
   const resizeEnabled = resizable !== undefined && layout === "push";
+  const openFraction = resizable?.openFraction;
+  const onOpening = resizable?.onOpening;
+  const { setWidth } = resize;
+  useLayoutEffect(() => {
+    const parentWidth = drawerRef.current?.parentElement?.clientWidth;
+    if (!open || !openFraction || !parentWidth) return;
+    setWidth(Math.round((parentWidth + (onOpening?.(parentWidth) ?? 0)) * openFraction));
+  }, [open, openFraction, onOpening, setWidth]);
   const capVw = (resizable?.maxViewportFraction ?? 0.45) * 100;
   // Push drawers take real layout space from the flex row they sit in — cap
   // at a fraction of the viewport so a wide `width` can't force the sibling

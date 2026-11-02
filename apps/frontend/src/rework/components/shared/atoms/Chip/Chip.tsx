@@ -23,6 +23,8 @@ export interface ChipProps {
   title?: string;
   /** Muted secondary line under the label (e.g. a file status). */
   secondary?: string;
+  /** "large" uses the larger label role, for a chip that stands alone in a bar. */
+  size?: "medium" | "large";
   /**
    * Leading visual. A bare `Icon` inherits the chip's muted (and tone) color;
    * a self-styled badge sets its own color and overrides it.
@@ -61,11 +63,12 @@ export default function Chip({
   removeIcon = "close",
   removeButtonSize = "2xs",
   tone = "default",
+  size = "medium",
 }: ChipProps) {
   const labelProps = { className: styles.label, title: title ?? label };
 
   return (
-    <span className={styles.chip} data-tone={tone}>
+    <span className={styles.chip} data-tone={tone} data-size={size}>
       {leading && (
         <span className={styles.leading} aria-hidden>
           {leading}

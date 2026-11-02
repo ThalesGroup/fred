@@ -80,6 +80,10 @@
   white-space: nowrap;
 }
 
+.chip[data-size="large"] .label {
+  font: var(--font-label-large);
+}
+
 .secondary {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);

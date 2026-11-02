@@ -17,6 +17,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
 import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate";
 import { usePlatformArea } from "@core/hooks/usePlatformArea";
+import { ChatNavPanelProvider } from "@core/hooks/useChatNavPanel";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import styles from "./MainLayout.module.css";
 
@@ -34,26 +35,28 @@ export default function MainLayout({ children, navigation = true }: PropsWithChi
   const organizationArea = ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, ""));
   const platformArea = area.platformArea && !organizationArea;
   return (
-    <div className={styles.mainLayout}>
-      <div className={styles.sidebar}>
-        <Sidebar
-          navigation={navigation}
-          platformArea={platformArea}
-          platformOnly={area.platformOnly}
-          organizationArea={organizationArea}
-        />
-      </div>
-      <main className={styles.content}>
-        {navigation ? (
-          platformArea || organizationArea || isWeaverContentRoute(pathname) ? (
-            <Outlet />
+    <ChatNavPanelProvider>
+      <div className={styles.mainLayout}>
+        <div className={styles.sidebar}>
+          <Sidebar
+            navigation={navigation}
+            platformArea={platformArea}
+            platformOnly={area.platformOnly}
+            organizationArea={organizationArea}
+          />
+        </div>
+        <main className={styles.content}>
+          {navigation ? (
+            platformArea || organizationArea || isWeaverContentRoute(pathname) ? (
+              <Outlet />
+            ) : (
+              <AdmittedWorkspace />
+            )
           ) : (
-            <AdmittedWorkspace />
-          )
-        ) : (
-          children
-        )}
-      </main>
-    </div>
+            children
+          )}
+        </main>
+      </div>
+    </ChatNavPanelProvider>
   );
 }

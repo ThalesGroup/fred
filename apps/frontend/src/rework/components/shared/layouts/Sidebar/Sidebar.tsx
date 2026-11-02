@@ -15,6 +15,7 @@
 import MainNavBar from "./MainNavBar/MainNavBar.tsx";
 import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
+import { isChatRoute, useChatNavPanel } from "@core/hooks/useChatNavPanel";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
@@ -35,6 +36,7 @@ export default function Sidebar({
   organizationArea?: boolean;
 }) {
   const { pathname } = useLocation();
+  const { collapsed } = useChatNavPanel();
 
   const getSidebarMode = (): SidebarMode => {
     if (platformArea) return "ADMIN";
@@ -61,7 +63,7 @@ export default function Sidebar({
         </div>
       </div>
       {navigation && (
-        <div className={styles["nav-panel-card"]} data-nav-panel>
+        <div className={styles["nav-panel-card"]} data-nav-panel hidden={collapsed && isChatRoute(pathname)}>
           {sidebarMode === "HOME" && <HomeNavPanel />}
           {sidebarMode === "TEAM" && <TeamContentNavbar />}
           {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}

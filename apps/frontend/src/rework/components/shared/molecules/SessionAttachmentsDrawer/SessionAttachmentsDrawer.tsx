@@ -73,7 +73,6 @@ export function SessionAttachmentsDrawer({
         onClose={onClose}
         title={t("chatbot.sessionAttachments.title")}
         persistKey="session-attachments-panel"
-        width="460px"
         fill
       >
         <UploadWarningBanner />

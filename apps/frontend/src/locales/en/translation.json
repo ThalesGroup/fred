@@ -425,6 +425,8 @@
       "forceUnavailable": "Could not send into the active turn. The message is still pending."
     },
     "newConversation": "New conversation",
+    "hideNavPanel": "Hide navigation panel",
+    "showNavPanel": "Show navigation panel",
     "uiParts": {
       "ariaLabel": "Agent cards",
       "geoAria": "Map data",
