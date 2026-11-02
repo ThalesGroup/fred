@@ -52,7 +52,7 @@ from fred_core.security.delegation import (
     preserved_delegation,
 )
 from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.oidc import get_current_user_without_gcu
+from fred_core.security.oidc import authenticate_request
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import security as pod_security
@@ -803,7 +803,7 @@ def admit_through_a_route(
     admitted: list[Any] = []
 
     @app.post("/agents/execute")
-    async def _execute(user=Depends(get_current_user_without_gcu)) -> dict[str, str]:
+    async def _execute(user=Depends(authenticate_request)) -> dict[str, str]:
         admitted.append(
             agent_app_module._admission_credentials(request, user, container)
         )
@@ -994,7 +994,7 @@ def test_a_role_holder_naming_nobody_is_refused_where_grants_are_not_believed(
     app = FastAPI(lifespan=installing_receiver())
 
     @app.post("/agents/execute")
-    async def _execute(user=Depends(get_current_user_without_gcu)) -> dict[str, str]:
+    async def _execute(user=Depends(authenticate_request)) -> dict[str, str]:
         agent_app_module._admission_credentials(unattended_request(), user, container)
         return {"outcome": "admitted"}
 

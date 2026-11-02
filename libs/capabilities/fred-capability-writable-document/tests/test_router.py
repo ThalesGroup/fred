@@ -15,7 +15,7 @@
 """Router tests: list/get/put/export happy paths + authz (404 missing, 403 foreign).
 
 The auth dependency and the store are both overridden so the routes run offline:
-`get_current_user` returns a chosen `KeycloakUser`, and the store is the in-memory fake.
+`authenticate_request` returns a chosen `KeycloakUser`, and the store is the in-memory fake.
 """
 
 from __future__ import annotations
@@ -29,7 +29,8 @@ from fastapi.testclient import TestClient
 from fred_capability_writable_document import store as store_module
 from fred_capability_writable_document.router import build_router
 from fred_capability_writable_document.store import WritableDocumentRecord
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser
+from fred_core.security.oidc import authenticate_request
 from port_fakes import FakeWritableDocumentStore
 
 _PREFIX = "/capabilities/writable_document"
@@ -59,7 +60,7 @@ def app_client():
     store_module.set_store_provider(lambda: fake)
     app = FastAPI()
     app.include_router(build_router(), prefix=_PREFIX)
-    app.dependency_overrides[get_current_user] = lambda: _user("u-1")
+    app.dependency_overrides[authenticate_request] = lambda: _user("u-1")
     client = TestClient(app)
     try:
         yield client, fake, app

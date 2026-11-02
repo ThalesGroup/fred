@@ -146,7 +146,7 @@ def has_auth_dependency(app, path: str, method: str) -> bool:
 
                     # Check if route has security dependencies
                     if hasattr(route, 'dependencies') and route.dependencies:
-                        # Look for get_current_user in dependencies
+                        # Look for current_user in dependencies
                         for dep in route.dependencies:
                             if hasattr(dep, 'dependency'):
                                 # MCP mounts authenticate through this yielding
@@ -162,7 +162,7 @@ def has_auth_dependency(app, path: str, method: str) -> bool:
                                 ):
                                     return True
                                 dep_str = str(dep.dependency)
-                                if 'get_current_user' in dep_str:
+                                if 'current_user' in dep_str:
                                     return True
                     
                     # Also check function signature for auth parameters
@@ -171,7 +171,7 @@ def has_auth_dependency(app, path: str, method: str) -> bool:
                         for param_name, param in sig.parameters.items():
                             if param.annotation and 'KeycloakUser' in str(param.annotation):
                                 return True
-                            if param.default and 'get_current_user' in str(param.default):
+                            if param.default and 'current_user' in str(param.default):
                                 return True
     except Exception:
         # Signature/dependency introspection is best-effort; treat failures as "no auth found" below.
@@ -287,7 +287,7 @@ def main():
             
             print("")
 
-        print("\nTo secure these routes, add: user: KeycloakUser = Depends(get_current_user)")
+        print("\nTo secure these routes, add: user: KeycloakUser = Depends(current_user)")
         return 1
 
 

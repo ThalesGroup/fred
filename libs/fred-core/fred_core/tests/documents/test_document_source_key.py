@@ -22,7 +22,7 @@ from fred_core.documents import DocumentMetadata, Identity, SourceInfo, SourceTy
 def test_source_key_and_optional_version_round_trip_in_metadata_json(version):
     key = "notes/../ç'est [drôle] ?&#.md"
     metadata = DocumentMetadata(
-        identity=Identity(document_name="report.md", document_uid="doc-1"),
+        identity=Identity(document_name="report.md", document_uid="doc-1", title=None),
         source=SourceInfo(
             source_type=SourceType.PUSH,
             source_tag="uploads",

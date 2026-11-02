@@ -14,7 +14,7 @@
 
 """Weaver admission for every pod route using the common user dependencies."""
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from fred_core.security import oidc
 from fred_core.security.delegation import AssertedUser
 from fred_core.security.structure import (
@@ -75,22 +75,6 @@ async def current_user_or_service(
     if not is_service_agent(subject):
         await _require_accepted(request, subject)
     return subject
-
-
-def install_admission(app: FastAPI) -> None:
-    """Replace all common pod admission dependencies, including nested consumers.
-
-    JWT and delegation verification stay shared with other backends. The pod has
-    no Swift directory snapshot, suspension hook or global filtering dependency.
-    """
-    app.dependency_overrides.update(
-        {
-            oidc.get_current_user: current_user,
-            oidc.get_current_user_or_service: current_user_or_service,
-            oidc.get_current_user_without_gcu: oidc.authenticate_request,
-            oidc.get_current_user_before_gcu: oidc.authenticate_request,
-        }
-    )
 
 
 async def prepare_authorization(

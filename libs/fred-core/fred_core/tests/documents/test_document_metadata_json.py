@@ -13,7 +13,7 @@ from fred_core.documents.processing_profile import IngestionProcessingProfile
 @pytest.mark.parametrize("profile", ["fast", "medium", "rich"])
 def test_processing_profile_and_stages_round_trip_in_metadata_json(profile):
     metadata = DocumentMetadata(
-        identity=Identity(document_name="data.csv", document_uid="doc-1"),
+        identity=Identity(document_name="data.csv", document_uid="doc-1", title=None),
         source=SourceInfo(
             source_type=SourceType.PUSH, source_tag="uploads", pull_location=None
         ),

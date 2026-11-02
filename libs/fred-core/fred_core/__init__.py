@@ -108,16 +108,11 @@ from fred_core.security.models import (
 )
 from fred_core.security.oidc import (
     decode_jwt,
-    get_current_user,
-    get_current_user_or_service,
-    get_current_user_without_gcu,
     get_keycloak_client_id,
     get_keycloak_url,
-    get_principal_context,
     get_token_endpoint,
     initialize_user_security,
     oauth2_scheme,
-    require_own_credential,
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
@@ -130,22 +125,8 @@ from fred_core.security.structure import (
     UserSecurity,
     is_service_agent,
 )
-from fred_core.teams.metadata_store import (
-    JoiningMode,
-    TeamMetadata,
-    TeamMetadataPatch,
-    TeamMetadataRow,
-    TeamMetadataStore,
-    TeamVisibility,
-)
 
 from .common import get_config
-from .users import (
-    BaseUserStore,
-    PostgresUserStore,
-    UserRow,
-    get_user_store,
-)
 
 __all__ = [
     "BaseLogStore",
@@ -160,9 +141,6 @@ __all__ = [
     "log_setup",
     "LogStorageConfig",
     "InMemoryLogStorageConfig",
-    "get_current_user",
-    "get_current_user_or_service",
-    "get_current_user_without_gcu",
     "decode_jwt",
     "initialize_user_security",
     "KeycloakUser",
@@ -178,7 +156,6 @@ __all__ = [
     "holds_caller_role",
     "is_delegation_caller",
     "require_workload_caller",
-    "get_principal_context",
     "PrincipalContext",
     "DelegationGrant",
     "GRANT_PARAM_AGENT",
@@ -188,7 +165,6 @@ __all__ = [
     "Principal",
     "get_delegation_config",
     "initialize_delegation",
-    "require_own_credential",
     "scrub_grant_text",
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
@@ -226,21 +202,11 @@ __all__ = [
     "get_keycloak_client_id",
     "KeycloackDisabled",
     "create_keycloak_admin",
-    "BaseUserStore",
-    "PostgresUserStore",
-    "UserRow",
-    "get_user_store",
     "get_config",
     # conversion
     "DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS",
     "convert_office_bytes_to_pdf",
     "convert_office_file_to_pdf",
-    "JoiningMode",
-    "TeamVisibility",
-    "TeamMetadata",
-    "TeamMetadataPatch",
-    "TeamMetadataStore",
-    "TeamMetadataRow",
     # documents
     "AccessInfo",
     "DocSummary",

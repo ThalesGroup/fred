@@ -42,6 +42,13 @@ config = load_agent_pod_config()          # reads ENV_FILE + CONFIG_FILE (config
 app    = create_agent_app(registry=REGISTRY, config=config)
 ```
 
+`create_agent_app` mounts protected routes with the explicit admission dependency
+`app.security.current_user`: common JWT/delegation verification, then the effective
+person's configured terms acceptance in `cp_read.terms_acceptance`. Capability
+routers inherit this guard at mounting; their handlers retain local resource
+authorization. No historical OIDC admission override is installed. The shared
+`get_config` override remains available to contributed routers and other helpers.
+
 `create_agent_app` returns a FastAPI application that exposes:
 
 | Method | Path                                       | Description                                                              |

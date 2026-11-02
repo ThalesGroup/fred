@@ -10,9 +10,9 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from fred_core.security.delegation import AssertedUser
-from fred_core.security.oidc import get_current_user
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app, history_access
+from fred_runtime.app.security import current_user
 from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
 from fred_runtime.runtime_support.checkpoints import checkpoint_config, graph_thread_id
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
@@ -86,7 +86,7 @@ async def case(monkeypatch):
         app.include_router(agent_app._build_agent_router({}, True, 10000))
         # Admission is supplied at the existing authenticated dependency boundary.
         # The outbound PersonCredentialProvider remains the real implementation.
-        app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        app.dependency_overrides[current_user] = lambda: KeycloakUser(
             uid="alice", username="alice", roles=[]
         )
         async with httpx.AsyncClient(
@@ -198,7 +198,7 @@ async def test_technical_failure_is_never_empty_history(case, where):
     ],
 )
 async def test_service_or_asserted_person_has_no_read_authority(case, principal):
-    case.app.dependency_overrides[get_current_user] = lambda: principal
+    case.app.dependency_overrides[current_user] = lambda: principal
     response = await case.client.get(f"/agents/sessions/{SESSION}/messages")
     assert response.status_code == 403
     case.checkpointer.aget_conversation_binding.assert_not_called()

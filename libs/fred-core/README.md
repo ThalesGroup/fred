@@ -24,6 +24,19 @@ foundational building blocks that must stay consistent across services.
 pip install fred-core
 ```
 
+## Authentication boundary
+
+`fred_core.security.oidc.authenticate_request` verifies JWT and trusted delegation
+and binds both caller and effective person to the request. The consuming backend
+owns admission and business authorization. Agent pods use
+`fred_runtime.app.security.current_user` for terms admission.
+
+The historical `get_current_user*`, `get_principal_context` and
+`require_own_credential` dependencies and root exports are removed, along with
+`fred_core.users`, `fred_core.teams` and `security.platform_access`. External
+Python consumers must select their backend's explicit admission dependency;
+authentication alone does not replace a former terms or own-credential guard.
+
 ## Notes
 
 `fred-core` is designed for internal Fred services and adapters. If you are

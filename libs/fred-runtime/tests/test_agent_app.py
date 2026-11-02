@@ -52,7 +52,6 @@ from fred_core.security.delegation import (
     initialize_delegation,
 )
 from fred_core.security.structure import KeycloakUser
-from fred_core.users.store import postgres_user_store
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import context as context_module
@@ -1769,43 +1768,8 @@ def test_managed_execution_rejects_grant_with_mismatched_team(
     assert "binding mismatch" in response.json()["detail"].lower()
 
 
-def test_create_agent_app_does_not_initialize_swift_user_store(
-    monkeypatch, tmp_path
-) -> None:
-    """Weaver admission reads Rust-owned terms and never initializes Swift users."""
-    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="startup ready")])
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(model),
-    )
-    monkeypatch.setattr(postgres_user_store, "_user_store", None)
-
-    app = create_agent_app(
-        registry={_EchoAgent().agent_id: _EchoAgent()},
-        config=_build_test_config(tmp_path),
-    )
-
-    with TestClient(app):
-        assert postgres_user_store._user_store is None
-
-
 def test_create_agent_app_overrides_shared_config_dependency(tmp_path) -> None:
-    """
-    Ensure agent pods expose the shared config dependency expected by security.
-
-    Why this test exists:
-    - `fred_core.security.oidc.get_current_user()` resolves configuration
-      through `Depends(get_config)`
-    - without a pod-level override, secured `/agents/execute*` routes fail at
-      request time with `NotImplementedError`
-
-    How to use it:
-    - run via the default offline `make test` suite in `fred-runtime`
-
-    Example:
-    - `pytest tests/test_agent_app.py -q`
-    """
+    """Keep the shared configuration override for non-admission consumers."""
 
     config = _build_test_config(tmp_path)
     app = create_agent_app(

@@ -39,10 +39,10 @@ def create_openai_compat_router(
     authenticated_user_dep: Callable[..., Any] | None = None,
 ) -> APIRouter:
     """Expose metadata and authenticate the explicitly unsupported execution route."""
-    from fred_core.security.oidc import get_current_user
+    from fred_runtime.app.security import current_user
 
     def _user_with_auth(
-        user: KeycloakUser | AssertedUser = Depends(get_current_user),
+        user: KeycloakUser | AssertedUser = Depends(current_user),
     ) -> KeycloakUser | None:
         # This surface admits runs too, so it refuses an asserted person for the
         # same reason the execute routes do: a run needs the person's own token.

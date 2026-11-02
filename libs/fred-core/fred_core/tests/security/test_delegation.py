@@ -47,7 +47,6 @@ from fred_core.security.delegation import (
     resolve_delegated_principal,
     scrub_grant_text,
 )
-from fred_core.security.oidc import require_own_credential
 from fred_core.security.structure import (
     SERVICE_AGENT_ROLE,
     KeycloakUser,
@@ -586,14 +585,13 @@ def test_the_delegation_surface_is_reachable_from_the_package_root() -> None:
         "holds_caller_role": holds_caller_role,
         "initialize_delegation": initialize_delegation,
         "is_delegation_caller": is_delegation_caller,
-        "require_own_credential": require_own_credential,
         "require_workload_caller": require_workload_caller,
     }
 
     for name, obj in exported.items():
         assert getattr(fred_core, name) is obj, name
         assert name in fred_core.__all__, name
-    # A subject resolved outside the shared dependency skips its account status check.
+    # Receivers must use the shared authentication boundary.
     for name in ("resolve_request_principal", "resolve_delegated_principal"):
         assert not hasattr(fred_core, name), name
         assert name not in fred_core.__all__, name

@@ -31,3 +31,11 @@ the capability at boot via the `fred.capabilities` entry point declared in
 `pyproject.toml`
 (`writable_document = "fred_capability_writable_document.capability:WritableDocumentCapability"`).
 The second entry point registers `open_writable_document` independently.
+
+The served router is mounted by `create_agent_app` under
+`/capabilities/writable_document` with the pod's terms-admission guard. Handlers
+use `fred_core.security.oidc.authenticate_request` to bind the effective person,
+then filter lists by owner or check the document owner after lookup (404 missing,
+403 foreign). Standalone router consumers must supply their own admission guard;
+the capability does not import the runtime. The OpenAPI dumper only describes
+the router and does not serve requests.

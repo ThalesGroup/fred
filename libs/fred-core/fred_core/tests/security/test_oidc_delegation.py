@@ -22,7 +22,6 @@ as its subject, what is audited, and that an endpoint's own body still parses.
 from __future__ import annotations
 
 import logging
-from types import SimpleNamespace
 from typing import Any, Iterator
 
 import pytest
@@ -31,7 +30,6 @@ from fastapi.testclient import TestClient
 from prometheus_client import REGISTRY
 from pydantic import BaseModel
 
-from fred_core.common import get_config
 from fred_core.logs.audit_log import AUDIT_LOGGER_NAME
 from fred_core.security import delegation, oidc
 from fred_core.security.delegation import (
@@ -45,7 +43,6 @@ from fred_core.security.structure import (
     PrincipalContext,
     is_service_agent,
 )
-from fred_core.users.store.postgres_user_store import get_user_store
 
 _CALLER = "agent-backend"
 _OTHER_CALLER = "some-other-client"
@@ -158,41 +155,39 @@ def client() -> TestClient:
     app = FastAPI()
 
     @app.get("/who", operation_id="who")
-    async def who(user=Depends(oidc.get_current_user)) -> dict[str, Any]:
+    async def who(user=Depends(oidc.authenticate_request)) -> dict[str, Any]:
         return _describe(user)
 
     @app.get("/without-operation-id")
     async def without_operation_id(
-        user=Depends(oidc.get_current_user),
+        user=Depends(oidc.authenticate_request),
     ) -> dict[str, Any]:
         return _describe(user)
 
     @app.post("/ask", operation_id="ask")
     async def ask(
-        payload: _Payload, user=Depends(oidc.get_current_user)
+        payload: _Payload, user=Depends(oidc.authenticate_request)
     ) -> dict[str, Any]:
         return {**_describe(user), "question": payload.question}
 
     @app.post("/ping", operation_id="ping")
-    async def ping(user=Depends(oidc.get_current_user)) -> dict[str, Any]:
+    async def ping(user=Depends(oidc.authenticate_request)) -> dict[str, Any]:
         return _describe(user)
 
     @app.post("/manual", operation_id="manual")
     async def manual(
-        request: Request, user=Depends(oidc.get_current_user)
+        request: Request, user=Depends(oidc.authenticate_request)
     ) -> dict[str, Any]:
         # No declared body: the dependency reads it first, so the handler's own
         # read must still see it.
         return {**_describe(user), "body": await request.json()}
 
-    @app.get("/own", operation_id="own")
-    async def own(user=Depends(oidc.require_own_credential)) -> dict[str, Any]:
-        return _describe(user)
-
     @app.get("/context", operation_id="context")
     async def context(
-        principals: PrincipalContext = Depends(oidc.get_principal_context),
+        request: Request,
+        user=Depends(oidc.authenticate_request),
     ) -> dict[str, str | bool]:
+        principals: PrincipalContext = request.state.principal_context
         return {
             "caller": principals.caller.uid,
             "subject": principals.subject.uid,
@@ -209,10 +204,6 @@ def client() -> TestClient:
         )
         return {**_describe(user), "body": (await request.body()).decode()}
 
-    app.dependency_overrides[get_config] = lambda: SimpleNamespace(
-        app=SimpleNamespace(gcu_version=None)
-    )
-    app.dependency_overrides[get_user_store] = lambda: None
     return TestClient(app)
 
 
@@ -711,20 +702,6 @@ def test_with_authentication_disabled_no_grant_is_read(
     assert audit.records == []
 
 
-def test_an_operation_requiring_its_own_credential_refuses_an_asserted_person(
-    client: TestClient,
-) -> None:
-    _accept_delegated_calls()
-
-    refused = client.get("/own", params=_GRANT, headers=_HEADERS)
-    accepted = client.get("/own", headers=_HEADERS)
-
-    assert refused.status_code == 403
-    assert refused.json()["detail"] == "requires_own_credential"
-    assert accepted.status_code == 200
-    assert accepted.json()["uid"] == "svc-1"
-
-
 def _one(audit: _AuditSink) -> dict[str, Any]:
     """The single audit line emitted, as the fields a log pipeline would see."""
     assert len(audit.records) == 1
@@ -766,7 +743,7 @@ def test_logging_context_requires_admission_and_keeps_receiver_identity(
     app.add_middleware(RequestLoggingMiddleware)
 
     @app.get("/logging-context", operation_id="logging_context")
-    async def context(user=Depends(oidc.get_current_user)) -> dict[str, Any]:
+    async def context(user=Depends(oidc.authenticate_request)) -> dict[str, Any]:
         return {"context": current_context(), "principal": user.uid}
 
     if mode != "disabled":

@@ -15,9 +15,9 @@
 """The writable_document capability's own routes (#1905, RFC §9.1).
 
 Auto-mounted by the pod under `/capabilities/writable_document` with the same
-bearer the pod validates for `/agents/*`. The pod applies a global
-`get_current_user` guard, but every handler ALSO binds the identity itself
-(`Depends(get_current_user)`) and authorizes `row.user_id == user.uid` — a
+bearer the pod validates for `/agents/*`. The pod applies its explicit admission
+guard (including terms); handlers bind the common authenticated identity with
+`Depends(authenticate_request)` and authorize `row.user_id == user.uid` — a
 document is only reachable by the chat user who owns its session (404 on missing,
 403 on a foreign user). Typed request/response models so the per-capability
 OpenAPI dump generates a fully-typed RTK Query slice.
@@ -36,7 +36,8 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from fred_core import KeycloakUser, get_current_user
+from fred_core import AssertedUser, KeycloakUser
+from fred_core.security.oidc import authenticate_request
 from pydantic import BaseModel, Field
 
 from fred_capability_writable_document.docx_export import markdown_to_docx_bytes
@@ -95,7 +96,7 @@ def _sanitize_filename(name: str) -> str:
 
 
 async def _authorized_record(
-    session_id: str, document_id: str, user: KeycloakUser
+    session_id: str, document_id: str, user: KeycloakUser | AssertedUser
 ) -> WritableDocumentRecord:
     """Fetch one document and authorize the caller (404 missing / 403 foreign)."""
     record = await get_writable_document_store().get(session_id, document_id)
@@ -126,7 +127,7 @@ def build_router() -> APIRouter:
     )
     async def list_writable_documents(
         session_id: str,
-        user: KeycloakUser = Depends(get_current_user),
+        user: KeycloakUser | AssertedUser = Depends(authenticate_request),
     ) -> List[WritableDocumentResponse]:
         records = await get_writable_document_store().list_for_session(session_id)
         # A session belongs to one user; still scope by user_id defensively.
@@ -145,7 +146,7 @@ def build_router() -> APIRouter:
     async def get_writable_document(
         session_id: str,
         document_id: str,
-        user: KeycloakUser = Depends(get_current_user),
+        user: KeycloakUser | AssertedUser = Depends(authenticate_request),
     ) -> WritableDocumentResponse:
         record = await _authorized_record(session_id, document_id, user)
         return WritableDocumentResponse.from_record(record)
@@ -160,7 +161,7 @@ def build_router() -> APIRouter:
         session_id: str,
         document_id: str,
         payload: WritableDocumentUpdate,
-        user: KeycloakUser = Depends(get_current_user),
+        user: KeycloakUser | AssertedUser = Depends(authenticate_request),
     ) -> WritableDocumentResponse:
         existing = await _authorized_record(session_id, document_id, user)
         # A user edit: mark authorship user, CLEAR agent_notified_at so the
@@ -188,7 +189,7 @@ def build_router() -> APIRouter:
         session_id: str,
         document_id: str,
         format: WritableDocumentExportFormat = Query(WritableDocumentExportFormat.docx),
-        user: KeycloakUser = Depends(get_current_user),
+        user: KeycloakUser | AssertedUser = Depends(authenticate_request),
     ) -> StreamingResponse:
         record = await _authorized_record(session_id, document_id, user)
 

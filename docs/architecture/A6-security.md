@@ -221,12 +221,6 @@ membership, personal space or content access. Business operations still require
 a direct role in the target organization and the operation's Control Plane permission; platform actions
 require their separate platform permission.
 
-Python control-plane additionally has configurable platform-access filtering and
-admission sources. Manager's onboarding checks authentication and consent, not
-that Python admission policy. A deployment using Python filtering therefore does
-not retain equivalent platform admission merely by directing the UI to manager.
-This security boundary is distinct from organization membership and from CGU.
-
 ## Space retirement and cleanup authority
 
 `platform.can_delete_space` is computed from `platform_admin` only. Request and receipt APIs
@@ -300,8 +294,13 @@ Source references: [`weaver_admission.py`](../../apps/knowledge-flow-backend/kno
 
 ### Runtime CGU dependency inventory
 
-With `security.user.enabled` and `app.gcu_version` configured, runtime's common
-user dependency reads `cp_read.terms_acceptance`. No check is removed here.
+With `security.user.enabled` and `app.gcu_version` configured, runtime's explicit
+`app.security.current_user` dependency reads `cp_read.terms_acceptance` after
+`fred_core.security.oidc.authenticate_request` verifies JWT and delegation.
+It checks the effective person's canonical ID and configured version; missing
+acceptance returns 403 `user_not_accept_gcu`, SQL failure returns a redacted
+503 `terms_acceptance_unavailable`, and an unconfigured version skips the read.
+Admission uses no dependency override or Python identity snapshot/store.
 The following paths are relative to the pod's configured base URL (normally
 `/fred/agents/v2`). A future removal must preserve JWT/delegation verification,
 effective-person binding and the current errors independently of the SQL read.
@@ -339,8 +338,10 @@ effective-person binding and the current errors independently of the SQL read.
 | POST | `/v1/chat/completions` (absolute, optional compatibility router) | No; execution remains explicitly unsupported |
 
 Installed capability routes mounted under `/capabilities/{id}` inherit the same
-CGU dependency; the default pod's five capability routes are listed above. Additional installed
-packages contribute their own paths and do not
+CGU dependency at mounting; `writable_document` handlers separately bind the
+common authenticated identity and keep their owner checks. Its OpenAPI-only
+wrapper is not a served application. The default pod's five capability routes
+are listed above. Additional installed packages contribute their own paths and do not
 implicitly resolve a turn. The five resolver-backed routes above are candidates
 for eliminating the duplicate local read in a later change, not permission to
 remove admission from the remaining routes. This inventory follows

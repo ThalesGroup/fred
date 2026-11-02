@@ -14,7 +14,7 @@ from fred_core.security.delegation import (
     DelegationConfig,
     initialize_delegation,
 )
-from fred_core.security.oidc import get_current_user_without_gcu
+from fred_core.security.oidc import authenticate_request
 
 _NOW = 2_000_000_000
 
@@ -103,7 +103,7 @@ def signed_receiver(monkeypatch):
     app = FastAPI(lifespan=_serving)
 
     @app.get("/documents", operation_id="read_documents")
-    async def documents(user=Depends(get_current_user_without_gcu)):
+    async def documents(user=Depends(authenticate_request)):
         return {"subject": user.uid, "roles": user.roles}
 
     try:

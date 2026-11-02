@@ -350,8 +350,8 @@ def _build_config_provider(config: AgentPodConfig) -> Callable[[], AgentPodConfi
     Expose the pod configuration through the shared FastAPI config dependency.
 
     Why this function exists:
-    - shared security helpers in `fred-core` resolve configuration through
-      `Depends(get_config)`, even when they are mounted inside an agent pod
+    - shared helpers and contributed routers can resolve configuration through
+      `Depends(get_config)` when mounted inside an agent pod
     - agent pods must therefore provide the same dependency override contract
       as the other Fred backends
 
@@ -1755,7 +1755,7 @@ async def _resolve_agent_instance(
 
 
 def _make_user_dependency(
-    get_current_user_fn: Callable[
+    current_user_fn: Callable[
         ..., KeycloakUser | AssertedUser | Awaitable[KeycloakUser | AssertedUser]
     ],
     security_enabled: bool,
@@ -1778,7 +1778,7 @@ def _make_user_dependency(
     if security_enabled:
 
         def _dep_with_auth(
-            user: KeycloakUser | AssertedUser = Depends(get_current_user_fn),
+            user: KeycloakUser | AssertedUser = Depends(current_user_fn),
         ) -> KeycloakUser | None:
             if isinstance(user, AssertedUser):
                 raise HTTPException(
@@ -1805,12 +1805,12 @@ def _declare_grant_parameters(
 
 
 def _make_execution_dependency(
-    get_current_user_fn: Callable[..., Any], security_enabled: bool
+    current_user_fn: Callable[..., Any], security_enabled: bool
 ) -> Callable[..., KeycloakUser | AssertedUser | None]:
     if security_enabled:
 
         def _subject(
-            user: KeycloakUser | AssertedUser = Depends(get_current_user_fn),
+            user: KeycloakUser | AssertedUser = Depends(current_user_fn),
         ) -> KeycloakUser | AssertedUser:
             return user
 
@@ -4675,9 +4675,9 @@ def _mount_capability_routers(
 
     if capability_registry is None:
         return
-    from fred_core.security.oidc import get_current_user
+    from fred_runtime.app.security import current_user
 
-    auth_deps = [Depends(get_current_user)] if security_enabled else []
+    auth_deps = [Depends(current_user)] if security_enabled else []
     for cap_id, router in capability_registry.routers():
         api_router.include_router(
             router,
@@ -4714,22 +4714,22 @@ def _build_agent_router(
     Why this is a function rather than a module-level router:
     - the registry is provided at app-creation time, not import time
     - each call produces an isolated router instance bound to that registry
-    - security_enabled controls whether get_current_user is applied as a dependency
+    - security_enabled controls whether current_user is applied as a dependency
     - base_url is the pod's normalized mount prefix, needed only to advertise
       each capability's `route_base_url` in the template catalog (#1979)
     """
-    from fred_core.security.oidc import get_current_user
+    from fred_runtime.app.security import current_user
 
     router = APIRouter(prefix="/agents", tags=["Agents"])
 
-    # Used by non-execute routes that only need authentication (no user injection).
-    _auth_deps = [Depends(get_current_user)] if security_enabled else []
+    # Admission for non-execute routes that do not need user injection.
+    _auth_deps = [Depends(current_user)] if security_enabled else []
 
     # Inject the authenticated user when security is enabled so that execute
     # handlers can perform the bearer-token / grant user_id correlation check.
     # Returns None in local-dev mode so dev pods start without Keycloak.
-    _authenticated_user = _make_user_dependency(get_current_user, security_enabled)
-    _execution_subject = _make_execution_dependency(get_current_user, security_enabled)
+    _authenticated_user = _make_user_dependency(current_user, security_enabled)
+    _execution_subject = _make_execution_dependency(current_user, security_enabled)
 
     def _enforce_chat_input_limit(request: RuntimeExecuteRequest) -> None:
         violation = validate_runtime_request(request, max_chat_input_chars)
@@ -6308,7 +6308,7 @@ def create_agent_app(
     Security (from config.security):
     - when `config.security.user.enabled` is True:
         - initializes Keycloak JWT validation (initialize_user_security)
-        - adds Depends(get_current_user) to POST /agents/execute and
+        - adds Depends(current_user) to POST /agents/execute and
           POST /agents/execute/stream
     - `config.security.authorized_origins` controls CORS (when non-empty)
     - routes, docs, and OpenAPI are mounted under `config.app.base_url`
@@ -6549,9 +6549,6 @@ def create_agent_app(
         openapi_url=f"{base_url}/openapi.json" if base_url else "/openapi.json",
         lifespan=lifespan,
     )
-    from fred_runtime.app.security import install_admission
-
-    install_admission(app)
     register_authorization_handlers(app)
     app.dependency_overrides[get_config] = _build_config_provider(config)
     app.state.capability_registry = capability_registry

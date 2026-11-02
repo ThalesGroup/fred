@@ -18,18 +18,17 @@ import json
 import logging
 import os
 import time
-from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from typing import Any, Dict, Tuple
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import jwt
-from fastapi import Depends, HTTPException, Request, Security
+from fastapi import HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordBearer
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from jwt import PyJWKClient
 
-from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
+from fred_core.common import ThreadSafeLRUCache, read_env_bool
 from fred_core.logs.context import bind_operation_context
 from fred_core.logs.propagation import CONTEXT_HEADER, admit_delegated_log_context
 from fred_core.security.delegation import (
@@ -50,9 +49,6 @@ from fred_core.security.structure import (
     UserSecurity,
     is_service_agent,
 )
-
-from ..users.store import BaseUserStore
-from ..users.store.postgres_user_store import get_user_store
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +82,6 @@ USER_SECURITY_CONFIG: UserSecurity | None = None
 # machine address carry that issuer. Set by apply_security_profile.
 _REALM_ISSUERS: frozenset[str] = frozenset()
 _JWKS_CLIENT: PyJWKClient | None = None  # cached for perf
-# Per-process write throttle; entries hold only IDs and monotonic deadlines.
-_IDENTITY_SNAPSHOT_DEADLINES: OrderedDict[UUID, float] = OrderedDict()
-_IDENTITY_SNAPSHOT_INTERVAL_SECONDS = 600.0
-_IDENTITY_SNAPSHOT_MAX_ENTRIES = 2048
 _JWT_CACHE: ThreadSafeLRUCache[str, tuple[float, KeycloakUser]] = ThreadSafeLRUCache(
     JWT_CACHE_MAX_SIZE
 )
@@ -348,29 +340,6 @@ def _cache_user(token: str, payload: Dict[str, Any], user: KeycloakUser) -> None
     _JWT_CACHE.set(token, (expires_at, user))
 
 
-def _parse_user_uuid(user: KeycloakUser) -> UUID | None:
-    """
-    Return the Keycloak subject as a UUID when the deployment uses UUID subjects.
-
-    Why this function exists:
-    - GCU enforcement now relies on the shared `fred_core.users` store keyed by
-      UUID
-    - no-security mode still injects a mock admin user with `uid="admin"`, and
-      that mock subject must not be forced into the persisted user store path
-
-    How to use it:
-    - call before GCU store reads or writes; handle `None` according to the
-      current security mode
-
-    Example:
-    - `user_uuid = _parse_user_uuid(user)`
-    """
-    try:
-        return UUID(user.uid)
-    except ValueError:
-        return None
-
-
 def _token_audiences(value: object) -> frozenset[str]:
     if isinstance(value, str) and value:
         return frozenset({value})
@@ -612,137 +581,6 @@ def decode_jwt(
     return user
 
 
-async def _enforce_gcu(
-    user: KeycloakUser, user_store: BaseUserStore, configuration
-) -> KeycloakUser:
-    """Refuse `user` unless the configured GCU version is persisted as accepted."""
-    if configuration.app.gcu_version is None or not KEYCLOAK_ENABLED:
-        return user
-
-    user_uuid = _parse_user_uuid(user)
-    if user_uuid is None:
-        logger.warning(
-            "[AUTH] Authenticated subject %r is not UUID-backed; rejecting GCU lookup.",
-            user.uid,
-        )
-        raise HTTPException(status_code=403, detail="user_not_accept_gcu")
-
-    stored_user = await user_store.find_user_by_id(user_uuid)
-    if (
-        stored_user is None
-        or stored_user.gcuVersionAccepted != configuration.app.gcu_version
-    ):
-        raise HTTPException(status_code=403, detail="user_not_accept_gcu")
-    return user
-
-
-async def _snapshot_local_identity(
-    user: KeycloakUser, user_store: BaseUserStore, configuration: Any
-) -> None:
-    directory = getattr(
-        getattr(configuration, "security", None), "user_directory", "keycloak"
-    )
-    if not KEYCLOAK_ENABLED or directory != "local":
-        return
-    delegation = get_delegation_config()
-    if (
-        not user.username
-        or is_service_agent(user)
-        or delegation.caller_role in user.caller_roles
-        or user.service_account
-    ):
-        return
-    try:
-        user_id = UUID(user.uid)
-    except ValueError:
-        return
-    now = time.monotonic()
-    deadline = _IDENTITY_SNAPSHOT_DEADLINES.get(user_id, 0.0)
-    if now < deadline:
-        return
-    _IDENTITY_SNAPSHOT_DEADLINES[user_id] = now + _IDENTITY_SNAPSHOT_INTERVAL_SECONDS
-    _IDENTITY_SNAPSHOT_DEADLINES.move_to_end(user_id)
-    if len(_IDENTITY_SNAPSHOT_DEADLINES) > _IDENTITY_SNAPSHOT_MAX_ENTRIES:
-        _IDENTITY_SNAPSHOT_DEADLINES.popitem(last=False)
-    try:
-        await user_store.upsert_identity(
-            user_id, user.username, user.email, user.first_name, user.last_name
-        )
-    except Exception:
-        _IDENTITY_SNAPSHOT_DEADLINES.pop(user_id, None)
-        logger.warning("[AUTH] Local identity snapshot failed")
-
-
-async def get_current_user(
-    request: Request,
-    token: str = Security(oauth2_scheme),
-    user_store: BaseUserStore = Depends(get_user_store),
-    configuration=Depends(get_config),
-) -> KeycloakUser | AssertedUser:
-    """
-    Return the authenticated user and enforce persisted GCU acceptance when enabled.
-
-    Why this function exists:
-    - secured deployments must gate access on the configured GCU version
-    - no-security mode still needs a lightweight mock admin without requiring a
-      UUID-backed persisted user row
-
-    How to use it:
-    - use as the default dependency for endpoints that require a fully admitted
-      user; pair with `get_current_user_without_gcu()` for the `/gcu` acceptance
-      flow itself
-
-    Example:
-    - `user: KeycloakUser = Depends(get_current_user)`
-    """
-    user = await get_current_user_without_gcu(request, token)
-    if isinstance(user, AssertedUser):
-        # The person's acceptance was gated by their own token when the run was
-        # admitted; the workload speaking for them has no acceptance row of its own.
-        return user
-    await _snapshot_local_identity(user, user_store, configuration)
-    return await _enforce_gcu(user, user_store, configuration)
-
-
-async def get_current_user_or_service(
-    request: Request,
-    token: str = Security(oauth2_scheme),
-    user_store: BaseUserStore = Depends(get_user_store),
-    configuration=Depends(get_config),
-) -> KeycloakUser | AssertedUser:
-    """Admit a service identity without the GCU gate: a workload cannot accept
-    terms, so the human admission rule does not apply to it (ReBAC still does).
-    Any other caller goes through exactly `get_current_user`'s gate."""
-    user = await get_current_user_without_gcu(request, token)
-    if isinstance(user, AssertedUser):
-        return user
-    if is_service_agent(user):
-        return user
-    await _snapshot_local_identity(user, user_store, configuration)
-    return await _enforce_gcu(user, user_store, configuration)
-
-
-async def get_current_user_before_gcu(
-    request: Request,
-    token: str = Security(oauth2_scheme),
-    user_store: BaseUserStore = Depends(get_user_store),
-    configuration=Depends(get_config),
-) -> KeycloakUser | AssertedUser:
-    """Record a human profile before terms acceptance without granting access."""
-    user = await get_current_user_without_gcu(request, token)
-    if not isinstance(user, AssertedUser):
-        await _snapshot_local_identity(user, user_store, configuration)
-    return user
-
-
-async def get_current_user_without_gcu(
-    request: Request,
-    token: str = Security(oauth2_scheme),
-) -> KeycloakUser | AssertedUser:
-    """Authenticate; admission belongs to the consuming backend."""
-    return await authenticate_request(request, token)
-
-
 async def authenticate_request(
     request: Request,
     token: str = Security(oauth2_scheme),
@@ -808,33 +646,3 @@ async def resolve_verified_principal(
             agent_id=subject.agent_id,
         )
     return subject
-
-
-async def get_principal_context(
-    request: Request,
-    subject: KeycloakUser | AssertedUser = Depends(get_current_user),
-) -> PrincipalContext:
-    """Return the bearer caller and authorization subject for this request."""
-
-    context = getattr(request.state, "principal_context", None)
-    if isinstance(context, PrincipalContext):
-        return context
-    if not isinstance(subject, KeycloakUser):
-        raise HTTPException(status_code=403, detail="principal_context_unavailable")
-    return PrincipalContext(caller=subject, subject=subject)
-
-
-async def require_own_credential(
-    user: KeycloakUser | AssertedUser = Depends(get_current_user),
-) -> KeycloakUser:
-    """Dependency for an operation that a caller may not perform for someone else.
-
-    An asserted person presented no credential of their own, so anything that acts
-    on that person's behalf beyond a permission check must refuse them.
-    """
-    if isinstance(user, AssertedUser):
-        logger.warning(
-            "[AUTH] Asserted principal refused on an operation that requires its own credential"
-        )
-        raise HTTPException(status_code=403, detail="requires_own_credential")
-    return user
