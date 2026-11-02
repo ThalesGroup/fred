@@ -27,7 +27,7 @@ from .contracts import (
     ModelSelectionSource,
 )
 from .guard import checked_clients, guarded_model
-from .turn import current_turn
+from .turn import TurnAuthority, current_turn
 
 if TYPE_CHECKING:
     from fred_runtime.app.config import InferenceCredentialBinding
@@ -74,6 +74,17 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             raise ModelRoutingError(
                 "Legacy model profile requires explicit offer re-selection"
             )
+        return self._build_admitted_chat(authority)
+
+    def build_for_title(self, definition: AgentDefinition) -> BaseChatModel:
+        """Reuse the turn's admitted connection for a cosmetic title."""
+        authority = current_turn()
+        authority.check(agent_id=definition.agent_id)
+        return self._build_admitted_chat(authority)[0]
+
+    def _build_admitted_chat(
+        self, authority: TurnAuthority
+    ) -> tuple[BaseChatModel, ModelSelection]:
         admission = authority.binding.inference
         selection = admission.selection
         connection = admission.connection

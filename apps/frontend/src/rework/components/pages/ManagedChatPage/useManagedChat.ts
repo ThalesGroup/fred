@@ -234,6 +234,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     [replaceStagedHitlAnswers, selectedHitlKey],
   );
   const [renamedTitle, setRenamedTitle] = useState<string | null>(null);
+  const titleRenamedRef = useRef(false);
   const contextPromptIds: string[] = [];
   const activeSessionIdRef = useRef(sessionId);
   activeSessionIdRef.current = sessionId ?? locallyCreatedSessionIdRef.current;
@@ -310,6 +311,15 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         sessionId: sid,
         updateSessionRequest: { updated_at: new Date().toISOString() },
       }).catch(() => {});
+    },
+    [refreshSession, spaceId, isScopeCurrent],
+  );
+
+  const storeGeneratedTitle = useCallback(
+    (title: string, sid: string) => {
+      if (!isScopeCurrent() || activeSessionIdRef.current !== sid || titleRenamedRef.current) return;
+      setRenamedTitle(title);
+      refreshSession({ spaceId, sessionId: sid, updateSessionRequest: { title } }).catch(() => {});
     },
     [refreshSession, spaceId, isScopeCurrent],
   );
@@ -515,6 +525,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       },
       [touchSessionActivity],
     ),
+    onSessionTitle: storeGeneratedTitle,
     onSteeredMessage: handleSteeredMessage,
     onStreamInterrupted: handleStreamInterrupted,
     onAwaitingHuman: handleAwaitingHuman,
@@ -597,6 +608,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     queuedStartRef.current = null;
     queueDrainRef.current = false;
     setRenamedTitle(null);
+    titleRenamedRef.current = false;
     // A genuine entry into a (new or different) session — normal
     // rehydration governs from here until the first local mutation.
     composer.reset(sessionId, chatControlsRef.current);
@@ -637,7 +649,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
 
   // Read from the session, not copied: a reset has no way to lose it. A rename
   // only shows until the session comes back carrying it.
-  useEffect(() => setRenamedTitle(null), [sessionData]);
+  useEffect(() => setRenamedTitle(null), [sessionData?.title]);
   const sessionTitle = renamedTitle ?? sessionData?.title ?? null;
 
   const inputCharacterCount = useMemo(() => countUnicodeCodePoints(input.trim()), [input]);
@@ -982,6 +994,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         setSelectedHitlKey(null);
         console.debug(`[useManagedChat] sendTurn() — calling send() with sid=${sid}`);
         const { runtimeContext, turnOptions } = buildTurnContext();
+        const autoTitle =
+          !titleRenamedRef.current && !latestMessagesRef.current.some((message) => message.role === "user");
         touchSessionActivity(sid);
         // `send()` receives the trimmed wire value, but a backend rejection must
         // restore the complete editable draft, including surrounding whitespace —
@@ -1000,6 +1014,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
             ...runtimeContext,
             ...(turnCommand ? { command: turnCommand } : {}),
             ...(skills?.length ? { skills } : {}),
+            ...(autoTitle ? { auto_title: true } : {}),
           },
           turnOptions,
           interrupted,
@@ -1470,6 +1485,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const commitTitle = useCallback(
     async (title: string) => {
       if (!sessionId || sessionUnavailable) return;
+      titleRenamedRef.current = true;
       try {
         const saved = await refreshSession({ spaceId, sessionId, updateSessionRequest: { title } }).unwrap();
         if (isScopeCurrent() && activeSessionIdRef.current === sessionId) setRenamedTitle(saved.title);

@@ -125,6 +125,7 @@ let capturedOnError: ((msg: string, code?: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 let capturedOnSteeredMessage: ((messageId: string, sessionId: string) => void) | undefined;
 let capturedOnStreamInterrupted: ((sessionId: string) => void) | undefined;
+let capturedOnSessionTitle: ((title: string, sessionId: string) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
     onTurnStarted?: () => void;
@@ -135,6 +136,7 @@ vi.mock("@hooks/useChatSse", () => ({
     onSteeredMessage?: (messageId: string, sessionId: string) => void;
     onStreamInterrupted?: (sessionId: string) => void;
     onBackgroundTurnSettled?: (sessionId: string, messages: unknown[]) => void;
+    onSessionTitle?: (title: string, sessionId: string) => void;
   }) => {
     capturedOnBackgroundTurnSettled = params.onBackgroundTurnSettled;
     capturedOnTurnStarted = params.onTurnStarted;
@@ -144,6 +146,7 @@ vi.mock("@hooks/useChatSse", () => ({
     capturedOnAwaitingHuman = params.onAwaitingHuman;
     capturedOnSteeredMessage = params.onSteeredMessage;
     capturedOnStreamInterrupted = params.onStreamInterrupted;
+    capturedOnSessionTitle = params.onSessionTitle;
     return {
       preparation: { model_choice: preparedModelChoice, model_error: null, models: hostModels },
       messages: chatSseMessages,
@@ -809,7 +812,7 @@ describe("useManagedChat — session write reliability", () => {
       act(() => latest.setInput("question"));
       await act(async () => latest.handleSend());
       expect(sendMock).toHaveBeenCalledOnce();
-      expect(sendMock.mock.calls[0][2]).toEqual({ model_choice: key, reasoning });
+      expect(sendMock.mock.calls[0][2]).toEqual({ model_choice: key, reasoning, auto_title: true });
     },
   );
 
@@ -840,7 +843,7 @@ describe("useManagedChat — session write reliability", () => {
     act(() => latest.setInput("question"));
     await act(async () => latest.handleSend());
     expect(sendMock).toHaveBeenCalledOnce();
-    expect(sendMock.mock.calls[0][2]).toEqual({});
+    expect(sendMock.mock.calls[0][2]).toEqual({ auto_title: true });
   });
 
   // #2369: a brand-new conversation's composer settings live only in memory —
@@ -864,7 +867,7 @@ describe("useManagedChat — session write reliability", () => {
     rerender();
     await act(async () => latest.handleSend());
     expect(sendMock).toHaveBeenCalledOnce();
-    expect(sendMock.mock.calls[0][2]).toEqual({ model_choice: key });
+    expect(sendMock.mock.calls[0][2]).toEqual({ model_choice: key, auto_title: true });
   });
 
   it("sends the search policy and RAG scope only when their controls are offered", async () => {
@@ -875,7 +878,11 @@ describe("useManagedChat — session write reliability", () => {
     mount();
     act(() => latest.setInput("question"));
     await act(async () => latest.handleSend());
-    expect(sendMock.mock.calls[0][2]).toEqual({ search_policy: "corpus", search_rag_scope: "general" });
+    expect(sendMock.mock.calls[0][2]).toEqual({
+      search_policy: "corpus",
+      search_rag_scope: "general",
+      auto_title: true,
+    });
   });
 
   it("rejects a legacy model profile instead of translating it into an offer", async () => {
@@ -3261,5 +3268,57 @@ describe("useManagedChat — session write reliability", () => {
     expect(prepareChatControlsMock).toHaveBeenCalledTimes(before);
     act(() => window.dispatchEvent(new Event("focus")));
     expect(refetchSessionMock).toHaveBeenCalled();
+  });
+
+  describe("automatic conversation title", () => {
+    const sendText = async (text: string) => {
+      act(() => latest.setInput(text));
+      await act(async () => {
+        await latest.handleSend();
+      });
+      return sendMock.mock.calls[sendMock.mock.calls.length - 1][2] as Record<string, unknown>;
+    };
+
+    it("asks for a title on the first exchange only", async () => {
+      mount();
+      expect((await sendText("first question")).auto_title).toBe(true);
+
+      act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
+      chatSseMessages = [
+        {
+          session_id: "saved",
+          exchange_id: "e1",
+          rank: 0,
+          timestamp: "2026-10-29T10:00:00Z",
+          role: "user",
+          channel: "final",
+          parts: [{ type: "text", text: "q1" }],
+        },
+      ];
+      rerender();
+      expect(await sendText("second question")).not.toHaveProperty("auto_title");
+    });
+
+    it("stores the generated title unless the user renamed the conversation first", async () => {
+      mount();
+      act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
+      rerender();
+      expect(latest.sessionId).toBe("saved");
+      expect(capturedOnSessionTitle).toBeDefined();
+      act(() => capturedOnSessionTitle?.("Quarterly sales review", "saved"));
+      expect(patchSessionCalls.length).toBe(1);
+      expect(latest.sessionTitle).toBe("Quarterly sales review");
+      expect(patchSessionCalls[patchSessionCalls.length - 1]).toMatchObject({
+        sessionId: "saved",
+        updateSessionRequest: { title: "Quarterly sales review" },
+      });
+
+      patchSessionImpl = async () => ({ title: "My own name" });
+      await act(async () => latest.commitTitle("My own name"));
+      const writes = patchSessionCalls.length;
+      act(() => capturedOnSessionTitle?.("Late summary", "saved"));
+      expect(latest.sessionTitle).toBe("My own name");
+      expect(patchSessionCalls).toHaveLength(writes);
+    });
   });
 });
