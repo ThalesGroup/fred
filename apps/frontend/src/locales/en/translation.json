@@ -421,6 +421,7 @@
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
     "pendingMessages": {
+      "saveFailed": "The pending-message queue is unavailable. Your unsaved text has been kept.",
       "label": "Queued",
       "send": "Send",
       "actions": "Message actions",

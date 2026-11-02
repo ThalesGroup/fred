@@ -46,17 +46,8 @@ import type {
 import { toolResultCallId, upsertOne } from "./chatSseUtils";
 import { mergePreparation, parseSseFrames } from "../utils/runtimeStream";
 import { countUnicodeCodePoints } from "../utils/chatInput";
-import { personalTeamId } from "../../components/shared/utils/teamId";
+import { canonicalizeRuntimeTeamId } from "../utils/runtimeTeamId";
 import { normalizeApiError } from "../errors/normalizeApiError";
-
-// The UI may still carry the bare "personal" placeholder (teamId.ts) in the URL
-// before bootstrap resolves the real per-user id. The control-plane resolves
-// that alias server-side (teams/system.py), but fred-runtime's OpenFGA check
-// does not — it authorizes the raw team_id in runtime_context. Canonicalize
-// before it reaches the runtime, mirroring usePipelineRun.ts.
-function canonicalizeRuntimeTeamId(teamId: string): string {
-  return teamId === "personal" ? personalTeamId(KeyCloakService.GetUserId() ?? "") : teamId;
-}
 
 // ── Turn-start token preflight ────────────────────────────────────────────────
 // The runtime pod forwards this turn's bearer to Knowledge Flow for the WHOLE
@@ -919,6 +910,7 @@ export function useChatSse(
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
       interrupted?: InterruptedRunChoice,
+      queuedMessageId?: string,
     ): Promise<boolean> => {
       const sendId = Math.random().toString(36).slice(2, 8);
       const stopped = stoppedSessionsRef.current.has(sessionId ?? "draft");
@@ -1174,6 +1166,7 @@ export function useChatSse(
             input,
             session_id: sessionId,
             steering_turn_id: steeringTurnId,
+            ...(queuedMessageId ? { queued_message_id: queuedMessageId } : {}),
             runtime_context: effectiveContext,
             ...(turnOptions ? { turn_options: turnOptions } : {}),
             ...(choice ? { interrupted_action: choice.action, interruption_id: choice.interruptionId ?? null } : {}),

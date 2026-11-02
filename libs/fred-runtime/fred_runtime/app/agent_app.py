@@ -238,7 +238,11 @@ from fred_runtime.runtime_support.hitl_batch import (
     parse_batched_human_answers,
 )
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
-from fred_runtime.runtime_support.turn_steering import turn_steering_mailbox
+from fred_runtime.runtime_support.turn_steering import (
+    PendingMessage,
+    PendingMessageUpdate,
+    turn_steering_mailbox,
+)
 
 from ..common.structures import AgentSettingsLike
 from ..integrations.v2_runtime.adapters import (
@@ -1242,6 +1246,7 @@ class _AgentExecuteRequest(BaseModel):
     message: str = Field(default="")
     context: dict[str, Any] | None = None
     steering_turn_id: str | None = None
+    queued_message_id: str | None = None
     interrupt_id: str | None = Field(default=None, min_length=1)
     occurrence_id: str | None = Field(default=None, min_length=1)
     resume_payload: Any | None = Field(
@@ -3170,6 +3175,8 @@ async def _write_turn_history(
     resume_payload: Any | None = None,
     occurrence_id: str | None = None,
     previously_pending_occurrence_ids: tuple[str, ...] = (),
+    steering_turn_id: str | None = None,
+    queued_message_id: str | None = None,
 ) -> None:
     """
     Persist one agent turn to the history store.
@@ -3638,6 +3645,17 @@ async def _write_turn_history(
             team_id=team_id,
             agent_instance_id=agent_instance_id,
         )
+        if steering_turn_id:
+            delivered_ids = {
+                str(payload["message_id"])
+                for payload in payloads
+                if payload.get("kind") == "steered_user_message"
+            }
+            if queued_message_id and request_message and resume_payload is None:
+                delivered_ids.add(queued_message_id)
+            await turn_steering_mailbox.delivered(
+                session_id, user_id, steering_turn_id, delivered_ids
+            )
     except Exception:
         if delegation_enabled():
             logger.error("event=turn_history outcome=failed reason=write_failed")
@@ -3981,13 +3999,20 @@ async def _stream(
             resolved_team_id or "personal",
             request.steering_turn_id,
             resume=request.resume_payload is not None,
+            queued_message_id=request.queued_message_id,
+            text=request.message,
+            steering_enabled=not isinstance(definition, GraphAgentDefinition),
         )
-        if session_id
-        and request.agent_instance_id
-        and request.steering_turn_id
-        and not isinstance(definition, GraphAgentDefinition)
+        if session_id and request.agent_instance_id and request.steering_turn_id
         else None
     )
+    if request.queued_message_id and steering_token is None:
+        yield _sse(
+            json.dumps(
+                {"kind": "execution_error", "message": "queued_message_unavailable"}
+            )
+        )
+        return
     if request.steering_turn_id and steering_token is None:
         request = request.model_copy(update={"steering_turn_id": None})
 
@@ -4036,25 +4061,29 @@ async def _stream(
             collected.append(payload)
             yield _sse(json.dumps(payload, ensure_ascii=False))
     finally:
-        # Closing this stream closes the run's stream with it, so a dropped
-        # response never leaves the run to garbage collection.
-        try:
-            await payloads.aclose()
-        finally:
-            if steering_heartbeat is not None:
-                steering_heartbeat.cancel()
-                with suppress(asyncio.CancelledError):
-                    await steering_heartbeat
-            if steering_token is not None and session_id is not None:
-                paused = any(
-                    payload.get("kind") == "awaiting_human" for payload in collected
-                )
-                failed = any(
-                    payload.get("kind") == "execution_error" for payload in collected
-                )
-                await turn_steering_mailbox.end(
-                    session_id, steering_token, paused=paused and not failed
-                )
+
+        async def finish_stream() -> None:
+            try:
+                await payloads.aclose()
+            finally:
+                try:
+                    if steering_heartbeat is not None:
+                        steering_heartbeat.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await steering_heartbeat
+                finally:
+                    if steering_token is not None and session_id is not None:
+                        paused = any(
+                            item.get("kind") == "awaiting_human" for item in collected
+                        )
+                        failed = any(
+                            item.get("kind") == "execution_error" for item in collected
+                        )
+                        await turn_steering_mailbox.end(
+                            session_id, steering_token, paused=paused and not failed
+                        )
+
+        await complete_cleanup(finish_stream())
 
     _emit_turn_completed(
         container,
@@ -4074,24 +4103,30 @@ async def _stream(
     if session_id:
         history_store = get_runtime_context().config.history_store
         if history_store is not None:
-            spawn(
-                _write_turn_history(
-                    session_id=session_id,
-                    user_id=user_id,
-                    request_message=request.message,
-                    turn_command=_turn_command(ctx),
-                    skill_invocation=ctx.get("skill"),
-                    skill_invocations=ctx.get("skills"),
-                    payloads=collected,
-                    history_store=history_store,
-                    team_id=resolved_team_id,
-                    agent_instance_id=request.agent_instance_id,
-                    exchange_id=exchange_id,
-                    resume_payload=request.resume_payload,
-                    occurrence_id=request.occurrence_id,
-                    previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
-                )
+            history_write = _write_turn_history(
+                session_id=session_id,
+                user_id=user_id,
+                request_message=request.message,
+                turn_command=_turn_command(ctx),
+                skill_invocation=ctx.get("skill"),
+                skill_invocations=ctx.get("skills"),
+                payloads=collected,
+                history_store=history_store,
+                team_id=resolved_team_id,
+                agent_instance_id=request.agent_instance_id,
+                exchange_id=exchange_id,
+                resume_payload=request.resume_payload,
+                occurrence_id=request.occurrence_id,
+                previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
+                steering_turn_id=steering_token,
+                queued_message_id=request.queued_message_id,
             )
+            if request.queued_message_id or any(
+                item.get("kind") == "steered_user_message" for item in collected
+            ):
+                await history_write
+            else:
+                spawn(history_write)
 
 
 def _build_capability_save_services(
@@ -6616,7 +6651,6 @@ def _build_agent_router(
             )
         else:
             deleted = await cp.adelete_thread(session_id)
-        await turn_steering_mailbox.purge(session_id, caller_uid)
         return {"deleted": deleted}
 
     @router.post(
@@ -6652,6 +6686,10 @@ def _build_agent_router(
         - This endpoint does not implement pod discovery or routing.
           Those concerns belong to Kubernetes Service, Ingress, and Argo CD.
         """
+        if request.queued_message_id:
+            raise HTTPException(
+                status_code=422, detail="queued_messages_require_streaming"
+            )
         _enforce_chat_input_limit(request)
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
@@ -6764,6 +6802,10 @@ def _build_agent_router(
         Intended for evaluation harnesses (DeepEval, Promptfoo) that need
         input, output, retrieval_context, tools_called, and steps in one response.
         """
+        if request.queued_message_id:
+            raise HTTPException(
+                status_code=422, detail="queued_messages_require_streaming"
+            )
         _enforce_chat_input_limit(request)
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
@@ -6856,6 +6898,90 @@ def _build_agent_router(
             session_id=eval_session_id,
             turn_start=turn_start,
         )
+
+    async def authorize_queue(
+        session_id: str,
+        agent_instance_id: str,
+        team_id: str,
+        authenticated_user: KeycloakUser | AssertedUser | None,
+        container: PodApplicationContext,
+        text: str = "",
+    ) -> tuple[RuntimeExecuteRequest, tuple[str, str, str]]:
+        _refuse_reserved_session_id(session_id)
+        if not agent_instance_id.strip() or not team_id.strip():
+            raise HTTPException(status_code=422, detail="invalid_queue_identity")
+        # Project validated queue identity into the shared authorization boundary,
+        # without requiring an executable user turn for reads or removals.
+        request = RuntimeExecuteRequest.model_construct(
+            agent_instance_id=agent_instance_id,
+            session_id=session_id,
+            input=text,
+            runtime_context=RuntimeContext(team_id=team_id),
+        )
+        await _enforce_session_ownership(
+            session_id,
+            authenticated_user,
+            container,
+            agent_instance_id=agent_instance_id,
+        )
+        await _authorize_execution_or_raise(request, authenticated_user, container)
+        return request, (
+            agent_instance_id,
+            authenticated_user.uid if authenticated_user else "unknown",
+            team_id,
+        )
+
+    @router.get("/sessions/{session_id}/pending", operation_id="get_pending_messages")
+    async def get_pending_messages(
+        session_id: str,
+        agent_instance_id: str,
+        team_id: str,
+        authenticated_user: KeycloakUser | AssertedUser | None = Depends(
+            _execution_subject
+        ),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> list[PendingMessage]:
+        _, identity = await authorize_queue(
+            session_id, agent_instance_id, team_id, authenticated_user, container
+        )
+        try:
+            return await turn_steering_mailbox.messages(session_id, *identity)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @router.put(
+        "/sessions/{session_id}/pending/{message_id}",
+        operation_id="update_pending_message",
+    )
+    async def update_pending_message(
+        session_id: str,
+        message_id: str,
+        update: PendingMessageUpdate,
+        authenticated_user: KeycloakUser | AssertedUser | None = Depends(
+            _execution_subject
+        ),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> list[PendingMessage]:
+        request, identity = await authorize_queue(
+            session_id,
+            update.agent_instance_id,
+            update.team_id,
+            authenticated_user,
+            container,
+            update.text,
+        )
+        if not message_id or len(message_id) > 128:
+            raise HTTPException(status_code=422, detail="invalid_message_id")
+        if update.request in ("enqueue", "edit"):
+            _enforce_chat_input_limit(request)
+            if not update.text.strip():
+                raise HTTPException(status_code=422, detail="empty_message")
+        try:
+            return await turn_steering_mailbox.modify(
+                session_id, *identity, message_id, update.text.strip(), update.request
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @router.post("/sessions/{session_id}/steer", status_code=status.HTTP_202_ACCEPTED)
     async def steer_active_turn(
@@ -6966,6 +7092,7 @@ def _build_agent_router(
             raise
         provider = target.credential_provider
         internal_req.steering_turn_id = request.steering_turn_id
+        internal_req.queued_message_id = request.queued_message_id
         stream = _stream(
             target.definition,
             internal_req,
@@ -7182,7 +7309,7 @@ def create_agent_app(
 
                 async def cleanup_expired_steering() -> None:
                     while True:
-                        await asyncio.sleep(24 * 60 * 60)
+                        await asyncio.sleep(60)
                         try:
                             await turn_steering_mailbox.cleanup_expired()
                         except Exception:

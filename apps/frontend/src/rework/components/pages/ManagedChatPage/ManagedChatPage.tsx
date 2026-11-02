@@ -1072,10 +1072,18 @@ export default function ManagedChatPage() {
                                     >
                                       {t("chatbot.pendingMessages.retry")}
                                     </button>
+                                    <button
+                                      type="button"
+                                      className={styles.pendingAction}
+                                      disabled={chat.waitResponse}
+                                      onClick={() => void chat.removePendingMessage(message.id)}
+                                    >
+                                      {t("chatbot.pendingMessages.remove")}
+                                    </button>
                                   </>
                                 ) : (
                                   <>
-                                    {chat.waitResponse && (
+                                    {
                                       <Button
                                         type="button"
                                         color="secondary"
@@ -1086,7 +1094,7 @@ export default function ManagedChatPage() {
                                       >
                                         {t("chatbot.pendingMessages.send")}
                                       </Button>
-                                    )}
+                                    }
                                     <ComposerActionsMenu
                                       icon={{ category: "outlined", type: "more_horiz" }}
                                       align="right"

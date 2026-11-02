@@ -48,6 +48,34 @@ vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserId: () => "alice" },
 }));
 
+type QueueItem = { id: string; text: string; status: "waiting" | "offered" | "uncertain" };
+const savedQueues = new Map<string, QueueItem[]>();
+const queueReadMock = vi.fn((args: { sessionId: string }) => ({
+  unwrap: async () => structuredClone(savedQueues.get(args.sessionId) ?? []),
+}));
+const queueWriteMock = vi.fn(
+  (args: { sessionId: string; messageId: string; pendingMessageUpdate: { request: string; text?: string } }) => ({
+    unwrap: async () => {
+      const messages = savedQueues.get(args.sessionId) ?? [];
+      const existing = messages.find((message) => message.id === args.messageId);
+      const { request, text } = args.pendingMessageUpdate;
+      if (request === "enqueue" && !existing)
+        messages.push({ id: args.messageId, text: text ?? "", status: "waiting" });
+      if (request === "edit" && existing) existing.text = text ?? "";
+      if (request === "retry" && existing) existing.status = "waiting";
+      savedQueues.set(
+        args.sessionId,
+        request === "remove" ? messages.filter((message) => message.id !== args.messageId) : messages,
+      );
+      return structuredClone(savedQueues.get(args.sessionId));
+    },
+  }),
+);
+vi.mock("../../../../slices/runtime/runtimeQueueApi", () => ({
+  useLazyGetPendingMessagesQuery: () => [queueReadMock],
+  useUpdatePendingMessageMutation: () => [queueWriteMock],
+}));
+
 const translate = vi.hoisted(() => (key: string) => key);
 vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "" }),
@@ -102,8 +130,28 @@ vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
 // an OOM from an actual infinite render loop while writing this test).
 const sendMock = vi.fn(async (..._args: unknown[]) => true);
 const steerActiveTurnMock = vi.fn(async (..._args: unknown[]) => "accepted");
+const steerWithQueue = async (sid: string, id: string, text: string) => {
+  const result = await steerActiveTurnMock(sid, id, text);
+  const entry = savedQueues.get(sid)?.find((message) => message.id === id);
+  if (entry && result === "accepted") entry.status = "offered";
+  if (entry && result === "uncertain") entry.status = "uncertain";
+  return result;
+};
+const sendWithQueue = async (...args: unknown[]) => {
+  const sid = args[1] as string;
+  const id = args[5] as string | undefined;
+  const entry = savedQueues.get(sid)?.find((message) => message.id === id);
+  if (entry) entry.status = "uncertain";
+  const accepted = await sendMock(...args);
+  if (accepted && entry)
+    savedQueues.set(
+      sid,
+      (savedQueues.get(sid) ?? []).filter((message) => message.id !== id),
+    );
+  return accepted;
+};
 let chatSseWaitResponse = false;
-const prepareChatControlsMock = vi.fn(async () => ({}));
+const prepareChatControlsMock = vi.fn(async () => ({ execute_stream_url: "/runtime/agents/execute/stream" }));
 const chatSseResetMock = vi.fn();
 // Default: the resume reached the backend. `useManagedChat` calls `.then()` on
 // whatever this returns, so an implementation-less `vi.fn()` would throw inside
@@ -118,6 +166,7 @@ const replaceAllMessagesMock = vi.fn();
 let chatSseMessages: unknown[] = [];
 let chatSseMaxChatInputChars: number | undefined;
 let chatSseChatControls: unknown[] = [];
+let hostTeamId = "team-1";
 let hostEffectiveModel: EffectiveChatModel | undefined;
 let capturedFlushPendingWrites: ((sid: string | null) => Promise<boolean>) | undefined;
 let capturedOnTurnStarted: (() => void) | undefined;
@@ -149,8 +198,8 @@ vi.mock("@hooks/useChatSse", () => ({
       chatControls: chatSseChatControls,
       maxChatInputChars: chatSseMaxChatInputChars,
       prepareChatControls: prepareChatControlsMock,
-      steerActiveTurn: steerActiveTurnMock,
-      send: sendMock,
+      steerActiveTurn: steerWithQueue,
+      send: sendWithQueue,
       sendHitlResume: sendHitlResumeMock,
       abort: abortMock,
       reset: chatSseResetMock,
@@ -288,7 +337,11 @@ import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHist
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useManagedChat>) => void }) {
-  const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1", effectiveChatModel: hostEffectiveModel });
+  const hook = useManagedChat({
+    teamId: hostTeamId,
+    agentInstanceId: "agent-1",
+    effectiveChatModel: hostEffectiveModel,
+  });
   onRender(hook);
   return null;
 }
@@ -331,6 +384,9 @@ describe("useManagedChat — session write reliability", () => {
   };
 
   beforeEach(() => {
+    savedQueues.clear();
+    queueReadMock.mockClear();
+    queueWriteMock.mockClear();
     postponeNavigation = false;
     commitNavigation = undefined;
     localStorage.clear();
@@ -338,6 +394,7 @@ describe("useManagedChat — session write reliability", () => {
     composerValue.reasoning = false;
     composerValue.chatProfileId = null;
     chatSseChatControls = [];
+    hostTeamId = "team-1";
     hostEffectiveModel = undefined;
     clearSessionHistoryCache();
     chatSseMessages = [];
@@ -1617,6 +1674,107 @@ describe("useManagedChat — session write reliability", () => {
     rerender();
   };
 
+  it("uses the full personal team identity for queue reads and writes", async () => {
+    hostTeamId = "personal";
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    await tick();
+    expect(queueReadMock.mock.calls[0][0]).toMatchObject({ teamId: "personal-alice" });
+    act(() => latest.setInput("saved"));
+    await act(async () => latest.handleSend());
+    expect(queueWriteMock.mock.calls[0][0].pendingMessageUpdate).toMatchObject({ team_id: "personal-alice" });
+  });
+
+  it("does not arm another conversation when leaving during a post-save refresh", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    await tick();
+    let finishRefresh: (messages: QueueItem[]) => void = () => {};
+    queueReadMock.mockImplementationOnce(() => ({
+      unwrap: () =>
+        new Promise<QueueItem[]>((resolve) => {
+          finishRefresh = resolve;
+        }),
+    }));
+    act(() => latest.setInput("same draft"));
+    let saving: Promise<void> | undefined;
+    await act(async () => {
+      saving = latest.handleSend();
+      await Promise.resolve();
+    });
+    savedQueues.set("session-2", [{ id: "b", text: "never auto-send", status: "waiting" }]);
+    bindSession("session-2");
+    await tick();
+    act(() => latest.setInput("same draft"));
+    await act(async () => {
+      finishRefresh([]);
+      await saving;
+    });
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    expect(latest.input).toBe("same draft");
+    expect(latest.pendingMessages[0].id).toBe("b");
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps an array when a queue read unexpectedly has no data", async () => {
+    queueReadMock.mockImplementationOnce(() => ({ unwrap: async () => undefined as unknown as QueueItem[] }));
+    mount();
+    bindSession("session-1");
+    await tick();
+    expect(latest.pendingMessages).toEqual([]);
+    act(() => latest.setInput("draft preserved"));
+    expect(latest.input).toBe("draft preserved");
+  });
+
+  it("restores a saved queue without dispatching until Send is clicked", async () => {
+    savedQueues.set("session-1", [{ id: "saved", text: "keep me", status: "waiting" }]);
+    mount();
+    bindSession("session-1");
+    await tick();
+    expect(latest.pendingMessages[0]).toMatchObject({ id: "saved", text: "keep me" });
+    expect(sendMock).not.toHaveBeenCalled();
+    await act(async () => latest.forcePendingMessage("saved"));
+    expect(sendMock).toHaveBeenCalledWith("keep me", "session-1", expect.anything(), undefined, undefined, "saved");
+  });
+
+  it("keeps the saved version when leaving during an edit", async () => {
+    savedQueues.set("session-1", [{ id: "saved", text: "original", status: "waiting" }]);
+    mount();
+    bindSession("session-1");
+    await tick();
+    act(() => latest.editPendingMessage("saved"));
+    act(() => latest.setInput("unfinished edit"));
+    bindSession("session-2");
+    await tick();
+    bindSession("session-1");
+    await tick();
+    expect(latest.pendingMessages[0].text).toBe("original");
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves unsaved text and reuses its identity after a failed enqueue", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    await tick();
+    queueWriteMock.mockImplementationOnce(() => ({
+      unwrap: async () => {
+        throw new Error("offline");
+      },
+    }));
+    act(() => latest.setInput("save me"));
+    await act(async () => latest.handleSend());
+    expect(latest.input).toBe("save me");
+    const firstId = queueWriteMock.mock.calls[0][0].messageId;
+    await act(async () => latest.handleSend());
+    expect(queueWriteMock.mock.calls[1][0].messageId).toBe(firstId);
+    expect(latest.pendingMessages).toHaveLength(1);
+    expect(latest.input).toBe("");
+  });
+
   it("queues, edits, and removes text while the agent is working", async () => {
     chatSseWaitResponse = true;
     mount();
@@ -1630,9 +1788,9 @@ describe("useManagedChat — session write reliability", () => {
     const id = latest.pendingMessages[0].id;
     act(() => latest.editPendingMessage(id));
     expect(latest.input).toBe("first");
-    expect(latest.pendingMessages).toEqual([]);
+    expect(latest.pendingMessages[0]).toMatchObject({ id, text: "first" });
     await act(async () => latest.handleSend());
-    act(() => latest.removePendingMessage(latest.pendingMessages[0].id));
+    await act(async () => latest.removePendingMessage(latest.pendingMessages[0].id));
     expect(latest.pendingMessages).toEqual([]);
   });
 
@@ -1678,9 +1836,9 @@ describe("useManagedChat — session write reliability", () => {
     chatSseWaitResponse = false;
     await act(async () => rerender());
     expect(sendMock).not.toHaveBeenCalled();
-    act(() => latest.retryPendingMessage(id));
+    await act(async () => latest.retryPendingMessage(id));
     await act(async () => rerender());
-    expect(sendMock).toHaveBeenCalledWith("change course", "session-1", expect.anything(), undefined, undefined);
+    expect(sendMock).toHaveBeenCalledWith("change course", "session-1", expect.anything(), undefined, undefined, id);
   });
 
   it("sends queued text after the active turn ends", async () => {
@@ -1759,6 +1917,7 @@ describe("useManagedChat — session write reliability", () => {
 
     act(() => latest.handleHitlAnswer("proceed"));
     chatSseWaitResponse = true;
+    rerender();
     await act(async () => {
       resolveResume(true);
       await Promise.resolve();
@@ -1769,10 +1928,18 @@ describe("useManagedChat — session write reliability", () => {
       capturedOnTurnStarted?.();
       return true;
     });
+    savedQueues.get("session-1")!.find((message) => message.id === id)!.status = "waiting";
     chatSseWaitResponse = false;
     await act(async () => rerender());
     await act(async () => rerender());
-    expect(sendMock).toHaveBeenCalledWith("focus on Marseille", "session-1", expect.anything(), undefined, undefined);
+    expect(sendMock).toHaveBeenCalledWith(
+      "focus on Marseille",
+      "session-1",
+      expect.anything(),
+      undefined,
+      undefined,
+      id,
+    );
     expect(latest.pendingMessages).toEqual([]);
   });
 
@@ -1841,7 +2008,8 @@ describe("useManagedChat — session write reliability", () => {
     await act(async () => rerender());
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][0]).toBe("first");
-    expect(latest.pendingMessages.map((message) => message.text)).toEqual(["second"]);
+    expect(latest.pendingMessages.map((message) => message.text)).toEqual(["first", "second"]);
+    expect(savedQueues.get("session-1")![0].status).toBe("uncertain");
     await act(async () => finishFirst?.(true));
   });
 

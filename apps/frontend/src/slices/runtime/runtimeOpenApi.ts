@@ -209,6 +209,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/messages` }),
     }),
+    getPendingMessages: build.query<GetPendingMessagesApiResponse, GetPendingMessagesApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/pending`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
+    updatePendingMessage: build.mutation<UpdatePendingMessageApiResponse, UpdatePendingMessageApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/pending/${queryArg.messageId}`,
+        method: "PUT",
+        body: queryArg.pendingMessageUpdate,
+      }),
+    }),
     steerActiveTurnPodV1AgentsSessionsSessionIdSteerPost: build.mutation<
       SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiResponse,
       SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg
@@ -440,6 +456,18 @@ export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse
   /** status 200 Successful Response */ ChatMessage[];
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
   sessionId: string;
+};
+export type GetPendingMessagesApiResponse = /** status 200 Successful Response */ PendingMessage[];
+export type GetPendingMessagesApiArg = {
+  sessionId: string;
+  agentInstanceId: string;
+  teamId: string;
+};
+export type UpdatePendingMessageApiResponse = /** status 200 Successful Response */ PendingMessage[];
+export type UpdatePendingMessageApiArg = {
+  sessionId: string;
+  messageId: string;
+  pendingMessageUpdate: PendingMessageUpdate;
 };
 export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiResponse = /** status 202 Successful Response */ {
   [key: string]: string;
@@ -743,6 +771,8 @@ export type RuntimeExecuteRequest =
       invocation_turns?: ConversationTurn[];
       /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
       occurrence_id?: string | null;
+      /** Identity of a durable queued message claimed for this ordinary turn. */
+      queued_message_id?: string | null;
       /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
       resume_payload?: any | null;
       /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
@@ -787,6 +817,8 @@ export type RuntimeExecuteRequest =
       invocation_turns?: ConversationTurn[];
       /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
       occurrence_id?: string | null;
+      /** Identity of a durable queued message claimed for this ordinary turn. */
+      queued_message_id?: string | null;
       /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
       resume_payload?: any | null;
       /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
@@ -1286,6 +1318,18 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
+export type PendingMessage = {
+  claim_id?: string | null;
+  id: string;
+  status?: "waiting" | "offered" | "uncertain";
+  text: string;
+};
+export type PendingMessageUpdate = {
+  agent_instance_id: string;
+  request: "enqueue" | "edit" | "remove" | "retry";
+  team_id: string;
+  text?: string;
+};
 export type SkillSummary = {
   argument_hint?: string | null;
   description: string;
@@ -1549,6 +1593,9 @@ export const {
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
+  useGetPendingMessagesQuery,
+  useLazyGetPendingMessagesQuery,
+  useUpdatePendingMessageMutation,
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
   useGetRuntimeInstanceSkillsQuery,
   useLazyGetRuntimeInstanceSkillsQuery,

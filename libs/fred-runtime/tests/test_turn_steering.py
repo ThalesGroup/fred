@@ -362,3 +362,390 @@ async def test_steering_route_authorizes_before_offering(
     finally:
         await first_engine.dispose()
         await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_durable_queue_survives_expiry_and_requires_explicit_offer(tmp_path):
+    first, second, engine, other = await _replicas(tmp_path)
+    try:
+        await first.modify("s", "a", "u", "t", "m", "keep me", "enqueue")
+        await first.modify("s", "a", "u", "t", "m", "keep me", "enqueue")
+        await second.cleanup_expired()
+        assert [item.text for item in await second.messages("s", "a", "u", "t")] == [
+            "keep me"
+        ]
+        assert await first.start("s", "a", "u", "t", "turn")
+        assert await second.take("s", "turn") == []
+        await first.end("s", "turn")
+        assert (await second.messages("s", "a", "u", "t"))[0].status == "waiting"
+        with pytest.raises(ValueError, match="owner_mismatch"):
+            await second.messages("s", "a", "other", "t")
+        with pytest.raises(ValueError, match="owner_mismatch"):
+            await second.modify("s", "a", "other", "t", "m2", "wrong", "enqueue")
+        assert await second.start("s", "a", "other", "t", "wrong") is None
+    finally:
+        await engine.dispose()
+        await other.dispose()
+
+
+@pytest.mark.asyncio
+async def test_claim_is_fifo_uncertain_and_old_ack_cannot_erase_retry(tmp_path):
+    first, second, engine, other = await _replicas(tmp_path)
+    try:
+        for item in ("1", "2"):
+            await first.modify("s", "a", "u", "t", item, item, "enqueue")
+        assert not await first.start(
+            "s", "a", "u", "t", "wrong", queued_message_id="2", text="2"
+        )
+        assert await first.start(
+            "s", "a", "u", "t", "one", queued_message_id="1", text="1"
+        )
+        assert not await second.start(
+            "s", "a", "u", "t", "duplicate", queued_message_id="1", text="1"
+        )
+        with pytest.raises(ValueError, match="turn_is_active"):
+            await second.modify("s", "a", "u", "t", "1", "", "retry")
+        await first.end("s", "one")
+        assert (await second.messages("s", "a", "u", "t"))[0].status == "uncertain"
+        await second.modify("s", "a", "u", "t", "1", "", "retry")
+        assert await second.start(
+            "s", "a", "u", "t", "two", queued_message_id="1", text="1"
+        )
+        await first.delivered("s", "u", "one", {"1"})
+        assert len(await first.messages("s", "a", "u", "t")) == 2
+        await second.delivered("s", "u", "two", {"1"})
+        assert [item.id for item in await first.messages("s", "a", "u", "t")] == ["2"]
+    finally:
+        await engine.dispose()
+        await other.dispose()
+
+
+@pytest.mark.asyncio
+async def test_legacy_offer_survives_expiry_and_empty_rows_are_deleted(tmp_path):
+    from sqlalchemy import select
+
+    first, second, engine, other = await _replicas(tmp_path)
+    try:
+        await first.start("s", "a", "u", "t", "old")
+        async with engine.begin() as conn:
+            await conn.execute(
+                update(turn_steering._turns).values(
+                    pending=[{"id": "m", "text": "legacy"}],
+                    expires_at=datetime(2000, 1, 1, tzinfo=UTC),
+                )
+            )
+        await second.cleanup_expired()
+        assert (await second.messages("s", "a", "u", "t"))[0].status == "waiting"
+        await second.modify("s", "a", "u", "t", "m", "edited", "edit")
+        assert (await first.messages("s", "a", "u", "t"))[0].text == "edited"
+        await second.modify("s", "a", "u", "t", "m", "", "remove")
+        await first.cleanup_expired()
+        async with engine.begin() as conn:
+            assert (await conn.execute(select(turn_steering._turns))).first() is None
+    finally:
+        await engine.dispose()
+        await other.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fails", [False, True])
+async def test_only_successful_history_write_acknowledges_claim(
+    monkeypatch, tmp_path, fails
+):
+    from unittest.mock import AsyncMock
+
+    first, second, engine, other = await _replicas(tmp_path)
+    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", first)
+    history = SimpleNamespace(
+        next_rank=AsyncMock(return_value=0),
+        save=AsyncMock(side_effect=RuntimeError("unavailable") if fails else None),
+    )
+    try:
+        await first.modify("s", "a", "u", "t", "m", "text", "enqueue")
+        await first.start(
+            "s", "a", "u", "t", "turn", queued_message_id="m", text="text"
+        )
+        await agent_app_module._write_turn_history(
+            session_id="s",
+            user_id="u",
+            request_message="text",
+            payloads=[],
+            history_store=cast(agent_app_module.HistoryStorePort, history),
+            steering_turn_id="turn",
+            queued_message_id="m",
+        )
+        assert bool(await second.messages("s", "a", "u", "t")) == fails
+    finally:
+        await engine.dispose()
+        await other.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stream_finishes_mailbox_teardown(monkeypatch, tmp_path):
+    first, second, engine, other = await _replicas(tmp_path)
+    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", first)
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(history_store=None)),
+    )
+
+    async def exchange_id(**kwargs):
+        return "exchange"
+
+    async def events(*args, **kwargs):
+        yield {"kind": "status"}
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", exchange_id)
+    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", events)
+    entered, release = asyncio.Event(), asyncio.Event()
+    end = first.end
+
+    async def delayed_end(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        await end(*args, **kwargs)
+
+    monkeypatch.setattr(first, "end", delayed_end)
+    stream = agent_app_module._stream(
+        cast(ReActAgentDefinition, SimpleNamespace(agent_id="a")),
+        agent_app_module._AgentExecuteRequest(
+            agent_instance_id="a",
+            message="hi",
+            context={"session_id": "s", "user_id": "u", "team_id": "t"},
+            steering_turn_id="turn",
+        ),
+        team_id="t",
+        container=cast(PodApplicationContext, SimpleNamespace()),
+    )
+    try:
+        await first.modify("s", "a", "u", "t", "m", "keep", "enqueue")
+        await anext(stream)
+        closing = asyncio.create_task(stream.aclose())
+        await entered.wait()
+        closing.cancel()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await closing
+        assert (await second.messages("s", "a", "u", "t"))[0].text == "keep"
+        assert await second.start("s", "a", "u", "t", "replacement")
+    finally:
+        await stream.aclose()
+        await engine.dispose()
+        await other.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.integration_postgres
+@pytest.mark.asyncio
+async def test_postgres_queue_claims_and_sweeps_across_replicas():
+    url = os.environ.get("FRED_TEST_POSTGRES_URL")
+    if not url:
+        pytest.skip("FRED_TEST_POSTGRES_URL is required")
+    engines = [create_async_engine(url) for _ in range(4)]
+    boxes = [turn_steering.TurnSteeringMailbox(engine) for engine in engines]
+    session = uuid4().hex
+    try:
+        async with engines[0].begin() as conn:
+            await conn.run_sync(turn_steering._metadata.create_all)
+        enqueues = await asyncio.gather(
+            *(
+                box.modify(session, "a", "u", "t", "m", "text", "enqueue")
+                for box in boxes
+            )
+        )
+        assert all(len(items) == 1 for items in enqueues)
+        capacity = await asyncio.gather(
+            *(
+                boxes[i % len(boxes)].modify(
+                    session, "a", "u", "t", f"pending-{i}", "bounded", "enqueue"
+                )
+                for i in range(36)
+            ),
+            return_exceptions=True,
+        )
+        assert sum(isinstance(item, ValueError) for item in capacity) == 5
+        assert len(await boxes[0].messages(session, "a", "u", "t")) == 32
+        claims = await asyncio.gather(
+            *(
+                box.start(
+                    session, "a", "u", "t", str(i), queued_message_id="m", text="text"
+                )
+                for i, box in enumerate(boxes)
+            )
+        )
+        assert sum(claim is not None for claim in claims) == 1
+        winner = next(claim for claim in claims if claim is not None)
+        await asyncio.gather(
+            *(box.cleanup_expired() for box in boxes), boxes[0].renew(session, winner)
+        )
+        assert (await boxes[1].messages(session, "a", "u", "t"))[
+            0
+        ].status == "uncertain"
+        await boxes[0].end(session, winner)
+        await asyncio.gather(*(box.cleanup_expired() for box in boxes))
+        assert len(await boxes[2].messages(session, "a", "u", "t")) == 32
+    finally:
+        await boxes[0].purge(session)
+        await asyncio.gather(*(engine.dispose() for engine in engines))
+
+
+@pytest.mark.asyncio
+async def test_queue_routes_enforce_identity_even_before_history(
+    monkeypatch, minimal_config, tmp_path
+):
+    first, second, engine, other = await _replicas(tmp_path)
+    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", first)
+
+    async def allow(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(agent_app_module, "_enforce_session_ownership", allow)
+    monkeypatch.setattr(agent_app_module, "_authorize_execution_or_raise", allow)
+    router = agent_app_module._build_agent_router(
+        registry={}, security_enabled=True, max_chat_input_chars=5000
+    )
+    endpoints = {
+        route.endpoint.__name__: route.endpoint
+        for route in router.routes
+        if isinstance(route, APIRoute)
+    }
+    args = {
+        "session_id": "s",
+        "authenticated_user": SimpleNamespace(uid="u"),
+        "container": PodApplicationContext(minimal_config),
+    }
+    try:
+        result = await endpoints["update_pending_message"](
+            **args,
+            message_id="m",
+            update=turn_steering.PendingMessageUpdate(
+                request="enqueue", agent_instance_id="a", team_id="t", text="saved"
+            ),
+        )
+        assert result[0].text == "saved"
+        result = await endpoints["get_pending_messages"](
+            **args, agent_instance_id="a", team_id="t"
+        )
+        assert result[0].id == "m"
+        for action in ("retry", "remove"):
+            result = await endpoints["update_pending_message"](
+                **args,
+                message_id="m",
+                update=turn_steering.PendingMessageUpdate(
+                    request=action, agent_instance_id="a", team_id="t"
+                ),
+            )
+        assert result == []
+        args["authenticated_user"] = SimpleNamespace(uid="other")
+        with pytest.raises(HTTPException) as denied:
+            await endpoints["get_pending_messages"](
+                **args, agent_instance_id="a", team_id="t"
+            )
+        assert denied.value.status_code == 409
+    finally:
+        await engine.dispose()
+        await other.dispose()
+
+
+@pytest.mark.asyncio
+async def test_rejected_queue_claim_never_invokes_agent(monkeypatch, tmp_path):
+    first, second, engine, other = await _replicas(tmp_path)
+    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", first)
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(history_store=None)),
+    )
+
+    async def exchange_id(**kwargs):
+        return "exchange"
+
+    async def forbidden(*args, **kwargs):
+        pytest.fail("An unclaimed queue message must not execute")
+        yield {}
+
+    monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", exchange_id)
+    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", forbidden)
+    stream = agent_app_module._stream(
+        cast(ReActAgentDefinition, SimpleNamespace(agent_id="a")),
+        agent_app_module._AgentExecuteRequest(
+            agent_instance_id="a",
+            message="not saved",
+            context={"session_id": "s", "user_id": "u", "team_id": "t"},
+            steering_turn_id="turn",
+            queued_message_id="missing",
+        ),
+        team_id="t",
+        container=cast(PodApplicationContext, SimpleNamespace()),
+    )
+    try:
+        assert "queued_message_unavailable" in await anext(stream)
+        with pytest.raises(StopAsyncIteration):
+            await anext(stream)
+    finally:
+        await stream.aclose()
+        await engine.dispose()
+        await other.dispose()
+
+
+@pytest.mark.asyncio
+async def test_graph_queue_claim_and_bounded_expiry_sweep(tmp_path):
+    from sqlalchemy import insert, select
+
+    first, second, engine, other = await _replicas(tmp_path)
+    try:
+        await first.modify("graph", "a", "u", "t", "m", "text", "enqueue")
+        assert await first.start(
+            "graph",
+            "a",
+            "u",
+            "t",
+            "turn",
+            queued_message_id="m",
+            text="text",
+            steering_enabled=False,
+        )
+        assert not await second.offer(
+            "graph", "a", "u", "t", "turn", "x", "no steering"
+        )
+        await first.end("graph", "turn")
+        now = datetime(2000, 1, 1, tzinfo=UTC)
+        async with engine.begin() as conn:
+            await conn.execute(
+                insert(turn_steering._turns),
+                [
+                    {
+                        "session_id": f"expired-{i}",
+                        "turn_id": "old",
+                        "agent_instance_id": "a",
+                        "user_id": "u",
+                        "team_id": "t",
+                        "state": "active",
+                        "pending": [{"id": "m", "text": "keep"}],
+                        "seen": [],
+                        "expires_at": now,
+                    }
+                    for i in range(turn_steering._CLEANUP_BATCH + 1)
+                ],
+            )
+        await first.cleanup_expired()
+        async with engine.begin() as conn:
+            rows = (
+                (
+                    await conn.execute(
+                        select(turn_steering._turns).where(
+                            turn_steering._turns.c.expires_at <= datetime.now(UTC)
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            assert len(rows) == 1
+        await second.cleanup_expired()
+        assert (await second.messages("expired-0", "a", "u", "t"))[0].text == "keep"
+    finally:
+        await engine.dispose()
+        await other.dispose()
