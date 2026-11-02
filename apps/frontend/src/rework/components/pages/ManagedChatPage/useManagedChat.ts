@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDispatch } from "react-redux";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import type { ExecutionPreparation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -21,6 +22,7 @@ import { useComposerSettings } from "./useComposerSettings";
 import { documentSelectionTurnOptions } from "./documentSelectionTurnOptions";
 import { DOCUMENT_SELECTION_SUPPORTED } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { useSearchParams } from "react-router-dom";
+import { setCapabilityBaseUrls } from "../../../../common/capabilityRoutingSlice";
 import { v4 as uuidv4 } from "uuid";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
@@ -115,9 +117,14 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const sameSession = visibleSessionRef.current === sessionId;
   const [configurationRefused, setConfigurationRefused] = useState(false);
   const composerRef = useRef<ReturnType<typeof useComposerSettings> | null>(null);
-  const acceptPreparation = useCallback((prep: ExecutionPreparation) => {
-    composerRef.current?.acceptPreparation(prep.agent_configuration_revision, prep.chat_controls);
-  }, []);
+  const dispatch = useDispatch();
+  const acceptPreparation = useCallback(
+    (prep: ExecutionPreparation) => {
+      dispatch(setCapabilityBaseUrls(prep.capability_base_urls));
+      composerRef.current?.acceptPreparation(prep.agent_configuration_revision, prep.chat_controls);
+    },
+    [dispatch],
+  );
   const [input, setInput] = useState("");
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const queuedStartRef = useRef<PendingMessage | null>(null);
@@ -248,7 +255,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const agentInstance = agentInstances?.items.find((i) => i.agent_instance_id === agentInstanceId);
   // Capabilities active in this session — drives the capability side-panel slot
   // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
-  const capabilityIds: string[] = [];
+  const capabilityIds = agentInstance?.selected_capability_ids ?? [];
 
   useEffect(() => {
     const attempt = sendAttemptRef.current;

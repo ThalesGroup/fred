@@ -152,6 +152,8 @@ pub struct ExecutionPreparation {
     pub model_error: Option<ModelPreparationError>,
     #[schema(required = true)]
     pub inference: Option<fred_rust_sdk::inference::InferenceSelection>,
+    /// Browser-reachable router of each selected capability that ships one.
+    pub capability_base_urls: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -177,6 +179,25 @@ fn require_available_capabilities(
     let selected = super::tuning::saved_selection(tuning)?;
     super::tuning::require_inventory(template, &selected)?;
     Ok(selected)
+}
+
+fn capability_base_urls(
+    template: &agents::AgentTemplateSummary,
+    selected: &[String],
+    base: &str,
+) -> std::collections::BTreeMap<String, String> {
+    template
+        .available_capabilities
+        .iter()
+        .filter_map(|entry| {
+            let id = entry.get("id")?.as_str()?;
+            entry.get("route_base_url")?;
+            selected
+                .iter()
+                .any(|chosen| chosen == id)
+                .then(|| (id.to_owned(), format!("{base}/capabilities/{id}")))
+        })
+        .collect()
 }
 
 pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
@@ -303,6 +324,7 @@ async fn prepare_execution(
         model_choice,
         model_error,
         inference,
+        capability_base_urls: capability_base_urls(&template, &selected, base),
     };
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(result)))
 }
@@ -311,6 +333,49 @@ async fn prepare_execution(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn exposes_routes_of_selected_capabilities_only() {
+        let entry = |id: &str, url: Option<&str>| {
+            let mut entry = std::collections::BTreeMap::from([("id".to_owned(), json!(id))]);
+            if let Some(url) = url {
+                entry.insert("route_base_url".to_owned(), json!(url));
+            }
+            entry
+        };
+        let template = agents::AgentTemplateSummary {
+            template_id: Uuid::nil(),
+            source_runtime_id: "pod".into(),
+            source_agent_id: "custom".into(),
+            display_name: "Custom".into(),
+            description: String::new(),
+            description_by_lang: None,
+            category: "react".into(),
+            tags: vec![],
+            capabilities: vec![],
+            team_instantiable: true,
+            status: agents::AgentTemplateStatus::Available,
+            public_version: None,
+            default_tuning_fields: vec![],
+            max_chat_input_chars: None,
+            available_capabilities: vec![
+                entry("viewer", Some("/pod/capabilities/viewer")),
+                entry("other", Some("/pod/capabilities/other")),
+                entry("search", None),
+            ],
+            supports_capabilities: true,
+            default_capability_ids: vec![],
+        };
+        let urls =
+            capability_base_urls(&template, &["viewer".into(), "search".into()], "/approved");
+        assert_eq!(
+            urls,
+            std::collections::BTreeMap::from([(
+                "viewer".to_owned(),
+                "/approved/capabilities/viewer".to_owned()
+            )])
+        );
+    }
 
     #[test]
     fn admits_only_selections_from_the_template_inventory() {

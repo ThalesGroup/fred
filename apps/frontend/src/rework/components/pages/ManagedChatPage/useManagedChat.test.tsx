@@ -29,6 +29,10 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock("react-redux", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-redux")>()),
+  useDispatch: () => vi.fn(),
+}));
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserId: () => "alice", GetSessionIdentity: () => "alice-session" },
 }));
