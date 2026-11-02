@@ -77,7 +77,7 @@
   flex-direction: column;
   gap: var(--spacing-3xs);
   border-radius: var(--radius-s);
-  background: var(--surface-main);
+  background: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-m);
   color: var(--on-surface);
 }

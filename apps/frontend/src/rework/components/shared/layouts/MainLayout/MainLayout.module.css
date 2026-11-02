@@ -59,6 +59,13 @@
   padding: 0;
 }
 
+/* A page that draws its own cards. Below 768px the shell card is edge to edge and stays. */
+@media (min-width: 768px) {
+  .content:has([data-shell-card="none"]) {
+    background-color: transparent;
+  }
+}
+
 @media (pointer: coarse) {
   .content {
     margin: var(--spacing-m) var(--spacing-m) var(--spacing-m) 0;

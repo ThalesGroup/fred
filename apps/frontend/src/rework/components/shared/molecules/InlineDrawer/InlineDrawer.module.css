@@ -119,32 +119,27 @@
 }
 
 /* ── Floating-card variant (opt-in, push layout) ──────────────────────────
- * The panel detaches into a rounded, bordered, elevated card inset from every
- * edge instead of a full-height flush panel. The drawer's own flush edge
- * border and the header divider are dropped — the card carries the only
- * border. Width stays fixed (not `auto`) so content doesn't reflow while the
- * drawer animates its width from 0, matching the flush panel's behaviour. */
+ * The panel is a card of its own beside the host's, on the app background: same
+ * surface and radius, no border, no header divider. Width stays fixed (not
+ * `auto`) so content doesn't reflow while the drawer animates its width from 0,
+ * matching the flush panel's behaviour. */
 .drawer[data-floating="true"] {
   background: transparent;
 }
 
-.drawer[data-floating="true"][data-layout="push"][data-open="true"] {
-  border-left-color: transparent;
+/* The gap to the host's card is part of the drawer's width, so it opens with the
+   slide, and the resize handle sits in it. */
+.drawer[data-floating="true"][data-layout="push"] .panel {
+  border: none;
+  border-radius: var(--radius-l);
+  background: var(--drawer-background, var(--surface-main));
+  width: calc(var(--drawer-width) - var(--spacing-s));
 }
 
-/* Tight against the body's edges and the launcher rail. No inset on the left: the
-   resize handle sits on top of the card and takes no width of its own. */
-.drawer[data-floating="true"][data-layout="push"] .panel {
-  top: var(--spacing-xs);
-  right: var(--spacing-xs);
-  bottom: var(--spacing-xs);
-  left: auto;
-  box-shadow: var(--shadow-s);
-  border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-m);
-  background: var(--drawer-background, var(--surface-container-high));
-  width: calc(var(--drawer-width) - var(--spacing-xs));
-  overflow: hidden;
+@media (pointer: coarse) {
+  .drawer[data-floating="true"][data-layout="push"] .panel {
+    border-radius: var(--radius-m);
+  }
 }
 
 .drawer[data-floating="true"] .header {
@@ -212,6 +207,11 @@
     bottom: 0;
     /* Full-screen panel: no left divider, edge to edge. */
     border-left: none;
+    width: 100%;
+  }
+
+  .drawer[data-floating="true"][data-layout="push"] .panel {
+    border-radius: 0;
     width: 100%;
   }
 

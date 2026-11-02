@@ -942,6 +942,7 @@ function ManagedChatContent({
       <div
         className={styles.page}
         data-shell-inset="none"
+        data-shell-card="none"
         onDragEnter={handleDragOver}
         onDragOver={handleDragOver}
         onDragLeave={(event) => {
@@ -961,74 +962,72 @@ function ManagedChatContent({
             event.currentTarget.value = "";
           }}
         />
-        {/* Conversation header. Spans the page above the chat body, independent of
-            the reading column; panels and the rail never reach it. On a new
-            conversation it only holds the panel toggle: the welcome block names the agent. */}
-        <div className={styles.topBar}>
-          <div className={styles.topBarInner}>
-            <ChatNavPanelToggle />
-            {!(isInitialState && chat.sessionId == null) && (
-              <>
-                <div className={styles.topBarTitle}>
-                  {chat.isReadOnly ? (
-                    <Tooltip
-                      text={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
-                    >
-                      <span
-                        className={styles.topBarAgentName}
-                        tabIndex={0}
-                        aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
-                      >
-                        <Chip
-                          size="large"
-                          leading={agentChipIcon}
-                          label={`${chat.agentDisplayName} ${t("chatbot.deletedAgentSuffix")}`}
-                        />
-                      </span>
-                    </Tooltip>
-                  ) : (
-                    <div className={styles.topBarAgentName}>
-                      <Chip size="large" leading={agentChipIcon} label={chat.agentDisplayName} />
-                    </div>
-                  )}
-                  {chat.sessionId && chat.sessionTitle != null && (
-                    <div className={styles.topBarTitleRow}>
-                      <span className={styles.titleLabel}>
-                        {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
-                      </span>
-                      <span className={styles.editButtonSlot}>
-                        <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className={styles.topBarRight}>
-                  {conversationTokens.total_tokens > 0 && (
-                    <span className={styles.conversationTokens}>
-                      {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
-                    </span>
-                  )}
-                  {chat.sessionId && (!chat.executionDisabled || chat.agentConfigurationChanged) && (
-                    <Tooltip text={t("chatbot.newConversation")}>
-                      <IconButton
-                        variant="icon"
-                        size="medium"
-                        color="on-surface-retreat"
-                        icon={{ category: "outlined", type: "add_comment" }}
-                        aria-label={t("chatbot.newConversation")}
-                        onClick={chat.startNewConversation}
-                      />
-                    </Tooltip>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Chat body — a row of [ left stack ][ push drawers ], below the header. */}
+        {/* Chat body — a row of [ chat card ][ viewer card ]. */}
         <div className={styles.pageBody}>
           <div className={styles.leftStack}>
+            {/* Conversation header, inside the chat card. On a new conversation it only
+                holds the panel toggle: the welcome block names the agent. */}
+            <div className={styles.topBar}>
+              <div className={styles.topBarInner}>
+                <ChatNavPanelToggle />
+                {!(isInitialState && chat.sessionId == null) && (
+                  <>
+                    <div className={styles.topBarTitle}>
+                      {chat.isReadOnly ? (
+                        <Tooltip
+                          text={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
+                        >
+                          <span
+                            className={styles.topBarAgentName}
+                            tabIndex={0}
+                            aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
+                          >
+                            <Chip
+                              size="large"
+                              leading={agentChipIcon}
+                              label={`${chat.agentDisplayName} ${t("chatbot.deletedAgentSuffix")}`}
+                            />
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <div className={styles.topBarAgentName}>
+                          <Chip size="large" leading={agentChipIcon} label={chat.agentDisplayName} />
+                        </div>
+                      )}
+                      {chat.sessionId && chat.sessionTitle != null && (
+                        <div className={styles.topBarTitleRow}>
+                          <span className={styles.titleLabel}>
+                            {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
+                          </span>
+                          <span className={styles.editButtonSlot}>
+                            <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className={styles.topBarRight}>
+                      {conversationTokens.total_tokens > 0 && (
+                        <span className={styles.conversationTokens}>
+                          {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
+                        </span>
+                      )}
+                      {chat.sessionId && (!chat.executionDisabled || chat.agentConfigurationChanged) && (
+                        <Tooltip text={t("chatbot.newConversation")}>
+                          <IconButton
+                            variant="icon"
+                            size="medium"
+                            color="on-surface-retreat"
+                            icon={{ category: "outlined", type: "add_comment" }}
+                            aria-label={t("chatbot.newConversation")}
+                            onClick={chat.startNewConversation}
+                          />
+                        </Tooltip>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
             {/* Conversation column — holds only the main column now. */}
             <div className={styles.contentRow}>
               <div className={styles.mainColumn} data-chat-main>
@@ -1221,7 +1220,7 @@ function ManagedChatContent({
           </div>
 
           {/* Capability side-panel slot — sibling of the left stack: its push
-            drawer reflows the conversation, never the header. */}
+            drawer reflows the chat card, header included. */}
           <CapabilitySidePanelHost
             capabilityIds={chat.capabilityIds}
             activeKey={activeCapabilityKey}
@@ -1322,8 +1321,8 @@ function ManagedChatContent({
         </div>
         {/* /pageBody */}
 
-        {/* Launcher rail — page-root sibling of the body (not inside it) so it
-            reserves its own in-flow column at the far right. */}
+        {/* Launcher rail — page-root sibling of the body, outside the cards, at
+            the far right. */}
         <ChatLauncherRail
           capabilityIds={chat.capabilityIds}
           activeKey={activeCapabilityKey}

@@ -185,6 +185,7 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
           hideHeader={shown?.ownsHeader ?? false}
           flushBody={shown?.ownsHeader ?? false}
           layout="push"
+          floating
           // Every capability panel opens at half of the chat body.
           resizable={{
             persistKey: "capability-side-panel",
