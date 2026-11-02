@@ -865,6 +865,14 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   another conversation. Saved-session availability and deletion guards remain defined
   in `openspec/specs/managed-conversations/spec.md`.
 
+- **A streamed answer survives in-app navigation (2026-11-02)** - leaving a
+  conversation (another session, another agent, another page) detaches its running
+  turn instead of aborting it, because the runtime cancels a turn whose stream
+  closes. Returning while it runs re-attaches it live, Stop included; once it ends
+  its full thread lands in the session-history cache. Reload or tab close still
+  loses the turn.
+  Mechanism: `core/hooks/backgroundTurns.ts`.
+
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed
   heights — the theme open issue above) heavy for what's often a 3-line payload, and each
