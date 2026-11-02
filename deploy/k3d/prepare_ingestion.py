@@ -60,9 +60,9 @@ def prepare() -> None:
         configs["knowledge-flow-backend-back"]["data"]["configuration.yaml"]
     )
     generated = output / "manager-ingestion.generated.yaml"
-    if not worker_config.get("manager_processing", {}).get("enabled"):
+    if not worker_config.get("manager_processing"):
         raise RuntimeError(
-            "This profile requires manager_processing.enabled for the KF worker"
+            "This profile requires manager_processing configuration for the KF worker"
         )
     corpus_index, api_indexes = corpus_settings(worker_config, api_config)
     indexes = [corpus_index]

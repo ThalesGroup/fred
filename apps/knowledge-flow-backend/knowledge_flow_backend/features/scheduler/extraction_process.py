@@ -21,13 +21,7 @@ end whatever we ask of it. Its Temporal slot is returned meanwhile, and the pod
 accepts a new extraction while the previous one still owns the CPU and the
 memory. Killing a process is the only thing that actually stops the computation.
 
-Known limitation, not handled here: across a network partition Temporal can hand
-one attempt to two workers. Nothing in this module prevents that and nothing
-makes it safe — both children extract the same document and write to the same
-shared-storage keys, so the surviving output is decided by arrival order and a
-reader in between can see one attempt's output mixed with the other's. Excluding
-it needs a lease or a fencing token on the document, which this change does not
-add.
+Manager descriptors fence output generations; publication remains Control Plane-owned.
 """
 
 from __future__ import annotations
@@ -41,6 +35,7 @@ import pathlib
 import signal
 import socket
 import sys
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -54,9 +49,12 @@ from fred_core.logs.log_setup import log_setup
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.logs.propagation import bind_received_log_context, encode_log_context
 from fred_pod.common.structures import LogOutputFormat
-from temporalio import exceptions
+from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.processing_metrics import processing_metrics_scope
+from knowledge_flow_backend.features.manager_processing.client import ManagerError
+from knowledge_flow_backend.features.manager_processing.contracts import Descriptor
+from knowledge_flow_backend.features.scheduler.fault_injection import inject_ingestion_fault
 
 logger = logging.getLogger(__name__)
 
@@ -124,12 +122,12 @@ class ExtractionRequest:
     input_path: str
     output_dir: str
     metadata_json: str
+    manager_job_json: str
     profile: str | None
     config_file: str | None
     logging_context: str | None = None
     log_format: LogOutputFormat = "text"
     log_level: str = "INFO"
-    manager_job_json: str | None = None
 
 
 def _install_parent_death_signal(expected_parent_pid: int) -> None:
@@ -171,49 +169,40 @@ def _child_main(request: ExtractionRequest, result_pipe: Connection, parent_pid:
     _install_parent_death_signal(parent_pid)
 
     try:
+        # Load the processing stack only in the spawned child; keep supervision lightweight.
         from knowledge_flow_backend.application_context import ApplicationContext
         from knowledge_flow_backend.common.config_loader import load_configuration
-        from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager
 
         if request.config_file:
             os.environ["CONFIG_FILE"] = request.config_file
         configuration = load_configuration()
-        if request.manager_job_json is not None:
-            from knowledge_flow_backend.common.structures import ProcessingConfig
-            from knowledge_flow_backend.features.manager_processing.contracts import Descriptor
+        from knowledge_flow_backend.common.structures import ProcessingConfig
 
-            descriptor = Descriptor.model_validate_json(request.manager_job_json)
-            setattr(configuration.processing.profiles, descriptor.work.profile, ProcessingConfig.ProfileConfig.model_validate(descriptor.profile_settings))
+        descriptor = Descriptor.model_validate_json(request.manager_job_json)
+        setattr(configuration.processing.profiles, descriptor.work.profile, ProcessingConfig.ProfileConfig.model_validate(descriptor.profile_settings))
         context = ApplicationContext(configuration)
-        if request.manager_job_json is not None:
-            from knowledge_flow_backend.features.manager_processing.artifacts import Artifacts
-            from knowledge_flow_backend.features.manager_processing.contracts import Descriptor
-            from knowledge_flow_backend.features.manager_processing.persistence import scoped_pipeline
+        from knowledge_flow_backend.features.manager_processing.artifacts import Artifacts
+        from knowledge_flow_backend.features.manager_processing.persistence import scoped_pipeline
 
-            descriptor = Descriptor.model_validate_json(request.manager_job_json)
-            settings = context.configuration.manager_processing
-            if settings is None or not settings.enabled:
-                raise ValueError("manager processing disabled")
-            import tempfile
+        settings = context.configuration.manager_processing
+        if settings is None:
+            raise ValueError("manager processing is not configured")
 
-            scratch = pathlib.Path(request.output_dir).parent / "scratch"
-            scratch.mkdir(exist_ok=True)
-            # This process handles one activity; all converter scratch dies with its workspace.
-            tempfile.tempdir = str(scratch)
-            manager, _ = scoped_pipeline(context, descriptor, pathlib.Path(request.output_dir), Artifacts(settings), include_output=False)
-        else:
-            manager = ProcessingPipelineManager.create_with_default(context, include_output=False)
+        scratch = pathlib.Path(request.output_dir).parent / "scratch"
+        scratch.mkdir(exist_ok=True)
+        # This process handles one activity; all converter scratch dies with its workspace.
+        tempfile.tempdir = str(scratch)
+        manager, _ = scoped_pipeline(context, descriptor, pathlib.Path(request.output_dir), Artifacts(settings), include_output=False)
         manager.run_input(
             input_path=pathlib.Path(request.input_path),
             output_dir=pathlib.Path(request.output_dir),
             metadata=DocumentMetadata.model_validate_json(request.metadata_json),
             profile=request.profile,
         )
-        if request.manager_job_json is not None and pathlib.Path(request.input_path).suffix.lower() in {".doc", ".docx", ".odt", ".ppt", ".pptx"}:
+        if pathlib.Path(request.input_path).suffix.lower() in {".doc", ".docx", ".odt", ".ppt", ".pptx"}:
             from fred_core import convert_office_file_to_pdf
 
             from knowledge_flow_backend.features.manager_processing.artifacts import adopt_output
-            from knowledge_flow_backend.features.manager_processing.client import ManagerError
 
             try:
                 rendered = convert_office_file_to_pdf(pathlib.Path(request.input_path), timeout_seconds=max(1, descriptor.file["input_activity_timeout_seconds"] - 30))
@@ -227,13 +216,9 @@ def _child_main(request: ExtractionRequest, result_pipe: Connection, parent_pid:
     except BaseException as exc:  # noqa: BLE001 - child-process failure boundary
         # Report even SystemExit/KeyboardInterrupt to the parent, then exit with
         # failure. This process never resumes extraction after an exception.
-        if request.manager_job_json is not None:
-            from knowledge_flow_backend.features.manager_processing.client import ManagerError
 
-            code = exc.code if isinstance(exc, ManagerError) else "unsupported_input" if _is_permanent(exc) else "worker_failed"
-            _send_outcome(result_pipe, {"error": code, "permanent": exc.permanent if isinstance(exc, ManagerError) else _is_permanent(exc)})
-        else:
-            _send_outcome(result_pipe, {"error": f"{type(exc).__name__}: {exc}", "permanent": _is_permanent(exc)})
+        code = exc.code if isinstance(exc, ManagerError) else "unsupported_input" if _is_permanent(exc) else "worker_failed"
+        _send_outcome(result_pipe, {"error": code, "permanent": exc.permanent if isinstance(exc, ManagerError) else _is_permanent(exc)})
         os._exit(1)
     _send_outcome(result_pipe, {"error": None, "permanent": False})
     os._exit(0)
@@ -651,29 +636,9 @@ async def extract_document(
     profile: Any,
     stage: str,
     started_at: float,
-    in_process_fallback: Callable[[], Any],
-    manager_job_json: str | None = None,
+    manager_job_json: str,
 ) -> None:
-    """Extract one document — the push and pull paths' single entry point, so
-    neither can supervise it differently from the other.
-
-    In a Temporal activity this runs in a killable child process. Outside one it
-    does not: the synchronous upload path and library sync call these activity
-    functions directly, inside the API process, and there is no worker slot to
-    keep honest there and no cancellation to deliver. Spawning an interpreter that
-    re-imports docling per uploaded document would be a large, unbounded cost paid
-    for nothing.
-    """
-    from temporalio import activity
-
-    if not activity.in_activity():
-        from knowledge_flow_backend.features.scheduler.kpi_utils import processor_activity_timer
-
-        with processing_metrics_scope(processor_activity_timer):
-            await in_process_fallback()
-        return
-
-    from knowledge_flow_backend.features.scheduler.fault_injection import inject_ingestion_fault
+    """Extract one manager document in a supervised, killable child process."""
 
     await inject_ingestion_fault(stage="extraction", document_name=metadata.document_name, document_uid=metadata.document_uid)
 
@@ -693,31 +658,25 @@ async def extract_document(
         log_level=app.log_level,
     )
     details = {"stage": stage, "document_uid": metadata.document_uid}
-    descriptor = None
-    if manager_job_json is not None:
-        from knowledge_flow_backend.features.manager_processing.contracts import Descriptor
 
-        descriptor = Descriptor.model_validate_json(manager_job_json)
+    descriptor = Descriptor.model_validate_json(manager_job_json)
 
     def _heartbeat() -> None:
-        if descriptor is not None:
-            from knowledge_flow_backend.features.manager_processing.client import ManagerError
-
-            settings = ApplicationContext.get_instance().get_config().manager_processing
-            if settings is None:
-                raise ManagerError("worker_failed", permanent=True)
-            total = output_total = count = 0
-            for path in output_dir.parent.rglob("*"):
-                count += 1
-                try:
-                    size = path.stat().st_size if path.is_file() else 0
-                    total += size
-                    if path.is_relative_to(output_dir):
-                        output_total += size
-                except FileNotFoundError:
-                    continue  # The supervised extractor can replace temporary outputs.
-                if count > descriptor.max_artifacts * 2 or output_total > descriptor.max_output_bytes or total > settings.temporary_bytes:
-                    raise ManagerError("capacity_exceeded", permanent=True)
+        settings = ApplicationContext.get_instance().get_config().manager_processing
+        if settings is None:
+            raise ManagerError("worker_failed", permanent=True)
+        total = output_total = count = 0
+        for path in output_dir.parent.rglob("*"):
+            count += 1
+            try:
+                size = path.stat().st_size if path.is_file() else 0
+                total += size
+                if path.is_relative_to(output_dir):
+                    output_total += size
+            except FileNotFoundError:
+                continue  # The supervised extractor can replace temporary outputs.
+            if count > descriptor.max_artifacts * 2 or output_total > descriptor.max_output_bytes or total > settings.temporary_bytes:
+                raise ManagerError("capacity_exceeded", permanent=True)
         if activity.in_activity():
             activity.heartbeat(details)
 
@@ -756,7 +715,6 @@ def _attempt_timeout_seconds() -> int:
     attempt. Outside an activity — the in-process test paths — there is no
     deadline to respect, hence the generous fallback.
     """
-    from temporalio import activity
 
     if not activity.in_activity():
         return 3600

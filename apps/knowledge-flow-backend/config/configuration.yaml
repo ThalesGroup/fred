@@ -20,10 +20,6 @@ app:
   log_format: text
   reload: false
   reload_dir: "."
-  default_team_max_resources_storage_size: 5368709120
-  personal_max_resources_storage_size: 5368709120
-  pdf_render_ttl_days: 30
-
 observability:
   kpi:
     log:
@@ -303,7 +299,7 @@ security:
     - "http://localhost:5180"
 scheduler:
   enabled: true
-  backend: "memory"
+  backend: "temporal"
   temporal:
     host: "localhost:7233"
     namespace: "default"
@@ -313,19 +309,6 @@ scheduler:
     ingestion_workflow_parallelism: 3
     ingestion_max_concurrent_workflow_tasks: 3
     ingestion_max_concurrent_activities: 3
-
-content_storage:
-  type: "local"
-  root_path: ~/.fred/knowledge-flow/content-storage
-document_sources:
-  fred:
-    type: push
-    description: "Documents manually uploaded by users"
-  local:
-    type: pull
-    provider: local_path
-    base_path: ~/Documents/Fred
-    description: "Personal local documents available for pull-mode ingestion"
 
 embedding_model:
   provider: openai
@@ -386,14 +369,8 @@ storage:
     secure: true
     verify_certs: false
     username: admin
-  resource_store:
-    type: "postgres"
   log_store:
     type: "in_memory"
-  tag_store:
-    type: "postgres"
-  metadata_store:
-    type: "postgres"
   tabular_store:
     artifacts_prefix: "tabular/datasets"
     format: "parquet"
@@ -415,28 +392,7 @@ storage:
       duckdb_memory_limit: "256MB"
       max_selected_datasets: 50
   vector_store:
-    type: chroma
-
-integrations:
-  prometheus:
-    base_url: http://localhost:9090
-    verify_ssl: false
-    timeout_seconds: 15.0
-    username: admin # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
-
-mcp:
-  reports_enabled: true
-  tabular_enabled: true
-  text_enabled: true
-  templates_enabled: true
-  resources_enabled: true
-  prometheus_ops_enabled: true
-  filesystem_read_default_limit: 100
-  filesystem_read_max_limit: 500
-  filesystem_read_default_max_chars: 20000
-  filesystem_read_absolute_max_chars: 50000
-
-filesystem:
-  type: local
+    type: pgvector
+    collection_name: document_vectors
 
 control_plane_url: "http://localhost:8001"

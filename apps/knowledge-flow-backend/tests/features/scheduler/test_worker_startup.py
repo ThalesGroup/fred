@@ -35,10 +35,10 @@ def _run_worker_with(*, roles: list[IngestionWorkerRole] | None = None, **kwargs
     worker_cls.return_value.run = AsyncMock()
     with (
         patch.object(worker_module.Client, "connect", AsyncMock(return_value=client)),
-        patch("knowledge_flow_backend.features.manager_processing.cleanup.run", cleanup),
+        patch.object(worker_module, "manager_cleanup", cleanup),
         patch.object(worker_module, "Worker", worker_cls),
     ):
-        asyncio.run(worker_module.run_worker(_CONFIG, roles=roles, manager_processing=True, **kwargs))
+        asyncio.run(worker_module.run_worker(_CONFIG, roles=roles, **kwargs))
     return cleanup, worker_cls
 
 

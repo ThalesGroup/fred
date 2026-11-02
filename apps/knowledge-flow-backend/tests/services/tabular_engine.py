@@ -20,7 +20,7 @@ from knowledge_flow_backend.features.tabular.service import ResolvedDataset, Tab
 class TabularEngineHarness(TabularService):
     def __init__(self):
         context = ApplicationContext.get_instance()
-        self.metadata_store = context.get_metadata_store()
+        self.metadata_store = context.test_metadata_store
         self.content_store = context.get_content_store()
         self.tabular_config = context.get_config().storage.tabular_store
         self.artifact_reader = SimpleNamespace(read_bytes=lambda prefix, artifact: self.content_store.get_output_artifact(prefix + artifact.path))

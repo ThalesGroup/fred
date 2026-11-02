@@ -19,13 +19,12 @@
 # ///
 """Render the Fred chart and check the knowledge-flow ingestion deployment.
 
-Extraction is routed to a Temporal queue derived from the document's processing
-profile. The API derives that name when it submits, each worker derives it from
-its own role when it polls, and the document's bytes travel between them through
-shared content storage. A rendered deployment therefore only ingests if the API
-and all four worker groups agree on the Temporal server, the namespace, the base
-task queue, the content storage and where documents land — and if something
-actually polls every queue. None of that is visible to `helm lint`.
+The control plane dispatches processing jobs to a common Temporal queue. Extraction
+runs on a queue derived from each document's processing profile, while original
+and derived bytes live in the manager-owned artifact bucket. The API reads
+published generations from that bucket and searches the same vector corpus.
+The four worker groups must share their Temporal and manager settings; each
+extraction queue must have a consumer. These checks inspect the rendered config.
 
 Two of these agreements have different mechanisms, and the checks below keep them
 apart:
@@ -83,23 +82,36 @@ ALL_GROUPS_OVERRIDDEN = {
                         "host": OVERRIDES["host"],
                         "namespace": OVERRIDES["namespace"],
                         "task_queue": OVERRIDES["task_queue"],
-                    }
+                    },
                 },
-                "content_storage": {
-                    "type": "minio",
-                    "root_path": None,
-                    "endpoint": "http://audit-minio:9000",
-                    "access_key": "audit-admin",
-                    "bucket_name": OVERRIDES["bucket_name"],
-                    "secure": False,
+                "manager_processing": {
+                    "url": "https://audit-manager.example/control-plane/v1",
+                    "issuer": "https://identity.example/realms/fred",
+                    "endpoint": "https://audit-s3.example",
+                    "bucket": OVERRIDES["bucket_name"],
+                    "vector_store": {
+                        "type": "pgvector",
+                        "collection_name": "audit-vectors",
+                    },
                 },
             },
         },
-        **{name: dict(_ENABLE) for name in WORKER_GROUPS if name != "knowledge-flow-worker"},
+        **{
+            name: dict(_ENABLE)
+            for name in WORKER_GROUPS
+            if name != "knowledge-flow-worker"
+        },
     }
 }
 
-HISTORICAL_WORKER_ONLY = {"applications": {"knowledge-flow-worker": {**_ENABLE, "configuration": {"scheduler": {"worker_roles": ["common"]}}}}}
+COMMON_WORKER_ONLY = {
+    "applications": {
+        "knowledge-flow-worker": {
+            **_ENABLE,
+            "configuration": {"scheduler": {"worker_roles": ["common"]}},
+        }
+    }
+}
 
 # A whole ingestion deployment retuned away from the chart defaults: the API and
 # the four worker groups. The API is a separate application and inherits nothing,
@@ -123,17 +135,26 @@ _SHARED_INGESTION_CONFIGURATION = {
             "task_queue": FULL_DEPLOYMENT_OVERRIDES["task_queue"],
         }
     },
-    "content_storage": {
-        "type": "minio",
-        "root_path": None,
-        "endpoint": "http://full-minio:9000",
-        "access_key": "full-admin",
-        "bucket_name": FULL_DEPLOYMENT_OVERRIDES["bucket_name"],
-        "secure": False,
+    "manager_processing": {
+        "url": "https://full-manager.example/control-plane/v1",
+        "issuer": "https://identity.example/realms/fred",
+        "endpoint": "https://full-s3.example",
+        "bucket": FULL_DEPLOYMENT_OVERRIDES["bucket_name"],
+        "vector_store": {
+            "type": "opensearch",
+            "index": FULL_DEPLOYMENT_OVERRIDES["vector_index"],
+        },
+    },
+    "published_artifacts": {
+        "endpoint": "https://full-s3.example",
+        "bucket": FULL_DEPLOYMENT_OVERRIDES["bucket_name"],
+        "access_key_env": "ARTIFACT_ACCESS_KEY",
+        "secret_key_env": "ARTIFACT_SECRET_KEY",
     },
     "storage": {
         "vector_store": {
             "type": "opensearch",
+            "collection_name": None,
             "index": FULL_DEPLOYMENT_OVERRIDES["vector_index"],
             "bulk_size": 1000,
         }
@@ -148,8 +169,21 @@ def _shared_ingestion_configuration() -> dict:
 FULL_DEPLOYMENT = {
     "applications": {
         API_GROUP: {"configuration": _shared_ingestion_configuration()},
-        "knowledge-flow-worker": {**_ENABLE, "configuration": {**_shared_ingestion_configuration(), "scheduler": {**_SHARED_INGESTION_CONFIGURATION["scheduler"], "worker_roles": ["common"]}}},
-        **{name: dict(_ENABLE) for name in WORKER_GROUPS if name != "knowledge-flow-worker"},
+        "knowledge-flow-worker": {
+            **_ENABLE,
+            "configuration": {
+                **_shared_ingestion_configuration(),
+                "scheduler": {
+                    **_SHARED_INGESTION_CONFIGURATION["scheduler"],
+                    "worker_roles": ["common"],
+                },
+            },
+        },
+        **{
+            name: dict(_ENABLE)
+            for name in WORKER_GROUPS
+            if name != "knowledge-flow-worker"
+        },
     }
 }
 
@@ -157,7 +191,9 @@ LOCAL_SINGLE_POD = {
     "applications": {
         "knowledge-flow-worker": {
             **_ENABLE,
-            "configuration": {"scheduler": {"worker_roles": list(WORKER_GROUPS.values())}},
+            "configuration": {
+                "scheduler": {"worker_roles": list(WORKER_GROUPS.values())}
+            },
         }
     }
 }
@@ -222,21 +258,31 @@ def _check_overrides_propagate(chart: Path) -> list[str]:
 
     for group, role in WORKER_GROUPS.items():
         temporal = configs[group]["scheduler"]["temporal"]
-        storage = configs[group]["content_storage"]
+        storage = configs[group]["manager_processing"]
         for key in ("host", "namespace", "task_queue"):
             if temporal[key] != OVERRIDES[key]:
-                errors.append(f"{group}: scheduler.temporal.{key} is {temporal[key]!r}, expected the override {OVERRIDES[key]!r}")
-        if storage.get("bucket_name") != OVERRIDES["bucket_name"]:
-            errors.append(f"{group}: content_storage.bucket_name is {storage.get('bucket_name')!r}, expected the override {OVERRIDES['bucket_name']!r}")
+                errors.append(
+                    f"{group}: scheduler.temporal.{key} is {temporal[key]!r}, expected the override {OVERRIDES[key]!r}"
+                )
+        if storage.get("bucket") != OVERRIDES["bucket_name"]:
+            errors.append(
+                f"{group}: manager_processing.bucket is {storage.get('bucket')!r}, expected the override {OVERRIDES['bucket_name']!r}"
+            )
         expected_image = f"{OVERRIDES['repository']}:{OVERRIDES['tag']}"
         if images.get(group) != expected_image:
-            errors.append(f"{group}: image is {images.get(group)!r}, expected the override {expected_image!r}")
+            errors.append(
+                f"{group}: image is {images.get(group)!r}, expected the override {expected_image!r}"
+            )
         if configs[group]["scheduler"]["worker_roles"] != [role]:
-            errors.append(f"{group}: worker_roles is {configs[group]['scheduler']['worker_roles']!r}, expected [{role!r}]")
+            errors.append(
+                f"{group}: worker_roles is {configs[group]['scheduler']['worker_roles']!r}, expected [{role!r}]"
+            )
 
     rich = configs["knowledge-flow-worker-extraction-rich"]["scheduler"]["temporal"]
     if rich["ingestion_max_concurrent_activities"] != 1:
-        errors.append(f"the rich group runs {rich['ingestion_max_concurrent_activities']} extractions per pod, expected 1")
+        errors.append(
+            f"the rich group runs {rich['ingestion_max_concurrent_activities']} extractions per pod, expected 1"
+        )
 
     return errors
 
@@ -244,11 +290,8 @@ def _check_overrides_propagate(chart: Path) -> list[str]:
 def _check_api_and_workers_agree(chart: Path) -> list[str]:
     """A whole ingestion deployment, API included, retuned off the chart defaults.
 
-    The API derives the extraction queue names from its own base task queue when
-    it submits, and saves the document into its own content storage before any
-    worker reads it. If it disagrees with the workers on either, submissions land
-    on queues nobody polls or extraction cannot find its input — so the render has
-    to show one value across all five applications.
+    The API reads the same corpus and published S3 artifacts that the workers
+    produce. Control Plane owns submissions; worker groups share its queue.
     """
     code, rendered = _render(chart, FULL_DEPLOYMENT)
     if code != 0:
@@ -262,27 +305,39 @@ def _check_api_and_workers_agree(chart: Path) -> list[str]:
 
     errors = []
     # What every application must agree on. An application left on the chart
-    # defaults may not carry the key at all — a local content storage has no
-    # bucket — so this reports the divergence rather than raising on it.
+    # defaults may not carry the artifact settings, so report the divergence.
     shared = {
         ("scheduler", "temporal", "host"): FULL_DEPLOYMENT_OVERRIDES["host"],
         ("scheduler", "temporal", "namespace"): FULL_DEPLOYMENT_OVERRIDES["namespace"],
-        ("scheduler", "temporal", "task_queue"): FULL_DEPLOYMENT_OVERRIDES["task_queue"],
-        ("content_storage", "bucket_name"): FULL_DEPLOYMENT_OVERRIDES["bucket_name"],
+        ("scheduler", "temporal", "task_queue"): FULL_DEPLOYMENT_OVERRIDES[
+            "task_queue"
+        ],
+        ("manager_processing", "bucket"): FULL_DEPLOYMENT_OVERRIDES["bucket_name"],
+        ("published_artifacts", "bucket"): FULL_DEPLOYMENT_OVERRIDES["bucket_name"],
+        ("manager_processing", "vector_store", "index"): FULL_DEPLOYMENT_OVERRIDES[
+            "vector_index"
+        ],
         ("storage", "vector_store", "index"): FULL_DEPLOYMENT_OVERRIDES["vector_index"],
     }
     for path, expected in shared.items():
         actual = {app: _dig(configs[app], path) for app in sorted(applications)}
         disagreeing = {app: value for app, value in actual.items() if value != expected}
         if disagreeing:
-            errors.append(f"{'.'.join(path)}: expected {expected!r} everywhere, got {disagreeing!r}")
+            errors.append(
+                f"{'.'.join(path)}: expected {expected!r} everywhere, got {disagreeing!r}"
+            )
 
     # Agreeing on the shared settings must not have flattened what each group is for.
     for group, role in WORKER_GROUPS.items():
         roles = configs[group]["scheduler"]["worker_roles"]
         if roles != [role]:
             errors.append(f"{group}: worker_roles is {roles!r}, expected [{role!r}]")
-    concurrencies = {group: configs[group]["scheduler"]["temporal"]["ingestion_max_concurrent_activities"] for group in WORKER_GROUPS}
+    concurrencies = {
+        group: configs[group]["scheduler"]["temporal"][
+            "ingestion_max_concurrent_activities"
+        ]
+        for group in WORKER_GROUPS
+    }
     expected_concurrencies = {
         "knowledge-flow-worker": 3,
         "knowledge-flow-worker-extraction-fast": 4,
@@ -290,17 +345,21 @@ def _check_api_and_workers_agree(chart: Path) -> list[str]:
         "knowledge-flow-worker-extraction-rich": 1,
     }
     if concurrencies != expected_concurrencies:
-        errors.append(f"per-group activity concurrency is {concurrencies!r}, expected {expected_concurrencies!r}")
+        errors.append(
+            f"per-group activity concurrency is {concurrencies!r}, expected {expected_concurrencies!r}"
+        )
 
     return errors
 
 
 def _check_unserved_role_is_refused(chart: Path) -> list[str]:
-    """Enabling only the historical worker must fail, not quietly leave the three
+    """Enabling only the common worker must fail, not quietly leave the three
     extraction queues without a consumer."""
-    code, output = _render(chart, HISTORICAL_WORKER_ONLY)
+    code, output = _render(chart, COMMON_WORKER_ONLY)
     if code == 0:
-        return ["enabling only knowledge-flow-worker rendered successfully; the three extraction queues would have no consumer"]
+        return [
+            "enabling only knowledge-flow-worker rendered successfully; the three extraction queues would have no consumer"
+        ]
     if "extraction-rich" not in output:
         return [f"the refusal does not name the unserved roles: {output.strip()}"]
     return []

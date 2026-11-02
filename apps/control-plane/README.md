@@ -587,10 +587,11 @@ See [activation and policy configuration](../../docs/architecture/A3-manager-ope
 ## Changing it
 
 A change described in the dossier updates its chapter in the same commit. A test that
-proves an invariant carries `// Proves: I<n>` above it. Applied SQL migrations are
-immutable, including comments and whitespace. Add the next numbered SQL file under
-`migrations/` for each schema change; preserve existing data
-(see [Existing local state](#existing-local-state)).
+proves an invariant carries `// Proves: I<n>` above it. During Weaver's fresh-install
+phase, update `migrations/0001_schema.sql` directly and retain its complete
+constraints, indexes and triggers. Do not add incremental migrations or backfills.
+A changed baseline requires explicit recreation of the disposable installation,
+never a live checksum rewrite (see [Existing local state](#existing-local-state)).
 
 ## Generate the frontend contract
 

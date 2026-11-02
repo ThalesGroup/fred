@@ -32,28 +32,13 @@ from knowledge_flow_backend.application_context import get_configuration
 from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
-from knowledge_flow_backend.core.processors.input.common.image_describer import (
-    PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1,
-    build_image_describer,
-)
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_deck_noise import (
-    detect_repeated_noise_texts,
-)
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import (
-    extract_native_slide_content,
-)
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_asset_manifest import (
-    write_slide_asset_manifest,
-)
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_markdown_formatter import (
-    format_slide_markdown,
-)
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_vision_enricher import (
-    enrich_slides_with_vision,
-)
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_visual_preanalysis import (
-    preanalyze_presentation,
-)
+from knowledge_flow_backend.core.processors.input.common.image_describer import PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1, build_image_describer
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_deck_noise import detect_repeated_noise_texts
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import extract_native_slide_content
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_asset_manifest import write_slide_asset_manifest
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_markdown_formatter import format_slide_markdown
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_vision_enricher import enrich_slides_with_vision
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_visual_preanalysis import preanalyze_presentation
 
 logger = logging.getLogger(__name__)
 
@@ -211,63 +196,6 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             logger.warning("[PPTX][GUARDRAIL] Failed to inspect PPTX xml parts for %s: %s", file_path, e)
 
         return master_lines, layout_lines
-
-    def extract_guardrail_text(self, file_path: Path) -> str | None:
-        try:
-            presentation = Presentation(str(file_path))
-        except Exception as e:
-            logger.warning("[PPTX][GUARDRAIL] Failed to open %s: %s", file_path, e)
-            return None
-
-        slides = list(presentation.slides)
-        if not slides:
-            return None
-
-        repeated_noise_texts = detect_repeated_noise_texts(slides)
-        master_xml_lines, layout_xml_lines = self._extract_master_layout_xml_lines(file_path)
-
-        parts: list[str] = []
-
-        if repeated_noise_texts:
-            parts.append("REPEATED_TEXT:")
-            parts.extend(sorted(repeated_noise_texts))
-
-        if master_xml_lines:
-            if parts:
-                parts.append("")
-            parts.append("MASTER_XML:")
-            parts.extend(dict.fromkeys(master_xml_lines))
-
-        if layout_xml_lines:
-            if parts:
-                parts.append("")
-            parts.append("LAYOUT_XML:")
-            parts.extend(dict.fromkeys(layout_xml_lines))
-
-        slide_indexes: list[int] = [0]
-        if len(slides) > 1:
-            slide_indexes.append(len(slides) - 1)
-
-        for slide_index in slide_indexes:
-            slide_lines = self._extract_slide_text_lines(slides[slide_index])
-            if not slide_lines:
-                continue
-
-            if parts:
-                parts.append("")
-            parts.append(f"SLIDE_{slide_index + 1}:")
-            parts.extend(slide_lines[:12])
-
-        result = "\n".join(parts).strip()
-
-        if result:
-            logger.info(
-                "[PPTX][GUARDRAIL] Extracted guardrail text for %s:\n%s",
-                file_path.name,
-                result,
-            )
-
-        return result or None
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PPTX file is valid and can be opened."""

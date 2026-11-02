@@ -406,8 +406,8 @@ or upload contents. UI components and generated API paths are unchanged.
 
 ## Authorization initialization
 
-The SQL schema owns direct grants and template policy. Startup applies the fresh
-schema; first-user bootstrap records the administrator and completion atomically.
+The SQL schema owns direct grants and template policy. The initialization Job creates
+the schema; first-user bootstrap records the administrator and completion atomically.
 There is no separate authorization model, store publication or service token.
 
 ## First-user application entry

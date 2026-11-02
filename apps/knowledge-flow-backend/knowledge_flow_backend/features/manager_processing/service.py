@@ -28,7 +28,7 @@ class ManagedIngestionService:
         self.descriptor = descriptor
         self.source = source
         settings = self.context.configuration.manager_processing
-        if settings is None or not settings.enabled:
+        if settings is None:
             raise ManagerError("worker_failed", permanent=True)
         self.settings = settings
         self.artifacts = Artifacts(self.settings)
@@ -133,9 +133,6 @@ class ManagedIngestionService:
         with ManagerClient(self.settings) as client:
             client.post(f"/document-processing/{d.work.processing_id}/abandon", Failure(work=d.work, stage=d.stage, generation=d.generation, code=code))
 
-    def process_input(self, user, input_path, output_dir, metadata, profile=None):
-        self.pipeline_manager.run_input(input_path=input_path, output_dir=output_dir, metadata=metadata, profile=profile)
-
     def get_preview_file(self, user, metadata, output_dir):
         for name in ("output.md", "table.csv", "output.txt"):
             candidate = output_dir / name
@@ -167,15 +164,13 @@ async def manager_service(source: str | None, stage: Stage, *, file=None):
     context = ApplicationContext.get_instance()
     settings = context.configuration.manager_processing
     if source is None or not source.startswith("manager:"):
-        if settings is not None and settings.enabled:
-            raise exceptions.ApplicationError("manager worker requires a manager document source", non_retryable=True)
-        return None
+        raise exceptions.ApplicationError("manager worker requires a manager document source", non_retryable=True)
     try:
         _, installation, operation = source.split(":")
         installation = UUID(installation)
         operation = UUID(operation)
-        if settings is None or not settings.enabled:
-            raise ValueError("manager processing disabled")
+        if settings is None:
+            raise ValueError("manager processing is not configured")
         info = activity.info()
         activity_id = uuid5(NAMESPACE_URL, f"{info.workflow_id}/{info.workflow_run_id}/{info.activity_id}")
         execution = uuid5(NAMESPACE_URL, f"{info.workflow_id}/{info.workflow_run_id}/{info.activity_id}/{info.attempt}")

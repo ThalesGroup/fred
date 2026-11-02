@@ -93,9 +93,9 @@ def test_emit_temporal_activity_result_kpis_emits_duration_and_counter(monkeypat
             return fake_writer
 
     fake_info = SimpleNamespace(
-        activity_type="pull_input_process",
+        activity_type="push_input_process",
         task_queue="ingestion",
-        workflow_type="ProcessPullFile",
+        workflow_type="ProcessPushFile",
         workflow_id="workflow-doc-1",
         attempt=2,
     )
@@ -114,7 +114,7 @@ def test_emit_temporal_activity_result_kpis_emits_duration_and_counter(monkeypat
 
     metadata = SimpleNamespace(
         file=SimpleNamespace(file_type=SimpleNamespace(value="pdf")),
-        source_type=SimpleNamespace(value="pull"),
+        source_type=SimpleNamespace(value="push"),
         source_tag="sharepoint",
     )
 
@@ -137,7 +137,7 @@ def test_emit_temporal_activity_result_kpis_emits_duration_and_counter(monkeypat
     assert emit_call["dims"]["phase"] == "input"
     assert emit_call["dims"]["status"] == "success"
     assert emit_call["dims"]["file_type"] == "pdf"
-    assert emit_call["dims"]["source_type"] == "pull"
+    assert emit_call["dims"]["source_type"] == "push"
     assert emit_call["dims"]["source_tag"] == "sharepoint"
     assert "quantities" not in emit_call
     count_args, count_kwargs = fake_writer.count_calls[0]

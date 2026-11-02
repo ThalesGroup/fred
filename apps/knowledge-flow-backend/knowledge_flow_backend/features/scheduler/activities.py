@@ -20,12 +20,14 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
-from temporalio import activity, exceptions
+from temporalio import activity
 
+from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.features.manager_processing.client import raise_permanent_failure
+from knowledge_flow_backend.features.manager_processing.service import manager_service
 from knowledge_flow_backend.features.scheduler.activity_utils import raise_if_document_deleted, to_thread_with_heartbeat
-from knowledge_flow_backend.features.scheduler.kpi_utils import (
-    emit_temporal_activity_result_kpis,
-)
+from knowledge_flow_backend.features.scheduler.fault_injection import inject_ingestion_fault
+from knowledge_flow_backend.features.scheduler.kpi_utils import emit_temporal_activity_result_kpis
 from knowledge_flow_backend.features.scheduler.logging_context import ingestion_activity
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
@@ -34,22 +36,15 @@ logger = logging.getLogger(__name__)
 
 @activity.defn
 @ingestion_activity
-async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
-    """Normal per-document ingestion output stage — persists metadata through
-    the permission-checked `save_metadata` (the calling user must hold
-    `TagPermission.UPDATE` on every tag the document carries). Used by the
-    ordinary `OutputProcess` workflow."""
-    from knowledge_flow_backend.features.manager_processing.service import manager_service
+async def output_process(file: FileToProcess, metadata: DocumentMetadata) -> DocumentMetadata:
+    """Index one manager-owned document and publish its fenced generation."""
 
     ingestion_service = await manager_service(file.source_tag, "indexing", file=file)
-    if ingestion_service is not None and ingestion_service.already_committed:
+    if ingestion_service.already_committed:
         return metadata
-    if ingestion_service is None:
-        raise exceptions.ApplicationError("manager processing required", non_retryable=True)
     return await _output_process_impl(
         file,
         metadata,
-        accept_memory_storage,
         ingestion_service=ingestion_service,
         persist_progress=ingestion_service.persist_progress,
     )
@@ -58,7 +53,6 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
 async def _output_process_impl(
     file: FileToProcess,
     metadata: DocumentMetadata,
-    accept_memory_storage: bool,
     *,
     ingestion_service: Any,
     persist_progress: Callable[..., Awaitable[bool]],
@@ -67,8 +61,6 @@ async def _output_process_impl(
     started_at = asyncio.get_running_loop().time()
     logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] Starting uid={metadata.document_uid}")
 
-    from knowledge_flow_backend.application_context import ApplicationContext
-
     output_stage: ProcessingStage | None = None
     try:
         with tempfile.TemporaryDirectory(prefix=f"doc-{metadata.document_uid}-") as tmpdir:
@@ -76,7 +68,7 @@ async def _output_process_impl(
             output_dir = working_dir / "output"
             document_name = metadata.document_name
 
-            # For both push and pull, restore what was saved (input/output).
+            # Restore the authorized original and predecessor generation artifacts.
             # to_thread_with_heartbeat, not bare to_thread, here and for
             # process_output below — and not only for progress reporting: the
             # heartbeat responses are ALSO the channel Temporal uses to tell a
@@ -116,18 +108,6 @@ async def _output_process_impl(
             metadata.set_stage_status(output_stage, ProcessingStatus.IN_PROGRESS)
             raise_if_document_deleted(await persist_progress(file.processed_by, metadata=metadata), metadata.document_uid)
 
-            if output_stage == ProcessingStage.VECTORIZED:
-                from knowledge_flow_backend.common.structures import InMemoryVectorStorage
-
-                vector_store = ingestion_service.settings.vector_store if hasattr(ingestion_service, "descriptor") else ApplicationContext.get_instance().get_config().storage.vector_store
-                if isinstance(vector_store, InMemoryVectorStorage) and not accept_memory_storage:
-                    raise exceptions.ApplicationError(
-                        "❌ Vectorization from temporal activity is not allowed with an in-memory vector store. Please configure a persistent vector store like OpenSearch.",
-                        non_retryable=True,
-                    )
-
-            from knowledge_flow_backend.features.scheduler.fault_injection import inject_ingestion_fault
-
             await inject_ingestion_fault(stage="indexing", document_name=metadata.document_name, document_uid=metadata.document_uid)
 
             # Proceed with the output processing (vectorization / SQL indexing —
@@ -160,9 +140,7 @@ async def _output_process_impl(
         )
         return metadata
     except Exception as exc:
-        record_failure = getattr(ingestion_service, "record_failure", None)
-        if record_failure is not None:
-            record_failure(exc)
+        ingestion_service.record_failure(exc)
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
         stage = output_stage or ProcessingStage.PREVIEW_READY
         metadata.mark_stage_error(stage, error_message)
@@ -183,7 +161,6 @@ async def _output_process_impl(
             status="error",
             exc=exc,
         )
-        from knowledge_flow_backend.features.manager_processing.client import raise_permanent_failure
 
         raise_permanent_failure(exc)
         raise

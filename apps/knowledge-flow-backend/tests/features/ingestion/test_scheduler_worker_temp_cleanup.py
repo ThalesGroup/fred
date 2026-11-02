@@ -96,12 +96,11 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
       assert the tracked folder no longer exists.
     """
     tracked_dir = _TrackedTemporaryDirectory(tmp_path / "worker-push-temp")
-    input_file = tmp_path / "sample.csv"
-    input_file.write_text("city,amount\nParis,10\n", encoding="utf-8")
     metadata = _FakeMetadata(document_uid="doc-push", document_name="sample.csv")
 
     class _FakeService:
         already_committed = False
+        extraction_context = "{}"
 
         def __init__(self) -> None:
             self.context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
@@ -109,8 +108,9 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         async def persist_progress(self, user, metadata) -> bool:
             return True
 
-        def process_input(self, user, input_path, output_dir, metadata, profile) -> None:
-            output_dir.mkdir(parents=True, exist_ok=True)
+        def get_local_copy(self, user, metadata, working_dir):
+            (working_dir / "input" / metadata.document_name).write_text("city,amount\nParis,10\n", encoding="utf-8")
+            return working_dir
 
         def save_output(self, user, metadata, output_dir) -> None:
             return None
@@ -119,7 +119,7 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         return func(*args)
 
     monkeypatch.setattr(
-        "knowledge_flow_backend.features.manager_processing.service.manager_service",
+        "knowledge_flow_backend.features.scheduler.push_files_activities.manager_service",
         AsyncMock(return_value=_FakeService()),
     )
     monkeypatch.setattr(
@@ -143,7 +143,7 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     # holds whatever extraction does — so it is intercepted rather than spawned.
     extracted: dict[str, object] = {}
 
-    async def _fake_extract_document(*, input_path, output_dir, metadata, profile, stage, started_at, in_process_fallback, manager_job_json=None) -> None:
+    async def _fake_extract_document(*, input_path, output_dir, metadata, profile, stage, started_at, manager_job_json) -> None:
         extracted.update({"input_path": input_path, "output_dir": output_dir, "stage": stage})
 
     monkeypatch.setattr(
@@ -154,7 +154,6 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     result = await push_input_process(
         user=_user(),
         metadata=metadata,
-        input_file=str(input_file),
         profile=IngestionProcessingProfile.medium,
     )
 
@@ -195,6 +194,7 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
 
     class _FakeService:
         already_committed = False
+        extraction_context = "{}"
 
         async def persist_progress(self, user, metadata) -> bool:
             return True
@@ -215,7 +215,7 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     )
 
     monkeypatch.setattr(
-        "knowledge_flow_backend.features.manager_processing.service.manager_service",
+        "knowledge_flow_backend.features.scheduler.activities.manager_service",
         AsyncMock(return_value=_FakeService()),
     )
     monkeypatch.setattr(
@@ -235,7 +235,7 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         lambda prefix="": tracked_dir,
     )
 
-    result = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+    result = await output_process(file=file, metadata=metadata)
 
     assert result is metadata
     assert tracked_dir.exited is True
@@ -258,6 +258,7 @@ async def test_output_process_uses_manager_progress_writer(tmp_path, monkeypatch
 
     class _FakeService:
         already_committed = False
+        extraction_context = "{}"
 
         def __init__(self) -> None:
             self.checked_calls = 0
@@ -300,8 +301,8 @@ async def test_output_process_uses_manager_progress_writer(tmp_path, monkeypatch
     )
 
     monkeypatch.setattr(
-        "knowledge_flow_backend.features.manager_processing.service.manager_service",
+        "knowledge_flow_backend.features.scheduler.activities.manager_service",
         AsyncMock(return_value=checked_service),
     )
-    await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+    await output_process(file=file, metadata=metadata)
     assert checked_service.checked_calls > 0

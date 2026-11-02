@@ -351,7 +351,7 @@ class VectorSearchService:
         Notes:
             When the current vector store backend does not expose `full_text_search`, this
             method falls back to semantic ANN search. This keeps local dev backends
-            (e.g. Chroma) usable even when the request policy defaults to `strict`.
+            (pgvector) usable even when the request policy defaults to `strict`.
         """
         if not isinstance(self.vector_store, SupportsFullTextSearch):
             logger.warning(
@@ -428,7 +428,7 @@ class VectorSearchService:
         Notes:
             When the current vector store backend does not expose `hybrid_search`, this
             method falls back to semantic ANN search. This keeps local dev backends
-            (e.g. Chroma) usable even when the request policy defaults to `hybrid`.
+            (pgvector) usable even when the request policy defaults to `hybrid`.
         """
         if not isinstance(self.vector_store, SupportsHybridSearch):
             logger.warning(

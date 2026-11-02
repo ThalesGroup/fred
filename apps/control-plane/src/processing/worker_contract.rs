@@ -50,12 +50,11 @@ impl WorkerContract {
                 "KF extraction queue differs from manager queue"
             );
             ensure!(
-                policy.len() == 11
+                policy.len() == 10
                     && policy.keys().all(|key| matches!(
                         key.as_str(),
                         "extraction_task_queue"
                             | "push_metadata_activity_timeout_seconds"
-                            | "pull_metadata_activity_timeout_seconds"
                             | "output_activity_timeout_seconds"
                             | "input_activity_timeout_seconds"
                             | "heartbeat_timeout_seconds"
@@ -108,12 +107,12 @@ impl WorkerContract {
         workflow: &str,
     ) -> Value {
         // Same diagnostic envelope as fred_core.logs.propagation.encode_log_context.
-        // Capture once in the durable submission, as SchedulerService does.
+        // Capture once in the durable submission.
         let logging_context=URL_SAFE_NO_PAD.encode(serde_json::to_vec(&json!({"v":1,"context":{"correlation_id":operation.to_string(),"workflow_id":workflow,"user_id":actor}})).unwrap());
         let name = serde_json::to_value(profile).unwrap();
         let mut file = self.profiles[name.as_str().unwrap()].clone();
         let object = file.as_object_mut().unwrap();
-        for (key,value) in json!({"source_tag":format!("manager:{installation}:{operation}"),"tags":[],"display_name":document.to_string(),"document_uid":document,"profile":name,"task_id":null,"logging_context":logging_context,"processed_by":{"uid":actor,"username":actor,"roles":[]}}).as_object().unwrap() {object.insert(key.clone(),value.clone());}
+        for (key,value) in json!({"source_tag":format!("manager:{installation}:{operation}"),"tags":[],"display_name":document.to_string(),"document_uid":document,"profile":name,"logging_context":logging_context,"processed_by":{"uid":actor,"username":actor,"roles":[]}}).as_object().unwrap() {object.insert(key.clone(),value.clone());}
         json!({"workflow_id":workflow,"name":"manager-document-processing","files":[file],"max_parallelism":1,"logging_context":logging_context})
     }
 }

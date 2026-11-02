@@ -47,22 +47,10 @@ import pandas as pd
 from openpyxl import load_workbook
 from tabulate import tabulate
 
-from knowledge_flow_backend.compat import openpyxl_patch  # noqa: F401
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import (
-    BaseMarkdownProcessor,
-    InputConversionError,
-)
-from knowledge_flow_backend.core.processors.input.excel_processor.excel_extractor import (
-    DetectedTable,
-    ExcelExtractor,
-    SheetSummary,
-    _a1,
-    _setup_log_file,
-    _step,
-    log,
-)
-from knowledge_flow_backend.core.stores.content.base_content_store import StoredObjectInfo
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
+from knowledge_flow_backend.core.processors.input.excel_processor.excel_extractor import DetectedTable, ExcelExtractor, SheetSummary, _a1, _setup_log_file, _step, log
 from knowledge_flow_backend.features.tabular.artifacts import (
+    StoredObjectInfo,
     build_table_query_alias,
     build_tabular_table_object_key,
     dataframe_dtype_to_literal,

@@ -30,7 +30,8 @@ flowchart TB
 ```
 
 Processing can start with the upload or later from a stored document. The chosen
-profile determines how the content is processed. A failed attempt can be retried
+profile determines how the content is processed. Control Plane coordinates every
+attempt; Knowledge Flow extracts and indexes its authorized original. A failed attempt can be retried
 without uploading the original again. Progress and results remain available
 after reloading the page.
 

@@ -283,18 +283,6 @@ set-version: ## Update the chart and application versions; Python packages have 
 	cd apps/frontend && npm version $(VERSION) --no-git-tag-version
 	@echo "Version updated to $(VERSION) in all components."
 
-##@ Migration Schema Snapshots
-
-SNAPSHOTS_DIR ?= $(CURDIR)/target/migration-snapshots
-
-.PHONY: db-snapshots
-db-snapshots: ## Dump schema after each migration for migratable backends into target/migration-snapshots/
-	@set -e; \
-	for dir in apps/knowledge-flow-backend; do \
-		echo "************ Snapshotting $$dir ************"; \
-		$(MAKE) -C $$dir db-snapshots DB_SNAPSHOTS_DIR=$(SNAPSHOTS_DIR); \
-	done
-
 ##@ Database Migrations (combined)
 
 MIGRATION_COMPOSE    := scripts/docker-compose.postgres.yml
@@ -302,16 +290,13 @@ PG_COMBINED_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migra
 SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 # One entry per Alembic tree. These lists are hardcoded, not discovery: a new
 # tree is exercised by nothing until it is added to all three targets below.
-KF_DIR               := apps/knowledge-flow-backend
 RT_DIR               := libs/fred-runtime
 WD_DIR               := libs/capabilities/fred-capability-writable-document
-KF_UV                := $(KF_DIR)/.venv/bin/uv
 RT_UV                := $(RT_DIR)/.venv/bin/uv
 WD_UV                := $(WD_DIR)/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
 db-check-combined-heads: ## assert each Alembic tree has exactly one head (no branch conflicts)
-	$(MAKE) -C $(KF_DIR) db-check-heads
 	$(MAKE) -C $(RT_DIR) db-check-heads
 	$(MAKE) -C $(WD_DIR) db-check-heads
 
@@ -327,16 +312,13 @@ db-check-combined-postgres-down: ## stop and wipe the PostgreSQL container for c
 db-check-combined-sqlite: ## upgrade every Alembic tree against the same SQLite DB, check for drift, then downgrade
 	@echo "=== Combined SQLite migration check: upgrade ==="
 	@rm -f $(SQLITE_COMBINED_DB)
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory $(KF_DIR) alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory $(KF_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory $(KF_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic downgrade base
 	@rm -f $(SQLITE_COMBINED_DB)
 	@echo "=== Combined SQLite migration check passed ==="
@@ -344,16 +326,13 @@ db-check-combined-sqlite: ## upgrade every Alembic tree against the same SQLite 
 .PHONY: db-check-combined-postgres
 db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade every Alembic tree against the same DB, check for drift, then downgrade
 	@echo "=== Combined migration check: upgrade ==="
-	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory $(KF_DIR) alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
 	@echo "=== Combined migration check: drift check ==="
-	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory $(KF_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic check
 	@echo "=== Combined migration check: downgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
-	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory $(KF_DIR) alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic downgrade base
 	@echo "=== Combined migration check passed ==="
 	$(MAKE) db-check-combined-postgres-down

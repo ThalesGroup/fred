@@ -26,10 +26,8 @@ from contextlib import suppress
 
 from fred_core import log_setup
 from fred_core.diagnostics import install_gc_diagnostics
-from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
+from fred_core.kpi import emit_process_kpis
 from fred_core.logs.null_log_store import NullLogStore
-from fred_core.scheduler import SchedulerBackend
-from fred_core.sql import require_tables
 from prometheus_client import start_http_server
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -48,7 +46,7 @@ def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> l
         only the API process, so worker KPI settings are consistent across runtime entrypoints.
     How:
         When the configured interval is positive, create background tasks for
-        process KPIs and shared SQL pool KPIs and return them for shutdown cleanup.
+        process KPIs and return them for shutdown cleanup.
     """
     interval_s = float(configuration.observability.kpi.process_metrics_interval_sec)
     if interval_s <= 0:
@@ -56,17 +54,6 @@ def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> l
 
     kpi_writer = app_context.get_kpi_writer()
     tasks = [asyncio.create_task(emit_process_kpis(interval_s, kpi_writer))]
-    if not (configuration.manager_processing and configuration.manager_processing.enabled):
-        tasks.append(
-            asyncio.create_task(
-                emit_sql_pool_kpis(
-                    interval_s,
-                    kpi_writer,
-                    app_context.get_pg_async_engine(),
-                    pool_name="knowledge-flow-postgres",
-                )
-            )
-        )
     return tasks
 
 
@@ -98,28 +85,8 @@ async def main() -> None:
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
         return
-    scheduler_backend = app_context.get_scheduler_backend()
-    if scheduler_backend == SchedulerBackend.MEMORY:
-        logger.info("Scheduler backend is 'memory'; no Temporal worker is required.")
-        return
-    if scheduler_backend != SchedulerBackend.TEMPORAL:
-        raise ValueError(f"Scheduler backend '{scheduler_backend}' not supported; expected 'temporal'.")
-
-    manager_processing = bool(configuration.manager_processing and configuration.manager_processing.enabled)
-    if manager_processing:
-        # Initialize the corpus before ingestion; API replicas only validate it.
-        await asyncio.to_thread(app_context.get_manager_vector_store)
-    else:
-        from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
-
-        # Legacy activities own SQL metadata/tasks; manager activities use its API.
-        await require_tables(
-            app_context.get_pg_async_engine(),
-            sorted(REQUIRED_TABLES),
-            component="knowledge-flow-worker",
-            migrate_command="make db-upgrade (apps/knowledge-flow-backend)",
-            version_table="alembic_version_knowledge_flow",
-        )
+    # Initialize the corpus before ingestion; API replicas only validate it.
+    await asyncio.to_thread(app_context.get_manager_vector_store)
 
     # Unlike the API entrypoints, the Temporal worker has no FastAPI app to pass
     # to `Instrumentator().instrument(app)`. We still expose Prometheus metrics
@@ -141,8 +108,6 @@ async def main() -> None:
             roles=configuration.scheduler.worker_roles,
             max_concurrent_workflow_tasks=configuration.scheduler.temporal.ingestion_max_concurrent_workflow_tasks,
             max_concurrent_activities=configuration.scheduler.temporal.ingestion_max_concurrent_activities,
-            pdf_render_ttl_days=configuration.app.pdf_render_ttl_days,
-            manager_processing=manager_processing,
         )
     finally:
         for task in kpi_tasks:

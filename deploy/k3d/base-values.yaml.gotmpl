@@ -1,6 +1,5 @@
-{{- /* Retain shared instance settings without the worker's legacy storage backends.
-Helm deep-merges maps: changing type alone would keep incompatible MinIO fields.
-The control-plane configuration is owned by values.yaml.gotmpl, not the factory. */ -}}
+{{- /* Import the factory's instance settings for this checkout's application contracts.
+The control plane configuration is owned by values.yaml.gotmpl. */ -}}
 {{- $base := readFile (printf "%s/k3d-apps/fred/values.yaml" (requiredEnv "K3D_FACTORY_ROOT")) | fromYaml -}}
 {{- $_ := unset (index $base.applications "fred-agents") "models_catalog" -}}
 {{- /* Knowledge Flow API reads the corpus with its own scoped OpenSearch identity. */ -}}
@@ -14,14 +13,24 @@ The control-plane configuration is owned by values.yaml.gotmpl, not the factory.
   (dict "name" "KF_ARTIFACT_ACCESS_KEY" "value" "fred-document-reader")
   (dict "name" "KF_ARTIFACT_SECRET_KEY" "valueFrom" (dict "secretKeyRef" (dict "name" "fred-ingestion" "key" "kf-api-s3-secret")))
 )) -}}
-{{- $worker := index $base.applications "knowledge-flow-worker" -}}
-{{- $_ := unset $worker.configuration "content_storage" -}}
-{{- $_ := unset $worker.configuration "filesystem" -}}
-{{- /* Weaver retired Knowledge Flow's OpenSearch ops tools; the factory still enables them. */ -}}
+{{- /* Only the instance choices consumed by Weaver enter the KF configuration.
+The factory also serves released charts with a different configuration contract. */ -}}
 {{- range $name := list "knowledge-flow-backend" "knowledge-flow-worker" -}}
-  {{- $_ := unset (index $base.applications $name).configuration.mcp "opensearch_ops_enabled" -}}
+  {{- $app := index $base.applications $name -}}
+  {{- $_ := unset $app "migration" -}}
+  {{- $env := list -}}
+  {{- range $app.extraEnvVars -}}
+    {{- if ne .name "MINIO_SECRET_KEY" -}}{{- $env = append $env . -}}{{- end -}}
+  {{- end -}}
+  {{- $_ := set $app "extraEnvVars" $env -}}
+  {{- $configuration := pick $app.configuration "security" "embedding_model" "chat_model" "vision_model" "crossencoder_model" "storage" "observability" "scheduler" -}}
+  {{- $storage := pick $configuration.storage "postgres" "opensearch" "vector_store" "log_store" "tabular_store" -}}
+  {{- /* Helm must drop the chart's pgvector collection when merging OpenSearch. */ -}}
+  {{- $_ := set $storage.vector_store "collection_name" nil -}}
+  {{- $_ := set $configuration "storage" $storage -}}
+  {{- $_ := set $app "configuration" $configuration -}}
 {{- end -}}
 {{- range $name := list "control-plane-backend" "control-plane-worker" -}}
   {{- $_ := unset (index $base.applications $name) "configuration" -}}
 {{- end -}}
-{{ $base | toYaml }}
+{{ pick $base "applications" | toYaml }}

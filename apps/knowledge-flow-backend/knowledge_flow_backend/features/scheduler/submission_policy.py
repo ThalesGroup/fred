@@ -12,7 +12,6 @@ def submission_policy(processing: ProcessingConfig, base_task_queue: str, profil
         # only the extraction activity leaves the common queue.
         "extraction_task_queue": extraction_task_queue(base_task_queue, normalized_profile),
         "push_metadata_activity_timeout_seconds": parse_duration_seconds(profile_config.push_metadata_activity_timeout, field_name="push_metadata_activity_timeout"),
-        "pull_metadata_activity_timeout_seconds": parse_duration_seconds(profile_config.pull_metadata_activity_timeout, field_name="pull_metadata_activity_timeout"),
         "output_activity_timeout_seconds": parse_duration_seconds(profile_config.output_activity_timeout, field_name="output_activity_timeout"),
         "input_activity_timeout_seconds": profile_config.input_activity_timeout_seconds,
         "heartbeat_timeout_seconds": profile_config.activity_heartbeat_timeout_seconds,

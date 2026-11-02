@@ -214,7 +214,7 @@ typed permission evaluator; that implication is not a stored grant of every role
 | --- | --- |
 | `import-provisioning ... --token-file ...` | Authenticated bearer, CGU, platform admin and compatible directory; same provisioning engine as HTTP. |
 | `serve` | Verifies the SQL schema, then supervises HTTP and background tasks, including Temporal connections. |
-| `migrate` | Applies embedded SQLx migrations using database credentials only. |
+| `initialize-schema` | Creates the complete schema using database credentials only; repeatable on a matching schema, refuses incompatible history. |
 | `generate-openapi` | Offline schema generation, no service credentials needed. |
 | `--help` / `-h` | Local command help. |
 

@@ -597,7 +597,6 @@ async fn initialization_preserves_administered_and_deleted_policies() {
         .unwrap();
 
     // The seed's chat/default/reasoning choices cannot replace the existing 'extra' decision.
-    platform.organization_models[0] = declaration("Administered", &["a"]);
     let calls = provider.response.lock().await.2;
     initialize(&e.pool, &platform, true).await.unwrap();
     assert_eq!(calls, provider.response.lock().await.2);

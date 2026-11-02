@@ -20,8 +20,6 @@ app:
   log_format: text
   reload: false
   reload_dir: "."
-  pdf_render_ttl_days: 30
-
 observability:
   kpi:
     log:
@@ -240,7 +238,7 @@ security:
 # Keep ingestion synchronous for easier test scripting and deterministic logs.
 scheduler:
   enabled: false
-  backend: "memory"
+  backend: "temporal"
   temporal:
     host: "localhost:7233"
     namespace: "default"
@@ -251,16 +249,6 @@ scheduler:
     ingestion_max_concurrent_workflow_tasks: 3
     ingestion_max_concurrent_activities: 3
 
-content_storage:
-  type: "local"
-  root_path: "/app/.fred-test/content-storage"
-
-document_sources:
-  fred:
-    type: push
-    description: "Documents manually uploaded by users"
-
-# Local-safe defaults to avoid requiring OPENAI_API_KEY for startup.
 chat_model:
   provider: ollama
   name: qwen2.5:3b-instruct
@@ -296,12 +284,6 @@ storage:
     secure: true
     verify_certs: false
     username: admin
-  resource_store:
-    type: "postgres"
-  tag_store:
-    type: "postgres"
-  metadata_store:
-    type: "postgres"
   tabular_store:
     artifacts_prefix: "tabular/datasets"
     format: "parquet"
@@ -322,27 +304,7 @@ storage:
       duckdb_memory_limit: "256MB"
       max_selected_datasets: 50
   vector_store:
-    type: chroma
+    type: pgvector
+    collection_name: document_vectors
 
-# integrations:
-#   prometheus:
-#     base_url: http://prometheus:9090
-#     verify_ssl: false
-#     timeout_seconds: 15.0
-#     username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
 
-mcp:
-  reports_enabled: true
-  tabular_enabled: true
-  text_enabled: true
-  templates_enabled: true
-  resources_enabled: true
-  prometheus_ops_enabled: false
-  filesystem_read_default_limit: 100
-  filesystem_read_max_limit: 500
-  filesystem_read_default_max_chars: 20000
-  filesystem_read_absolute_max_chars: 50000
-
-filesystem:
-  type: local
-  root: "/app/.fred-test/filesystem"

@@ -27,7 +27,7 @@ Knowledge Flow provides two primary services:
    search (e.g., RAG pipelines).
 
 2. **Structured Data Ingestion**  
-   Processes CSV files into dataset-scoped Parquet artifacts stored in the shared `content_storage` object area.
+   Processes CSV files into dataset-scoped Parquet artifacts stored in the generation artifact store.
    The primary ingestion path inspects delimiter and encoding once, converts CSV to Parquet directly with DuckDB,
    then derives row counts and column schema from the generated Parquet artifact instead of materializing a full
    pandas DataFrame. These datasets are then exposed through read-only REST and MCP endpoints and queried on demand
@@ -37,7 +37,7 @@ Knowledge Flow supports one tabular data runtime that can be queried with SQL:
 
 | Runtime                 | Main config                                 | Backing storage                                          | Status      |
 | ----------------------- | ------------------------------------------- | -------------------------------------------------------- | ----------- |
-| Dataset-centric runtime | `content_storage` + `storage.tabular_store` | One Parquet artifact per document + DuckDB at query time | Recommended |
+| Dataset-centric runtime | `manager_processing` + `storage.tabular_store` | One Parquet artifact per document + DuckDB at query time | Recommended |
 
 Tabular access denials return HTTP 403 and direct callers to `list_tabular_documents`
 for valid `document_uid` values: filenames and SQL aliases are not document UIDs.
@@ -68,65 +68,17 @@ Key point: Knowledge Flow uses the same `ENV_FILE` + `CONFIG_FILE` contract as A
 
 ## Quick Start
 
-The default configuration is developer-friendly and only uses local stores. See the
-[configuration page](./config/README.md) when you want another setup.
-
-### Optional Chroma storage
-
-Chroma remains available as an embedded vector store that persists data on the
-local filesystem, with no separate database service. From
-`apps/knowledge-flow-backend`, install it explicitly with:
-
-```bash
-uv sync --locked --extra chroma
-```
-
-The default development dependency group also includes Chroma so `uv sync`,
-`make dev`, `make run` and `make test` keep supporting the local configuration.
-Keep the existing `storage.vector_store.type: chroma`, `local_path` and
-`collection_name`: existing data needs no migration or reindexing.
-
-For an installation without Chroma or development tools, use
-`uv sync --locked --no-default-groups` and configure another supported vector
-backend (for example OpenSearch or pgvector). Start it with `uv run --no-sync`
-or its installed executable; `make run` deliberately installs development
-dependencies. Selecting Chroma without installing it fails with instructions
-to enable the extra; there is no automatic fallback to another store.
-
-Production API and worker images omit Chroma by default. To use the same image
-with local Chroma storage, build an explicit variant from the repository root:
-
-```bash
-docker build -f apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod \
-  --build-arg INSTALL_CHROMA=true -t knowledge-flow-with-chroma .
-```
-
-Use this variant for both the API and any workers configured to use Chroma,
-including local container runs that mount the default configuration. Preserve
-the existing persistent storage mounts.
-
-Chroma stays in `uv.lock` for reproducible optional installations. Lockfile and
-local-environment scanners can therefore still report its vulnerabilities.
-Only scans of the default final image should lose Chroma-specific findings;
-the opt-in image retains them. Shared dependencies needed by other features
-remain installed.
+Knowledge Flow uses the Weaver processing pipeline coordinated by Control Plane.
+See the [configuration guide](./config/README.md) for API and worker settings.
 
 ### Storage credentials
 
-- **Core storage (`storage.postgres`)**: used by tags, metadata, resources, pgvector, etc.
-  - User/host/db come from `storage.postgres` in `configuration*.yaml`.
-  - Password comes from `FRED_POSTGRES_PASSWORD` (or an explicit `password:` in the YAML).
-- **Tabular artifacts (`storage.tabular_store` + `content_storage`)**: CSV ingestion writes Parquet artifacts into the shared content store object area.
-  - Runtime query limits come from `storage.tabular_store` in `configuration*.yaml`.
-  - The CSV-to-Parquet path is DuckDB-native and avoids loading the full dataset into a pandas DataFrame.
-  - Tabular runtime URLs now use `storage.tabular_store.query.internal_presigned_ttl_seconds` for backend-internal reads.
-  - Object-storage credentials come from `content_storage` when using MinIO/S3-compatible backends.
-  - This is the recommended mode for new deployments.
-  - If `storage.tabular_store` is omitted, this runtime is enabled with the built-in defaults.
-
-Tip: for S3-compatible deployments, keep `content_storage.endpoint` on the internal MinIO/S3 address used by backend
-pods and workers, reserve `public_endpoint` for browser-facing links, and use `storage.tabular_store` only for
-query/runtime bounds.
+- `storage.postgres` serves publication/access reads and pgvector when selected.
+  Its password comes from `FRED_POSTGRES_PASSWORD`.
+- Vector projections support only OpenSearch and pgvector.
+- `manager_processing` configures worker authentication and generation artifact writes.
+- `published_artifacts` configures API reads of published S3 artifacts.
+- `storage.tabular_store` configures Parquet generation and bounded DuckDB queries.
 
 ```bash
 git clone https://github.com/ThalesGroup/knowledge-flow.git
@@ -191,9 +143,9 @@ Use the [fred-deployment-factory](https://github.com/ThalesGroup/fred-deployment
 - Keycloak (authentication)
 - Storage options:
   - PostgreSQL + `pgvector` (no OpenSearch dependency), or
-  - OpenSearch (vector + metadata index) if you prefer that stack
-- MinIO (content storage) when you need object storage
-- Fred + Knowledge Flow containers
+  - OpenSearch for the vector projection, with PostgreSQL for publication/access reads
+- An S3-compatible bucket owned by the control plane for originals and generation artifacts
+- Control plane, Fred runtime and Knowledge Flow API/worker containers
 
 Pick the storage flavour that matches your platform constraints; both are supported end-to-end.
 

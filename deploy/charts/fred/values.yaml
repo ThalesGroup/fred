@@ -315,32 +315,6 @@ x-kf-scheduler: &kf-scheduler
     ingestion_max_concurrent_activities: 3
 
 
-x-kf-content-storage: &kf-content-storage
-  type: local
-  root_path: /home/fred-user/.fred/knowledge-flow/content-storage
-  # type: minio
-  # endpoint: http://minio:9000
-  # access_key: admin
-  # bucket_name: app-bucket
-  # secure: false
-  # public_endpoint: https://minio.example.com  # Public URL for browser-facing presigned URLs
-  # public_secure: true  # Optional, inferred from public_endpoint scheme if omitted
-  # --- Native Google Cloud Storage (ADC / Workload Identity, no JSON key) ---
-  # See deploy/charts/fred/values-gcp.yaml
-  # type: gcs
-  # bucket_name: <GCP_PROJECT_ID>-content   # suffixed at runtime → -documents / -objects / -files (all must exist)
-  # project_id: ""                 # optional; inferred from ADC when empty
-
-x-kf-document-sources: &kf-document-sources
-  fred:
-    type: push
-    description: "Documents manually uploaded by users"
-  local:
-    type: pull
-    provider: local_path
-    base_path: ~/Documents/Fred
-    description: "Personal local documents available for pull-mode ingestion"
-
 x-kf-embedding-model: &kf-embedding-model
   provider: openai           # CUSTOMIZE: openai | azure | ollama
   name: text-embedding-3-large
@@ -378,19 +352,11 @@ x-kf-storage: &kf-storage
     secure: true
     verify_certs: false
     username: admin
-  resource_store:
-    type: "duckdb"
-    duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
   log_store:
     type: "in_memory"
-  tag_store:
-    type: "duckdb"
-    duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
-  metadata_store:
-    type: "duckdb"
-    duckdb_path: "/home/fred-user/.fred/knowledge-flow/metadata.duckdb"
   vector_store:
-    type: in_memory
+    type: pgvector
+    collection_name: document_vectors
   tabular_store:
     artifacts_prefix: "tabular/datasets"
     format: "parquet"
@@ -403,30 +369,6 @@ x-kf-storage: &kf-storage
       default_max_rows: 200
       max_rows: 1000
 
-x-kf-mcp: &kf-mcp
-  reports_enabled: true
-  tabular_enabled: true
-  text_enabled: true
-  templates_enabled: true
-  resources_enabled: true
-  prometheus_ops_enabled: false
-
-x-kf-filesystem: &kf-filesystem
-  type: local
-  # type: minio
-  # endpoint: http://localhost:9000
-  # access_key: admin
-  # bucket_name: filesystem
-  # secure: false
-  # --- Native Google Cloud Storage (ADC / Workload Identity, no JSON key) ---
-  # See deploy/charts/fred/values-gcp.yaml
-  # type: gcs
-  # bucket_name: <GCP_PROJECT_ID>-fs
-  # prefix: ""                     # optional; lets several logical roots share one bucket
-  # project_id: ""                 # optional; inferred from ADC when empty
-
-# ════════════════════════════════════════════════════════════════════
-# ── 2. Global settings ──────────────────────────────────────────────
 global:
   kubeconfig: ""
   persistence:
@@ -1070,13 +1012,6 @@ applications:
       enabled: false
     job:
       enabled: false
-    migration:
-      # OFF by default - a platform overlay either turns this Job on in its own
-      # values or runs the upgrade imperatively. knowledge-flow creates no table
-      # at startup, so migrate before the pods roll either way.
-      enabled: false
-      scaleDown: true
-      backoffLimit: 3
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -1215,8 +1150,6 @@ applications:
         log_format: "json"
         reload: false
         reload_dir: "."
-        pdf_render_ttl_days: 30
-
       observability:
         kpi:
           prometheus:
@@ -1234,30 +1167,15 @@ applications:
 
       security:        *kf-security
       scheduler:       *kf-scheduler
-      content_storage: *kf-content-storage
-      document_sources: *kf-document-sources
       embedding_model: *kf-embedding-model
       chat_model:      *kf-chat-model
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
-      integrations:
-        prometheus:
-          # base_url: http://prometheus:9090
-          # verify_ssl: false
-          # timeout_seconds: 15.0
-          # username: admin
-      mcp:             *kf-mcp
-      filesystem:      *kf-filesystem
-
-    # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
-      MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
-      PROMETHEUS_PASSWORD: ""
-      PROMETHEUS_BEARER_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
 
   # ── 3.4 Knowledge Flow Workers (Temporal) ──────────────────────────
@@ -1462,8 +1380,6 @@ applications:
         reload: false
         reload_dir: "."
         # Same key as the API pod: the worker is what runs the nightly sweep.
-        pdf_render_ttl_days: 30
-
       observability:
         kpi:
           prometheus:
@@ -1483,30 +1399,15 @@ applications:
       scheduler:
         <<: *kf-scheduler
         worker_roles: ["common", "extraction-fast", "extraction-medium", "extraction-rich"]
-      content_storage: *kf-content-storage
-      document_sources: *kf-document-sources
       embedding_model: *kf-embedding-model
       chat_model:      *kf-chat-model
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
-      integrations:
-        prometheus:
-          # base_url: http://prometheus:9090
-          # verify_ssl: false
-          # timeout_seconds: 15.0
-          # username: admin
-      mcp:             *kf-mcp
-      filesystem:      *kf-filesystem
-
-    # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
-      MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
-      PROMETHEUS_PASSWORD: ""
-      PROMETHEUS_BEARER_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
 
   # ── 3.4b Knowledge Flow Extraction Workers (Temporal) ──────────────

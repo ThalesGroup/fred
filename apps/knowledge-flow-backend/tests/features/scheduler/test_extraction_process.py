@@ -208,7 +208,7 @@ async def _read_pid(output_dir: pathlib.Path, name: str = "child.pid", timeout: 
 
 
 def _request(output_dir: pathlib.Path) -> ExtractionRequest:
-    return ExtractionRequest(input_path="/tmp/in", output_dir=str(output_dir), metadata_json="{}", profile="rich", config_file=None)
+    return ExtractionRequest(input_path="/tmp/in", output_dir=str(output_dir), metadata_json="{}", manager_job_json="{}", profile="rich", config_file=None)
 
 
 async def _supervise(target, output_dir: pathlib.Path, *, budget_seconds: float = 30.0, heartbeat=lambda: None, start_method: str = _TEST_START_METHOD):

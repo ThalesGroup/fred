@@ -55,12 +55,12 @@ drive the library against real Postgres.
 Bearer verification and read-only platform-role evaluation are implemented in
 [`libs/fred-rust-sdk`](../../libs/fred-rust-sdk/README.md), a local dependency in
 the root Cargo workspace. Control Plane re-exports the shared authentication and
-role types; it retains schema migrations, grant mutations and scoped business
+role types; it retains schema initialization, grant mutations and scoped business
 authorization. The extraction does not change its HTTP security contract.
 
 ```mermaid
 flowchart TB
-    main["main.rs<br/>serve, migrate, import-provisioning"]
+    main["main.rs<br/>serve, initialize-schema<br/>import-provisioning"]
     config["config.rs<br/>configuration.yaml + secrets"]
     logging["logging.rs<br/>stdout format, request ids"]
     api["api.rs<br/>routes, handlers"]

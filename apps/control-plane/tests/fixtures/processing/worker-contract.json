@@ -32,18 +32,6 @@
             "$ref": "#/$defs/IngestionProcessingProfile",
             "default": "medium"
           },
-          "task_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Task Id"
-          },
           "document_uid": {
             "anyOf": [
               {
@@ -55,54 +43,6 @@
             ],
             "default": null,
             "title": "Document Uid"
-          },
-          "external_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "External Path"
-          },
-          "size": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Size"
-          },
-          "modified_time": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Modified Time"
-          },
-          "hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Hash"
           },
           "processed_by": {
             "$ref": "#/$defs/KeycloakUser"
@@ -134,11 +74,6 @@
           "push_metadata_activity_timeout_seconds": {
             "default": 300,
             "title": "Push Metadata Activity Timeout Seconds",
-            "type": "integer"
-          },
-          "pull_metadata_activity_timeout_seconds": {
-            "default": 1800,
-            "title": "Pull Metadata Activity Timeout Seconds",
             "type": "integer"
           },
           "output_activity_timeout_seconds": {
@@ -426,9 +361,8 @@
       "process_images": false,
       "generate_summary": false,
       "input_activity_timeout": "90m",
-      "push_metadata_activity_timeout": "5m",
-      "pull_metadata_activity_timeout": "30m",
-      "output_activity_timeout": "1h",
+      "push_metadata_activity_timeout": "300s",
+      "output_activity_timeout": "3600s",
       "activity_heartbeat_timeout": "5m",
       "pdf": {
         "extractor": "docling",
@@ -558,9 +492,8 @@
       "process_images": false,
       "generate_summary": false,
       "input_activity_timeout": "2h",
-      "push_metadata_activity_timeout": "5m",
-      "pull_metadata_activity_timeout": "30m",
-      "output_activity_timeout": "1h",
+      "push_metadata_activity_timeout": "300s",
+      "output_activity_timeout": "3600s",
       "activity_heartbeat_timeout": "5m",
       "pdf": {
         "extractor": "docling",
@@ -690,9 +623,8 @@
       "process_images": true,
       "generate_summary": false,
       "input_activity_timeout": "2h",
-      "push_metadata_activity_timeout": "5m",
-      "pull_metadata_activity_timeout": "30m",
-      "output_activity_timeout": "1h",
+      "push_metadata_activity_timeout": "300s",
+      "output_activity_timeout": "3600s",
       "activity_heartbeat_timeout": "5m",
       "pdf": {
         "extractor": "docling",
@@ -822,7 +754,6 @@
     "fast": {
       "extraction_task_queue": "ingestion-fast",
       "push_metadata_activity_timeout_seconds": 300,
-      "pull_metadata_activity_timeout_seconds": 1800,
       "output_activity_timeout_seconds": 3600,
       "input_activity_timeout_seconds": 5400,
       "heartbeat_timeout_seconds": 300,
@@ -835,7 +766,6 @@
     "medium": {
       "extraction_task_queue": "ingestion-medium",
       "push_metadata_activity_timeout_seconds": 300,
-      "pull_metadata_activity_timeout_seconds": 1800,
       "output_activity_timeout_seconds": 3600,
       "input_activity_timeout_seconds": 7200,
       "heartbeat_timeout_seconds": 300,
@@ -848,7 +778,6 @@
     "rich": {
       "extraction_task_queue": "ingestion-rich",
       "push_metadata_activity_timeout_seconds": 300,
-      "pull_metadata_activity_timeout_seconds": 1800,
       "output_activity_timeout_seconds": 3600,
       "input_activity_timeout_seconds": 7200,
       "heartbeat_timeout_seconds": 300,

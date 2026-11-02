@@ -14,19 +14,10 @@
 
 import pytest
 from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
-from fred_core.common import DuckdbStoreConfig, ModelConfiguration, PostgresStoreConfig
+from fred_core.common import ModelConfiguration, PostgresStoreConfig
 from pydantic import AnyHttpUrl, AnyUrl
 
-from knowledge_flow_backend.common.structures import (
-    AppConfig,
-    Configuration,
-    InMemoryVectorStorage,
-    LocalContentStorageConfig,
-    LocalFilesystemConfig,
-    SchedulerConfig,
-    StorageConfig,
-    TemporalSchedulerConfig,
-)
+from knowledge_flow_backend.common.structures import AppConfig, Configuration, PgVectorStorageConfig, SchedulerConfig, StorageConfig, TemporalSchedulerConfig
 
 
 def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:
@@ -70,10 +61,8 @@ def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:
             ),
         ),
         storage=storage,
-        content_storage=LocalContentStorageConfig(type="local", root_path="/tmp/test-content"),
         chat_model=ModelConfiguration(provider="openai", name="gpt-4o", settings={}),
         embedding_model=ModelConfiguration(provider="openai", name="text-embedding-3-large", settings={}),
-        filesystem=LocalFilesystemConfig(type="local", root="/tmp/test-fs"),
     )
 
 
@@ -92,11 +81,7 @@ def _build_minimal_storage(tmp_path) -> StorageConfig:
 
     return StorageConfig(
         postgres=PostgresStoreConfig(host="localhost", database="fred"),
-        resource_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "resource.duckdb")),
-        tag_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "tag.duckdb")),
-        kpi_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "kpi.duckdb")),
-        metadata_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "metadata.duckdb")),
-        vector_store=InMemoryVectorStorage(type="in_memory"),
+        vector_store=PgVectorStorageConfig(type="pgvector"),
     )
 
 

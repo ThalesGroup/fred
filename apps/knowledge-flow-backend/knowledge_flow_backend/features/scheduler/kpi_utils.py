@@ -129,21 +129,16 @@ def _temporal_activity_file_type(*, metadata: Any | None, file: Any | None) -> s
     if isinstance(display_name, str) and "." in display_name:
         return display_name.rsplit(".", 1)[-1].lower()
 
-    external_path = getattr(file, "external_path", None)
-    if isinstance(external_path, str) and "." in external_path:
-        return external_path.rsplit(".", 1)[-1].lower()
-
     return "other"
 
 
 def _temporal_activity_source_type(*, metadata: Any | None, file: Any | None) -> str:
     """
     Why:
-    Distinguish push and pull ingestion flows in metrics without relying on
-    high-cardinality identifiers.
+    Label worker processing metrics without high-cardinality identifiers.
 
     How:
-    Prefer normalized metadata source_type, then infer from FileToProcess shape.
+    Prefer normalized metadata source_type, then identify a processing file.
     """
     if metadata is not None:
         source_type = getattr(metadata, "source_type", None)
@@ -152,8 +147,7 @@ def _temporal_activity_source_type(*, metadata: Any | None, file: Any | None) ->
             return str(value)
 
     if file is not None:
-        external_path = getattr(file, "external_path", None)
-        return "pull" if external_path else "push"
+        return "push"
 
     return "unknown"
 

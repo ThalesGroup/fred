@@ -31,12 +31,8 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.processing_metrics import processing_metrics_scope
 from knowledge_flow_backend.common.structures import ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
-from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
-    PdfMarkdownProcessor,
-)
-from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.image_transcription import (
-    ImageTranscription,
-)
+from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.image_transcription import ImageTranscription
 from knowledge_flow_backend.features.scheduler.activity_utils import to_thread_with_heartbeat
 from knowledge_flow_backend.features.scheduler.kpi_utils import processor_activity_timer
 
@@ -448,13 +444,7 @@ def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_fi
 
     assert processor.check_file_validity(sample_pdf_file)
 
-    metadata = processor.process_metadata(sample_pdf_file, [], "uploads")
-
-    assert metadata.document_name == "sample.pdf"
-    # assert metadata.num_pages == 2
-    assert metadata.document_uid
-
-    result = processor.convert_file_to_markdown(sample_pdf_file, output_dir, metadata.document_uid)
+    result = processor.convert_file_to_markdown(sample_pdf_file, output_dir, "document-uid")
 
     md_file = Path(result["md_file"])
     assert md_file.exists()

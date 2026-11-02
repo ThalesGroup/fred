@@ -211,7 +211,6 @@ applications:
   knowledge-flow-backend:
     # The capability backend: agent pods call it for a person, in an admitted turn.
     # Control Plane authorizes the corpus; local SQL checks its publication state.
-    migration: {enabled: false}
     configuration:
       control_plane_url: http://control-plane-backend:8222/control-plane/v1
       published_artifacts:
@@ -261,15 +260,9 @@ applications:
       requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 5Gi}
       limits: {cpu: "4", memory: 6Gi, ephemeral-storage: 8Gi}
     configuration:
-      app:
-        pdf_render_ttl_days: 0
       observability:
         kpi:
           opensearch: {enabled: true, index: kpi-index}
-      # Required by the shared configuration model, unused by manager activities.
-      # Remote originals and outputs use manager_processing below.
-      content_storage: {type: local, root_path: /tmp/manager-processing}
-      filesystem: {type: local, root: /tmp/manager-processing}
       storage:
         opensearch:
           username: fred-kf-ingestion
@@ -282,7 +275,6 @@ applications:
           task_queue: manager-ingestion
           ingestion_max_concurrent_activities: 1
       manager_processing:
-        enabled: true
         url: http://control-plane-backend:8222/control-plane/v1
         issuer: {{ requiredEnv "K3D_REALM_URL" | quote }}
         audience: control-plane
@@ -293,6 +285,6 @@ applications:
         temporary_bytes: 1073741824
         vector_store:
           type: opensearch
-          # choice: Swift mapping; isolated until readers enforce manager publication/ReBAC.
+          # Same corpus as the API; SQL publication and scope restrict reads.
           index: document-vectors
           bulk_size: 1000

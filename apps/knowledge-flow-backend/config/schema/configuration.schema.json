@@ -64,39 +64,6 @@
           ],
           "default": null,
           "title": "Gcu Version"
-        },
-        "default_team_max_resources_storage_size": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Default storage limit in bytes for a team when not explicitly set.",
-          "title": "Default Team Max Resources Storage Size"
-        },
-        "personal_max_resources_storage_size": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Maximum resources storage size in bytes for a personal space",
-          "title": "Personal Max Resources Storage Size"
-        },
-        "pdf_render_ttl_days": {
-          "default": 30,
-          "description": "Days a cached Word/PowerPoint PDF render is kept before the nightly sweep deletes it. 0 disables the sweep.",
-          "minimum": 0,
-          "title": "Pdf Render Ttl Days",
-          "type": "integer"
         }
       },
       "title": "AppConfig",
@@ -142,128 +109,6 @@
       ],
       "title": "ArtifactStorageConfig",
       "type": "object"
-    },
-    "ChromaVectorStorageConfig": {
-      "description": "Local, embedded Chroma. No server needed.\n- persist_path: folder where Chroma (DuckDB/Parquet) stores data\n- collection_name: logical collection for your chunks\n- distance: ANN space; 'cosine' matches our UI-friendly similarity",
-      "properties": {
-        "type": {
-          "const": "chroma",
-          "title": "Type",
-          "type": "string"
-        },
-        "local_path": {
-          "default": "~/.fred/knowledge-flow/chromadb-vector-store",
-          "description": "Local vector storage path",
-          "title": "Local Path",
-          "type": "string"
-        },
-        "collection_name": {
-          "default": "fred_chunks",
-          "description": "Chroma collection name",
-          "title": "Collection Name",
-          "type": "string"
-        },
-        "distance": {
-          "default": "cosine",
-          "description": "Vector space (affects HNSW metric)",
-          "enum": [
-            "cosine",
-            "l2",
-            "ip"
-          ],
-          "title": "Distance",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "ChromaVectorStorageConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "ClickHouseStoreConfig": {
-      "properties": {
-        "host": {
-          "default": "localhost",
-          "description": "ClickHouse host",
-          "title": "Host",
-          "type": "string"
-        },
-        "port": {
-          "default": 8123,
-          "description": "ClickHouse HTTP port",
-          "title": "Port",
-          "type": "integer"
-        },
-        "database": {
-          "default": "default",
-          "description": "ClickHouse database",
-          "title": "Database",
-          "type": "string"
-        },
-        "username": {
-          "default": "default",
-          "description": "ClickHouse username",
-          "title": "Username",
-          "type": "string"
-        },
-        "password": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "ClickHouse password (from CLICKHOUSE_PASSWORD env)",
-          "title": "Password"
-        },
-        "secure": {
-          "default": false,
-          "description": "Use HTTPS for ClickHouse client",
-          "title": "Secure",
-          "type": "boolean"
-        },
-        "verify": {
-          "default": true,
-          "description": "Verify TLS certificates for ClickHouse",
-          "title": "Verify",
-          "type": "boolean"
-        }
-      },
-      "title": "ClickHouseStoreConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "ClickHouseVectorStorageConfig": {
-      "description": "ClickHouse backend.\n- Uses shared `storage.clickhouse` connection settings.\n- Stores vectors in the configured table.",
-      "properties": {
-        "type": {
-          "const": "clickhouse",
-          "title": "Type",
-          "type": "string"
-        },
-        "table": {
-          "default": "fred_vectors",
-          "description": "ClickHouse table name for chunks",
-          "title": "Table",
-          "type": "string"
-        },
-        "bulk_size": {
-          "default": 1000,
-          "description": "Number of rows per insert batch",
-          "title": "Bulk Size",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "ClickHouseVectorStorageConfig",
-      "type": "object",
-      "additionalProperties": false
     },
     "DelegationConfig": {
       "additionalProperties": false,
@@ -334,387 +179,6 @@
       "title": "DelegationConfig",
       "type": "object"
     },
-    "DocumentGuardrailConfig": {
-      "properties": {
-        "enabled": {
-          "default": false,
-          "description": "Enable ingestion-time document marking guardrails.",
-          "title": "Enabled",
-          "type": "boolean"
-        },
-        "source_tags": {
-          "description": "Optional source tags this guardrail applies to. Empty means all sources.",
-          "items": {
-            "type": "string"
-          },
-          "title": "Source Tags",
-          "type": "array"
-        },
-        "allowed_labels": {
-          "description": "Optional allow-list of labels accepted by the guardrail. Empty means detection-only.",
-          "items": {
-            "type": "string"
-          },
-          "title": "Allowed Labels",
-          "type": "array"
-        },
-        "on_no_label": {
-          "default": "allow",
-          "description": "Behavior when no explicit document marking is detected.",
-          "enum": [
-            "allow",
-            "warn",
-            "reject"
-          ],
-          "title": "On No Label",
-          "type": "string"
-        },
-        "patterns": {
-          "description": "Regex patterns used to recognize explicit document markings.",
-          "items": {
-            "$ref": "#/$defs/DocumentMarkingPatternConfig"
-          },
-          "title": "Patterns",
-          "type": "array"
-        }
-      },
-      "title": "DocumentGuardrailConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "DocumentMarkingPatternConfig": {
-      "properties": {
-        "label": {
-          "description": "Normalized label returned when the regex matches.",
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "pattern": {
-          "description": "Regex used to detect the marking in extracted guardrail text.",
-          "minLength": 1,
-          "title": "Pattern",
-          "type": "string"
-        }
-      },
-      "required": [
-        "label",
-        "pattern"
-      ],
-      "title": "DocumentMarkingPatternConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "DuckdbStoreConfig": {
-      "properties": {
-        "type": {
-          "const": "duckdb",
-          "title": "Type",
-          "type": "string"
-        },
-        "duckdb_path": {
-          "description": "Path to the DuckDB database file.",
-          "title": "Duckdb Path",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type",
-        "duckdb_path"
-      ],
-      "title": "DuckdbStoreConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "FileSystemPullSource": {
-      "properties": {
-        "type": {
-          "const": "pull",
-          "default": "pull",
-          "title": "Type",
-          "type": "string"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Human-readable description of this source",
-          "title": "Description"
-        },
-        "provider": {
-          "const": "local_path",
-          "title": "Provider",
-          "type": "string"
-        },
-        "base_path": {
-          "title": "Base Path",
-          "type": "string"
-        }
-      },
-      "required": [
-        "provider",
-        "base_path"
-      ],
-      "title": "FileSystemPullSource",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "GcsFilesystemConfig": {
-      "description": "Google Cloud Storage virtual filesystem. Authentication uses Application\nDefault Credentials / Workload Identity (no JSON key required). The bucket\nmust already exist; an optional ``prefix`` lets several logical roots share it.",
-      "properties": {
-        "type": {
-          "const": "gcs",
-          "default": "gcs",
-          "title": "Type",
-          "type": "string"
-        },
-        "bucket_name": {
-          "default": "filesystem",
-          "description": "GCS bucket name.",
-          "title": "Bucket Name",
-          "type": "string"
-        },
-        "prefix": {
-          "default": "",
-          "description": "Optional key prefix within the bucket (default '').",
-          "title": "Prefix",
-          "type": "string"
-        },
-        "project_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "GCP project id; inferred from ADC when empty.",
-          "title": "Project Id"
-        }
-      },
-      "title": "GcsFilesystemConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "GcsStorageConfig": {
-      "description": "Google Cloud Storage content store. Authentication uses Application Default\nCredentials / Workload Identity (no JSON key required).\n\nBucket-splitting mirrors MinIO: the configured ``bucket_name`` is suffixed\nwith ``-documents`` and ``-objects`` (content store) and ``-files`` (namespace\nfile store). All buckets must already exist.",
-      "properties": {
-        "type": {
-          "const": "gcs",
-          "title": "Type",
-          "type": "string"
-        },
-        "bucket_name": {
-          "default": "app-bucket",
-          "description": "Base GCS bucket name (suffixed with -documents/-objects).",
-          "title": "Bucket Name",
-          "type": "string"
-        },
-        "project_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "GCP project id; inferred from ADC when empty.",
-          "title": "Project Id"
-        },
-        "signing_service_account_email": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Service account email used to sign V4 signed URLs for backend-internal tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON key). Required for content_storage.type=gcs; startup fails clearly when omitted. The Workload Identity service account must hold iam.serviceAccounts.signBlob on this account, which must have storage.objects.get on the objects bucket.",
-          "title": "Signing Service Account Email"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "GcsStorageConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "GitPullSource": {
-      "properties": {
-        "type": {
-          "const": "pull",
-          "default": "pull",
-          "title": "Type",
-          "type": "string"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Human-readable description of this source",
-          "title": "Description"
-        },
-        "provider": {
-          "const": "github",
-          "title": "Provider",
-          "type": "string"
-        },
-        "repo": {
-          "description": "GitHub repository in the format 'owner/repo'",
-          "title": "Repo",
-          "type": "string"
-        },
-        "branch": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "main",
-          "description": "Git branch to pull from",
-          "title": "Branch"
-        },
-        "subdir": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "",
-          "description": "Subdirectory to extract files from",
-          "title": "Subdir"
-        },
-        "username": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Optional GitHub username (for logs)",
-          "title": "Username"
-        },
-        "token": {
-          "description": "GitHub token (from GITHUB_TOKEN env variable)",
-          "title": "Token",
-          "type": "string"
-        }
-      },
-      "required": [
-        "provider",
-        "repo",
-        "token"
-      ],
-      "title": "GitPullSource",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "GitlabPullSource": {
-      "properties": {
-        "type": {
-          "const": "pull",
-          "default": "pull",
-          "title": "Type",
-          "type": "string"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Human-readable description of this source",
-          "title": "Description"
-        },
-        "provider": {
-          "const": "gitlab",
-          "title": "Provider",
-          "type": "string"
-        },
-        "repo": {
-          "description": "GitLab repository in the format 'namespace/project'",
-          "title": "Repo",
-          "type": "string"
-        },
-        "branch": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "main",
-          "description": "Branch to pull from",
-          "title": "Branch"
-        },
-        "subdir": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "",
-          "description": "Optional subdirectory to scan files from",
-          "title": "Subdir"
-        },
-        "token": {
-          "description": "GitLab private token (from GITLAB_TOKEN env variable)",
-          "title": "Token",
-          "type": "string"
-        },
-        "base_url": {
-          "default": "https://gitlab.com/api/v4",
-          "description": "GitLab API base URL",
-          "title": "Base Url",
-          "type": "string"
-        }
-      },
-      "required": [
-        "provider",
-        "repo",
-        "token"
-      ],
-      "title": "GitlabPullSource",
-      "type": "object",
-      "additionalProperties": false
-    },
     "InMemoryLogStorageConfig": {
       "properties": {
         "type": {
@@ -727,35 +191,6 @@
         "type"
       ],
       "title": "InMemoryLogStorageConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "InMemoryStoreConfig": {
-      "description": "Minimal config for in-memory stores (dev/test only).",
-      "properties": {
-        "type": {
-          "const": "memory",
-          "default": "memory",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "title": "InMemoryStoreConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "InMemoryVectorStorage": {
-      "properties": {
-        "type": {
-          "const": "in_memory",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "InMemoryVectorStorage",
       "type": "object",
       "additionalProperties": false
     },
@@ -778,26 +213,6 @@
       ],
       "title": "IngestionWorkerRole",
       "type": "string"
-    },
-    "IntegrationsConfig": {
-      "description": "Optional upstream service integrations consumed by Knowledge Flow.",
-      "properties": {
-        "prometheus": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PrometheusConfig"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Optional Prometheus API configuration for cluster-wide metrics queries."
-        }
-      },
-      "title": "IntegrationsConfig",
-      "type": "object",
-      "additionalProperties": false
     },
     "KpiLogSinkConfig": {
       "properties": {
@@ -888,97 +303,6 @@
       "type": "object",
       "additionalProperties": false
     },
-    "LibraryProcessorConfig": {
-      "description": "Configuration structure for a library-level output processor.\n\nAttributes:\n    class_path (str): Dotted import path of the processor class.\n    description (str): Human readable explanation of what the processor does.",
-      "properties": {
-        "class_path": {
-          "description": "Dotted import path of the library output processor class",
-          "title": "Class Path",
-          "type": "string"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Human-readable description of the library output processor purpose shown in the UI.",
-          "title": "Description"
-        }
-      },
-      "required": [
-        "class_path"
-      ],
-      "title": "LibraryProcessorConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "LocalContentStorageConfig": {
-      "properties": {
-        "type": {
-          "const": "local",
-          "title": "Type",
-          "type": "string"
-        },
-        "root_path": {
-          "default": "~/.fred/knowledge-flow/content-store",
-          "description": "Local storage directory",
-          "title": "Root Path",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "LocalContentStorageConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "LocalFilesystemConfig": {
-      "properties": {
-        "type": {
-          "const": "local",
-          "default": "local",
-          "title": "Type",
-          "type": "string"
-        },
-        "root": {
-          "default": "~/.fred/knowledge-flow/filesystem/",
-          "description": "Local filesystem root directory.",
-          "title": "Root",
-          "type": "string"
-        }
-      },
-      "title": "LocalFilesystemConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "LogStoreConfig": {
-      "properties": {
-        "type": {
-          "const": "log",
-          "title": "Type",
-          "type": "string"
-        },
-        "level": {
-          "description": "Logging level",
-          "title": "Level",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type",
-        "level"
-      ],
-      "title": "LogStoreConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
     "M2MSecurity": {
       "additionalProperties": false,
       "description": "Configuration for machine-to-machine authentication.",
@@ -1046,81 +370,9 @@
       "title": "M2MSecurity",
       "type": "object"
     },
-    "MCPConfig": {
-      "description": "Feature toggles for MCP-only HTTP/MCP surfaces.\n\nThese do NOT affect core storage backends (e.g., using OpenSearch\nas vector store or metadata store). They only control whether\noptional monitoring/exploration controllers and their MCP servers\nare exposed.",
-      "properties": {
-        "reports_enabled": {
-          "default": true,
-          "description": "Expose the Reports MCP server (Markdown-first report generation).",
-          "title": "Reports Enabled",
-          "type": "boolean"
-        },
-        "tabular_enabled": {
-          "default": true,
-          "description": "Expose the Tabular MCP server for SQL/table exploration.",
-          "title": "Tabular Enabled",
-          "type": "boolean"
-        },
-        "text_enabled": {
-          "default": true,
-          "description": "Expose the Text MCP server for semantic vector search.",
-          "title": "Text Enabled",
-          "type": "boolean"
-        },
-        "templates_enabled": {
-          "default": true,
-          "description": "Expose the Template MCP server for prompts/templates.",
-          "title": "Templates Enabled",
-          "type": "boolean"
-        },
-        "resources_enabled": {
-          "default": true,
-          "description": "Expose the Resources MCP server for resource/tag management.",
-          "title": "Resources Enabled",
-          "type": "boolean"
-        },
-        "prometheus_ops_enabled": {
-          "default": false,
-          "description": "Expose Prometheus operational endpoints and the corresponding MCP server.",
-          "title": "Prometheus Ops Enabled",
-          "type": "boolean"
-        },
-        "filesystem_read_default_limit": {
-          "default": 100,
-          "description": "Default line count returned by filesystem read_file when callers omit limit.",
-          "minimum": 1,
-          "title": "Filesystem Read Default Limit",
-          "type": "integer"
-        },
-        "filesystem_read_max_limit": {
-          "default": 500,
-          "description": "Absolute maximum line count accepted by filesystem read_file.",
-          "minimum": 1,
-          "title": "Filesystem Read Max Limit",
-          "type": "integer"
-        },
-        "filesystem_read_default_max_chars": {
-          "default": 20000,
-          "description": "Default maximum character count returned by filesystem read_file when callers omit max_chars.",
-          "minimum": 1,
-          "title": "Filesystem Read Default Max Chars",
-          "type": "integer"
-        },
-        "filesystem_read_absolute_max_chars": {
-          "default": 50000,
-          "description": "Absolute maximum character count accepted by filesystem read_file.",
-          "minimum": 1,
-          "title": "Filesystem Read Absolute Max Chars",
-          "type": "integer"
-        }
-      },
-      "title": "MCPConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
     "ManagerProcessingConfig": {
       "additionalProperties": false,
-      "description": "Workload identity and isolated persistence for manager-owned documents.",
+      "description": "Workload identity and persistence for manager-owned documents.",
       "properties": {
         "endpoint": {
           "title": "Endpoint",
@@ -1150,11 +402,6 @@
           "title": "Allow Insecure",
           "type": "boolean"
         },
-        "enabled": {
-          "default": false,
-          "title": "Enabled",
-          "type": "boolean"
-        },
         "url": {
           "title": "Url",
           "type": "string"
@@ -1181,9 +428,6 @@
         "vector_store": {
           "discriminator": {
             "mapping": {
-              "chroma": "#/$defs/ChromaVectorStorageConfig",
-              "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
-              "in_memory": "#/$defs/InMemoryVectorStorage",
               "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
               "pgvector": "#/$defs/PgVectorStorageConfig"
             },
@@ -1191,19 +435,10 @@
           },
           "oneOf": [
             {
-              "$ref": "#/$defs/InMemoryVectorStorage"
-            },
-            {
               "$ref": "#/$defs/OpenSearchVectorIndexConfig"
             },
             {
-              "$ref": "#/$defs/ChromaVectorStorageConfig"
-            },
-            {
               "$ref": "#/$defs/PgVectorStorageConfig"
-            },
-            {
-              "$ref": "#/$defs/ClickHouseVectorStorageConfig"
             }
           ],
           "title": "Vector Store"
@@ -1226,226 +461,6 @@
       ],
       "title": "ManagerProcessingConfig",
       "type": "object"
-    },
-    "MinioFilesystemConfig": {
-      "properties": {
-        "type": {
-          "const": "minio",
-          "default": "minio",
-          "title": "Type",
-          "type": "string"
-        },
-        "endpoint": {
-          "description": "MinIO or S3 compatible endpoint.",
-          "title": "Endpoint",
-          "type": "string"
-        },
-        "access_key": {
-          "description": "MinIO access key.",
-          "title": "Access Key",
-          "type": "string"
-        },
-        "secret_key": {
-          "default": null,
-          "description": "MinIO secret key (from MINIO_SECRET_KEY env).",
-          "title": "Secret Key",
-          "type": "string"
-        },
-        "bucket_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "filesystem",
-          "description": "MinIO bucket name.",
-          "title": "Bucket Name"
-        },
-        "secure": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": false,
-          "description": "Use TLS for the MinIO client.",
-          "title": "Secure"
-        }
-      },
-      "required": [
-        "endpoint",
-        "access_key"
-      ],
-      "title": "MinioFilesystemConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "MinioPullSource": {
-      "properties": {
-        "type": {
-          "const": "pull",
-          "default": "pull",
-          "title": "Type",
-          "type": "string"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Human-readable description of this source",
-          "title": "Description"
-        },
-        "provider": {
-          "const": "minio",
-          "title": "Provider",
-          "type": "string"
-        },
-        "endpoint_url": {
-          "description": "S3-compatible endpoint (e.g., https://s3.amazonaws.com)",
-          "title": "Endpoint Url",
-          "type": "string"
-        },
-        "bucket_name": {
-          "description": "Name of the S3 bucket to scan",
-          "title": "Bucket Name",
-          "type": "string"
-        },
-        "prefix": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "",
-          "description": "Optional prefix (folder path) to scan inside the bucket",
-          "title": "Prefix"
-        },
-        "access_key": {
-          "description": "MinIO access key (from MINIO_ACCESS_KEY env variable)",
-          "title": "Access Key",
-          "type": "string"
-        },
-        "secret_key": {
-          "default": null,
-          "description": "MinIO secret key (from MINIO_SECRET_KEY env variable)",
-          "title": "Secret Key",
-          "type": "string"
-        },
-        "region": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "us-east-1",
-          "description": "AWS region (used by some clients)",
-          "title": "Region"
-        },
-        "secure": {
-          "default": true,
-          "description": "Use HTTPS (secure=True) or HTTP (secure=False)",
-          "title": "Secure",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "provider",
-        "endpoint_url",
-        "bucket_name",
-        "access_key"
-      ],
-      "title": "MinioPullSource",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "MinioStorageConfig": {
-      "properties": {
-        "type": {
-          "const": "minio",
-          "title": "Type",
-          "type": "string"
-        },
-        "endpoint": {
-          "default": "localhost:9000",
-          "description": "MinIO API URL",
-          "title": "Endpoint",
-          "type": "string"
-        },
-        "access_key": {
-          "description": "MinIO access key (from MINIO_ACCESS_KEY env)",
-          "title": "Access Key",
-          "type": "string"
-        },
-        "secret_key": {
-          "default": null,
-          "description": "MinIO secret key (from MINIO_SECRET_KEY env)",
-          "title": "Secret Key",
-          "type": "string"
-        },
-        "bucket_name": {
-          "default": "app-bucket",
-          "description": "Content store bucket name",
-          "title": "Bucket Name",
-          "type": "string"
-        },
-        "secure": {
-          "default": false,
-          "description": "Use TLS (https)",
-          "title": "Secure",
-          "type": "boolean"
-        },
-        "public_endpoint": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Public MinIO endpoint for browser-facing presigned URLs (e.g. 'https://my.minio.ingress'). If not set, uses endpoint.",
-          "title": "Public Endpoint"
-        },
-        "public_secure": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Use TLS for public endpoint. If not set, inferred from public_endpoint scheme.",
-          "title": "Public Secure"
-        }
-      },
-      "required": [
-        "type",
-        "access_key"
-      ],
-      "title": "MinioStorageConfig",
-      "type": "object",
-      "additionalProperties": false
     },
     "ModelConfiguration": {
       "properties": {
@@ -1812,47 +827,6 @@
       "type": "object",
       "additionalProperties": false
     },
-    "PostgresTableConfig": {
-      "properties": {
-        "type": {
-          "const": "postgres",
-          "title": "Type",
-          "type": "string"
-        },
-        "table": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Table name used by the store. Deprecated: stores now use fixed table names.",
-          "title": "Table"
-        },
-        "prefix": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
-          "title": "Prefix"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "PostgresTableConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
     "ProcessingConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1942,12 +916,6 @@
           "default": "5m",
           "description": "Per-attempt timeout for uploaded-file metadata lookup; excludes queue wait.",
           "title": "Push Metadata Activity Timeout",
-          "type": "string"
-        },
-        "pull_metadata_activity_timeout": {
-          "default": "30m",
-          "description": "Per-attempt timeout for source download and metadata creation; excludes queue wait.",
-          "title": "Pull Metadata Activity Timeout",
           "type": "string"
         },
         "output_activity_timeout": {
@@ -2067,108 +1035,6 @@
       "title": "ProfilesConfig",
       "type": "object"
     },
-    "PrometheusConfig": {
-      "properties": {
-        "base_url": {
-          "description": "Base URL of a Prometheus-compatible HTTP API.",
-          "title": "Base Url",
-          "type": "string"
-        },
-        "verify_ssl": {
-          "default": true,
-          "description": "Verify upstream TLS certificates when querying Prometheus.",
-          "title": "Verify Ssl",
-          "type": "boolean"
-        },
-        "timeout_seconds": {
-          "default": 15.0,
-          "description": "HTTP timeout applied to Prometheus API calls.",
-          "exclusiveMinimum": 0,
-          "title": "Timeout Seconds",
-          "type": "number"
-        },
-        "bearer_token": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Optional bearer token loaded from PROMETHEUS_BEARER_TOKEN.",
-          "title": "Bearer Token"
-        },
-        "username": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "admin",
-          "description": "Basic-auth username configured directly in prometheus.username. Defaults to 'admin'.",
-          "title": "Username"
-        },
-        "password": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Optional basic-auth password loaded from PROMETHEUS_PASSWORD.",
-          "title": "Password"
-        }
-      },
-      "required": [
-        "base_url"
-      ],
-      "title": "PrometheusConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "PushSourceConfig": {
-      "properties": {
-        "type": {
-          "const": "push",
-          "default": "push",
-          "title": "Type",
-          "type": "string"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Human-readable description of this source",
-          "title": "Description"
-        }
-      },
-      "title": "PushSourceConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "SchedulerBackend": {
-      "description": "Allowed scheduler backend values across Fred backends.\n\nWhy this exists:\n- Avoid raw string literals (`\"temporal\"`, `\"memory\"`) spread in business code.\n- Keep one typed source of truth used by configuration parsing and runtime checks.\n\nHow to use:\n```python\nfrom fred_core.scheduler import SchedulerBackend\n\nif backend == SchedulerBackend.MEMORY:\n    ...\n```",
-      "enum": [
-        "temporal",
-        "memory"
-      ],
-      "title": "SchedulerBackend",
-      "type": "string"
-    },
     "SchedulerConfig": {
       "properties": {
         "enabled": {
@@ -2177,8 +1043,10 @@
           "type": "boolean"
         },
         "backend": {
-          "$ref": "#/$defs/SchedulerBackend",
-          "default": "temporal"
+          "const": "temporal",
+          "default": "temporal",
+          "title": "Backend",
+          "type": "string"
         },
         "temporal": {
           "$ref": "#/$defs/TemporalSchedulerConfig"
@@ -2252,76 +1120,6 @@
       "type": "object",
       "additionalProperties": false
     },
-    "SpherePullSource": {
-      "properties": {
-        "type": {
-          "const": "pull",
-          "default": "pull",
-          "title": "Type",
-          "type": "string"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Human-readable description of this source",
-          "title": "Description"
-        },
-        "provider": {
-          "const": "sphere",
-          "title": "Provider",
-          "type": "string"
-        },
-        "base_url": {
-          "description": "Base URL for the Sphere API",
-          "title": "Base Url",
-          "type": "string"
-        },
-        "parent_node_id": {
-          "description": "ID of the parent folder or node to list/download",
-          "title": "Parent Node Id",
-          "type": "string"
-        },
-        "username": {
-          "description": "Username for Sphere Basic Auth",
-          "title": "Username",
-          "type": "string"
-        },
-        "password": {
-          "description": "Password (loaded from SPHERE_PASSWORD)",
-          "title": "Password",
-          "type": "string"
-        },
-        "apikey": {
-          "description": "API key (loaded from SPHERE_API_KEY)",
-          "title": "Apikey",
-          "type": "string"
-        },
-        "verify_ssl": {
-          "default": false,
-          "description": "Set to True to verify SSL certs",
-          "title": "Verify Ssl",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "provider",
-        "base_url",
-        "parent_node_id",
-        "username",
-        "password",
-        "apikey"
-      ],
-      "title": "SpherePullSource",
-      "type": "object",
-      "additionalProperties": false
-    },
     "StdoutLogStorageConfig": {
       "properties": {
         "type": {
@@ -2354,108 +1152,6 @@
           "default": null,
           "description": "Optional OpenSearch store"
         },
-        "clickhouse": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ClickHouseStoreConfig"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Optional ClickHouse store"
-        },
-        "resource_store": {
-          "discriminator": {
-            "mapping": {
-              "duckdb": "#/$defs/DuckdbStoreConfig",
-              "log": "#/$defs/LogStoreConfig",
-              "memory": "#/$defs/InMemoryStoreConfig",
-              "opensearch": "#/$defs/OpenSearchIndexConfig",
-              "postgres": "#/$defs/PostgresTableConfig"
-            },
-            "propertyName": "type"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/DuckdbStoreConfig"
-            },
-            {
-              "$ref": "#/$defs/OpenSearchIndexConfig"
-            },
-            {
-              "$ref": "#/$defs/LogStoreConfig"
-            },
-            {
-              "$ref": "#/$defs/PostgresTableConfig"
-            },
-            {
-              "$ref": "#/$defs/InMemoryStoreConfig"
-            }
-          ],
-          "title": "Resource Store"
-        },
-        "tag_store": {
-          "discriminator": {
-            "mapping": {
-              "duckdb": "#/$defs/DuckdbStoreConfig",
-              "log": "#/$defs/LogStoreConfig",
-              "memory": "#/$defs/InMemoryStoreConfig",
-              "opensearch": "#/$defs/OpenSearchIndexConfig",
-              "postgres": "#/$defs/PostgresTableConfig"
-            },
-            "propertyName": "type"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/DuckdbStoreConfig"
-            },
-            {
-              "$ref": "#/$defs/OpenSearchIndexConfig"
-            },
-            {
-              "$ref": "#/$defs/LogStoreConfig"
-            },
-            {
-              "$ref": "#/$defs/PostgresTableConfig"
-            },
-            {
-              "$ref": "#/$defs/InMemoryStoreConfig"
-            }
-          ],
-          "title": "Tag Store"
-        },
-        "metadata_store": {
-          "discriminator": {
-            "mapping": {
-              "duckdb": "#/$defs/DuckdbStoreConfig",
-              "log": "#/$defs/LogStoreConfig",
-              "memory": "#/$defs/InMemoryStoreConfig",
-              "opensearch": "#/$defs/OpenSearchIndexConfig",
-              "postgres": "#/$defs/PostgresTableConfig"
-            },
-            "propertyName": "type"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/DuckdbStoreConfig"
-            },
-            {
-              "$ref": "#/$defs/OpenSearchIndexConfig"
-            },
-            {
-              "$ref": "#/$defs/LogStoreConfig"
-            },
-            {
-              "$ref": "#/$defs/PostgresTableConfig"
-            },
-            {
-              "$ref": "#/$defs/InMemoryStoreConfig"
-            }
-          ],
-          "title": "Metadata Store"
-        },
         "tabular_store": {
           "$ref": "#/$defs/TabularStoreConfig",
           "description": "Dataset-centric tabular runtime configuration backed by Parquet artifacts in content storage."
@@ -2463,9 +1159,6 @@
         "vector_store": {
           "discriminator": {
             "mapping": {
-              "chroma": "#/$defs/ChromaVectorStorageConfig",
-              "clickhouse": "#/$defs/ClickHouseVectorStorageConfig",
-              "in_memory": "#/$defs/InMemoryVectorStorage",
               "opensearch": "#/$defs/OpenSearchVectorIndexConfig",
               "pgvector": "#/$defs/PgVectorStorageConfig"
             },
@@ -2473,19 +1166,10 @@
           },
           "oneOf": [
             {
-              "$ref": "#/$defs/InMemoryVectorStorage"
-            },
-            {
               "$ref": "#/$defs/OpenSearchVectorIndexConfig"
             },
             {
-              "$ref": "#/$defs/ChromaVectorStorageConfig"
-            },
-            {
               "$ref": "#/$defs/PgVectorStorageConfig"
-            },
-            {
-              "$ref": "#/$defs/ClickHouseVectorStorageConfig"
             }
           ],
           "title": "Vector Store"
@@ -2524,9 +1208,6 @@
       },
       "required": [
         "postgres",
-        "resource_store",
-        "tag_store",
-        "metadata_store",
         "vector_store"
       ],
       "title": "StorageConfig",
@@ -2623,7 +1304,7 @@
       "properties": {
         "artifacts_prefix": {
           "default": "tabular/datasets",
-          "description": "Prefix under content_storage objects where Parquet datasets are stored.",
+          "description": "Logical prefix for tabular dataset keys within a processing attempt.",
           "title": "Artifacts Prefix",
           "type": "string"
         },
@@ -2903,18 +1584,6 @@
     "observability": {
       "$ref": "#/$defs/ObservabilityConfig"
     },
-    "integrations": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/IntegrationsConfig"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Optional third-party service integrations used by the backend."
-    },
     "chat_model": {
       "$ref": "#/$defs/ModelConfiguration"
     },
@@ -2974,18 +1643,6 @@
       "description": "Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used.",
       "title": "Attachment Processors"
     },
-    "document_guardrail": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/DocumentGuardrailConfig"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Optional ingestion-time guardrail for explicit document markings."
-    },
     "output_processors": {
       "anyOf": [
         {
@@ -3000,44 +1657,6 @@
       ],
       "default": null,
       "title": "Output Processors"
-    },
-    "library_output_processors": {
-      "anyOf": [
-        {
-          "items": {
-            "$ref": "#/$defs/LibraryProcessorConfig"
-          },
-          "type": "array"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Library Output Processors"
-    },
-    "content_storage": {
-      "description": "Content Storage configuration",
-      "discriminator": {
-        "mapping": {
-          "gcs": "#/$defs/GcsStorageConfig",
-          "local": "#/$defs/LocalContentStorageConfig",
-          "minio": "#/$defs/MinioStorageConfig"
-        },
-        "propertyName": "type"
-      },
-      "oneOf": [
-        {
-          "$ref": "#/$defs/LocalContentStorageConfig"
-        },
-        {
-          "$ref": "#/$defs/MinioStorageConfig"
-        },
-        {
-          "$ref": "#/$defs/GcsStorageConfig"
-        }
-      ],
-      "title": "Content Storage"
     },
     "scheduler": {
       "$ref": "#/$defs/SchedulerConfig"
@@ -3080,111 +1699,8 @@
       ],
       "default": null
     },
-    "document_sources": {
-      "additionalProperties": {
-        "discriminator": {
-          "mapping": {
-            "pull": {
-              "discriminator": {
-                "mapping": {
-                  "github": "#/$defs/GitPullSource",
-                  "gitlab": "#/$defs/GitlabPullSource",
-                  "local_path": "#/$defs/FileSystemPullSource",
-                  "minio": "#/$defs/MinioPullSource",
-                  "sphere": "#/$defs/SpherePullSource"
-                },
-                "propertyName": "provider"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/$defs/FileSystemPullSource"
-                },
-                {
-                  "$ref": "#/$defs/GitPullSource"
-                },
-                {
-                  "$ref": "#/$defs/SpherePullSource"
-                },
-                {
-                  "$ref": "#/$defs/GitlabPullSource"
-                },
-                {
-                  "$ref": "#/$defs/MinioPullSource"
-                }
-              ]
-            },
-            "push": "#/$defs/PushSourceConfig"
-          },
-          "propertyName": "type"
-        },
-        "oneOf": [
-          {
-            "$ref": "#/$defs/PushSourceConfig"
-          },
-          {
-            "discriminator": {
-              "mapping": {
-                "github": "#/$defs/GitPullSource",
-                "gitlab": "#/$defs/GitlabPullSource",
-                "local_path": "#/$defs/FileSystemPullSource",
-                "minio": "#/$defs/MinioPullSource",
-                "sphere": "#/$defs/SpherePullSource"
-              },
-              "propertyName": "provider"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/$defs/FileSystemPullSource"
-              },
-              {
-                "$ref": "#/$defs/GitPullSource"
-              },
-              {
-                "$ref": "#/$defs/SpherePullSource"
-              },
-              {
-                "$ref": "#/$defs/GitlabPullSource"
-              },
-              {
-                "$ref": "#/$defs/MinioPullSource"
-              }
-            ]
-          }
-        ]
-      },
-      "description": "Mapping of source_tag identifiers to push/pull source configurations",
-      "title": "Document Sources",
-      "type": "object"
-    },
     "storage": {
       "$ref": "#/$defs/StorageConfig"
-    },
-    "mcp": {
-      "$ref": "#/$defs/MCPConfig",
-      "description": "Feature toggles for MCP-only endpoints and servers."
-    },
-    "filesystem": {
-      "description": "Filesystem backend configuration.",
-      "discriminator": {
-        "mapping": {
-          "gcs": "#/$defs/GcsFilesystemConfig",
-          "local": "#/$defs/LocalFilesystemConfig",
-          "minio": "#/$defs/MinioFilesystemConfig"
-        },
-        "propertyName": "type"
-      },
-      "oneOf": [
-        {
-          "$ref": "#/$defs/LocalFilesystemConfig"
-        },
-        {
-          "$ref": "#/$defs/MinioFilesystemConfig"
-        },
-        {
-          "$ref": "#/$defs/GcsFilesystemConfig"
-        }
-      ],
-      "title": "Filesystem"
     }
   },
   "required": [
@@ -3192,10 +1708,8 @@
     "chat_model",
     "embedding_model",
     "security",
-    "content_storage",
     "scheduler",
-    "storage",
-    "filesystem"
+    "storage"
   ],
   "title": "Configuration",
   "type": "object",

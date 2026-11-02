@@ -26,10 +26,6 @@ app:
   # unset here they default to None, so `_evaluate_quota` skips the personal
   # check entirely and any team without an explicit DB limit is unlimited —
   # the UI shows "x / 5 GB" while uploads sail past it.
-  default_team_max_resources_storage_size: 5368709120
-  personal_max_resources_storage_size: 5368709120
-  pdf_render_ttl_days: 30
-
 observability:
   kpi:
     prometheus:
@@ -273,16 +269,6 @@ scheduler:
     ingestion_workflow_parallelism: 3
     ingestion_max_concurrent_workflow_tasks: 3
     ingestion_max_concurrent_activities: 3
-content_storage:
-  type: minio
-  endpoint: http://localhost:8333
-  access_key: "admin"
-  bucket_name: "knowledge-flow-content"
-  secure: false
-document_sources:
-  fred:
-    type: push
-    description: "Documents manually uploaded by users"
 chat_model:
   provider: openai
   name: mistral-medium-2508 # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
@@ -426,20 +412,7 @@ storage:
     secure: true
     verify_certs: false
     username: admin
-  # clickhouse:
-  #   host: localhost
-  #   port: 8123
-  #   database: fred
-  #   username: fred
-  #   secure: false
-  #   verify: true
 
-  resource_store:
-    type: "postgres"
-  tag_store:
-    type: "postgres"
-  metadata_store:
-    type: "postgres"
   tabular_store:
     artifacts_prefix: "tabular/datasets"
     format: "parquet"
@@ -465,37 +438,8 @@ storage:
     # Must match the index the worker writes to (configuration_worker.yaml),
     # otherwise the API searches an empty index and every RAG query returns 0.
     index: vector-index-mistral
-    # type: clickhouse
-    # table: fred_vectors
-    # Default bulk size for vector insertions is 500. Increase if you have
-    # enough memory and want faster ingestion. Or if run into ingestion errors
-    # while ingesting large documents.
     bulk_size: 1000
   log_store:
     type: opensearch
     index: app-logs-index
-# integrations:
-#   prometheus:
-#     base_url: http://prometheus:9090
-#     verify_ssl: false
-#     timeout_seconds: 15.0
-mcp:
-  reports_enabled: true
-  tabular_enabled: true
-  text_enabled: true
-  templates_enabled: true
-  resources_enabled: true
-  prometheus_ops_enabled: false
-  filesystem_read_default_limit: 100
-  filesystem_read_max_limit: 500
-  filesystem_read_default_max_chars: 20000
-  filesystem_read_absolute_max_chars: 50000
-filesystem:
-  type: minio
-  endpoint: http://localhost:8333
-  access_key: admin
-  bucket_name: filesystem
-  secure: false
-# Workspace storage layout (paths inside the bucket/filesystem)
-
 control_plane_url: "http://localhost:8001"

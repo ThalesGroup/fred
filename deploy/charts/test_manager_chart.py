@@ -28,6 +28,34 @@ def deployments(docs):
 
 
 class ManagerChartTests(unittest.TestCase):
+    def test_schema_initialization_hook_keeps_its_password_secret_reference(self):
+        docs = render(
+            "applications.control-plane-backend.migration.enabled=true",
+            "applications.control-plane-backend.dotenv.FRED_POSTGRES_PASSWORD=fixture",
+        )
+        job = next(
+            d
+            for d in docs
+            if d["kind"] == "Job"
+            and d["metadata"]["name"] == "control-plane-backend-schema-init-1"
+        )
+        container = job["spec"]["template"]["spec"]["containers"][0]
+        self.assertEqual(
+            container["command"] + container["args"],
+            ["control-plane", "initialize-schema"],
+        )
+        secret_name = container["envFrom"][0]["secretRef"]["name"]
+        secret = next(
+            d
+            for d in docs
+            if d["kind"] == "Secret" and d["metadata"]["name"] == secret_name
+        )
+        self.assertEqual(secret_name, "control-plane-backend-schema-init-db")
+        self.assertEqual(secret["stringData"]["FRED_POSTGRES_PASSWORD"], "fixture")
+        self.assertEqual(
+            job["metadata"]["annotations"]["helm.sh/hook"], "pre-install,pre-upgrade"
+        )
+
     def assert_manager_upstreams(self, apps, namespace):
         env = apps["frontend"]["spec"]["template"]["spec"]["containers"][0]["env"]
         for name in ("FRONTEND_CONTROL_PLANE_UPSTREAM",):
@@ -275,7 +303,8 @@ class ManagerChartTests(unittest.TestCase):
         )
         container = job["spec"]["template"]["spec"]["containers"][0]
         self.assertEqual(
-            container["command"] + container["args"], ["control-plane", "initialize-schema"]
+            container["command"] + container["args"],
+            ["control-plane", "initialize-schema"],
         )
         configmap = next(
             d

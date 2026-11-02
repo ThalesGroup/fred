@@ -62,15 +62,13 @@ class ProcessingPipelineManager:
     @staticmethod
     def _clone_pipeline(template: ProcessingPipeline, name: str) -> ProcessingPipeline:
         # Keep this clone lightweight: profile pipelines only need different input
-        # mappings. Output processors and library processors are shared instances.
+        # mappings. Output processors are shared instances.
         input_processors = dict(template.input_processors)
         output_processors = {ext: list(processors) for ext, processors in template.output_processors.items()}
-        library_output_processors = list(template.library_output_processors)
         return ProcessingPipeline(
             name=name,
             input_processors=input_processors,
             output_processors=output_processors,
-            library_output_processors=library_output_processors,
         )
 
     def _register_profile_pipelines(self, context: ApplicationContext) -> None:
@@ -107,8 +105,7 @@ class ProcessingPipelineManager:
         The narrowest entry point into extraction: a pipeline manager needs the
         configuration and the processor classes. Extraction-only construction
         excludes output processors; input processors may still require stores.
-        Both `IngestionService.process_input` and the extraction subprocess call
-        this method, keeping the extraction algorithm shared.
+        The supervised extraction subprocess calls this method.
 
         The profile scope is entered here, so the processors read the same
         effective per-profile settings on both paths.

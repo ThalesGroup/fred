@@ -13,61 +13,30 @@
 # limitations under the License.
 
 
-import hashlib
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import List, Optional
 
 from fred_core import KeycloakUser
-from fred_core.documents.document_structures import (
-    AccessInfo,
-    DocumentMetadata,
-    FileInfo,
-    Identity,
-    Processing,
-    SourceInfo,
-    SourceType,
-    Tagging,
-)
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
-from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
-class FileToProcessWithoutUser(BaseModel):
+class FileToProcess(BaseModel):
     # Common fields
     source_tag: str
     tags: List[str] = []
     display_name: Optional[str] = None
     profile: IngestionProcessingProfile = IngestionProcessingProfile.medium
-    task_id: Optional[str] = None  # OPS-04: set when a task_run row has been created
 
     # Push-specific
     document_uid: Optional[str] = None  # Present for push files
 
-    # Pull-specific
-    external_path: Optional[str] = None
-    size: Optional[int] = None
-    modified_time: Optional[float] = None  # Unix timestamp
-    hash: Optional[str] = None  # Optional, used for UID
-
-    def is_pull(self) -> bool:
-        return self.external_path is not None
-
-    def is_push(self) -> bool:
-        return not self.is_pull()
-
-
-class FileToProcess(FileToProcessWithoutUser):
     processed_by: KeycloakUser
     logging_context: Optional[str] = None  # bounded diagnostic envelope, never authority
     # Set at submission from the file's profile, and read back by the workflow to
-    # route this document's extraction activity. Absent on the in-process paths
-    # that call the activities directly, which never reach a Temporal queue.
+    # route this document's extraction activity.
     extraction_task_queue: Optional[str] = None
     push_metadata_activity_timeout_seconds: int = 300
-    pull_metadata_activity_timeout_seconds: int = 1800
     output_activity_timeout_seconds: int = 3600
     input_activity_timeout_seconds: int = 3600
     heartbeat_timeout_seconds: int = 300
@@ -77,91 +46,6 @@ class FileToProcess(FileToProcessWithoutUser):
     retry_maximum_attempts: int = 6
     retry_non_retryable_error_types: List[str] = Field(default_factory=list)
 
-    @classmethod
-    def from_file_to_process_without_user(cls, file: FileToProcessWithoutUser, user: KeycloakUser) -> "FileToProcess":
-        return cls(
-            **file.model_dump(),
-            processed_by=user,
-        )
-
-    @classmethod
-    def from_pull_entry(cls, entry: PullFileEntry, source_tag: str, user: KeycloakUser) -> "FileToProcess":
-        return cls(
-            source_tag=source_tag,
-            external_path=entry.path,
-            size=entry.size,
-            modified_time=entry.modified_time,
-            hash=entry.hash or hashlib.sha256(entry.path.encode()).hexdigest(),
-            display_name=Path(entry.path).name,
-            processed_by=user,
-        )
-
-    def to_virtual_metadata(self) -> DocumentMetadata:
-        """
-        Build a v2 DocumentMetadata stub for a *pull* file.
-        This is 'virtual' because the raw file isn't in our content store yet.
-        """
-        if not self.is_pull():
-            raise ValueError("Virtual metadata can only be generated for pull files")
-
-        assert self.external_path, "Pull files must have an external path"
-        name = Path(self.external_path).name
-
-        # Use modified time if available; otherwise set to epoch (UTC)
-        modified_dt = datetime.fromtimestamp(self.modified_time or 0, tz=timezone.utc)
-
-        # Stable UID for pull sources. Keep your existing convention if other systems depend on it.
-        uid = self.document_uid or f"pull-{self.source_tag}-{self.hash or hashlib.sha256(self.external_path.encode()).hexdigest()}"
-
-        # Identity block
-        identity = Identity(
-            document_name=name,
-            document_uid=uid,
-            title=self.display_name or None,
-            created=None,
-            modified=modified_dt,
-            last_modified_by=None,
-        )
-
-        # Source block
-        source = SourceInfo(
-            source_type=SourceType.PULL,
-            source_tag=self.source_tag,
-            pull_location=self.external_path,
-            retrievable=False,  # not fetched into our store yet
-            date_added_to_kb=modified_dt,  # use fs timestamp as best proxy
-        )
-
-        # File block (best-effort; we don't know the MIME here)
-        file_info = FileInfo(
-            file_size_bytes=self.size,
-            mime_type=None,
-            page_count=None,
-            row_count=None,
-            sha256=self.hash,  # if provided by catalog
-            md5=None,
-            language=None,
-        )
-
-        # Tags: assuming incoming `tags` are display names.
-        # If they are tag IDs in your system, assign them to `tag_ids=` instead.
-        tagging = Tagging(tag_names=list(self.tags))
-
-        # Empty processing status; you can mark phases as you progress.
-        processing = Processing()  # stages={}, errors={}
-
-        return DocumentMetadata(
-            identity=identity,
-            source=source,
-            file=file_info,
-            tags=tagging,
-            processing=processing,
-            access=AccessInfo(),  # default AccessInfo() will be created by the model
-            preview_url=None,
-            viewer_url=None,
-            extensions=None,
-        )
-
 
 class PipelineDefinition(BaseModel):
     workflow_id: Optional[str] = None
@@ -169,32 +53,3 @@ class PipelineDefinition(BaseModel):
     files: List[FileToProcess]
     max_parallelism: int = 1
     logging_context: Optional[str] = None
-
-
-class ProcessDocumentsRequest(BaseModel):
-    relaunch: bool = False
-    files: List[FileToProcessWithoutUser]
-    pipeline_name: str
-
-
-class ProcessDocumentsResponse(BaseModel):
-    status: str
-    pipeline_name: str
-    total_files: int
-    workflow_id: str
-    run_id: Optional[str] = None
-    task_ids: dict[str, str] = Field(default_factory=dict)
-
-
-class ProcessLibraryRequest(BaseModel):
-    library_tag: str
-    processor: str  # fully qualified class path for a LibraryOutputProcessor
-    document_uids: Optional[List[str]] = None  # optional subset; defaults to all docs in tag
-
-
-class ProcessLibraryResponse(BaseModel):
-    status: str
-    library_tag: str
-    workflow_id: str
-    run_id: Optional[str] = None
-    document_count: Optional[int] = None

@@ -1,7 +1,7 @@
 # Configuration fragment, not a complete deployment overlay. Helm replaces lists:
 # preserve every SQL/identity/model entry and volume already in your deployment.
 # See deploy/k3d/ for the complete factory profile and contract preparation.
-# Use the same Swift documents bucket as document-storage.yaml; grant only output
+# Use the same documents bucket as document-storage.yaml; grant only output
 # writes to the worker and input writes plus input/output reads to the API.
 applications:
   control-plane-backend:
@@ -65,10 +65,7 @@ applications:
           namespace: default
           task_queue: ingestion
           ingestion_max_concurrent_activities: 1
-      app:
-        pdf_render_ttl_days: 0
       manager_processing:
-        enabled: true
         url: https://manager.example.test/control-plane/v1
         issuer: https://identity.example.test/realms/app
         audience: control-plane

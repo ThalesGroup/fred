@@ -543,3 +543,17 @@ def utc_now_iso() -> str:
     """
 
     return datetime.now(timezone.utc).isoformat()
+
+
+class StoredObjectInfo(BaseModel):
+    """
+    Metadata returned when a processor writes a tabular artifact.
+    """
+
+    key: str
+    size: int
+    file_name: str
+    content_type: str | None = None
+    modified: datetime | None = None
+    etag: str | None = None
+    document_uid: str | None = None

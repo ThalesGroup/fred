@@ -17,8 +17,8 @@ Temporal worker responsible for running ingestion pipelines.
 
 One process serves one or more roles (`scheduler.worker_roles`), each with its own
 Temporal worker on its own queue: the common role runs every workflow and every
-activity but extraction, while an extraction role runs nothing but the two
-extraction activities for one processing profile. A Kubernetes deployment declares
+activity but extraction, while an extraction role runs nothing but the
+extraction activity for one processing profile. A Kubernetes deployment declares
 a single role so its pods size and scale independently; a developer's single
 process declares all four.
 """
@@ -31,25 +31,14 @@ from datetime import timedelta
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from knowledge_flow_backend.common.structures import (
-    IngestionWorkerRole,
-    TemporalSchedulerConfig,
-    extraction_task_queue,
-)
+from knowledge_flow_backend.common.structures import IngestionWorkerRole, TemporalSchedulerConfig, extraction_task_queue
+from knowledge_flow_backend.features.manager_processing.cleanup import run as manager_cleanup
 from knowledge_flow_backend.features.manager_processing.retrievable import confirm_document_retrievable, record_retrievable_applied, set_document_retrievable
 from knowledge_flow_backend.features.manager_processing.retrievable_workflow import SetDocumentRetrievable
 from knowledge_flow_backend.features.scheduler.activities import output_process
-from knowledge_flow_backend.features.scheduler.push_files_activities import (
-    get_push_file_metadata,
-    push_input_process,
-)
-from knowledge_flow_backend.features.scheduler.workflow import (
-    GetPushFileMetadata,
-    OutputProcess,
-    ProcessPush,
-    ProcessPushFile,
-    PushInputProcess,
-)
+from knowledge_flow_backend.features.scheduler.fault_injection import read_ingestion_fault
+from knowledge_flow_backend.features.scheduler.push_files_activities import get_push_file_metadata, push_input_process
+from knowledge_flow_backend.features.scheduler.workflow import GetPushFileMetadata, OutputProcess, ProcessPush, ProcessPushFile, PushInputProcess
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +60,6 @@ def _build_worker(
     role: IngestionWorkerRole,
     workflow_task_concurrency: int,
     activity_concurrency: int,
-    manager_processing: bool = False,
 ) -> Worker:
     """One Temporal worker for one role, registering only what that role runs."""
     is_common = role is IngestionWorkerRole.common
@@ -94,8 +82,6 @@ def _build_worker(
             activity_concurrency,
         )
 
-    if not manager_processing:
-        raise ValueError("Weaver requires manager_processing")
     workflows = [ProcessPush, ProcessPushFile, GetPushFileMetadata, PushInputProcess, OutputProcess, SetDocumentRetrievable] if is_common else []
     activities = [get_push_file_metadata, output_process, set_document_retrievable, record_retrievable_applied, confirm_document_retrievable] if is_common else [push_input_process]
 
@@ -127,8 +113,6 @@ async def run_worker(
     roles: list[IngestionWorkerRole] | None = None,
     max_concurrent_workflow_tasks: int = 1,
     max_concurrent_activities: int = 1,
-    pdf_render_ttl_days: int = 30,
-    manager_processing: bool = False,
 ):
     """
     Connect to Temporal and start one worker per configured role.
@@ -141,7 +125,7 @@ async def run_worker(
     How:
         Build one `Worker` per role — the common role registers every workflow and
         every activity but extraction, an extraction role registers nothing but the
-        two extraction activities — and run them together until one stops.
+        extraction activity — and run them together until one stops.
     Usage example:
         `await run_worker(config, roles=[IngestionWorkerRole.extraction_rich], max_concurrent_activities=1)`
 
@@ -151,12 +135,7 @@ async def run_worker(
             defaults to the common role alone.
         max_concurrent_workflow_tasks (int): Max concurrent workflow tasks per role.
         max_concurrent_activities (int): Max concurrent activity tasks per role.
-        pdf_render_ttl_days (int): Lifetime of cached PDF renders; drives the
-            nightly expiry Schedule (0 removes it).
-        manager_processing (bool): Register only manager push processing, without
-            legacy SQL activities or PDF expiry scheduling.
     """
-    from knowledge_flow_backend.features.scheduler.fault_injection import read_ingestion_fault
 
     fault = read_ingestion_fault()
     if fault is not None:
@@ -179,7 +158,6 @@ async def run_worker(
             role=role,
             workflow_task_concurrency=workflow_task_concurrency,
             activity_concurrency=activity_concurrency,
-            manager_processing=manager_processing,
         )
         for role in active_roles
     ]
@@ -196,8 +174,6 @@ async def run_worker(
     # KPI writer their activities are still using.
     async with asyncio.TaskGroup() as group:
         if IngestionWorkerRole.common in active_roles:
-            from knowledge_flow_backend.features.manager_processing.cleanup import run as manager_cleanup
-
             group.create_task(manager_cleanup())
         for worker in workers:
             group.create_task(worker.run())

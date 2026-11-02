@@ -41,40 +41,7 @@ from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ActivityError, ApplicationError, ChildWorkflowError, RetryState, TimeoutError, TimeoutType, is_cancelled_exception
-
-# The event write itself is tiny, but this activity also runs the terminal
-# document repair: on a cancellation that erases the document's content, vectors,
-# metadata and quota, which on a large document is not a 30-second job. Cutting it
-# short would retry the erasure from the start and never persist the terminal
-# event — the exact state this whole path exists to avoid.
-_EVENT_START_TO_CLOSE = timedelta(minutes=10)
-
-# Progress persistence has its own short retry policy; data stages use the profile.
-_SHORT_OPERATION_RETRY = RetryPolicy(
-    initial_interval=timedelta(seconds=1),
-    backoff_coefficient=2.0,
-    maximum_interval=timedelta(seconds=10),
-    maximum_attempts=3,
-)
-
-
-async def _wf_emit_event(args: list[Any]) -> None:
-    """Emit one progress or terminal task event.
-
-    Retried, unlike before: losing a document's terminal event to a brief
-    database blip left it running with nothing to show for it, and — on the
-    single attempt it used to get — took the whole submission down with it.
-    Safe to retry because the write is idempotent in effect: the event carries
-    absolute state and counters rather than increments, and the document repair
-    it triggers is idempotent by construction.
-    """
-    await workflow.execute_activity(
-        "emit_ingestion_task_event",
-        args=args,
-        start_to_close_timeout=_EVENT_START_TO_CLOSE,
-        retry_policy=_SHORT_OPERATION_RETRY,
-    )
+from temporalio.exceptions import ApplicationError, is_cancelled_exception
 
 
 def _wf_get(item: Any, key: str, default=None):
@@ -93,18 +60,7 @@ def _wf_document_uid(file: Any) -> str | None:
     doc_uid = _wf_get(file, "document_uid", None)
     if doc_uid:
         return doc_uid
-    external_path = _wf_get(file, "external_path", None)
-    source_tag = _wf_get(file, "source_tag", None)
-    if not external_path or not source_tag:
-        return None
-    hash_val = _wf_get(file, "hash", None)
-    if not hash_val:
-        hash_val = hashlib.sha256(str(external_path).encode()).hexdigest()
-    return f"pull-{source_tag}-{hash_val}"
-
-
-def _wf_is_pull(file: Any) -> bool:
-    return _wf_get(file, "external_path", None) is not None
+    return None
 
 
 def _wf_child_id(prefix: str, file: Any, file_index: int) -> str:
@@ -116,12 +72,6 @@ def _wf_child_id(prefix: str, file: Any, file_index: int) -> str:
     raw = f"{prefix}|{file_index}|{display_name}|{doc_uid}"
     digest = hashlib.sha256(raw.encode()).hexdigest()[:12]
     return f"{prefix}-{file_index}-{digest}"
-
-
-def _wf_file_kind_summary(files: list[Any]) -> tuple[bool, bool]:
-    has_pull = any(_wf_is_pull(file) for file in files)
-    has_push = any(not _wf_is_pull(file) for file in files)
-    return has_pull, has_push
 
 
 def _wf_profile_value(file: Any) -> str | None:
@@ -181,31 +131,6 @@ def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
         # Missing/invalid input: fall through to default_seconds below.
         pass
     return default_seconds
-
-
-def _wf_file_terminal_event_args(exc: BaseException, task_id: str, document_uid: Any, display_name: Any, step: str | None = None) -> list[Any]:
-    """Keep the failed stage and useful cause instead of Temporal's wrapper message."""
-    if is_cancelled_exception(exc):
-        return [task_id, "cancelled", None, None, "Ingestion cancelled", 0, 1, 0, document_uid, display_name]
-    cause = exc
-    exhausted = False
-    # Only unwrap orchestration wrappers, preserving the application's own explanation.
-    for _ in range(8):
-        if isinstance(cause, ActivityError):
-            exhausted = cause.retry_state == RetryState.MAXIMUM_ATTEMPTS_REACHED
-        if not isinstance(cause, (ChildWorkflowError, ActivityError)) or cause.__cause__ is None:
-            break
-        cause = cause.__cause__
-    if isinstance(cause, TimeoutError):
-        reason = "The worker stopped reporting activity before the heartbeat deadline." if cause.type == TimeoutType.HEARTBEAT else "The configured time limit was exceeded."
-        if cause.type is not None:
-            reason += f" ({cause.type.name})"
-    else:
-        reason = str(cause).strip() or "No failure details were reported."
-    phase = {"uploading": "document preparation", "processing": "content extraction", "indexing": "indexing", "done": "completion reporting"}.get(step or "")
-    heading = f"Ingestion failed at the {phase} step." if phase else "Ingestion failed."
-    error_str = f"{heading} {'Configured attempts exhausted. ' if exhausted else ''}{reason[:1500]}"
-    return [task_id, "failed", step, None, error_str, 0, 1, 1, document_uid, display_name]
 
 
 def _wf_activity_retry_policy(file: Any) -> RetryPolicy:
@@ -270,21 +195,20 @@ def _wf_activity_retry_policy(file: Any) -> RetryPolicy:
 
 
 def _wf_activity_context_args(file: Any) -> list[Any]:
-    """Optional plain-data extension; legacy payloads retain their original args."""
+    """Carry the optional diagnostic context without importing domain types."""
     header = _wf_get(file, "logging_context", None)
-    return [header, _wf_get(file, "task_id", None)] if isinstance(header, str) else []
+    return [header] if isinstance(header, str) else []
 
 
 def _wf_log_policy(file: Any) -> None:
     workflow.logger.info(
-        "[INGESTION POLICY] task=%s document=%s profile=%s extraction_queue=%s "
+        "[INGESTION POLICY] document=%s profile=%s extraction_queue=%s "
         "metadata_attempt_s=%s extraction_attempt_s=%s output_attempt_s=%s "
         "attempts=%s retry_initial_s=%s retry_backoff=%s retry_max_s=%s heartbeat_s=%s non_retryable_types=%s",
-        _wf_get(file, "task_id"),
         _wf_document_uid(file),
         _wf_profile_value(file),
         _wf_get(file, "extraction_task_queue"),
-        _wf_get(file, "pull_metadata_activity_timeout_seconds" if _wf_is_pull(file) else "push_metadata_activity_timeout_seconds"),
+        _wf_get(file, "push_metadata_activity_timeout_seconds"),
         _wf_get(file, "input_activity_timeout_seconds"),
         _wf_get(file, "output_activity_timeout_seconds"),
         _wf_get(file, "retry_maximum_attempts"),
@@ -384,8 +308,7 @@ async def _wf_run_parent_pipeline(
 
     async def _run_one(file: Any, file_index: int, profile: str) -> bool:
         """True when the document succeeded. Never raises for a document failure —
-        the child already emitted its own terminal event, and the siblings must
-        keep running."""
+        Control Plane tracks each attempt, and the siblings must keep running."""
         try:
             handle = await workflow.start_child_workflow(
                 child_workflow_run,
@@ -463,38 +386,8 @@ async def _wf_run_parent_pipeline(
 
     if failed:
         workflow.logger.warning("[SCHEDULER] Pipeline %s: %d of %d document(s) failed", pipeline_name, failed, processed)
-    # Completing rather than raising: each document already carries its own
-    # verdict on its own task, and a raising parent would be indistinguishable
-    # from a crash or a cancellation. Documents whose terminal event could not be
-    # persisted are driven terminal by the existing reconciliation, which reads
-    # this workflow's completed status.
+    # Control Plane reconciles each processing attempt from its callbacks and Temporal outcome.
     return {"total": len(files), "processed": processed, "failed": failed}
-
-
-@workflow.defn
-class CreatePullFileMetadata:
-    @workflow.run
-    async def run(self, file: Any) -> Any:
-        """
-        Create metadata for one pull document with scheduler-configured retries.
-
-        Why:
-            Pull ingestion must survive transient worker loss before document
-            metadata exists in the catalog.
-        How:
-            Pass the serialized file payload so the child workflow can rebuild
-            the configured activity retry policy.
-        """
-        workflow.logger.info("[SCHEDULER] CreatePullFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity(
-            "create_pull_file_metadata",
-            args=[file],
-            # Per attempt, so a queue this activity waited in does not eat the
-            # budget meant for running it. Longer than the push lookup: this one
-            # downloads the whole source file before it can read its metadata.
-            start_to_close_timeout=timedelta(seconds=_wf_timeout_seconds(_wf_get(file, "pull_metadata_activity_timeout_seconds"), default_seconds=1800)),
-            retry_policy=_wf_activity_retry_policy(file),
-        )
 
 
 @workflow.defn
@@ -521,54 +414,12 @@ class GetPushFileMetadata:
 
 
 @workflow.defn
-class PullInputProcess:
-    @workflow.run
-    async def run(
-        self,
-        file: Any,
-        user: Any,
-        metadata: Any,
-        profile: Any = None,
-        input_activity_timeout_seconds: int = 3600,
-        heartbeat_timeout_seconds: int = 300,
-    ) -> Any:
-        """
-        Run one pull input activity with per-profile timeouts and shared retries.
-
-        Why:
-            Pull processing is the stage most exposed to CPU stalls and worker
-            restarts, so it needs both tuned timeouts and retry behavior.
-        How:
-            Pass the file payload, user, metadata, optional profile, then the
-            computed start-to-close and heartbeat timeouts in seconds.
-        """
-        task_queue = _wf_extraction_task_queue(file)
-        workflow.logger.info("[SCHEDULER] PullInputProcess on queue=%s", task_queue)
-        timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
-        return await workflow.execute_activity(
-            "pull_input_process",
-            args=[user, metadata, profile, *_wf_activity_context_args(file)],
-            # The one hop off the common queue: extraction runs on the pods
-            # dedicated to this document's profile. Everything around it —
-            # metadata, progress events, indexing — stays where the workflow is.
-            task_queue=task_queue,
-            start_to_close_timeout=timedelta(seconds=timeout_seconds),
-            heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
-            retry_policy=_wf_activity_retry_policy(file),
-            # See OutputProcess below: compensation must run after the activity
-            # actually finished cancelling, not concurrently with it.
-            cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
-        )
-
-
-@workflow.defn
 class PushInputProcess:
     @workflow.run
     async def run(
         self,
         file: Any,
         user: Any,
-        input_file: str,
         metadata: Any,
         profile: Any = None,
         input_activity_timeout_seconds: int = 3600,
@@ -585,20 +436,19 @@ class PushInputProcess:
             computed timeout values in seconds.
         """
         task_queue = _wf_extraction_task_queue(file)
-        workflow.logger.info("[SCHEDULER] PushInputProcess: %s on queue=%s", input_file or "<resolve-on-worker>", task_queue)
+        workflow.logger.info("[SCHEDULER] PushInputProcess: restoring authorized original on queue=%s", task_queue)
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "push_input_process",
-            args=[user, metadata, input_file, profile, *_wf_activity_context_args(file)],
+            args=[user, metadata, profile, *_wf_activity_context_args(file)],
             # The one hop off the common queue: extraction runs on the pods
-            # dedicated to this document's profile. `input_file` is empty on this
-            # path, so the activity restores its input from shared storage.
+            # dedicated to this document's profile. The control plane authorizes
+            # the original download for this attempt.
             task_queue=task_queue,
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
             heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
             retry_policy=_wf_activity_retry_policy(file),
-            # See OutputProcess below: compensation must run after the activity
-            # actually finished cancelling, not concurrently with it.
+            # Wait until the activity drains its child process before completing cancellation.
             cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
 
@@ -620,7 +470,7 @@ class OutputProcess:
         workflow.logger.info("[SCHEDULER] OutputProcess: %s", _wf_get(file, "display_name", "unknown"))
         await workflow.execute_activity(
             "output_process",
-            args=[file, metadata, False],
+            args=[file, metadata],
             # Per attempt, not schedule-to-close: indexing is the longest stage
             # and used to lose its budget to time spent queued behind others.
             start_to_close_timeout=timedelta(seconds=_wf_timeout_seconds(_wf_get(file, "output_activity_timeout_seconds"))),
@@ -632,108 +482,10 @@ class OutputProcess:
             # frees the slot when a worker dies mid-output.
             heartbeat_timeout=timedelta(seconds=_wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300)),
             retry_policy=_wf_activity_retry_policy(file),
-            # WAIT, not the default TRY_CANCEL: with TRY_CANCEL the workflow
-            # resumed (and its compensation purged the document's artifacts)
-            # while the activity's worker thread was still writing — vectors
-            # observed landing *after* the purge, orphaned (#2315). WAIT holds
-            # the workflow until the activity finished cancelling (the activity
-            # drains its thread, see to_thread_with_heartbeat), restoring the
-            # order "last write, then cleanup". It also lets the SDK complete
-            # the activity as *cancelled* (quiet DEBUG) instead of "failed"
-            # with a CancelledError stacktrace at WARNING.
+            # Wait for the last thread write before completing cancellation.
+            # The control plane coordinates generation cleanup.
             cancellation_type=workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
         )
-
-
-@workflow.defn
-class FastStoreVectors:
-    @workflow.run
-    async def run(self, payload):
-        return await workflow.execute_activity("fast_store_vectors", args=[payload], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
-
-
-@workflow.defn
-class FastDeleteVectors:
-    @workflow.run
-    async def run(self, payload):
-        return await workflow.execute_activity("fast_delete_vectors", args=[payload], schedule_to_close_timeout=timedelta(minutes=1), retry_policy=RetryPolicy(maximum_attempts=1))
-
-
-@workflow.defn
-class ProcessPullFile:
-    @workflow.run
-    async def run(self, workflow_id: str, file: Any, file_index: int) -> dict:
-        """
-        Process one pull document end to end inside a child workflow.
-
-        Why:
-            Keeping one document per child workflow isolates failures and lets
-            the parent workflow continue coordinating batch-level progress.
-        How:
-            Pass the file payload carrying the profile-derived retry policy so
-            every underlying activity reuses the same settings.
-        """
-        display_name = _wf_get(file, "display_name", None) or "unknown"
-        if not _wf_is_pull(file):
-            raise ValueError(f"ProcessPullFile received a push file: {display_name}")
-
-        task_id: str | None = _wf_get(file, "task_id")
-        document_uid: str | None = _wf_document_uid(file)
-        _wf_log_policy(file)
-        step = "uploading"
-
-        try:
-            if task_id:
-                await _wf_emit_event([task_id, "running", "uploading", None, None, 0, 1, 0, document_uid, display_name])
-
-            workflow.logger.info("[SCHEDULER] Processing pull file: %s", display_name)
-            metadata = await workflow.execute_child_workflow(
-                CreatePullFileMetadata.run,
-                args=[file],
-                id=_wf_child_id("CreatePullFileMetadata", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=1),
-            )
-
-            step = "processing"
-            if task_id:
-                # progress stays None (indeterminate) through this step: neither
-                # PullInputProcess nor OutputProcess reports intermediate progress,
-                # so a fixed fraction here would freeze the UI's progress ring for
-                # however long the real work takes instead of honestly spinning.
-                await _wf_emit_event([task_id, "running", "processing", None, None, 0, 1, 0, document_uid, display_name])
-
-            metadata = await workflow.execute_child_workflow(
-                PullInputProcess.run,
-                args=[
-                    file,
-                    _wf_get(file, "processed_by"),
-                    metadata,
-                    _wf_profile_value(file),
-                    _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
-                    _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
-                ],
-                id=_wf_child_id("PullInputProcess", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=1),
-            )
-            step = "indexing"
-            if task_id:
-                await _wf_emit_event([task_id, "running", step, None, None, 0, 1, 0, document_uid, display_name])
-            await workflow.execute_child_workflow(
-                OutputProcess.run,
-                args=[file, metadata],
-                id=_wf_child_id("OutputProcess", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=1),
-            )
-            workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
-            final_uid = _wf_get(metadata, "document_uid") or document_uid
-            step = "done"
-            if task_id:
-                await _wf_emit_event([task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name])
-            return {"document_uid": final_uid, "filename": display_name}
-        except Exception as exc:
-            if task_id:
-                await _wf_emit_event(_wf_file_terminal_event_args(exc, task_id, document_uid, display_name, step))
-            raise
 
 
 @workflow.defn
@@ -751,67 +503,39 @@ class ProcessPushFile:
             the profile-derived retry policy.
         """
         display_name = _wf_get(file, "display_name", None) or "unknown"
-        if _wf_is_pull(file):
-            raise ValueError(f"ProcessPushFile received a pull file: {display_name}")
-
-        task_id: str | None = _wf_get(file, "task_id")
         document_uid: str | None = _wf_get(file, "document_uid")
         _wf_log_policy(file)
-        step = "uploading"
 
-        try:
-            if task_id:
-                await _wf_emit_event([task_id, "running", "uploading", None, None, 0, 1, 0, document_uid, display_name])
+        workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
+        metadata = await workflow.execute_child_workflow(
+            GetPushFileMetadata.run,
+            args=[file],
+            id=_wf_child_id("GetPushFileMetadata", file, file_index),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
 
-            workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
-            metadata = await workflow.execute_child_workflow(
-                GetPushFileMetadata.run,
-                args=[file],
-                id=_wf_child_id("GetPushFileMetadata", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=1),
-            )
-
-            step = "processing"
-            if task_id:
-                # progress stays None (indeterminate) through this step: neither
-                # PushInputProcess nor OutputProcess reports intermediate progress,
-                # so a fixed fraction here would freeze the UI's progress ring for
-                # however long the real work takes instead of honestly spinning.
-                await _wf_emit_event([task_id, "running", "processing", None, None, 0, 1, 0, document_uid, display_name])
-
-            metadata = await workflow.execute_child_workflow(
-                PushInputProcess.run,
-                args=[
-                    file,
-                    _wf_get(file, "processed_by"),
-                    "",
-                    metadata,
-                    _wf_profile_value(file),
-                    _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
-                    _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
-                ],
-                id=_wf_child_id("PushInputProcess", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=1),
-            )
-            step = "indexing"
-            if task_id:
-                await _wf_emit_event([task_id, "running", step, None, None, 0, 1, 0, document_uid, display_name])
-            await workflow.execute_child_workflow(
-                OutputProcess.run,
-                args=[file, metadata],
-                id=_wf_child_id("OutputProcess", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=1),
-            )
-            workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
-            final_uid = _wf_get(metadata, "document_uid") or document_uid
-            step = "done"
-            if task_id:
-                await _wf_emit_event([task_id, "succeeded", "done", 1.0, None, 1, 1, 0, final_uid, display_name])
-            return {"document_uid": final_uid, "filename": display_name}
-        except Exception as exc:
-            if task_id:
-                await _wf_emit_event(_wf_file_terminal_event_args(exc, task_id, document_uid, display_name, step))
-            raise
+        metadata = await workflow.execute_child_workflow(
+            PushInputProcess.run,
+            args=[
+                file,
+                _wf_get(file, "processed_by"),
+                metadata,
+                _wf_profile_value(file),
+                _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
+                _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
+            ],
+            id=_wf_child_id("PushInputProcess", file, file_index),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+        await workflow.execute_child_workflow(
+            OutputProcess.run,
+            args=[file, metadata],
+            id=_wf_child_id("OutputProcess", file, file_index),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+        workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
+        final_uid = _wf_get(metadata, "document_uid") or document_uid
+        return {"document_uid": final_uid, "filename": display_name}
 
 
 @workflow.defn
@@ -819,30 +543,8 @@ class ProcessPush:
     @workflow.run
     async def run(self, definition: Any) -> dict:
         files = _wf_get(definition, "files", []) or []
-        has_pull, has_push = _wf_file_kind_summary(files)
-        if has_pull:
-            raise ValueError("ProcessPush received at least one pull file. Submit push and pull in separate workflow requests.")
-        if not has_push and files:
-            raise ValueError("ProcessPush received files but none are recognized as push.")
         return await _wf_run_parent_pipeline(
             definition=definition,
             child_workflow_run=ProcessPushFile.run,
             child_prefix="ProcessPushFile",
-        )
-
-
-@workflow.defn
-class ProcessPull:
-    @workflow.run
-    async def run(self, definition: Any) -> dict:
-        files = _wf_get(definition, "files", []) or []
-        has_pull, has_push = _wf_file_kind_summary(files)
-        if has_push:
-            raise ValueError("ProcessPull received at least one push file. Submit push and pull in separate workflow requests.")
-        if not has_pull and files:
-            raise ValueError("ProcessPull received files but none are recognized as pull.")
-        return await _wf_run_parent_pipeline(
-            definition=definition,
-            child_workflow_run=ProcessPullFile.run,
-            child_prefix="ProcessPullFile",
         )

@@ -15,8 +15,7 @@
 """Liveness (`/healthz`) and dependency-aware readiness (`/ready`) endpoints.
 
 `/healthz` stays a trivial liveness check (used by the k8s liveness/startup probes).
-`/ready` actively probes each backend (Postgres, OpenSearch, and the GCS
-content store + virtual filesystem) with a per-check timeout, so an operator (or the
+`/ready` actively probes PostgreSQL, the configured vector backend and published artifacts with a per-check timeout, so an operator (or the
 fredlab-status command) sees exactly *which* dependency is down instead of a silent
 hang. Each probe is bounded by a timeout, so a stalled dependency reports as failed
 rather than blocking the request.
@@ -63,8 +62,8 @@ class MonitoringController:
         probes: dict[str, Callable[[], Awaitable[object | None]]] = {
             "postgres": self._check_postgres,
             "opensearch": self._check_opensearch,
-            "gcs_filesystem": self._check_gcs_filesystem,
-            "gcs_content_store": self._check_gcs_content_store,
+            "published_artifacts": self._check_published_artifacts,
+            "control_plane": self._check_control_plane,
         }
         results: dict[str, dict] = {}
 
@@ -104,10 +103,9 @@ class MonitoringController:
             await conn.execute(text("SELECT 1"))
 
     async def _check_opensearch(self) -> None:
-        try:
-            client = self._context.get_opensearch_client()
-        except Exception as exc:  # noqa: BLE001
-            raise _SkippedCheck(f"opensearch not configured ({exc})") from exc
+        if self._context.configuration.storage.opensearch is None:
+            raise _SkippedCheck("opensearch not configured")
+        client = self._context.get_opensearch_client()
         ok = await asyncio.to_thread(client.ping)
         if not ok:
             raise RuntimeError("OpenSearch ping returned False")
@@ -115,18 +113,18 @@ class MonitoringController:
         if isinstance(store, OpenSearchVectorStoreAdapter):
             await asyncio.to_thread(store.ensure_ready)
 
-    async def _check_gcs_filesystem(self) -> object:
-        return await self._check_backend_health(self._context.get_filesystem(), "filesystem")
+    async def _check_published_artifacts(self) -> None:
+        reader = self._context.get_published_artifact_reader()
+        if not await asyncio.to_thread(reader.client.bucket_exists, reader.bucket):
+            raise RuntimeError("Published artifact bucket is missing")
 
-    async def _check_gcs_content_store(self) -> object:
-        return await self._check_backend_health(self._context.get_content_store(), "content store")
-
-    @staticmethod
-    async def _check_backend_health(backend: object, label: str) -> object:
-        health_check = getattr(backend, "health_check", None)
-        if health_check is None:
-            raise _SkippedCheck(f"{type(backend).__name__} has no health_check (non-GCS {label})")
-        return await asyncio.to_thread(health_check)
+    async def _check_control_plane(self) -> None:
+        url = self._context.configuration.control_plane_url
+        if not url:
+            raise RuntimeError("Control plane URL is not configured")
+        client = self._context.get_authorization_client()
+        response = await client.get(f"{url.rstrip('/')}/healthz")
+        response.raise_for_status()
 
 
 class _SkippedCheck(Exception):

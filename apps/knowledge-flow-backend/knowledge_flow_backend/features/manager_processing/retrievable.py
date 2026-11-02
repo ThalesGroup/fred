@@ -18,7 +18,7 @@ def retrieval_work(command):
     try:
         context = ApplicationContext.get_instance()
         settings = context.configuration.manager_processing
-        if settings is None or not settings.enabled:
+        if settings is None:
             raise ManagerError("worker_failed", permanent=True)
         document_id = str(UUID(command["document_id"]))
         operation_id = UUID(command["operation_id"])

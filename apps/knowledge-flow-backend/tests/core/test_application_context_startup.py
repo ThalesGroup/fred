@@ -12,51 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 import secrets
 
 import pytest
 from pydantic import AnyUrl
 
-from knowledge_flow_backend import application_context as application_context_module
 from knowledge_flow_backend.application_context import ApplicationContext
 
 _REQUIRED_VARIABLE = "KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET"
-
-
-class _Records(logging.Handler):
-    def __init__(self) -> None:
-        super().__init__(logging.DEBUG)
-        self.records: list[logging.LogRecord] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.records.append(record)
-
-
-def test_user_security_refuses_to_start_without_the_client_secret(app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The refusal names the variable; the startup log never does."""
-    configuration = app_context.configuration.model_copy(deep=True)
-    configuration.security.user.enabled = True
-    context_logger = application_context_module.logger
-    previous_level = context_logger.level
-    records = _Records()
-    context_logger.addHandler(records)
-    context_logger.setLevel(logging.DEBUG)
-    try:
-        monkeypatch.delenv(_REQUIRED_VARIABLE, raising=False)
-        monkeypatch.setattr(ApplicationContext, "_instance", None)
-        with pytest.raises(ValueError, match=_REQUIRED_VARIABLE):
-            ApplicationContext(configuration)
-
-        monkeypatch.setenv(_REQUIRED_VARIABLE, secrets.token_urlsafe())
-        monkeypatch.setattr(ApplicationContext, "_instance", None)
-        ApplicationContext(configuration)
-    finally:
-        context_logger.removeHandler(records)
-        context_logger.setLevel(previous_level)
-
-    assert records.records
-    assert all(_REQUIRED_VARIABLE not in record.getMessage() for record in records.records)
 
 
 def test_oidc_issuer_does_not_need_keycloak_realm_path(app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch) -> None:

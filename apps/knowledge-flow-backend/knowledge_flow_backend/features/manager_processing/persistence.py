@@ -78,7 +78,7 @@ class ScopedVectors:
             identifiers.append(identifier)
         if len(self.documents) != previous:
             settings = ApplicationContext.get_instance().configuration.manager_processing
-            if settings is None or not settings.enabled:
+            if settings is None:
                 raise ManagerError("worker_failed", permanent=True)
             with ManagerClient(settings) as client:
                 client.post(f"/document-processing/{d.work.processing_id}/vectors", VectorPlan(work=d.work, generation=d.generation, count=len(self.documents)))
@@ -177,7 +177,7 @@ class LocalTabularArtifacts:
     def put_file(self, key: str, file_path: Path, *, content_type: str):
         import hashlib
 
-        from knowledge_flow_backend.core.stores.content.base_content_store import StoredObjectInfo
+        from knowledge_flow_backend.features.tabular.artifacts import StoredObjectInfo
 
         name = "datasets/" + hashlib.sha256(key.encode()).hexdigest() + ".parquet"
         target = adopt_output(self.descriptor, self.directory, file_path, name)
@@ -202,7 +202,6 @@ def scoped_pipeline(context, descriptor: Descriptor, output: Path, artifacts: Ar
     scoped._input_processor_instances = {}
     scoped._output_processor_instances = {}
     scoped._inject_processor_context = True
-    scoped.configuration.library_output_processors = []
     if descriptor.session_id is not None:
         scoped.configuration.storage.tabular_store.pointer_chunks_enabled = False
     settings = scoped.configuration.manager_processing

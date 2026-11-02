@@ -16,13 +16,10 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from fred_core.documents.document_structures import DocumentMetadata
 from PIL import Image
 
 from knowledge_flow_backend.core.processors.input.docx_markdown_processor import docx_markdown_processor as docx_module
-from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor import (
-    DocxMarkdownProcessor,
-)
+from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor import DocxMarkdownProcessor
 
 
 @pytest.fixture
@@ -40,10 +37,6 @@ async def test_process_docx_file(processor: DocxMarkdownProcessor, samples_path)
     test_docx_path = samples_path / "sample.docx"
 
     assert processor.check_file_validity(test_docx_path)
-    metadata = processor.process_metadata(test_docx_path, [], "uploads")
-    assert isinstance(metadata, DocumentMetadata)
-    assert metadata.document_uid
-    assert metadata.document_name == "sample.docx"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         output_dir = Path(tmpdir)
@@ -51,7 +44,7 @@ async def test_process_docx_file(processor: DocxMarkdownProcessor, samples_path)
         result = processor.convert_file_to_markdown(
             test_docx_path,
             output_dir,
-            metadata.document_uid,  # ✅ now access attribute, not dict key
+            "document-uid",
         )
 
         assert "md_file" in result

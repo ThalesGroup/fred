@@ -447,10 +447,12 @@ def _frontend_app() -> dict:
 
 
 def _kf_app(kf_config: dict) -> dict:
-    return _obj(_base_app_props({
+    props = _base_app_props({
         "configuration": kf_config,
         "dotenv": _obj({}, additional=True),
-    }))
+    })
+    props.pop("migration")
+    return _obj(props)
 
 
 def _drop_required(schema: object) -> object:
@@ -470,10 +472,12 @@ def _drop_required(schema: object) -> object:
 
 def _kf_worker_app(kf_config: dict, *, partial_configuration: bool = False) -> dict:
     configuration = _drop_required(copy.deepcopy(kf_config)) if partial_configuration else kf_config
-    return _obj(_base_app_props({
+    props = _base_app_props({
         "configuration": configuration,
         "dotenv": _obj({}, additional=True),
-    }))
+    })
+    props.pop("migration")
+    return _obj(props)
 
 
 def _manager_app(config: dict) -> dict:

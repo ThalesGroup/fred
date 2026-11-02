@@ -12,87 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-import importlib.util
 import logging
 import os
+import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type
 
 import httpx
-from fred_core import (
-    BaseFilesystem,
-    BaseLogStore,
-    GcsFilesystem,
-    LocalFilesystem,
-    MinioFilesystem,
-    ModelProvider,
-    build_log_store,
-    get_embeddings,
-    get_model,
-    split_realm_url,
-)
-from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig
-from fred_core.documents import BaseDocumentMetadataStore as BaseMetadataStore
-from fred_core.documents import PostgresDocumentMetadataStore as PostgresMetadataStore
-from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIWriter, build_kpi_writer
-from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
+from fred_core import BaseLogStore, ModelProvider, build_log_store, get_embeddings, get_model, split_realm_url
+from fred_core.common import ModelConfiguration, OpenSearchIndexConfig
+from fred_core.kpi import BaseKPIWriter, build_kpi_writer
+from fred_core.model import http_clients
 from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MBearerAuth, M2MTokenProvider
 from fred_core.sql import create_async_engine_from_config
-from fred_core.users.store.postgres_user_store import init_user_store
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 if TYPE_CHECKING:
+    from knowledge_flow_backend.features.manager_processing.persistence import LocalTabularArtifacts
     from sentence_transformers import CrossEncoder
 
-from knowledge_flow_backend.common.structures import (
-    ChromaVectorStorageConfig,
-    ClickHouseVectorStorageConfig,
-    Configuration,
-    FileSystemPullSource,
-    GcsFilesystemConfig,
-    GcsStorageConfig,
-    InMemoryVectorStorage,
-    LocalContentStorageConfig,
-    LocalFilesystemConfig,
-    MinioFilesystemConfig,
-    MinioPullSource,
-    MinioStorageConfig,
-    OpenSearchVectorIndexConfig,
-    PgVectorStorageConfig,
-    TabularStoreConfig,
-)
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
+from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
+from knowledge_flow_backend.common.structures import Configuration, OpenSearchVectorIndexConfig, PgVectorStorageConfig, TabularStoreConfig
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import BaseFastTextProcessor
-from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
-from knowledge_flow_backend.core.stores.content.base_content_loader import BaseContentLoader
-from knowledge_flow_backend.core.stores.content.base_content_store import BaseContentStore
-from knowledge_flow_backend.core.stores.content.filesystem_content_loader import FileSystemContentLoader
-from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
-from knowledge_flow_backend.core.stores.content.gcs_content_store import GcsContentStore
-from knowledge_flow_backend.core.stores.content.minio_content_loader import MinioContentLoader
-from knowledge_flow_backend.core.stores.content.minio_content_store import MinioStorageBackend
-from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileStore
-from knowledge_flow_backend.core.stores.files.gcs_file_store import GcsFileStore
-from knowledge_flow_backend.core.stores.files.local_file_store import LocalFileStore
-from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileStore
-from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
-from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
-from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
-from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
-from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.core.stores.vector.pgvector_store import PgVectorStoreAdapter
 from knowledge_flow_backend.features.manager_processing.artifacts import ArtifactReader
-
-# Union of supported processor base classes
-BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
 
 # Default mapping for output processors by category
 DEFAULT_OUTPUT_PROCESSORS = {
@@ -172,10 +124,6 @@ def get_app_context() -> "ApplicationContext":
     return ApplicationContext._instance
 
 
-def get_filesystem() -> BaseFilesystem:
-    return get_app_context().get_filesystem()
-
-
 def _validate_pdf_dependencies(class_path: str, selection: str, extractor: str = "docling") -> None:
     prefix = "knowledge_flow_backend.core.processors.input."
     if class_path == prefix + "lightweight_markdown_processor.lite2_pdf_to_md_processor.LitePdfMarkdownProcessor" or (
@@ -238,22 +186,6 @@ def validate_output_processor_config(config: Configuration):
             raise ImportError(f"Output Processor '{entry.class_path}' could not be loaded: {e}")
 
 
-def validate_library_output_processor_config(config: Configuration):
-    """Ensure all library output processor classes can be imported and subclass LibraryOutputProcessor."""
-    if not config.library_output_processors:
-        return
-    for entry in config.library_output_processors:
-        module_path, class_name = entry.class_path.rsplit(".", 1)
-        try:
-            module = importlib.import_module(module_path)
-            cls = getattr(module, class_name)
-            if not issubclass(cls, LibraryOutputProcessor):
-                raise TypeError(f"{entry.class_path} is not a subclass of LibraryOutputProcessor")
-            logger.debug("Validated library output processor: %s", entry.class_path)
-        except (ImportError, AttributeError, TypeError) as e:
-            raise ImportError(f"Library Output Processor '{entry.class_path}' could not be loaded: {e}")
-
-
 def validate_attachment_processor_config(config: Configuration):
     """Ensure all attachment fast-text processor classes can be imported and subclass BaseFastTextProcessor."""
     if not config.attachment_processors:
@@ -286,24 +218,16 @@ class ApplicationContext:
     _input_processor_instances: Dict[str, BaseInputProcessor] = {}
     _output_processor_instances: Dict[str, BaseOutputProcessor] = {}
     _vector_store_instance: Optional[BaseVectorStore] = None
-    _metadata_store_instance: Optional[BaseMetadataStore] = None
-    _tag_store_instance: Optional[BaseTagStore] = None
 
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
-    _resource_store_instance: Optional[BaseResourceStore] = None
-    _file_store_instance: Optional[BaseFileStore] = None
-    _content_store_instance: Optional[BaseContentStore] = None
+    _content_store_instance: Optional["LocalTabularArtifacts"] = None
     _embedder_instance: Optional[Embeddings] = None
     _kpi_writer: Optional[BaseKPIWriter] = None
     _control_plane_client: httpx.AsyncClient | None = None
-    _filesystem_instance: Optional[BaseFilesystem] = None
     _pg_async_engine: Optional[AsyncEngine] = None
-    _task_service_instance: Optional[Any] = None
 
     def __init__(self, configuration: Configuration):
-        import threading
-
         self._manager_vector_lock = threading.Lock()
         self._manager_vector_store = None
         # Allow reuse if already initialized with same config
@@ -313,15 +237,8 @@ class ApplicationContext:
 
         self.configuration = configuration
         self._published_artifact_reader: ArtifactReader | None = None
-        if isinstance(configuration.storage.vector_store, ChromaVectorStorageConfig) and importlib.util.find_spec("chromadb") is None:
-            raise ImportError(
-                "Chroma vector storage is configured but the optional 'chromadb' dependency is missing. "
-                "Run `uv sync --extra chroma` in apps/knowledge-flow-backend, or build the "
-                "Knowledge Flow image with `--build-arg INSTALL_CHROMA=true`."
-            )
         validate_profile_input_processor_config(configuration)
         validate_output_processor_config(configuration)
-        validate_library_output_processor_config(configuration)
         validate_attachment_processor_config(configuration)
         self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
         self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
@@ -459,12 +376,6 @@ class ApplicationContext:
         """
         return self.configuration
 
-    def get_scheduler_backend(self) -> SchedulerBackend:
-        scheduler_cfg = self.configuration.scheduler
-        if not scheduler_cfg.enabled:
-            return SchedulerBackend.MEMORY
-        return resolve_scheduler_backend(scheduler_cfg.backend)
-
     def _get_input_processor_class(self, extension: str) -> Optional[Type[BaseInputProcessor]]:
         """
         Get the input processor class for a given file extension. The mapping is
@@ -517,8 +428,6 @@ class ApplicationContext:
         """
         Lazily create and cache a single async Postgres Engine for all the postgres async stores.
         """
-        if self.configuration.manager_processing and self.configuration.manager_processing.enabled:
-            raise RuntimeError("Manager processing uses the manager API, not the legacy SQL stores")
         if self._pg_async_engine is None:
             self._pg_async_engine = self._init_pg_async_engine()
         return self._pg_async_engine
@@ -528,7 +437,6 @@ class ApplicationContext:
         pg_async_engine = create_async_engine_from_config(pg_cfg)
 
         logger.info("[SQL] Shared Postgres async initialized.")
-        init_user_store(pg_async_engine)
         return pg_async_engine
 
     def get_log_store(self) -> BaseLogStore:
@@ -545,90 +453,11 @@ class ApplicationContext:
             )
         return self._log_store_instance
 
-    def get_content_store(self) -> BaseContentStore:
-        """
-        Factory function to get the appropriate storage backend based on configuration.
-        Built once and cached — same reasoning as get_file_store/get_log_store right
-        here in this class: GcsContentStore.__init__ builds a real GCS client (auth +
-        HTTP connection pool) via build_gcs_client(), so rebuilding it on every call
-        (this used to) reloads that pipeline on every Temporal activity that touches
-        content storage, not just once per pod.
-        Returns:
-            BaseContentStore: An instance of the storage backend.
-        """
-        if self._content_store_instance is not None:
-            return self._content_store_instance
-
-        # Get the singleton application context and configuration
-        config = ApplicationContext.get_instance().get_config().content_storage
-        backend_type = config.type
-
-        if isinstance(config, MinioStorageConfig):
-            document_bucket = f"{config.bucket_name}-documents"
-            object_bucket = f"{config.bucket_name}-objects"
-            self._content_store_instance = MinioStorageBackend(
-                endpoint=config.endpoint,
-                access_key=config.access_key,
-                secret_key=config.secret_key,
-                document_bucket=document_bucket,
-                object_bucket=object_bucket,
-                secure=config.secure,
-                public_endpoint=config.public_endpoint,
-                public_secure=config.public_secure,
-            )
-        elif isinstance(config, GcsStorageConfig):
-            # Fail fast at startup: GCS tabular Parquet reads need a signing SA to
-            # mint V4 signed URLs via IAM signBlob. There is no per-feature flag to
-            # detect tabular usage, so a missing email must stop the boot with a
-            # clear message rather than surfacing later as an opaque runtime error.
-            if not config.signing_service_account_email:
-                raise ValueError(
-                    "content_storage.type=gcs requires 'signing_service_account_email' "
-                    "to sign V4 signed URLs for tabular Parquet reads (IAM signBlob under "
-                    "Workload Identity, no JSON key). Set it to the signing service account "
-                    "that holds storage.objects.get on the objects bucket and on which the "
-                    "Workload Identity service account has iam.serviceAccounts.signBlob."
-                )
-            self._content_store_instance = GcsContentStore(
-                document_bucket=f"{config.bucket_name}-documents",
-                object_bucket=f"{config.bucket_name}-objects",
-                project_id=config.project_id,
-                signing_service_account_email=config.signing_service_account_email,
-            )
-        elif isinstance(config, LocalContentStorageConfig):
-            document_root = Path(config.root_path).expanduser() / "documents"
-            object_root = Path(config.root_path).expanduser() / "objects"
-            self._content_store_instance = FileSystemContentStore(
-                document_root=document_root,
-                object_root=object_root,
-            )
-        else:
-            raise ValueError(f"Unsupported storage backend: {backend_type}")
-
+    def get_content_store(self) -> "LocalTabularArtifacts":
+        """Return the attempt-local writer installed by scoped_pipeline."""
+        if self._content_store_instance is None:
+            raise RuntimeError("Tabular artifacts require a manager processing attempt")
         return self._content_store_instance
-
-    def get_file_store(self) -> BaseFileStore:
-        """
-        Return a simple file store.
-        Returns:
-            BaseContentStore: An instance of the storage backend.
-        """
-        # Get the singleton application context and configuration
-        if self._file_store_instance:
-            return self._file_store_instance
-
-        config = ApplicationContext.get_instance().get_config().content_storage
-        backend_type = config.type
-
-        if isinstance(config, MinioStorageConfig):
-            self._file_store_instance = MinioFileStore(endpoint=config.endpoint, access_key=config.access_key, secret_key=config.secret_key, bucket_name=config.bucket_name, secure=config.secure)
-        elif isinstance(config, GcsStorageConfig):
-            self._file_store_instance = GcsFileStore(bucket_name=f"{config.bucket_name}-files", project_id=config.project_id)
-        elif isinstance(config, LocalContentStorageConfig):
-            self._file_store_instance = LocalFileStore(Path(config.root_path).expanduser())
-        else:
-            raise ValueError(f"Unsupported file backend: {backend_type}")
-        return self._file_store_instance
 
     def get_embedder(self) -> Embeddings:
         """
@@ -637,10 +466,7 @@ class ApplicationContext:
         - Only secrets live in env; all other wiring lives in YAML.
         - Typed return (Embeddings) keeps the contract clear at call sites.
 
-        Cached like every other get_* factory in this class (get_file_store,
-        get_content_store, ...): get_embeddings() builds a real provider client on
-        each call, and this is called per-activity from several scheduler activities
-        (fast_store_vectors, delete_vectors, ...), not just once at startup.
+        Cache the provider client across indexing activities.
         """
         if self._embedder_instance is not None:
             return self._embedder_instance
@@ -652,11 +478,6 @@ class ApplicationContext:
         if not self.configuration.chat_model:
             raise ValueError("Utility model configuration is missing.")
         return get_model(self.configuration.chat_model)
-
-    def get_vision_model(self):
-        if not self.configuration.vision_model:
-            raise ValueError("Vision model configuration is missing.")
-        return get_model(self.configuration.vision_model)
 
     def get_crossencoder_model(self) -> "CrossEncoder":
         """
@@ -740,15 +561,15 @@ class ApplicationContext:
         with self._manager_vector_lock:
             if self._manager_vector_store is None:
                 settings = self.configuration.manager_processing
-                if settings is None or not settings.enabled:
-                    raise ValueError("Manager processing is disabled")
+                if settings is None:
+                    raise ValueError("Manager processing is not configured")
                 instance = self.build_vector_store(self.get_embedder(), settings.vector_store)
                 instance.strict_operations = True
                 self._manager_vector_store = instance
             return self._manager_vector_store
 
     def build_vector_store(self, embedding_model: Embeddings, store, *, read_only: bool = False) -> BaseVectorStore:
-        """Construct an explicitly selected namespace without changing the legacy singleton."""
+        """Construct an explicitly selected namespace for the API or a processing attempt."""
         embedding_model_name = self.configuration.embedding_model.name or "unknown"
 
         if isinstance(store, OpenSearchVectorIndexConfig):
@@ -773,19 +594,6 @@ class ApplicationContext:
                 read_only=read_only,
             )
             return instance
-        elif isinstance(store, ChromaVectorStorageConfig):
-            from knowledge_flow_backend.core.stores.vector.chromadb_vector_store import ChromaDBVectorStore
-
-            local_path = Path(store.local_path).expanduser()
-            local_path.mkdir(parents=True, exist_ok=True)
-            instance = ChromaDBVectorStore(
-                persist_path=str(local_path),
-                collection_name=store.collection_name,
-                embeddings=embedding_model,
-                embedding_model_name=embedding_model_name,
-            )
-        elif isinstance(store, InMemoryVectorStorage):
-            instance = InMemoryLangchainVectorStore(embedding_model=embedding_model, embedding_model_name=embedding_model_name)
         elif isinstance(store, PgVectorStorageConfig):
             pg = self.configuration.storage.postgres
             instance = PgVectorStoreAdapter(
@@ -798,57 +606,9 @@ class ApplicationContext:
                 "[VECTOR][PGVECTOR] Using postgres collection=%s (default table)",
                 store.collection_name,
             )
-        elif isinstance(store, ClickHouseVectorStorageConfig):
-            try:
-                from knowledge_flow_backend.core.stores.vector.clickhouse_vector_store import ClickHouseVectorStoreAdapter
-            except ModuleNotFoundError as exc:
-                missing_dep = exc.name or "unknown"
-                if missing_dep == "clickhouse_connect" or missing_dep.startswith("clickhouse_connect."):
-                    raise ImportError(
-                        "ClickHouse vector store is configured but required dependency is missing: "
-                        f"'{missing_dep}'. Install ClickHouse dependency "
-                        "`clickhouse-connect` or switch `storage.vector_store.type` to a different backend."
-                    ) from exc
-                raise
-
-            ch = self.configuration.storage.clickhouse
-            if not ch:
-                raise ValueError("Missing ClickHouse configuration")
-            if not ch.password:
-                raise ValueError("Missing ClickHouse credentials: CLICKHOUSE_PASSWORD")
-            instance = ClickHouseVectorStoreAdapter(
-                embedding_model=embedding_model,
-                embedding_model_name=embedding_model_name,
-                host=ch.host,
-                port=ch.port,
-                database=ch.database,
-                table=store.table,
-                username=ch.username,
-                password=ch.password,
-                secure=ch.secure,
-                verify=ch.verify,
-                bulk_size=store.bulk_size,
-            )
-            instance.validate_index_or_fail()
-            logger.info(
-                "[VECTOR][CLICKHOUSE] Using host=%s database=%s table=%s",
-                ch.host,
-                ch.database,
-                store.table,
-            )
         else:
             raise ValueError("Unsupported vector store backend")
         return instance
-
-    def get_metadata_store(self) -> BaseMetadataStore:
-        if self._metadata_store_instance is not None:
-            return self._metadata_store_instance
-
-        store_config = get_configuration().storage.metadata_store
-        if isinstance(store_config, PostgresTableConfig):
-            self._metadata_store_instance = PostgresMetadataStore(engine=self.get_pg_async_engine())
-            return self._metadata_store_instance
-        raise ValueError(f"Unsupported metadata storage backend type: {store_config.type}")
 
     def get_opensearch_client(self) -> OpenSearch:
         if self._opensearch_client is not None:
@@ -866,18 +626,6 @@ class ApplicationContext:
             connection_class=RequestsHttpConnection,
         )
         return self._opensearch_client
-
-    def get_async_sql_engine(self) -> AsyncEngine:
-        """Create one async SQL engine for the whole app"""
-        if self._pg_async_engine is None:
-            # For now, only Postgres is supported
-            pg = get_configuration().storage.postgres
-            if not pg:
-                raise ValueError("PostgreSQL configuration is required for async sql engine")
-
-            self._pg_async_engine = create_async_engine_from_config(pg)
-
-        return self._pg_async_engine
 
     def get_kpi_writer(self) -> BaseKPIWriter:
         if self._kpi_writer is not None:
@@ -907,59 +655,11 @@ class ApplicationContext:
             raise RuntimeError("Control Plane client is opened at API startup")
         return self._control_plane_client
 
-    def get_kpi_store(self) -> BaseKPIStore:
-        writer = self.get_kpi_writer()
-        if isinstance(writer, KPIWriter):
-            return writer.store
-        raise ValueError("KPI store not available (NoOpKPIWriter active)")
-
-    def get_tag_store(self) -> BaseTagStore:
-        if self._tag_store_instance is not None:
-            return self._tag_store_instance
-
-        store_config = get_configuration().storage.tag_store
-        if isinstance(store_config, PostgresTableConfig):
-            self._tag_store_instance = PostgresTagStore(engine=self.get_pg_async_engine())
-            return self._tag_store_instance
-        raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
-
-    def get_resource_store(self) -> BaseResourceStore:
-        if self._resource_store_instance is not None:
-            return self._resource_store_instance
-
-        store_config = get_configuration().storage.resource_store
-        if isinstance(store_config, PostgresTableConfig):
-            self._resource_store_instance = PostgresResourceStore(engine=self.get_pg_async_engine())
-            return self._resource_store_instance
-        raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
-
-    def get_content_loader(self, source: str) -> BaseContentLoader:
-        """
-        Factory method to create a document loader instance based on configuration.
-        this document loader is legacy it returns directly langchain documents
-        Currently supports LocalFileLoader.
-        """
-        # Get the singleton application context and configuration
-        config = self.get_config().document_sources
-        if not config or source not in config:
-            raise ValueError(f"Unknown document source tag: {source}")
-        source_config = config[source]
-        if source_config.type != "pull":
-            raise ValueError(f"Source '{source}' is not a pull-mode source.")
-        if isinstance(source_config, FileSystemPullSource):
-            return FileSystemContentLoader(source_config, source)
-        elif isinstance(source_config, MinioPullSource):
-            return MinioContentLoader(source_config, source)
-        else:
-            raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
-
     def get_text_splitter(self) -> BaseTextSplitter:
         """
         Factory method to create a text splitter instance based on configuration.
         Currently returns RecursiveSplitter.
         """
-        from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
-
         profile = get_current_processing_profile()
         profile_cfg = self.configuration.processing.get_profile_config(profile)
         splitter_cfg = profile_cfg.text_splitter
@@ -969,66 +669,12 @@ class ApplicationContext:
             preserve_tables=splitter_cfg.preserve_tables,
         )
 
-    def get_pull_provider(self, source_tag: str) -> BaseContentLoader:
-        source_config = self.configuration.document_sources.get(source_tag)
-
-        if not source_config:
-            raise ValueError(f"Unknown document source tag: {source_tag}")
-        if source_config.type != "pull":
-            raise ValueError(f"Source '{source_tag}' is not a pull-mode source.")
-
-        if source_config.provider == "local_path":
-            return FileSystemContentLoader(source_config, source_tag)
-        elif source_config.provider == "minio":
-            return MinioContentLoader(source_config, source_tag)
-        else:
-            raise NotImplementedError(f"No pull provider implemented for '{source_config.provider}'")
-
-    def get_filesystem(self):
-        """
-        Factory function to create the filesystem backend based on configuration.
-
-        Returns:
-            Filesystem: Instance of the configured filesystem backend.
-        """
-        if self._filesystem_instance is not None:
-            return self._filesystem_instance
-
-        fs_cfg = self.configuration.filesystem
-
-        if isinstance(fs_cfg, LocalFilesystemConfig):
-            instance = LocalFilesystem(root=fs_cfg.root)
-
-        elif isinstance(fs_cfg, MinioFilesystemConfig):
-            instance = MinioFilesystem(
-                endpoint=fs_cfg.endpoint,
-                access_key=fs_cfg.access_key,
-                secret_key=fs_cfg.secret_key,
-                bucket_name=fs_cfg.bucket_name,  # type: ignore
-                secure=bool(fs_cfg.secure),
-            )
-
-        elif isinstance(fs_cfg, GcsFilesystemConfig):
-            instance = GcsFilesystem(
-                bucket_name=fs_cfg.bucket_name,
-                prefix=fs_cfg.prefix,
-                project_id=fs_cfg.project_id,
-            )
-
-        else:
-            raise ValueError(f"Unsupported filesystem type '{fs_cfg.type}'")
-
-        self._filesystem_instance = instance
-        return instance
-
     def is_summary_generation_enabled(self) -> bool:
         """
         Checks if the summary generation feature is enabled in the configuration.
         Returns:
             bool: True if enabled, False otherwise.
         """
-        from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
-
         profile = get_current_processing_profile()
         profile_cfg = self.configuration.processing.get_profile_config(profile)
         return profile_cfg.generate_summary
@@ -1052,12 +698,6 @@ class ApplicationContext:
                 except Exception as e:
                     logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
                     raise ValueError("Invalid Keycloak URL") from e
-            # Manager-processing workers use their dedicated client credentials,
-            # validated by ManagerClient, rather than the legacy KF API identity.
-            manager_processing = self.configuration.manager_processing
-            if not (manager_processing and manager_processing.enabled) and not os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET"):
-                raise ValueError("Missing required environment variable: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
-
         embedding = self.configuration.embedding_model
         # Non-secret settings from YAML
         for k, v in (embedding.settings or {}).items():
@@ -1125,79 +765,8 @@ class ApplicationContext:
                 logger.info("     ↳ Collection: %s", store.collection_name)
                 logger.info("     ↳ Username: %s", pg.username)
                 self._log_sensitive("FRED_POSTGRES_PASSWORD", os.getenv("FRED_POSTGRES_PASSWORD"))
-            elif isinstance(store, ClickHouseVectorStorageConfig):
-                ch = self.configuration.storage.clickhouse
-                if not ch:
-                    logger.error("     ❌ Missing ClickHouse configuration (required for ClickHouse-backed vector store)")
-                    raise RuntimeError("ClickHouse configuration is required for ClickHouse vector store")
-                _require_env("CLICKHOUSE_PASSWORD")
-                logger.info("     ↳ Backend: clickhouse")
-                logger.info("     ↳ Host: %s  Port: %s  DB: %s", ch.host, ch.port, ch.database)
-                logger.info("     ↳ Table: %s", store.table)
-                logger.info("     ↳ Secure (TLS): %s", ch.secure)
-                logger.info("     ↳ Verify Certs: %s", ch.verify)
-                logger.info("     ↳ Username: %s", ch.username)
-                self._log_sensitive("CLICKHOUSE_PASSWORD", os.getenv("CLICKHOUSE_PASSWORD"))
-            elif vector_type == "in_memory":
-                logger.info("     ↳ In-memory vector store (no host/index)")
         except Exception:
             logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
-
-        try:
-            st = self.configuration.storage
-            logger.info("  🗄️  Storage:")
-
-            def _describe(label: str, store_cfg):
-                if isinstance(store_cfg, DuckdbStoreConfig):
-                    logger.info("     • %-14s DuckDB  path=%s", label, store_cfg.duckdb_path)
-
-                elif isinstance(store_cfg, OpenSearchIndexConfig):
-                    os_cfg = self.configuration.storage.opensearch
-                    if not os_cfg:
-                        raise ValueError("Missing OpenSearch configuration")
-                    _require_env("OPENSEARCH_PASSWORD")
-                    logger.info(
-                        "     • %-14s OpenSearch host=%s index=%s secure=%s verify=%s",
-                        label,
-                        os_cfg.host,
-                        store_cfg.index,
-                        os_cfg.secure,
-                        os_cfg.verify_certs,
-                    )
-                    secret = os_cfg.password or os.getenv("OPENSEARCH_PASSWORD")
-                    logger.info("     ↳ Username: %s", os_cfg.username or "<unset>")
-                    self._log_sensitive("TABULAR_POSTGRES_PASSWORD|SQL_PASSWORD|FRED_POSTGRES_PASSWORD", secret)
-                elif isinstance(store_cfg, ChromaVectorStorageConfig):
-                    logger.info("     • %-14s ChromaDB  database=%s  host=%s  distance=%s", label, store_cfg.local_path or "unset", store_cfg.collection_name or "unset", store_cfg.distance or "unset")
-                elif isinstance(store_cfg, PgVectorStorageConfig):
-                    logger.info(
-                        "     • %-14s pgvector  collection=%s",
-                        label,
-                        store_cfg.collection_name,
-                    )
-                elif isinstance(store_cfg, ClickHouseVectorStorageConfig):
-                    logger.info(
-                        "     • %-14s ClickHouse table=%s",
-                        label,
-                        store_cfg.table,
-                    )
-                elif isinstance(store_cfg, LogStoreConfig):
-                    # No-op KPI / log-only store
-                    logger.info(
-                        "     • %-14s No-op / LogStore  level=%s  (logs only, no persistence)",
-                        label,
-                        getattr(store_cfg, "level", "INFO"),
-                    )
-                else:
-                    logger.info("     • %-14s %s", label, type(store_cfg).__name__)
-
-            _describe("tag_store", st.tag_store)
-            _describe("metadata_store", st.metadata_store)
-            _describe("vector_store", st.vector_store)
-            _describe("resource_store", st.resource_store)
-
-        except Exception:
-            logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
 
         try:
             tabular_store: TabularStoreConfig = self.configuration.storage.tabular_store
@@ -1218,40 +787,6 @@ class ApplicationContext:
             )
         except Exception:
             logger.warning("  ⚠️ Failed to read tabular runtime section.")
-
-        # Filesystem
-        logger.info("  📁 Agent filesystem:")
-        fs = self.configuration.filesystem
-        logger.info("     • %-14s %s", "filesystem", type(fs).__name__)
-        if isinstance(fs, LocalFilesystemConfig):
-            logger.info("        backend=local  root=%s", fs.root)
-        elif isinstance(fs, MinioFilesystemConfig):
-            logger.info(
-                "        backend=minio  endpoint=%s  access_key=%s  secret_key=%s",
-                fs.endpoint,
-                fs.access_key,
-                _mask(fs.secret_key),
-            )
-        elif isinstance(fs, GcsFilesystemConfig):
-            logger.info(
-                "        backend=gcs  bucket=%s  prefix=%s  project_id=%s",
-                fs.bucket_name,
-                fs.prefix or "",
-                fs.project_id or "<from-adc>",
-            )
-        else:
-            logger.info("        backend=<unknown>")
-
-        logger.info(f"  📁 Content storage backend: {self.configuration.content_storage.type}")
-        if isinstance(self.configuration.content_storage, MinioStorageConfig):
-            logger.info(f"     ↳ Local Path: {self.configuration.content_storage.bucket_name}")
-        elif isinstance(self.configuration.content_storage, GcsStorageConfig):
-            logger.info(
-                "     ↳ GCS buckets: %s-documents / %s-objects  project_id=%s",
-                self.configuration.content_storage.bucket_name,
-                self.configuration.content_storage.bucket_name,
-                self.configuration.content_storage.project_id or "<from-adc>",
-            )
 
         logger.info("  🧩 Input Processor Mappings:")
         for ext, cls in self.input_processor_registry.items():
@@ -1281,8 +816,6 @@ class ApplicationContext:
         """
         # HTTP clients
         try:
-            from fred_core.model import http_clients
-
             await http_clients.async_shutdown_shared_clients()
         except Exception:
             logger.debug("[HTTP] Failed to shutdown shared clients", exc_info=True)

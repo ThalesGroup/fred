@@ -12,7 +12,7 @@ A space owns its folder tree, document registry and stored originals. Manager ow
 their identity, storage lifecycle and processing receipts. Knowledge Flow workers
 own extraction and output algorithms. Upload-only requires no ingestion service;
 optional processing dispatches the existing `ProcessPush` workflow through Temporal.
-Manager folder UUIDs and Knowledge Flow tag UUIDs are distinct identity domains.
+Control Plane owns document placement; Knowledge Flow has no separate tag catalog.
 
 A folder has one immutable space and at most one parent in that space. Paths
 contain UUIDs, not display names. Renaming changes one label without rewriting
@@ -86,15 +86,12 @@ Publication failure leaves no visible document. Originals are immutable (I25).
 
 ## Physical object layout
 
-Manager preserves Swift's documents bucket convention and document-local
-`input`/`output` roots. The configured bucket is the full name, not the base name:
+Originals and derived artifacts share one configured S3 bucket:
 
 ```text
-<content_storage.bucket_name>-documents/  # app-content-documents in k3d
+<bucket>/  # app-content-documents in k3d
   <document_id>/input/<original_filename>
   <document_id>/output/<installation_id>/<processing_id>/<generation_id>/<artifact>
-<content_storage.bucket_name>-objects/    # unchanged auxiliary store
-  <key chosen by an object-store consumer>
 ```
 
 Original and derived configurations require the same endpoint, bucket and prefix.
@@ -104,8 +101,7 @@ The original also carries S3 metadata `fred-installation=<installation_id>`:
 cleanup never deletes an unknown or foreign installation's object. The document
 UUID is also its internal upload journal ID; the browser request key is different.
 Read `document.object_key` for the exact key. SQL records the storage binding and
-refuses changed coordinates at startup. Existing Swift metadata is not imported
-merely by pointing manager at its bucket.
+refuses changed coordinates at startup. Knowledge Flow owns no catalog tables or Alembic migrations.
 
 Generation directories below `output` are the justified layout difference:
 retries and stale activities cannot overwrite the published artifacts. A new
@@ -121,7 +117,7 @@ there is no required S3 `manifest.json`. Artifact presence alone is not publicat
 The source definitions are [original keys](../../apps/control-plane/src/documents/mod.rs)
 and [upload identity](../../apps/control-plane/src/documents/upload.rs),
 [derived prefixes](../../apps/control-plane/src/processing/store.rs), and
-[legacy MinIO storage](../../apps/knowledge-flow-backend/knowledge_flow_backend/core/stores/content/minio_content_store.py).
+[generation artifact storage](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/artifacts.py).
 The [document journey](02.2-document-journey.md) gives the user-facing PDF example;
 its [technical annex](A4-document-journey.md) provides read-only inspection steps.
 
@@ -257,12 +253,13 @@ identities, describes running work again every two minutes and expires
 queued/running work within configured deadlines. Temporal
 history contains references and orchestration metadata, never files or credentials.
 
-The existing KF activities select a manager persistence adapter through the source
-reference. They stream an authorized original, run the existing extraction and
+KF activities require a Control Plane processing source reference. They stream an authorized original, run the existing extraction and
 output processors, and stage immutable derived artifacts and generation-scoped
 vectors in separate stores. Native Word/ODT/PowerPoint previews use the existing
 Office-to-PDF converter in the supervised extraction process. CSV/Excel use the
-existing tabular processors. No legacy tag, catalog row or task is created.
+existing tabular processors with attempt-local
+[`LocalTabularArtifacts`](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/persistence.py).
+Vector projections use OpenSearch or pgvector.
 
 Preparation, extraction and indexing claim monotonically fenced generations.
 Manager verifies artifact sizes/hashes before the final guarded transaction checks

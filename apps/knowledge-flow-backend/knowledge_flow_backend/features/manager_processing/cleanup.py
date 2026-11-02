@@ -67,7 +67,7 @@ async def run():
 
     context = ApplicationContext.get_instance()
     settings = context.configuration.manager_processing
-    if settings is None or not settings.enabled:
+    if settings is None:
         return
     while True:
         try:

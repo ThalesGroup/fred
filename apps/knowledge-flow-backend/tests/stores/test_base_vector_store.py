@@ -18,11 +18,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from knowledge_flow_backend.core.stores.vector.base_vector_store import (
-    BaseVectorStore,
-    is_own_session_chunk,
-    is_session_chunk,
-)
+from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore, is_own_session_chunk, is_session_chunk
 
 
 def test_is_own_session_chunk_requires_session_scope_and_matching_user():
@@ -51,8 +47,7 @@ def test_is_session_chunk_ignores_owner_and_only_checks_scope():
 
 
 class _FakeChunkStore(BaseVectorStore):
-    """`raises=True` simulates a real production store (OpenSearch, PGVector,
-    ChromaDB, ClickHouse, in-memory) whose `get_chunks_for_document` hits a
+    """`raises=True` simulates a real production store (OpenSearch, PGVector) whose `get_chunks_for_document` hits a
     genuine backend failure -- these all raise `RuntimeError` on a lookup
     failure, never `NotImplementedError` (that is reserved for a backend that
     never supports the capability at all). A lookup failure must propagate,
@@ -164,8 +159,7 @@ def test_is_session_scoped_document_propagates_a_lookup_failure_instead_of_autho
     """P1: the platform-admin bypass must not be granted just because the
     vector store couldn't be reached -- an outage that turns a lookup into an
     exception is indistinguishable from "no chunks left" only if the failure
-    is swallowed. Every real backend (OpenSearch, PGVector, ChromaDB,
-    ClickHouse, in-memory) now raises RuntimeError on a genuine fetch
+    is swallowed. Every real backend (OpenSearch, PGVector) now raises RuntimeError on a genuine fetch
     failure; this must propagate out and force a non-2xx response at the
     endpoint, not silently authorize the delete."""
     store = _FakeChunkStore(raises=True)

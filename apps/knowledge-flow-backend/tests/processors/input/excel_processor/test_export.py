@@ -227,7 +227,7 @@ def _read_stored_parquet(object_key: str) -> pd.DataFrame:
     from knowledge_flow_backend.application_context import ApplicationContext
 
     store = ApplicationContext.get_instance().get_content_store()
-    data = store.get_object_stream(object_key).read()
+    data = store.get_output_artifact(object_key)
     return pd.read_parquet(io.BytesIO(data))
 
 

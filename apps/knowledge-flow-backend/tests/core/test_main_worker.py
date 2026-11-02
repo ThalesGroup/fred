@@ -14,7 +14,6 @@
 
 import asyncio
 import json
-from types import SimpleNamespace
 
 import pytest
 
@@ -23,9 +22,8 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import IngestionWorkerRole
 
 
-@pytest.mark.parametrize("manager_processing", [False, True])
 @pytest.mark.asyncio
-async def test_main_worker_enables_observability_from_configuration(app_context, monkeypatch, capsys, manager_processing) -> None:
+async def test_main_worker_enables_observability_from_configuration(app_context, monkeypatch, capsys) -> None:
     """
     Verify worker startup honors metrics and KPI settings from configuration.
 
@@ -37,8 +35,6 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         metrics server, schedules KPI emitters, runs Temporal, and shuts down cleanly.
     """
     config = app_context.configuration.model_copy(deep=True)
-    if manager_processing:
-        config = config.model_copy(update={"manager_processing": SimpleNamespace(enabled=True)})
     config.observability = config.observability.model_copy(deep=True)
     config.observability.kpi = config.observability.kpi.model_copy(
         update={
@@ -46,7 +42,7 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         }
     )
     config.observability.kpi.prometheus = config.observability.kpi.prometheus.model_copy(update={"enabled": True})
-    config.app = config.app.model_copy(update={"pdf_render_ttl_days": 45, "log_format": "json"})
+    config.app = config.app.model_copy(update={"log_format": "json"})
     config.scheduler = config.scheduler.model_copy(
         update={
             "enabled": True,
@@ -63,7 +59,6 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
 
     observed: dict[str, object] = {}
     writer_sentinel = object()
-    engine_sentinel = object()
 
     async def fake_run_worker(
         temporal_config,
@@ -71,18 +66,13 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         roles=None,
         max_concurrent_workflow_tasks: int = 1,
         max_concurrent_activities: int = 1,
-        pdf_render_ttl_days: int = 30,
-        manager_processing: bool = False,
     ) -> None:
         """Capture the Temporal config passed to the worker and yield once."""
-        if manager_processing:
-            assert observed["corpus_initialized"] is True
+        assert observed["corpus_initialized"] is True
         observed["temporal_config"] = temporal_config
-        observed["manager_processing"] = manager_processing
         observed["roles"] = roles
         observed["max_concurrent_workflow_tasks"] = max_concurrent_workflow_tasks
         observed["max_concurrent_activities"] = max_concurrent_activities
-        observed["pdf_render_ttl_days"] = pdf_render_ttl_days
         await asyncio.sleep(0)
 
     async def fake_emit_process_kpis(interval_s: float, writer) -> None:
@@ -90,20 +80,10 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
         observed["process_kpi"] = (interval_s, writer)
         await asyncio.sleep(0)
 
-    async def fake_emit_sql_pool_kpis(interval_s: float, writer, engine, pool_name: str) -> None:
-        """Record SQL pool KPI scheduling inputs without touching a real database."""
-        observed["sql_pool_kpi"] = (interval_s, writer, engine, pool_name)
-        await asyncio.sleep(0)
-
     async def fake_shutdown(self) -> None:
         """Mark the test context as shut down without closing real shared resources."""
         observed["shutdown_called"] = True
 
-    async def fake_require_tables(engine, tables, *, component, migrate_command, version_table) -> None:
-        """Record the #2314 startup schema guard call without touching a database."""
-        observed["require_tables"] = (engine, set(tables), component, version_table)
-
-    monkeypatch.setattr(main_worker_module, "require_tables", fake_require_tables)
     monkeypatch.setattr(main_worker_module, "load_configuration", lambda: config)
     monkeypatch.setattr(
         main_worker_module,
@@ -112,10 +92,8 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     )
     monkeypatch.setattr(main_worker_module, "run_worker", fake_run_worker)
     monkeypatch.setattr(main_worker_module, "emit_process_kpis", fake_emit_process_kpis)
-    monkeypatch.setattr(main_worker_module, "emit_sql_pool_kpis", fake_emit_sql_pool_kpis)
     monkeypatch.setattr(ApplicationContext, "get_manager_vector_store", lambda self: observed.setdefault("corpus_initialized", True))
     monkeypatch.setattr(ApplicationContext, "get_kpi_writer", lambda self: writer_sentinel)
-    monkeypatch.setattr(ApplicationContext, "get_pg_async_engine", lambda self: engine_sentinel)
     monkeypatch.setattr(ApplicationContext, "shutdown", fake_shutdown)
 
     ApplicationContext.reset_instance()
@@ -132,30 +110,12 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     assert all("timestamp" in event and "severity" in event for event in events)
 
     prom_cfg = config.observability.kpi.prometheus
-    # #2314: the worker must run the startup schema guard (on its engine, with
-    # the full required set) before polling Temporal.
-    from knowledge_flow_backend.models.table_ownership import REQUIRED_TABLES
-
-    if manager_processing:
-        assert "require_tables" not in observed
-    else:
-        assert observed["require_tables"] == (
-            engine_sentinel,
-            set(REQUIRED_TABLES),
-            "knowledge-flow-worker",
-            "alembic_version_knowledge_flow",
-        )
     assert observed["metrics_server"] == (prom_cfg.port, prom_cfg.address)
     assert observed["process_kpi"] == (10.0, writer_sentinel)
-    if manager_processing:
-        assert "sql_pool_kpi" not in observed
-    else:
-        assert observed["sql_pool_kpi"] == (10.0, writer_sentinel, engine_sentinel, "knowledge-flow-postgres")
+    assert "sql_pool_kpi" not in observed
     assert observed["temporal_config"] == config.scheduler.temporal
     assert observed["max_concurrent_workflow_tasks"] == 4
     assert observed["max_concurrent_activities"] == 6
-    assert observed["pdf_render_ttl_days"] == 45
-    assert observed["manager_processing"] is manager_processing
     # The role is what decides the queue polled and the registrations; the worker
     # derives both from it, so nothing here spells a queue name out.
     assert observed["roles"] == [IngestionWorkerRole.extraction_rich]

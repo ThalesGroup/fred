@@ -63,7 +63,7 @@ def journal(monkeypatch):
             writes.append(body.count)
 
     monkeypatch.setattr(client, "ManagerClient", FakeClient)
-    monkeypatch.setattr(ApplicationContext, "get_instance", lambda: SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace(enabled=True))))
+    monkeypatch.setattr(ApplicationContext, "get_instance", lambda: SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace())))
     return writes
 
 
@@ -76,7 +76,7 @@ def test_export_uses_the_existing_temporal_models():
     for submitted in submissions:
         parsed = PipelineDefinition.model_validate(submitted)
         file = parsed.files[0]
-        assert file.is_push() and file.task_id is None
+        assert file.document_uid
         assert file.processed_by.roles == []
         from fred_core.logs.propagation import decode_log_context
 
@@ -325,7 +325,7 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
     vectors = SimpleNamespace(delete_chunk=delete, get_chunk=read)
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace(enabled=True)), get_manager_vector_store=lambda: vectors)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
     if failure:
         if failure == "authority":
             with pytest.raises(RuntimeError):
@@ -377,7 +377,7 @@ def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descript
     vectors = SimpleNamespace(delete_chunk=delete, get_chunk=lambda *_: {})
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace(enabled=True)), get_manager_vector_store=lambda: vectors)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
     cleanup.sweep(context)
     assert [str(ack.generation) for ack in acknowledgments] == [later["generation"]]
 
@@ -453,7 +453,7 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
     artifacts = SimpleNamespace(bucket="derived", client=SimpleNamespace(list_objects=objects, remove_object=remove))
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: artifacts)
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace(enabled=True)), get_manager_vector_store=lambda: vectors)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
     if remaining:
         cleanup.sweep(context)
         assert all(ack.work.document_id != descriptor.work.document_id for ack in acknowledgments)
@@ -507,7 +507,7 @@ def test_extraction_child_freezes_profile_before_context_and_requires_office_pre
     fixture = Path(__file__).resolve().parents[4] / "control-plane/tests/fixtures/processing/worker-contract.json"
     profile = json.loads(fixture.read_text())["processor_profiles"]["fast"]
     descriptor = descriptor.model_copy(update={"profile_settings": profile, "file": {"input_activity_timeout_seconds": 60}})
-    configuration = SimpleNamespace(processing=SimpleNamespace(profiles=SimpleNamespace(fast=None)), manager_processing=SimpleNamespace(enabled=True))
+    configuration = SimpleNamespace(processing=SimpleNamespace(profiles=SimpleNamespace(fast=None)), manager_processing=SimpleNamespace())
     context = SimpleNamespace(configuration=configuration)
 
     def build(received):
@@ -758,31 +758,6 @@ def test_manager_http_transient_failure_is_retryable_and_refreshes_auth():
     assert closed == [True, True] and refreshed == [True]
 
 
-@pytest.mark.parametrize("kind, field", [("opensearch", "index"), ("pgvector", "collection_name"), ("chroma", "collection_name"), ("clickhouse", "table")])
-def test_configuration_refuses_shared_vector_and_content_namespaces(kind, field):
-    from knowledge_flow_backend.common.structures import Configuration, MinioFilesystemConfig, MinioStorageConfig
-
-    legacy = SimpleNamespace(type=kind, **{field: "legacy"})
-    manager = SimpleNamespace(enabled=True, vector_store=SimpleNamespace(type=kind, **{field: "derived"}), bucket="derived")
-    content = MinioStorageConfig(type="minio", endpoint="localhost:9000", access_key="fixture", secret_key="fixture", bucket_name="legacy")
-    filesystem = MinioFilesystemConfig(endpoint="localhost:9000", access_key="fixture", secret_key="fixture", bucket_name="legacy-files")
-    config = Configuration.model_construct(storage=SimpleNamespace(vector_store=legacy), manager_processing=manager, content_storage=content, filesystem=filesystem)
-    assert config.isolate_manager_processing() is config
-    setattr(manager.vector_store, field, "legacy")
-    with pytest.raises(ValueError, match="vector namespaces must differ"):
-        config.isolate_manager_processing()
-    setattr(manager.vector_store, field, "derived")
-    manager.bucket = "legacy-documents"
-    assert config.isolate_manager_processing() is config
-    for bucket in ("legacy", "legacy-objects"):
-        manager.bucket = bucket
-        with pytest.raises(ValueError, match="content buckets must differ"):
-            config.isolate_manager_processing()
-    manager.bucket = "legacy-files"
-    with pytest.raises(ValueError, match="filesystem buckets must differ"):
-        config.isolate_manager_processing()
-
-
 @pytest.mark.parametrize("kind,done,expected", [("single", True, True), ("multi", True, True), ("single", False, False), ("none", True, False)])
 def test_indexing_publishes_tabular_inclusion_without_vectors(monkeypatch, descriptor, tmp_path, kind, done, expected):
     from fred_core.documents.document_structures import DocumentMetadata, FileInfo, Identity, ProcessingStage, SourceInfo, SourceType
@@ -877,7 +852,7 @@ def test_managed_tabular_pipeline_publishes_complete_datasets_without_vector_dep
 
     monkeypatch.setattr(type(app_context), "get_content_store", scoped_content_store)
     monkeypatch.setattr(ExcelProcessor, "recalc", False)
-    app_context.configuration.manager_processing = ManagerProcessingConfig.model_construct(enabled=True, temporary_bytes=1_048_576)
+    app_context.configuration.manager_processing = ManagerProcessingConfig.model_construct(temporary_bytes=1_048_576)
     app_context.configuration.storage.tabular_store.pointer_chunks_enabled = True
     profile = ProcessingConfig.ProfileConfig(
         input_processors=[

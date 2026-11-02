@@ -13,49 +13,21 @@
 # limitations under the License.
 
 
-import os
 import re
 from enum import Enum
-from pathlib import Path
-from typing import Annotated, Dict, List, Literal, Optional, Union
+from typing import Annotated, List, Literal, Optional, Union
 
-from fred_core import (
-    LogStorageConfig,
-    SecurityConfiguration,
-)
-from fred_core.common import (
-    KpiObservabilityConfig,
-    ModelConfiguration,
-    OpenSearchStoreConfig,
-    PostgresStoreConfig,
-    StoreConfig,
-    TemporalSchedulerConfig,
-)
-from fred_core.scheduler import SchedulerBackend
+from fred_core import LogStorageConfig, SecurityConfiguration
+from fred_core.common import KpiObservabilityConfig, ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, TemporalSchedulerConfig
 from fred_core.tasks.models import IngestionProcessingProfile as IngestionProcessingProfile
 from fred_pod.common.structures import LogOutputFormat
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from pydantic.json_schema import WithJsonSchema
 
 """
 This module defines the top level data structures used by controllers, processors
 unit tests. It helps to decouple the different components of the application and allows
 to define clear workflows and data structures.
 """
-
-
-class Status(str, Enum):
-    IN_PROGRESS = "in_progress"
-    SUCCESS = "success"
-    # The user chose to keep the document already in the folder: nothing was
-    # imported for this file, and that is not a failure.
-    IGNORED = "ignored"
-    # The name was taken while the import was under way, so the file still
-    # needs the user's overwrite-or-skip answer. Also not a failure.
-    CONFLICT = "conflict"
-    FAILED = "failed"
-    ERROR = "error"
-    FINISHED = "finished"
 
 
 class IngestionWorkerRole(str, Enum):
@@ -135,17 +107,6 @@ def parse_duration_seconds(value: object, *, field_name: str) -> int:
     return seconds
 
 
-class OutputProcessorResponse(BaseModel):
-    """
-    Represents the response of a n output processor operation. It is used to report
-    the status of the output process to the REST remote client.
-    Attributes:
-        status (str): The status of the vectorization operation.
-    """
-
-    status: Status
-
-
 class ProcessorConfig(BaseModel):
     """
     Configuration structure for a file processor.
@@ -164,125 +125,16 @@ class ProcessorConfig(BaseModel):
     )
 
 
-class LibraryProcessorConfig(BaseModel):
-    """
-    Configuration structure for a library-level output processor.
-
-    Attributes:
-        class_path (str): Dotted import path of the processor class.
-        description (str): Human readable explanation of what the processor does.
-    """
-
-    class_path: str = Field(..., description="Dotted import path of the library output processor class")
-    description: Optional[str] = Field(
-        default=None,
-        min_length=1,
-        description="Human-readable description of the library output processor purpose shown in the UI.",
-    )
-
-
-###########################################################
-#
-#  --- Content Storage Configuration
-#
-
-
-class MinioStorageConfig(BaseModel):
-    type: Literal["minio"]
-    endpoint: str = Field(default="localhost:9000", description="MinIO API URL")
-    access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env)")
-    secret_key: Annotated[str, WithJsonSchema({"type": "string"})] = Field(default=None, description="MinIO secret key (from MINIO_SECRET_KEY env)")  # type: ignore[assignment]
-    bucket_name: str = Field(default="app-bucket", description="Content store bucket name")
-    secure: bool = Field(default=False, description="Use TLS (https)")
-    public_endpoint: Optional[str] = Field(default=None, description="Public MinIO endpoint for browser-facing presigned URLs (e.g. 'https://my.minio.ingress'). If not set, uses endpoint.")
-    public_secure: Optional[bool] = Field(default=None, description="Use TLS for public endpoint. If not set, inferred from public_endpoint scheme.")
-
-    @model_validator(mode="before")
-    @classmethod
-    def load_env_if_missing(cls, values: dict) -> dict:
-        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
-
-        if not values.get("secret_key"):
-            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
-
-        return values
-
-
-class LocalContentStorageConfig(BaseModel):
-    type: Literal["local"]
-    root_path: str = Field(default=str(Path("~/.fred/knowledge-flow/content-store")), description="Local storage directory")
-
-
-class GcsStorageConfig(BaseModel):
-    """
-    Google Cloud Storage content store. Authentication uses Application Default
-    Credentials / Workload Identity (no JSON key required).
-
-    Bucket-splitting mirrors MinIO: the configured ``bucket_name`` is suffixed
-    with ``-documents`` and ``-objects`` (content store) and ``-files`` (namespace
-    file store). All buckets must already exist.
-    """
-
-    type: Literal["gcs"]
-    bucket_name: str = Field(default="app-bucket", description="Base GCS bucket name (suffixed with -documents/-objects).")
-    project_id: Optional[str] = Field(default=None, description="GCP project id; inferred from ADC when empty.")
-    signing_service_account_email: Optional[str] = Field(
-        default=None,
-        description=(
-            "Service account email used to sign V4 signed URLs for backend-internal "
-            "tabular Parquet reads, via IAM signBlob under Workload Identity (no JSON "
-            "key). Required for content_storage.type=gcs; startup fails clearly when "
-            "omitted. The Workload Identity service account must hold "
-            "iam.serviceAccounts.signBlob on this account, which must have "
-            "storage.objects.get on the objects bucket."
-        ),
-    )
-
-
-ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig, GcsStorageConfig], Field(discriminator="type")]
-
-
-class ClickHouseStoreConfig(BaseModel):
-    host: str = Field(default="localhost", description="ClickHouse host")
-    port: int = Field(default=8123, description="ClickHouse HTTP port")
-    database: str = Field(default="default", description="ClickHouse database")
-    username: str = Field(default="default", description="ClickHouse username")
-    password: Optional[str] = Field(
-        default_factory=lambda: os.getenv("CLICKHOUSE_PASSWORD"),
-        description="ClickHouse password (from CLICKHOUSE_PASSWORD env)",
-    )
-    secure: bool = Field(default=False, description="Use HTTPS for ClickHouse client")
-    verify: bool = Field(default=True, description="Verify TLS certificates for ClickHouse")
-
-
 ###########################################################
 #
 #  --- Vector storage configuration
 #
 
 
-class InMemoryVectorStorage(BaseModel):
-    type: Literal["in_memory"]
-
-
 class OpenSearchVectorIndexConfig(BaseModel):
     type: Literal["opensearch"]
     index: str = Field(..., description="OpenSearch index name")
     bulk_size: int = Field(default=1000, description="Number of documents to send in each bulk insert request")
-
-
-class ChromaVectorStorageConfig(BaseModel):
-    """
-    Local, embedded Chroma. No server needed.
-    - persist_path: folder where Chroma (DuckDB/Parquet) stores data
-    - collection_name: logical collection for your chunks
-    - distance: ANN space; 'cosine' matches our UI-friendly similarity
-    """
-
-    type: Literal["chroma"]
-    local_path: str = Field(default=str(Path("~/.fred/knowledge-flow/chromadb-vector-store")), description="Local vector storage path")
-    collection_name: str = Field("fred_chunks", description="Chroma collection name")
-    distance: Literal["cosine", "l2", "ip"] = Field("cosine", description="Vector space (affects HNSW metric)")
 
 
 class PgVectorStorageConfig(BaseModel):
@@ -296,25 +148,10 @@ class PgVectorStorageConfig(BaseModel):
     collection_name: str = Field("fred_chunks", description="Logical collection name")
 
 
-class ClickHouseVectorStorageConfig(BaseModel):
-    """
-    ClickHouse backend.
-    - Uses shared `storage.clickhouse` connection settings.
-    - Stores vectors in the configured table.
-    """
-
-    type: Literal["clickhouse"]
-    table: str = Field("fred_vectors", description="ClickHouse table name for chunks")
-    bulk_size: int = Field(default=1000, description="Number of rows per insert batch")
-
-
 VectorStorageConfig = Annotated[
     Union[
-        InMemoryVectorStorage,
         OpenSearchVectorIndexConfig,
-        ChromaVectorStorageConfig,
         PgVectorStorageConfig,
-        ClickHouseVectorStorageConfig,
     ],
     Field(discriminator="type"),
 ]
@@ -339,11 +176,9 @@ class ArtifactStorageConfig(BaseModel):
 
 
 class ManagerProcessingConfig(ArtifactStorageConfig):
-    """Workload identity and isolated persistence for manager-owned documents."""
+    """Workload identity and persistence for manager-owned documents."""
 
     model_config = ConfigDict(extra="forbid")
-    # Enabled workers accept manager jobs exclusively and do not use legacy SQL.
-    enabled: bool = False
     url: str
     issuer: str
     audience: str = "control-plane"
@@ -359,8 +194,6 @@ class ManagerProcessingConfig(ArtifactStorageConfig):
         for url in (self.url, self.issuer):
             if not url.startswith("https://") and not (self.allow_insecure and url.startswith("http://")):
                 raise ValueError("manager processing endpoints require HTTPS")
-        if self.vector_store.type == "in_memory":
-            raise ValueError("manager processing requires a durable vector store")
         return self
 
 
@@ -435,7 +268,6 @@ class ProcessingConfig(BaseModel):
             description="Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
         )
         push_metadata_activity_timeout: str = Field(default="5m", description="Per-attempt timeout for uploaded-file metadata lookup; excludes queue wait.")
-        pull_metadata_activity_timeout: str = Field(default="30m", description="Per-attempt timeout for source download and metadata creation; excludes queue wait.")
         output_activity_timeout: str = Field(default="1h", description="Per-attempt timeout for indexing; excludes queue wait.")
 
         activity_heartbeat_timeout: str = Field(
@@ -477,7 +309,7 @@ class ProcessingConfig(BaseModel):
             description="Temporal application error types that should fail fast for this profile without retry.",
         )
 
-        @field_validator("push_metadata_activity_timeout", "pull_metadata_activity_timeout", "output_activity_timeout", mode="before")
+        @field_validator("push_metadata_activity_timeout", "output_activity_timeout", mode="before")
         @classmethod
         def _normalize_stage_timeout(cls, value: object) -> str:
             seconds = parse_duration_seconds(value, field_name="processing.profiles.*.stage_activity_timeout")
@@ -638,73 +470,9 @@ class ProcessingConfig(BaseModel):
         return any(self.get_profile_config(profile).use_gpu for profile in IngestionProcessingProfile)
 
 
-class MCPConfig(BaseModel):
-    """
-    Feature toggles for MCP-only HTTP/MCP surfaces.
-
-    These do NOT affect core storage backends (e.g., using OpenSearch
-    as vector store or metadata store). They only control whether
-    optional monitoring/exploration controllers and their MCP servers
-    are exposed.
-    """
-
-    reports_enabled: bool = Field(
-        default=True,
-        description="Expose the Reports MCP server (Markdown-first report generation).",
-    )
-    tabular_enabled: bool = Field(
-        default=True,
-        description="Expose the Tabular MCP server for SQL/table exploration.",
-    )
-    text_enabled: bool = Field(
-        default=True,
-        description="Expose the Text MCP server for semantic vector search.",
-    )
-    templates_enabled: bool = Field(
-        default=True,
-        description="Expose the Template MCP server for prompts/templates.",
-    )
-    resources_enabled: bool = Field(
-        default=True,
-        description="Expose the Resources MCP server for resource/tag management.",
-    )
-    prometheus_ops_enabled: bool = Field(
-        default=False,
-        description="Expose Prometheus operational endpoints and the corresponding MCP server.",
-    )
-    filesystem_read_default_limit: int = Field(
-        default=100,
-        ge=1,
-        description="Default line count returned by filesystem read_file when callers omit limit.",
-    )
-    filesystem_read_max_limit: int = Field(
-        default=500,
-        ge=1,
-        description="Absolute maximum line count accepted by filesystem read_file.",
-    )
-    filesystem_read_default_max_chars: int = Field(
-        default=20_000,
-        ge=1,
-        description="Default maximum character count returned by filesystem read_file when callers omit max_chars.",
-    )
-    filesystem_read_absolute_max_chars: int = Field(
-        default=50_000,
-        ge=1,
-        description="Absolute maximum character count accepted by filesystem read_file.",
-    )
-
-    @model_validator(mode="after")
-    def validate_filesystem_read_limits(self) -> "MCPConfig":
-        if self.filesystem_read_default_limit > self.filesystem_read_max_limit:
-            raise ValueError("mcp.filesystem_read_default_limit must be <= mcp.filesystem_read_max_limit")
-        if self.filesystem_read_default_max_chars > self.filesystem_read_absolute_max_chars:
-            raise ValueError("mcp.filesystem_read_default_max_chars must be <= mcp.filesystem_read_absolute_max_chars")
-        return self
-
-
 class SchedulerConfig(BaseModel):
     enabled: bool = False
-    backend: SchedulerBackend = SchedulerBackend.TEMPORAL
+    backend: Literal["temporal"] = "temporal"
     temporal: TemporalSchedulerConfig
     worker_roles: List[IngestionWorkerRole] = Field(
         default_factory=lambda: list(IngestionWorkerRole),
@@ -738,206 +506,11 @@ class AppConfig(BaseModel):
     reload: bool = False
     reload_dir: str = "."
     gcu_version: str | None = None
-    default_team_max_resources_storage_size: Optional[int] = Field(
-        default=None,
-        description="Default storage limit in bytes for a team when not explicitly set.",
-    )
-    personal_max_resources_storage_size: Optional[int] = Field(
-        default=None,
-        description="Maximum resources storage size in bytes for a personal space",
-    )
-    pdf_render_ttl_days: int = Field(
-        default=30,
-        ge=0,
-        description="Days a cached Word/PowerPoint PDF render is kept before the nightly sweep deletes it. 0 disables the sweep.",
-    )
-
-
-class PrometheusConfig(BaseModel):
-    base_url: str = Field(
-        ...,
-        description="Base URL of a Prometheus-compatible HTTP API.",
-    )
-    verify_ssl: bool = Field(
-        default=True,
-        description="Verify upstream TLS certificates when querying Prometheus.",
-    )
-    timeout_seconds: float = Field(
-        default=15.0,
-        gt=0,
-        description="HTTP timeout applied to Prometheus API calls.",
-    )
-    bearer_token: Optional[str] = Field(
-        default=None,
-        description="Optional bearer token loaded from PROMETHEUS_BEARER_TOKEN.",
-    )
-    username: Optional[str] = Field(
-        default="admin",
-        description="Basic-auth username configured directly in prometheus.username. Defaults to 'admin'.",
-    )
-    password: Optional[str] = Field(
-        default=None,
-        description="Optional basic-auth password loaded from PROMETHEUS_PASSWORD.",
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def load_env_credentials(cls, values: dict) -> dict:
-        values.setdefault("bearer_token", os.getenv("PROMETHEUS_BEARER_TOKEN"))
-        values.setdefault("password", os.getenv("PROMETHEUS_PASSWORD"))
-        return values
-
-    @field_validator("base_url", mode="after")
-    @classmethod
-    def normalize_base_url(cls, value: str) -> str:
-        normalized = value.strip().rstrip("/")
-        if not normalized:
-            raise ValueError("prometheus.base_url must not be empty")
-        return normalized
-
-    @model_validator(mode="after")
-    def validate_basic_auth_pair(self) -> "PrometheusConfig":
-        if self.password and not self.username:
-            raise ValueError(
-                "prometheus.username must not be empty when prometheus.password is set",
-            )
-        return self
-
-
-class IntegrationsConfig(BaseModel):
-    """Optional upstream service integrations consumed by Knowledge Flow."""
-
-    prometheus: Optional[PrometheusConfig] = Field(
-        default=None,
-        description="Optional Prometheus API configuration for cluster-wide metrics queries.",
-    )
-
-
-class PullProvider(str, Enum):
-    LOCAL_PATH = "local_path"
-    WEBDAV = "webdav"
-    S3 = "s3"
-    GIT = "git"
-    HTTP = "http"
-    OTHER = "other"
-
-
-class PushSourceConfig(BaseModel):
-    type: Literal["push"] = "push"
-    description: Optional[str] = Field(default=None, description="Human-readable description of this source")
-
-
-class BasePullSourceConfig(BaseModel):
-    type: Literal["pull"] = "pull"
-    description: Optional[str] = Field(default=None, description="Human-readable description of this source")
-
-
-class FileSystemPullSource(BasePullSourceConfig):
-    provider: Literal["local_path"]
-    base_path: str
-
-
-class GitPullSource(BasePullSourceConfig):
-    provider: Literal["github"]
-    repo: str = Field(..., description="GitHub repository in the format 'owner/repo'")
-    branch: Optional[str] = Field(default="main", description="Git branch to pull from")
-    subdir: Optional[str] = Field(default="", description="Subdirectory to extract files from")
-    username: Optional[str] = Field(default=None, description="Optional GitHub username (for logs)")
-    token: str = Field(..., description="GitHub token (from GITHUB_TOKEN env variable)")
-
-    @model_validator(mode="before")
-    @classmethod
-    def load_env_token(cls, values: dict) -> dict:
-        values.setdefault("token", os.getenv("GITHUB_TOKEN"))
-        if not values.get("token"):
-            raise ValueError("Missing GITHUB_TOKEN environment variable")
-        return values
-
-
-class SpherePullSource(BasePullSourceConfig):
-    provider: Literal["sphere"]
-    base_url: str = Field(..., description="Base URL for the Sphere API")
-    parent_node_id: str = Field(..., description="ID of the parent folder or node to list/download")
-    username: str = Field(..., description="Username for Sphere Basic Auth")
-    password: str = Field(..., description="Password (loaded from SPHERE_PASSWORD)")
-    apikey: str = Field(..., description="API key (loaded from SPHERE_API_KEY)")
-    verify_ssl: bool = Field(default=False, description="Set to True to verify SSL certs")
-
-    @model_validator(mode="before")
-    @classmethod
-    def load_env_vars(cls, values: dict) -> dict:
-        values.setdefault("password", os.getenv("SPHERE_PASSWORD"))
-        values.setdefault("apikey", os.getenv("SPHERE_API_KEY"))
-
-        if not values.get("password"):
-            raise ValueError("Missing SPHERE_PASSWORD environment variable")
-
-        if not values.get("apikey"):
-            raise ValueError("Missing SPHERE_API_KEY environment variable")
-
-        return values
-
-
-class GitlabPullSource(BasePullSourceConfig):
-    type: Literal["pull"] = "pull"
-    provider: Literal["gitlab"]
-    repo: str = Field(..., description="GitLab repository in the format 'namespace/project'")
-    branch: Optional[str] = Field(default="main", description="Branch to pull from")
-    subdir: Optional[str] = Field(default="", description="Optional subdirectory to scan files from")
-    token: str = Field(..., description="GitLab private token (from GITLAB_TOKEN env variable)")
-    base_url: str = Field(default="https://gitlab.com/api/v4", description="GitLab API base URL")
-
-    @model_validator(mode="before")
-    @classmethod
-    def load_env_token(cls, values: dict) -> dict:
-        values.setdefault("token", os.getenv("GITLAB_TOKEN"))
-        if not values.get("token"):
-            raise ValueError("Missing GITLAB_TOKEN environment variable")
-        return values
-
-
-class MinioPullSource(BasePullSourceConfig):
-    type: Literal["pull"] = "pull"
-    provider: Literal["minio"]
-    endpoint_url: str = Field(..., description="S3-compatible endpoint (e.g., https://s3.amazonaws.com)")
-    bucket_name: str = Field(..., description="Name of the S3 bucket to scan")
-    prefix: Optional[str] = Field(default="", description="Optional prefix (folder path) to scan inside the bucket")
-    access_key: str = Field(..., description="MinIO access key (from MINIO_ACCESS_KEY env variable)")
-    secret_key: Annotated[str, WithJsonSchema({"type": "string"})] = Field(default=None, description="MinIO secret key (from MINIO_SECRET_KEY env variable)")  # type: ignore[assignment]
-    region: Optional[str] = Field(default="us-east-1", description="AWS region (used by some clients)")
-    secure: bool = Field(default=True, description="Use HTTPS (secure=True) or HTTP (secure=False)")
-
-    @model_validator(mode="before")
-    @classmethod
-    def load_env_secrets(cls, values: dict) -> dict:
-        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
-
-        if not values.get("secret_key"):
-            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
-
-        return values
-
-
-PullSourceConfig = Annotated[
-    Union[
-        FileSystemPullSource,
-        GitPullSource,
-        SpherePullSource,
-        GitlabPullSource,
-        MinioPullSource,
-    ],
-    Field(discriminator="provider"),
-]
-DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Field(discriminator="type")]
 
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
     opensearch: Optional[OpenSearchStoreConfig] = Field(default=None, description="Optional OpenSearch store")
-    clickhouse: Optional[ClickHouseStoreConfig] = Field(default=None, description="Optional ClickHouse store")
-    resource_store: StoreConfig
-    tag_store: StoreConfig
-    metadata_store: StoreConfig
     tabular_store: "TabularStoreConfig" = Field(
         default_factory=lambda: TabularStoreConfig(),  # type: ignore
         description="Dataset-centric tabular runtime configuration backed by Parquet artifacts in content storage.",
@@ -1033,7 +606,7 @@ class TabularStoreConfig(BaseModel):
 
     artifacts_prefix: str = Field(
         default="tabular/datasets",
-        description="Prefix under content_storage objects where Parquet datasets are stored.",
+        description="Logical prefix for tabular dataset keys within a processing attempt.",
     )
     format: Literal["parquet"] = Field(
         default="parquet",
@@ -1058,80 +631,6 @@ class TabularStoreConfig(BaseModel):
     )
 
 
-# ---------- Agent filesystem config, used for listing, reading, creating & deleting files.  ---------- #
-
-
-class LocalFilesystemConfig(BaseModel):
-    type: Literal["local"] = "local"
-    root: str = Field("~/.fred/knowledge-flow/filesystem/", description="Local filesystem root directory.")
-
-
-class MinioFilesystemConfig(BaseModel):
-    type: Literal["minio"] = "minio"
-    endpoint: str = Field(..., description="MinIO or S3 compatible endpoint.")
-    access_key: str = Field(..., description="MinIO access key.")
-    secret_key: Annotated[str, WithJsonSchema({"type": "string"})] = Field(default=None, description="MinIO secret key (from MINIO_SECRET_KEY env).")  # type: ignore[assignment]
-    bucket_name: Optional[str] = Field("filesystem", description="MinIO bucket name.")
-    secure: Optional[bool] = Field(False, description="Use TLS for the MinIO client.")
-
-    @model_validator(mode="before")
-    @classmethod
-    def load_env_secrets(cls, values: dict) -> dict:
-        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
-        if not values.get("secret_key"):
-            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
-        return values
-
-
-class GcsFilesystemConfig(BaseModel):
-    """
-    Google Cloud Storage virtual filesystem. Authentication uses Application
-    Default Credentials / Workload Identity (no JSON key required). The bucket
-    must already exist; an optional ``prefix`` lets several logical roots share it.
-    """
-
-    type: Literal["gcs"] = "gcs"
-    bucket_name: str = Field("filesystem", description="GCS bucket name.")
-    prefix: str = Field("", description="Optional key prefix within the bucket (default '').")
-    project_id: Optional[str] = Field(default=None, description="GCP project id; inferred from ADC when empty.")
-
-
-FilesystemConfig = Annotated[Union[LocalFilesystemConfig, MinioFilesystemConfig, GcsFilesystemConfig], Field(discriminator="type")]
-
-
-class DocumentMarkingPatternConfig(BaseModel):
-    label: str = Field(..., min_length=1, description="Normalized label returned when the regex matches.")
-    pattern: str = Field(..., min_length=1, description="Regex used to detect the marking in extracted guardrail text.")
-
-
-class DocumentGuardrailConfig(BaseModel):
-    enabled: bool = Field(default=False, description="Enable ingestion-time document marking guardrails.")
-    source_tags: list[str] = Field(
-        default_factory=list,
-        description="Optional source tags this guardrail applies to. Empty means all sources.",
-    )
-    allowed_labels: list[str] = Field(
-        default_factory=list,
-        description="Optional allow-list of labels accepted by the guardrail. Empty means detection-only.",
-    )
-    on_no_label: Literal["allow", "warn", "reject"] = Field(
-        default="allow",
-        description="Behavior when no explicit document marking is detected.",
-    )
-    patterns: list[DocumentMarkingPatternConfig] = Field(
-        default_factory=list,
-        description="Regex patterns used to recognize explicit document markings.",
-    )
-
-    @model_validator(mode="after")
-    def validate_guardrail(self) -> "DocumentGuardrailConfig":
-        if not self.enabled:
-            return self
-        if not self.patterns:
-            raise ValueError("document_guardrail.patterns must not be empty when the guardrail is enabled")
-        return self
-
-
 class ObservabilityConfig(BaseModel):
     kpi: KpiObservabilityConfig = Field(default_factory=KpiObservabilityConfig)
 
@@ -1139,10 +638,6 @@ class ObservabilityConfig(BaseModel):
 class Configuration(BaseModel):
     app: AppConfig
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
-    integrations: Optional[IntegrationsConfig] = Field(
-        default=None,
-        description="Optional third-party service integrations used by the backend.",
-    )
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None
@@ -1156,42 +651,13 @@ class Configuration(BaseModel):
         default=None,
         description="Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used.",
     )
-    document_guardrail: Optional[DocumentGuardrailConfig] = Field(
-        default=None,
-        description="Optional ingestion-time guardrail for explicit document markings.",
-    )
     output_processors: Optional[List[ProcessorConfig]] = None
-    library_output_processors: Optional[List[LibraryProcessorConfig]] = None
-    content_storage: ContentStorageConfig = Field(..., description="Content Storage configuration")
     scheduler: SchedulerConfig
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     control_plane_url: str | None = None
     manager_processing: ManagerProcessingConfig | None = None
     published_artifacts: ArtifactStorageConfig | None = None
-    document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
-    mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
-    filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
-
-    @model_validator(mode="after")
-    def isolate_manager_processing(self):
-        manager = self.manager_processing
-        if manager is None or not manager.enabled:
-            return self
-        legacy = self.storage.vector_store
-        derived = manager.vector_store
-        if legacy.type == derived.type:
-            for field in ("index", "collection_name", "table"):
-                if hasattr(legacy, field) and getattr(legacy, field) == getattr(derived, field):
-                    raise ValueError("manager and legacy vector namespaces must differ")
-        if isinstance(self.content_storage, MinioStorageConfig) and manager.bucket in {
-            self.content_storage.bucket_name,
-            f"{self.content_storage.bucket_name}-objects",
-        }:
-            raise ValueError("manager and legacy content buckets must differ")
-        if isinstance(self.filesystem, MinioFilesystemConfig) and manager.bucket == self.filesystem.bucket_name:
-            raise ValueError("manager and legacy filesystem buckets must differ")
-        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -1222,9 +688,6 @@ class Configuration(BaseModel):
 
         Example:
         ```yaml
-        content_storage:
-          type: local
-          root_path: ".fred/data/content"
         storage:
           tabular_store:
             artifacts_prefix: "tabular/datasets"
@@ -1249,43 +712,5 @@ class Configuration(BaseModel):
                     raise ValueError(
                         "'storage.tabular_store.query.presigned_ttl_seconds' is no longer supported. Use 'storage.tabular_store.query.internal_presigned_ttl_seconds'.",
                     )
-
-        return values
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_legacy_app_ingestion_concurrency(cls, values: object):
-        """
-        Move the legacy app-level ingestion workers knob into scheduler.temporal.
-
-        Why:
-            Ingestion queue/concurrency settings logically belong to the Temporal
-            scheduler configuration, not generic app runtime settings.
-        How:
-            Read legacy `app.max_ingestion_workers` when present and backfill missing
-            `scheduler.temporal.ingestion_*` keys without overriding explicit
-            scheduler-level configuration.
-        Usage example:
-            `app.max_ingestion_workers: 3` now behaves like setting all three
-            `scheduler.temporal.ingestion_*` keys to `3`.
-        """
-        if not isinstance(values, dict):
-            return values
-
-        app_value = values.get("app")
-        scheduler_value = values.get("scheduler")
-        if not isinstance(app_value, dict) or not isinstance(scheduler_value, dict):
-            return values
-
-        temporal_value = scheduler_value.get("temporal")
-        if not isinstance(temporal_value, dict):
-            return values
-
-        legacy_single = app_value.get("max_ingestion_workers")
-
-        if legacy_single is not None:
-            temporal_value.setdefault("ingestion_workflow_parallelism", legacy_single)
-            temporal_value.setdefault("ingestion_max_concurrent_workflow_tasks", legacy_single)
-            temporal_value.setdefault("ingestion_max_concurrent_activities", legacy_single)
 
         return values

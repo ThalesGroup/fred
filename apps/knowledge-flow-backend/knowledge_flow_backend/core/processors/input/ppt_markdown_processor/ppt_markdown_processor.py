@@ -66,11 +66,6 @@ class PptMarkdownProcessor(PptxMarkdownProcessor):
             pptx_path = convert_ppt_to_pptx(file_path, Path(tmp))
             return super().extract_file_metadata(pptx_path)
 
-    def extract_guardrail_text(self, file_path: Path) -> str | None:
-        with tempfile.TemporaryDirectory(prefix="ppt2pptx_") as tmp:
-            pptx_path = convert_ppt_to_pptx(file_path, Path(tmp))
-            return super().extract_guardrail_text(pptx_path)
-
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         with tempfile.TemporaryDirectory(prefix="ppt2pptx_") as tmp:
             pptx_path = convert_ppt_to_pptx(file_path, Path(tmp))

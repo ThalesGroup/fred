@@ -19,20 +19,15 @@ import tempfile
 
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
-from temporalio import activity, exceptions
+from temporalio import activity
 
 from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
-from knowledge_flow_backend.features.scheduler.activity_utils import (
-    await_with_heartbeat,
-    raise_if_document_deleted,
-    to_thread_with_heartbeat,
-)
+from knowledge_flow_backend.features.manager_processing.client import raise_permanent_failure
+from knowledge_flow_backend.features.manager_processing.service import manager_service
+from knowledge_flow_backend.features.scheduler.activity_utils import await_with_heartbeat, raise_if_document_deleted, to_thread_with_heartbeat
 from knowledge_flow_backend.features.scheduler.extraction_process import extract_document
-from knowledge_flow_backend.features.scheduler.kpi_utils import (
-    emit_temporal_activity_queue_wait_kpi,
-    emit_temporal_activity_result_kpis,
-)
+from knowledge_flow_backend.features.scheduler.kpi_utils import emit_temporal_activity_queue_wait_kpi, emit_temporal_activity_result_kpis
 from knowledge_flow_backend.features.scheduler.logging_context import ingestion_activity
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
@@ -72,11 +67,8 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     started_at = asyncio.get_running_loop().time()
     logger.info("Push metadata activity started")
     emit_temporal_activity_queue_wait_kpi(phase="metadata")
-    from knowledge_flow_backend.features.manager_processing.service import manager_service
 
     ingestion_service = await manager_service(file.source_tag, "preparation", file=file)
-    if ingestion_service is None:
-        raise exceptions.ApplicationError("manager processing required", non_retryable=True)
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] push file uid={file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
     metadata = await ingestion_service.get_metadata(file.processed_by, file.document_uid)
@@ -103,29 +95,21 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
 async def push_input_process(
     user: KeycloakUser,
     metadata: DocumentMetadata,
-    input_file: str = "",
     profile: IngestionProcessingProfile | str | None = None,
     logging_context: str | None = None,
-    task_id: str | None = None,
 ) -> DocumentMetadata:
     """
-    Process push-file input and persist generated output in content storage.
-    The input may be provided directly (local fast path) or restored from content
-    storage on the current worker.
+    Extract the control-plane-authorized original and publish its generation artifacts.
     """
     logger = activity.logger
     started_at = asyncio.get_running_loop().time()
     profile = coerce_processing_profile(profile)
     logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s profile=%s", metadata.document_uid, profile)
 
-    from knowledge_flow_backend.features.manager_processing.service import manager_service
-
     ingestion_service = await manager_service(metadata.source.source_tag, "extraction")
-    if ingestion_service is not None and ingestion_service.already_committed:
+    if ingestion_service.already_committed:
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
         return metadata
-    if ingestion_service is None:
-        raise exceptions.ApplicationError("manager processing required", non_retryable=True)
 
     try:
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)
@@ -138,26 +122,21 @@ async def push_input_process(
             input_dir.mkdir(exist_ok=True)
             output_dir.mkdir(exist_ok=True)
 
-            if input_file:
-                resolved_input_file = pathlib.Path(input_file)
-                if not resolved_input_file.exists() or not resolved_input_file.is_file():
-                    raise FileNotFoundError(f"Provided push input file does not exist for document {metadata.document_uid}: {resolved_input_file}")
-            else:
-                # Only a genuinely absent input is a FileNotFoundError. Wrapping
-                # every failure in one made a transient object-store outage look
-                # permanent, and a permanent miss look worth six more attempts.
-                resolved_input_file = await await_with_heartbeat(
-                    resolve_push_input_file_for_worker(
-                        user=user,
-                        metadata=metadata,
-                        working_dir=working_dir,
-                        ingestion_service=ingestion_service,
-                    ),
-                    heartbeat_details={
-                        "stage": "push_input_restore",
-                        "document_uid": metadata.document_uid,
-                    },
-                )
+            # Only a genuinely absent input is a FileNotFoundError. Wrapping
+            # every failure in one made a transient object-store outage look
+            # permanent, and a permanent miss look worth six more attempts.
+            resolved_input_file = await await_with_heartbeat(
+                resolve_push_input_file_for_worker(
+                    user=user,
+                    metadata=metadata,
+                    working_dir=working_dir,
+                    ingestion_service=ingestion_service,
+                ),
+                heartbeat_details={
+                    "stage": "push_input_restore",
+                    "document_uid": metadata.document_uid,
+                },
+            )
 
             await extract_document(
                 input_path=resolved_input_file,
@@ -166,19 +145,7 @@ async def push_input_process(
                 profile=profile,
                 stage="push_input_process",
                 started_at=started_at,
-                manager_job_json=getattr(ingestion_service, "extraction_context", None),
-                in_process_fallback=lambda: to_thread_with_heartbeat(
-                    ingestion_service.process_input,
-                    user,
-                    resolved_input_file,
-                    output_dir,
-                    metadata,
-                    profile,
-                    heartbeat_details={
-                        "stage": "push_input_process",
-                        "document_uid": metadata.document_uid,
-                    },
-                ),
+                manager_job_json=ingestion_service.extraction_context,
             )
             await to_thread_with_heartbeat(
                 ingestion_service.save_output,
@@ -203,9 +170,7 @@ async def push_input_process(
         )
         return metadata
     except Exception as exc:
-        record_failure = getattr(ingestion_service, "record_failure", None)
-        if record_failure is not None:
-            record_failure(exc)
+        ingestion_service.record_failure(exc)
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
         metadata.mark_stage_error(ProcessingStage.PREVIEW_READY, error_message)
         try:
@@ -228,7 +193,6 @@ async def push_input_process(
             status="error",
             exc=exc,
         )
-        from knowledge_flow_backend.features.manager_processing.client import raise_permanent_failure
 
         raise_permanent_failure(exc)
         raise

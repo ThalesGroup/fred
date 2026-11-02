@@ -65,11 +65,6 @@ class OdtMarkdownProcessor(DocxMarkdownProcessor):
             docx_path = convert_odt_to_docx(file_path, Path(tmp))
             return super().extract_file_metadata(docx_path)
 
-    def extract_guardrail_text(self, file_path: Path) -> str | None:
-        with tempfile.TemporaryDirectory(prefix="odt2docx_") as tmp:
-            docx_path = convert_odt_to_docx(file_path, Path(tmp))
-            return super().extract_guardrail_text(docx_path)
-
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         with tempfile.TemporaryDirectory(prefix="odt2docx_") as tmp:
             docx_path = convert_odt_to_docx(file_path, Path(tmp))

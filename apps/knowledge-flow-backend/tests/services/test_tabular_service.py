@@ -22,21 +22,10 @@ from pathlib import Path
 import duckdb
 import pytest
 from fred_core import KeycloakUser
-from fred_core.documents.document_structures import (
-    DocumentMetadata,
-    FileInfo,
-    FileType,
-    Identity,
-    ProcessingStage,
-    ProcessingStatus,
-    SourceInfo,
-    SourceType,
-    Tagging,
-)
+from fred_core.documents.document_structures import DocumentMetadata, FileInfo, FileType, Identity, ProcessingStage, ProcessingStatus, SourceInfo, SourceType, Tagging
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
-from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     TABULAR_MULTI_EXTENSION_KEY,
@@ -48,6 +37,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
 from knowledge_flow_backend.features.tabular.execution import open_duckdb_connection
 from knowledge_flow_backend.features.tabular.service import TabularDatasetReadError
 from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
+from tests.services.artifact_store import TestArtifactStore
 from tests.services.tabular_engine import TabularEngineHarness
 
 
@@ -101,7 +91,7 @@ async def _ingest_csv(
         tag_names=tag_names,
     )
     processed_metadata = processor.process(str(csv_path), metadata)
-    await ApplicationContext.get_instance().get_metadata_store().save_metadata(processed_metadata)
+    await ApplicationContext.get_instance().test_metadata_store.save_metadata(processed_metadata)
     return processed_metadata
 
 
@@ -146,7 +136,7 @@ async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str, extra_tab
     processor.recalc = False
     processor.convert_file_to_markdown(workbook_path, output_dir, document_uid)
     metadata = ExcelTableRegistrationProcessor().process(str(output_dir / "output.md"), metadata)
-    await ApplicationContext.get_instance().get_metadata_store().save_metadata(metadata)
+    await ApplicationContext.get_instance().test_metadata_store.save_metadata(metadata)
     return metadata, output_dir
 
 
@@ -195,11 +185,11 @@ async def test_tabular_processor_stores_distinct_artifacts_for_each_revision(tmp
         updated_artifact.object_key,
     }
 
-    await ApplicationContext.get_instance().get_metadata_store().save_metadata(updated_metadata)
+    await ApplicationContext.get_instance().test_metadata_store.save_metadata(updated_metadata)
 
     # Metadata selects the new revision. Artifact retirement belongs to the
     # manager processing lifecycle, not this processor's metadata fixture.
-    saved = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid("doc-1")
+    saved = await ApplicationContext.get_instance().test_metadata_store.get_metadata_by_uid("doc-1")
     assert saved is not None
     assert read_tabular_artifact(saved) == updated_artifact
     assert updated_artifact.row_count == 1
@@ -529,7 +519,7 @@ def test_tabular_processor_limits_python_rss_growth_for_large_csv(tmp_path):
 async def test_tabular_service_lists_context_and_queries_datasets(tmp_path):
     app_context = ApplicationContext.get_instance()
     content_store = app_context.get_content_store()
-    metadata_store = app_context.get_metadata_store()
+    metadata_store = app_context.test_metadata_store
     content_store.clear()
 
     await _ingest_csv(
@@ -598,7 +588,7 @@ async def test_tabular_service_rejects_duckdb_table_functions_outside_authorized
 
     app_context = ApplicationContext.get_instance()
     content_store = app_context.get_content_store()
-    metadata_store = app_context.get_metadata_store()
+    metadata_store = app_context.test_metadata_store
     content_store.clear()
 
     await _ingest_csv(
@@ -740,7 +730,7 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
     metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
     content_store.save_output("doc-excel", output_dir)
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    await ApplicationContext.get_instance().get_metadata_store().save_metadata(metadata)
+    await ApplicationContext.get_instance().test_metadata_store.save_metadata(metadata)
 
     service = TabularEngineHarness()
     schemas = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
@@ -800,7 +790,7 @@ async def test_describe_documents_reads_values_instead_of_legacy_metadata(tmp_pa
         else:
             column.pop("min_value", None)
             column.pop("max_value", None)
-    await ApplicationContext.get_instance().get_metadata_store().save_metadata(csv_metadata)
+    await ApplicationContext.get_instance().test_metadata_store.save_metadata(csv_metadata)
 
     excel_metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
     content_store.save_output("doc-excel", output_dir)
@@ -812,7 +802,7 @@ async def test_describe_documents_reads_values_instead_of_legacy_metadata(tmp_pa
             else:
                 column.pop("min_value", None)
                 column.pop("max_value", None)
-    await ApplicationContext.get_instance().get_metadata_store().save_metadata(excel_metadata)
+    await ApplicationContext.get_instance().test_metadata_store.save_metadata(excel_metadata)
 
     service = TabularEngineHarness()
     descriptions = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
@@ -873,7 +863,7 @@ async def test_describe_documents_reads_all_twenty_workbook_tables(tmp_path, met
     metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-twenty", extra_tables=18)
     content_store.save_output("doc-twenty", output_dir)
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    await ApplicationContext.get_instance().get_metadata_store().save_metadata(metadata)
+    await ApplicationContext.get_instance().test_metadata_store.save_metadata(metadata)
 
     tables = (await TabularEngineHarness().describe_documents(_user(), ["doc-twenty"]))[0].tables
     assert len(tables) == 20
@@ -901,7 +891,7 @@ async def test_describe_documents_fails_when_a_table_artifact_is_missing(tmp_pat
     )
     artifact = read_tabular_artifact(metadata)
     assert artifact is not None
-    assert isinstance(content_store, FileSystemContentStore)
+    assert isinstance(content_store, TestArtifactStore)
     (content_store.object_root / artifact.object_key).unlink()
 
     with pytest.raises(FileNotFoundError, match="Tabular artifact"):
@@ -922,7 +912,7 @@ async def test_describe_documents_checks_artifacts_without_value_columns(tmp_pat
     artifact = read_tabular_artifact(metadata)
     assert artifact is not None
     assert artifact.columns[0].is_categorical is False
-    assert isinstance(content_store, FileSystemContentStore)
+    assert isinstance(content_store, TestArtifactStore)
     (content_store.object_root / artifact.object_key).unlink()
 
     with pytest.raises(FileNotFoundError, match="Tabular artifact"):
@@ -1161,7 +1151,7 @@ async def test_query_mounts_only_the_datasets_the_sql_references(tmp_path):
     """
     app_context = ApplicationContext.get_instance()
     content_store = app_context.get_content_store()
-    metadata_store = app_context.get_metadata_store()
+    metadata_store = app_context.test_metadata_store
     content_store.clear()
 
     for index in range(4):
@@ -1213,7 +1203,7 @@ async def test_query_referencing_no_dataset_is_rejected(tmp_path):
 
     await _ingest_csv(
         tmp_path=tmp_path,
-        metadata_store=app_context.get_metadata_store(),
+        metadata_store=app_context.test_metadata_store,
         document_uid="doc-sales",
         file_name="sales.csv",
         content="city,amount\nParis,10\n",
@@ -1236,7 +1226,7 @@ async def test_query_referencing_more_datasets_than_the_cap_is_rejected(tmp_path
     """
     app_context = ApplicationContext.get_instance()
     content_store = app_context.get_content_store()
-    metadata_store = app_context.get_metadata_store()
+    metadata_store = app_context.test_metadata_store
     content_store.clear()
 
     for index in range(3):
@@ -1273,7 +1263,7 @@ async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path, mo
 
     await _ingest_csv(
         tmp_path=tmp_path,
-        metadata_store=app_context.get_metadata_store(),
+        metadata_store=app_context.test_metadata_store,
         document_uid="doc-sales",
         file_name="sales.csv",
         content="city,amount\nParis,10\n",
@@ -1296,7 +1286,7 @@ async def test_query_cannot_read_outside_its_local_dataset(tmp_path, monkeypatch
     app_context.get_content_store().clear()
     await _ingest_csv(
         tmp_path=tmp_path,
-        metadata_store=app_context.get_metadata_store(),
+        metadata_store=app_context.test_metadata_store,
         document_uid="doc-sales",
         file_name="sales.csv",
         content="city,amount\nParis,10\n",
@@ -1336,7 +1326,7 @@ async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
     content_store.clear()
     metadata = await _ingest_csv(
         tmp_path=tmp_path,
-        metadata_store=app_context.get_metadata_store(),
+        metadata_store=app_context.test_metadata_store,
         document_uid="doc-sales",
         file_name="sales.csv",
         content="city,amount\nParis,10\n",

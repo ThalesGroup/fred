@@ -13,24 +13,12 @@
 # limitations under the License.
 
 
-import os
-
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from fred_core import (
-    M2MSecurity,
-    SecurityConfiguration,
-    UserSecurity,
-)
-from fred_core.common import (
-    DuckdbStoreConfig,
-    ModelConfiguration,
-    OpenSearchStoreConfig,
-    PostgresStoreConfig,
-)
+from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
+from fred_core.common import ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig
 from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
-from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
 from fred_core.documents.document_structures import DocumentMetadata
 from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl
@@ -41,94 +29,37 @@ from knowledge_flow_backend.common.structures import (
     AppConfig,
     Configuration,
     IngestionProcessingProfile,
-    InMemoryVectorStorage,
-    LocalContentStorageConfig,
-    LocalFilesystemConfig,
     ObservabilityConfig,
+    PgVectorStorageConfig,
     ProcessingConfig,
     ProcessorConfig,
-    PushSourceConfig,
     SchedulerConfig,
     StorageConfig,
     TemporalSchedulerConfig,
 )
 from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
 from knowledge_flow_backend.main import create_app
+from tests.services.artifact_store import TestArtifactStore
 
 from .test_utils.test_processors import TestDocxProcessor, TestMarkdownProcessor, TestOutputProcessor
 
 
-class _InMemoryTestMetadataStore(BaseMetadataStore):
+class _InMemoryTestMetadataStore:
     def __init__(self) -> None:
         self._items: dict[str, DocumentMetadata] = {}
 
     async def get_all_metadata(self, filters: dict, session=None) -> list[DocumentMetadata]:
-        docs = list(self._items.values())
-        if not filters:
-            return [d.model_copy(deep=True) for d in docs]
+        return [document.model_copy(deep=True) for document in self._items.values()]
 
-        def _matches(doc: DocumentMetadata) -> bool:
-            for key, expected in filters.items():
-                if key == "source_tag":
-                    if doc.source_tag != expected:
-                        return False
-                    continue
-                if key == "tags":
-                    tag_names = list(getattr(doc.tags, "tag_names", []) or [])
-                    if isinstance(expected, list):
-                        if not all(v in tag_names for v in expected):
-                            return False
-                    elif expected not in tag_names:
-                        return False
-                    continue
-                actual = getattr(doc, key, None)
-                if actual != expected:
-                    return False
-            return True
-
-        return [d.model_copy(deep=True) for d in docs if _matches(d)]
+    async def get_metadata_by_uids(self, document_uids):
+        return [self._items[uid].model_copy(deep=True) for uid in document_uids if uid in self._items]
 
     async def get_metadata_by_uid(self, document_uid: str, session=None) -> DocumentMetadata | None:
         item = self._items.get(document_uid)
         return item.model_copy(deep=True) if item else None
 
-    async def get_metadata_by_source_key(self, source_library_id: str, source_key: str, session=None) -> DocumentMetadata | None:
-        # The real store relies on a unique index over the pair; here the scan
-        # is the same rule stated the only way an in-memory dict can state it.
-        for doc in self._items.values():
-            if doc.source.source_library_id == source_library_id and doc.source.source_key == source_key:
-                return doc.model_copy(deep=True)
-        return None
-
-    async def update_metadata(self, metadata: DocumentMetadata, session=None) -> bool:
-        # Never creates: mirrors the store contract a mid-flight writer depends on.
-        if metadata.document_uid not in self._items:
-            return False
-        self._items[metadata.document_uid] = metadata.model_copy(deep=True)
-        return True
-
-    async def get_metadata_in_tag(self, tag_id: str, session=None) -> list[DocumentMetadata]:
-        out: list[DocumentMetadata] = []
-        for doc in self._items.values():
-            tag_ids = list(getattr(doc.tags, "tag_ids", []) or [])
-            tag_names = list(getattr(doc.tags, "tag_names", []) or [])
-            if tag_id in tag_ids or tag_id in tag_names:
-                out.append(doc.model_copy(deep=True))
-        return out
-
-    async def list_by_source_library(self, source_library_id: str, *, limit: int, session=None) -> list[DocumentMetadata]:
-        keyed = sorted(
-            (doc for doc in self._items.values() if doc.source.source_library_id == source_library_id),
-            key=lambda doc: doc.source.source_key or "",
-        )
-        return [doc.model_copy(deep=True) for doc in keyed[:limit]]
-
     async def save_metadata(self, metadata: DocumentMetadata, session=None) -> None:
         self._items[metadata.document_uid] = metadata.model_copy(deep=True)
-
-    async def delete_metadata(self, document_uid: str, session=None) -> bool:
-        # Mirrors the store contract: True only when this call removed the row.
-        return self._items.pop(document_uid, None) is not None
 
     async def clear(self, session=None) -> None:
         self._items.clear()
@@ -145,15 +76,14 @@ def fake_embedder(monkeypatch):
 
 
 @pytest.fixture(scope="function", autouse=True)
-def app_context(monkeypatch, fake_embedder):
-    """Fixture to initialize ApplicationContext with full duckdb/local config."""
+def app_context(monkeypatch, fake_embedder, tmp_path):
+    """Initialize configuration and test-only artifact/metadata doubles."""
     ApplicationContext._instance = None
     monkeypatch.setenv("OPENAI_API_KEY", "test")
     # OpenSearchStoreConfig sources its password from this env var; set it so the
     # config below builds without reaching OpenSearch (unit-level, no integration).
     monkeypatch.setenv("OPENSEARCH_PASSWORD", "test")  # pragma: allowlist secret
 
-    duckdb = DuckdbStoreConfig(type="duckdb", duckdb_path="/tmp/testdb.duckdb")
     fake_security_config = SecurityConfiguration(
         m2m=M2MSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-m2m-realm"), client_id="fake-m2m-client"),
         user=UserSecurity(enabled=False, realm_url=AnyUrl("http://localhost:8080/realms/fake-user-realm"), client_id="fake-user-client"),
@@ -180,11 +110,6 @@ def app_context(monkeypatch, fake_embedder):
                 connect_timeout_seconds=3,
             ),
         ),
-        document_sources={
-            "uploads": PushSourceConfig(type="push", description="Uploaded files for testing"),
-            # Include 'fred' as a valid push source for ingestion tests
-            "fred": PushSourceConfig(type="push", description="Manual ingestion test source"),
-        },
         storage=StorageConfig(
             postgres=PostgresStoreConfig(
                 host="localhost",
@@ -196,16 +121,7 @@ def app_context(monkeypatch, fake_embedder):
                 host="http://localhost:9200",
                 username="admin",
             ),
-            resource_store=duckdb,
-            tag_store=duckdb,
-            kpi_store=duckdb,
-            metadata_store=duckdb,
-            catalog_store=duckdb,
-            vector_store=InMemoryVectorStorage(type="in_memory"),
-        ),
-        content_storage=LocalContentStorageConfig(
-            type="local",
-            root_path="/tmp/knowledge-flow-test-content",
+            vector_store=PgVectorStorageConfig(type="pgvector"),
         ),
         chat_model=ModelConfiguration(
             provider="openai",
@@ -285,7 +201,6 @@ def app_context(monkeypatch, fake_embedder):
                 description="Test output processor for docx files",
             ),
         ],
-        filesystem=LocalFilesystemConfig(type="local", root="/tmp/knowledge-flow-test-fs"),
         observability=ObservabilityConfig(
             kpi=KpiObservabilityConfig(
                 opensearch=KpiOpenSearchSinkConfig(enabled=False),
@@ -293,10 +208,9 @@ def app_context(monkeypatch, fake_embedder):
         ),
     )
 
-    os.makedirs("/tmp/knowledge-flow-test-fs", exist_ok=True)
-
     ctx = ApplicationContext(config)
-    ctx._metadata_store_instance = _InMemoryTestMetadataStore()
+    ctx.test_metadata_store = _InMemoryTestMetadataStore()
+    ctx._content_store_instance = TestArtifactStore(tmp_path / "artifacts")
     # Production opens the published engine at API startup; unit tests allow all.
     return ctx
 
@@ -326,4 +240,4 @@ def content_store(app_context: ApplicationContext):
 
 @pytest.fixture
 def metadata_store(app_context: ApplicationContext):
-    return app_context.get_instance().get_metadata_store()
+    return app_context.get_instance().test_metadata_store

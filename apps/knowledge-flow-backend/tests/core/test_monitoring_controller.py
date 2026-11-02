@@ -52,17 +52,16 @@ def _healthy_context() -> SimpleNamespace:
     opensearch = MagicMock()
     opensearch.ping = MagicMock(return_value=True)
 
-    gcs_fs = MagicMock()
-    gcs_fs.health_check = MagicMock(return_value={"backend": "gcs", "bucket": "fs"})
-    gcs_content = MagicMock()
-    gcs_content.health_check = MagicMock(return_value={"backend": "gcs", "buckets": ["docs", "objs"]})
+    reader = SimpleNamespace(client=SimpleNamespace(bucket_exists=MagicMock(return_value=True)), bucket="derived")
+    authorization = SimpleNamespace(get=AsyncMock(return_value=SimpleNamespace(raise_for_status=lambda: None)))
 
     return SimpleNamespace(
         get_pg_async_engine=lambda: engine,
         get_opensearch_client=lambda: opensearch,
         get_vector_store=lambda: object(),
-        get_filesystem=lambda: gcs_fs,
-        get_content_store=lambda: gcs_content,
+        get_published_artifact_reader=lambda: reader,
+        get_authorization_client=lambda: authorization,
+        configuration=SimpleNamespace(storage=SimpleNamespace(opensearch=object()), control_plane_url="https://cp/control-plane/v1"),
     )
 
 
@@ -87,15 +86,15 @@ def test_ready_all_dependencies_ok() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ready"
-    for name in ("postgres", "opensearch", "gcs_filesystem", "gcs_content_store"):
+    for name in ("postgres", "opensearch", "published_artifacts", "control_plane"):
         assert body["checks"][name]["ok"] is True
 
 
-def test_ready_reports_degraded_when_gcs_down() -> None:
+def test_ready_reports_degraded_when_artifacts_down() -> None:
     ctx = _healthy_context()
     failing = MagicMock()
-    failing.health_check = MagicMock(side_effect=RuntimeError("GCS bucket unreachable"))
-    ctx.get_content_store = lambda: failing
+    failing.client.bucket_exists = MagicMock(side_effect=RuntimeError("Artifact bucket unreachable"))
+    ctx.get_published_artifact_reader = lambda: failing
 
     with _client(ctx) as client:
         resp = client.get("/knowledge-flow/v2/ready")
@@ -103,23 +102,22 @@ def test_ready_reports_degraded_when_gcs_down() -> None:
     assert resp.status_code == 503
     body = resp.json()
     assert body["status"] == "degraded"
-    assert body["checks"]["gcs_content_store"]["ok"] is False
-    assert "GCS bucket unreachable" in body["checks"]["gcs_content_store"]["error"]
+    assert body["checks"]["published_artifacts"]["ok"] is False
+    assert "Artifact bucket unreachable" in body["checks"]["published_artifacts"]["error"]
     # other dependencies still report healthy
     assert body["checks"]["postgres"]["ok"] is True
 
 
-def test_ready_skips_non_gcs_backend() -> None:
+def test_ready_skips_unconfigured_opensearch() -> None:
     ctx = _healthy_context()
-    local_fs = SimpleNamespace()  # no health_check attribute → skipped, not failed
-    ctx.get_filesystem = lambda: local_fs
+    ctx.configuration.storage.opensearch = None
 
     with _client(ctx) as client:
         resp = client.get("/knowledge-flow/v2/ready")
 
     assert resp.status_code == 200
     assert ctx is not None
-    fs_check = resp.json()["checks"]["gcs_filesystem"]
+    fs_check = resp.json()["checks"]["opensearch"]
     assert fs_check["ok"] is True
     assert "skipped" in fs_check
 

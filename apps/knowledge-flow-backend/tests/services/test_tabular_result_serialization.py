@@ -131,7 +131,7 @@ async def test_extracted_excel_nullable_date_query_returns_json_null(tmp_path, t
     metadata.file.file_type = FileType.XLSX
     metadata.file.mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     metadata = ExcelTableRegistrationProcessor().process(str(output_dir / "output.md"), metadata)
-    await ApplicationContext.get_instance().get_metadata_store().save_metadata(metadata)
+    await ApplicationContext.get_instance().test_metadata_store.save_metadata(metadata)
 
     [dataset] = await service.list_datasets(_user())
     sql = f"SELECT reference, CAST(date_expedition AS {date_type}) AS date_expedition, amount FROM {dataset.query_alias} ORDER BY reference"
