@@ -191,6 +191,13 @@ def make_alembic_env(
 
     _include_name, _include_object = build_ownership_filters(_owned_tables)
 
+    def _postgres_config() -> PostgresStoreConfig:
+        # Pre-install hooks have no application ConfigMap yet. Both coordinates
+        # and owning schema must be supplied explicitly in their environment.
+        if os.environ.get("DATABASE_URL"):
+            return PostgresStoreConfig(schema=os.environ.get("DATABASE_SCHEMA"))
+        return get_postgres_config()
+
     def _is_postgres(url: str) -> bool:
         return url.startswith("postgresql")
 
@@ -203,6 +210,9 @@ def make_alembic_env(
             target_metadata=target_metadata,
             render_as_batch=not is_postgres,
             version_table=version_table,
+            version_table_schema=_postgres_config().schema_name
+            if is_postgres
+            else None,
             include_name=_include_name,
             include_object=_include_object,
         )
@@ -212,7 +222,14 @@ def make_alembic_env(
     async def _run_async_migrations() -> None:
         url = _build_url(get_postgres_config)
         is_postgres = _is_postgres(url)
-        connectable = create_async_engine(url, poolclass=pool.NullPool)
+        connect_args = (
+            _postgres_config().postgres_connect_args(asynchronous=True)
+            if is_postgres
+            else {}
+        )
+        connectable = create_async_engine(
+            url, poolclass=pool.NullPool, connect_args=connect_args
+        )
         async with connectable.begin() as connection:
             await connection.run_sync(_do_run_migrations, is_postgres=is_postgres)
         await connectable.dispose()
@@ -220,16 +237,22 @@ def make_alembic_env(
     def run_migrations_offline() -> None:
         """Emit SQL to stdout without a live DB (used with ``--sql`` flag)."""
         url = _build_url(get_postgres_config)
+        pg = _postgres_config() if _is_postgres(url) else None
+        if pg:
+            pg.postgres_connect_args(asynchronous=True)
         context.configure(
             url=url,
             target_metadata=target_metadata,
             literal_binds=True,
             dialect_opts={"paramstyle": "named"},
             version_table=version_table,
+            version_table_schema=pg.schema_name if pg else None,
             include_name=_include_name,
             include_object=_include_object,
         )
         with context.begin_transaction():
+            if pg:
+                context.execute(f"SET search_path TO {pg.schema_name}")
             context.run_migrations()
 
     def run_migrations_online() -> None:

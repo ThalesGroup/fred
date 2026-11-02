@@ -20,7 +20,7 @@ SHARED = {
     "OPENFGA_API_URL": "http://authz.invalid:9080",
 }
 OWN = {
-    "m2m_secret_env": "AN_APP_M2M_CLIENT_SECRET",  # nosec B105 - variable name  # pragma: allowlist secret
+    "m2m_secret_env": "AN_APP_M2M_CLIENT_SECRET",  # nosec B105 # variable name  # pragma: allowlist secret
 }
 OPTIONAL = (
     "KEYCLOAK_M2M_REALM_URL",
@@ -63,7 +63,7 @@ def test_two_applications_differ_only_by_the_names_that_are_their_own(
 
     one = security_configuration_from_env(**OWN)
     another = security_configuration_from_env(
-        m2m_secret_env="ANOTHER_APP_M2M_CLIENT_SECRET",  # nosec B106 - variable name  # pragma: allowlist secret
+        m2m_secret_env="ANOTHER_APP_M2M_CLIENT_SECRET",  # nosec B106 # variable name  # pragma: allowlist secret
     )
 
     assert one.profile == another.profile == "c3"

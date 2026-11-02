@@ -15,7 +15,8 @@
 """Liveness (`/healthz`) and dependency-aware readiness (`/ready`) endpoints.
 
 `/healthz` stays a trivial liveness check (used by the k8s liveness/startup probes).
-`/ready` actively probes PostgreSQL, the configured vector backend and published artifacts with a per-check timeout, so an operator (or the
+`/ready` actively probes PostgreSQL, the configured vector backend and Control Plane
+with a per-check timeout, so an operator (or the
 fredlab-status command) sees exactly *which* dependency is down instead of a silent
 hang. Each probe is bounded by a timeout, so a stalled dependency reports as failed
 rather than blocking the request.
@@ -62,7 +63,6 @@ class MonitoringController:
         probes: dict[str, Callable[[], Awaitable[object | None]]] = {
             "postgres": self._check_postgres,
             "opensearch": self._check_opensearch,
-            "published_artifacts": self._check_published_artifacts,
             "control_plane": self._check_control_plane,
         }
         results: dict[str, dict] = {}
@@ -112,11 +112,6 @@ class MonitoringController:
         store = self._context.get_vector_store()
         if isinstance(store, OpenSearchVectorStoreAdapter):
             await asyncio.to_thread(store.ensure_ready)
-
-    async def _check_published_artifacts(self) -> None:
-        reader = self._context.get_published_artifact_reader()
-        if not await asyncio.to_thread(reader.client.bucket_exists, reader.bucket):
-            raise RuntimeError("Published artifact bucket is missing")
 
     async def _check_control_plane(self) -> None:
         url = self._context.configuration.control_plane_url

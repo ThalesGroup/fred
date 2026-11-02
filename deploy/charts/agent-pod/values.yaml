@@ -35,6 +35,13 @@ httpRoute:
 # validated against it by values.schema.json. Set at least app.runtime_id,
 # app.base_url, security.m2m and security.user (README.md, "Configure").
 configuration:
+  storage:
+    postgres:
+      host: postgres
+      port: 5432
+      database: fred
+      username: fred_runtime
+      schema: runtime
   app:
     host: "0.0.0.0"
     # The port the image serves on.
@@ -51,7 +58,10 @@ secret:
   existingSecret: ""
   create: false
   data: {}
-extraEnvVars: []
+extraEnvVars:
+  - name: FRED_POSTGRES_PASSWORD
+    valueFrom:
+      secretKeyRef: {name: fred-secrets, key: POSTGRES_RUNTIME_PASSWORD}
 
 extraVolumes: []
 extraVolumeMounts: []

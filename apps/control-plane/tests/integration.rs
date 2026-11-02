@@ -33,6 +33,8 @@ mod content_bucket;
 mod document_storage;
 #[path = "support/environment.rs"]
 mod environment;
+#[path = "support/sql_boundary.rs"]
+mod sql_boundary;
 use environment::{Env, env, named_space};
 
 /// Removes a tuple behind control-plane's back, as another admin or an operator would.

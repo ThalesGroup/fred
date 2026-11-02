@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PKCE_CALLBACK_HOST = "127.0.0.1"
 DEFAULT_PKCE_CALLBACK_PORT = 8765
-DEFAULT_KEYCLOAK_TOKEN_FILE = (  # nosec B105 - local cache path, not a credential
+DEFAULT_KEYCLOAK_TOKEN_FILE = (  # nosec B105 # local cache path, not a credential
     "~/.config/fred/agent-chat-session.json"
 )
 

@@ -126,7 +126,7 @@ storage:
     host: localhost
     port: 5432
     database: fred
-    username: fred
+    username: fred_cp
 
 policies:
   purge_catalog_path: ./config/lifecycle_policy_catalog.yaml
@@ -248,7 +248,7 @@ flowchart LR
     run --> pg & kc
     run --> tmp
     browser --> traefik --> pod
-    secrets -. "POSTGRES_FRED_PASSWORD,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN,<br/>KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET" .-> pod
+    secrets -. "POSTGRES_CP_PASSWORD,<br/>CONTROL_PLANE_BOOTSTRAP_TOKEN,<br/>KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET" .-> pod
 ```
 
 | | Host run | k3d release |
@@ -287,15 +287,21 @@ and checksums without applying them.
 ## SQLx schema initialization
 
 The [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue) identifies
-the control-plane tables and their responsibilities. The single file
+the control-plane tables and their responsibilities. The baseline
 [`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql) creates
-the complete current schema, including constraints, indexes and triggers. SQLx
-embeds it in the Rust binary and records its fingerprint in `_sqlx_migrations`.
+the owned tables, constraints, indexes and triggers.
+[`0002_cp_read.sql`](../../apps/control-plane/migrations/0002_cp_read.sql) defines
+the consumer views and their SELECT grants. SQLx
+embeds both in the Rust binary and records migration fingerprints in `control_plane._sqlx_migrations`.
 There is no incremental upgrade path for draft Weaver installations.
 
 `control-plane initialize-schema` connects using `DATABASE_URL` without loading
-application configuration. SQLx serializes concurrent initializers with a database
-lock and creates the schema in one transaction. Repeating initialization on the
+application configuration. Both this command and the configured API pool explicitly
+set `search_path=control_plane` in `PgConnectOptions`. Unqualified application
+queries and SQLx history therefore resolve inside the owning schema.
+The administrator must first execute `deploy/postgres/bootstrap.sql`; SQLx logs in
+as `fred_cp`, never as the administrator. SQLx serializes concurrent initializers with a database
+lock and executes each migration in a transaction. Repeating initialization on the
 same schema preserves data. An incompatible history or checksum is refused with
 an explicit fresh-database requirement; no automatic reset or checksum rewrite occurs.
 
@@ -309,10 +315,11 @@ API pool initialization uses the read-only `db::require_initialized` check and
 refuses empty, incomplete or incompatible history. Provisioning import performs
 the same verification. Outside Kubernetes, run `control-plane initialize-schema`
 before starting the API. This separates schema execution from normal startup;
-database privilege separation is not enforced by the application.
+database roles enforce the schema boundary independently of the application.
 
-During this fresh-install phase, schema changes update the baseline file and
-require rebuilding the image and explicitly recreating the disposable installation.
+This build remains for fresh installations; the cp_read migration does not
+convert old public tables. Changing the schema requires rebuilding the image and
+explicitly recreating an incompatible disposable installation.
 An application-only redeployment reuses the matching schema. Preserve needed data
 before a separately authorized recreation; deployment does not perform it. A future
 supported upgrade path requires an explicit release decision and immutable migrations.
@@ -324,17 +331,17 @@ the local profile):
 ```sql
 SELECT version, description, installed_on, success,
        encode(checksum, 'hex') AS checksum
-FROM public._sqlx_migrations
+FROM control_plane._sqlx_migrations
 ORDER BY version;
 
 SELECT tablename
 FROM pg_catalog.pg_tables
-WHERE schemaname = 'public'
+WHERE schemaname = 'control_plane'
 ORDER BY tablename;
 
 SELECT table_name, ordinal_position, column_name, data_type, is_nullable
 FROM information_schema.columns
-WHERE table_schema = 'public'
+WHERE table_schema IN ('control_plane', 'cp_read')
 ORDER BY table_name, ordinal_position;
 ```
 

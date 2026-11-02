@@ -36,7 +36,7 @@ storage:
     host: localhost
     port: 5432
     database: fred
-    username: fred
+    username: fred_cp
 
 policies:
   purge_catalog_path: ./config/lifecycle_policy_catalog.yaml

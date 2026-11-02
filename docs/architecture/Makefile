@@ -2,7 +2,7 @@
 # Postgres, tbls and mermaid-cli run in throwaway containers; nothing is installed.
 
 PYTHON          ?= python3
-POSTGRES_IMAGE  ?= mirror.gcr.io/postgres:15.12-alpine3.20
+POSTGRES_IMAGE  ?= pgvector/pgvector:pg15
 TBLS_IMAGE      ?= ghcr.io/k1low/tbls:v1.96.0
 MERMAID_IMAGE   ?= minlag/mermaid-cli:11.17.0
 ROOT            := $(realpath ../..)
@@ -21,8 +21,9 @@ er: ## Regenerate generated/<component>.er.mmd from each component's migrations
 		trap 'docker rm -f $$pg >/dev/null 2>&1 || true' EXIT; \
 		docker run -d --name $$pg -e POSTGRES_PASSWORD=docs -p 127.0.0.1::5432 $(POSTGRES_IMAGE) >/dev/null; \
 		until docker exec $$pg psql -U postgres -h 127.0.0.1 -c 'select 1' >/dev/null 2>&1; do sleep 1; done; \
+		docker exec -i $$pg psql -U postgres -q -v database=postgres < $(ROOT)/deploy/postgres/bootstrap.sql; \
 		for migration in $(ROOT)/apps/$$c/migrations/*.sql; do \
-			docker exec -i $$pg psql -U postgres -q -1 -v ON_ERROR_STOP=1 < "$$migration"; \
+			docker exec -i -e PGOPTIONS="-c search_path=control_plane -c role=fred_cp" $$pg psql -U postgres -q -1 -v ON_ERROR_STOP=1 < "$$migration"; \
 		done; \
 		addr=$$(docker port $$pg 5432/tcp | head -n1); \
 		docker run --rm --network host $(TBLS_IMAGE) out -t mermaid \

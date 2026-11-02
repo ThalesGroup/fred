@@ -542,7 +542,6 @@ class ProcessPushFile:
 class ProcessPush:
     @workflow.run
     async def run(self, definition: Any) -> dict:
-        files = _wf_get(definition, "files", []) or []
         return await _wf_run_parent_pipeline(
             definition=definition,
             child_workflow_run=ProcessPushFile.run,

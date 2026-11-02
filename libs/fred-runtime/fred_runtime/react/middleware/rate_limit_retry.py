@@ -136,9 +136,9 @@ class RateLimitRetryMiddleware(AgentMiddleware):
         """Honor provider minimum delays and spread fallback retries."""
 
         if retry_after is not None and retry_after >= 0:
-            return retry_after + random.uniform(0, 1.0)  # nosec B311 — retry jitter, not security-sensitive
+            return retry_after + random.uniform(0, 1.0)  # nosec B311 # retry jitter, not security-sensitive
         ceiling = min(_BACKOFF_CAP_S, _BACKOFF_BASE_S * (2**attempt))
-        return random.uniform(ceiling / 2, ceiling)  # nosec B311 — retry jitter, not security-sensitive
+        return random.uniform(ceiling / 2, ceiling)  # nosec B311 # retry jitter, not security-sensitive
 
     def _record(self, model_name: str | None, *, exhausted: bool) -> None:
         if self._kpi is None:

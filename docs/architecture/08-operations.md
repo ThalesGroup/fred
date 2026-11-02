@@ -28,6 +28,24 @@ The hook does not infer resources from a component-name prefix. The worker uses 
 same rendered configuration as the permission setup. The local profile selects
 `document-vectors`, separately from Swift's retrieval index.
 
+## PostgreSQL ownership
+
+One database contains four isolated schemas. Control Plane owns `control_plane`
+(tables, functions, triggers and SQLx history) and `cp_read` (read contracts).
+Knowledge Flow owns `knowledge`; Agent Pod owns `runtime`, including Alembic
+history and checkpoints. Their logins are `fred_cp`, `fred_kf`, `fred_runtime`;
+`fred_monitor` reads only its platform-role view. Consumers receive SELECT through
+reader groups and have no access to the Control Plane schema. `public` is closed.
+
+An administrator runs the deployment-owned bootstrap before schema initialization.
+It creates roles, schemas and the vector extension without passwords. Deployment
+supplies separate credentials through Secrets, then runs Control Plane SQLx,
+runtime migrations, and starts applications, in that order. The optional chart
+bootstrap hook is disabled by default: managed installations have their DBA run
+the [bootstrap procedure](../../deploy/postgres/README.md). Applications never
+receive role-administration privileges. The first installation with this layout
+requires a fresh database; no conversion of an old `public` database is attempted.
+
 ## Schema initialization and recovery
 
 Weaver Control Plane installs its complete schema on a fresh database. The

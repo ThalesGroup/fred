@@ -31,8 +31,9 @@ from opensearchpy import OpenSearch, RequestsHttpConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 if TYPE_CHECKING:
-    from knowledge_flow_backend.features.manager_processing.persistence import LocalTabularArtifacts
     from sentence_transformers import CrossEncoder
+
+    from knowledge_flow_backend.features.manager_processing.persistence import LocalTabularArtifacts
 
 from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
 from knowledge_flow_backend.common.structures import Configuration, OpenSearchVectorIndexConfig, PgVectorStorageConfig, TabularStoreConfig
@@ -599,7 +600,7 @@ class ApplicationContext:
             instance = PgVectorStoreAdapter(
                 embedding_model=embedding_model,
                 embedding_model_name=embedding_model_name,
-                connection_string=pg.dsn(),
+                postgres_config=pg,
                 collection_name=store.collection_name,
             )
             logger.info(

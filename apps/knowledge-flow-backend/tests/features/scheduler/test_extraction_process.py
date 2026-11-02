@@ -37,7 +37,7 @@ import os
 import pathlib
 import signal
 import socket
-import subprocess  # nosec B404: only starts a fixed sleeping interpreter
+import subprocess  # nosec B404 # only starts a fixed sleeping interpreter
 import sys
 import time
 from multiprocessing import reduction
@@ -107,7 +107,7 @@ def _child_that_spawns_a_descendant_in_its_own_group(request, _pipe, _parent_pid
     """How fred-core runs LibreOffice: a group of its own, so its timeout can kill
     it, inside the child's session."""
     os.setsid()
-    descendant = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"], process_group=0)  # nosec B603: fixed test command
+    descendant = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"], process_group=0)  # nosec B603 # fixed test command
     _report_pid(request, "descendant.pid", descendant.pid)
     _report_pid(request, "child.pid", os.getpid())
     time.sleep(300)

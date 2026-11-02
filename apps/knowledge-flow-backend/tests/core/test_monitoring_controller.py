@@ -52,14 +52,13 @@ def _healthy_context() -> SimpleNamespace:
     opensearch = MagicMock()
     opensearch.ping = MagicMock(return_value=True)
 
-    reader = SimpleNamespace(client=SimpleNamespace(bucket_exists=MagicMock(return_value=True)), bucket="derived")
     authorization = SimpleNamespace(get=AsyncMock(return_value=SimpleNamespace(raise_for_status=lambda: None)))
 
     return SimpleNamespace(
         get_pg_async_engine=lambda: engine,
         get_opensearch_client=lambda: opensearch,
         get_vector_store=lambda: object(),
-        get_published_artifact_reader=lambda: reader,
+        get_published_artifact_reader=MagicMock(side_effect=AssertionError("API readiness must not access S3")),
         get_authorization_client=lambda: authorization,
         configuration=SimpleNamespace(storage=SimpleNamespace(opensearch=object()), control_plane_url="https://cp/control-plane/v1"),
     )
@@ -86,15 +85,16 @@ def test_ready_all_dependencies_ok() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ready"
-    for name in ("postgres", "opensearch", "published_artifacts", "control_plane"):
+    assert set(body["checks"]) == {"postgres", "opensearch", "control_plane"}
+    for name in body["checks"]:
         assert body["checks"][name]["ok"] is True
 
 
-def test_ready_reports_degraded_when_artifacts_down() -> None:
+def test_ready_reports_degraded_when_postgres_down() -> None:
     ctx = _healthy_context()
     failing = MagicMock()
-    failing.client.bucket_exists = MagicMock(side_effect=RuntimeError("Artifact bucket unreachable"))
-    ctx.get_published_artifact_reader = lambda: failing
+    failing.connect = MagicMock(side_effect=RuntimeError("Postgres unreachable"))
+    ctx.get_pg_async_engine = lambda: failing
 
     with _client(ctx) as client:
         resp = client.get("/knowledge-flow/v2/ready")
@@ -102,10 +102,10 @@ def test_ready_reports_degraded_when_artifacts_down() -> None:
     assert resp.status_code == 503
     body = resp.json()
     assert body["status"] == "degraded"
-    assert body["checks"]["published_artifacts"]["ok"] is False
-    assert "Artifact bucket unreachable" in body["checks"]["published_artifacts"]["error"]
+    assert body["checks"]["postgres"]["ok"] is False
+    assert "Postgres unreachable" in body["checks"]["postgres"]["error"]
     # other dependencies still report healthy
-    assert body["checks"]["postgres"]["ok"] is True
+    assert body["checks"]["control_plane"]["ok"] is True
 
 
 def test_ready_skips_unconfigured_opensearch() -> None:

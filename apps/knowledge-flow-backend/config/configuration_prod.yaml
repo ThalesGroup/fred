@@ -401,12 +401,13 @@ storage:
     host: localhost
     port: 5432
     database: fred
-    username: fred
     pool_size: 2
     max_overflow: 0
     pool_timeout: 30
     pool_recycle: 1800
     pool_pre_ping: true
+    username: fred_kf
+    schema: knowledge
   opensearch:
     host: https://localhost:9200
     secure: true

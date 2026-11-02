@@ -128,7 +128,7 @@ def _convert_with_libreoffice(src_path: Path, out_dir: Path, *, convert_to: str,
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-        )  # nosec: controlled command arguments, shell=False
+        )  # nosec B603 # LibreOffice executable with separate arguments; shell=False.
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.decode(errors="ignore").strip() if exc.stderr else str(exc)
         raise LegacyOfficeConversionError(f"LibreOffice conversion failed for '{src_path.name}': {detail}") from exc

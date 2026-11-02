@@ -6411,7 +6411,9 @@ def create_agent_app(
 
                 async with sql_engine.connect() as connection:
                     await connection.execute(
-                        text("select user_id, version from terms_acceptance limit 0")
+                        text(
+                            "select user_id, version from cp_read.terms_acceptance limit 0"
+                        )
                     )
             chat_factory = _build_chat_model_factory(config)
             if model_provider is not None and isinstance(

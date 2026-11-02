@@ -842,7 +842,7 @@ def test_adapter_keeps_binding_and_token_private(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(adapters_module, "VectorSearchClient", lambda **_kw: object())
-    binding = _binding(access_token="secret-token")  # nosec B106 - test fixture
+    binding = _binding(access_token="secret-token")  # nosec B106 # test fixture
     adapter = DocumentSearchAdapter(binding=binding, settings=_settings())
 
     # No PUBLIC attribute exposes the binding/token/client — all private.

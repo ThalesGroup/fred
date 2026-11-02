@@ -89,7 +89,7 @@ async def test_immediate_retry_recovers_and_success_is_cached(
         return httpx.Response(
             200,
             request=request,
-            json={"access_token": "workload-token", "expires_in": 120},  # nosec B105 - protocol metadata or synthetic fixture
+            json={"access_token": "workload-token", "expires_in": 120},  # nosec B105 # protocol metadata or synthetic fixture
         )
 
     provider = M2MTokenProvider(
@@ -113,10 +113,10 @@ async def test_immediate_retry_recovers_and_success_is_cached(
     "payload",
     [
         {},
-        {"access_token": "", "expires_in": 60},  # nosec B105 - protocol metadata or synthetic fixture
-        {"access_token": "token", "expires_in": 0},  # nosec B105 - protocol metadata or synthetic fixture
-        {"access_token": "token", "expires_in": float("inf")},  # nosec B105 - protocol metadata or synthetic fixture
-        {"access_token": "token", "expires_in": True},  # nosec B105 - protocol metadata or synthetic fixture
+        {"access_token": "", "expires_in": 60},  # nosec B105 # protocol metadata or synthetic fixture
+        {"access_token": "token", "expires_in": 0},  # nosec B105 # protocol metadata or synthetic fixture
+        {"access_token": "token", "expires_in": float("inf")},  # nosec B105 # protocol metadata or synthetic fixture
+        {"access_token": "token", "expires_in": True},  # nosec B105 # protocol metadata or synthetic fixture
     ],
 )
 async def test_invalid_token_response_is_a_bounded_failure(
@@ -180,7 +180,7 @@ async def test_token_expired_during_refresh_is_never_returned(
         return httpx.Response(
             200,
             request=request,
-            json={"access_token": "already-expired", "expires_in": 60},  # nosec B105 - protocol metadata or synthetic fixture
+            json={"access_token": "already-expired", "expires_in": 60},  # nosec B105 # protocol metadata or synthetic fixture
         )
 
     provider = M2MTokenProvider(
@@ -229,7 +229,7 @@ async def test_cancelled_waiter_does_not_cancel_shared_refresh(
         return httpx.Response(
             200,
             request=request,
-            json={"access_token": "recovered", "expires_in": 120},  # nosec B105 - protocol metadata or synthetic fixture
+            json={"access_token": "recovered", "expires_in": 120},  # nosec B105 # protocol metadata or synthetic fixture
         )
 
     provider = M2MTokenProvider(_config(), transport=httpx.MockTransport(_endpoint))

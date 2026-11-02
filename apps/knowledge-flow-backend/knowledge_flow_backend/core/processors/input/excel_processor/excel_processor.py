@@ -97,7 +97,7 @@ def recalc_with_libreoffice(path: str) -> str:
             ],
             check=True,
             capture_output=True,
-        )  # nosec: controlled command arguments, shell=False
+        )  # nosec B603 # LibreOffice executable with separate arguments; shell=False.
         # Pick up whatever LibreOffice wrote rather than reconstructing the name (it
         # normalises the filename, e.g. trims trailing spaces). The profile lives in a
         # sub-directory, so the single produced .xlsx directly in outdir is unambiguous.

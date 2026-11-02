@@ -81,7 +81,7 @@ def caller() -> KeycloakUser:
         client_id=_CALLER,
         token_issuer=_ISSUER,
         token_audiences=frozenset({_AUDIENCE}),
-        token_type="Bearer",  # nosec B106 - protocol metadata or synthetic fixture
+        token_type="Bearer",  # nosec B106 # protocol metadata or synthetic fixture
         caller_roles=frozenset({"delegation_caller"}),
     )
 
@@ -273,8 +273,8 @@ def test_endpoint_without_operation_metadata_accepts_the_trusted_identity(
     "updates",
     [
         {"client_id": _LOGIN_CLIENT},
-        {"token_type": "ID"},  # nosec B105 - protocol metadata or synthetic fixture
-        {"token_issuer": "https://other.invalid/realms/test"},  # nosec B105 - protocol metadata or synthetic fixture
+        {"token_type": "ID"},  # nosec B105 # protocol metadata or synthetic fixture
+        {"token_issuer": "https://other.invalid/realms/test"},  # nosec B105 # protocol metadata or synthetic fixture
         {"token_audiences": frozenset({"other-receiver"})},
     ],
 )

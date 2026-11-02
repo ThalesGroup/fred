@@ -23,13 +23,31 @@ No Rust-specific profile is added to the factory.
 
 ## Technical monitor
 
-The profile also builds `apps/monitor`, enables the chart application and exposes
-`/admin/monitor` in the frontend for platform administrators. No additional port
-is required. `prepare` invokes the factory's `k3d-apps/fred/monitor-database` to
-create/reuse the dedicated SQL login and Secret. `finish` grants the role-table
-read after Control Plane migrations on a fresh database. The factory must include
-this hook; use its matching `weaver` branch. Repeated deployments keep credentials
-and work against existing PostgreSQL volumes.
+The profile builds `apps/monitor` and exposes `/admin/monitor` to platform admins.
+`prepare` passes this checkout's `deploy/postgres/bootstrap.sql` to the factory's
+`monitor-database` hook (the historical filename now provisions all four roles).
+The hook retains four passwords in `fred-secrets`: `POSTGRES_CP_PASSWORD`,
+`POSTGRES_KF_PASSWORD`, `POSTGRES_RUNTIME_PASSWORD`, `POSTGRES_MONITOR_PASSWORD`.
+It also stores the derived `POSTGRES_MONITOR_DATABASE_URL`. No password is printed
+or passed in argv. `finish` no longer grants tables; SQLx owns all `cp_read` grants.
+
+The factory's secondary infrastructure leaves the vector extension to the checkout
+bootstrap. Swift and the independent tabular database retain their existing setup.
+The first Weaver installation with this SQL boundary requires a reset of the
+secondary PostgreSQL volume, even if B1 was already deployed. An ordinary upgrade
+cannot move the former public tables or extension. For a disposable secondary
+cluster, these operator-run commands recreate its volumes and deploy everything:
+
+```sh
+cd ~/Rebac/fred-deployment-factory
+make k3d-wipe ENV=secondary
+make k3d-up ENV=secondary
+# Recreate the operator-owned fred-model-credentials Secret from your secret source.
+make k3d-app ENV=secondary APP=fred DIR=../fred
+```
+
+Never reset a database containing data to keep. See the
+[DBA procedure](../postgres/README.md) for managed installations and role cleanup.
 
 ## First start on k3d
 
@@ -124,7 +142,7 @@ The inherited factory settings are retained:
 
 | Dependency | Effective profile |
 | --- | --- |
-| PostgreSQL / migrations | Database `fred`, user `fred`, host `postgres`; password from `fred-secrets/POSTGRES_FRED_PASSWORD`. The enabled job runs `python -m fred_runtime migrate`, including installed capabilities, without old Python Control Plane migrations. |
+| PostgreSQL / migrations | Database `fred`, host `postgres`; runtime login `fred_runtime`, schema `runtime`, password from `fred-secrets/POSTGRES_RUNTIME_PASSWORD`. The enabled job runs `python -m fred_runtime migrate`, including installed capabilities, without old Python Control Plane migrations. |
 | Keycloak | Secondary issuer/origins, user and M2M authentication; workload client `agentic` and secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Existing outgoing delegation is retained. |
 | Storage / observability | SeaweedFS runtime object store, OpenSearch logs/KPI, Prometheus and node CA mount; their inherited credential references are retained. |
 | Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
@@ -162,9 +180,7 @@ can read the corpus, its mapping and the hybrid pipeline, but cannot modify corp
 data, mappings or pipelines; its separate logs/KPI permissions keep writes there. Preparation rejects
 an observability index equal to the corpus index.
 
-PostgreSQL remains `postgres:5432/fred`, user `fred`. The API reads the Control
-Plane's `space`, `document`, `document_processing` and published authorization
-binding; it runs no KF migration. This shared SQL role is not a read-only account.
+PostgreSQL remains `postgres:5432/fred`, with login `fred_kf` and schema `knowledge`. The API reads publication and lifecycle facts through `cp_read`; it runs no KF migration. The role writes only knowledge tables and reads publication facts through SELECT-only `cp_read` views.
 
 ## Prepare and deploy
 
@@ -199,7 +215,7 @@ PostgreSQL; Control Plane owns permission decisions, and the ingestion worker ke
 its scoped storage credentials.
 
 The generic identity hook provisions `knowledge-flow-worker`. The checkout's
-`prepare` hook then:
+`prepare` hook bootstraps PostgreSQL roles and schemas before it:
 
 - exports the processing contract from the built KF image and effective config;
 - creates retained application credentials in `fred-ingestion`;

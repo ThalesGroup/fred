@@ -13,6 +13,10 @@
     {{- $appEnabled = $app.enabled }}
   {{- end }}
   {{- if $appEnabled }}
+  {{- $databaseEnv := include "fred.postgres-env" (dict "app" $app "root" $ "name" $name) | fromYamlArray }}
+  {{- if $databaseEnv }}
+    {{- $_ := set $app "extraEnvVars" (concat ($app.extraEnvVars | default list) $databaseEnv) }}
+  {{- end }}
   {{- $ctx := dict "app" $app "root" $ }}
   {{- include "common-library.service" $ctx }}
   {{- include "common-library.service-metrics" $ctx }}

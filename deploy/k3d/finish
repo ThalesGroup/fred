@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-# On a fresh database the role-grant table appears during Control Plane migration.
-"${K3D_FACTORY_ROOT:?Run through fred-deployment-factory}/k3d-apps/fred/monitor-database" --require-table
+# SQL view grants were installed by the Control Plane migration.
 printf 'Fred manager + Knowledge Flow worker + monitor + frontend: %s\n' "$K3D_PUBLIC_URL"
 printf 'Platform administrator monitor: %s/admin/monitor\n' "$K3D_PUBLIC_URL"
 printf 'First login bootstrap token (retrieve locally):\n'

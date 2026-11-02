@@ -404,7 +404,7 @@ class TabularService:
                             for _, column in numeric:
                                 identifier = quote_identifier(column.name)
                                 aggregates.extend((f"MIN({identifier}) FILTER (WHERE isfinite({identifier}))", f"MAX({identifier}) FILTER (WHERE isfinite({identifier}))"))
-                            bounds = connection.execute(f"SELECT {', '.join(aggregates)} FROM tabular_description_table").fetchone()  # nosec B608 — quoted stored column names
+                            bounds = connection.execute(f"SELECT {', '.join(aggregates)} FROM tabular_description_table").fetchone()  # nosec B608 # quoted stored column names
                             if bounds is not None:
                                 for position, (index, column) in enumerate(numeric):
                                     columns[index] = describe_numeric_column(column, bounds[2 * position], bounds[2 * position + 1])
@@ -412,7 +412,7 @@ class TabularService:
                             handle.raise_if_aborted()
                             identifier = quote_identifier(column.name)
                             rows = connection.execute(
-                                f"SELECT DISTINCT {identifier} FROM tabular_description_table WHERE {identifier} IS NOT NULL"  # nosec B608 — quoted stored column name
+                                f"SELECT DISTINCT {identifier} FROM tabular_description_table WHERE {identifier} IS NOT NULL"  # nosec B608 # quoted stored column name
                             ).fetchall()
                             columns[index] = column.model_copy(update={"sample_values": sorted(str(row[0]) for row in rows) or None})
                         if not numeric and not categorical:
@@ -775,7 +775,7 @@ class TabularService:
         # relation, column and literal below is machine-generated and quoted with
         # quote_identifier / quote_string_literal, never caller text.
         count_select = ", ".join(f"count(*) FILTER (WHERE {condition}) AS m{index}" for index, condition in enumerate(column_conditions))
-        count_sql = f"SELECT {count_select} FROM {alias_sql}"  # nosec B608 — machine-built; relation/columns quoted, no caller text
+        count_sql = f"SELECT {count_select} FROM {alias_sql}"  # nosec B608 # machine-built; relation/columns quoted, no caller text
         count_row = connection.execute(count_sql).fetchone()
         matched_columns = [name for index, name in enumerate(columns) if count_row and count_row[index]]
         if not matched_columns:
@@ -783,7 +783,7 @@ class TabularService:
 
         # Pass 2 — a bounded sample of matching rows (one extra row detects truncation).
         where_any_column = " OR ".join(column_conditions)
-        sample_sql = f"SELECT * FROM {alias_sql} WHERE {where_any_column} LIMIT {max_rows_per_table + 1}"  # nosec B608 — machine-built; relation/columns quoted, no caller text
+        sample_sql = f"SELECT * FROM {alias_sql} WHERE {where_any_column} LIMIT {max_rows_per_table + 1}"  # nosec B608 # machine-built; relation/columns quoted, no caller text
         rows_df = connection.execute(sample_sql).df()
         row_truncated = len(rows_df) > max_rows_per_table
         rows = dataframe_to_records(rows_df.head(max_rows_per_table))

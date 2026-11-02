@@ -57,9 +57,13 @@ async fn main() -> Result<()> {
             Some(rest) => format!("postgresql://{rest}"),
             None => url,
         };
+        let options = url
+            .parse::<sqlx::postgres::PgConnectOptions>()
+            .map_err(|_| anyhow::anyhow!("invalid schema initialization database URL"))?
+            .options([("search_path", "control_plane")]);
         let pool = PgPoolOptions::new()
             .max_connections(1)
-            .connect(&url)
+            .connect_with(options)
             .await
             .map_err(|_| anyhow::anyhow!("schema initialization database connection failed"))?;
         sqlx::migrate!()

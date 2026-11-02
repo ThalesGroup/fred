@@ -99,9 +99,10 @@ storage:
     host: localhost
     port: 5432
     database: fred
-    username: fred
     pool_size: 20
     max_overflow: 20
+    username: fred_runtime
+    schema: runtime
   opensearch:
     host: "https://localhost:9200"
     username: "admin"

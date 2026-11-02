@@ -16,12 +16,9 @@
 the JSONB update and the search that reads it back, through the same LangChain
 store a deployment uses.
 
-Needs the `vector` extension, which `scripts/docker-compose.postgres.yml` does
-not provide; point FRED_PGVECTOR_DSN at a disposable pgvector database, e.g.
-
-    docker run -d --rm -p 5434:5432 -e POSTGRES_PASSWORD=<password> pgvector/pgvector:pg15
-    FRED_PGVECTOR_DSN=postgresql://postgres:<password>@localhost:5434/postgres \\
-        .venv/bin/pytest tests/stores/test_pgvector_store_postgres.py -m integration
+Use a disposable database initialized with deploy/postgres/bootstrap.sql, and
+set FRED_PGVECTOR_DSN to its fred_kf login through a protected environment.
+The fixture never creates an extension or uses an administrator login.
 """
 
 from __future__ import annotations
@@ -31,30 +28,38 @@ import uuid
 from typing import Iterator
 
 import pytest
+from fred_core.common import PostgresStoreConfig
+from fred_core.sql.base_sql import create_engine_from_config
 from langchain_core.documents import Document
 from langchain_core.embeddings import DeterministicFakeEmbedding
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, SearchFilter
 from knowledge_flow_backend.core.stores.vector.pgvector_store import PgVectorStoreAdapter
 
 pytestmark = [pytest.mark.integration, pytest.mark.integration_postgres]
 
-_DEFAULT_DSN = "postgresql://test:test@localhost:5433/test_migrations"  # pragma: allowlist secret
-
 
 @pytest.fixture
 def store() -> Iterator[PgVectorStoreAdapter]:
-    dsn = os.environ.get("FRED_PGVECTOR_DSN", _DEFAULT_DSN)
+    dsn = os.environ.get("FRED_PGVECTOR_DSN")
+    if not dsn:
+        pytest.skip("Set FRED_PGVECTOR_DSN to a bootstrapped disposable fred_kf database")
+    url = make_url(dsn)
+    assert url.username == "fred_kf", "The integration fixture must use the consumer login"
+    config = PostgresStoreConfig(host=url.host, port=url.port or 5432, username=url.username, password=url.password, database=url.database, schema="knowledge")
+    engine = create_engine_from_config(config)
     try:
-        with create_engine(dsn).begin() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    except Exception as exc:
-        pytest.skip(f"no pgvector database at {dsn}: {exc}")
+        with engine.connect() as conn:
+            assert conn.scalar(text("select current_schema()")) == "knowledge"
+            assert conn.scalar(text("select to_regtype('knowledge.vector') is not null"))
+    finally:
+        engine.dispose()
     adapter = PgVectorStoreAdapter(
         embedding_model=DeterministicFakeEmbedding(size=16),
         embedding_model_name="fake",
-        connection_string=dsn,
+        postgres_config=config,
         collection_name=f"retrievable-{uuid.uuid4().hex}",
     )
     try:

@@ -116,6 +116,7 @@ def app_context(monkeypatch, fake_embedder, tmp_path):
                 port=5432,
                 username="user",
                 database="test_db",
+                schema="knowledge",
             ),
             opensearch=OpenSearchStoreConfig(
                 host="http://localhost:9200",

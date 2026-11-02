@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use control_plane::{db, domain::Space};
-use sqlx::{AssertSqlSafe, PgPool};
+use sqlx::PgPool;
 use uuid::Uuid;
-const IGNORE: &str = "needs disposable Postgres: make test-integration";
+#[path = "database.rs"]
+mod database;
 
 pub struct Env {
     pub pool: PgPool,
@@ -68,19 +69,7 @@ async fn open_directory() -> OpenDirectory {
 }
 
 pub async fn env() -> Env {
-    let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES").expect(IGNORE);
-    let name = format!("t_{}", Uuid::new_v4().simple());
-    let admin = PgPool::connect(&format!("{postgres}/postgres"))
-        .await
-        .unwrap();
-    sqlx::query(AssertSqlSafe(format!("create database {name}")))
-        .execute(&admin)
-        .await
-        .unwrap();
-    let pool = PgPool::connect(&format!("{postgres}/{name}"))
-        .await
-        .unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
+    let pool = database::database().await;
 
     Env {
         pool,

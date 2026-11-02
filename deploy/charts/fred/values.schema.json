@@ -7,6 +7,60 @@
     "^x-": {}
   },
   "properties": {
+    "postgresSecrets": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "controlPlaneKey": {
+          "type": "string"
+        },
+        "knowledgeKey": {
+          "type": "string"
+        },
+        "runtimeKey": {
+          "type": "string"
+        },
+        "monitorKey": {
+          "type": "string"
+        },
+        "monitorUrlKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "postgresBootstrap": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "image": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "database": {
+          "type": "string"
+        },
+        "adminUser": {
+          "type": "string"
+        },
+        "adminSecretName": {
+          "type": "string"
+        },
+        "adminPasswordKey": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "global": {
       "type": "object",
       "properties": {
@@ -1725,6 +1779,20 @@
                           ],
                           "default": null,
                           "title": "Username"
+                        },
+                        "schema": {
+                          "anyOf": [
+                            {
+                              "pattern": "^[a-z_][a-z0-9_]*$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Owning PostgreSQL schema; required for PostgreSQL connections.",
+                          "title": "Schema"
                         },
                         "password": {
                           "anyOf": [
@@ -7236,6 +7304,20 @@
                           "default": null,
                           "title": "Username"
                         },
+                        "schema": {
+                          "anyOf": [
+                            {
+                              "pattern": "^[a-z_][a-z0-9_]*$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Owning PostgreSQL schema; required for PostgreSQL connections.",
+                          "title": "Schema"
+                        },
                         "password": {
                           "anyOf": [
                             {
@@ -10356,6 +10438,20 @@
                           "default": null,
                           "title": "Username"
                         },
+                        "schema": {
+                          "anyOf": [
+                            {
+                              "pattern": "^[a-z_][a-z0-9_]*$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Owning PostgreSQL schema; required for PostgreSQL connections.",
+                          "title": "Schema"
+                        },
                         "password": {
                           "anyOf": [
                             {
@@ -13421,6 +13517,20 @@
                           "default": null,
                           "title": "Username"
                         },
+                        "schema": {
+                          "anyOf": [
+                            {
+                              "pattern": "^[a-z_][a-z0-9_]*$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Owning PostgreSQL schema; required for PostgreSQL connections.",
+                          "title": "Schema"
+                        },
                         "password": {
                           "anyOf": [
                             {
@@ -16453,6 +16563,20 @@
                           "default": null,
                           "title": "Username"
                         },
+                        "schema": {
+                          "anyOf": [
+                            {
+                              "pattern": "^[a-z_][a-z0-9_]*$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Owning PostgreSQL schema; required for PostgreSQL connections.",
+                          "title": "Schema"
+                        },
                         "password": {
                           "anyOf": [
                             {
@@ -19484,6 +19608,20 @@
                           ],
                           "default": null,
                           "title": "Username"
+                        },
+                        "schema": {
+                          "anyOf": [
+                            {
+                              "pattern": "^[a-z_][a-z0-9_]*$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null,
+                          "description": "Owning PostgreSQL schema; required for PostgreSQL connections.",
+                          "title": "Schema"
                         },
                         "password": {
                           "anyOf": [

@@ -78,6 +78,8 @@ See the [configuration guide](./config/README.md) for API and worker settings.
 - Vector projections support only OpenSearch and pgvector.
 - `manager_processing` configures worker authentication and generation artifact writes.
 - `published_artifacts` configures API reads of published S3 artifacts.
+  API readiness checks PostgreSQL, OpenSearch and Control Plane, without probing S3.
+  Existing artifact-reading routes still require S3 until the API/worker separation is complete.
 - `storage.tabular_store` configures Parquet generation and bounded DuckDB queries.
 
 ```bash

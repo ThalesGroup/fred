@@ -104,7 +104,7 @@ flowchart TB
     end
     cp["Control Plane API"]
     kfa["Knowledge Flow API<br/>Search and content retrieval"]
-    stores[("Knowledge stores<br/>Index, publication facts and content")]
+    stores[("Knowledge stores<br/>Index, cp_read publication facts and content")]
     ui <-->|"Messages / streamed answers"| agent
     agent -->|"Resolve authorized turn context"| cp
     capability -->|"Delegated identity / bound space"| kfa

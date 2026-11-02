@@ -657,7 +657,7 @@ def _create_model(
                             "[MODEL][ANTHROPIC] Patched no_proxy: added %s for direct connection",
                             _host,
                         )
-            except Exception:  # nosec B110 — best-effort proxy patch; must not block model construction
+            except Exception:  # nosec B110 # best-effort proxy patch; must not block model construction
                 pass
 
         _info_provider(cfg, settings)

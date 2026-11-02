@@ -47,7 +47,7 @@ async def _require_accepted(
         async with engine.connect() as connection:
             accepted = await connection.scalar(
                 text(
-                    "select exists(select 1 from terms_acceptance "
+                    "select exists(select 1 from cp_read.terms_acceptance "
                     "where user_id = :uid and version = :version)"
                 ),
                 {"uid": subject.uid, "version": version},

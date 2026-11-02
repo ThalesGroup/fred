@@ -36,48 +36,42 @@ from fred_core.documents.transport import DocumentAccessContext
 logger = logging.getLogger(__name__)
 
 _SPACE = text(
-    "SELECT id, parent_id, organization_id, deletion_id FROM space WHERE id = :space_id"
+    "SELECT id, retired FROM cp_read.space_state WHERE id = :space_id"
 ).bindparams(bindparam("space_id", type_=Uuid))
 
 _CONVERSATION = text(
-    "SELECT session_id FROM session_metadata"
-    " WHERE session_id = :conversation_id AND space_id = :space_id"
-    " AND user_id = :user_id AND deletion_id IS NULL"
+    "SELECT conversation_id FROM cp_read.conversation"
+    " WHERE conversation_id = :conversation_id AND space_id = :space_id AND owner = :user_id"
 ).bindparams(
     bindparam("conversation_id", type_=Uuid), bindparam("space_id", type_=Uuid)
 )
 
+# Keep the Python row vocabulary local; the SQL boundary has explicit conversation names.
+_DOCUMENT_FACTS = (
+    "d.document_id AS id, d.folder_id, d.space_id, d.conversation_id AS session_id,"
+    " d.conversation_owner AS session_user_id, d.visible, d.rejection_reasons,"
+    " d.generation_id, d.vector_ordinals"
+)
 _DOCUMENTS = text(
-    "SELECT d.id, d.folder_id, d.space_id, d.session_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
-    " sm.user_id AS session_user_id, sm.deletion_id AS session_deletion_id,"
-    " d.retrievable, d.retrievable_pending,"
-    " g.id AS generation_id, g.vector_ordinals"
-    " FROM document d"
-    " JOIN space s ON s.id = d.space_id"
-    " LEFT JOIN session_metadata sm ON sm.session_id = d.session_id"
-    " AND sm.space_id = d.space_id"
-    " LEFT JOIN generation g ON g.id = d.published_generation"
-    " WHERE d.id = ANY(:document_ids)"
+    # Only literal SQL and the fixed _DOCUMENT_FACTS column list are concatenated;
+    # document_ids is supplied separately as a bound parameter to execute().
+    "SELECT "  # nosec B608
+    + _DOCUMENT_FACTS
+    + " FROM cp_read.document_visibility d WHERE d.document_id = ANY(:document_ids)"
 ).bindparams(bindparam("document_ids", type_=ARRAY(Uuid)))
 
-
 _PUBLISHED_ARTIFACT = text(
-    "SELECT d.id, d.folder_id, d.space_id, d.session_id, d.deletion_id, s.deletion_id AS space_deletion_id,"
-    " sm.user_id AS session_user_id, sm.deletion_id AS session_deletion_id,"
-    " d.retrievable, d.retrievable_pending, g.prefix, a.size, a.sha256"
-    " FROM document d"
-    " JOIN space s ON s.id = d.space_id"
-    " LEFT JOIN session_metadata sm ON sm.session_id = d.session_id"
-    " AND sm.space_id = d.space_id"
-    " JOIN generation g ON g.id = d.published_generation"
-    " JOIN artifact a ON a.generation_id = g.id AND a.path = :path"
-    " WHERE d.id = :document_id"
+    # _DOCUMENT_FACTS is a fixed column list; document_id and path are bound
+    # parameters passed separately to execute(), never interpolated into SQL.
+    "SELECT " + _DOCUMENT_FACTS + ", a.prefix, a.size, a.sha256"  # nosec B608
+    " FROM cp_read.document_visibility d"
+    " JOIN cp_read.published_artifact a ON a.document_id = d.document_id AND a.path = :path"
+    " WHERE d.document_id = :document_id"
 ).bindparams(bindparam("document_id", type_=Uuid))
 
-
 _FOLDERS = text(
-    "SELECT id, path FROM folder WHERE id = ANY(:folder_ids)"
-    " AND space_id = ANY(:space_ids) AND deletion_id IS NULL"
+    "SELECT id, path FROM cp_read.folder_path WHERE id = ANY(:folder_ids)"
+    " AND space_id = ANY(:space_ids)"
 ).bindparams(
     bindparam("folder_ids", type_=ARRAY(Uuid)),
     bindparam("space_ids", type_=ARRAY(Uuid)),
@@ -152,22 +146,9 @@ def _published_chunks(
     return found
 
 
-def _is_retrievable(row: Mapping[Any, Any]) -> bool:
-    return (
-        row["deletion_id"] is None
-        and row["space_deletion_id"] is None
-        and bool(row["retrievable"])
-        and row["retrievable_pending"] is False
-    )
-
-
 def is_live_document(row: Mapping[Any, Any], allowed: Container[UUID]) -> bool:
     """A live corpus document in scope, retrievable with no pending inclusion."""
-    return (
-        row["space_id"] in allowed
-        and row["session_id"] is None
-        and _is_retrievable(row)
-    )
+    return row["space_id"] in allowed and row["session_id"] is None and row["visible"]
 
 
 def is_visible_document(scope: SearchScope, row: Mapping[Any, Any]) -> bool:
@@ -184,8 +165,7 @@ def is_visible_document(scope: SearchScope, row: Mapping[Any, Any]) -> bool:
         and row["space_id"] == scope.space_id
         and row["id"] in scope.attachment_ids
         and row["session_user_id"] == scope.user_id
-        and row["session_deletion_id"] is None
-        and _is_retrievable(row)
+        and row["visible"]
     )
 
 
@@ -196,9 +176,7 @@ def filter_candidates(
 ) -> list[Candidate]:
     """Keep published, live, in-scope chunks in their original order; drop the rest."""
     visible: dict[UUID, Mapping[Any, Any]] = {
-        row["id"]: row
-        for row in documents
-        if is_visible_document(scope, row) and row["generation_id"] is not None
+        row["id"]: row for row in documents if is_visible_document(scope, row)
     }
     wanted: dict[UUID, set[str]] = {}
     for candidate in candidates:
@@ -250,7 +228,7 @@ async def resolve_scope(
     row = (await conn.execute(_SPACE, {"space_id": space_id})).mappings().first()
     if row is None:
         raise SpaceNotFoundError(str(space_id))
-    if row["deletion_id"] is not None:
+    if row["retired"]:
         raise SpacePendingDeletionError(str(space_id))
     scope = SearchScope(space_id=space_id, space_ids=authorized_space_ids)
     selection = context.document_scope
@@ -321,7 +299,6 @@ async def resolve_scope(
                         for row in rows
                         if row["session_id"] is not None
                         and is_visible_document(scope, row)
-                        and row["generation_id"] is not None
                     ),
                 )
     return scope
@@ -359,16 +336,7 @@ async def verify_candidates(
             rejected["attachment"] += 1
         if row["space_id"] not in scope.space_ids:
             rejected["out_of_scope"] += 1
-        if row["deletion_id"] is not None:
-            rejected["document_deleted"] += 1
-        if row["space_deletion_id"] is not None:
-            rejected["space_deleted"] += 1
-        if not row["retrievable"]:
-            rejected["not_retrievable"] += 1
-        if row["retrievable_pending"] is not False:
-            rejected["retrievable_pending"] += 1
-        if row["generation_id"] is None:
-            rejected["not_published"] += 1
+        rejected.update(row["rejection_reasons"])
     logger.info(
         "[VECTOR][SQL] checked",
         extra={
@@ -409,23 +377,20 @@ class PublishedDocument:
 
 
 _TABULAR_DOCUMENTS = text(
-    "WITH page AS (SELECT d.id, d.name, d.sha256, d.folder_id, d.space_id, d.session_id,"
-    " d.deletion_id, s.deletion_id AS space_deletion_id,"
-    " sm.user_id AS session_user_id, sm.deletion_id AS session_deletion_id,"
-    " d.retrievable, d.retrievable_pending, g.id AS generation_id, g.prefix"
-    " FROM document d JOIN space s ON s.id = d.space_id"
-    " LEFT JOIN session_metadata sm ON sm.session_id = d.session_id"
-    " AND sm.space_id = d.space_id"
-    " JOIN generation g ON g.id = d.published_generation"
-    " WHERE d.space_id = ANY(:space_ids) AND d.id > :after"
-    " AND ((:include_corpus AND d.session_id IS NULL) OR (d.session_id = :conversation_id"
-    " AND d.space_id = :space_id AND d.id = ANY(:attachment_ids)))"
-    " AND (:all_documents OR d.id = ANY(:document_ids))"
-    " AND EXISTS (SELECT 1 FROM artifact a WHERE a.generation_id = g.id"
+    # Only the fixed _DOCUMENT_FACTS column list is inserted into literal SQL;
+    # all scope identifiers, pagination and filters are bound via execute().
+    "WITH page AS (SELECT " + _DOCUMENT_FACTS + ", d.name, d.source_revision AS sha256"  # nosec B608
+    " FROM cp_read.document_visibility d"
+    " WHERE d.space_id = ANY(:space_ids) AND d.document_id > :after"
+    " AND d.generation_id IS NOT NULL"
+    " AND ((:include_corpus AND d.conversation_id IS NULL) OR (d.conversation_id = :conversation_id"
+    " AND d.space_id = :space_id AND d.document_id = ANY(:attachment_ids)))"
+    " AND (:all_documents OR d.document_id = ANY(:document_ids))"
+    " AND EXISTS (SELECT 1 FROM cp_read.published_artifact a WHERE a.document_id = d.document_id"
     " AND a.path LIKE 'datasets/%.parquet')"
-    " ORDER BY d.id LIMIT 100)"
-    " SELECT page.*, a.path, a.size, a.sha256 AS artifact_sha256"
-    " FROM page JOIN artifact a ON a.generation_id = page.generation_id"
+    " ORDER BY d.document_id LIMIT 100)"
+    " SELECT page.*, a.path, a.size, a.sha256 AS artifact_sha256, a.prefix"
+    " FROM page JOIN cp_read.published_artifact a ON a.document_id = page.id"
     " ORDER BY page.id, a.path"
 ).bindparams(
     bindparam("space_ids", type_=ARRAY(Uuid)),

@@ -282,7 +282,13 @@ selection only as a further restriction; attachments use the explicit anchor and
 separate conversation ownership checks.
 
 Index filters narrow candidates. Before returning content, the shared visibility
-primitive checks SQL publication, lifecycle and generation facts. Markdown,
+primitive reads only Control Plane-owned `cp_read` views. The SQL `visible` fact
+combines publication and lifecycle: no first-publication content is available,
+while a previous published generation remains available during reprocessing unless
+retirement or search-inclusion state makes it unavailable. Python applies the
+authorized corpus, explicit selection and conversation ownership, then verifies
+chunk ordinals against the published generation. It does not reconstruct lifecycle
+policy or read the Control Plane tables. Markdown,
 summary, extraction and tabular access use the same scope boundary. A dependency
 failure returns an unavailable error, never an unrestricted or fabricated empty
 success. These data checks do not refresh the admitted agent turn's authority.
@@ -291,3 +297,52 @@ Source references: [`weaver_admission.py`](../../apps/knowledge-flow-backend/kno
 [`access.py`](../../libs/fred-core/fred_core/documents/access.py),
 [`authorization.rs`](../../apps/control-plane/src/authorization.rs) and
 [`spaces.rs`](../../apps/control-plane/src/spaces.rs).
+
+### Runtime CGU dependency inventory
+
+With `security.user.enabled` and `app.gcu_version` configured, runtime's common
+user dependency reads `cp_read.terms_acceptance`. No check is removed here.
+The following paths are relative to the pod's configured base URL (normally
+`/fred/agents/v2`). A future removal must preserve JWT/delegation verification,
+effective-person binding and the current errors independently of the SQL read.
+
+| Method | Route | Is consent checked again by the Control Plane resolver? |
+| --- | --- | --- |
+| POST | `/agents/execute` | Yes, `_authorize_and_resolve` before execution |
+| POST | `/agents/execute/stream` | Yes, `_authorize_and_resolve` before streaming |
+| POST | `/agents/evaluate` | Yes, `_authorize_and_resolve` before evaluation |
+| GET | `/agents/skills` | Yes, public runtime resolution in `get_instance_skills` |
+| GET | `/agents/skills/{skill_name}` | Yes, via `get_instance_skills` |
+| GET | `/agents/kpi-turns` | No turn resolution |
+| GET | `/agents/audit-events` | No turn resolution |
+| GET | `/agents/web-research/activity` | No turn resolution |
+| DELETE | `/agents/web-research/activity/users/{user_id}` | No turn resolution |
+| POST | `/agents/creation-assistant/draft` | No turn resolution |
+| POST | `/agents/capabilities/{capability_id}/validate-config` | No turn resolution |
+| POST | `/agents/capabilities/{capability_id}/copy-config` | No turn resolution |
+| POST | `/agents/capabilities/{capability_id}/export-config` | No turn resolution |
+| POST | `/agents/capabilities/chat-controls` | No turn resolution |
+| GET | `/agents/sessions` | No turn resolution |
+| GET | `/agents/sessions/{session_id}/messages` | No turn resolution |
+| DELETE | `/agents/sessions/{session_id}` | No turn resolution |
+| DELETE | `/agents/sessions/{session_id}/filesystem` | No turn resolution |
+| GET | `/agents/checkpoints` | No turn resolution |
+| GET | `/agents/checkpoints/_stats` | No turn resolution |
+| GET | `/agents/checkpoints/{session_id}` | No turn resolution |
+| DELETE | `/agents/checkpoints/{session_id}` | No turn resolution |
+| POST | `/agents/sessions/{session_id}/steer` | No new turn resolution; targets an admitted active turn |
+| GET | `/capabilities/writable_document/sessions/{session_id}/documents` | No turn resolution |
+| GET | `/capabilities/writable_document/sessions/{session_id}/documents/{document_id}` | No turn resolution |
+| PUT | `/capabilities/writable_document/sessions/{session_id}/documents/{document_id}` | No turn resolution |
+| GET | `/capabilities/writable_document/sessions/{session_id}/documents/{document_id}/export` | No turn resolution |
+| POST | `/capabilities/ppt_filler/analyze` | No turn resolution |
+| POST | `/v1/chat/completions` (absolute, optional compatibility router) | No; execution remains explicitly unsupported |
+
+Installed capability routes mounted under `/capabilities/{id}` inherit the same
+CGU dependency; the default pod's five capability routes are listed above. Additional installed
+packages contribute their own paths and do not
+implicitly resolve a turn. The five resolver-backed routes above are candidates
+for eliminating the duplicate local read in a later change, not permission to
+remove admission from the remaining routes. This inventory follows
+`app/agent_app.py`, `skills/api.py`, `app/openai_compat_router.py` and
+`apps/control-plane/src/agent_instances/runtime.rs::resolve`.

@@ -13,7 +13,7 @@ class MonitorChartTests(unittest.TestCase):
         container = pod["containers"][0]
         env = {entry["name"]: entry for entry in container["env"]}
         self.assertEqual(env["MONITOR_NAMESPACE"]["valueFrom"]["fieldRef"]["fieldPath"], "metadata.namespace")
-        self.assertEqual(env["DATABASE_URL"]["valueFrom"]["secretKeyRef"]["name"], "monitor-database")
+        self.assertEqual(env["DATABASE_URL"]["valueFrom"]["secretKeyRef"]["name"], "fred-secrets")
         self.assertEqual(env["OIDC_ISSUER"]["value"], "http://keycloak:8080/realms/app")
         self.assertEqual(env["OIDC_AUDIENCE"]["value"], "app")
         self.assertFalse(any("persistentVolumeClaim" in v for v in pod.get("volumes") or []))

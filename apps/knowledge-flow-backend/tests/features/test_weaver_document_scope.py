@@ -262,10 +262,10 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
     engine = MagicMock()
     conn = engine.connect.return_value.__aenter__.return_value
     result = MagicMock()
-    facts = dict(space_id=SPACE, deletion_id=None, space_deletion_id=None, retrievable=True, retrievable_pending=False, generation_id=generation, vector_ordinals=[0, 1])
+    facts = dict(space_id=SPACE, visible=True, rejection_reasons=[], generation_id=generation, vector_ordinals=[0, 1])
     result.mappings.return_value.all.return_value = [
         dict(facts, id=DOC, folder_id=FOLDER, session_id=None),
-        dict(facts, id=attachment_id, folder_id=None, session_id=CONVERSATION, session_user_id=PERSON.uid, session_deletion_id=None),
+        dict(facts, id=attachment_id, folder_id=None, session_id=CONVERSATION, session_user_id=PERSON.uid),
     ]
     conn.execute = AsyncMock(return_value=result)
     monkeypatch.setattr(search_module.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_pg_async_engine=lambda: engine))
@@ -302,7 +302,9 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
     assert len(hits) <= 2
     assert hits[-1].score == (0.25 if corpus.is_empty else 1 / 62)
     conn.execute.assert_awaited_once()
-    assert "g.id = d.published_generation" in str(conn.execute.call_args.args[0])
+    statement, params = conn.execute.call_args.args
+    assert "FROM cp_read.document_visibility" in str(statement)
+    assert set(params["document_ids"]) == ({attachment_id} if corpus.is_empty else {DOC, attachment_id})
 
 
 def test_rank_fusion_deduplicates_and_ignores_incomparable_scores():
@@ -335,12 +337,9 @@ async def test_direct_attachment_chunks_require_sql_publication_and_requested_do
             space_id=SPACE,
             session_id=CONVERSATION,
             session_user_id=PERSON.uid,
-            session_deletion_id=None,
             folder_id=None,
-            deletion_id=None,
-            space_deletion_id=None,
-            retrievable=True,
-            retrievable_pending=False,
+            visible=True,
+            rejection_reasons=[],
             generation_id=generation,
             vector_ordinals=[0],
         )

@@ -15,8 +15,9 @@
 import os
 from enum import Enum
 from typing import Annotated, Any, Dict, Literal, Optional, Union
+from urllib.parse import quote
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fred_pod.common.naming import RUNTIME_ID_PATTERN
 
@@ -124,6 +125,8 @@ class DuckdbStoreConfig(BaseModel):
 
 
 class PostgresStoreConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     type: Literal["postgres"] = "postgres"
     host: Optional[str] = Field(default=None, description="PostgreSQL host")
     port: int = 5432
@@ -133,6 +136,12 @@ class PostgresStoreConfig(BaseModel):
     )
     database: Optional[str] = None
     username: Optional[str] = None
+    schema_name: Optional[str] = Field(
+        default=None,
+        alias="schema",
+        pattern=r"^[a-z_][a-z0-9_]*$",
+        description="Owning PostgreSQL schema; required for PostgreSQL connections.",
+    )
     password: Optional[str] = Field(
         default_factory=lambda: os.getenv("FRED_POSTGRES_PASSWORD")
     )
@@ -160,11 +169,30 @@ class PostgresStoreConfig(BaseModel):
         default=None, description="Optional connect_args passed to SQLAlchemy."
     )
 
+    def postgres_connect_args(self, *, asynchronous: bool) -> dict[str, Any]:
+        """One explicit schema boundary for application pools and Alembic."""
+        if self.schema_name not in {"knowledge", "runtime", "control_plane"}:
+            raise ValueError("An explicit owning PostgreSQL schema is required")
+        args = dict(self.connect_args or {})
+        if asynchronous:
+            settings = dict(args.get("server_settings", {}))
+            settings["search_path"] = self.schema_name
+            args["server_settings"] = settings
+        else:
+            options = args.get("options", "")
+            args["options"] = f"{options} -csearch_path={self.schema_name}".strip()
+        return args
+
     def dsn(self) -> str:
-        return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        return self.async_dsn().replace("postgresql+asyncpg://", "postgresql://", 1)
 
     def async_dsn(self) -> str:
-        return f"postgresql+asyncpg://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        user = quote(self.username or "", safe="")
+        password = quote(self.password or "", safe="")
+        database = quote(self.database or "", safe="")
+        return (
+            f"postgresql+asyncpg://{user}:{password}@{self.host}:{self.port}/{database}"
+        )
 
 
 # The laptop escape hatch a pod falls back to when its config declares no

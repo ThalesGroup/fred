@@ -1,3 +1,21 @@
+# PostgreSQL owners and passwords are provisioned before application migrations.
+postgresSecrets:
+  name: fred-secrets
+  controlPlaneKey: POSTGRES_CP_PASSWORD
+  knowledgeKey: POSTGRES_KF_PASSWORD
+  runtimeKey: POSTGRES_RUNTIME_PASSWORD
+  monitorKey: POSTGRES_MONITOR_PASSWORD
+  monitorUrlKey: POSTGRES_MONITOR_DATABASE_URL
+postgresBootstrap:
+  enabled: false
+  image: pgvector/pgvector:pg15
+  host: postgres
+  port: 5432
+  database: fred
+  adminUser: postgres
+  adminSecretName: postgres-admin
+  adminPasswordKey: password
+
 # ════════════════════════════════════════════════════════════════════
 #  Fred Helm Chart — Default Values
 #
@@ -346,7 +364,8 @@ x-kf-storage: &kf-storage
     host: localhost
     port: 5432
     database: fred
-    username: admin
+    username: fred_kf
+    schema: knowledge
   opensearch:
     host: https://localhost:9200
     secure: true
@@ -724,7 +743,8 @@ applications:
           host: localhost
           port: 5432
           database: fred
-          username: admin
+          username: fred_runtime
+          schema: runtime
         opensearch:
           host: https://localhost:9200
           secure: true
@@ -1773,7 +1793,7 @@ applications:
           host: postgres
           port: 5432
           database: fred
-          username: fred
+          username: fred_cp
       policies:
         purge_catalog_path: /app/config/lifecycle_policy_catalog.yaml
       scheduler:
@@ -1861,7 +1881,7 @@ applications:
         memory: 128Mi
       limits:
         memory: 512Mi
-  # Enable after provisioning monitor-database with a read-only DATABASE_URL.
+  # Enable after bootstrap and provisioning its dedicated DATABASE_URL secret.
   # User authentication defaults to the Control Plane issuer/client/audience.
   monitor:
     enabled: false
@@ -1884,9 +1904,6 @@ applications:
       - name: MONITOR_NAMESPACE
         valueFrom:
           fieldRef: {fieldPath: metadata.namespace}
-      - name: DATABASE_URL
-        valueFrom:
-          secretKeyRef: {name: monitor-database, key: DATABASE_URL}
       - name: RUST_LOG
         value: info
     extraEnvVars: []

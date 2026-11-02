@@ -28,6 +28,7 @@ _ACTIVE_LEASE = timedelta(seconds=90)
 _PAUSED_RETENTION = timedelta(days=30)
 _MAX_PENDING = 32
 _metadata = MetaData()
+# DDL and reads share the engine whose explicit PostgreSQL search_path is runtime.
 _turns = Table(
     "runtime_turn_steering",
     _metadata,

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess  # nosec B404: only used to construct result/exception stubs in tests
+import subprocess  # nosec B404 # only used to construct result/exception stubs in tests
 import sys
 import time
 from pathlib import Path

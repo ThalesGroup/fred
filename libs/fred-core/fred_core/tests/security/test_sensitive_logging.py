@@ -98,6 +98,7 @@ def _postgres_config(monkeypatch) -> PostgresStoreConfig:
         port=5432,
         database=_DATABASE,
         username=_ACCOUNT,
+        schema="runtime",
     )
 
 
@@ -187,6 +188,7 @@ def test_missing_password_is_reported_without_naming_the_variable(
         port=5432,
         database=_DATABASE,
         username=_ACCOUNT,
+        schema="runtime",
     )
 
     with pytest.raises(RuntimeError) as failure:

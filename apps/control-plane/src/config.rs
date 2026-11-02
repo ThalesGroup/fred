@@ -224,7 +224,8 @@ impl Configuration {
             .port(pg.port)
             .database(&pg.database)
             .username(&pg.username)
-            .password(&password))
+            .password(&password)
+            .options([("search_path", "control_plane")]))
     }
 
     pub fn security(&self) -> Result<SecuritySettings> {

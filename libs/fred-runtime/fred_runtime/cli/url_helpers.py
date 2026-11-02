@@ -81,7 +81,7 @@ def default_agent_metrics_url(*, base_url: str | None = None) -> str | None:
     raw_host = (
         str(app_section.get("metrics_address", fallback_host)).strip() or fallback_host
     )
-    host = fallback_host if raw_host in {"0.0.0.0", "::", "[::]"} else raw_host  # nosec B104 - rewrite wildcard bind address to the active target host for local scraping
+    host = fallback_host if raw_host in {"0.0.0.0", "::", "[::]"} else raw_host  # nosec B104 # rewrite wildcard bind address to the active target host for local scraping
     return urlunparse((scheme, f"{host}:{port}", "/metrics", "", "", ""))
 
 

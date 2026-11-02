@@ -32,6 +32,7 @@ Usage (called automatically by python-config-schema.mk):
 """
 
 import argparse
+import shutil
 import copy
 import json
 import sys
@@ -549,6 +550,15 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
         # validators, so we allow any x-* key with any value at the root.
         "patternProperties": {"^x-": {}},
         "properties": {
+            "postgresSecrets": _obj({key: _STRING for key in (
+                "name", "controlPlaneKey", "knowledgeKey", "runtimeKey", "monitorKey", "monitorUrlKey"
+            )}),
+            "postgresBootstrap": _obj({
+                "enabled": _BOOL, "port": _INT,
+                **{key: _STRING for key in (
+                    "image", "host", "database", "adminUser", "adminSecretName", "adminPasswordKey"
+                )},
+            }),
             "global": _GLOBAL,
             "registrations": _registrations(),
             "applications": _obj({
@@ -582,6 +592,10 @@ def main() -> None:
     parser.add_argument("--control-plane", required=True, type=Path, metavar="SCHEMA")
     parser.add_argument("--output", required=True, type=Path, metavar="OUTPUT")
     args = parser.parse_args()
+    root = Path(__file__).resolve().parents[1]
+    packaged = root / "deploy/charts/fred/files/bootstrap.sql"
+    packaged.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(root / "deploy/postgres/bootstrap.sql", packaged)
 
     for p in (args.fred_agents, args.knowledge_flow, args.control_plane):
         if not p.exists():

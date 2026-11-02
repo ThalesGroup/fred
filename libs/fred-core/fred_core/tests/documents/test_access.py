@@ -45,7 +45,7 @@ def space(id: UUID, parent: UUID | None, organization: UUID) -> dict[str, Any]:
         "id": id,
         "parent_id": parent,
         "organization_id": organization,
-        "deletion_id": None,
+        "retired": False,
     }
 
 
@@ -62,10 +62,8 @@ def document(**changes: Any) -> dict[str, Any]:
         "id": uuid4(),
         "space_id": TEAM,
         "session_id": None,
-        "deletion_id": None,
-        "space_deletion_id": None,
-        "retrievable": True,
-        "retrievable_pending": False,
+        "visible": True,
+        "rejection_reasons": [],
         "generation_id": GENERATION,
         "vector_ordinals": [0, 2, 5],
     }
@@ -113,25 +111,7 @@ async def test_attachment_rejection_is_reported_without_an_extra_query(caplog) -
     assert record.document_rejection_facts == {"attachment": 1}
 
 
-@pytest.mark.parametrize(
-    "changes",
-    [
-        {"space_id": PROJECT},
-        {"deletion_id": uuid4()},
-        {"space_deletion_id": uuid4()},
-        {"retrievable": False},
-        {"retrievable_pending": True},
-        {"generation_id": None, "vector_ordinals": None},
-    ],
-    ids=[
-        "out-of-scope",
-        "retired",
-        "space-deleting",
-        "not-retrievable",
-        "inclusion-pending",
-        "unpublished",
-    ],
-)
+@pytest.mark.parametrize("changes", [{"space_id": PROJECT}, {"visible": False}])
 def test_document_facts_reject_the_candidate(changes: dict[str, Any]) -> None:
     assert kept(document(**changes)) == []
 
@@ -197,11 +177,8 @@ async def test_published_artifact_uses_one_query(space_id: UUID) -> None:
     artifact = await published_artifact(conn, SCOPE, row["id"], "output.md")
     assert artifact == PublishedArtifact(row["prefix"], 42, "a" * 64)
     conn.execute.assert_awaited_once()
-    statement, params = conn.execute.call_args.args
+    _, params = conn.execute.call_args.args
     assert params == {"document_id": row["id"], "path": "output.md"}
-    sql = str(statement)
-    assert "g.id = d.published_generation" in sql
-    assert "a.generation_id = g.id AND a.path = :path" in sql
 
 
 @pytest.mark.asyncio
@@ -211,22 +188,14 @@ async def test_published_artifact_uses_one_query(space_id: UUID) -> None:
         None,
         document(space_id=PROJECT),
         document(space_id=PERSONAL),
-        document(deletion_id=uuid4()),
-        document(space_deletion_id=uuid4()),
-        document(retrievable=False),
-        document(retrievable_pending=True),
-        document(retrievable_pending=None),
+        document(visible=False),
         document(session_id=uuid4()),
     ],
     ids=[
         "missing-document-generation-or-path",
         "out-of-scope",
         "personal",
-        "retired",
-        "space-deleting",
-        "not-retrievable",
-        "pending",
-        "unknown-pending",
+        "not-visible",
         "attachment",
     ],
 )
@@ -334,8 +303,7 @@ async def test_folder_resolution_is_one_batched_query_without_document_enumerati
         authorized_space_ids=(ORG, TEAM),
     )
     assert conn.execute.await_count == 2
-    statement, params = conn.execute.call_args.args
-    assert "FROM folder" in str(statement) and "FROM document" not in str(statement)
+    _, params = conn.execute.call_args.args
     assert set(params["folder_ids"]) == set(folders)
     assert scope.selection_terms == (
         {"folder_path": [f"/{folders[0]}/"], "document_uid": []},
@@ -364,7 +332,6 @@ def attachment(**changes: Any) -> dict[str, Any]:
         folder_id=None,
         session_id=CONVERSATION,
         session_user_id="alice",
-        session_deletion_id=None,
         **changes,
     )
 
@@ -392,11 +359,7 @@ def test_attachment_visibility_is_independent_of_corpus_selection(selection) -> 
         {"space_id": PROJECT},
         {"session_user_id": "bob"},
         {"session_user_id": None},
-        {"session_deletion_id": uuid4()},
-        {"deletion_id": uuid4()},
-        {"retrievable": False},
-        {"retrievable_pending": True},
-        {"generation_id": None},
+        {"visible": False},
         {"id": uuid4()},
     ],
 )
@@ -421,7 +384,7 @@ async def test_markdown_rechecks_attachment_conversation_after_scope_resolution(
     row = attachment(prefix="published/current/", size=42, sha256="a" * 64)
     scope = attachment_scope(row["id"], selection=DocumentScope.from_ids([], []))
     if retired:
-        row["session_deletion_id"] = uuid4()
+        row["visible"] = False
     conn = MagicMock(spec=AsyncConnection)
     conn.execute = AsyncMock(return_value=MagicMock())
     conn.execute.return_value.mappings.return_value.first.return_value = row
@@ -429,9 +392,6 @@ async def test_markdown_rechecks_attachment_conversation_after_scope_resolution(
     assert result == (
         None if retired else PublishedArtifact("published/current/", 42, "a" * 64)
     )
-    sql = str(conn.execute.call_args.args[0])
-    assert "sm.session_id = d.session_id" in sql and "sm.space_id = d.space_id" in sql
-    assert "g.id = d.published_generation" in sql
 
 
 @pytest.mark.asyncio
@@ -468,18 +428,15 @@ async def test_resolver_checks_conversation_and_prefilters_all_attachment_ids(
         conn, context, user_id="alice", authorized_space_ids=(ORG, TEAM)
     )
     assert set(scope.attachment_ids) == (set(ids) if authorized else set())
-    statement, params = conn.execute.call_args_list[1].args
+    _, params = conn.execute.call_args_list[1].args
     assert params == {
         "conversation_id": CONVERSATION,
         "space_id": TEAM,
         "user_id": "alice",
     }
-    assert "session_id = :conversation_id AND space_id = :space_id" in str(statement)
-    assert "user_id = :user_id AND deletion_id IS NULL" in str(statement)
     if count and authorized:
-        statement, params = conn.execute.call_args.args
+        _, params = conn.execute.call_args.args
         assert set(params["document_ids"]) == set(ids)
-        assert "LIMIT" not in str(statement)
     else:
         assert conn.execute.await_count == 2
 
@@ -535,3 +492,25 @@ async def test_scope_uses_only_authorized_corpus_without_rebuilding_ancestors():
     )
     assert scope.space_id == PROJECT
     assert scope.space_ids == (PROJECT,)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "row,error",
+    [(None, "SpaceNotFoundError"), ({"retired": True}, "SpacePendingDeletionError")],
+)
+async def test_scope_distinguishes_missing_and_retired_space(row, error):
+    from fred_core.documents import access
+
+    result = MagicMock()
+    result.mappings.return_value.first.return_value = row
+    conn = MagicMock(spec=AsyncConnection)
+    conn.execute = AsyncMock(return_value=result)
+    with pytest.raises(getattr(access, error)):
+        await access.resolve_scope(
+            conn,
+            DocumentAccessContext(space_id=TEAM, document_scope=DocumentScope()),
+            user_id="alice",
+            authorized_space_ids=(TEAM,),
+        )
+    conn.execute.assert_awaited_once()

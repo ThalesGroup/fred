@@ -812,6 +812,20 @@
           "default": null,
           "title": "Username"
         },
+        "schema": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z_][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Owning PostgreSQL schema; required for PostgreSQL connections.",
+          "title": "Schema"
+        },
         "password": {
           "anyOf": [
             {

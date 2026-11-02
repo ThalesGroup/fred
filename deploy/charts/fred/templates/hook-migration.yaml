@@ -14,11 +14,15 @@
 
   The password is FRED_POSTGRES_PASSWORD, from one of:
   - `dotenv.FRED_POSTGRES_PASSWORD`, copied into the `<app>-migration-db` hook
-    Secret below (weight -1, so it exists before the Job at weight 0);
+    Secret below (weight -15, before schema initialization and runtime migration);
   - otherwise `migration.extraEnvVars`, e.g. a secretKeyRef to a Secret that
     exists before the release (vault/CI-injected secrets).
 */}}
 {{- $pg := required (printf "applications.%s.configuration.storage.postgres is required when migration.enabled is true" .app.applicationName) (and .app.configuration .app.configuration.storage .app.configuration.storage.postgres) }}
+{{- $hasPasswordEnv := false }}
+{{- range (.app.migration.extraEnvVars | default list) }}
+  {{- if eq .name "FRED_POSTGRES_PASSWORD" }}{{- $hasPasswordEnv = true }}{{- end }}
+{{- end }}
 {{- $dbPassword := "" }}
 {{- if .app.dotenv }}
 {{- $dbPassword = default "" .app.dotenv.FRED_POSTGRES_PASSWORD }}
@@ -36,11 +40,11 @@ metadata:
     type: {{ $operation }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-weight": "-15"
     # Helm never manages hook resources with the release: without the last two
     # policies the password would outlive the migration, and even an uninstall.
     # Helm deletes succeeded hooks once the whole phase is done, so the Job
-    # (weight 0) still reads this Secret while it runs.
+    # still reads this Secret while it runs.
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
 stringData:
   FRED_POSTGRES_PASSWORD: {{ $dbPassword | quote }}
@@ -57,7 +61,7 @@ metadata:
     type: {{ $operation }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-weight": {{ ternary "-10" "0" (eq $operation "schema-init") | quote }}
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   backoffLimit: {{ default 3 .app.migration.backoffLimit }}
@@ -114,6 +118,15 @@ spec:
             {{- with .app.migration.extraEnvVars }}
 {{ toYaml . | nindent 12 }}
             {{- end }}
+            {{- if and (not $dbPassword) (not $hasPasswordEnv) }}
+            - name: FRED_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .root.Values.postgresSecrets.name | quote }}
+                  key: {{ ternary .root.Values.postgresSecrets.controlPlaneKey .root.Values.postgresSecrets.runtimeKey (eq $operation "schema-init") | quote }}
+            {{- end }}
+            - name: DATABASE_SCHEMA
+              value: {{ ternary "control_plane" (required "runtime migration requires storage.postgres.schema" (default "runtime" $pg.schema)) (eq $operation "schema-init") | quote }}
             # Last, so $(FRED_POSTGRES_PASSWORD) resolves from any source above.
             - name: DATABASE_URL
               value: "postgresql+asyncpg://{{ $pg.username }}:$(FRED_POSTGRES_PASSWORD)@{{ $pg.host }}:{{ default 5432 $pg.port }}/{{ $pg.database }}"

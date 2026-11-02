@@ -142,7 +142,7 @@ def test_strict_accepts_exact_issuer_and_audience(_rsa_keypair):
     assert user.client_id == "caller"
     assert user.token_issuer == _REALM
     assert user.token_audiences == frozenset({_CLIENT})
-    assert user.token_type == "Bearer"  # nosec B105 - protocol metadata or synthetic fixture
+    assert user.token_type == "Bearer"  # nosec B105 # protocol metadata or synthetic fixture
     assert "token_issuer" not in user.model_dump()
     assert "token_audiences" not in user.model_dump()
     assert "token_type" not in user.model_dump()
@@ -460,7 +460,7 @@ def test_signed_id_token_retains_its_non_access_token_purpose(_rsa_keypair):
 
     user = oidc.decode_jwt(_token(priv_pem, iss=_REALM, aud=_CLIENT, typ="ID"))
 
-    assert user.token_type == "ID"  # nosec B105 - protocol metadata or synthetic fixture
+    assert user.token_type == "ID"  # nosec B105 # protocol metadata or synthetic fixture
 
 
 def test_groups_claim_is_accepted_but_ignored(_rsa_keypair):

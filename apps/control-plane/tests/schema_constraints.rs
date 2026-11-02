@@ -2,26 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use serde_json::json;
-use sqlx::{AssertSqlSafe, PgPool};
+use sqlx::PgPool;
 use uuid::Uuid;
 
-async fn database() -> PgPool {
-    let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES")
-        .expect("needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES");
-    let name = format!("t_{}", Uuid::new_v4().simple());
-    let admin = PgPool::connect(&format!("{postgres}/postgres"))
-        .await
-        .unwrap();
-    sqlx::query(AssertSqlSafe(format!("create database {name}")))
-        .execute(&admin)
-        .await
-        .unwrap();
-    let pool = PgPool::connect(&format!("{postgres}/{name}"))
-        .await
-        .unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
-    pool
-}
+#[path = "support/database.rs"]
+mod database;
+use database::database;
 
 fn check_violation(error: sqlx::Error) {
     violation(error, "23514");
@@ -484,11 +470,12 @@ async fn initialization_replays_without_data_changes_and_refuses_incompatible_hi
     };
     assert!(initialize().status.success());
     control_plane::db::require_initialized(&pool).await.unwrap();
-    let versions: Vec<i64> = sqlx::query_scalar("select version from _sqlx_migrations")
-        .fetch_all(&pool)
-        .await
-        .unwrap();
-    assert_eq!(versions, vec![1]);
+    let versions: Vec<i64> =
+        sqlx::query_scalar("select version from _sqlx_migrations order by version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(versions, vec![1, 2]);
 
     // Simulate a draft installation's obsolete history only in this disposable fixture.
     sqlx::query("insert into _sqlx_migrations(version,description,success,checksum,execution_time) values(99,'obsolete draft',true,decode('00','hex'),0)")

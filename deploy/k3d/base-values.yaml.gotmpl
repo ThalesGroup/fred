@@ -33,4 +33,15 @@ The factory also serves released charts with a different configuration contract.
 {{- range $name := list "control-plane-backend" "control-plane-worker" -}}
   {{- $_ := unset (index $base.applications $name) "configuration" -}}
 {{- end -}}
+{{- range $name, $role := dict "fred-agents" "fred_runtime" "knowledge-flow-backend" "fred_kf" "knowledge-flow-worker" "fred_kf" -}}
+  {{- $app := index $base.applications $name -}}
+  {{- $schema := ternary "runtime" "knowledge" (eq $role "fred_runtime") -}}
+  {{- $_ := set $app.configuration.storage.postgres "username" $role -}}
+  {{- $_ := set $app.configuration.storage.postgres "schema" $schema -}}
+  {{- range $app.extraEnvVars -}}
+    {{- if eq .name "FRED_POSTGRES_PASSWORD" -}}
+      {{- $_ := set . "valueFrom" (dict "secretKeyRef" (dict "name" "fred-secrets" "key" (ternary "POSTGRES_RUNTIME_PASSWORD" "POSTGRES_KF_PASSWORD" (eq $role "fred_runtime")))) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
 {{ pick $base "applications" | toYaml }}

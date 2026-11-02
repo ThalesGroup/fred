@@ -183,7 +183,9 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         )
         super().__init__(serde=serde)
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
-        metadata = MetaData()
+        metadata = (
+            MetaData()
+        )  # PostgreSQL engine search_path is the configured runtime schema.
         json_type = json_for_engine(engine)
 
         self.checkpoints_table = Table(

@@ -21,7 +21,7 @@ from drifting apart.
 """
 
 import importlib
-import subprocess  # nosec B404 — fixed argv, no shell; needed for a fresh interpreter
+import subprocess  # nosec B404 # fixed argv, no shell; needed for a fresh interpreter
 import sys
 from types import ModuleType
 
@@ -117,7 +117,7 @@ def test_knowledge_base_import_stays_lean() -> None:
         "leaked = (m for m in forbidden if m in sys.modules and m not in resident)\n"
         "print(','.join(sorted(leaked)))\n"
     )
-    result = subprocess.run(  # nosec B603 — fixed argv, no shell
+    result = subprocess.run(  # nosec B603 # fixed argv, no shell
         [sys.executable, "-c", probe],
         capture_output=True,
         text=True,

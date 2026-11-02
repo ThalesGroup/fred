@@ -64,7 +64,8 @@ applications:
           host: "<POSTGRES_HOST>" # e.g. Cloud SQL private IP or proxy
           port: 5432
           database: fred
-          username: fred
+          username: fred_runtime
+          schema: runtime
         log_store:
           type: "in_memory"
         tabular_store:

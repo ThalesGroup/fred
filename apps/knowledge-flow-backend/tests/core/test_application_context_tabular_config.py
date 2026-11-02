@@ -80,7 +80,7 @@ def _build_minimal_storage(tmp_path) -> StorageConfig:
     """
 
     return StorageConfig(
-        postgres=PostgresStoreConfig(host="localhost", database="fred"),
+        postgres=PostgresStoreConfig(host="localhost", database="fred", schema="knowledge"),
         vector_store=PgVectorStorageConfig(type="pgvector"),
     )
 

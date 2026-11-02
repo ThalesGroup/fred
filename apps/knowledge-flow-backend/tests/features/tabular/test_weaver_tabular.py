@@ -76,14 +76,11 @@ def published(tmp_path, monkeypatch):
                     folder_id=folder,
                     space_id=SPACE,
                     session_id=None,
-                    deletion_id=None,
-                    space_deletion_id=None,
-                    retrievable=True,
-                    retrievable_pending=False,
+                    visible=True,
+                    rejection_reasons=[],
                     generation_id=uid,
                     vector_ordinals=[],
                     session_user_id=PERSON.uid,
-                    session_deletion_id=None,
                     prefix=prefix,
                     path=name,
                     size=len(data),
@@ -98,7 +95,7 @@ def published(tmp_path, monkeypatch):
 
         async def execute(self, statement, params):
             if statement is access._SPACE:
-                return Rows([dict(id=SPACE, parent_id=None, organization_id=SPACE, deletion_id=None)])
+                return Rows([dict(id=SPACE, retired=False)])
             if statement is access._FOLDERS:
                 return Rows([dict(id=id, path=f"/{id}/") for id in params["folder_ids"] if id in (A, B)])
             if statement is access._CONVERSATION:
@@ -213,9 +210,7 @@ async def test_known_uuid_and_multi_dataset_cannot_escape_selection(published, o
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("inventory", ["list_documents", "list_datasets"])
-@pytest.mark.parametrize(
-    "field,value", [("generation_id", None), ("deletion_id", D3), ("space_deletion_id", D3), ("space_id", OTHER_SPACE), ("retrievable", False), ("retrievable_pending", True), ("session_id", D3)]
-)
+@pytest.mark.parametrize("field,value", [("visible", False), ("space_id", OTHER_SPACE), ("session_id", D3)])
 async def test_each_read_rechecks_publication_lifecycle_and_space(published, field, value, inventory):
     service = published.service(DocumentScope.from_ids(document_ids=[str(D1)]))
     list_inventory = getattr(service, inventory)
@@ -323,7 +318,7 @@ async def test_workbook_reads_every_published_table_and_its_catalog(published, i
     # The same published object is no longer visible when the document is excluded.
     for row in published.facts:
         if row["id"] == D1:
-            row["retrievable"] = False
+            row["visible"] = False
     with pytest.raises(PermissionError):
         await service.describe_documents(PERSON, [str(D1)])
 
@@ -366,7 +361,7 @@ async def test_conversation_owner_exact_space_identity_and_retirement_are_requir
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field,value", [("session_user_id", "bob"), ("session_deletion_id", D2), ("session_id", D2), ("space_id", OTHER_SPACE), ("generation_id", None), ("deletion_id", D2)])
+@pytest.mark.parametrize("field,value", [("session_user_id", "bob"), ("visible", False), ("session_id", D2), ("space_id", OTHER_SPACE)])
 async def test_attachment_document_facts_rechecked_on_every_tabular_read(published, field, value):
     published.attach(D1)
     service = published.service(DocumentScope.from_ids([], []), conversation_id=CONVERSATION, attachments=(D1,))

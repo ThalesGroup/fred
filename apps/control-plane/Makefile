@@ -1,5 +1,8 @@
 include ../../scripts/makefiles/config/INFO-control-plane.mk
 
+# Tests exercise the real bootstrap, including the deployment-owned extension.
+INTEGRATION_POSTGRES_IMAGE ?= pgvector/pgvector:pg15
+
 # === Rust Utility ===
 include ../../scripts/makefiles/rust-vars.mk
 include ../../scripts/makefiles/rust-deps.mk

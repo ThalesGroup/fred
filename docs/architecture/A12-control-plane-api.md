@@ -651,6 +651,8 @@ Request: [`ProvisioningUpload`](#provisioningupload) (`multipart/form-data`).
 | GET | [/me](#get-me) |  |
 | GET | [/me/onboarding](#get-meonboarding) |  |
 | POST | [/me/personal-space](#post-mepersonal-space) |  |
+| GET | [/me/prompt-marketplaces](#get-meprompt-marketplaces) | Organizations where the caller participates through an active collective business role |
+| GET | [/me/prompt-publication-teams](#get-meprompt-publication-teams) | Active teams where the caller has direct Write permission |
 | GET | [/me/spaces](#get-mespaces) |  |
 
 ### GET /me
@@ -677,6 +679,32 @@ Request: [`CreatePersonalSpace`](#createpersonalspace).
 - 201: [`Space`](#space) — Created personal space
 - 400, 401, 403, 404, 409, 422, 500: [`ErrorBody`](#errorbody) — Request failed
 
+### GET /me/prompt-marketplaces
+
+Organizations where the caller participates through an active collective business role.
+
+Operation `prompt_marketplaces`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `after` | query | string (uuid) |  |  |
+
+- 200: [`PromptMarketplacePage`](#promptmarketplacepage)
+- 400, 401, 403, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### GET /me/prompt-publication-teams
+
+Active teams where the caller has direct Write permission.
+
+Operation `prompt_publication_teams`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `after` | query | string (uuid) |  |  |
+
+- 200: [`PromptPublicationTeamPage`](#promptpublicationteampage)
+- 400, 401, 403, 422, 500, 503: [`ErrorBody`](#errorbody)
+
 ### GET /me/spaces
 
 Operation `my_spaces`.
@@ -698,6 +726,8 @@ Operation `my_spaces`.
 | PUT | [/organizations/{organization_id}/model-policy](#put-organizationsorganization_idmodel-policy) |  |
 | POST | [/organizations/{organization_id}/model-sources/{source_id}/refresh](#post-organizationsorganization_idmodel-sourcessource_idrefresh) |  |
 | GET | [/organizations/{organization_id}/models](#get-organizationsorganization_idmodels) |  |
+| GET | [/organizations/{organization_id}/published-prompts](#get-organizationsorganization_idpublished-prompts) | Bounded organization catalogue; previews and team labels never come from an unrestricted source-space read |
+| GET | [/organizations/{organization_id}/published-prompts/{prompt_id}](#get-organizationsorganization_idpublished-promptsprompt_id) |  |
 | GET | [/organizations/{organization_id}/supervision](#get-organizationsorganization_idsupervision) |  |
 | GET | [/organizations/{organization_id}/supervision/teams/{team_id}](#get-organizationsorganization_idsupervisionteamsteam_id) |  |
 
@@ -843,6 +873,32 @@ Operation `organization_models`.
 - 401, 403, 404, 409, 500, 503: [`ErrorBody`](#errorbody)
 - 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
 
+### GET /organizations/{organization_id}/published-prompts
+
+Bounded organization catalogue; previews and team labels never come from an unrestricted source-space read. No usage counter or import is exposed.
+
+Operation `published_prompts`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `organization_id` | path | string (uuid) | yes |  |
+| `after` | query | string (uuid) |  |  |
+
+- 200: [`PublishedPromptPage`](#publishedpromptpage)
+- 400, 401, 403, 404, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### GET /organizations/{organization_id}/published-prompts/{prompt_id}
+
+Operation `published_prompt`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `organization_id` | path | string (uuid) | yes |  |
+| `prompt_id` | path | string (uuid) | yes |  |
+
+- 200: [`PublishedPrompt`](#publishedprompt)
+- 400, 401, 403, 404, 422, 500, 503: [`ErrorBody`](#errorbody)
+
 ### GET /organizations/{organization_id}/supervision
 
 Operation `organization_supervision`.
@@ -897,6 +953,7 @@ Operation `team_supervision`.
 | DELETE | [/spaces/{space_id}/prompts/{prompt_id}](#delete-spacesspace_idpromptsprompt_id) |  |
 | PUT | [/spaces/{space_id}/prompts/{prompt_id}/favorite](#put-spacesspace_idpromptsprompt_idfavorite) |  |
 | DELETE | [/spaces/{space_id}/prompts/{prompt_id}/favorite](#delete-spacesspace_idpromptsprompt_idfavorite) |  |
+| PUT | [/spaces/{space_id}/prompts/{prompt_id}/publication](#put-spacesspace_idpromptsprompt_idpublication) | Idempotent publication/retraction by a direct team editor |
 | GET | [/spaces/{space_id}/sessions](#get-spacesspace_idsessions) |  |
 | POST | [/spaces/{space_id}/sessions](#post-spacesspace_idsessions) |  |
 | GET | [/spaces/{space_id}/sessions/{session_id}](#get-spacesspace_idsessionssession_id) |  |
@@ -1258,6 +1315,22 @@ Operation `remove_prompt_favorite`.
 | `prompt_id` | path | string (uuid) | yes |  |
 
 - 204: no body — Favorite removed for the caller (idempotent)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### PUT /spaces/{space_id}/prompts/{prompt_id}/publication
+
+Idempotent publication/retraction by a direct team editor. Missing or outside-organization space: 404; retired space: 409 space_pending_deletion; missing direct Write permission, including organization admin alone: 403.
+
+Operation `set_prompt_publication`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `prompt_id` | path | string (uuid) | yes |  |
+
+Request: [`PromptPublicationRequest`](#promptpublicationrequest).
+
+- 204: no body — Publication state saved
 - 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
 ### GET /spaces/{space_id}/sessions
@@ -2360,6 +2433,20 @@ Extends [`PromptMetadata`](#promptmetadata) with:
 | --- | --- | --- | --- |
 | `name` | string, min length 1, max length 120 | yes | NFC-normalized, trimmed, nonblank, without control characters. |
 
+### PromptMarketplace
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | yes |  |
+| `organization_id` | string (uuid) | yes |  |
+
+### PromptMarketplacePage
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | array of [`PromptMarketplace`](#promptmarketplace), max items 100 | yes |  |
+| `next_cursor` | string (uuid) or null | yes |  |
+
 ### PromptMetadata
 
 | Field | Type | Required | Description |
@@ -2371,6 +2458,7 @@ Extends [`PromptMetadata`](#promptmetadata) with:
 | `display_name` | string | yes |  |
 | `logical_name` | string | yes | Immutable space-local identity. The slash command is "/" + logical_name. |
 | `prompt_id` | string (uuid) | yes |  |
+| `published` | boolean | yes |  |
 | `space_id` | string (uuid) | yes |  |
 | `tags` | array of string | yes |  |
 | `updated_at` | string (date-time) | yes |  |
@@ -2382,6 +2470,27 @@ Extends [`PromptMetadata`](#promptmetadata) with:
 | --- | --- | --- | --- |
 | `items` | array of [`PromptSummary`](#promptsummary), max items 100 | yes | At most 100 entries, ordered by immutable logical_name in ASCII order. |
 | `next_cursor` | string or null | yes | Pass as `after` until null, including for search, pickers and command menus. Pages are not a snapshot; restart to include concurrent inserts before the cursor. |
+
+### PromptPublicationRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `published` | boolean | yes |  |
+
+### PromptPublicationTeam
+
+Extends [`Space`](#space) with:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `organization_id` | string (uuid) | yes |  |
+
+### PromptPublicationTeamPage
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | array of [`PromptPublicationTeam`](#promptpublicationteam), max items 100 | yes |  |
+| `next_cursor` | string (uuid) or null | yes |  |
 
 ### PromptSummary
 
@@ -2420,6 +2529,30 @@ Extends [`PromptMetadata`](#promptmetadata) with:
 | `tabular_datasets` | integer (int64) | yes | Published datasets/*.parquet artifacts, not SQL tables. |
 | `total_rows` | integer (int64) or null | yes | Null when at least one dataset has no attributable row count. |
 | `vectors` | integer (int64) | yes |  |
+
+### PublishedPrompt
+
+Extends [`Prompt`](#prompt) with:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `team_name` | string | yes |  |
+
+### PublishedPromptPage
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | array of [`PublishedPromptSummary`](#publishedpromptsummary), max items 100 | yes |  |
+| `next_cursor` | string (uuid) or null | yes | Exclusive immutable UUID cursor. Pages are current reads, not a snapshot across requests; restart to see concurrent publications before the cursor. |
+
+### PublishedPromptSummary
+
+Extends [`PromptSummary`](#promptsummary) with:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `can_publish` | boolean | yes | Advisory UI decision; writes always recheck the current source-team title. |
+| `team_name` | string | yes |  |
 
 ### ReasoningEffort
 

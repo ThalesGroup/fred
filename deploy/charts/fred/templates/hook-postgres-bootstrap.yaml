@@ -1,0 +1,76 @@
+{{- if .Values.postgresBootstrap.enabled }}
+{{- $pg := .Values.postgresBootstrap }}
+{{- $credentials := .Values.postgresSecrets }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-postgres-bootstrap
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-30"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  bootstrap.sql: |
+{{ .Files.Get "files/bootstrap.sql" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-postgres-bootstrap
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: bootstrap
+          image: {{ $pg.image | quote }}
+          command: [sh, -ec]
+          args:
+            - |
+              # psql never echoes SQL or errors containing a password into pod logs.
+              if ! psql -X -q -v ON_ERROR_STOP=1 -v database="$PGDATABASE" -f /bootstrap/bootstrap.sql -f - >/dev/null 2>&1 <<'SQL'
+              SET log_statement = 'none';
+              SET log_min_duration_statement = -1;
+              SET log_min_duration_sample = -1;
+              SET log_transaction_sample_rate = 0;
+              SET log_min_error_statement = 'panic';
+              \getenv cp_password CP_PASSWORD
+              \getenv kf_password KF_PASSWORD
+              \getenv runtime_password RUNTIME_PASSWORD
+              \getenv monitor_password MONITOR_PASSWORD
+              ALTER ROLE fred_cp PASSWORD :'cp_password';
+              ALTER ROLE fred_kf PASSWORD :'kf_password';
+              ALTER ROLE fred_runtime PASSWORD :'runtime_password';
+              ALTER ROLE fred_monitor PASSWORD :'monitor_password';
+              SQL
+              then
+                echo 'PostgreSQL bootstrap failed; review admin privileges and schema prerequisites.' >&2
+                exit 1
+              fi
+              echo 'PostgreSQL schemas and component roles provisioned.'
+          env:
+            - {name: PGHOST, value: {{ $pg.host | quote }}}
+            - {name: PGPORT, value: {{ $pg.port | quote }}}
+            - {name: PGDATABASE, value: {{ $pg.database | quote }}}
+            - {name: PGUSER, value: {{ $pg.adminUser | quote }}}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ $pg.adminSecretName | quote }}, key: {{ $pg.adminPasswordKey | quote }}}
+            {{- range $env, $key := dict "CP_PASSWORD" $credentials.controlPlaneKey "KF_PASSWORD" $credentials.knowledgeKey "RUNTIME_PASSWORD" $credentials.runtimeKey "MONITOR_PASSWORD" $credentials.monitorKey }}
+            - name: {{ $env }}
+              valueFrom:
+                secretKeyRef: {name: {{ $credentials.name | quote }}, key: {{ $key | quote }}}
+            {{- end }}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+      volumes:
+        - name: bootstrap
+          configMap: {name: {{ .Release.Name }}-postgres-bootstrap}
+{{- end }}

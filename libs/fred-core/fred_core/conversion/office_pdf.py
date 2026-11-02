@@ -42,7 +42,7 @@ import logging
 import os
 import shutil
 import signal
-import subprocess  # nosec: controlled command arguments, shell=False
+import subprocess  # nosec B404 # LibreOffice runs with separate arguments and no shell.
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -90,7 +90,7 @@ def _run_soffice(command: list[str], *, timeout: float) -> None:
     the whole group is killed (soffice.bin and its helpers), then reaped."""
     # Its own group but the caller's session: Knowledge Flow's extraction child
     # sweeps its session on cancellation, and a new session would escape it.
-    process = subprocess.Popen(  # nosec: controlled command arguments, shell=False
+    process = subprocess.Popen(  # nosec B603 # Internal LibreOffice argument list; shell=False.
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

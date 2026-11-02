@@ -3,9 +3,15 @@
 # prepare exports the selected worker's contract and provisions application identities.
 
 # secret: lists replace the instance lists, so retain every required dependency.
-x-postgres: &postgres
+x-postgres-cp: &postgres-cp
   name: FRED_POSTGRES_PASSWORD
-  valueFrom: {secretKeyRef: {name: fred-secrets, key: POSTGRES_FRED_PASSWORD}}
+  valueFrom: {secretKeyRef: {name: fred-secrets, key: POSTGRES_CP_PASSWORD}}
+x-postgres-runtime: &postgres-runtime
+  name: FRED_POSTGRES_PASSWORD
+  valueFrom: {secretKeyRef: {name: fred-secrets, key: POSTGRES_RUNTIME_PASSWORD}}
+x-postgres-kf: &postgres-kf
+  name: FRED_POSTGRES_PASSWORD
+  valueFrom: {secretKeyRef: {name: fred-secrets, key: POSTGRES_KF_PASSWORD}}
 x-model: &model
   name: OPENAI_API_KEY
   valueFrom: {secretKeyRef: {name: fred-model-credentials, key: OPENAI_API_KEY}}
@@ -31,7 +37,7 @@ applications:
     enabled: true
     migration:
       enabled: true
-      extraEnvVars: [*postgres]
+      extraEnvVars: [*postgres-runtime]
     configuration:
       # Execution still runs in the pod; match the control-plane source exactly.
       inference_credentials:
@@ -51,7 +57,7 @@ applications:
       scaleDown: false
       command: [control-plane]
       args: [initialize-schema]
-      extraEnvVars: [*postgres]
+      extraEnvVars: [*postgres-cp]
     lifecycle_policy_catalog:
       space_policies:
         purge:
@@ -76,7 +82,7 @@ applications:
       - {name: manager-config, mountPath: /app/config/configuration.yaml, subPath: configuration.yaml}
       - {name: manager-env, mountPath: /app/config/.env, subPath: .env}
     extraEnvVars:
-      - *postgres
+      - *postgres-cp
       - *model
       - name: SSL_CERT_FILE
         value: /etc/fred/node-ca/ca-certificates.crt

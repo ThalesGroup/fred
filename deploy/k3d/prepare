@@ -3,6 +3,6 @@ set -Eeuo pipefail
 : "${K3D_FACTORY_ROOT:?Run through fred-deployment-factory}"
 # Retain the existing read-only check for the operator-provided model credential.
 "$K3D_FACTORY_ROOT/k3d-apps/fred/prepare"
-# Provision only the monitor's restricted SQL login, including on an existing PVC.
-"$K3D_FACTORY_ROOT/k3d-apps/fred/monitor-database"
+# Bootstrap all SQL owners before migrations; the factory receives the canonical source.
+"$K3D_FACTORY_ROOT/k3d-apps/fred/monitor-database" --bootstrap "$(dirname "$0")/../postgres/bootstrap.sql"
 exec python3 "$(dirname "$0")/prepare_ingestion.py"

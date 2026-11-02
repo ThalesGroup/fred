@@ -65,9 +65,7 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
             f"[SQL][Engine] Missing required Postgres config fields: {', '.join(missing)}"
         )
 
-    connect_args: dict[str, Any] = (
-        dict(config.connect_args) if config.connect_args else {}
-    )
+    connect_args = config.postgres_connect_args(asynchronous=False)
 
     effective_pool_size = config.pool_size or 5
     effective_max_overflow = (
@@ -167,9 +165,7 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
             f"[SQL][AsyncEngine] Missing required Postgres config fields: {', '.join(missing)}"
         )
 
-    connect_args: dict[str, Any] = (
-        dict(config.connect_args) if config.connect_args else {}
-    )
+    connect_args = config.postgres_connect_args(asynchronous=True)
 
     async_dsn = config.async_dsn()
     effective_pool_size = config.pool_size or 5

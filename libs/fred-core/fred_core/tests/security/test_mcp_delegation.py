@@ -40,7 +40,7 @@ async def test_a_tool_mount_refuses_a_request_carrying_no_bearer() -> None:
         await _drain(
             mcp_delegation.mcp_mount_auth(
                 request=_a_request(),
-                token="",  # nosec B106 - the absence under test
+                token="",  # nosec B106 # the absence under test
             )
         )
 
@@ -67,7 +67,7 @@ async def test_a_grant_reaches_the_mount_from_the_endpoint_alone(
 
     mount = mcp_delegation.mcp_mount_auth(
         request=_a_request(),
-        token="a-bearer",  # nosec B106 - synthetic fixture
+        token="a-bearer",  # nosec B106 # synthetic fixture
     )
     await _drain(mount)
 
@@ -129,7 +129,7 @@ async def test_two_calls_never_observe_each_others_grant(
         )
         agen = mcp_delegation.mcp_mount_auth(
             request=_a_request(),
-            token="a-bearer",  # nosec B106 - synthetic fixture
+            token="a-bearer",  # nosec B106 # synthetic fixture
         )
         await agen.__anext__()
         await asyncio.sleep(0)  # let the other call interleave here

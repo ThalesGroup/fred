@@ -14,22 +14,18 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 import logging
 import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
-try:
-    from langchain_postgres.vectorstores import PGVector as NewPGVector  # type: ignore
-except Exception:  # pragma: no cover - fallback for environments without langchain-postgres
-    NewPGVector = None
-
-from langchain_community.vectorstores.pgvector import PGVector as LegacyPGVector
+from fred_core.common import PostgresStoreConfig
+from fred_core.sql.base_sql import create_engine_from_config
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from sqlalchemy import create_engine, text
+from langchain_postgres.vectorstores import PGVector
+from sqlalchemy import text
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
@@ -200,16 +196,21 @@ class PgVectorStoreAdapter(BaseVectorStore):
         self,
         embedding_model: Embeddings,
         embedding_model_name: str,
-        connection_string: str,
+        postgres_config: PostgresStoreConfig,
         collection_name: str,
     ) -> None:
         self.embedding_model = embedding_model
         self.embedding_model_name = embedding_model_name
         self.collection_name = collection_name
-        self._connection_string = connection_string
         # lightweight engine for optional helper queries
-        self._engine = create_engine(connection_string, future=True)
-        self._vs = self._create_store(connection_string, collection_name)
+        self._engine = create_engine_from_config(postgres_config)
+        self._vs = PGVector(
+            embeddings=self.embedding_model,
+            connection=self._engine,
+            collection_name=collection_name,
+            use_jsonb=True,
+            create_extension=False,  # Administrator-owned bootstrap, never application DDL.
+        )
 
     # ---------- BaseVectorStore: ingestion ----------
 
@@ -573,47 +574,3 @@ class PgVectorStoreAdapter(BaseVectorStore):
             float(results[0].score) if results else 0.0,
         )
         return results
-
-    def _create_store(self, connection_string: str, collection_name: str):
-        """
-        Instantiate the preferred pgvector implementation (langchain-postgres),
-        and fall back to the legacy langchain_community version if unavailable.
-        """
-        if NewPGVector is not None:
-            # Adapt to possible signature differences between versions.
-            params = inspect.signature(NewPGVector.__init__).parameters
-            kwargs: Dict[str, Any] = {}
-            if "connection_string" in params:
-                kwargs["connection_string"] = connection_string
-            if "embeddings" in params:
-                kwargs["embeddings"] = self.embedding_model
-            elif "embedding_function" in params:
-                kwargs["embedding_function"] = self.embedding_model
-            if "collection_name" in params:
-                kwargs["collection_name"] = collection_name
-            if "use_jsonb" in params:
-                kwargs["use_jsonb"] = True
-            if "create_extension" in params:
-                kwargs["create_extension"] = True
-            try:
-                store = NewPGVector(**kwargs)
-                logger.info(
-                    "[VECTOR][PGVECTOR] initialized (langchain-postgres) collection=%s",
-                    collection_name,
-                )
-                return store
-            except Exception:
-                logger.exception("[VECTOR][PGVECTOR] Failed to init langchain-postgres PGVector, falling back to legacy implementation")
-
-        # Legacy fallback
-        store = LegacyPGVector(
-            connection_string=connection_string,
-            collection_name=collection_name,
-            embedding_function=self.embedding_model,
-            use_jsonb=True,
-        )
-        logger.info(
-            "[VECTOR][PGVECTOR] initialized (legacy) collection=%s (default table)",
-            collection_name,
-        )
-        return store
