@@ -332,3 +332,18 @@ working pod with several agents.
 ## License
 
 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+
+### Managed execution scope
+
+Managed turns use the `space_id` validated by Control Plane, including evaluation,
+HITL resume, capabilities and checkpoint/history writes. `team_id` is optional
+ancestry, not a substitute for that space. Runtime skill catalog/detail reads now
+require `space_id` and `agent_instance_id`, without a `team_id` query parameter.
+Their person-credential and resolver consistency checks remain in place.
+
+For an existing local database, read the [schema notes](fred_runtime/migrations/README)
+before starting the pod: Alembic owns history/steering, whereas the checkpointer
+owns its separate tables and refuses the old owner schema. No data conversion
+from team ancestry is provided. The unused history-to-owner backfill helper has
+been removed; invocation writes supply retention metadata directly.

@@ -38,6 +38,8 @@ from fred_sdk.contracts.context import (
 
 
 class _FakePortable:
+    user_id = "alice"
+    space_id = "project-1"
     agent_id = "agent-1"
     session_id = "sess-1"
     team_id = "personal"

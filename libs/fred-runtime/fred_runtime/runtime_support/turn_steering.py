@@ -36,7 +36,7 @@ _turns = Table(
     Column("turn_id", String(128), nullable=False),
     Column("agent_instance_id", String, nullable=False),
     Column("user_id", String, nullable=False),
-    Column("team_id", String, nullable=False),
+    Column("space_id", String, nullable=False),
     Column("state", String(16), nullable=False),
     Column("pending", JsonColumn, nullable=False),
     Column("seen", JsonColumn, nullable=False),
@@ -66,7 +66,7 @@ class TurnSteeringMailbox:
         session_id: str,
         agent_instance_id: str,
         user_id: str,
-        team_id: str,
+        space_id: str,
         turn_id: str,
         *,
         resume: bool = False,
@@ -94,7 +94,7 @@ class TurnSteeringMailbox:
                             turn_id=turn_id,
                             agent_instance_id=agent_instance_id,
                             user_id=user_id,
-                            team_id=team_id,
+                            space_id=space_id,
                             state="resumed" if resume else "active",
                             pending=[],
                             seen=[],
@@ -114,7 +114,7 @@ class TurnSteeringMailbox:
                     if (
                         row["agent_instance_id"] != agent_instance_id
                         or row["user_id"] != user_id
-                        or row["team_id"] != team_id
+                        or row["space_id"] != space_id
                     ):
                         return None
                     pending, seen = row["pending"], row["seen"]
@@ -127,7 +127,7 @@ class TurnSteeringMailbox:
                         turn_id=turn_id,
                         agent_instance_id=agent_instance_id,
                         user_id=user_id,
-                        team_id=team_id,
+                        space_id=space_id,
                         state="resumed" if resume else "active",
                         pending=pending,
                         seen=seen,
@@ -199,7 +199,7 @@ class TurnSteeringMailbox:
         session_id: str,
         agent_instance_id: str,
         user_id: str,
-        team_id: str,
+        space_id: str,
         turn_id: str,
         message_id: str,
         text: str,
@@ -225,7 +225,7 @@ class TurnSteeringMailbox:
                 or row["turn_id"] != turn_id
                 or row["agent_instance_id"] != agent_instance_id
                 or row["user_id"] != user_id
-                or row["team_id"] != team_id
+                or row["space_id"] != space_id
             ):
                 return False
             if message_id in row["seen"]:

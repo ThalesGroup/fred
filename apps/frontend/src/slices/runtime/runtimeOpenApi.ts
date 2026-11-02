@@ -202,7 +202,6 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/pod/v1/agents/skills`,
         params: {
           agent_instance_id: queryArg.agentInstanceId,
-          team_id: queryArg.teamId,
           space_id: queryArg.spaceId,
         },
       }),
@@ -215,7 +214,6 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/pod/v1/agents/skills/${queryArg.skillName}`,
         params: {
           agent_instance_id: queryArg.agentInstanceId,
-          team_id: queryArg.teamId,
           space_id: queryArg.spaceId,
         },
       }),
@@ -415,15 +413,13 @@ export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg = {
 export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
 export type GetRuntimeInstanceSkillsApiArg = {
   agentInstanceId: string;
-  teamId: string;
-  spaceId?: string | null;
+  spaceId: string;
 };
 export type GetRuntimeInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
 export type GetRuntimeInstanceSkillDetailApiArg = {
   skillName: string;
   agentInstanceId: string;
-  teamId: string;
-  spaceId?: string | null;
+  spaceId: string;
 };
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];

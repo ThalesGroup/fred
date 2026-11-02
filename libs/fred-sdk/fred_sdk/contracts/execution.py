@@ -94,32 +94,6 @@ class ActorContext(FrozenModel):
     )
 
 
-class TeamType(str, Enum):
-    PERSONAL = "personal"
-    COLLABORATIVE = "collaborative"
-
-
-class TeamContext(FrozenModel):
-    """
-    Team scope for one execution.
-
-    Why this exists:
-    - All agent execution is team-scoped; team_id is mandatory and explicit.
-    - team_type distinguishes personal workspaces from collaborative teams,
-      enabling team-type-aware policy enforcement downstream.
-
-    How to use:
-    - Always set team_id. Never execute without a team context.
-    - team_type is optional; set it when known from control-plane enrollment.
-    """
-
-    team_id: str = Field(..., min_length=1, description="Stable team identifier.")
-    team_type: TeamType | None = Field(
-        default=None,
-        description="Optional team type distinguishing personal from collaborative teams.",
-    )
-
-
 class ExecutionTarget(FrozenModel):
     """
     The managed agent instance that will be executed.
@@ -453,10 +427,6 @@ class RuntimeExecuteRequest(BaseModel):
         """Return user_id from runtime_context (the authenticated caller identity)."""
         return self.runtime_context.user_id if self.runtime_context else None
 
-    def effective_team_id(self) -> str | None:
-        """Return the team_id the caller is acting in, from runtime_context."""
-        return self.runtime_context.team_id if self.runtime_context else None
-
     def effective_session_id(self) -> str | None:
         """Return session_id, preferring the top-level field over runtime_context."""
         if self.session_id is not None:
@@ -495,9 +465,6 @@ class RuntimeExecuteRequest(BaseModel):
         user_id = self.effective_user_id()
         if user_id:
             ctx["user_id"] = user_id
-        team_id = self.effective_team_id()
-        if team_id:
-            ctx["team_id"] = team_id
         if self.agent_instance_id is not None:
             ctx["agent_instance_id"] = self.agent_instance_id
         trace_id = self.runtime_context.trace_id if self.runtime_context else None

@@ -929,7 +929,6 @@ async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_get(
             access_token=None,
             control_plane_url="http://control-plane.invalid/control-plane/v1",
             http_client=client,
-            team_id=SPACE_ID,
             credentials=provider,
         )
 
@@ -1090,9 +1089,9 @@ async def run_one_turn(
 
     request = agent_app_module._AgentExecuteRequest.model_construct(
         agent_id="rags.sample.echo",
-        agent_instance_id=None,
+        agent_instance_id=INSTANCE_ID,
         message="hello",
-        context=context,
+        context={"space_id": SPACE_ID, **context},
         resume_payload=None,
         interrupt_id=None,
         invocation_turns=(),
@@ -1457,7 +1456,6 @@ async def test_with_the_flag_off_a_child_reads_the_updated_person_bearer(
             services = agent_app_module._build_runtime_services(
                 definition,
                 binding,
-                team_id="team-1",
                 registry={"member-1": definition},
                 access_token="person-token-1",
             )

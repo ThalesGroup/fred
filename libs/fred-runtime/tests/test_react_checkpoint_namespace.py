@@ -40,6 +40,8 @@ from weaver_fixtures import SPACE_ID
 
 
 class _FakePortable:
+    user_id = "alice"
+    space_id = "project-1"
     agent_id = "react.agent"
     session_id = "session-1"
     team_id = "personal"
@@ -131,7 +133,13 @@ async def test_react_executor_does_not_configure_a_checkpoint_namespace() -> Non
 
     await executor.invoke(input_model, ExecutionConfig(session_id="session-1"))
 
-    assert compiled.config == {"configurable": {"thread_id": "session-1"}}
+    assert compiled.config == {
+        "configurable": {
+            "thread_id": "session-1",
+            "__fred_user_id": "alice",
+            "__fred_space_id": "project-1",
+        }
+    }
 
 
 def test_to_runnable_config_carries_only_the_thread_id() -> None:

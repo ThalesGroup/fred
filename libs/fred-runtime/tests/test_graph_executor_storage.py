@@ -77,7 +77,9 @@ async def checkpointer(tmp_path):
 
 def _binding() -> BoundRuntimeContext:
     return BoundRuntimeContext(
-        runtime_context=RuntimeContext(session_id="s1", user_id="alice", team_id="t1"),
+        runtime_context=RuntimeContext(
+            session_id="s1", user_id="alice", team_id="t1", space_id="project-1"
+        ),
         portable_context=PortableContext(
             request_id="r1",
             correlation_id="c1",
@@ -87,6 +89,7 @@ def _binding() -> BoundRuntimeContext:
             session_id="s1",
             user_id="alice",
             team_id="t1",
+            space_id="project-1",
             baggage={"agent_instance_id": "inst-1"},
         ),
     )
@@ -161,6 +164,15 @@ async def test_native_graph_threads_record_their_owner_and_purge_with_the_sessio
         "s1", derived_prefix=graph_thread_prefix("s1")
     )
     assert owners == {"s1:inst-1": "alice"}
+    from sqlalchemy import select
+
+    async with checkpointer.store.begin() as connection:
+        row = (
+            (await connection.execute(select(checkpointer.thread_owner_table)))
+            .mappings()
+            .one()
+        )
+    assert row["space_id"] == "project-1"
 
     assert (
         await checkpointer.adelete_session_threads(

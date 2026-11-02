@@ -80,6 +80,7 @@ def _context(**overrides: Any) -> PortableContext:
         "agent_name": "rag-agent",
         "session_id": "sess-42",
         "user_id": "user-7",
+        "space_id": "project-p",
         "team_id": "team-red",
         "baggage": {"exchange_id": "exch-9", "execution_action": "execute"},
     }
@@ -106,6 +107,9 @@ def test_session_and_user_reach_langfuse_native_trace_fields() -> None:
     attributes = fake.observations[0]._otel_span.attributes
     assert attributes["session.id"] == "sess-42"
     assert attributes["user.id"] == "user-7"
+    metadata = fake.start_kwargs[0]["metadata"]
+    assert metadata["space_id"] == "project-p"
+    assert metadata["team_id"] == "team-red"
 
 
 def test_trace_is_named_after_the_agent_and_tagged() -> None:

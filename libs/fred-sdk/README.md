@@ -441,3 +441,20 @@ The label applies to Knowledge Bases only, not to this SDK's agent APIs.
 ## License
 
 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+
+### Execution space
+
+`RuntimeContext.space_id` is the requested Weaver space before admission. A
+managed Agent Pod turn validates it against the Control Plane resolver and then
+carries that same admitted ID in `RuntimeContext`, `PortableContext.space_id`
+and `CapabilityIdentity.space_id`. A project's team ancestry never replaces the
+project; personal spaces keep their real Weaver ID and have no team ancestry.
+`team_id` remains optional ancestry metadata. These fields do not grant access.
+
+Portable/save-time or local SDK contexts may omit `space_id`; a managed turn
+cannot. `baggage` no longer transports the space and has no scope fallback.
+`TeamContext`, `TeamType` and `RuntimeExecuteRequest.effective_team_id()` are
+removed. `to_legacy_context()` still projects both explicit fields. History
+ports now accept `space_id` instead of `team_id`; callers must supply an admitted
+space, never rename their ancestry value.

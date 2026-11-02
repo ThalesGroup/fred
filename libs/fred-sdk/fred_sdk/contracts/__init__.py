@@ -56,8 +56,6 @@ if TYPE_CHECKING:
         ExecutionGrantAction,
         ExecutionTarget,
         RuntimeExecuteRequest,
-        TeamContext,
-        TeamType,
         TraceContext,
     )
     from .openai_compat import (
@@ -110,8 +108,6 @@ _LAZY: dict[str, str] = {
     "ExecutionGrantAction": "fred_sdk.contracts.execution",
     "ExecutionTarget": "fred_sdk.contracts.execution",
     "RuntimeExecuteRequest": "fred_sdk.contracts.execution",
-    "TeamContext": "fred_sdk.contracts.execution",
-    "TeamType": "fred_sdk.contracts.execution",
     "TraceContext": "fred_sdk.contracts.execution",
     # OpenAI compat
     "OpenAIModelCard": "fred_sdk.contracts.openai_compat",
@@ -177,8 +173,6 @@ __all__ = [
     "rebuild_ui_part_union",
     # Execution identity and authorization (Phase 1)
     "ActorContext",
-    "TeamContext",
-    "TeamType",
     "ExecutionTarget",
     "TraceContext",
     "ExecutionGrantAction",

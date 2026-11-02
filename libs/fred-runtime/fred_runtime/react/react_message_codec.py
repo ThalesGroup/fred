@@ -39,6 +39,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 
+from fred_sdk.contracts.context import PortableContext
 from fred_sdk.contracts.execution import check_session_id
 from fred_sdk.contracts.react_contract import (
     ReActInput,
@@ -206,7 +207,9 @@ def final_assistant_message(
     raise RuntimeError("ReAct execution completed without an assistant message.")
 
 
-def to_runnable_config(config: ExecutionConfig) -> Mapping[str, object] | None:
+def to_runnable_config(
+    config: ExecutionConfig, context: PortableContext | None = None
+) -> Mapping[str, object] | None:
     """
     Convert Fred execution config to LangChain runnable config.
 
@@ -231,6 +234,10 @@ def to_runnable_config(config: ExecutionConfig) -> Mapping[str, object] | None:
         # session_id is Fred's public identity; thread_id is LangGraph's internal key.
         check_session_id(config.session_id)
         configurable["thread_id"] = config.session_id
+
+    if context is not None:
+        configurable["__fred_user_id"] = context.user_id
+        configurable["__fred_space_id"] = context.space_id
 
     if configurable:
         merged["configurable"] = configurable

@@ -223,9 +223,9 @@ def _binding(*, baggage: dict[str, str] | None = None) -> BoundRuntimeContext:
             session_id="session-1",
             user_id="user-1",
             team_id="team-1",
+            space_id=SPACE_ID,
             agent_id="template",
             baggage={
-                "space_id": SPACE_ID,
                 "agent_instance_id": INSTANCE_ID,
                 "template_agent_id": "template",
                 **(baggage or {}),
@@ -815,7 +815,7 @@ async def test_tool_refuses_context_outside_admitted_turn(
         portable = binding.portable_context
         update = (
             {"baggage": {**portable.baggage, field: "another"}}
-            if field in {"space_id", "agent_instance_id"}
+            if field == "agent_instance_id"
             else {field: "another"}
         )
         binding = BoundRuntimeContext(

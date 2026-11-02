@@ -19,19 +19,17 @@ from fred_runtime.runtime_context import get_runtime_context
 
 async def get_instance_skills(
     agent_instance_id: str,
-    team_id: str,
+    space_id: str,
     caller: KeycloakUser | None,
     authorization: str | None,
     container: PodApplicationContext,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
-    *,
-    space_id: str | None = None,
 ) -> SkillCatalog:
     """Read the public resolver projection with the person's own bearer only."""
     if caller is None or is_service_agent(caller) or not authorization:
         raise HTTPException(status_code=403, detail="Person credential required")
     try:
-        space = str(UUID(space_id or ""))
+        space = str(UUID(space_id))
         instance = str(UUID(agent_instance_id))
     except ValueError:
         raise HTTPException(
@@ -58,7 +56,6 @@ async def get_instance_skills(
         or str(binding.space.id) != space
         or str(binding.agent.instance_id) != instance
         or binding.agent.runtime_id != runtime.service_name
-        or (str(binding.space.team_id) if binding.space.team_id else None) != team_id
     ):
         raise HTTPException(status_code=403, detail="Weaver metadata binding mismatch")
     definition = registry.get(binding.agent.template_key)
@@ -73,23 +70,20 @@ async def get_instance_skills(
 async def get_instance_skill_detail(
     skill_name: str,
     agent_instance_id: str,
-    team_id: str,
+    space_id: str,
     caller: KeycloakUser | None,
     authorization: str | None,
     container: PodApplicationContext,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
-    *,
-    space_id: str | None = None,
 ) -> SkillDetail:
     """Authorize through the catalog before reading its immutable snapshot."""
     catalog = await get_instance_skills(
         agent_instance_id,
-        team_id,
+        space_id,
         caller,
         authorization,
         container,
         registry,
-        space_id=space_id,
     )
     try:
         name = SkillInvocation(name=skill_name).name

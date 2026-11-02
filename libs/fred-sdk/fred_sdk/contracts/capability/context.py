@@ -68,6 +68,8 @@ class CapabilityIdentity(BaseModel):
 
     user_id: str
     session_id: str | None = None
+    space_id: str | None = None
+    # Team ancestry only; personal spaces have no team.
     team_id: str | None = None
     agent_instance_id: str | None = None
 

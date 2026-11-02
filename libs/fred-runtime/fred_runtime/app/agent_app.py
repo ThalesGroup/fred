@@ -761,7 +761,9 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             )
 
         context_dict = request.context.model_dump(mode="json")
-        context_dict["space_id"] = str(authority.binding.space.id)
+        space = authority.binding.space
+        context_dict["space_id"] = str(space.id)
+        context_dict["team_id"] = str(space.team_id) if space.team_id else None
         context_dict["agent_instance_id"] = str(authority.binding.agent.instance_id)
         context_dict.setdefault("execution_action", ExecutionGrantAction.EXECUTE.value)
         # RFC AGENT-INVOKE: apply the caller's per-call scope onto the callee's
@@ -840,7 +842,6 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             definition,
             execute_request,
             access_token=self._access_token,
-            team_id=request.context.team_id,
             registry=self._registry,
             capability_registry=self._capability_registry,
             credential_provider=credentials,
@@ -896,7 +897,6 @@ def _build_runtime_services(
     binding: BoundRuntimeContext,
     *,
     tuning: AgentTuning | None = None,
-    team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     access_token: str | None = None,
     capability_registry: CapabilityRegistry | None = None,
@@ -938,7 +938,9 @@ def _build_runtime_services(
             else None,
         )
         conversation_port = DeepConversationFilesystemPort(backend, permissions)
-    settings = _build_agent_settings(definition, team_id=team_id)
+    settings = _build_agent_settings(
+        definition, team_id=binding.runtime_context.team_id
+    )
     document_access_config = None
     effective_tuning = tuning if tuning is not None else settings.tuning
     if capability_registry is not None and "document_access" in capability_registry:
@@ -1568,7 +1570,6 @@ async def _resolve_agent_instance(
     access_token: str | None,
     control_plane_url: str | None,
     http_client: httpx.AsyncClient,
-    team_id: str | None = None,
     request_id: str | None = None,
     credentials: OutboundCredentialProvider | None = None,
 ) -> _ResolvedExecutionTarget:
@@ -1690,8 +1691,8 @@ async def _resolve_agent_instance(
         or resolution.run_id != params.get("run")
         or resolution.conversation_id != conversation
         or (
-            team_id is not None
-            and team_id
+            ctx.get("team_id") is not None
+            and ctx["team_id"]
             != (str(resolution.space.team_id) if resolution.space.team_id else None)
         )
     ):
@@ -1913,7 +1914,6 @@ def _admit_run_credentials(
     *,
     agent_id: str | None,
     agent_instance_id: str | None,
-    team_id: str | None,
 ) -> OutboundCredentialProvider | None:
     """Decide, once per run, what its outbound calls will present.
 
@@ -2062,7 +2062,6 @@ def _admission_credentials(
         authenticated_user,
         agent_id=request.agent_id,
         agent_instance_id=request.agent_instance_id,
-        team_id=request.effective_team_id(),
     )
     if credentials is not None and credentials.delegated:
         base_ctx = request.runtime_context or RuntimeContext()
@@ -2140,7 +2139,6 @@ async def _authorize_and_resolve(
                 access_token=access_token,
                 control_plane_url=get_runtime_context().config.control_plane_url,
                 http_client=container.get_control_plane_http_client(),
-                team_id=request.effective_team_id(),
                 request_id=binding_request_id,
                 credentials=credentials,
             )
@@ -2179,39 +2177,6 @@ async def _authorize_and_resolve(
         raise
     target.credential_provider = credentials
     return internal_req, target
-
-
-def _validate_resolved_team(
-    request: RuntimeExecuteRequest,
-    resolved_team_id: str | None,
-    container: PodApplicationContext,
-) -> None:
-    """
-    Cross-check the resolved instance owner team against the caller's claim.
-
-    Team-scoped resolution already restricts the lookup to the caller's team, so a
-    mismatch should be impossible; this is defense-in-depth and an audit anchor.
-    Skipped for direct template execution (no team scope).
-    """
-    if resolved_team_id is None:
-        return
-    claimed = request.effective_team_id()
-    if claimed is not None and claimed != resolved_team_id:
-        _emit_audit_event(
-            container,
-            "warning",
-            "team_binding_mismatch",
-            claimed_team_id=claimed,
-            resolved_team_id=resolved_team_id,
-            agent_instance_id=request.agent_instance_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"resolved owner team {resolved_team_id!r} does not match "
-                f"requested team {claimed!r}"
-            ),
-        )
 
 
 # LangGraph's fixed pending-write channel for an open `interrupt()`: the only
@@ -2624,7 +2589,7 @@ async def _write_turn_history(
     skill_invocations: list[SkillInvocation | dict[str, Any]] | None = None,
     payloads: list[dict[str, Any]],
     history_store: HistoryStorePort,
-    team_id: str | None = None,
+    space_id: str | None = None,
     agent_instance_id: str | None = None,
     exchange_id: str | None = None,
     resume_payload: Any | None = None,
@@ -3095,7 +3060,7 @@ async def _write_turn_history(
             session_id=session_id,
             messages=messages,
             user_id=user_id,
-            team_id=team_id,
+            space_id=space_id,
             agent_instance_id=agent_instance_id,
         )
     except Exception:
@@ -3381,10 +3346,8 @@ async def _stream(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
-    team_id: str | None = None,
     agent_instance_name: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
-    security_enabled: bool = False,
     container: PodApplicationContext,
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
@@ -3404,10 +3367,7 @@ async def _stream(
     - after the stream closes, history is written as a fire-and-forget background
       task so the SSE connection is not held open waiting for the DB write
 
-    Team resolution:
-    - team_id is resolved once here so KPI, history, and the agent runtime all
-      see the same identity; in no-security standalone mode it defaults to
-      "personal" when the caller omits it.
+    Execution scope and team ancestry come from the admitted request context.
     """
     ctx = request.context or {}
     session_id: str | None = ctx.get("session_id")
@@ -3419,11 +3379,10 @@ async def _stream(
     )
     turn_start = time.monotonic()
 
-    # Resolve team identity once so all downstream calls (runtime, KPI, history)
-    # carry the same value.  Standalone no-security default: "personal".
-    resolved_team_id: str | None = team_id or ctx.get("team_id")
-    if not security_enabled and not resolved_team_id:
-        resolved_team_id = "personal"
+    resolved_team_id: str | None = ctx.get("team_id")
+    space_id = ctx.get("space_id")
+    if request.agent_instance_id and not space_id:
+        raise AuthorityLostError()
 
     collected: list[dict[str, Any]] = []
     steering_token = (
@@ -3431,13 +3390,13 @@ async def _stream(
             session_id,
             request.agent_instance_id,
             user_id,
-            # Weaver scopes steering by the admitted space, as the steer route does.
-            str(ctx.get("space_id") or "personal"),
+            space_id,
             request.steering_turn_id,
             resume=request.resume_payload is not None,
         )
         if session_id
         and request.agent_instance_id
+        and space_id
         and request.steering_turn_id
         and not isinstance(definition, GraphAgentDefinition)
         else None
@@ -3462,7 +3421,6 @@ async def _stream(
         definition,
         request,
         access_token=access_token,
-        team_id=resolved_team_id,
         registry=registry,
         exchange_id=exchange_id,
         tuning=tuning,
@@ -3531,7 +3489,7 @@ async def _stream(
                     skill_invocations=ctx.get("skills"),
                     payloads=collected,
                     history_store=history_store,
-                    team_id=resolved_team_id,
+                    space_id=space_id,
                     agent_instance_id=request.agent_instance_id,
                     exchange_id=exchange_id,
                     resume_payload=request.resume_payload,
@@ -3723,6 +3681,7 @@ def _build_capability_block(
     services: RuntimeServices,
     user_id: str | None,
     session_id: str | None,
+    space_id: str | None,
     team_id: str | None,
     agent_instance_id: str | None,
     turn_options: Mapping[str, Mapping[str, Any]] | None = None,
@@ -3815,6 +3774,7 @@ def _build_capability_block(
         identity=CapabilityIdentity(
             user_id=user_id or "anonymous",
             session_id=session_id,
+            space_id=space_id,
             team_id=team_id,
             agent_instance_id=agent_instance_id,
         ),
@@ -4075,7 +4035,6 @@ async def _iterate_runtime_event_payloads(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
-    team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
     tuning: AgentTuning | None = None,
@@ -4095,7 +4054,6 @@ async def _iterate_runtime_event_payloads(
         definition,
         request,
         access_token,
-        team_id=team_id,
         registry=registry,
         exchange_id=exchange_id,
         tuning=tuning,
@@ -4211,7 +4169,6 @@ async def _iterate_runtime_event_payloads_inner(
     request: _AgentExecuteRequest,
     access_token: str | None = None,
     *,
-    team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
     tuning: AgentTuning | None = None,
@@ -4230,12 +4187,6 @@ async def _iterate_runtime_event_payloads_inner(
     - keeping the generator payload-oriented lets the HTTP layer choose whether
       it renders SSE or returns a terminal JSON response
 
-    team_id:
-    - callers are responsible for resolving the effective team before calling this
-      function; see _stream() for the standalone "personal" default logic
-    - None is accepted for agent-to-agent (AgentInvoker) invocations where no
-      team scope is required
-
     access_token:
     - the user's JWT forwarded via the Authorization header
     - stored in RuntimeContext so KF tool adapters can use it for outbound calls
@@ -4251,7 +4202,7 @@ async def _iterate_runtime_event_payloads_inner(
     request_id = str(current_context().get("request_id") or uuid4())
     ctx = request.context or {}
     correlation_id = str(current_context().get("correlation_id") or uuid4())
-    resolved_team_id = team_id or ctx.get("team_id")
+    resolved_team_id = ctx.get("team_id")
     delegated_turn = credential_provider is not None and credential_provider.delegated
     if delegated_turn:
         # The person's credential was spent at admission. Nothing in this turn
@@ -4301,10 +4252,10 @@ async def _iterate_runtime_event_payloads_inner(
         session_id=ctx.get("session_id"),
         user_id=ctx.get("user_id"),
         team_id=resolved_team_id,
+        space_id=ctx.get("space_id"),
         baggage={
             key: value
             for key, value in {
-                "space_id": ctx.get("space_id"),
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
                 "interrupt_id": resolved_interrupt_id,
@@ -4368,6 +4319,8 @@ async def _iterate_runtime_event_payloads_inner(
         platform_prompt=platform_prompt,
     )
 
+    current_turn().check_context(runtime_context, definition.agent_id)
+
     conversation_filesystem = _build_conversation_filesystem(binding)
     services = _build_runtime_services(
         definition,
@@ -4375,7 +4328,6 @@ async def _iterate_runtime_event_payloads_inner(
         tuning=tuning,
         document_scope=request._document_scope,
         turn_options=getattr(request, "turn_options", None),
-        team_id=resolved_team_id,
         registry=registry,
         access_token=access_token,
         capability_registry=capability_registry,
@@ -4412,6 +4364,7 @@ async def _iterate_runtime_event_payloads_inner(
             services=services,
             user_id=ctx.get("user_id"),
             session_id=ctx.get("session_id"),
+            space_id=ctx.get("space_id"),
             team_id=resolved_team_id,
             agent_instance_id=request.agent_instance_id,
             turn_options=getattr(request, "turn_options", None) or None,
@@ -4959,22 +4912,20 @@ def _build_agent_router(
     async def get_skills(
         http_request: Request,
         agent_instance_id: str,
-        team_id: str,
-        space_id: str | None = None,
+        space_id: str,
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> SkillCatalog:
-        """List metadata after the same team-use and target checks as execution."""
+        """List metadata after the same space and target checks as execution."""
         from fred_runtime.skills.api import get_instance_skills
 
         return await get_instance_skills(
             agent_instance_id,
-            team_id,
+            space_id,
             caller,
             http_request.headers.get("Authorization"),
             container,
             registry,
-            space_id=space_id,
         )
 
     @router.get(
@@ -4986,8 +4937,7 @@ def _build_agent_router(
         http_request: Request,
         skill_name: str,
         agent_instance_id: str,
-        team_id: str,
-        space_id: str | None = None,
+        space_id: str,
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> SkillDetail:
@@ -4996,12 +4946,11 @@ def _build_agent_router(
         return await get_instance_skill_detail(
             skill_name,
             agent_instance_id,
-            team_id,
+            space_id,
             caller,
             http_request.headers.get("Authorization"),
             container,
             registry,
-            space_id=space_id,
         )
 
     @router.get("/mcp-catalog")
@@ -5973,7 +5922,6 @@ def _build_agent_router(
                 access_token=None
                 if target.credential_provider and target.credential_provider.delegated
                 else access_token,
-                team_id=target.team_id,
                 registry=registry,
                 exchange_id=exchange_id,
                 tuning=target.tuning,
@@ -6012,7 +5960,7 @@ def _build_agent_router(
                     skill_invocations=(internal_req.context or {}).get("skills"),
                     payloads=payloads,
                     history_store=history_store,
-                    team_id=target.team_id,
+                    space_id=(internal_req.context or {}).get("space_id"),
                     agent_instance_id=request.agent_instance_id,
                     exchange_id=exchange_id,
                     resume_payload=request.resume_payload,
@@ -6080,7 +6028,6 @@ def _build_agent_router(
                 access_token=None
                 if target.credential_provider and target.credential_provider.delegated
                 else access_token,
-                team_id=target.team_id,
                 registry=registry,
                 exchange_id=exchange_id,
                 tuning=target.tuning,
@@ -6118,7 +6065,7 @@ def _build_agent_router(
                     skill_invocations=(internal_req.context or {}).get("skills"),
                     payloads=payloads,
                     history_store=history_store,
-                    team_id=target.team_id,
+                    space_id=(internal_req.context or {}).get("space_id"),
                     agent_instance_id=request.agent_instance_id,
                     exchange_id=exchange_id,
                     resume_payload=request.resume_payload,
@@ -6246,10 +6193,8 @@ def _build_agent_router(
             target.definition,
             internal_req,
             access_token=None if provider and provider.delegated else access_token,
-            team_id=target.team_id,
             agent_instance_name=target.agent_instance_name,
             registry=registry,
-            security_enabled=security_enabled,
             container=container,
             tuning=target.tuning,
             capability_registry=_capability_registry_of(http_request),

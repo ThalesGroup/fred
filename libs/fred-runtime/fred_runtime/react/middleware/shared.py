@@ -49,6 +49,8 @@ def identity_kpi_dims(binding: BoundRuntimeContext) -> dict[str, Optional[str]]:
         dims["session_id"] = portable.session_id
     if portable.user_id:
         dims["user_id"] = portable.user_id
+    if portable.space_id:
+        dims["space_id"] = portable.space_id
     if portable.team_id:
         dims["team_id"] = portable.team_id
     agent_instance_id = portable.baggage.get("agent_instance_id")

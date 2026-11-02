@@ -747,6 +747,9 @@ class PortableContext(FrozenModel):
     session_id: str | None = None
     user_id: str | None = None
     user_name: str | None = None
+    # Admitted execution space; None only before admission or for local SDK use.
+    space_id: str | None = None
+    # Trusted team ancestry, never the execution scope.
     team_id: str | None = None
     baggage: dict[str, str] = Field(default_factory=dict)
 

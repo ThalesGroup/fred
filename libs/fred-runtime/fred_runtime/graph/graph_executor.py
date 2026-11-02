@@ -673,7 +673,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         portable = self._binding.portable_context
         keys = {
             "__fred_user_id": runtime.user_id or portable.user_id,
-            "__fred_team_id": runtime.team_id or portable.team_id,
+            "__fred_space_id": runtime.space_id or portable.space_id,
         }
         return {key: value for key, value in keys.items() if value}
 

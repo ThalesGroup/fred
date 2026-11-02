@@ -172,9 +172,9 @@ def _binding(
             session_id=session_id,
             user_id="alice",
             team_id="t1",
+            space_id=SPACE_ID,
             agent_id="fred.tests.interrupted",
             baggage={
-                "space_id": SPACE_ID,
                 **({"agent_instance_id": instance} if instance else {}),
             },
         ),

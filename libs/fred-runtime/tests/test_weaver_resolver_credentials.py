@@ -312,3 +312,31 @@ async def test_present_but_incomplete_choice_is_not_treated_as_absent(admission)
             await admission.resolve(client)
     assert error.value.status_code == 422
     assert admission.request._turn_authority is None
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("space_id", None),
+        ("space_id", ""),
+        ("space_id", "00000000-0000-0000-0000-000000000099"),
+        ("team_id", "forged-ancestry"),
+    ],
+)
+async def test_missing_or_forged_scope_cannot_admit(
+    admission: _Admission, field, value
+) -> None:
+    assert admission.request.context is not None
+    admission.request.context[field] = value
+    calls = []
+
+    def resolver(request):
+        calls.append(request)
+        return httpx.Response(200, json=admission.binding.model_dump(mode="json"))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(resolver)) as client:
+        with pytest.raises(HTTPException) as error:
+            await admission.resolve(client)
+    assert error.value.status_code == 403
+    assert admission.request._turn_authority is None
+    assert len(calls) == (0 if not value else 1)

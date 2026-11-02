@@ -20,7 +20,6 @@ from typing import Any, Callable, Optional
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
 from fred_core.common import OwnerFilter
-from fred_core.common.team_id import is_personal_team_id
 from fred_core.security.delegation import scrub_grant_text
 from fred_sdk.contracts.context import (
     ToolContentBlock,
@@ -285,7 +284,6 @@ class ContextAwareTool(BaseTool):
         tool supports it and caller didn't pass it.
         """
         context = self.context_provider()
-        settings = self.agent_settings_provider()
         if not context:
             return kwargs
 
@@ -356,19 +354,16 @@ class ContextAwareTool(BaseTool):
                 session_id,
             )
 
-        # Force team_id depending on agent settings.
-        # Personal-space IDs ("personal-<uuid>") are not real ReBAC teams;
-        # don't forward them to tools that look up team membership.
-        effective_team_id = (
-            settings.team_id if not is_personal_team_id(settings.team_id) else None
-        )
-        if "team_id" in tool_properties and effective_team_id:
+        # Scope comes from the bound context, never a tool argument or ancestry.
+        if "space_id" in tool_properties:
+            if not context.space_id:
+                raise AuthorityLostError()
+            kwargs["space_id"] = context.space_id
+        effective_team_id = context.team_id
+        if not context.space_id:
+            effective_team_id = self.agent_settings_provider().team_id
+        if "team_id" in tool_properties:
             kwargs["team_id"] = effective_team_id
-            logger.info(
-                "ContextAwareTool(%s) injecting team_id: %s",
-                self.name,
-                effective_team_id,
-            )
 
         # Force owner_filter depending on agent settings
         if "owner_filter" in tool_properties:

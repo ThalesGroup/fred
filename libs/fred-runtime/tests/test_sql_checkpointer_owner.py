@@ -18,8 +18,6 @@ Why this file exists:
 - every ``aput`` must write exactly one owner row per thread (upsert, not
   duplicate) and its owner write must be best-effort — a forced failure must
   NEVER raise out of ``aput`` (it cannot fail a user's turn);
-- the one-shot backfill must produce one owner row per DISTINCT thread in
-  ``session_history``;
 - the per-user purge must delete exactly that user's threads and no others.
 
 All tests are offline — a temporary SQLite database, no external services.
@@ -28,7 +26,7 @@ All tests are offline — a temporary SQLite database, no external services.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
@@ -36,17 +34,7 @@ from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_sdk.contracts.context import ToolContentKind
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import empty_checkpoint
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Integer,
-    MetaData,
-    String,
-    Table,
-    func,
-    insert,
-    select,
-)
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine
 
 _NOW = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
@@ -84,23 +72,6 @@ async def _put(cp: FredSqlCheckpointer, thread_id: str, **configurable) -> None:
 async def _owner_rows(cp: FredSqlCheckpointer) -> list:
     async with cp.store.begin() as conn:
         return list((await conn.execute(select(cp.thread_owner_table))).fetchall())
-
-
-async def _seed_history(engine, rows: list[dict]) -> None:
-    """Create a minimal ``session_history`` table and insert the given rows."""
-    md = MetaData()
-    history = Table(
-        "session_history",
-        md,
-        Column("session_id", String, primary_key=True),
-        Column("user_id", String, primary_key=True),
-        Column("rank", Integer, primary_key=True),
-        Column("team_id", String, nullable=True),
-        Column("timestamp", DateTime(timezone=True), nullable=False),
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(md.create_all)
-        await conn.execute(insert(history), rows)
 
 
 @pytest.mark.asyncio
@@ -146,24 +117,25 @@ async def test_aput_writes_exactly_one_owner_row_upsert(checkpointer):
     assert len(rows) == 1
     row = rows[0]
     assert row.thread_id == "thread-A"
-    assert row.user_id is None  # nothing injects identity at aput time yet
+    assert row.user_id is None  # low-level writes may omit identity
     assert row.last_activity_at is not None
     assert row.created_at is not None
 
 
 @pytest.mark.asyncio
 async def test_aput_records_injected_identity(checkpointer):
-    # If a caller injects __fred_user_id/__fred_team_id, aput records them.
+    # If a caller injects __fred_user_id/__fred_space_id, aput records them.
     await _put(
         checkpointer,
         "thread-Z",
         __fred_user_id="alice",
-        __fred_team_id="team-1",
+        __fred_space_id="project-1",
     )
     rows = await _owner_rows(checkpointer)
     assert len(rows) == 1
     assert rows[0].user_id == "alice"
-    assert rows[0].team_id == "team-1"
+    assert rows[0].space_id == "project-1"
+    assert await checkpointer.aget_conversation_binding("thread-Z") is None
 
 
 @pytest.mark.asyncio
@@ -173,12 +145,12 @@ async def test_injected_identity_not_leaked_into_checkpoint_metadata(checkpointe
         checkpointer,
         "thread-Z",
         __fred_user_id="alice",
-        __fred_team_id="team-1",
+        __fred_space_id="project-1",
     )
     tuple_ = await checkpointer.aget_tuple(_config("thread-Z"))
     assert tuple_ is not None
     assert "__fred_user_id" not in tuple_.metadata
-    assert "__fred_team_id" not in tuple_.metadata
+    assert "__fred_space_id" not in tuple_.metadata
 
 
 @pytest.mark.asyncio
@@ -317,102 +289,14 @@ async def test_adelete_thread_returns_zero_for_unknown_thread(checkpointer):
 
 
 @pytest.mark.asyncio
-async def test_backfill_matches_distinct_threads(checkpointer, engine):
-    await _seed_history(
-        engine,
-        [
-            {
-                "session_id": "s1",
-                "user_id": "u1",
-                "rank": 0,
-                "team_id": "t1",
-                "timestamp": _NOW,
-            },
-            {
-                "session_id": "s1",
-                "user_id": "u1",
-                "rank": 1,
-                "team_id": "t1",
-                "timestamp": _NOW + timedelta(minutes=5),
-            },
-            {
-                "session_id": "s2",
-                "user_id": "u2",
-                "rank": 0,
-                "team_id": None,
-                "timestamp": _NOW + timedelta(hours=1),
-            },
-            {
-                "session_id": "s3",
-                "user_id": "u1",
-                "rank": 0,
-                "team_id": "t1",
-                "timestamp": _NOW + timedelta(hours=2),
-            },
-        ],
-    )
-
-    processed = await checkpointer.backfill_thread_owners_from_history()
-
-    # One owner row per DISTINCT session_id (== thread_id) in history.
-    async with engine.begin() as conn:
-        distinct = (
-            await conn.execute(
-                select(
-                    func.count(
-                        func.distinct(
-                            Table(
-                                "session_history",
-                                MetaData(),
-                                Column("session_id", String),
-                                keep_existing=True,
-                            ).c.session_id
-                        )
-                    )
-                )
-            )
-        ).scalar_one()
-    rows = await _owner_rows(checkpointer)
-    assert processed == distinct == 3
-    assert {r.thread_id for r in rows} == {"s1", "s2", "s3"}
-    owners = {r.thread_id: (r.user_id, r.team_id) for r in rows}
-    assert owners["s1"] == ("u1", "t1")
-    assert owners["s2"] == ("u2", None)
-    assert owners["s3"] == ("u1", "t1")
-
-
-@pytest.mark.asyncio
 async def test_purge_deletes_exactly_that_users_threads(checkpointer, engine):
-    # Threads for user u1 (s1, s3) and user u2 (s2), with real checkpoints.
-    for thread_id in ("s1", "s2", "s3"):
-        await _put(checkpointer, thread_id)
-    await _seed_history(
-        engine,
-        [
-            {
-                "session_id": "s1",
-                "user_id": "u1",
-                "rank": 0,
-                "team_id": "t1",
-                "timestamp": _NOW,
-            },
-            {
-                "session_id": "s2",
-                "user_id": "u2",
-                "rank": 0,
-                "team_id": "t2",
-                "timestamp": _NOW,
-            },
-            {
-                "session_id": "s3",
-                "user_id": "u1",
-                "rank": 0,
-                "team_id": "t1",
-                "timestamp": _NOW,
-            },
-        ],
-    )
-    await checkpointer.backfill_thread_owners_from_history()
+    # Current invocation metadata owns retention; no history backfill is needed.
+    for thread, user, space in [
+        ("s1", "u1", "p1"),
+        ("s2", "u2", "p2"),
+        ("s3", "u1", "p2"),
+    ]:
+        await _put(checkpointer, thread, __fred_user_id=user, __fred_space_id=space)
 
     purged = await checkpointer.purge_threads_for_user("u1")
 
@@ -423,3 +307,18 @@ async def test_purge_deletes_exactly_that_users_threads(checkpointer, engine):
     assert await checkpointer.aget_tuple(_config("s2")) is not None
     remaining = {r.thread_id for r in await _owner_rows(checkpointer)}
     assert remaining == {"s2"}
+
+
+@pytest.mark.asyncio
+async def test_existing_ancestry_schema_requires_explicit_operator_action(engine):
+    from sqlalchemy import text
+
+    async with engine.begin() as connection:
+        await connection.execute(
+            text(
+                "CREATE TABLE v2_checkpoint_thread_owner (thread_id TEXT PRIMARY KEY, user_id TEXT, team_id TEXT, binding_json JSON, created_at TIMESTAMP, last_activity_at TIMESTAMP)"
+            )
+        )
+    checkpointer = FredSqlCheckpointer(engine, prefix="v2_")
+    with pytest.raises(RuntimeError, match="requires space_id"):
+        await checkpointer.aget_tuple(_config("existing"))

@@ -41,6 +41,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
         "b2f3a4e5c6d7_add_exchange_id.py",  # pragma: allowlist secret
         "c3d4b5a6f7e8_add_team_and_instance.py",  # pragma: allowlist secret
         "e5f6a7b8c9d0_web_research_activity.py",  # pragma: allowlist secret
+        "a7b8c9d0e1f2_execution_space.py",  # pragma: allowlist secret
         "f6a7b8c9d0e1_shared_turn_steering.py",  # pragma: allowlist secret
         "d4e5c6b7a8f9_drop_demo_echo_tables.py",  # pragma: allowlist secret
     }
@@ -50,6 +51,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+        ("a7b8c9d0e1f2", "f6a7b8c9d0e1"),  # pragma: allowlist secret
         ("f6a7b8c9d0e1", "e5f6a7b8c9d0"),  # pragma: allowlist secret
         ("e5f6a7b8c9d0", "d4e5c6b7a8f9"),  # pragma: allowlist secret
         ("d4e5c6b7a8f9", "c3d4b5a6f7e8"),  # pragma: allowlist secret
@@ -73,7 +75,16 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         assert connection.execute(
             "PRAGMA table_info(runtime_web_research_activity)"
         ).fetchall()
-        assert connection.execute("PRAGMA table_info(runtime_turn_steering)").fetchall()
+        steering_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(runtime_turn_steering)")
+        }
+        assert "space_id" in steering_columns and "team_id" not in steering_columns
+        indexes = {
+            row[1] for row in connection.execute("PRAGMA index_list(session_history)")
+        }
+        assert "ix_session_history_space_id" in indexes
+        assert "ix_session_history_team_id" not in indexes
         revision = connection.execute(
             "SELECT version_num FROM alembic_version_runtime"
         ).fetchone()
@@ -88,10 +99,10 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "parts_json",
         "metadata_json",
         "exchange_id",
-        "team_id",
+        "space_id",
         "agent_instance_id",
     }
-    assert revision == ("f6a7b8c9d0e1",)  # pragma: allowlist secret
+    assert revision == ("a7b8c9d0e1f2",)  # pragma: allowlist secret
 
 
 def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -216,3 +227,30 @@ def test_packaged_tree_is_not_excluded_from_the_docker_build_context() -> None:
     assert offenders == [], (
         f"{dockerignore} excludes the packaged Alembic tree: {offenders}"
     )
+
+
+def test_execution_space_migration_does_not_copy_history_ancestry(
+    tmp_path, monkeypatch
+) -> None:
+    from alembic import command
+
+    database = tmp_path / "scope.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database}")
+    config = Config()
+    config.set_main_option("script_location", str(RUNTIME_ALEMBIC_DIR))
+    command.upgrade(config, "f6a7b8c9d0e1")  # pragma: allowlist secret
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO session_history (session_id, user_id, rank, timestamp, role, channel, team_id) VALUES ('s', 'u', 0, '2026-11-02 00:00:00', 'user', 'final', 'team-e')"
+        )
+        connection.execute(
+            "INSERT INTO runtime_turn_steering (session_id, turn_id, agent_instance_id, user_id, team_id, state, pending, seen, expires_at) VALUES ('s', 'turn', 'agent', 'u', 'project-p', 'active', '[]', '[]', '2026-11-02 00:00:00')"
+        )
+    command.upgrade(config, "head")
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT space_id FROM session_history"
+        ).fetchone() == (None,)
+        assert connection.execute(
+            "SELECT space_id FROM runtime_turn_steering"
+        ).fetchone() == ("project-p",)

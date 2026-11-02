@@ -250,6 +250,7 @@ class WebResearchAdapter(WebResearchPort):
                     "tool_name": request.operation,
                     "status": "cancelled" if cancelled else "error" if error else "ok",
                     "error_code": error.code if error else None,
+                    "space_id": portable.space_id,
                     "team_id": portable.team_id,
                 },
                 cost={"usd": service.config.cost_per_1000_searches / 1000}

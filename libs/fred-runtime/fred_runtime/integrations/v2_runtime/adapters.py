@@ -564,6 +564,7 @@ class LangfuseTracerAdapter(TracerPort):
             "actor": portable_context.actor,
             "user_id": portable_context.user_id,
             "user_name": portable_context.user_name,
+            "space_id": portable_context.space_id,
             "team_id": portable_context.team_id,
             "agent_instance_id": portable_context.baggage.get("agent_instance_id"),
             "template_agent_id": portable_context.baggage.get("template_agent_id"),
@@ -1131,6 +1132,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         include_timeline = bool(payload.get("include_timeline", True))
 
         query_filters = {
+            "space_id": self._binding.portable_context.space_id,
             "fred_session_id": session_id,
             "agent_name": _coerce_optional_string(payload.get("agent_name")),
             "agent_id": _coerce_optional_string(payload.get("agent_id")),
@@ -2595,6 +2597,7 @@ def _summarize_langfuse_conversation(
             "latency_s": selected_trace.get("latency"),
             "agent_id": selected_md.get("agent_id"),
             "agent_name": selected_md.get("agent_name"),
+            "space_id": selected_md.get("space_id"),
             "team_id": selected_md.get("team_id"),
             "user_id": selected_md.get("user_id"),
             "user_name": selected_md.get("user_name"),
@@ -2640,6 +2643,7 @@ def _trace_matches_filters(
         _matches("fred_session_id", metadata_keys=("session_id",))
         and _matches("agent_name")
         and _matches("agent_id")
+        and _matches("space_id")
         and _matches("team_id")
         and _matches("user_name")
     )

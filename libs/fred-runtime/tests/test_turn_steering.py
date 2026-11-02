@@ -64,23 +64,23 @@ async def test_human_pause_resumes_on_another_replica(monkeypatch, tmp_path) -> 
     first, second, first_engine, second_engine = await _replicas(tmp_path)
     monkeypatch.setattr(turn_steering, "turn_steering_mailbox", second)
     try:
-        assert await first.start("s", "agent", "user", "team", "turn-1")
+        assert await first.start("s", "agent", "user", "space", "turn-1")
         assert await second.offer(
-            "s", "agent", "user", "team", "turn-1", "message", "focus on Marseille"
+            "s", "agent", "user", "space", "turn-1", "message", "focus on Marseille"
         )
         await first.pause("s", "turn-1")
         await first.end("s", "turn-1", paused=True)
         assert not await first.offer(
-            "s", "agent", "user", "team", "turn-1", "late", "too late"
+            "s", "agent", "user", "space", "turn-1", "late", "too late"
         )
         assert (
-            await second.start("s", "agent", "other", "team", "turn-2", resume=True)
+            await second.start("s", "agent", "other", "space", "turn-2", resume=True)
             is None
         )
-        assert await second.start("s", "agent", "user", "team", "turn-2", resume=True)
+        assert await second.start("s", "agent", "user", "space", "turn-2", resume=True)
         await first.end("s", "turn-1")
         assert await first.offer(
-            "s", "agent", "user", "team", "turn-2", "message", "duplicate"
+            "s", "agent", "user", "space", "turn-2", "message", "duplicate"
         )
         middleware = turn_steering.TurnSteeringMiddleware("s", "turn-2")
         update = await middleware.abefore_model({"messages": []}, Runtime(context=None))
@@ -102,28 +102,28 @@ async def test_human_pause_resumes_on_another_replica(monkeypatch, tmp_path) -> 
 async def test_resume_takes_pending_before_old_stream_closes(tmp_path) -> None:
     first, second, first_engine, second_engine = await _replicas(tmp_path)
     try:
-        assert await first.start("s", "agent", "user", "team", "old")
-        assert await second.offer("s", "agent", "user", "team", "old", "m", "pending")
+        assert await first.start("s", "agent", "user", "space", "old")
+        assert await second.offer("s", "agent", "user", "space", "old", "m", "pending")
         await first.pause("s", "old")
-        assert await second.start("s", "agent", "user", "team", "new", resume=True)
+        assert await second.start("s", "agent", "user", "space", "new", resume=True)
         assert (
-            await first.start("s", "agent", "user", "team", "competing", resume=True)
+            await first.start("s", "agent", "user", "space", "competing", resume=True)
             is None
         )
         await first.end("s", "old", paused=True)
         assert await second.take("s", "new") == [("m", "pending")]
         assert await first.offer(
-            "s", "agent", "user", "team", "new", "m2", "second pause"
+            "s", "agent", "user", "space", "new", "m2", "second pause"
         )
         await second.pause("s", "new")
-        assert await first.start("s", "agent", "user", "team", "third", resume=True)
+        assert await first.start("s", "agent", "user", "space", "third", resume=True)
         await second.end("s", "new", paused=True)
         assert await first.take("s", "third") == [("m2", "second pause")]
         await first.end("s", "third")
         await second.end("s", "new")
-        assert await first.start("fresh", "agent", "user", "team", "one", resume=True)
+        assert await first.start("fresh", "agent", "user", "space", "one", resume=True)
         assert (
-            await second.start("fresh", "agent", "user", "team", "two", resume=True)
+            await second.start("fresh", "agent", "user", "space", "two", resume=True)
             is None
         )
         await first.end("fresh", "one")
@@ -161,7 +161,6 @@ async def test_stream_marks_pause_before_emitting_human_event(
             context={"session_id": "s", "user_id": "user", "space_id": "space"},
             steering_turn_id="old",
         ),
-        team_id="team",
         container=cast(PodApplicationContext, SimpleNamespace()),
     )
     try:
@@ -181,25 +180,25 @@ async def test_expired_owner_and_unrelated_resume_cannot_move_messages(
 ) -> None:
     first, second, first_engine, second_engine = await _replicas(tmp_path)
     try:
-        assert await first.start("s", "agent", "user", "team", "old")
-        assert await second.offer("s", "agent", "user", "team", "old", "m", "pending")
+        assert await first.start("s", "agent", "user", "space", "old")
+        assert await second.offer("s", "agent", "user", "space", "old", "m", "pending")
         await first.pause("s", "old")
         await first.end("s", "old", paused=True)
-        assert await second.start("s", "agent", "user", "team", "new") == "new"
+        assert await second.start("s", "agent", "user", "space", "new") == "new"
         assert await first.take("s", "old") == []
         assert await second.take("s", "new") == []
         await first.end("s", "old")
-        assert await second.offer("s", "agent", "user", "team", "new", "m2", "current")
+        assert await second.offer("s", "agent", "user", "space", "new", "m2", "current")
         async with first_engine.begin() as conn:
             await conn.execute(
                 update(turn_steering._turns)
                 .where(turn_steering._turns.c.session_id == "s")
                 .values(expires_at=datetime(2000, 1, 1, tzinfo=UTC))
             )
-        assert not await first.offer("s", "agent", "user", "team", "new", "m3", "late")
+        assert not await first.offer("s", "agent", "user", "space", "new", "m3", "late")
         await first.cleanup_expired()
         assert await second.take("s", "new") == []
-        assert await first.start("s", "agent", "user", "team", "replacement")
+        assert await first.start("s", "agent", "user", "space", "replacement")
         assert await second.take("s", "replacement") == []
         await second.end("s", "replacement")
     finally:
@@ -228,15 +227,15 @@ async def test_postgres_replicas_consume_concurrent_offers_once() -> None:
     first = turn_steering.TurnSteeringMailbox(first_engine)
     second = turn_steering.TurnSteeringMailbox(second_engine)
     session_id = f"{uuid4().hex}{'s' * 170}"
-    agent_id, user_id, team_id = "a" * 200, "u" * 200, "t" * 200
+    agent_id, user_id, space_id = "a" * 200, "u" * 200, "t" * 200
     try:
         async with first_engine.begin() as conn:
             await conn.run_sync(turn_steering._metadata.create_all)
-        assert await first.start(session_id, agent_id, user_id, team_id, "turn")
+        assert await first.start(session_id, agent_id, user_id, space_id, "turn")
         accepted = await asyncio.gather(
             *(
                 second.offer(
-                    session_id, agent_id, user_id, team_id, "turn", str(i), str(i)
+                    session_id, agent_id, user_id, space_id, "turn", str(i), str(i)
                 )
                 for i in range(12)
             )
@@ -250,15 +249,15 @@ async def test_postgres_replicas_consume_concurrent_offers_once() -> None:
         ) == [str(i) for i in sorted(range(12), key=str)]
         assert len([batch for batch in deliveries if batch]) == 1
         assert await second.offer(
-            session_id, agent_id, user_id, team_id, "turn", "late", "resume me"
+            session_id, agent_id, user_id, space_id, "turn", "late", "resume me"
         )
         await first.pause(session_id, "turn")
         assert await second.start(
-            session_id, agent_id, user_id, team_id, "resumed", resume=True
+            session_id, agent_id, user_id, space_id, "resumed", resume=True
         )
         assert (
             await first.start(
-                session_id, agent_id, user_id, team_id, "competing", resume=True
+                session_id, agent_id, user_id, space_id, "competing", resume=True
             )
             is None
         )
@@ -359,6 +358,34 @@ async def test_steering_route_authorizes_before_offering(
         assert await endpoint(**args) == {"status": "pending"}
         assert await first.take("route-steer", "turn") == [("message", "new direction")]
         await first.end("route-steer", "turn")
+    finally:
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_projects_in_one_team_never_share_steering(tmp_path) -> None:
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    try:
+        assert await first.start("s", "agent", "user", "project-p", "turn")
+        assert not await second.offer(
+            "s", "agent", "user", "project-q", "turn", "m", "wrong project"
+        )
+        assert not await second.offer(
+            "s", "agent", "user", "team-e", "turn", "m", "ancestor"
+        )
+        assert await second.offer(
+            "s", "agent", "user", "project-p", "turn", "m", "correct"
+        )
+        await first.pause("s", "turn")
+        assert (
+            await second.start("s", "agent", "user", "project-q", "resume", resume=True)
+            is None
+        )
+        assert await second.start(
+            "s", "agent", "user", "project-p", "resume", resume=True
+        )
+        assert await first.take("s", "resume") == [("m", "correct")]
     finally:
         await first_engine.dispose()
         await second_engine.dispose()

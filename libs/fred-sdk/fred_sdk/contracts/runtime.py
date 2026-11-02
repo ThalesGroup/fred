@@ -767,7 +767,7 @@ class HistoryStorePort(Protocol):
         session_id: str,
         messages: List[Any],
         user_id: str,
-        team_id: str | None = None,
+        space_id: str | None = None,
         agent_instance_id: str | None = None,
     ) -> None:
         """Persist a batch of messages for one turn."""

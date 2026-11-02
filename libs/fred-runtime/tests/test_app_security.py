@@ -264,6 +264,7 @@ def test_mounted_execution_passes_admitted_person_once(
     assert response.status_code == 409
     assert response.json() == {"detail": "resolver-reached"}
     resolver.assert_awaited_once()
-    assert resolver.await_args is not None
-    assert resolver.await_args.kwargs["authenticated_user"] is subject
+    await_args = resolver.await_args
+    assert await_args is not None
+    assert await_args.kwargs["authenticated_user"] is subject
     connection.scalar.assert_awaited_once()

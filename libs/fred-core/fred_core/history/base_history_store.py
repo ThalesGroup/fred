@@ -61,7 +61,7 @@ class BaseHistoryStore(ABC):
         session_id: str,
         messages: List[ChatMessage],
         user_id: str,
-        team_id: str | None = None,
+        space_id: str | None = None,
         agent_instance_id: str | None = None,
     ) -> None:
         """
@@ -75,7 +75,7 @@ class BaseHistoryStore(ABC):
         How to use it:
         - call once per turn after the executor generator is exhausted
         - messages must already have ``rank`` set in ascending order
-        - team_id and agent_instance_id are required for admin/retention queries;
+        - space_id and agent_instance_id are required for admin/retention queries;
           pass them whenever the execution context is managed (Phase 3c+)
         """
 
@@ -184,7 +184,7 @@ class NoOpHistoryStore(BaseHistoryStore):
         session_id: str,
         messages: List[ChatMessage],
         user_id: str,
-        team_id: str | None = None,
+        space_id: str | None = None,
         agent_instance_id: str | None = None,
     ) -> None:
         return

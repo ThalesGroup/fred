@@ -16,7 +16,7 @@
 Offline unit tests for the runtime execution contract models (RUNTIME-07 rev. 2).
 
 Tests cover:
-- ActorContext, TeamContext, ExecutionTarget, TraceContext
+- ActorContext, ExecutionTarget, TraceContext
 - RuntimeExecuteRequest: target validation, compatibility helpers
 - TurnPersistedEvent inclusion in RuntimeEvent union
 
@@ -33,8 +33,6 @@ from fred_sdk.contracts.execution import (
     ActorContext,
     ExecutionTarget,
     RuntimeExecuteRequest,
-    TeamContext,
-    TeamType,
     TraceContext,
 )
 from fred_sdk.contracts.runtime import (
@@ -71,32 +69,6 @@ def test_actor_context_is_frozen() -> None:
     actor = ActorContext(user_id="u-1")
     with pytest.raises(Exception):
         actor.user_id = "u-2"  # type: ignore[misc]
-
-
-# ---------------------------------------------------------------------------
-# TeamContext
-# ---------------------------------------------------------------------------
-
-
-def test_team_context_requires_team_id() -> None:
-    with pytest.raises(Exception):
-        TeamContext(team_id="")  # type: ignore[call-arg]
-
-
-def test_team_context_minimal() -> None:
-    team = TeamContext(team_id="t-1")
-    assert team.team_id == "t-1"
-    assert team.team_type is None
-
-
-def test_team_context_with_type_personal() -> None:
-    team = TeamContext(team_id="t-1", team_type=TeamType.PERSONAL)
-    assert team.team_type == TeamType.PERSONAL
-
-
-def test_team_context_with_type_collaborative() -> None:
-    team = TeamContext(team_id="t-2", team_type=TeamType.COLLABORATIVE)
-    assert team.team_type == TeamType.COLLABORATIVE
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +188,6 @@ def test_managed_turns_accept_canonical_space_without_team(turn: dict) -> None:
     )
     assert request.runtime_context is not None
     assert request.runtime_context.space_id == "f0137825-89b0-4d36-bdc3-b007a9777122"
-    assert request.effective_team_id() is None
     assert (
         RuntimeExecuteRequest.model_validate_json(request.model_dump_json()) == request
     )
@@ -279,17 +250,6 @@ def test_effective_user_id_none_without_context() -> None:
     assert req.effective_user_id() is None
 
 
-def test_effective_team_id_from_runtime_context() -> None:
-    req = RuntimeExecuteRequest(
-        agent_instance_id="inst-42",
-        input="hello",
-        runtime_context=RuntimeContext(
-            user_id="u-1", team_id="t-ctx", space_id="space-1"
-        ),
-    )
-    assert req.effective_team_id() == "t-ctx"
-
-
 def test_effective_session_id_prefers_top_level() -> None:
     req = RuntimeExecuteRequest(
         agent_id="my-agent",
@@ -332,6 +292,7 @@ def test_to_legacy_context_merges_runtime_context_fields() -> None:
     assert ctx["session_id"] == "sess-abc"
     assert ctx["user_id"] == "u-ctx"
     assert ctx["team_id"] == "t-ctx"
+    assert ctx["space_id"] == "space-1"
     assert ctx["agent_instance_id"] == "inst-42"
     assert ctx["trace_id"] == "trace-1"
     assert ctx["correlation_id"] == "corr-1"

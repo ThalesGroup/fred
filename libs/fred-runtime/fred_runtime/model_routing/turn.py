@@ -132,7 +132,7 @@ class TurnAuthority:
         self.check(agent_id=agent_id)
         b = self.binding
         if isinstance(context, PortableContext):
-            space_id = context.baggage.get("space_id")
+            space_id = context.space_id
             instance_id = context.baggage.get("agent_instance_id")
         else:
             space_id = context.space_id

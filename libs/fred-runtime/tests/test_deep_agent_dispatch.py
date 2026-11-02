@@ -44,7 +44,7 @@ from fred_sdk.contracts.models import (
 )
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import ExecutionConfig, RuntimeServices
-from weaver_fixtures import turn_binding
+from weaver_fixtures import INSTANCE_ID, SPACE_ID, turn_binding
 
 
 class _DeepAgent(DeepAgentDefinition):
@@ -144,7 +144,9 @@ async def test_dispatch_routes_deep_definition_to_deep_runtime(
     )
 
     request = agent_app_module._AgentExecuteRequest(
-        agent_id=definition.agent_id, message="hello"
+        agent_instance_id=INSTANCE_ID,
+        message="hello",
+        context={"user_id": "alice", "space_id": SPACE_ID},
     )
 
     request._turn_authority = TurnAuthority(turn_binding(definition.agent_id), None)

@@ -121,7 +121,8 @@ async def test_transformed_requests_cannot_widen_model_or_options(payload):
 
 @pytest.mark.parametrize("portable", [False, True])
 @pytest.mark.parametrize(
-    "changed", [None, "user_id", "session_id", "space_id", "agent_instance_id"]
+    "changed",
+    [None, "user_id", "session_id", "space_id", "agent_instance_id", "missing_space"],
 )
 def test_context_provenance_is_checked_for_runtime_and_portable_calls(
     portable, changed
@@ -139,10 +140,11 @@ def test_context_provenance_is_checked_for_runtime_and_portable_calls(
         space_id=str(binding.space.id),
         agent_instance_id=str(binding.agent.instance_id),
     )
-    if changed is not None:
+    if changed == "missing_space":
+        fields["space_id"] = None
+    elif changed is not None:
         fields[changed] = "forged"
     if portable:
-        space = fields.pop("space_id")
         instance = fields.pop("agent_instance_id")
         context = PortableContext(
             request_id="r",
@@ -151,7 +153,14 @@ def test_context_provenance_is_checked_for_runtime_and_portable_calls(
             tenant="default",
             environment=PortableEnvironment.DEV,
             **fields,
-            baggage={"space_id": str(space), "agent_instance_id": str(instance)},
+            baggage={
+                "agent_instance_id": str(instance),
+                **(
+                    {"space_id": str(binding.space.id)}
+                    if changed == "missing_space"
+                    else {}
+                ),
+            },
         )
     else:
         context = RuntimeContext.model_validate(fields)

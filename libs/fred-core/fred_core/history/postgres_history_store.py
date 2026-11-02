@@ -214,7 +214,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         session_id: str,
         messages: List[ChatMessage],
         user_id: str,
-        team_id: str | None = None,
+        space_id: str | None = None,
         agent_instance_id: str | None = None,
         session: AsyncSession | None = None,
     ) -> None:
@@ -225,13 +225,13 @@ class PostgresHistoryStore(BaseHistoryStore):
         - call after the agent executor generator is fully exhausted
         - ``messages`` must have ``rank`` set in ascending order (use
           ``_assign_ranks`` in the calling code to compute ranks from MAX(rank)+1)
-        - ``team_id`` and ``agent_instance_id`` should always be passed for
+        - ``space_id`` and ``agent_instance_id`` should always be passed for
           managed execution so admin and retention queries can filter by them
 
         Example:
             await store.save(
                 session_id="s1", messages=[user_msg, assistant_msg],
-                user_id="u1", team_id="personal", agent_instance_id="inst-abc"
+                user_id="u1", space_id="admitted-space-uuid", agent_instance_id="inst-abc"
             )
         """
         if not messages:
@@ -247,7 +247,7 @@ class PostgresHistoryStore(BaseHistoryStore):
                 if isinstance(msg.channel, Channel)
                 else msg.channel,
                 "exchange_id": msg.exchange_id,
-                "team_id": team_id,
+                "space_id": space_id,
                 "agent_instance_id": agent_instance_id,
                 "parts_json": [_serialize_part(p) for p in (msg.parts or [])],
                 "metadata_json": _serialize_metadata(msg.metadata),
@@ -263,7 +263,7 @@ class PostgresHistoryStore(BaseHistoryStore):
                     "parts_json",
                     "metadata_json",
                     "timestamp",
-                    "team_id",
+                    "space_id",
                     "agent_instance_id",
                 ]
             },

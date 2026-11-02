@@ -253,3 +253,27 @@ def test_context_aware_tool_respects_agent_scoped_library() -> None:
     )
 
     assert injected["document_library_tags_ids"] == ["lib-agent"]
+
+
+@pytest.mark.parametrize("team_id", ["team-e", None])
+def test_bound_execution_space_overrides_tool_arguments(team_id) -> None:
+    class ScopedArgs(_SearchArgs):
+        space_id: str
+
+    base = _FakeSearchTool(args_schema=ScopedArgs)
+    context = RuntimeContext(space_id="project-or-personal-uuid", team_id=team_id)
+    wrapper = ContextAwareTool(
+        base_tool=base,
+        context_provider=lambda: context,
+        agent_settings_provider=_FakeAgentSettings,
+    )
+    injected = wrapper._inject_context_if_needed(
+        {"space_id": "forged", "team_id": "forged"}
+    )
+    assert injected["space_id"] == context.space_id
+    assert injected["team_id"] == team_id
+    context.space_id = None
+    from fred_runtime.runtime_support.authority import AuthorityLostError
+
+    with pytest.raises(AuthorityLostError):
+        wrapper._inject_context_if_needed({"space_id": "forged"})

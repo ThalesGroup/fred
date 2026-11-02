@@ -59,6 +59,8 @@ from langchain_core.tools import BaseTool, tool
 
 
 class _FakePortable:
+    user_id = "alice"
+    space_id = "project-1"
     agent_id = "agent-1"
     session_id = "sess-1"
     team_id = "personal"

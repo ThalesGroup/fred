@@ -1,5 +1,31 @@
-Fred Runtime Alembic migrations — manages the session_history table and ships
-inside the fred_runtime Python package.
+Fred Runtime owns the immutable Alembic history for session_history and the
+runtime activity/steering tables. The packaged migration runner is
+`python -m fred_runtime migrate`; it also walks installed capability trees.
+Use the owning application's configured migration command for deployment.
 
-Run from libs/fred-runtime/:
-    alembic upgrade head
+Execution-space schema (revision a7b8c9d0e1f2):
+- runtime_turn_steering.team_id already contained an admitted space. It is renamed
+  to space_id, preserving that value and the mailbox's identity/lease lifecycle.
+- session_history.team_id contained team ancestry. It is dropped; a nullable
+  space_id and its index are added. Existing rows receive NULL, never a copied
+  team ID. New managed turns write their admitted space. Downgrade likewise does
+  not reconstruct ancestry from space. Session/rank keys are unchanged.
+
+FredSqlCheckpointer owns its tables outside Alembic, through _create_tables under
+its existing advisory lock. Fresh owner tables contain space_id. create_all does
+not upgrade an existing owner table: a table lacking space_id is rejected with
+an explicit schema error. No automatic reset, ancestry conversion or backfill is
+performed. Weaver supports fresh installations only.
+
+A pre-existing local database therefore needs an explicit operator schema action
+before running this code: on the configured (possibly prefixed)
+checkpoint_thread_owner table, drop the old nullable team_id and add nullable
+space_id. Do not rename/copy team_id; leave existing space metadata NULL. Preserve
+thread_id, user_id, binding_json, timestamps, other tables and indexes. Do not
+recreate that owner table alone: doing so would discard conversation provenance.
+Alternatively provision a separate fresh local database. This is an operational
+prerequisite, not a command executed by this change.
+
+The owner index remains retention metadata. Conversation access still uses the
+existing Weaver binding_json provenance and Control Plane checks. Neither NULL
+nor a supplied space_id creates missing provenance or grants access.

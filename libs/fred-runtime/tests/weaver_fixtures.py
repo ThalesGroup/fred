@@ -154,6 +154,7 @@ def create_managed_app(
     user_id="alice",
     mock_identity=True,
     binding_transform=None,
+    space_id=SPACE_ID,
     **kwargs,
 ):
     """Mock identity and Control Plane HTTP, preserving real admission and storage."""
@@ -174,7 +175,7 @@ def create_managed_app(
                 200,
                 json={
                     "session_id": request.url.path.rsplit("/", 1)[-1],
-                    "space_id": SPACE_ID,
+                    "space_id": space_id,
                     "agent_instance_id": INSTANCE_ID,
                     "template_id": str(
                         turn_binding(definition.agent_id).agent.template_id
@@ -183,7 +184,7 @@ def create_managed_app(
                 },
             )
         assert request.url.path.endswith(
-            f"/spaces/{SPACE_ID}/agent-instances/{INSTANCE_ID}/runtime"
+            f"/spaces/{space_id}/agent-instances/{INSTANCE_ID}/runtime"
         )
         assert request.headers["Authorization"] == "Bearer workload-token"
         params = dict(request.url.params)
@@ -197,6 +198,7 @@ def create_managed_app(
             tuning=tuning,
         )
         data = binding.model_dump(mode="json")
+        data["space"]["id"] = space_id
         if binding_transform is not None:
             binding_transform(data)
         return httpx.Response(resolver_status, json=data)
@@ -247,9 +249,11 @@ def active_turn(template, *, user="alice", session=None, attachments=()):
 def invocation_context(**kwargs):
     from fred_sdk.contracts.context import PortableContext
 
-    baggage = {"space_id": SPACE_ID, "agent_instance_id": INSTANCE_ID}
+    baggage = {"agent_instance_id": INSTANCE_ID}
     baggage.update(kwargs.pop("baggage", {}))
-    return PortableContext(**{"user_id": "alice", **kwargs}, baggage=baggage)
+    return PortableContext(
+        **{"user_id": "alice", "space_id": SPACE_ID, **kwargs}, baggage=baggage
+    )
 
 
 def conversation_provenance(template="rags.sample.echo"):
@@ -288,9 +292,9 @@ def local_binding(
             update={
                 **identity,
                 "agent_id": template,
+                "space_id": SPACE_ID,
                 "baggage": {
                     **portable.baggage,
-                    "space_id": SPACE_ID,
                     "agent_instance_id": INSTANCE_ID,
                     "template_agent_id": template,
                 },

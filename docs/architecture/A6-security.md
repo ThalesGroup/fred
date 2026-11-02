@@ -253,6 +253,15 @@ and model policy. The pod enforces that context locally for the admitted turn;
 policy changes are observed at the next admission, not by per-model-call refresh.
 Cancellation and closed-run checks remain effective within the turn.
 
+The Python SDK carries the admitted space explicitly in `RuntimeContext`,
+`PortableContext` and `CapabilityIdentity`; `team_id` is ancestry only. Steering
+compares that space when accepting messages and resuming a mailbox. History and
+checkpoint owner metadata record it without granting access: the existing
+`binding_json` provenance and Control Plane checks still govern conversation
+reads. Missing provenance is never inferred from retention metadata. See the
+[runtime schema notes](../../libs/fred-runtime/fred_runtime/migrations/README)
+for the distinction between steering's renamed space and discarded ancestry.
+
 | Boundary | Implementation reference |
 | --- | --- |
 | Trusted delegation and canonical binding | [`agent_instances/runtime.rs`](../../apps/control-plane/src/agent_instances/runtime.rs), `RuntimeQuery::subject`, `resolve_runtime` |

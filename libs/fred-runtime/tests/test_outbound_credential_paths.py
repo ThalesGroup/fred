@@ -230,7 +230,6 @@ async def binding_call(provider: DelegatedCredentialProvider, receiver: Receiver
                 access_token=PERSON_TOKEN,
                 control_plane_url="http://control-plane.invalid/v1",
                 http_client=client,
-                team_id="team-1",
                 credentials=provider.for_agent(INSTANCE_ID),
             )
     assert raised.value.status_code == 403
@@ -832,7 +831,6 @@ async def test_binding_lookup_does_not_expose_upstream_denial_fields(
                 access_token="person-bearer",
                 control_plane_url="http://control-plane.invalid/v1",
                 http_client=client,
-                team_id="team-1",
                 credentials=admitted_provider(
                     MockIdentityProvider(monkeypatch).provider
                 ).for_agent(INSTANCE_ID),

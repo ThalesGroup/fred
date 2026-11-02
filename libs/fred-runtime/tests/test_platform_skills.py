@@ -1271,8 +1271,9 @@ async def test_reference_read_escapes_reserved_tags_only_for_model_messages(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("denied", [False, True])
+@pytest.mark.parametrize("kind", ["project", "personal"])
 async def test_runtime_catalog_uses_person_metadata_and_selected_instance(
-    monkeypatch: pytest.MonkeyPatch, denied: bool
+    monkeypatch: pytest.MonkeyPatch, denied: bool, kind: str
 ) -> None:
     import httpx
     from fastapi import HTTPException
@@ -1293,10 +1294,15 @@ async def test_runtime_catalog_uses_person_metadata_and_selected_instance(
         )
         assert not request.url.params
         assert request.headers["Authorization"] == "Bearer person-token"
-        return httpx.Response(
-            403 if denied else 200,
-            json=turn_binding(definition.agent_id).model_dump(mode="json"),
+        binding = turn_binding(definition.agent_id).model_dump(mode="json")
+        binding["space"].update(
+            kind=kind,
+            team_id="00000000-0000-0000-0000-000000000019"
+            if kind == "project"
+            else None,
+            project_id=SPACE_ID if kind == "project" else None,
         )
+        return httpx.Response(403 if denied else 200, json=binding)
 
     monkeypatch.setattr(
         api,
@@ -1323,10 +1329,10 @@ async def test_runtime_catalog_uses_person_metadata_and_selected_instance(
         )
         if denied:
             with pytest.raises(HTTPException) as exc:
-                await api.get_instance_skills(*args, space_id=SPACE_ID)
+                await api.get_instance_skills(*args)
             assert exc.value.status_code == 403
         else:
-            result = await api.get_instance_skills(*args, space_id=SPACE_ID)
+            result = await api.get_instance_skills(*args)
             assert result == catalog.catalog
     assert len(requests) == 1
 
@@ -1419,6 +1425,7 @@ async def test_skill_metrics_use_trusted_context_count_only_success_and_skip_res
 ):
     from fred_runtime.skills.preload import preload_skills
     from fred_runtime.skills.tools import load_skill
+    from weaver_fixtures import SPACE_ID
 
     store = RecordingSkillKPIStore()
     writer = KPIWriter(store=store)
@@ -1462,6 +1469,7 @@ async def test_skill_metrics_use_trusted_context_count_only_success_and_skip_res
         "actor_type": "system",
         "skill_name": "meeting-minutes",
         "skill_origin": "user",
+        "space_id": SPACE_ID,
         "team_id": "trusted-team",
         "session_id": "trusted-session",
         "exchange_id": "exchange",

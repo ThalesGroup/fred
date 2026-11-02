@@ -247,7 +247,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             metadata,
             Column("thread_id", String, primary_key=True),
             Column("user_id", String, nullable=True),
-            Column("team_id", String, nullable=True),
+            Column("space_id", String, nullable=True),
             Column("binding_json", json_type, nullable=True),
             Column(
                 "created_at",
@@ -354,6 +354,12 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         # This index already owns its DDL (like the LangGraph tables). Existing
         # unbound rows remain unbound; never infer provenance from a checkpoint.
         table = self.thread_owner_table
+        if "space_id" not in {
+            c["name"] for c in inspect(connection).get_columns(table.name)
+        }:
+            raise RuntimeError(
+                "Checkpoint owner schema requires space_id; see runtime migrations/README."
+            )
         if "binding_json" not in {
             c["name"] for c in inspect(connection).get_columns(table.name)
         }:
@@ -1328,37 +1334,29 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         """
         Best-effort upsert of this thread's owner/age row. Called from ``aput``.
 
-        Identity note (A4 design decision): at ``aput`` time the RunnableConfig's
-        ``configurable`` carries only ``thread_id``/``checkpoint_ns``/``checkpoint_id``
-        — user/team identity is NOT threaded into the checkpointer today (verified
-        by grep of the graph/react invocation sites). So this write always records
-        the **age key** (``last_activity_at``), which is all ``aput`` can know and
-        is what the A6 idle sweep needs, and picks up ``user_id``/``team_id`` only
-        if a caller has injected them under the ``__fred_user_id``/``__fred_team_id``
-        keys (``__``-prefixed → excluded from persisted checkpoint metadata by
-        LangGraph's ``get_checkpoint_metadata``, so identity is not duplicated into
-        checkpoint blobs). Nothing injects them yet; the authoritative owner comes
-        from :meth:`backfill_thread_owners_from_history`. Injecting at the
-        invocation sites is a documented, optional follow-up (out of A4 scope).
+        Runtime invocation sites supply user and admitted space under
+        ``__fred_user_id``/``__fred_space_id``. LangGraph excludes these from
+        checkpoint blobs. This owner/age index is retention metadata only;
+        conversation access still requires the Weaver binding_json provenance.
 
         This never raises: a failed owner write must not fail the user's turn.
         """
         try:
             thread_id = str(configurable["thread_id"])
             user_id = configurable.get("__fred_user_id")
-            team_id = configurable.get("__fred_team_id")
+            space_id = configurable.get("__fred_space_id")
             async with self.store.begin() as conn:
                 await self._upsert_owner(
                     conn,
                     thread_id=thread_id,
                     user_id=str(user_id) if user_id is not None else None,
-                    team_id=str(team_id) if team_id is not None else None,
+                    space_id=str(space_id) if space_id is not None else None,
                     last_activity_at=func.now(),
                 )
         except Exception:
             self._logger.warning(
                 "checkpoint_thread_owner write skipped (best-effort); owner "
-                "index may lag until the next backfill",
+                "index may lag until the next checkpoint write",
                 exc_info=True,
             )
 
@@ -1368,16 +1366,15 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         *,
         thread_id: str,
         user_id: str | None,
-        team_id: str | None,
+        space_id: str | None,
         last_activity_at: Any,
-        created_at: Any | None = None,
     ) -> None:
         """
         Upsert exactly one owner row per thread (PK = thread_id).
 
         Merge rules on conflict:
         - ``last_activity_at`` moves forward only (portable ``GREATEST`` via CASE);
-        - ``user_id``/``team_id`` fill from the new value but never overwrite a
+        - ``user_id``/``space_id`` fill from the new value but never overwrite a
           known owner with NULL (``COALESCE(new, existing)``);
         - ``created_at`` is insert-only (first-seen), never updated.
         """
@@ -1392,11 +1389,9 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         values: dict[str, Any] = {
             "thread_id": thread_id,
             "user_id": user_id,
-            "team_id": team_id,
+            "space_id": space_id,
             "last_activity_at": last_activity_at,
         }
-        if created_at is not None:
-            values["created_at"] = created_at
         stmt = insert_stmt.values(**values)
 
         owner = self.thread_owner_table.c
@@ -1404,7 +1399,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             index_elements=[owner.thread_id],
             set_={
                 "user_id": func.coalesce(stmt.excluded.user_id, owner.user_id),
-                "team_id": func.coalesce(stmt.excluded.team_id, owner.team_id),
+                "space_id": func.coalesce(stmt.excluded.space_id, owner.space_id),
                 "last_activity_at": case(
                     (
                         stmt.excluded.last_activity_at > owner.last_activity_at,
@@ -1415,54 +1410,6 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             },
         )
         await conn.execute(stmt)
-
-    async def backfill_thread_owners_from_history(
-        self, *, history_table_name: str = "session_history"
-    ) -> int:
-        """
-        One-shot reconciliation: seed the owner index from ``session_history``.
-
-        ``session_history`` is where identity is definitively known (user_id is
-        part of its PK; team_id/timestamp are recorded per turn). One owner row
-        per distinct ``session_id`` (== checkpoint ``thread_id``) is written, with
-        ``created_at``=min(timestamp), ``last_activity_at``=max(timestamp). Safe to
-        re-run: it coalesces owner identity and only advances ``last_activity_at``.
-
-        Returns the number of distinct threads processed.
-        """
-        await self._ensure_tables()
-        # Lightweight, read-only projection of the runtime-owned history table.
-        history = Table(
-            history_table_name,
-            MetaData(),
-            Column("session_id", String),
-            Column("user_id", String),
-            Column("team_id", String),
-            Column("timestamp", DateTime(timezone=True)),
-            keep_existing=True,
-        )
-        async with self.store.begin() as conn:
-            rows = (
-                await conn.execute(
-                    select(
-                        history.c.session_id,
-                        func.min(history.c.user_id),
-                        func.min(history.c.team_id),
-                        func.min(history.c.timestamp),
-                        func.max(history.c.timestamp),
-                    ).group_by(history.c.session_id)
-                )
-            ).fetchall()
-            for row in rows:
-                await self._upsert_owner(
-                    conn,
-                    thread_id=str(row[0]),
-                    user_id=(str(row[1]) if row[1] is not None else None),
-                    team_id=(str(row[2]) if row[2] is not None else None),
-                    last_activity_at=row[4],
-                    created_at=row[3],
-                )
-        return len(rows)
 
     async def purge_threads_for_user(self, user_id: str) -> list[str]:
         """

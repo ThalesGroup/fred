@@ -182,7 +182,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         print("[cli] auth      : none  (standalone mode — security disabled)")
 
-    effective_team_id = args.team_id or ("personal" if login_config is None else None)
+    effective_team_id = args.team_id
     if effective_team_id:
         print(f"[cli] team      : {effective_team_id}")
 

@@ -1749,7 +1749,7 @@ def test_managed_execution_rejects_grant_with_mismatched_team(
     )
 
     # The caller claims a DIFFERENT team than the resolved owner_team_id. Team-scoped
-    # resolution + `_validate_resolved_team` must reject the cross-team attempt.
+    # the resolver binding check must reject a false ancestry claim.
     with TestClient(app) as client:
         response = client.post(
             "/pod/v1/agents/execute",
@@ -2258,7 +2258,7 @@ async def test_local_registry_invoker_reuses_runtime_execute_projection(
         access_token="token-1",
     )
 
-    with active_turn("rags.sample.echo", session="session-1"):
+    with active_turn("rags.sample.echo", session="session-1") as authority:
         result = await invoker.invoke(
             AgentInvocationRequest(
                 agent_id=definition.agent_id,
@@ -2289,7 +2289,7 @@ async def test_local_registry_invoker_reuses_runtime_execute_projection(
     assert context["trace_id"] == "trace-1"
     assert context["session_id"] == "session-1"
     assert context["user_id"] == "alice"
-    assert context["team_id"] == "fredlab"
+    assert context["team_id"] == str(authority.binding.space.team_id)
     assert context["space_id"] == SPACE_ID
     assert context["agent_instance_id"] == INSTANCE_ID
     assert context["execution_action"] == "execute"
@@ -2654,7 +2654,6 @@ async def test_build_runtime_services_uses_persisted_document_source_settings(
         services = agent_app_module._build_runtime_services(
             definition,
             binding,
-            team_id="fredlab",
             tuning=tuning,
             capability_registry=cast(Any, Registry()),
         )
@@ -4512,6 +4511,7 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
         services=RuntimeServices(),
         user_id=None,
         session_id=None,
+        space_id=None,
         team_id=None,
         agent_instance_id=None,
     )
@@ -4585,6 +4585,7 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
         services=RuntimeServices(),
         user_id=None,
         session_id=None,
+        space_id=None,
         team_id=None,
         agent_instance_id=None,
     )
@@ -4722,6 +4723,7 @@ def test_build_capability_block_for_graph_agent_returns_tools() -> None:
         services=RuntimeServices(),
         user_id=None,
         session_id=None,
+        space_id=None,
         team_id=None,
         agent_instance_id=None,
     )
@@ -4842,6 +4844,7 @@ def test_build_capability_block_rejects_react_only_capability_for_graph_agent() 
             services=RuntimeServices(),
             user_id=None,
             session_id=None,
+            space_id=None,
             team_id=None,
             agent_instance_id=None,
         )
@@ -4958,6 +4961,7 @@ def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent() 
         services=RuntimeServices(),
         user_id=None,
         session_id=None,
+        space_id=None,
         team_id=None,
         agent_instance_id=None,
     )
@@ -5096,6 +5100,7 @@ def test_build_capability_block_ignores_stale_selection_for_capability_unsupport
         services=RuntimeServices(),
         user_id=None,
         session_id=None,
+        space_id=None,
         team_id=None,
         agent_instance_id=None,
     )
@@ -5182,6 +5187,7 @@ def test_capability_block_orders_mcp_prompt_groups_by_server_id() -> None:
         services=RuntimeServices(),
         user_id=None,
         session_id=None,
+        space_id=None,
         team_id=None,
         agent_instance_id=None,
     )
@@ -5432,9 +5438,6 @@ async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
     monkeypatch.setattr(agent_app_module, "_authorize_execution_or_raise", _noop)
     monkeypatch.setattr(agent_app_module, "_resolve_agent_instance", _fake_resolve)
     monkeypatch.setattr(
-        agent_app_module, "_validate_resolved_team", lambda *a, **k: None
-    )
-    monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
         lambda: SimpleNamespace(config=SimpleNamespace(control_plane_url=None)),
@@ -5511,9 +5514,6 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
     monkeypatch.setattr(agent_app_module, "_enforce_session_ownership", _noop)
     monkeypatch.setattr(agent_app_module, "_authorize_execution_or_raise", _noop)
     monkeypatch.setattr(agent_app_module, "_resolve_agent_instance", _fake_resolve)
-    monkeypatch.setattr(
-        agent_app_module, "_validate_resolved_team", lambda *a, **k: None
-    )
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
@@ -5649,3 +5649,221 @@ def test_document_ceiling_is_shared_by_all_services_and_child_invoker(
     assert isinstance(builtin, agent_app_module.FredKnowledgeSearchToolInvoker)
     assert builtin._document_scope == expected
     assert builtin._bound_library_ids is None
+
+
+@pytest.mark.parametrize("kind", ["project", "personal"])
+@pytest.mark.parametrize(
+    "route,pause",
+    [
+        ("execute", False),
+        ("evaluate", False),
+        ("execute/stream", False),
+        ("execute/stream", True),
+    ],
+)
+def test_admitted_space_reaches_capability_history_and_checkpoints(
+    monkeypatch, tmp_path, kind, route, pause
+) -> None:
+    from fred_core.history.history_models import SessionHistoryRow
+    from fred_runtime.capabilities import CapabilityRegistry
+    from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+    from fred_sdk.contracts.capability import (
+        AgentCapability,
+        CapabilityManifest,
+        EmptyModel,
+    )
+    from fred_sdk.contracts.runtime import HumanInputRequest
+    from langchain_core.tools import tool as lc_tool
+    from langgraph.types import interrupt
+    from sqlalchemy import select
+
+    space_id = "00000000-0000-0000-0000-000000000021"
+    team_id = SPACE_ID if kind == "project" else None
+    identities = []
+    bindings = []
+
+    class ScopeCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]):
+        manifest = CapabilityManifest(
+            id="scope_probe",
+            version="1.0.0",
+            name="Scope",
+            description="Scope probe",
+            icon="Build",
+        )
+        ConfigModel = EmptyModel
+
+        def tools(self, ctx):
+            identities.append(ctx.identity)
+
+            @lc_tool
+            def probe_space() -> str:
+                """Return the admitted execution space, optionally after a human pause."""
+                if pause:
+                    interrupt(
+                        HumanInputRequest(
+                            question="Continue?", occurrence_id="scope-call"
+                        ).model_dump(mode="json")
+                    )
+                return str(ctx.identity.space_id)
+
+            return [probe_space]
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[{"id": "scope-call", "name": "probe_space", "args": {}}],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+
+    class Factory(StaticChatModelFactory):
+        def build(self, definition, binding):
+            assert isinstance(binding, BoundRuntimeContext)
+            bindings.append(binding)
+            return super().build(definition, binding)
+
+    monkeypatch.setattr(
+        agent_app_module, "_build_chat_model_factory", lambda config: Factory(model)
+    )
+    definition = _EchoAgent()
+
+    def placement(data):
+        data["space"].update(
+            kind=kind,
+            team_id=team_id,
+            project_id=space_id if kind == "project" else None,
+        )
+
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+        space_id=space_id,
+        binding_transform=placement,
+        tuning={
+            "role": definition.role,
+            "description": definition.description,
+            "selected_capability_ids": ["scope_probe"],
+        },
+    )
+    body = {
+        "agent_instance_id": INSTANCE_ID,
+        "input": "hello",
+        "session_id": "space-session",
+        "runtime_context": {"space_id": space_id},
+    }
+    with TestClient(app) as client:
+        registry = CapabilityRegistry()
+        registry.register(ScopeCapability())
+        app.state.capability_registry = registry
+        history_store = get_runtime_context().config.history_store
+        assert history_store is not None
+        save = history_store.save
+        history_written = asyncio.Event()
+
+        async def record_history(*args, **kwargs):
+            await save(*args, **kwargs)
+            history_written.set()
+
+        async def wait_for_history():
+            await asyncio.wait_for(history_written.wait(), timeout=5)
+
+        monkeypatch.setattr(history_store, "save", record_history)
+        assert client.portal is not None
+        response = client.post(f"/pod/v1/agents/{route}", json=body)
+        assert response.status_code == 200, response.text
+        client.portal.call(wait_for_history)
+        if pause:
+            history_written.clear()
+            events = [
+                json.loads(line[6:])
+                for line in response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            gate = next(
+                event["request"]
+                for event in events
+                if event.get("kind") == "awaiting_human"
+            )
+            body.update(
+                input="",
+                resume_payload={"text": "yes"},
+                interrupt_id=gate["interrupt_id"],
+                occurrence_id=gate["occurrence_id"],
+            )
+            response = client.post(f"/pod/v1/agents/{route}", json=body)
+            assert response.status_code == 200, response.text
+            client.portal.call(wait_for_history)
+        if route == "execute/stream":
+            events = [
+                json.loads(line[6:])
+                for line in response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            assert not any(event.get("kind") == "execution_error" for event in events)
+            assert any(
+                event.get("kind") == "final" and event.get("content") == "done"
+                for event in events
+            )
+        elif route == "execute":
+            assert response.json()["content"] == "done"
+
+        checkpointer = get_runtime_context().config.checkpointer
+        assert isinstance(checkpointer, FredSqlCheckpointer)
+
+        async def persisted():
+            async with checkpointer.store.begin() as connection:
+                history = (
+                    (
+                        await connection.execute(
+                            select(SessionHistoryRow.space_id).where(
+                                SessionHistoryRow.session_id == "space-session"
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                owner = (
+                    (
+                        await connection.execute(
+                            select(checkpointer.thread_owner_table).where(
+                                checkpointer.thread_owner_table.c.thread_id
+                                == "space-session"
+                            )
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+            provenance = await checkpointer.aget_conversation_binding("space-session")
+            return history, owner, provenance
+
+        assert client.portal is not None
+        history, owner, provenance = client.portal.call(persisted)
+        assert history and set(history) == {space_id}
+        assert owner["space_id"] == space_id
+        assert owner["user_id"] == "alice"
+        assert provenance is not None
+        assert provenance["space_id"] == space_id
+
+    assert len(app.state.resolver_requests) == (2 if pause else 1)
+    assert identities and bindings
+    assert all(
+        identity.space_id == space_id and identity.team_id == team_id
+        for identity in identities
+    )
+    for binding in bindings:
+        assert (
+            binding.runtime_context.space_id
+            == binding.portable_context.space_id
+            == space_id
+        )
+        assert (
+            binding.runtime_context.team_id
+            == binding.portable_context.team_id
+            == team_id
+        )
+        assert "space_id" not in binding.portable_context.baggage

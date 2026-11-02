@@ -415,7 +415,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             graph_input, _ = await self._input_with_skill(input_model, config)
             result = await self._compiled_agent.ainvoke(
                 graph_input,
-                config=_to_runnable_config(config),
+                config=_to_runnable_config(config, self._binding.portable_context),
             )
             transcript = tuple(
                 _from_langchain_message_adapter(
@@ -481,6 +481,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     "agent_id": portable.agent_id or "",
                     "agent_step": "react",
                     "session_id": portable.session_id,
+                    "space_id": portable.space_id,
                     "team_id": portable.team_id,
                     "agent_instance_id": baggage.get("agent_instance_id"),
                     "template_agent_id": baggage.get("template_agent_id"),
@@ -700,13 +701,13 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             if self._services.skills is None:
                 agent_stream = self._compiled_agent.astream(
                     graph_input,
-                    config=_to_runnable_config(config),
+                    config=_to_runnable_config(config, self._binding.portable_context),
                     stream_mode=["messages", "updates", "custom"],
                 )
             else:
                 agent_stream = self._compiled_agent.astream(
                     graph_input,
-                    config=_to_runnable_config(config),
+                    config=_to_runnable_config(config, self._binding.portable_context),
                     stream_mode=["messages", "updates", "custom"],
                     subgraphs=True,
                 )

@@ -106,6 +106,7 @@ def record_skill_load(
             dims={
                 "skill_name": attribution.name,
                 "skill_origin": attribution.origin,
+                "space_id": portable.space_id,
                 "team_id": portable.team_id,
                 "session_id": portable.session_id,
                 "exchange_id": binding.runtime_context.exchange_id,

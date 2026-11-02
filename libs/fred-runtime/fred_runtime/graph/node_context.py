@@ -877,6 +877,7 @@ def _runtime_observability_dims(
     baggage = portable.baggage
     return {
         "user_id": portable.user_id,
+        "space_id": portable.space_id,
         "team_id": portable.team_id,
         "session_id": portable.session_id,
         "trace_id": portable.trace_id,
