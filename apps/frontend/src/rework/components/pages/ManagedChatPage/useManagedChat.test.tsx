@@ -809,12 +809,23 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock.mock.calls[0][2]).toEqual({ model_choice: key });
   });
 
+  it("sends the search policy and RAG scope only when their controls are offered", async () => {
+    chatSseChatControls = [
+      { capability_id: "document_access", widget: "search_policy", params: {} },
+      { capability_id: "document_access", widget: "rag_scope", params: {} },
+    ];
+    mount();
+    act(() => latest.setInput("question"));
+    await act(async () => latest.handleSend());
+    expect(sendMock.mock.calls[0][2]).toEqual({ search_policy: "corpus", search_rag_scope: "general" });
+  });
+
   it("rejects a legacy model profile instead of translating it into an offer", async () => {
     composerValue.chatProfileId = "chat.large";
     mount();
     act(() => latest.setInput("preserved question"));
     await act(async () => latest.handleSend());
-    expect(latest.modelPreparationError).toBe("The saved model choice must be selected again in the Models menu.");
+    expect(latest.modelPreparationError).toBe("chatbot.savedModelChoiceInvalid");
     expect(registerSessionCalls).toEqual([]);
     expect(sendMock).not.toHaveBeenCalled();
     expect(prepareChatControlsMock).toHaveBeenCalledWith(null, undefined, false);

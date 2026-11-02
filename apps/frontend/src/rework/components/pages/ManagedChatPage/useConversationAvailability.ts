@@ -15,6 +15,9 @@
 import { useGetSessionQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 
+export const isAccessRefusal = (error: unknown) =>
+  typeof error === "object" && !!error && "status" in error && [401, 403, 404].includes(Number(error.status));
+
 export function useConversationAvailability(
   spaceId: string,
   agentInstanceId: string,
@@ -27,11 +30,12 @@ export function useConversationAvailability(
     { ...crossSessionRefreshOptions(skip), refetchOnMountOrArgChange: true },
   );
   useRefetchOnWindowFocus(query.refetch, skip);
-  // RTK retains currentData after errors. A current refusal must hide that snapshot.
+  // RTK retains currentData after errors: a refusal must hide that snapshot, a transient failure must not.
+  const refused = isAccessRefusal(query.error);
   const mismatch =
     !!query.currentData &&
     (query.currentData.space_id !== spaceId || query.currentData.agent_instance_id !== agentInstanceId);
-  const sessionData = !skip && !query.isError && !mismatch ? query.currentData : undefined;
+  const sessionData = !skip && !refused && !mismatch ? query.currentData : undefined;
   const isReadOnly = sessionData?.agent_deleted === true;
   const executionDisabled =
     !spaceId ||
@@ -42,17 +46,13 @@ export function useConversationAvailability(
     sessionData,
     isReadOnly,
     executionDisabled,
-    sessionUnavailable: Boolean(sessionId && (query.isError || mismatch) && !locallyCreated),
-    sessionErrorKey: mismatch
-      ? "rework.weaverAgents.scopeUnavailable"
-      : query.isError
-        ? typeof query.error === "object" &&
-          query.error &&
-          "status" in query.error &&
-          [401, 403, 404].includes(Number(query.error.status))
-          ? "rework.weaverAgents.scopeUnavailable"
-          : "rework.weaverAgents.errors.server"
-        : undefined,
+    sessionUnavailable: Boolean(sessionId && (query.isError || mismatch) && !sessionData && !locallyCreated),
+    sessionErrorKey:
+      mismatch || refused
+        ? "rework.weaverAgents.scopeUnavailable"
+        : query.isError
+          ? "rework.weaverAgents.errors.server"
+          : undefined,
     historyRevision: query.fulfilledTimeStamp,
     refetchSession: () => {
       if (!skip) void query.refetch();

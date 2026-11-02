@@ -4,6 +4,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import { usePromptFavoriteToggle } from "@core/hooks/usePromptFavoriteToggle";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import ChatSidePanel from "@shared/molecules/ChatSidePanel/ChatSidePanel";
 import Select from "@shared/molecules/Select/Select";
@@ -49,6 +52,7 @@ export default function PromptSelectionChatPanel({
   const [insertingId, setInsertingId] = useState<string | null>(null);
   const canPickSpace = !isPersonalChat && Boolean(personalTeamId);
   const spaceId = isPersonalChat || !canPickSpace || space === "team" ? teamId : personalTeamId!;
+  const toggleFavorite = usePromptFavoriteToggle(spaceId);
   const scope = JSON.stringify([open, spaceId]);
   const currentScope = useRef({ key: scope });
   if (currentScope.current.key !== scope) currentScope.current = { key: scope };
@@ -112,41 +116,47 @@ export default function PromptSelectionChatPanel({
           onSelectedIndexChange={(index) => setSpace(SPACES[index])}
         />
       )}
-      <FavoritesFilterChip
-        size="xs"
-        label={t("rework.teams.prompts.favorite.filter")}
-        active={favoritesOnly}
-        onToggle={() => setFavoritesOnly((value) => !value)}
-      />
       <div className={styles.filters}>
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
-          clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
-          size="xs"
-        />
-        <Select
-          size="small"
-          compact
-          ariaLabel={t("rework.promptCategories.pickerTitle")}
-          disabled={!categoryCatalog.currentData || categoryCatalog.isError || !catalog.currentData || catalog.isError}
-          value={categoryId ?? ALL_CATEGORIES}
-          onChange={(value) => setCategoryId(value === ALL_CATEGORIES ? null : value)}
-          options={[
-            { key: ALL_CATEGORIES, value: ALL_CATEGORIES, label: t("rework.teams.agents.podFilter.all") },
-            {
-              key: NO_CATEGORY_FILTER_ID,
-              value: NO_CATEGORY_FILTER_ID,
-              label: `${t("rework.promptCategories.noCategory")} (${counts.get(null) ?? 0})`,
-            },
-            ...categories.map((category) => ({
-              key: category.id,
-              value: category.id,
-              label: `${category.name} (${counts.get(category.id) ?? 0})`,
-            })),
-          ]}
-        />
+        <div className={styles.searchRow}>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
+            clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
+            size="xs"
+          />
+          <FavoritesFilterChip
+            size="xs"
+            label={t("rework.teams.prompts.favorite.filter")}
+            active={favoritesOnly}
+            onToggle={() => setFavoritesOnly((value) => !value)}
+          />
+        </div>
+        {categories.length > 0 && (
+          <Select
+            size="xs"
+            compact
+            ariaLabel={t("chatbot.promptSelectionPanel.categoryLabel")}
+            disabled={
+              !categoryCatalog.currentData || categoryCatalog.isError || !catalog.currentData || catalog.isError
+            }
+            value={categoryId ?? ALL_CATEGORIES}
+            onChange={(value) => setCategoryId(value === ALL_CATEGORIES ? null : value)}
+            options={[
+              { key: ALL_CATEGORIES, value: ALL_CATEGORIES, label: t("chatbot.promptSelectionPanel.allCategories") },
+              {
+                key: NO_CATEGORY_FILTER_ID,
+                value: NO_CATEGORY_FILTER_ID,
+                label: `${t("rework.promptCategories.noCategory")} (${counts.get(null) ?? 0})`,
+              },
+              ...categories.map((category) => ({
+                key: category.id,
+                value: category.id,
+                label: `${category.name} (${counts.get(category.id) ?? 0})`,
+              })),
+            ]}
+          />
+        )}
       </div>
       {catalog.isError || categoryCatalog.isError ? (
         <div className={styles.state} role="alert">
@@ -169,7 +179,13 @@ export default function PromptSelectionChatPanel({
         </div>
       ) : visible.length === 0 ? (
         <p className={styles.state}>
-          {t(prompts.length === 0 ? "chatbot.promptSelectionPanel.empty" : "chatbot.promptSelectionPanel.emptyFilters")}
+          {t(
+            prompts.length === 0
+              ? "chatbot.promptSelectionPanel.empty"
+              : favoritesOnly && !search && !categoryId
+                ? "rework.teams.prompts.favorite.empty"
+                : "chatbot.promptSelectionPanel.emptyFilters",
+          )}
         </p>
       ) : (
         <ul className={styles.list}>
@@ -185,11 +201,26 @@ export default function PromptSelectionChatPanel({
                 <span className={styles.name} title={prompt.display_name}>
                   {prompt.display_name}
                 </span>
-                <span className={styles.description} title={`/${prompt.logical_name}`}>
-                  /{prompt.logical_name}
-                </span>
                 {prompt.description && <span className={styles.description}>{prompt.description}</span>}
               </button>
+              {/* A sibling of the row: a button cannot hold a button. */}
+              <span className={styles.favorite}>
+                <Tooltip
+                  text={t(
+                    prompt.is_favorite ? "rework.teams.prompts.favorite.remove" : "rework.teams.prompts.favorite.add",
+                  )}
+                >
+                  <IconButton
+                    variant="icon"
+                    size="small"
+                    color={prompt.is_favorite ? "warning" : "on-surface-retreat"}
+                    icon={{ category: "outlined", type: "star", filled: prompt.is_favorite }}
+                    aria-label={t("rework.teams.prompts.favorite.filter")}
+                    aria-pressed={prompt.is_favorite}
+                    onClick={() => void toggleFavorite(prompt)}
+                  />
+                </Tooltip>
+              </span>
             </li>
           ))}
         </ul>

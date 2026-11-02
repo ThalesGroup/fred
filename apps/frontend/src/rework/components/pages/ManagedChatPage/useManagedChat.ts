@@ -228,7 +228,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     },
     [replaceStagedHitlAnswers, selectedHitlKey],
   );
-  const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  const [renamedTitle, setRenamedTitle] = useState<string | null>(null);
   const contextPromptIds: string[] = [];
   const activeSessionIdRef = useRef(sessionId);
   activeSessionIdRef.current = sessionId ?? locallyCreatedSessionIdRef.current;
@@ -561,39 +561,38 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     setHitlFreeText("");
     setInput("");
     setPendingMessages([]);
-    setSessionTitle(null);
+    setRenamedTitle(null);
     // A genuine entry into a (new or different) session — normal
     // rehydration governs from here until the first local mutation.
     composer.reset(sessionId, chatControlsRef.current);
   }, [sessionId, reset, composer.reset, replacePendingHitls, replaceStagedHitlAnswers]);
 
-  // Reading an existing conversation needs no execution preparation. Typing
-  // expresses send intent; a fresh draft can prepare immediately.
-  const preparingExecution = !sessionId || input.length > 0;
   const requestedModel = useMemo(() => {
     try {
       return { choice: composer.chatProfileId ? parseModelChoice(composer.chatProfileId) : undefined, error: null };
     } catch {
-      return { choice: undefined, error: "The saved model choice must be selected again in the Models menu." };
+      return { choice: undefined, error: "chatbot.savedModelChoiceInvalid" };
     }
   }, [composer.chatProfileId]);
   const preparedModelKey = preparation?.model_choice ? modelChoiceKey(preparation.model_choice) : null;
   const requestedModelKey = requestedModel.choice ? modelChoiceKey(requestedModel.choice) : null;
   const modelPreparationCurrent = preparation !== undefined && preparedModelKey === requestedModelKey;
-  const modelPreparationError =
-    requestedModel.error ?? (modelPreparationCurrent ? preparation?.model_error?.message : null);
+  const modelPreparationError = requestedModel.error
+    ? t(requestedModel.error)
+    : modelPreparationCurrent
+      ? preparation?.model_error?.message
+      : null;
   const modelPreparationPending =
     (!sessionId && composer.agentConfigurationRevision === null) ||
-    (preparingExecution && !preparationUnavailable && !modelPreparationCurrent);
+    (!preparationUnavailable && !modelPreparationCurrent);
   useEffect(() => {
-    if (executionDisabled || !sameSession || !preparingExecution || (sessionId && locallyCreatingSession)) return;
+    if (executionDisabled || !sameSession || (sessionId && locallyCreatingSession)) return;
     const request = prepareChatControls(sessionId, requestedModel.choice, composer.reasoning);
     void request.catch(() => refetchSessionRef.current());
     return () => request.abort();
   }, [
     sessionId,
     executionDisabled,
-    preparingExecution,
     prepareChatControls,
     sameSession,
     locallyCreatingSession,
@@ -601,9 +600,10 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     composer.reasoning,
   ]);
 
-  useEffect(() => {
-    if (sessionData) setSessionTitle(sessionData.title);
-  }, [sessionData]);
+  // Read from the session, not copied: a reset has no way to lose it. A rename
+  // only shows until the session comes back carrying it.
+  useEffect(() => setRenamedTitle(null), [sessionData]);
+  const sessionTitle = renamedTitle ?? sessionData?.title ?? null;
 
   const inputCharacterCount = useMemo(() => countUnicodeCodePoints(input.trim()), [input]);
   const inputTooLong = maxChatInputChars !== undefined && inputCharacterCount > maxChatInputChars;
@@ -775,6 +775,12 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         ...(offersReasoning(chatControls, preparation?.models, composer.chatProfileId)
           ? { reasoning: composer.reasoning }
           : {}),
+        ...(chatControls.some((control) => control.widget === "search_policy")
+          ? { search_policy: composer.searchPolicy }
+          : {}),
+        ...(chatControls.some((control) => control.widget === "rag_scope")
+          ? { search_rag_scope: composer.ragScope }
+          : {}),
       },
       turnOptions:
         DOCUMENT_SELECTION_SUPPORTED &&
@@ -782,7 +788,15 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
           ? documentSelectionTurnOptions(composer.documentSelection)
           : undefined,
     }),
-    [composer.chatProfileId, composer.reasoning, composer.documentSelection, chatControls, preparation?.models],
+    [
+      composer.chatProfileId,
+      composer.reasoning,
+      composer.searchPolicy,
+      composer.ragScope,
+      composer.documentSelection,
+      chatControls,
+      preparation?.models,
+    ],
   );
 
   // Read at answer time so handleHitlAnswer keeps its identity across keystrokes.
@@ -1389,7 +1403,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       if (!sessionId || sessionUnavailable) return;
       try {
         const saved = await refreshSession({ spaceId, sessionId, updateSessionRequest: { title } }).unwrap();
-        if (isScopeCurrent() && activeSessionIdRef.current === sessionId) setSessionTitle(saved.title);
+        if (isScopeCurrent() && activeSessionIdRef.current === sessionId) setRenamedTitle(saved.title);
       } catch (error) {
         if (isScopeCurrent() && activeSessionIdRef.current === sessionId) notifySessionSaveFailed(error);
       }

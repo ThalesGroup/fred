@@ -59,6 +59,7 @@ import { selectSidePanelOpenRequest } from "../../../features/capabilities/sideP
 import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel/PromptSelectionChatPanel.tsx";
 import type { CommandDescriptor } from "../../../../slices/runtime/runtimeOpenApi";
 import { conversationTokenTotals } from "./toThreadMessages";
+import { isAccessRefusal } from "./useConversationAvailability";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
 import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
@@ -152,7 +153,7 @@ export default function ManagedChatPage() {
   const { t } = useTranslation();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
   const context = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
-  const space = !context.isError ? resolveAgentSpace(context.currentData, teamId) : undefined;
+  const space = !isAccessRefusal(context.error) ? resolveAgentSpace(context.currentData, teamId) : undefined;
   if (context.isFetching && !context.currentData) return <div>{t("rework.sidebar.chatList.loading")}</div>;
   if (!space || !agentInstanceId)
     return <ServiceNotice icon="lock" title={t("rework.weaverAgents.scopeUnavailable")} centered />;
@@ -347,8 +348,15 @@ function ManagedChatContent({
     !conversationUnresolved &&
     chat.pendingHitl == null &&
     !chat.executionDisabled &&
-    !chat.historyUnavailable &&
-    !chat.preparationUnavailable;
+    !chat.historyUnavailable;
+
+  const conversationNotice = (chat.historyUnavailable || chat.sessionUnavailable || chat.preparationUnavailable) && (
+    <p className={styles.conversationNotice} role="status">
+      {chat.historyUnavailable || chat.sessionUnavailable
+        ? t(chat.historyErrorKey ?? "chatbot.historyUnavailable")
+        : chat.preparationErrorDetail || t("chatbot.preparationUnavailable")}
+    </p>
+  );
 
   const attachmentsCount = chat.persistedAttachments.length;
 
@@ -735,14 +743,6 @@ function ManagedChatContent({
 
   const composer = (
     <>
-      {chat.agentConfigurationChanged && (
-        <div className={styles.modelPreparationNotice} role="status">
-          <p>{t("chatbot.agentConfigurationChanged")}</p>
-          <Button color="primary" variant="outlined" size="medium" onClick={chat.startNewConversation}>
-            {t("chatbot.newConversation")}
-          </Button>
-        </div>
-      )}
       {chat.modelPreparationError && !chat.executionDisabled && (
         <div className={styles.modelPreparationNotice}>
           <ServiceNotice
@@ -834,11 +834,7 @@ function ManagedChatContent({
         }
         leftSlot={
           <>
-            <ComposerActionsMenu
-              disabled={
-                composerControlsDisabled || !chat.chatControls.some((control) => control.widget === "attach_files")
-              }
-            >
+            <ComposerActionsMenu disabled={composerControlsDisabled}>
               {({ closeMenu }) => (
                 <ComposerControlSlot
                   part="primary"
@@ -913,6 +909,21 @@ function ManagedChatContent({
         ]
       : []),
   ];
+
+  // The conversation can no longer continue: the composer gives way to the way out.
+  const composerArea =
+    chat.agentConfigurationChanged && !chat.waitResponse ? (
+      <div className={styles.agentChangedBar}>
+        <div className={styles.agentChangedCard} role="status">
+          <p>{t("chatbot.agentConfigurationChanged")}</p>
+          <Button color="primary" variant="filled" size="medium" onClick={chat.startNewConversation}>
+            {t("chatbot.newConversation")}
+          </Button>
+        </div>
+      </div>
+    ) : (
+      composer
+    );
 
   return (
     <TraceDrawerProvider value={traceDrawerApi}>
@@ -1032,8 +1043,9 @@ function ManagedChatContent({
                     {isInitialState ? (
                       <div className={styles.initialStage}>
                         <ManagedChatWelcome agent={chat.agentInstance} />
+                        {conversationNotice}
                         <div className={styles.initialComposer}>
-                          {composer}
+                          {composerArea}
                           <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
                         </div>
                       </div>
@@ -1087,13 +1099,7 @@ function ManagedChatContent({
 
                 {!isInitialState && (
                   <div className={styles.inputOverlay}>
-                    {(chat.historyUnavailable || chat.sessionUnavailable || chat.preparationUnavailable) && (
-                      <p className={styles.conversationNotice} role="status">
-                        {chat.historyUnavailable || chat.sessionUnavailable || !chat.preparationErrorDetail
-                          ? t(chat.historyErrorKey ?? "chatbot.historyUnavailable")
-                          : chat.preparationErrorDetail}
-                      </p>
-                    )}
+                    {conversationNotice}
                     {(chat.pendingMessages?.length ?? 0) > 0 && (
                       <section className={styles.pendingMessages} aria-label={t("chatbot.pendingMessages.label")}>
                         <button
@@ -1194,7 +1200,7 @@ function ManagedChatContent({
                         )}
                       </section>
                     )}
-                    {composer}
+                    {composerArea}
                     <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
                   </div>
                 )}

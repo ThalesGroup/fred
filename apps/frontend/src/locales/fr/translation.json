@@ -377,7 +377,7 @@
     }
   },
   "chatbot": {
-    "agentConfigurationChanged": "Cet agent a été modifié depuis le début de cette conversation. Démarrez une nouvelle conversation pour utiliser sa nouvelle configuration.",
+    "agentConfigurationChanged": "Depuis que cette conversation a démarré, l'agent a été modifié. Vous ne pouvez plus continuer cette conversation, veuillez commencer une nouvelle conversation pour utiliser la dernière version de l'agent.",
     "artifactLinks": {
       "ariaLabel": "Fichiers générés",
       "downloadAria": "Télécharger {{name}}",
@@ -654,6 +654,8 @@
     "deletedAgentSuffix": "(supprimé)",
     "modelPreparationErrorTitle": "Envoi indisponible",
     "historyUnavailable": "L'historique de la conversation est indisponible. Réessayez plus tard.",
+    "preparationUnavailable": "Impossible de préparer la conversation. Vérifiez votre connexion puis réessayez.",
+    "savedModelChoiceInvalid": "Le modèle enregistré doit être sélectionné à nouveau dans le menu Modèles.",
     "skipAllHitlQuestions": "Tout passer",
     "hitlOtherAnswerHint": "écrire votre réponse…",
     "hitlQuestionState": {
