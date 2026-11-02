@@ -6,7 +6,7 @@ foundational building blocks that must stay consistent across services.
 ## What it provides
 
 - Configuration helpers used by multiple backends.
-- Storage and session primitives.
+- Storage and conversation-history primitives.
 - Security and access-control utilities (ReBAC helpers, Keycloak helpers).
 - Common runtime helpers (logging, KPI, scheduling utilities).
 - The pod floor — configuration files, identity, contributed-name rules — now
@@ -90,6 +90,13 @@ resource through `importlib.resources`, without walking up the checkout. Docker
 builds and Python packaging do not require a separately maintained model copy.
 
 ## Schema migrations
+
+Conversation history lives in `fred_core.history`; Control Plane owns session
+associations and document placement/publication. Knowledge Flow's worker owns
+ingestion workflows. `fred_core.documents` retains the shared `DocumentMetadata`
+artifact format, `documents.processing_profile.IngestionProcessingProfile`, and
+the selection, transport and `cp_read` visibility primitives. It provides no
+session store, document metadata store or task service.
 
 Python services call `fred_core.sql.require_tables` at startup to check required
 SQL tables. A missing table raises `SchemaNotMigratedError`; its message names

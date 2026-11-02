@@ -420,9 +420,7 @@ class DocumentMetadata(BaseModel):
     tags: Tagging = Field(default_factory=Tagging)
     # Descriptive, user-defined business labels (e.g. "DAT", "MEX"). Distinct
     # from `tags`: labels carry NO scope/permission semantics, they only
-    # describe the document and are used to target search subsets. Hydrated
-    # from the `document_labels` table on read, never stored in this model's
-    # own JSONB serialization (PostgresDocumentMetadataStore._to_dict).
+    # describe the document and are serialized in metadata.json.
     labels: List[str] = Field(
         default_factory=list,
         description="Descriptive business labels; no access-control meaning.",

@@ -21,10 +21,8 @@
 // exact same view.
 //
 // Data comes from the standard task surface (`GET /tasks`, already scoped
-// platform vs team server-side) — both control-plane and knowledge-flow run
-// their own task
-// store behind an identical `GET /tasks`/`TaskSummary` contract (fred-core's
-// shared `tasks` module), neither proxying the other. No `kind` filter
+// platform vs team server-side in the retained legacy API snapshots).
+// The snapshots share a `GET /tasks`/`TaskSummary` contract. No `kind` filter
 // means "every kind", so this queries both and merges; a `kind` filter narrows both the query args AND which
 // single backend gets queried (`taskBackendFor` — the same map
 // `useTaskPolling`/`useTaskAcknowledgement` route by), since
@@ -180,7 +178,7 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
   });
   const isLoading = controlPlane.isLoading || knowledgeFlow.isLoading;
   const isError = controlPlane.isError || knowledgeFlow.isError;
-  // Both backends generate TaskSummary from the shared fred-core model.
+  // The retained legacy clients expose the same TaskSummary shape.
   const tasks: TaskSummary[] = [
     ...(controlPlane.data?.tasks ?? []),
     ...((knowledgeFlow.data?.tasks ?? []) as TaskSummary[]),

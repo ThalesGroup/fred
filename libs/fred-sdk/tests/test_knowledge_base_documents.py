@@ -351,14 +351,15 @@ def test_a_wait_that_never_reaches_fred_still_ends_at_the_deadline(monkeypatch):
         asyncio.run(publisher.wait(TASK, timeout=0.01, poll_interval=0.001))
 
 
-def test_the_terminal_states_mirror_the_platform():
-    """A pod reads states without installing the platform, so the copy is checked here."""
-    models = pytest.importorskip("fred_core.tasks.models")
+def test_a_cancelled_ingestion_ends_the_wait_without_success(monkeypatch):
+    fred = _Fred().answers("GET", (200, _summary("cancelled")))
+    publisher = _publisher(fred, monkeypatch)
 
-    terminal = {state.value for state in models.TaskState if state.is_terminal}
+    outcome = asyncio.run(publisher.wait(TASK, timeout=1, poll_interval=0.001))
 
-    assert set(documents_module._TERMINAL_STATES) == terminal
-    assert documents_module._SUCCEEDED == models.TaskState.succeeded.value
+    assert outcome.terminal is True
+    assert outcome.succeeded is False
+    assert len(fred.calls) == 1
 
 
 def test_an_unknown_task_names_itself_and_the_status(monkeypatch):

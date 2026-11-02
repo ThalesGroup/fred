@@ -114,6 +114,12 @@ PDF, the published artifact set contains `metadata.json`, `output.md` and
 The manifest, not a hard-coded list, is the inventory. An input PDF's File preview
 uses the original; a derived `native.pdf` is not required for this PDF journey.
 
+`metadata.json` uses fred-core's shared
+[`DocumentMetadata`](../../libs/fred-core/fred_core/documents/document_structures.py)
+and [processing profile](../../libs/fred-core/fred_core/documents/processing_profile.py).
+The worker serializes it; the API's tabular reader deserializes the same format.
+This artifact does not require a Python document metadata SQL store.
+
 Each vector ID is `UUIDv5(generation UUID, decimal ordinal string)`. The worker
 journals planned IDs before writes and reads back persisted chunks before creating
 `chunks.jsonl`. Chunk metadata uses the existing Swift fields, including

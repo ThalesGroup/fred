@@ -383,21 +383,6 @@ wheels = [
 ]
 
 [[package]]
-name = "authzed"
-version = "1.25.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "googleapis-common-protos" },
-    { name = "grpc-interceptor" },
-    { name = "grpcio" },
-    { name = "protobuf" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/18/82/3b8eada7df14079ecdbebccba83b51af3a4a31f14d3ee284038edc5f4eed/authzed-1.25.0.tar.gz", hash = "sha256:8a59617f072d64e6b4c450f1379339aa3b9a4251cc2a55d5e6abe4ac6b8b5a4c", size = 146946, upload-time = "2026-07-14T14:04:03.874Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c8/aa/1d0c0a825c6b749b647f80b1a8549a6d6a4b2892248f79cee94de8b3a804/authzed-1.25.0-py3-none-any.whl", hash = "sha256:31bf2e4c4c562bdcb7a8b41bcb8812eb84874b70f8c162afce0a03c69655e57d", size = 186527, upload-time = "2026-07-14T14:04:02.489Z" },
-]
-
-[[package]]
 name = "azure-core"
 version = "1.41.0"
 source = { registry = "https://pypi.org/simple" }
@@ -997,7 +982,6 @@ dependencies = [
     { name = "aiohttp" },
     { name = "aiosqlite" },
     { name = "asyncpg" },
-    { name = "authzed" },
     { name = "azure-identity" },
     { name = "fastapi" },
     { name = "fred-pod" },
@@ -1075,7 +1059,6 @@ requires-dist = [
     { name = "alembic", marker = "extra == 'dev'", specifier = ">=1.18.4" },
     { name = "alembic", marker = "extra == 'migration'", specifier = ">=1.18.4" },
     { name = "asyncpg", specifier = ">=0.31.0" },
-    { name = "authzed", specifier = ">=1.22.1" },
     { name = "azure-identity", specifier = ">=1.25.0" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
@@ -1577,18 +1560,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d2/d0/fa5bdd5f3f421bb68dc6dc162e9caaf942897ca41ce7255b524723c80f0b/grpc_google_iam_v1-0.14.5.tar.gz", hash = "sha256:07fd3a9fafb586588e771831fbfc8f6597050181d0c3b45e039d18b8fdc1aab5", size = 23736, upload-time = "2026-08-06T06:24:54.489Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/84/ab/be3ad0d46cffe35fd1e7cc3f9947edd6cb3c552229de3be2742f15f7ea47/grpc_google_iam_v1-0.14.5-py3-none-any.whl", hash = "sha256:0f5e680b20aa0a9441e68c769da04d94d70fca4e43751a82d8abb8aa6a7181ca", size = 32674, upload-time = "2026-08-06T06:23:49.467Z" },
-]
-
-[[package]]
-name = "grpc-interceptor"
-version = "0.15.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "grpcio" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9f/28/57449d5567adf4c1d3e216aaca545913fbc21a915f2da6790d6734aac76e/grpc-interceptor-0.15.4.tar.gz", hash = "sha256:1f45c0bcb58b6f332f37c637632247c9b02bc6af0fdceb7ba7ce8d2ebbfb0926", size = 19322, upload-time = "2023-11-16T02:05:42.459Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/ac/8d53f230a7443401ce81791ec50a3b0e54924bf615ad287654fa4a2f5cdc/grpc_interceptor-0.15.4-py3-none-any.whl", hash = "sha256:0035f33228693ed3767ee49d937bac424318db173fef4d2d0170b3215f254d9d", size = 20848, upload-time = "2023-11-16T02:05:40.913Z" },
 ]
 
 [[package]]

@@ -36,16 +36,10 @@ export const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["succeeded", "fa
 export type ImportStage = "upload" | "analysis" | "decision";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HAND-MAINTAINED ADAPTER — keep in sync with the backend by hand.
+// HAND-MAINTAINED ADAPTER for the retained legacy API snapshots.
 //
-// The RFC (docs/swift/rfc/TASK-EVENT-STREAM-RFC.md §"generated union") wants this
-// task-event union generated from OpenAPI. It is not, yet: the events are SSE
-// payloads typed `any` in the generated clients, so there is no schema to generate
-// from. Until TaskEvent is exposed as an OpenAPI component (tracked in
-// FRONTEND-BACKLOG — "generate TaskEvent union"), these interfaces MIRROR the
-// canonical Pydantic models in libs/fred-core/fred_core/tasks/models.py and must be
-// updated together with them. Adding a backend kind means adding it here too (and
-// to taskKinds).
+// SSE payloads are typed `any` in the legacy generated clients. These interfaces
+// retain that wire format independently of the removed Python task service.
 //
 // `TaskLogEvent` (kind "log") is intentionally omitted: log tasks are an internal
 // diagnostic kind and are never surfaced in this UI, so the union covers only the

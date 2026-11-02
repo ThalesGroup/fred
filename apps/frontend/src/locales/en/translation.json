@@ -3692,6 +3692,8 @@
           "description": "Description",
           "name": "Name",
           "text": "Prompt text",
+          "tagsPlaceholder": "Type and press Enter to add tags...",
+          "removeTagAria": "Remove {{tag}}",
           "commandReserved": "/skill is reserved for platform skills. Choose another command."
         },
         "loading": "Loading prompts...",

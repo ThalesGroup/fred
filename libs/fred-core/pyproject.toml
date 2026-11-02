@@ -43,7 +43,6 @@ dependencies = [
     "langchain-anthropic>=0.3.0",
     "langchain-openai>=1.1.14",
     "azure-identity>=1.25.0",
-    "authzed>=1.22.1",
     # Keep the patched HTTP transport floor; older versions still
     # admits vulnerable versions. Pin the patched floor so package-index
     # consumers cannot resolve a vulnerable aiohttp.

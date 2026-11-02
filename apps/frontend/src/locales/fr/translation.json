@@ -3692,6 +3692,8 @@
           "description": "Description",
           "name": "Nom",
           "text": "Texte du prompt",
+          "tagsPlaceholder": "Saisissez puis appuyez sur Entrée pour ajouter des tags...",
+          "removeTagAria": "Retirer {{tag}}",
           "commandReserved": "/skill est réservé aux skills de la plateforme. Choisissez une autre commande."
         },
         "loading": "Chargement des prompts...",

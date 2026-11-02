@@ -58,8 +58,7 @@ _DECLARE_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 # this half, so nothing downstream depends on the spelling.
 _MACHINE_KIND = "knowledge_base"
 
-# Mirrors `TaskState.is_terminal` in fred_core: spelled out here because a pod
-# reads a task's state without installing the platform.
+# Terminal states of the Knowledge Base publisher's HTTP task contract.
 _SUCCEEDED = "succeeded"
 _FAILED = "failed"
 _TERMINAL_STATES = (_SUCCEEDED, _FAILED, "cancelled")

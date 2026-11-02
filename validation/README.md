@@ -460,12 +460,10 @@ read-only store audits, the demo editor, ingestion/embeddings, and an otherwise
 idle local deployment: concurrent imports/deletions invalidate the count checks.
 No Test Assistant or chat model is required for this focused campaign.
 
-This campaign does not call the label endpoints and therefore does not validate
-PostgreSQL label filtering. The separate fred-core
-`fred_core/tests/integration/test_postgres_document_store_sql.py` suite executes
-all three label queries against a real PostgreSQL instance. SQLite service tests
-cover controlled stale-write races with an OpenFGA double; those are not live
-OpenFGA integration evidence.
+This historical campaign does not validate Weaver publication or PostgreSQL
+visibility. The Control Plane SQL boundary integration tests own the `cp_read`
+contract; fred-core's `tests/documents/test_access.py` covers Python filtering.
+Those checks do not establish end-to-end ingestion or label-query behavior.
 
 ```bash
 make integration-test-k3d VALIDATION_ARGS="scenarios/test_folder_inventory.py"
