@@ -63,19 +63,22 @@ Every ReAct agent with skills configured SHALL receive validated catalog names, 
 
 ### Requirement: Mermaid guidance uses progressive skill loading
 
-The packaged catalog SHALL include an English `graph` skill, presented as Graphs, with an advisory argument hint. Its procedure SHALL choose a representation suited to the question and source facts, with type-specific syntax and examples in a single self-contained `SKILL.md`. It SHALL cover flowcharts, sequence, state, class and entity relationship diagrams, mindmaps, timelines, Gantt charts, pie and XY charts, user journeys and Git graphs without requiring reference-file or external-documentation reads. Quantitative data, relationships, dates and scores SHALL come from supplied facts or actual tool results. Mermaid instructions SHALL be loaded only through the shared skill workflow; runtime prompt assembly SHALL NOT inject the former SDK output contract automatically. The existing frontend Mermaid renderer and sanitization SHALL remain available.
+The packaged catalog SHALL include one English `graph` skill, presented as Visualization/Visualisation, that selects an appropriate diagram, data chart or table from the user's question, source facts and available rendering tools. It SHALL retain user and model invocation. Common guidance SHALL cover data fidelity, suitable representation, readable labels and supported output formats. Quantitative data, relationships, dates and scores SHALL come from supplied facts or actual tool results.
+
+Mermaid syntax and examples SHALL reside in a packaged reference that the procedure directs the agent to read when Mermaid output is selected. This reference SHALL cover flowcharts, sequence, state, class and entity relationship diagrams, mindmaps, timelines, Gantt charts, pie and XY charts, user journeys and Git graphs without external-documentation downloads. Non-Mermaid output SHALL use the selected tool's supported formats and SHALL NOT require reading the Mermaid reference. Mermaid instructions SHALL remain within the shared skill workflow, without automatic global-prompt injection. The existing frontend Mermaid renderer and sanitization SHALL remain available.
 
 #### Scenario: Mermaid catalog metadata before loading
 
 - **GIVEN** a pod uses the packaged skills directory
 - **WHEN** an agent receives its system prompt
-- **THEN** `graph` is advertised with its description in the native Deep index or with its description and advisory hint in the ReAct catalog
-- **AND** its diagram syntax instructions are absent until loaded
+- **THEN** the unified `graph` entry is advertised with its description and the existing execution-model-specific hint presentation
+- **AND** diagram syntax examples remain absent until the corresponding reference is read
 
 #### Scenario: User or model loads Mermaid
 
 - **WHEN** a user invokes `/graph` with or without text, or the model reads its instructions with ReAct `load_skill` or Deep native `read_file`
-- **THEN** the runtime supplies its instructions with the existing origin attribution and successful-load KPI
+- **THEN** the runtime supplies the unified visualization procedure with existing origin attribution and successful-load KPI
+- **AND** the procedure directs a read of its packaged Mermaid reference when Mermaid is chosen
 - **AND** no tool named `graph` is registered
 - **AND** complete returned Mermaid diagrams continue to use the existing frontend renderer
 - **AND** Mermaid instructions direct output to a fenced Markdown block in chat, rather than sending Mermaid source to the static HTML artifact viewer
@@ -83,10 +86,18 @@ The packaged catalog SHALL include an English `graph` skill, presented as Graphs
 
 #### Scenario: The chosen diagram has type-specific guidance
 
-- **WHEN** the graph procedure selects a representation
-- **THEN** its syntax guidance and examples are included in the same instructions through both the ReAct skill loader and the Deep native filesystem
-- **AND** applying the procedure does not require fetching external documentation or another graph skill file
-- **AND** the guidance identifies the installed syntax baseline without claiming unperformed validation
+- **WHEN** the procedure selects a Mermaid diagram family
+- **THEN** its type-specific syntax and examples are accessible through the same skill's ReAct reference reader and Deep native filesystem
+- **AND** applying the procedure does not require external documentation or loading a second skill
+- **AND** the reference identifies the existing syntax baseline without claiming unperformed validation
+
+#### Scenario: A numerical chart uses an available renderer
+
+- **GIVEN** verified category values and an available plotting or static HTML rendering tool
+- **WHEN** the procedure chooses a representation
+- **THEN** its instructions select a suitable chart and use the tool's documented formats
+- **AND** the Mermaid reference is conditional on choosing Mermaid, rather than required for every chart
+- **AND** missing renderers lead to a useful table or a stated limitation without invented artifacts
 
 ### Requirement: Agents can load and combine skills through shared tools
 
@@ -278,7 +289,7 @@ Managed web chat SHALL retain and render all explicit platform skill invocations
 
 #### Scenario: Select two platform skills
 
-- **WHEN** a user completes `/meeting-minutes`, then `/verify-answer`, and submits the request
+- **WHEN** a user completes `/meeting-minutes`, then `/graph`, and submits the request
 - **THEN** both inline selections and surrounding text remain intact
 - **AND** both distinct names reach the same execution turn
 - **AND** ReAct receives both procedures before inference; Deep receives canonical user text and both native pins before inference
@@ -394,7 +405,7 @@ Catalog access, explicit selection and skill tools SHALL use the serving runtime
 
 ### Requirement: The first platform skill produces grounded minutes
 
-The platform SHALL distribute English-written instructions and references for a focused quality/reliability catalog: `grounded-research`, `summarize-document`, `compare-options`, `verify-answer` and the existing `meeting-minutes` skill with a referenced minutes template under `fred_runtime/skills/meeting-minutes/`. The minutes instructions SHALL guide the agent to read supplied notes, identify decisions and actions, and report owners or dates as missing when absent. It SHALL work through explicit web invocation and automatic model selection with available document-reading tools.
+The platform SHALL distribute English-written `meeting-minutes` instructions with a referenced minutes template under `fred_runtime/skills/meeting-minutes/`. This skill SHALL be user-invocable only. Its instructions SHALL guide the agent to read supplied notes, identify decisions and actions, and report owners or dates as missing when absent, using available document-reading tools.
 
 #### Scenario: Notes omit a deadline
 
@@ -412,7 +423,7 @@ The platform SHALL distribute English-written instructions and references for a 
 
 #### Scenario: Evidence-dependent workflows lack sources
 
-- **WHEN** a research, summary, comparison or verification skill has insufficient evidence to complete its requested output
+- **WHEN** a research, summary, comparison or minutes procedure has insufficient evidence to complete its requested output
 - **THEN** its instructions guide the agent to use available context and tools, distinguish evidence from inference, and report the missing information
 - **AND** they do not claim to have read unavailable sources or verified unsupported facts
 
@@ -997,7 +1008,7 @@ On submit, the web client SHALL read every prompt behind a prompt command of the
 
 #### Scenario: Prompts and skills in one message
 
-- **GIVEN** two prompt commands and the platform skill `/verify-answer` in one message
+- **GIVEN** two prompt commands and the platform skill `/graph` in one message
 - **WHEN** the user submits it
 - **THEN** both prompt texts reach the model and the skill name travels with the turn as it does today
 
@@ -1292,7 +1303,21 @@ Administration SHALL provide a global Skills tab under Features with packaged in
 
 ### Requirement: Common skills include an explicit interview and grounded data workflows
 
-The packaged catalog SHALL include an explicit-only grill-me procedure adapted for general users, a user-facing analyze-data procedure and an agent-only data-visualization procedure. Instructions SHALL be English and UI titles/descriptions SHALL have French/English presentation. New skills SHALL be enabled by default and respect current invocation and administrative policy. They SHALL use available tools without installing dependencies, inventing values or duplicating capability-specific access rules.
+The packaged catalog SHALL publish the following canonical skills and invocation modes, subject to the existing global enablement policy:
+
+| Skill | User invocation | Model invocation |
+| --- | --- | --- |
+| analyze-data | Unavailable | Available |
+| compare-options | Unavailable | Available |
+| graph | Available | Available |
+| grill-me | Available | Unavailable |
+| grounded-research | Available | Available |
+| meeting-minutes | Available | Unavailable |
+| summarize-document | Unavailable | Available |
+
+`data-visualization` and `verify-answer` SHALL be absent from the packaged catalog. `graph` SHALL own the combined visualization scope. Existing per-name policy SHALL apply to its retained identity, without automatically transferring a retired name's policy or adding aliases. Instructions SHALL be English and UI titles/descriptions SHALL have French/English presentation. Skills SHALL use available tools without installing dependencies, inventing values or duplicating capability-specific access rules.
+
+`compare-options` SHALL provide a compact procedure centered on decision criteria, comparable evidence and material trade-offs, treating missing values as unknown and using weighted scores only with supplied or approved weights. `summarize-document` SHALL provide a minimal fidelity procedure for ordinary summaries and a conditional packaged reference for multiple conflicting sources, complex documents or explicit fidelity/traceability needs. The core SHALL preserve consequential conditions, numbers, uncertainty and source attribution while following the requested output scope.
 
 Original Fred procedures SHALL include their instructions in packaged resources without requiring external documentation downloads. Imported skills SHALL retain their upstream references and required notices.
 
@@ -1305,6 +1330,39 @@ Original Fred procedures SHALL include their instructions in packaged resources 
 - **WHEN** a user asks for analysis with incomplete data or unavailable computation
 - **THEN** the procedure makes limits explicit and uses supported tools and representations
 - **AND** it never claims fabricated computations
+
+#### Scenario: Model-only analysis, comparison and summary
+- **WHEN** a user opens the command catalog or directly selects analyze-data, compare-options or summarize-document for execution
+- **THEN** these skills are absent from user commands and the direct selections are rejected before inference
+- **AND** eligible ReAct and native Deep agents can discover and load all three skills with agent-origin attribution
+
+#### Scenario: Minutes require an explicit current selection for a new load
+- **WHEN** a request has no current explicit meeting-minutes selection
+- **THEN** the skill is unavailable for a new autonomous load by a ReAct agent, Deep parent or native child
+- **AND** selecting it explicitly permits the existing preload or native pin workflow with user attribution
+- **AND** ordinary reuse of already-loaded conversational context retains the existing continuity semantics
+
+#### Scenario: A comparison does not fabricate a ranking
+- **GIVEN** alternatives with missing evidence or unspecified priorities
+- **WHEN** the model reads compare-options
+- **THEN** its compact instructions preserve unknowns and material trade-offs, and reserve weighted scores for supplied or approved weights
+
+#### Scenario: A short summary uses the minimal core
+- **GIVEN** a simple supplied document and a short-summary request
+- **WHEN** the model reads summarize-document
+- **THEN** the core instructions are sufficient without requiring the complex-summary reference
+- **AND** the output remains scoped to the user's requested length and purpose
+
+#### Scenario: Complex or fidelity-sensitive summaries have targeted guidance
+- **GIVEN** conflicting documents, a complex source or an explicit need for traceable fidelity
+- **WHEN** the summary procedure selects its detailed branch
+- **THEN** it directs the agent to read its packaged reference through the existing skill reference workflow
+- **AND** the guidance preserves source disagreements and consequential qualifications without requiring a new skill or tool
+
+#### Scenario: Retired skills and historical activity
+- **WHEN** a fresh request selects data-visualization or verify-answer on an updated packaged runtime
+- **THEN** normal unknown-skill validation rejects the selection without aliasing to another procedure
+- **AND** existing stored messages, skill activity and usage records remain readable without rewriting their canonical names
 
 ### Requirement: Distributed imported skills preserve licensing and provenance
 
