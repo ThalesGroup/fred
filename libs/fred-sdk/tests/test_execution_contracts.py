@@ -527,26 +527,3 @@ def test_a_session_id_cannot_name_another_sessions_graph_thread(
     # ":" would address, list and purge another session's graph thread.
     with pytest.raises(ValidationError, match="session_id"):
         RuntimeExecuteRequest.model_validate({"agent_id": "a", "input": "x", **fields})
-
-
-@pytest.mark.parametrize(
-    "missing", ["session_id", "steering_turn_id", "managed", "ordinary"]
-)
-def test_queue_identity_requires_an_ordinary_managed_turn(missing):
-    payload = {
-        "agent_instance_id": "a",
-        "session_id": "s",
-        "steering_turn_id": "turn",
-        "queued_message_id": "m",
-        "input": "text",
-        "runtime_context": {"team_id": "t"},
-    }
-    if missing == "managed":
-        payload.pop("agent_instance_id")
-        payload["agent_id"] = "template"
-    elif missing == "ordinary":
-        payload["resume_payload"] = "yes"
-    else:
-        payload.pop(missing)
-    with pytest.raises(ValidationError, match="queued_message_id requires"):
-        RuntimeExecuteRequest.model_validate(payload)

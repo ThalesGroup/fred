@@ -7156,21 +7156,13 @@ gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
 
-### Durable managed chat queue (2026-11-02)
+### Managed chat stream lifetime (2026-11-02)
 
-Managed runtime sessions expose `GET /agents/sessions/{session_id}/pending` and
-`PUT /agents/sessions/{session_id}/pending/{message_id}`. Mutations carry a managed
-agent/team identity, an action (`enqueue`, `edit`, `remove`, `retry`) and text when
-required. Existing authenticated session ownership and execution authorization
-apply; the SQL mailbox additionally checks its recorded owner before history
-exists. The queue is bounded to 32 messages and uses the configured chat input
-limit.
-
-`RuntimeExecuteRequest.queued_message_id` identifies an ordinary queued message
-for `execute/stream` only, alongside `session_id` and `steering_turn_id`. It is
-invalid for HITL resume, continuation or nonstream execution/evaluation. The
-runtime claims the message before dispatch and retains uncertain delivery until
-history persistence succeeds. SSE receipt alone is not durable acknowledgement.
-
-The current retention and recovery requirements are maintained in the
-[managed conversations specification](../../../openspec/specs/managed-conversations/spec.md).
+Ordinary pending messages live in the current browser chat visit. Navigation,
+reload or stream interruption clears that list; there is no queue recovery API
+or delivery acknowledgement tied to history persistence. The existing SQL
+mailbox only coordinates temporary steering across replicas. Cancellation
+completes generator teardown and stops lease renewal; expired steering rows are
+reclaimed every minute in bounded batches. The
+[managed conversations specification](../../../openspec/specs/managed-conversations/spec.md)
+defines the lifecycle and normal HITL behavior.

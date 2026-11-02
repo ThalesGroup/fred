@@ -127,6 +127,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
     onSteeredMessage: (messageId, sessionId) => onSteeredMessageMock(messageId, sessionId),
+    onStreamInterrupted: (sessionId) => onStreamInterruptedMock(sessionId),
     isTurnCurrent,
     isExecutionAllowed,
   });
@@ -142,6 +143,7 @@ const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
 const onAwaitingHumanMock = vi.fn();
 const onSteeredMessageMock = vi.fn();
+const onStreamInterruptedMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -166,6 +168,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onTurnRejectedMock.mockClear();
     onAwaitingHumanMock.mockClear();
     onSteeredMessageMock.mockClear();
+    onStreamInterruptedMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -187,6 +190,58 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       root.unmount();
     });
     container.remove();
+  });
+
+  it.each(["final", "awaiting_human", "status"])("reports only premature EOF as an interruption (%s)", async (kind) => {
+    const event = {
+      kind,
+      content: "done",
+      status: "running",
+      request: { stage: "agent_question", question: "Continue?" },
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(`data: ${JSON.stringify(event)}\n\n`));
+    mount();
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+    expect(onStreamInterruptedMock).toHaveBeenCalledTimes(kind === "status" ? 1 : 0);
+    if (kind === "status") expect(onStreamInterruptedMock).toHaveBeenCalledWith("session-1");
+  });
+
+  it.each(["status", "awaiting_human"])("reports abort after %s, but not a failed HTTP preflight", async (kind) => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (_url, init) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({ kind, request: { stage: "agent_question", question: "Continue?" } })}\n\n`,
+                ),
+              );
+              init?.signal?.addEventListener("abort", () =>
+                controller.error(new DOMException("Stopped", "AbortError")),
+              );
+            },
+          }),
+        ),
+    );
+    mount();
+    let sending!: Promise<boolean>;
+    await act(async () => {
+      sending = latest.send("hello", "session-1");
+    });
+    await act(async () => {
+      latest.abort();
+      await sending;
+    });
+    expect(onStreamInterruptedMock).toHaveBeenCalledWith("session-1");
+    onStreamInterruptedMock.mockClear();
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response("unavailable", { status: 503 }));
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+    expect(onStreamInterruptedMock).not.toHaveBeenCalled();
   });
 
   it.each([false, true])("rejects %s resume/send when availability changes during preparation", async (resume) => {

@@ -5827,13 +5827,12 @@ Admission denial, every enrollment state and the transient admission-verificatio
 
 Invitation history filtering and cleanup (2026-10-09): the shared Select filters All, Active, Revoked or Expired across server-paginated history. Suspended links appear in All with grayscale rows at reduced opacity, retaining copying and revocation actions; the status is available to screen readers without a visible Suspended label or explanatory paragraph. Suspension has no separate filter. A height-bounded shared DataTable (same rule as the activation review) keeps headers and pagination outside its scrolling body. Loading hides previous rows while retaining pagination totals until the requested page arrives. Cleanup is triggered from the history dialog's footer, away from the filter, and uses the shared destructive confirmation Dialog (revocation confirms in the error colour too) with the selected team in its title and the team-wide eligible count; the history dialog remains visible behind it, inert and hidden from assistive navigation while confirmation alone handles focus and keyboard dismissal; it preserves the filter and refreshes history after success. Copy keeps the chat ActionBar feedback without changing modal geometry.
 
-### Durable pending chat messages (2026-11-02)
+### Pending chat messages (2026-11-02)
 
-The managed chat pending list is a view of the runtime's durable queue. Returning
-to a conversation restores the list without starting execution. Its existing
-Send control is also available while idle to explicitly resume the queue.
-Editing leaves the saved original intact until the changed text is saved.
-Failed saves preserve the composer draft. Uncertain deliveries offer explicit
-retry and removal; they never retry automatically. The runtime retains an
-uncertain receipt until message history has been persisted, even if the current
-stream has already shown delivery.
+The pending list belongs to the current chat visit, like the live generation.
+Changing conversation, leaving the page, reloading or interrupting its stream
+clears the list without restoring or replaying it. Normal completion drains the
+local queue; a normal human-input pause holds it until the user responds.
+Other uncertain outcomes offer text-only Send again / Renvoyer and Remove /
+Supprimer, without a delivery-status label or an additional delivery-check toast.
+The retry tooltip retains its duplicate-message guidance.

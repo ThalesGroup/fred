@@ -46,8 +46,12 @@ import type {
 import { toolResultCallId, upsertOne } from "./chatSseUtils";
 import { mergePreparation, parseSseFrames } from "../utils/runtimeStream";
 import { countUnicodeCodePoints } from "../utils/chatInput";
-import { canonicalizeRuntimeTeamId } from "../utils/runtimeTeamId";
+import { personalTeamId } from "../../components/shared/utils/teamId";
 import { normalizeApiError } from "../errors/normalizeApiError";
+
+function canonicalizeRuntimeTeamId(teamId: string): string {
+  return teamId === "personal" ? personalTeamId(KeyCloakService.GetUserId() ?? "") : teamId;
+}
 
 // ── Turn-start token preflight ────────────────────────────────────────────────
 // The runtime pod forwards this turn's bearer to Knowledge Flow for the WHOLE
@@ -252,6 +256,7 @@ export type ChatSseCallbacks = {
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
   onTurnPersisted?: (sessionId: string) => void;
   onSteeredMessage?: (messageId: string, sessionId: string) => void;
+  onStreamInterrupted?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string) => void;
   /**
@@ -307,6 +312,7 @@ export function useChatSse(
     onBindDraftAgentToSessionId,
     onTurnPersisted,
     onSteeredMessage,
+    onStreamInterrupted,
     onAwaitingHuman,
     onError,
     onTurnStarted,
@@ -896,11 +902,23 @@ export function useChatSse(
       const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
         console.warn("[useChatSse] Failed to parse SSE frame:", raw),
       );
-      for await (const event of frames) {
-        processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+      let terminal = false;
+      let ended = false;
+      try {
+        for await (const event of frames) {
+          if (["final", "awaiting_human", "execution_interrupted", "execution_error"].includes(event.kind)) {
+            terminal = true;
+          }
+          processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+        }
+        ended = true;
+      } finally {
+        if ((!ended || !terminal) && (!abortRef.current || abortRef.current.signal === signal)) {
+          onStreamInterrupted?.(sessionId);
+        }
       }
     },
-    [processEvent],
+    [processEvent, onStreamInterrupted],
   );
 
   const send = useCallback(
@@ -910,7 +928,6 @@ export function useChatSse(
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
       interrupted?: InterruptedRunChoice,
-      queuedMessageId?: string,
     ): Promise<boolean> => {
       const sendId = Math.random().toString(36).slice(2, 8);
       const stopped = stoppedSessionsRef.current.has(sessionId ?? "draft");
@@ -1166,7 +1183,6 @@ export function useChatSse(
             input,
             session_id: sessionId,
             steering_turn_id: steeringTurnId,
-            ...(queuedMessageId ? { queued_message_id: queuedMessageId } : {}),
             runtime_context: effectiveContext,
             ...(turnOptions ? { turn_options: turnOptions } : {}),
             ...(choice ? { interrupted_action: choice.action, interruption_id: choice.interruptionId ?? null } : {}),

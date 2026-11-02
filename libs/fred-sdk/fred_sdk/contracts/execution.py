@@ -306,12 +306,6 @@ class RuntimeExecuteRequest(BaseModel):
         max_length=128,
         description="Identity of the active chat turn for mid-turn message delivery.",
     )
-    queued_message_id: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=128,
-        description="Identity of a durable queued message claimed for this ordinary turn.",
-    )
     interrupt_id: str | None = Field(
         default=None,
         description=(
@@ -430,16 +424,6 @@ class RuntimeExecuteRequest(BaseModel):
         ):
             raise ValueError(
                 "runtime_context.team_id is required for managed agent execution."
-            )
-        if self.queued_message_id and (
-            not has_instance
-            or not self.session_id
-            or not self.steering_turn_id
-            or self.resume_payload is not None
-            or self.interrupted_action == "continue"
-        ):
-            raise ValueError(
-                "queued_message_id requires an ordinary managed streaming turn with session_id and steering_turn_id."
             )
         continuing = self.interrupted_action == "continue"
         if continuing and (

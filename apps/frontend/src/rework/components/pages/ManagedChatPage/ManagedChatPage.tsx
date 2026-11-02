@@ -1059,9 +1059,6 @@ export default function ManagedChatPage() {
                                   <span className={styles.pendingStatus}>{t("chatbot.pendingMessages.offered")}</span>
                                 ) : message.status === "uncertain" ? (
                                   <>
-                                    <span className={styles.pendingStatus}>
-                                      {t("chatbot.pendingMessages.uncertain")}
-                                    </span>
                                     <button
                                       type="button"
                                       className={styles.pendingAction}
@@ -1083,7 +1080,7 @@ export default function ManagedChatPage() {
                                   </>
                                 ) : (
                                   <>
-                                    {
+                                    {chat.waitResponse && (
                                       <Button
                                         type="button"
                                         color="secondary"
@@ -1094,7 +1091,7 @@ export default function ManagedChatPage() {
                                       >
                                         {t("chatbot.pendingMessages.send")}
                                       </Button>
-                                    }
+                                    )}
                                     <ComposerActionsMenu
                                       icon={{ category: "outlined", type: "more_horiz" }}
                                       align="right"
