@@ -4,7 +4,7 @@ from langchain_community.embeddings import FakeEmbeddings
 
 from knowledge_flow_backend.application_context import ApplicationContext
 
-TEST_OPENSEARCH_PASSWORD = "test"
+TEST_OPENSEARCH_PASSWORD = "test"  # pragma: allowlist secret
 
 
 def test_application_context_opensearch_factory_does_not_call_validate_index_or_fail(
