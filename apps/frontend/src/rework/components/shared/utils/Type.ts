@@ -61,6 +61,8 @@ export const materialIcons = [
   "add",
   "drag_indicator",
   "add_comment",
+  "group",
+  "block",
   "crown",
   "remove",
   "home",

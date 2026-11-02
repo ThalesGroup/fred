@@ -21,12 +21,12 @@
 .popover {
   display: flex;
   flex-direction: column;
-  /* M3: menus float above content → mid-level elevation shadow, extra-small
-     container corner (`--radius-s`, the menu/text-field/chip radius). Neutral
+  /* Menus float above content → mid-level elevation shadow, a corner that
+     follows the items inside the padding (`--radius-ms`). Neutral
      border → an `outline-*` token, never `on-surface`. */
   box-shadow: var(--shadow-m);
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-ms);
   background: var(--surface-floating);
   padding: var(--spacing-2xs);
   color: var(--on-surface);
