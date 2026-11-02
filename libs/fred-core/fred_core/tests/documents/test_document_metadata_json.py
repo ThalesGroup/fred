@@ -5,7 +5,6 @@
 import json
 
 import pytest
-
 from fred_core import DocumentMetadata, Identity, ProcessingStage, ProcessingStatus
 from fred_core.documents import SourceInfo, SourceType
 from fred_core.documents.processing_profile import IngestionProcessingProfile

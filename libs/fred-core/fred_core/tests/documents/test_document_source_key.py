@@ -15,7 +15,6 @@
 """Source keys and versions remain opaque in the shared artifact format."""
 
 import pytest
-
 from fred_core.documents import DocumentMetadata, Identity, SourceInfo, SourceType
 
 
