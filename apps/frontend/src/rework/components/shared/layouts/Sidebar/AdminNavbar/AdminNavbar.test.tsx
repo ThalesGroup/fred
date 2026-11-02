@@ -46,6 +46,7 @@ vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
       ) ?? [];
     return {
       allowed: h.supervision,
+      offered: h.supervision,
       organizations,
       organization: organizations[0],
       selectOrganization: h.selectOrganization,

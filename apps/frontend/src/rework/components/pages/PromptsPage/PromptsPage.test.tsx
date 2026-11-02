@@ -58,12 +58,20 @@ const PROMPT_B_DETAIL = promptFixture({
 let promptBReady = false;
 let context: MySpace[] = SPACES;
 let stamp = 1;
+const answered = (allowed: boolean) => ({
+  currentData: { allowed },
+  startedTimeStamp: Date.now(),
+  isFetching: false,
+  isUninitialized: false,
+  isError: false,
+  refetch: vi.fn(),
+});
 let catalogError = false;
 let publishedFailure = false;
 const createCalls: unknown[] = [];
 let createRejectsWith: unknown = null;
 let deleteRejectsWith: unknown = null;
-const authorize = vi.fn();
+const spaceAccess = vi.fn();
 const update = vi.fn();
 const remove = vi.fn();
 const create = vi.fn();
@@ -96,7 +104,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     refetch: vi.fn(),
   }),
   useMySpacesQuery: () => ({ currentData: context, fulfilledTimeStamp: stamp, isError: false }),
-  useAuthorizeSpaceMutation: () => [authorize],
+  useSpaceAccessQuery: (check: { space_id: string; permission: string }) => spaceAccess(check),
   usePromptCatalogQuery: (args: unknown) => {
     catalogRead(args);
     return {
@@ -204,7 +212,7 @@ beforeEach(async () => {
   createRejectsWith = null;
   deleteRejectsWith = null;
   confirmation.last = null;
-  authorize.mockImplementation(() => ({ unwrap: async () => ({ allowed: true }), abort: vi.fn() }));
+  spaceAccess.mockImplementation(() => answered(true));
   create.mockImplementation((arg: unknown) => {
     createCalls.push(arg);
     return {
@@ -507,50 +515,42 @@ describe("Weaver prompt management", () => {
     route.teamId = "personal";
     await act(async () => render());
     expect(catalogRead).toHaveBeenLastCalledWith({ spaceId: SPACE_B });
-    expect(authorize).toHaveBeenCalledWith({ spaceCheck: { space_id: SPACE_B, permission: "write" } });
+    expect(spaceAccess).toHaveBeenCalledWith({ space_id: SPACE_B, permission: "write" });
     expect(container.textContent).toContain("rework.teams.prompts.titlePersonal");
   });
 
   it("does not inherit a form or Write permission across spaces, even with an owner role", async () => {
     cardAction("edit");
     typeInto(fieldByLabel("form.name")!, "Unsaved draft");
-    let allow!: (value: { allowed: boolean }) => void;
-    const abort = vi.fn();
-    authorize.mockImplementationOnce(() => ({
-      unwrap: () =>
-        new Promise((resolve) => {
-          allow = resolve;
-        }),
-      abort,
-    }));
+    spaceAccess.mockImplementation(({ space_id }) =>
+      space_id === SPACE_B
+        ? { isFetching: true, isUninitialized: false, isError: false, refetch: vi.fn() }
+        : answered(true),
+    );
     context = SPACES.map((space) => ({ ...space, roles: ["owner"] }));
     route.teamId = SPACE_B;
     render();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(button("rework.teams.prompts.create")).toBeUndefined();
-    await act(async () => allow({ allowed: false }));
+    spaceAccess.mockImplementation(({ space_id }) => answered(space_id !== SPACE_B));
+    render();
     expect(button("rework.teams.prompts.create")).toBeUndefined();
     route.teamId = SPACE_A;
     await act(async () => render());
-    expect(abort).toHaveBeenCalledOnce();
     click(button("rework.teams.prompts.create"));
     expect(formValues()).toEqual({ name: "", description: "", text: "" });
   });
 
   it("revokes editing immediately while refreshed server authority is unresolved", async () => {
     cardAction("edit");
-    let answer!: (value: { allowed: boolean }) => void;
-    authorize.mockImplementationOnce(() => ({
-      unwrap: () =>
-        new Promise((resolve) => {
-          answer = resolve;
-        }),
-      abort: vi.fn(),
-    }));
+    const rechecking = { ...answered(true), isFetching: true };
+    spaceAccess.mockImplementation(() => rechecking);
     stamp++;
     render();
     expect(button("rework.save")?.disabled).toBe(true);
-    await act(async () => answer({ allowed: false }));
+    expect(button("rework.teams.prompts.create")).toBeTruthy();
+    spaceAccess.mockImplementation(() => answered(false));
+    render();
     expect(fieldByLabel("form.name")?.disabled).toBe(true);
     await save();
     expect(update).not.toHaveBeenCalled();

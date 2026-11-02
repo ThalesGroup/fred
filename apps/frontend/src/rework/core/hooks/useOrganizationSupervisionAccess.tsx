@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createContext, useCallback, useContext, useEffect, useState, type PropsWithChildren } from "react";
-import { useAuthorizeSpaceMutation, useMySpacesQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useMySpacesQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "./crossSessionRefresh";
+import { useSpaceAccess } from "./useSpaceAccess";
 
 function useAccess() {
   const context = useMySpacesQuery(undefined, {
@@ -32,57 +33,24 @@ function useAccess() {
     if (context.currentData && !context.isFetching && !context.isError && selectedId !== organizationId)
       selectOrganization(organizationId);
   }, [context.currentData, context.isFetching, context.isError, selectedId, organizationId, selectOrganization]);
-  const [authorize] = useAuthorizeSpaceMutation();
-  const [decision, setDecision] = useState<{
-    organizationId: string;
-    stamp: number;
-    allowed: boolean;
-    error?: unknown;
-  }>();
+  const access = useSpaceAccess(organizationId, "administer_organization");
   const stamp = context.fulfilledTimeStamp;
-
-  useEffect(() => {
-    // Do not reuse A's decision if the person returns to A while B is still pending.
-    setDecision(undefined);
-    if (!organizationId || !stamp || context.isFetching || context.isError) return;
-    let active = true;
-    const request = authorize({ spaceCheck: { space_id: organizationId, permission: "administer_organization" } });
-    void request.unwrap().then(
-      ({ allowed }) => {
-        if (active) setDecision({ organizationId, stamp, allowed });
-      },
-      (error: unknown) => {
-        if (active) setDecision({ organizationId, stamp, allowed: false, error });
-      },
-    );
-    return () => {
-      active = false;
-      request.abort();
-    };
-  }, [authorize, organizationId, stamp, context.isFetching, context.isError]);
-
+  const check = `${organizationId}:${stamp}`;
+  // A refused metric read revokes until the next context refresh rechecks.
+  const [revoked, setRevoked] = useState<string>();
   useRefetchOnWindowFocus(context.refetch, false);
-  const current =
-    !context.isFetching &&
-    !context.isError &&
-    decision &&
-    decision.stamp === stamp &&
-    decision.organizationId === organizationId
-      ? decision
-      : undefined;
-  const revoke = useCallback(() => {
-    setDecision((previous) => (previous ? { ...previous, allowed: false } : previous));
-  }, []);
+  const revoke = useCallback(() => setRevoked(check), [check]);
   return {
     memberships: context,
     organizations,
     organization,
     selectOrganization,
     organizationId,
-    allowed: !!organizationId && current?.allowed === true,
-    loading: !context.isError && (context.isFetching || context.isLoading || (!!organizationId && !current)),
+    allowed: !!organizationId && access.allowed && revoked !== check,
+    offered: !!organizationId && access.offered,
+    loading: !context.isError && (context.isFetching || context.isLoading || (!!organizationId && !access.settled)),
     revoke,
-    error: context.error || current?.error,
+    error: context.error || access.error,
     refresh: context.refetch,
   };
 }

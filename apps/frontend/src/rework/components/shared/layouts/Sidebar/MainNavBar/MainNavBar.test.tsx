@@ -26,7 +26,7 @@ vi.mock("react-router-dom", () => ({
 }));
 vi.mock("@core/hooks/useOrganizationOwner", () => ({ useOrganizationOwner: () => ({ isOwner: true }) }));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
-  useOrganizationSupervisionAccess: () => ({ allowed: true }),
+  useOrganizationSupervisionAccess: () => ({ allowed: true, offered: true }),
 }));
 vi.mock("@hooks/useUserCapabilities.ts", () => ({
   useUserCapabilities: (skip: boolean) => {

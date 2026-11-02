@@ -19,6 +19,7 @@ import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker"
 import TagInput from "@shared/molecules/TagInput/TagInput";
 import FavoritesFilterChip from "@shared/molecules/FavoritesFilterChip/FavoritesFilterChip";
 import { usePromptFavoriteToggle } from "@core/hooks/usePromptFavoriteToggle";
+import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips";
 import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
@@ -30,7 +31,6 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useMySpacesQuery,
   usePromptPublicationTeamsQuery,
-  useAuthorizeSpaceMutation,
   usePromptCatalogQuery,
   useListPromptCategoriesQuery,
   useGetPromptQuery,
@@ -79,25 +79,10 @@ export default function PromptsPage() {
   if (!context.currentData || (!ordinarySpace && !publication.currentData && !publication.isError))
     return <Spinner size={20} />;
   if (!space) return <ServiceNotice icon="lock" title={t("rework.weaverAgents.scopeUnavailable")} centered />;
-  return (
-    <SpacePrompts
-      key={space.id}
-      space={space}
-      contextStamp={context.fulfilledTimeStamp}
-      canPublish={!!team && !publication.isFetching}
-    />
-  );
+  return <SpacePrompts key={space.id} space={space} canPublish={!!team && !publication.isFetching} />;
 }
 
-function SpacePrompts({
-  space,
-  contextStamp,
-  canPublish,
-}: {
-  space: Pick<MySpace, "id" | "kind" | "name">;
-  contextStamp?: number;
-  canPublish: boolean;
-}) {
+function SpacePrompts({ space, canPublish }: { space: Pick<MySpace, "id" | "kind" | "name">; canPublish: boolean }) {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -110,28 +95,13 @@ function SpacePrompts({
     };
   }, []);
   const [mutationError, setMutationError] = useState<unknown>();
-  const [authorize] = useAuthorizeSpaceMutation();
-  const [access, setAccess] = useState<{ stamp?: number; allowed: boolean; readable?: boolean; error?: unknown }>();
-  useEffect(() => {
-    let current = true;
-    const write = authorize({ spaceCheck: { space_id: spaceId, permission: "write" } });
-    const read = authorize({ spaceCheck: { space_id: spaceId, permission: "read" } });
-    void Promise.all([write.unwrap(), read.unwrap()]).then(
-      ([writer, reader]) => {
-        if (current) setAccess({ stamp: contextStamp, allowed: writer.allowed, readable: reader.allowed });
-      },
-      (error: unknown) => {
-        if (current) setAccess({ stamp: contextStamp, allowed: false, readable: false, error });
-      },
-    );
-    return () => {
-      current = false;
-      write.abort();
-      read.abort();
-    };
-  }, [authorize, spaceId, contextStamp]);
-  const canManage = access?.stamp === contextStamp && access?.allowed === true && access?.readable === true;
-  const canFavorite = access?.stamp === contextStamp && access?.readable === true;
+  const writer = useSpaceAccess(spaceId, "write");
+  const reader = useSpaceAccess(spaceId, "read");
+  const canManage = writer.allowed && reader.allowed;
+  // Display keeps the last answer through a recheck; actions stay on canManage.
+  const offersManage = writer.offered && reader.offered;
+  const canFavorite = reader.offered;
+  const accessError = writer.error ?? reader.error;
   const canPublishRef = useRef(canPublish);
   canPublishRef.current = canPublish;
   const canManageRef = useRef(canManage);
@@ -375,7 +345,7 @@ function SpacePrompts({
   ]
     .map(normalizeApiError)
     .some((error) => error.status === 403 || error.status === 404 || error.code === "space_pending_deletion");
-  if (refused || (access?.stamp === contextStamp && access && !access.readable && !canPublish)) {
+  if (refused || (reader.settled && !reader.allowed && !canPublish)) {
     canManageRef.current = false;
     canPublishRef.current = false;
     return (
@@ -396,7 +366,7 @@ function SpacePrompts({
         title={t(space.kind === "personal" ? "rework.teams.prompts.titlePersonal" : "rework.teams.prompts.title")}
         actions={
           <>
-            {canManage && (
+            {offersManage && (
               <Button
                 color="primary"
                 variant="filled"
@@ -421,7 +391,7 @@ function SpacePrompts({
               variant="text"
               size="small"
               disabled={
-                !canManage ||
+                !offersManage ||
                 !categoryCatalog.currentData ||
                 categoryCatalog.isFetching ||
                 categoryCatalog.isError ||
@@ -465,7 +435,7 @@ function SpacePrompts({
           maxVisible={6}
         />
       )}
-      {!canPublish && access?.error != null && <ServiceNotice icon="info" title={agentErrorText(access.error, t)} />}
+      {!canPublish && accessError != null && <ServiceNotice icon="info" title={agentErrorText(accessError, t)} />}
       {catalog.isError || categoryCatalog.isError ? (
         <ServiceNotice
           icon="cloud_off"
@@ -494,7 +464,7 @@ function SpacePrompts({
         <PageEmptyState
           icon="edit_note"
           message={t("rework.teams.prompts.noPrompt")}
-          action={canManage ? { label: t("rework.teams.prompts.firstCreate"), onClick: () => open() } : undefined}
+          action={offersManage ? { label: t("rework.teams.prompts.firstCreate"), onClick: () => open() } : undefined}
         />
       ) : filtered.length === 0 ? (
         <div className={styles.emptyState}>{t("rework.teams.prompts.emptySearch")}</div>
@@ -505,7 +475,7 @@ function SpacePrompts({
               key={prompt.prompt_id}
               prompt={prompt}
               categoryName={prompt.category_id ? categoryNameById.get(prompt.category_id) : null}
-              canManage={canManage && !busy}
+              canManage={offersManage && !busy}
               publishable={canPublish && !busy}
               published={prompt.published}
               onPublish={() => changePublication(prompt, true)}
@@ -542,7 +512,7 @@ function SpacePrompts({
                 required
                 explanation={`${countUnicodeCodePoints(form.display_name.normalize("NFC").trim())}/255`}
                 value={form.display_name}
-                disabled={!canManage || busy}
+                disabled={!offersManage || busy}
                 error={!validTitle && form.display_name ? t("rework.weaverPrompts.titleLimit") : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
               />
@@ -554,7 +524,7 @@ function SpacePrompts({
                 required
                 prefix="/"
                 readOnly={mode === "edit"}
-                disabled={!canManage || busy}
+                disabled={!offersManage || busy}
                 value={form.logical_name}
                 maxLength={64}
                 error={nameError ?? (form.logical_name && !validName ? t("rework.weaverPrompts.nameHelp") : undefined)}
@@ -567,20 +537,20 @@ function SpacePrompts({
                 label={t("rework.teams.prompts.form.description")}
                 explanation={`${countUnicodeCodePoints(form.description ?? "")}/500`}
                 value={form.description ?? ""}
-                disabled={!canManage || busy}
+                disabled={!offersManage || busy}
                 error={!validDescription ? t("rework.weaverPrompts.descriptionLimit") : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
               <CategoryPicker
                 categories={categories}
                 value={form.category_id}
-                disabled={!canManage || busy}
+                disabled={!offersManage || busy}
                 onChange={(category_id) => setForm((current) => ({ ...current, category_id }))}
               />
               <TagInput
                 label={t("rework.weaverPrompts.tags")}
                 tags={form.tags ?? []}
-                disabled={!canManage || busy}
+                disabled={!offersManage || busy}
                 placeholder={t("rework.teams.prompts.form.tagsPlaceholder")}
                 error={!validTags ? t("rework.weaverPrompts.tagsLimit") : undefined}
                 removeTagAriaLabel={(tag) => t("rework.teams.prompts.form.removeTagAria", { tag })}
@@ -591,13 +561,13 @@ function SpacePrompts({
                 required
                 error={form.text && !validText ? t("rework.weaverPrompts.textRequired") : undefined}
                 value={form.text}
-                disabled={!canManage || busy}
+                disabled={!offersManage || busy}
                 onChange={(text) => setForm((f) => ({ ...f, text }))}
               />
             </div>
           )}
           <div className={styles.modalFooter}>
-            {mode === "edit" && detail.currentData && canManage && (
+            {mode === "edit" && detail.currentData && offersManage && (
               <Button
                 color="error"
                 variant="text"
@@ -634,7 +604,7 @@ function SpacePrompts({
           </div>
         </div>
       </FullPageModal>
-      {managingCategories && canManage && categoryCatalog.currentData && (
+      {managingCategories && offersManage && categoryCatalog.currentData && (
         <ManageCategoriesDialog
           open
           spaceId={spaceId}
@@ -660,7 +630,7 @@ function SpacePrompts({
         initialName=""
         error={nameError ?? (duplicate.isError ? agentErrorText(duplicate.error, t) : undefined)}
         onNameChange={() => setNameError(undefined)}
-        isSubmitting={busy || !canManage || duplicate.isFetching || duplicate.isError || !duplicate.currentData}
+        isSubmitting={busy || !offersManage || duplicate.isFetching || duplicate.isError || !duplicate.currentData}
         onCancel={close}
         onConfirm={handleDuplicate}
       />

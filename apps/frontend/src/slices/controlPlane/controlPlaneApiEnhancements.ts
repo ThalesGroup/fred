@@ -16,6 +16,8 @@ import {
   type ManagedAgentInstanceSummary,
   type PromptCategory,
   type OrganizationDetail,
+  type Allowed,
+  type SpaceCheck,
 } from "./controlPlaneOpenApi";
 
 type CatalogDefinition = typeof controlPlaneApi.endpoints.listPrompts.Types.QueryDefinition;
@@ -508,7 +510,6 @@ export const {
   useUpdateAgentInstanceMutation,
   useDeleteAgentInstanceMutation,
   useSpaceAgentTemplatesQuery,
-  useAuthorizeSpaceMutation,
   useOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
   useOrganizationModelsQuery,
@@ -545,3 +546,18 @@ export const {
   useAcceptTermsMutation,
   useBootstrapPlatformAdminMutation,
 } = enhancedControlPlaneApi;
+
+// authorizeSpace as a query: the last answer stays cached through rechecks and page changes.
+export const { useSpaceAccessQuery } = enhancedControlPlaneApi.injectEndpoints({
+  endpoints: (build) => ({
+    spaceAccess: build.query<Allowed, SpaceCheck>({
+      keepUnusedDataFor: 600,
+      queryFn: async (spaceCheck, { dispatch }) => {
+        const answer = await dispatch(
+          enhancedControlPlaneApi.endpoints.authorizeSpace.initiate({ spaceCheck }, { track: false }),
+        );
+        return "error" in answer ? { error: answer.error as FetchBaseQueryError } : { data: answer.data };
+      },
+    }),
+  }),
+});

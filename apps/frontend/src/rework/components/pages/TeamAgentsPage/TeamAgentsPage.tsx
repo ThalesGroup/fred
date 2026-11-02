@@ -17,7 +17,6 @@ import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { useCurrentUserPreference } from "../../../../app/userPreferences";
 import {
   useMySpacesQuery,
-  useAuthorizeSpaceMutation,
   useListAgentInstancesQuery,
   useSpaceAgentTemplatesQuery,
   useGetAgentInstanceQuery,
@@ -31,6 +30,7 @@ import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState";
 import { filterAgents } from "./agentFilter";
 import { sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort";
 import { isAgentNameConflict, normalizeAgentName, takenAgentNames } from "./agentNames";
+import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { agentErrorText, createAgentRequest, resolveAgentSpace, updateAgentRequest } from "./weaverAgents";
 import styles from "./TeamAgentsPage.module.css";
 
@@ -43,7 +43,7 @@ export default function TeamAgentsPage() {
   if (!context.currentData) return <Spinner size={20} />;
   if (!space) return <ServiceNotice icon="lock" title={t("rework.weaverAgents.scopeUnavailable")} centered />;
   // A new scope cannot inherit the previous scope's list, dialog or write decision.
-  return <SpaceAgents key={space.id} space={space} contextStamp={context.fulfilledTimeStamp} />;
+  return <SpaceAgents key={space.id} space={space} />;
 }
 
 function AgentNotice({ error }: { error: unknown }) {
@@ -51,14 +51,14 @@ function AgentNotice({ error }: { error: unknown }) {
   return <ServiceNotice icon="info" title={agentErrorText(error, t)} />;
 }
 
-function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: number }) {
+function SpaceAgents({ space }: { space: MySpace }) {
   const { t } = useTranslation();
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const { agentsNicknamePlural, agentsNicknameSingular } = useFrontendProperties();
   const spaceId = space.id;
-  const [authorize] = useAuthorizeSpaceMutation();
-  const [access, setAccess] = useState<{ stamp?: number; allowed: boolean; error?: unknown }>();
+  const access = useSpaceAccess(spaceId, "write");
+  const { allowed: canManageAgents, offered: offersManagement } = access;
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
@@ -66,28 +66,12 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
       live.current = false;
     };
   }, []);
-  useEffect(() => {
-    let current = true;
-    const request = authorize({ spaceCheck: { space_id: spaceId, permission: "write" } });
-    void request.unwrap().then(
-      ({ allowed }) => {
-        if (current) setAccess({ stamp: contextStamp, allowed });
-      },
-      (error: unknown) => {
-        if (current) setAccess({ stamp: contextStamp, allowed: false, error });
-      },
-    );
-    return () => {
-      current = false;
-      request.abort();
-    };
-  }, [authorize, spaceId, contextStamp]);
-  const canManageAgents = access?.stamp === contextStamp && access?.allowed === true;
   const instances = useListAgentInstancesQuery({ spaceId }, { refetchOnMountOrArgChange: true });
-  const catalog = useSpaceAgentTemplatesQuery({ spaceId }, { skip: !canManageAgents, refetchOnMountOrArgChange: true });
+  const catalog = useSpaceAgentTemplatesQuery(
+    { spaceId },
+    { skip: !offersManagement, refetchOnMountOrArgChange: true },
+  );
   const managedInstances = instances.isError ? [] : (instances.currentData?.items ?? []);
-  // `data` survives skip while rights are revalidated, keeping the form mounted.
-  // SpaceAgents is keyed by space; saving still requires canManageAgents.
   const templates = catalog.isError ? [] : (catalog.data ?? []);
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [editingId, setEditingId] = useState<string>();
@@ -124,6 +108,8 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
         await create({ spaceId, createAgentInstanceRequest: createAgentRequest(payload) }).unwrap();
       } else return;
       if (!live.current) return;
+      // As on swift: tag invalidation alone has left the list stale after a save.
+      void instances.refetch();
       showSuccess({
         summary: t(editing ? "rework.agentCard.updateSuccess" : "rework.agentCard.createSuccess", {
           agent: agentsNicknameSingular,
@@ -146,13 +132,14 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
         agentInstanceId: instance.agent_instance_id,
         updateAgentInstanceRequest: { status },
       }).unwrap();
-      if (live.current)
-        showSuccess({
-          summary: t("rework.agentCard.toggleSuccess", {
-            agent: agentsNicknameSingular,
-            status: t(status === "enabled" ? "rework.agentCard.statusEnabled" : "rework.agentCard.statusDisabled"),
-          }),
-        });
+      if (!live.current) return;
+      void instances.refetch();
+      showSuccess({
+        summary: t("rework.agentCard.toggleSuccess", {
+          agent: agentsNicknameSingular,
+          status: t(status === "enabled" ? "rework.agentCard.statusEnabled" : "rework.agentCard.statusDisabled"),
+        }),
+      });
     } catch (error) {
       notifyError(error);
     }
@@ -170,6 +157,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
         try {
           await remove({ spaceId, agentInstanceId: instance.agent_instance_id }).unwrap();
           if (!live.current) return;
+          void instances.refetch();
           setEditingId(undefined);
           showSuccess({ summary: t("rework.agentCard.deleteSuccess", { agent: agentsNicknameSingular }) });
         } catch (error) {
@@ -178,7 +166,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
       },
     });
   };
-  const canCreate = canManageAgents && !catalog.isFetching && !catalog.isError && templates.length > 0;
+  const canCreate = offersManagement && !catalog.isFetching && !catalog.isError && templates.length > 0;
   const searched = sortAgents(filterAgents(managedInstances, search), sort);
   const names = new Set([...takenAgentNames(managedInstances, editingId), ...refusedNames]);
   return (
@@ -187,7 +175,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
         title={t(space.kind === "personal" ? "rework.teams.agents.titlePersonal" : "rework.teams.agents.title")}
         actions={
           <>
-            {canManageAgents && (
+            {offersManagement && (
               <Button
                 color="primary"
                 variant="filled"
@@ -225,9 +213,9 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
           </>
         }
       />
-      {access?.error != null && <AgentNotice error={access.error} />}
-      {canManageAgents && catalog.isError && <AgentNotice error={catalog.error} />}
-      {canManageAgents && !catalog.isFetching && !catalog.isError && catalog.currentData?.length === 0 && (
+      {access.error != null && <AgentNotice error={access.error} />}
+      {offersManagement && catalog.isError && <AgentNotice error={catalog.error} />}
+      {offersManagement && !catalog.isFetching && !catalog.isError && catalog.currentData?.length === 0 && (
         <ServiceNotice icon="info" title={t("rework.teams.formAgent.noTemplates")} />
       )}
       {instances.isError ? (
@@ -239,7 +227,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
         </div>
       ) : managedInstances.length === 0 ? (
         <TeamAgentEmptyState
-          canManageAgents={canManageAgents}
+          canManageAgents={offersManagement}
           templatesUnavailable={!canCreate}
           onCreateAgent={() => setIsEnrollOpen(true)}
         />
@@ -259,7 +247,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
                 runtimeId={instance.source_runtime_id}
                 teamId={spaceId}
                 chatAvailable
-                canManageAgents={canManageAgents}
+                canManageAgents={offersManagement}
                 managementBusy={busy}
                 unavailableActionsReason={unavailable}
                 onEdit={() => {
@@ -272,7 +260,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
                 onCopyTo={() => {}}
                 marketplace={{
                   showBar: false,
-                  publishAction: canManageAgents ? { kind: "publish", disabledReason: unavailable } : undefined,
+                  publishAction: offersManagement ? { kind: "publish", disabledReason: unavailable } : undefined,
                   canRemove: false,
                   showDetailedState: false,
                   canHide: false,
@@ -285,13 +273,13 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
           </div>
         </div>
       )}
-      {editingId && canManageAgents && detail.isFetching && <Spinner size={20} />}
-      {editingId && canManageAgents && detail.isError && <AgentNotice error={detail.error} />}
+      {editingId && offersManagement && detail.isFetching && <Spinner size={20} />}
+      {editingId && offersManagement && detail.isError && <AgentNotice error={detail.error} />}
       {(isEnrollOpen || editing) && (
         <AgentFormModal
           key={editing?.agent_instance_id ?? "create"}
           isOpen
-          isSubmitting={busy || !canManageAgents}
+          isSubmitting={busy || !offersManagement}
           mode={editing ? "edit" : "create"}
           teamName={space.name}
           teamId={spaceId}
@@ -303,7 +291,7 @@ function SpaceAgents({ space, contextStamp }: { space: MySpace; contextStamp?: n
             setEditingId(undefined);
           }}
           onSubmit={handleSave}
-          onDelete={editing && canManageAgents ? () => handleDelete(editing) : undefined}
+          onDelete={editing && offersManagement ? () => handleDelete(editing) : undefined}
         />
       )}
     </div>
