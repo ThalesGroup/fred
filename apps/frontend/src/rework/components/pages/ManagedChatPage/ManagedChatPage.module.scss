@@ -41,14 +41,17 @@
 }
 
 /* ── Left stack — the chat card: header above, content below ──────────────── */
+/* Unclipped and above the panels, here and down to the main column: the composer's
+   menus must be able to open over the viewer card. */
 .leftStack {
   display: flex;
+  position: relative;
   flex: 1 1 0;
   flex-direction: column;
+  z-index: 4;
   border-radius: var(--radius-l);
   background: var(--surface-main);
   min-width: 0;
-  overflow: hidden;
 }
 
 /* Same radii as the shell card (MainLayout.module.css). */
@@ -78,7 +81,6 @@
   flex: 1 1 0;
   flex-direction: row;
   min-height: 0;
-  overflow: hidden;
 }
 
 /* ── Main column — holds the whole conversation surface ────────────────── */
@@ -87,10 +89,8 @@
   position: relative;
   flex: 1 1 0;
   flex-direction: column;
-  background: var(--surface-main);
   min-width: 0;
   height: 100%;
-  overflow: hidden;
 }
 
 /* ── Drop overlay ──────────────────────────────────────────────────────── */
