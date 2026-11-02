@@ -92,7 +92,7 @@ function BusinessMainNavBar() {
   // alone would leave a delegated role holder with no way to reach the one
   // page they own.
   if (
-    supervision.allowed ||
+    supervision.offered ||
     manager.isAdmin ||
     canEnterAdminSection({ ...capabilities, canManageFeatures: organization.isOwner })
   ) {

@@ -41,7 +41,7 @@ function BusinessAdminNavbar() {
   const supervision = useOrganizationSupervisionAccess();
   const pages = organizationOwnerPages({
     capabilities: { ...capabilities, canManageFeatures: organization.isOwner },
-    supervision: supervision.allowed,
+    supervision: supervision.offered,
     platformAccessEnabled: !!getConfig()?.platform_access_enabled,
   });
   const navigationItems: NavigationMenuItemProps[] = pages.map((page) => ({
