@@ -19,6 +19,7 @@
   visibility: hidden;
   opacity: 0;
   z-index: 9;
+  backdrop-filter: blur(4px);
   transition:
     opacity 250ms ease-out,
     visibility 250ms;

@@ -17,6 +17,7 @@
 .overlay {
   position: fixed;
   z-index: 300;
+  backdrop-filter: blur(4px);
   inset: 0;
   background: var(--scrim);
 }
