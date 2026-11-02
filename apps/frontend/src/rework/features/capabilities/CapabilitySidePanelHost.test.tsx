@@ -74,20 +74,18 @@ vi.mock("@shared/molecules/InlineDrawer/InlineDrawer", () => ({
     open,
     title,
     hideHeader,
-    floating,
     resizable,
     children,
   }: {
     open: boolean;
     title: string;
     hideHeader?: boolean;
-    floating?: boolean;
     resizable: { onOpening: (width: number) => number };
     children: React.ReactNode;
   }) => {
     navRoom.onOpening = resizable.onOpening;
     return (
-      <div data-drawer data-open={open} data-floating={floating}>
+      <div data-drawer data-open={open}>
         {!hideHeader && <div data-drawer-title>{title}</div>}
         {children}
       </div>
@@ -139,12 +137,6 @@ describe("CapabilitySidePanelHost panel drawer", () => {
     state.entries = [entry("demo_echo", "edit_note", undefined, false)];
 
     expect(render("demo_echo:demo_echo_pane")).toContain("data-drawer-title");
-  });
-
-  it("opens the viewer on its own card, beside the chat's", () => {
-    state.entries = [entry("demo_echo", "edit_note", undefined, false)];
-
-    expect(render("demo_echo:demo_echo_pane")).toContain('data-floating="true"');
   });
 });
 

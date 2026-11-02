@@ -45,7 +45,7 @@ export interface InlineDrawerProps {
   headerActions?: ReactNode;
   /** Width in CSS units. Defaults to "480px". */
   width?: string;
-  /** Drawer shell background (CSS color/token). Defaults to `--surface-floating`, or `--surface-container` for a flush push panel. */
+  /** Drawer shell background (CSS color/token). Defaults to `--surface-floating`, or `--surface-main` for a push panel. */
   background?: string;
   /**
    * Open/close duration for the push layout (any CSS time, ideally a
@@ -57,7 +57,7 @@ export interface InlineDrawerProps {
   /**
    * Layout mode.
    * - `"overlay"` (default): floats over the page with a dimming backdrop.
-   * - `"push"`: takes layout space on the right; the host's main column reflows
+   * - `"push"`: a card of its own on the right; the host's main column reflows
    *   (e.g. the chat shifts left). No backdrop — content stays interactive.
    *
    * `push` only reflows siblings when the drawer's parent is a flex row and the
@@ -76,12 +76,6 @@ export interface InlineDrawerProps {
    * can use the whole width. The content then owns its own insets.
    */
   flushBody?: boolean;
-  /**
-   * Render the panel as a card of its own beside the host's (push layout), on
-   * `--surface-main` with `--radius-l` corners, no border and no header divider.
-   * Opt-in — default panels stay flush.
-   */
-  floating?: boolean;
   /**
    * Drop the drawer's own title band for content that already has one (a
    * capability pane naming the artefact it holds). The drawer then contributes no
@@ -107,7 +101,6 @@ export function InlineDrawer({
   layout = "overlay",
   resizable,
   flushBody = false,
-  floating = false,
   hideHeader = false,
   children,
 }: PropsWithChildren<InlineDrawerProps>) {
@@ -181,7 +174,6 @@ export function InlineDrawer({
         className={styles.drawer}
         data-open={open}
         data-layout={layout}
-        data-floating={floating ? "true" : undefined}
         data-compact-header={compactHeader ? "true" : undefined}
         data-title-size={titleSize}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}

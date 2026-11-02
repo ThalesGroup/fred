@@ -55,7 +55,6 @@ export default function ChatSidePanel({
       titleSize={titleSize}
       headerActions={headerActions}
       layout="push"
-      floating
       compactHeader
       // Snappier than the 250ms default: these panels are a quick detour from
       // the conversation, not a context switch.

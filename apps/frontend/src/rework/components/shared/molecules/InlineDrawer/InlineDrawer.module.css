@@ -72,8 +72,8 @@
   transition:
     width var(--drawer-duration) var(--easing-standard),
     visibility var(--drawer-duration);
-  /* Transparent shell — the panel below carries the visible surface (background
-     + left divider) so the shell only reserves the animated width. */
+  /* Transparent shell — the panel below carries the visible surface, so the shell
+     only reserves the animated width. */
   background: transparent;
   width: 0;
   overflow: hidden;
@@ -105,45 +105,27 @@
      instead of being clipped away (the host keeps it mounted for the duration). */
   opacity: 1;
   transition: opacity 200ms ease-out;
-  /* Full-height flush panel: a 1px left divider separates it from the content,
-     square corners, flush right against the viewport edge; clip the content
-     (iframe, header, tabs) to the edge. */
-  border-left: 1px solid var(--outline-muted);
-  background: var(--drawer-background, var(--surface-container));
-  width: var(--drawer-width);
-  overflow: hidden;
-}
-
-.drawer[data-layout="push"]:not([data-open="true"]) .panel {
-  opacity: 0;
-}
-
-/* ── Floating-card variant (opt-in, push layout) ──────────────────────────
- * The panel is a card of its own beside the host's, on the app background: same
- * surface and radius, no border, no header divider. Width stays fixed (not
- * `auto`) so content doesn't reflow while the drawer animates its width from 0,
- * matching the flush panel's behaviour. */
-.drawer[data-floating="true"] {
-  background: transparent;
-}
-
-/* The gap to the host's card is part of the drawer's width, so it opens with the
-   slide, and the resize handle sits in it. */
-.drawer[data-floating="true"][data-layout="push"] .panel {
-  border: none;
+  /* A card of its own beside the host's. The gap between them is part of the
+     drawer's width, so it opens with the slide and holds the resize handle. Width
+     stays fixed so content doesn't reflow while the drawer animates from 0. */
   border-radius: var(--radius-s) var(--radius-l) var(--radius-l) var(--radius-s);
   background: var(--drawer-background, var(--surface-main));
   width: calc(var(--drawer-width) - var(--spacing-2xs));
+  overflow: hidden;
 }
 
 @media (pointer: coarse) {
-  .drawer[data-floating="true"][data-layout="push"] .panel {
+  .drawer[data-layout="push"] .panel {
     border-radius: var(--radius-s) var(--radius-m) var(--radius-m) var(--radius-s);
   }
 }
 
-.drawer[data-floating="true"] .header {
+.drawer[data-layout="push"] .header {
   border-bottom: none;
+}
+
+.drawer[data-layout="push"]:not([data-open="true"]) .panel {
+  opacity: 0;
 }
 
 /* ── Drag-to-resize handle (push + `resizable`) ───────────────────────────
@@ -202,7 +184,6 @@
     position: fixed;
     z-index: 10;
     inset: 0;
-    border-left: none;
   }
 
   .drawer[data-layout="push"][data-open="true"] {
@@ -212,12 +193,7 @@
   .drawer[data-layout="push"] .panel {
     top: 0;
     bottom: 0;
-    /* Full-screen panel: no left divider, edge to edge. */
-    border-left: none;
-    width: 100%;
-  }
-
-  .drawer[data-floating="true"][data-layout="push"] .panel {
+    /* Full-screen panel, edge to edge. */
     border-radius: 0;
     width: 100%;
   }
