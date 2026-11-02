@@ -2322,7 +2322,7 @@ channel itself carries no guarantee against it.
 
 **Tool-loop safety guardrails:**
 
-- `max_tool_calls_per_turn = 12` on all five ReAct agents
+- `max_tool_calls_per_turn = 100` on all ReAct agents
   (`fred_agents/tool_pacing.py`), permanent — a real cap, not a
   documented-but-inert default; hitting it degrades the answer
   (`exit_behavior="continue"`) rather than erroring the turn.
