@@ -60,7 +60,7 @@ let context: MySpace[] = SPACES;
 let stamp = 1;
 const answered = (allowed: boolean) => ({
   currentData: { allowed },
-  startedTimeStamp: Date.now(),
+  startedTimeStamp: Date.now() + 60_000,
   isFetching: false,
   isUninitialized: false,
   isError: false,
