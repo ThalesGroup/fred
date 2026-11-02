@@ -115,6 +115,12 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 
 import { useChatSse } from "./useChatSse";
+import { abortTurn } from "./backgroundTurns";
+import {
+  clearSessionHistoryCache,
+  getCachedSessionHistory,
+  setCachedSessionHistory,
+} from "../../components/pages/ManagedChatPage/sessionHistoryCache";
 import type { RuntimeAwaitingHumanEvent } from "./useChatSse";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>) => void }) {
@@ -1959,6 +1965,41 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       expect(latest.waitResponse).toBe(false);
       expect(onBackgroundTurnSettledMock).not.toHaveBeenCalled();
       fetchSpy.mockRestore();
+    });
+
+    it("deleting the shown conversation cancels its turn, releases the composer and forgets its cache", async () => {
+      setCachedSessionHistory("session-1", [{ id: "cached" }] as never);
+      mount();
+      const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
+      act(() => abortTurn("session-1"));
+      expect(signal.aborted).toBe(true);
+      expect(getCachedSessionHistory("session-1")).toBeUndefined();
+      expect(sessionStorage.getItem("chat.history.session-1")).toBeNull();
+      // The view's departure snapshot runs after the deletion: it must not re-cache it.
+      setCachedSessionHistory("session-1", [{ id: "snapshot" }] as never);
+      expect(getCachedSessionHistory("session-1")).toBeUndefined();
+      clearSessionHistoryCache();
+      await act(async () => {
+        stream.close();
+        await sendPromise;
+      });
+      expect(latest.waitResponse).toBe(false);
+      expect(onErrorMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it("deleting a conversation answering in the background cancels it and caches nothing", async () => {
+      mount();
+      const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
+      act(() => root.unmount());
+      abortTurn("session-1");
+      expect(signal.aborted).toBe(true);
+      stream.close();
+      await sendPromise;
+      expect(onBackgroundTurnSettledMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+      mount();
+      expect(latest.adoptBackgroundTurn("session-1")).toBe(false);
     });
 
     it("never writes into the session shown meanwhile, and Stop after adoption still cancels", async () => {

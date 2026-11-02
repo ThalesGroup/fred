@@ -871,6 +871,8 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   closes. Returning while it runs re-attaches it live, Stop included; once it ends
   its full thread lands in the session-history cache. Reload or tab close still
   loses the turn.
+  Deleting a conversation (single or bulk) cancels its turn and drops its cached
+  thread first, so a finishing turn cannot write history back after the erasure.
   Mechanism: `core/hooks/backgroundTurns.ts`.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI

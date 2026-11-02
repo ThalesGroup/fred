@@ -48,6 +48,7 @@ import { toolResultCallId, upsertOne } from "./chatSseUtils";
 import {
   detachTurn,
   readTurnMessages,
+  registerTurn,
   settleTurn,
   takeDetachedTurn,
   turnCallbacks,
@@ -388,7 +389,11 @@ export function useChatSse(
       finish: (turn) => {
         if (activeSteeringTurnIdRef.current === turn.steeringTurnId) activeSteeringTurnIdRef.current = null;
         if (liveTurnRef.current === turn) liveTurnRef.current = null;
-        if (!turn.controller.signal.aborted) setWaitResponse(false);
+        // Stop and a replacing send take the slot before aborting. Still owning
+        // it after an abort means abortTurn() on deletion: release the composer here.
+        const owned = abortRef.current === turn.controller;
+        if (owned) abortRef.current = null;
+        if (!turn.controller.signal.aborted || owned) setWaitResponse(false);
       },
     }),
     [],
@@ -463,6 +468,7 @@ export function useChatSse(
         detachedCallbacks: {},
       };
       liveTurnRef.current = turn;
+      registerTurn(turn);
       return turn;
     },
     [host],

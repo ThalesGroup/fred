@@ -27,6 +27,7 @@ import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import styles from "./ChatList.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
+import { abortTurn } from "@core/hooks/backgroundTurns";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
@@ -101,6 +102,7 @@ export default function ChatList({ teamId }: ChatListProps) {
         confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
         cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
         onConfirm: async () => {
+          abortTurn(sessionId);
           try {
             await deleteSession({ teamId: teamId!, sessionId }).unwrap();
             clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });

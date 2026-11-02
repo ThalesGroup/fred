@@ -17,6 +17,7 @@
 // turn whose stream closes), and the next view of that session adopts it back.
 // Module-level on purpose, like sessionHistoryCache: the page remounts per agent.
 
+import { forgetCachedSessionHistory } from "../../components/pages/ManagedChatPage/sessionHistoryCache";
 import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 import type { ChatSseCallbacks } from "./useChatSse";
 
@@ -49,6 +50,21 @@ export type LiveTurn = {
 };
 
 const detached = new Map<string, LiveTurn>();
+// Every streaming turn, attached or not: what deletion cancels.
+const running = new Map<string, LiveTurn>();
+
+export function registerTurn(turn: LiveTurn): void {
+  running.set(turn.sessionId, turn);
+}
+
+/**
+ * Cancels the session's streaming turn and drops its cached thread. Called
+ * before erasing a conversation: a running turn would write its history back.
+ */
+export function abortTurn(sessionId: string): void {
+  running.get(sessionId)?.controller.abort();
+  forgetCachedSessionHistory(sessionId);
+}
 
 export function readTurnMessages(turn: LiveTurn): ChatMessage[] {
   return turn.host ? turn.host.read() : turn.messages;
@@ -82,10 +98,15 @@ export function takeDetachedTurn(sessionId: string): LiveTurn | undefined {
 
 /** Ends the turn on its view, or hands a detached turn's final thread to its owner. */
 export function settleTurn(turn: LiveTurn): void {
+  // A replacement turn of the same session may already be registered.
+  if (running.get(turn.sessionId) === turn) running.delete(turn.sessionId);
   if (turn.host) {
     turn.host.finish(turn);
     return;
   }
   if (detached.get(turn.sessionId) === turn) detached.delete(turn.sessionId);
-  turn.detachedCallbacks.onBackgroundTurnSettled?.(turn.sessionId, turn.messages);
+  // Only deletion aborts a detached turn: its thread must not be cached again.
+  if (!turn.controller.signal.aborted) {
+    turn.detachedCallbacks.onBackgroundTurnSettled?.(turn.sessionId, turn.messages);
+  }
 }
