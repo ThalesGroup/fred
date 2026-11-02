@@ -651,11 +651,20 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     [mayShowMessages, messages, waitResponse],
   );
   executionDisabledRef.current = executionDisabled;
+  // The backend links no document to a turn, so timestamps tell sent files from pending ones.
+  const sentBefore = useMemo(
+    () =>
+      isHistorySettled
+        ? Math.max(0, ...messages.filter((m) => m.role === "user").map((m) => Date.parse(m.timestamp)))
+        : Infinity,
+    [isHistorySettled, messages],
+  );
   const attachments = useChatAttachments({
     spaceId,
     sessionId,
     enabled: !executionDisabled,
     canUpload: chatControls.some((control) => control.widget === "attach_files"),
+    sentBefore,
   });
 
   const notifySessionSaveFailed = useCallback(
@@ -1440,10 +1449,6 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     ],
   );
   const setComposerInput = useMemo(() => guardChange(setInput), [guardChange]);
-  const removeAttachment = useMemo(
-    () => guardChange(attachments.removeAttachment),
-    [guardChange, attachments.removeAttachment],
-  );
   const deletePersistedAttachment = useCallback(
     async (id: string) => {
       if (!executionDisabledRef.current) await attachments.deletePersistedAttachment(id);
@@ -1505,7 +1510,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     },
     attachmentListError: attachments.listError,
     refreshAttachments: attachments.refreshAttachments,
-    removeAttachment,
+    // Unguarded: dismissing a failed chip is local, and the hook itself blocks backend deletion.
+    removeAttachment: attachments.removeAttachment,
     deletePersistedAttachment,
     setDocumentSelection: guardedComposer.setDocumentSelection,
     searchPolicy: composer.searchPolicy,

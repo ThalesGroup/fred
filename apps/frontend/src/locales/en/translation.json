@@ -446,9 +446,17 @@
     "attachmentChip": {
       "ariaLabel": "Attached files",
       "failed": "Failed",
+      "failedReason": {
+        "name_conflict": "Name already used",
+        "quota_exceeded": "Quota reached",
+        "conversation_files_exceeded": "Too many files",
+        "conversation_bytes_exceeded": "Total size reached",
+        "file_too_large": "File too large",
+        "unsupported_input": "Unsupported format"
+      },
       "file": "File",
       "image": "Image",
-      "processing": "Processing",
+      "processing": "Processing...",
       "removeAria": "Remove {{name}}",
       "uploading": "Uploading",
       "ready": "Ready"
@@ -482,7 +490,7 @@
       "processingPrepare": "Preparing processing",
       "uploadWarningConfirm": "I understand",
       "uploadWarningTitle": "Before attaching files",
-      "waiting": "Sending waits for file upload and processing. A file ready after a turn starts is available from the next turn.",
+      "waiting": "You can send once your files are processed",
       "listFailed": "Unable to verify attachments. Retry before sending your message.",
       "retryUpload": "Retry upload (select the same file)",
       "processingUnavailable": "This file cannot be used by the agent. Delete it and upload it again to retry processing.",
@@ -606,7 +614,6 @@
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
-      "deleteAria": "Delete {{name}}",
       "empty": "No attachments in this conversation.",
       "filePreviewTitle": "Attachment preview",
       "loading": "Loading attachments...",

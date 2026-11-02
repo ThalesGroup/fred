@@ -27,6 +27,7 @@ vi.mock("../../../../security/KeycloakService", () => ({
 vi.mock("../../../../common/platformAccess", () => ({ handlePlatformAccessDenial: vi.fn() }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@core/hooks/useApiErrorToast.ts", () => ({ useApiErrorToast: () => ({ notifyApiError: notify }) }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: notify }) }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const NativeRequest = globalThis.Request;
@@ -75,13 +76,15 @@ function Host({
   sessionId,
   enabled,
   canUpload,
+  sentBefore,
 }: {
   onRender: (value: Hook) => void;
   sessionId: string;
   enabled: boolean;
   canUpload: boolean;
+  sentBefore: number;
 }) {
-  onRender(useChatAttachments({ spaceId: "personal-space", sessionId, enabled, canUpload }));
+  onRender(useChatAttachments({ spaceId: "personal-space", sessionId, enabled, canUpload, sentBefore }));
   return null;
 }
 function makeStore() {
@@ -95,12 +98,13 @@ describe("conversation attachment transport and server state", () => {
   let latest: Hook;
   let documents: Attachment[];
   let fetcher: ReturnType<typeof vi.fn<(request: Request) => Promise<Response>>>;
-  const render = async (sessionId = "conversation", enabled = true, canUpload = true) => {
+  const render = async (sessionId = "conversation", enabled = true, canUpload = true, sentBefore = 0) => {
     await act(async () => {
       root.render(
         <Provider store={store}>
           <Host
             canUpload={canUpload}
+            sentBefore={sentBefore}
             sessionId={sessionId}
             enabled={enabled}
             onRender={(h) => {
@@ -242,6 +246,37 @@ describe("conversation attachment transport and server state", () => {
     await refresh();
     expect(latest.attachments).toHaveLength(1);
     expect(latest.hasReadyAttachments).toBe(true);
+  });
+  it("drops sent ready documents from the composer and keeps them in the drawer", async () => {
+    documents = [document(true, "succeeded")];
+    await render("conversation", true, true, Date.parse("2026-10-29T10:00:01Z"));
+    await refresh();
+    expect(latest.attachments).toEqual([]);
+    expect(latest.hasReadyAttachments).toBe(false);
+    expect(latest.persistedAttachments).toHaveLength(1);
+  });
+  it("gives the panel the same failure reason as the composer", async () => {
+    documents = [document(false, "failed")];
+    await render();
+    await refresh();
+    expect(latest.persistedAttachments[0].error).toBe(latest.attachments[0].error);
+    expect(latest.persistedAttachments[0].error).toBeDefined();
+  });
+  it("offers removal only once processing has ended", async () => {
+    documents = [document(false, "running")];
+    await render();
+    await refresh();
+    expect(latest.attachments[0].canRemove).toBe(false);
+  });
+  it("deletes a failed document and clears its chip even if the deletion is refused", async () => {
+    documents = [document(false, "failed")];
+    await render();
+    await refresh();
+    expect(latest.attachments).toHaveLength(1);
+    fetcher.mockImplementation(async () => reply({ code: "storage_unavailable" }, 503));
+    await act(async () => latest.removeAttachment("doc"));
+    expect(latest.attachments).toEqual([]);
+    expect(fetcher.mock.calls.some(([request]) => request.method === "DELETE")).toBe(true);
   });
   it.each(["processing_active", "network"])("retains the document when deletion fails: %s", async (failure) => {
     documents = [document(true, "succeeded")];

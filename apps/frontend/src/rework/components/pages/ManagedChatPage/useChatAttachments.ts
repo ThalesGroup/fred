@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   useListAttachmentsQuery,
   useDeleteAttachmentMutation,
@@ -13,8 +14,8 @@ import type { Attachment } from "../../../../slices/controlPlane/controlPlaneOpe
 import { managerActor, type ManagerDispatch } from "../../../features/imports/managerImportRun";
 import type { AttachmentSource, ChatAttachment, SessionAttachment } from "@rework/types/attachments";
 import {
-  attachmentErrorCode,
   attachmentUploadScope,
+  dismissAttachment,
   forgetAttachmentUpload,
   refreshAttachmentUploads,
   retryAttachmentUpload,
@@ -32,11 +33,20 @@ interface UseChatAttachmentsParams {
   canUpload?: boolean;
   spaceId: string;
   sessionId: string | null;
+  /** Epoch ms of the latest turn: ready documents created up to then were already sent. */
+  sentBefore?: number;
 }
-export function useChatAttachments({ spaceId, sessionId, enabled = true, canUpload = true }: UseChatAttachmentsParams) {
+export function useChatAttachments({
+  spaceId,
+  sessionId,
+  enabled = true,
+  canUpload = true,
+  sentBefore = 0,
+}: UseChatAttachmentsParams) {
   const dispatch = useDispatch<ManagerDispatch>();
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
+  const { showError } = useToast();
   const actor = managerActor();
   const scope = useMemo(() => attachmentUploadScope(actor, spaceId, sessionId ?? ""), [actor, spaceId, sessionId]);
   const [acceptedDeletions, setAcceptedDeletions] = useState<{ scope: UploadScope; ids: ReadonlySet<string> }>({
@@ -115,17 +125,26 @@ export function useChatAttachments({ spaceId, sessionId, enabled = true, canUplo
     }
   }, [documents, scope, uploads]);
 
+  const documentError = (document: Attachment) =>
+    document.processing?.error_code ?? (attachmentStatus(document) === "error" ? "not_ready" : undefined);
+  const isPending = (document: Attachment) => {
+    const status = attachmentStatus(document);
+    if (status === "error") return !scope.dismissed.has(document.document_id);
+    return status === "ingesting" || Date.parse(document.created_at) > sentBefore;
+  };
+  // The composer's view: only what the next turn still has to deal with.
   const attachments: ChatAttachment[] = [
-    ...(documents ?? []).map(
+    ...(documents ?? []).filter(isPending).map(
       (document): ChatAttachment => ({
         id: document.document_id,
         name: document.name,
         size: document.size,
         mime: document.mime,
         status: attachmentStatus(document),
-        isImage: document.mime.startsWith("image/"),
         documentUid: document.document_id,
-        error: document.processing?.error_code ?? (attachmentStatus(document) === "error" ? "not_ready" : undefined),
+        error: documentError(document),
+        // The server refuses the deletion while processing runs.
+        canRemove: attachmentStatus(document) !== "ingesting",
       }),
     ),
     ...uploads
@@ -137,7 +156,6 @@ export function useChatAttachments({ spaceId, sessionId, enabled = true, canUplo
           size: entry.size,
           mime: entry.mime,
           status: entry.phase === "failed" ? "error" : entry.phase === "stored" ? "ingesting" : "uploading",
-          isImage: entry.mime.startsWith("image/"),
           error: entry.error,
           canRetry: entry.phase === "failed" || entry.phase === "uncertain",
           canRemove: entry.phase === "failed",
@@ -153,7 +171,7 @@ export function useChatAttachments({ spaceId, sessionId, enabled = true, canUplo
     summaryMd: "",
     createdAt: d.created_at,
     status: attachmentStatus(d),
-    error: d.processing?.error_code ?? undefined,
+    error: documentError(d),
   }));
   const deletePersistedAttachment = useCallback(
     async (documentId: string) => {
@@ -171,16 +189,15 @@ export function useChatAttachments({ spaceId, sessionId, enabled = true, canUplo
           if (entry.receipt?.document_id === documentId) forgetAttachmentUpload(scope, entry.key);
       } catch (error) {
         if (managerActor() === actor && visibleScope.current === scope)
-          notifyApiError(error, {
+          showError({
             summary: t("chatbot.errors.attachmentDeleteFailedSummary"),
-            fallbackDetail: t("chatbot.errors.attachmentDeleteFailedDetail"),
-            conflictDetail: t(`chatbot.attachments.errors.${attachmentErrorCode(error)}`, {
+            detail: t(`chatbot.attachments.errors.${(error as { data?: { code?: string } }).data?.code}`, {
               defaultValue: t("chatbot.errors.attachmentDeleteFailedDetail"),
             }),
           });
       }
     },
-    [actor, deleteDocument, enabled, notifyApiError, scope, sessionId, spaceId, t],
+    [actor, deleteDocument, enabled, scope, sessionId, showError, spaceId, t],
   );
   const addFiles = useCallback(
     async (files: File[], _source: AttachmentSource, activeSessionId?: string | null) => {
@@ -216,10 +233,15 @@ export function useChatAttachments({ spaceId, sessionId, enabled = true, canUplo
   const removeAttachment = useCallback(
     (id: string) => {
       const local = scope.entries.find((e) => e.key === id);
+      const failedDocument = documents?.some((d) => d.document_id === id && attachmentStatus(d) === "error");
       if (local?.phase === "failed") forgetAttachmentUpload(scope, id);
-      else if (!local) void deletePersistedAttachment(id);
+      else if (!local) {
+        // Out of the composer even if the deletion is refused: a failed file is no use there.
+        if (failedDocument) dismissAttachment(scope, id);
+        void deletePersistedAttachment(id);
+      }
     },
-    [deletePersistedAttachment, scope],
+    [deletePersistedAttachment, documents, scope],
   );
   return {
     attachments,

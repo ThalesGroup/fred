@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { ReactNode } from "react";
-import Icon from "../Icon/Icon";
+import IconButton from "../IconButton/IconButton";
 import styles from "./Chip.module.css";
 
 export interface ChipProps {
@@ -28,13 +28,19 @@ export interface ChipProps {
    * a self-styled badge sets its own color and overrides it.
    */
   leading?: ReactNode;
+  /** Makes the whole chip clickable; the remove button stays separate. */
+  onClick?: () => void;
   /** Extra content shown just before the remove button (e.g. a task indicator). */
   trailing?: ReactNode;
   /** When provided, renders a trailing remove (close) affordance. */
   onRemove?: () => void;
   removeAriaLabel?: string;
-  /** Semantic tone. "error" flips the container to the error-container role. */
-  tone?: "default" | "error";
+  /** Glyph of the remove button, "delete" when removing is destructive. */
+  removeIcon?: "close" | "delete";
+  removeButtonSize?: "2xs" | "small";
+  /** Semantic tone. "error" flips the container to the error-container role;
+   *  "tertiary" and "success" only color the icon and the secondary line. */
+  tone?: "default" | "error" | "tertiary" | "success";
 }
 
 /**
@@ -48,11 +54,16 @@ export default function Chip({
   title,
   secondary,
   leading,
+  onClick,
   trailing,
   onRemove,
   removeAriaLabel,
+  removeIcon = "close",
+  removeButtonSize = "2xs",
   tone = "default",
 }: ChipProps) {
+  const labelProps = { className: styles.label, title: title ?? label };
+
   return (
     <span className={styles.chip} data-tone={tone}>
       {leading && (
@@ -61,21 +72,24 @@ export default function Chip({
         </span>
       )}
       <span className={styles.text}>
-        <span className={styles.label} title={title ?? label}>
-          {label}
-        </span>
+        {onClick ? (
+          <button type="button" onClick={onClick} {...labelProps}>
+            {label}
+          </button>
+        ) : (
+          <span {...labelProps}>{label}</span>
+        )}
         {secondary != null && <span className={styles.secondary}>{secondary}</span>}
       </span>
       {trailing}
       {onRemove && (
-        <button
-          type="button"
-          className={styles.remove}
+        <IconButton
+          variant="icon"
+          size={removeButtonSize}
+          icon={{ category: "outlined", type: removeIcon }}
           onClick={onRemove}
           aria-label={removeAriaLabel ?? `Remove ${label}`}
-        >
-          <Icon category="outlined" type="close" />
-        </button>
+        />
       )}
     </span>
   );
