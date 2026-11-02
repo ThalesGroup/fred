@@ -7155,3 +7155,22 @@ The outer request authenticates before MCP dispatch; the inner FastAPI request
 gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
+
+### 8.119 Generated conversation title (2026-10-29)
+
+`RuntimeContext.auto_title: bool | None` is a new optional field, and
+`session_title` (`SessionTitleRuntimeEvent { title }`) is a new runtime event
+kind. The chat sets `auto_title=true` on a conversation's first turn only. The
+runtime then starts one call beside the turn
+(`fred_runtime/app/session_title.py`) without reasoning, on the admin's title
+model (`ManagedAgentRuntimeBinding.title_model_profile_id`), else the platform
+chat binding, else the pod default. It sends the first 600 characters of the
+turn input and keeps a title of 80 characters at most, made of letters, digits,
+spaces, apostrophes and hyphens; a reply without a letter gives no title. The event is streamed once, just before the first turn event that
+follows the call's completion, so the title usually shows while the answer is
+still streaming. If the call is still running when `final` arrives, the stream
+waits at most 2 s for it. A failure or timeout sends no event. The frontend stores it with the existing session `PATCH { title }`. A
+manual rename made before the title arrives wins, and the title is never
+regenerated afterwards. Child agent invocations never generate titles,
+because `PortableContext` has no `auto_title` field.
+Migration note: `docs/swift/ops/migrations/3346-generated-conversation-title.md`.
