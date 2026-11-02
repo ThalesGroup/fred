@@ -1,14 +1,13 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-use control_plane::{authorization::Authorization, db, domain::Space};
+use control_plane::{db, domain::Space};
 use sqlx::{AssertSqlSafe, PgPool};
 use uuid::Uuid;
 const IGNORE: &str = "needs disposable Postgres: make test-integration";
 
 pub struct Env {
     pub pool: PgPool,
-    pub authorization: Authorization,
     subjects: OpenDirectory,
 }
 
@@ -69,11 +68,6 @@ async fn open_directory() -> OpenDirectory {
 }
 
 pub async fn env() -> Env {
-    env_at(i64::MAX).await
-}
-
-/// Isolated pre-upgrade fixtures; never connects to an existing application database.
-pub async fn env_at(version: i64) -> Env {
     let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES").expect(IGNORE);
     let name = format!("t_{}", Uuid::new_v4().simple());
     let admin = PgPool::connect(&format!("{postgres}/postgres"))
@@ -86,16 +80,10 @@ pub async fn env_at(version: i64) -> Env {
     let pool = PgPool::connect(&format!("{postgres}/{name}"))
         .await
         .unwrap();
-    let mut migrations = sqlx::migrate!();
-    migrations
-        .migrations
-        .to_mut()
-        .retain(|m| m.version <= version);
-    migrations.run(&pool).await.unwrap();
-    let authorization = Authorization::new(pool.clone());
+    sqlx::migrate!().run(&pool).await.unwrap();
+
     Env {
         pool,
-        authorization,
         subjects: open_directory().await,
     }
 }
@@ -115,14 +103,16 @@ pub async fn insert_document(
 /// children among SQL placement.
 pub async fn named_space(
     pool: &PgPool,
-    authorization: &Authorization,
     parent: Option<Uuid>,
     name: &str,
 ) -> anyhow::Result<Option<Space>> {
     let row = match parent {
         None => db::organization_named(pool, name).await?,
         Some(parent) => {
-            let ids = authorization.linked_to(parent, false).await?;
+            let ids: Vec<Uuid> = sqlx::query_scalar("select id from space where parent_id=$1")
+                .bind(parent)
+                .fetch_all(pool)
+                .await?;
             db::spaces(pool, &ids)
                 .await?
                 .into_iter()

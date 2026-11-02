@@ -16,21 +16,14 @@
 //! lock so a revoked admin cannot complete a previously authorized mutation.
 
 use crate::{
-    authorization::{self, Authorization},
-    bootstrap,
+    authorization, bootstrap,
     error::{AppError, AppResult},
     keycloak::Directory,
+    roles::PlatformPermission,
     roles::PlatformRole,
 };
 use serde::Serialize;
 use sqlx::PgPool;
-
-pub(crate) async fn require_admin(authorization: &Authorization, caller: &str) -> AppResult<()> {
-    if !authorization.is_platform_admin(caller).await? {
-        return Err(AppError::Forbidden);
-    }
-    Ok(())
-}
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct Grant {
@@ -38,10 +31,9 @@ pub struct Grant {
     pub role: PlatformRole,
 }
 
-pub async fn list(authorization: &Authorization, caller: &str) -> AppResult<Vec<Grant>> {
-    require_admin(authorization, caller).await?;
-    Ok(authorization
-        .platform_grants()
+pub async fn list(pool: &PgPool, caller: &str) -> AppResult<Vec<Grant>> {
+    authorization::require_platform(pool, caller, PlatformPermission::ManagePlatform).await?;
+    Ok(crate::authorization::platform_grants(pool)
         .await?
         .into_iter()
         .map(|(user_id, role)| Grant { user_id, role })
@@ -56,7 +48,7 @@ pub async fn grant(
     role: PlatformRole,
 ) -> AppResult<()> {
     let mut tx = bootstrap::locked(pool).await?;
-    require_admin_locked(&mut tx, caller).await?;
+    authorization::require_platform(&mut *tx, caller, PlatformPermission::ManagePlatform).await?;
     let directory = directory
         .ok_or_else(|| AppError::Unavailable("Keycloak directory is not configured".into()))?;
     if !directory.exists(target).await? {
@@ -76,7 +68,7 @@ pub async fn revoke(
     role: PlatformRole,
 ) -> AppResult<()> {
     let mut tx = bootstrap::locked(pool).await?;
-    require_admin_locked(&mut tx, caller).await?;
+    authorization::require_platform(&mut *tx, caller, PlatformPermission::ManagePlatform).await?;
     let grants = authorization::platform_grants(&mut *tx).await?;
     if !grants.contains(&(target.to_owned(), role)) {
         return Err(AppError::NotFound);
@@ -101,18 +93,4 @@ pub async fn revoke(
     tx.commit().await?;
 
     Ok(())
-}
-
-pub(crate) async fn require_admin_locked(
-    conn: &mut sqlx::PgConnection,
-    caller: &str,
-) -> AppResult<()> {
-    if authorization::platform_roles(conn, caller)
-        .await?
-        .contains(&PlatformRole::PlatformAdmin)
-    {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden)
-    }
 }

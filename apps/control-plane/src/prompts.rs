@@ -63,28 +63,6 @@ pub struct UpdatePromptRequest {
     pub text: Option<String>,
 }
 
-/// The invited editor exception opens only prompt/category reads and publication.
-/// It neither grants ordinary space Read/Write nor enables favorites or CRUD.
-/// Authorization is admitted before the read, like existing space prompt reads.
-pub(super) async fn authorize_read(
-    pool: &sqlx::PgPool,
-    authorization: &crate::authorization::Authorization,
-    actor: &str,
-    space_id: Uuid,
-) -> AppResult<crate::domain::Space> {
-    if crate::authorization::can_publish_prompts(pool, actor, space_id).await? {
-        return crate::spaces::load(pool, space_id).await;
-    }
-    crate::spaces::authorize(
-        pool,
-        authorization,
-        actor,
-        space_id,
-        crate::domain::Permission::Read,
-    )
-    .await
-}
-
 pub(super) fn require_prompt_space(kind: SpaceKind) -> AppResult<()> {
     if matches!(kind, SpaceKind::Team | SpaceKind::Personal) {
         Ok(())

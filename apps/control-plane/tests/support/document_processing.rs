@@ -33,10 +33,9 @@ async fn setup_with_content_limits(
             .fetch_one(&d.e.pool)
             .await
             .unwrap();
-    let observed = control_plane::authorization::Authorization::new(d.e.pool.clone());
+
     let processing = Arc::new(Processing {
         pool: d.e.pool.clone(),
-        authorization: observed.clone(),
         terms: None,
         installation,
         auth: d.identity.auth().await,
@@ -54,7 +53,6 @@ async fn setup_with_content_limits(
         api::AppState {
             agent_catalog: Default::default(),
             pool: d.e.pool.clone(),
-            authorization: observed,
             auth: Arc::new(d.identity.auth().await),
             content: Some(d.storage.clone()),
             processing: Some(processing.clone()),
@@ -150,7 +148,6 @@ async fn verify_terminal_replay(d: &Documents, p: &Processing, work: &Work, done
         pool: sqlx::PgPool::connect_with(p.pool.connect_options().as_ref().clone())
             .await
             .unwrap(),
-        authorization: p.authorization.clone(),
         terms: p.terms.clone(),
         installation: p.installation,
         config: p.config.clone(),

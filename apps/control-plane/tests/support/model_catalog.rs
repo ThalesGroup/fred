@@ -92,7 +92,6 @@ async fn model_app(
 ) -> Router {
     routes(AppState {
         pool: e.pool.clone(),
-        authorization: e.authorization.clone(),
         agent_catalog: platform,
         auth: Arc::new(identity.auth().await),
         directory: Some(identity.directory()),
@@ -230,7 +229,7 @@ async fn organization_provisioning_runs_the_pending_seed_without_model_ui_action
 async fn sources_isolate_inventory_refresh_policy_recommendation_and_admission() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
-    let other = support::member_organization(&e.pool, &e.authorization, "Other", "bob")
+    let other = support::member_organization(&e.pool, "Other", "bob")
         .await
         .unwrap();
     grant(&e, team.id, Role::Editor, "alice").await;
@@ -553,11 +552,11 @@ async fn seed_failure_retry_validation_and_concurrent_replicas() {
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: make test-integration"]
-async fn migration_requires_explicit_mapping_and_preserves_administered_policy() {
-    let e = environment::env_at(10).await;
+async fn initialization_preserves_administered_and_deleted_policies() {
+    let e = env().await;
     let org = Uuid::new_v4();
     sqlx::query(
-        "insert into space (id,kind,name,organization_id) values ($1,'organization','Legacy',$1)",
+        "insert into space (id,kind,name,organization_id) values ($1,'organization','Administered',$1)",
     )
     .bind(org)
     .execute(&e.pool)
@@ -566,7 +565,7 @@ async fn migration_requires_explicit_mapping_and_preserves_administered_policy()
     let provider = Provider::start().await;
     let mut platform = PlatformConfig {
         model_sources: vec![provider.source("a")],
-        organization_models: vec![declaration("Legacy", &[])],
+        organization_models: vec![declaration("Administered", &["a"])],
         ..Default::default()
     };
     model_catalog::configure_sources(&e.pool, &platform.model_sources)
@@ -576,41 +575,29 @@ async fn migration_requires_explicit_mapping_and_preserves_administered_policy()
         .await
         .unwrap();
     sqlx::query("insert into organization_model_policy (organization_id,revision,created_by,updated_by) values ($1,7,'owner','owner')").bind(org).execute(&e.pool).await.unwrap();
+    assert!(sqlx::query("insert into organization_model_permission (organization_id,source_id,upstream_model_id) values ($1,'a','extra')")
+        .bind(org).execute(&e.pool).await.is_err());
+    sqlx::query(
+        "insert into organization_model_source (organization_id,source_id) values ($1,'a')",
+    )
+    .bind(org)
+    .execute(&e.pool)
+    .await
+    .unwrap();
     sqlx::query("insert into organization_model_permission (organization_id,source_id,upstream_model_id) values ($1,'a','extra')").bind(org).execute(&e.pool).await.unwrap();
     let deleted_policy_org = Uuid::new_v4();
     sqlx::query("insert into space (id,kind,name,organization_id) values ($1,'organization','Deleted policy',$1)")
         .bind(deleted_policy_org).execute(&e.pool).await.unwrap();
     sqlx::query("insert into organization_model_policy (organization_id,revision,created_by,updated_by) values ($1,3,'owner','owner')")
         .bind(deleted_policy_org).execute(&e.pool).await.unwrap();
-    sqlx::migrate!().run(&e.pool).await.unwrap();
     sqlx::query("delete from organization_model_policy where organization_id=$1")
         .bind(deleted_policy_org)
         .execute(&e.pool)
         .await
         .unwrap();
 
-    assert!(
-        initialize(&e.pool, &platform, true)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("historical_model_source_mapping_missing")
-    );
-    assert!(!completion(&e, org).await);
-    sqlx::query("insert into space_role_grant (space_id,subject,role) values ($1,'alice','owner')")
-        .bind(org)
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    let identity = support::IdentityServer::start().await;
-    let app = model_app(&e, &identity, platform.clone()).await;
-    let denied = inventory(&app, &identity, org).await;
-    assert_eq!(denied["sources"], json!([]));
-    assert_eq!(denied["policy"]["permitted"], json!([]));
-    assert!(sqlx::query("insert into organization_model_permission (organization_id,source_id,upstream_model_id) values ($1,'a','chat')")
-        .bind(org).execute(&e.pool).await.is_err());
     // The seed's chat/default/reasoning choices cannot replace the existing 'extra' decision.
-    platform.organization_models[0] = declaration("Legacy", &["a"]);
+    platform.organization_models[0] = declaration("Administered", &["a"]);
     let calls = provider.response.lock().await.2;
     initialize(&e.pool, &platform, true).await.unwrap();
     assert_eq!(calls, provider.response.lock().await.2);
@@ -685,7 +672,6 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     config.security.delegation.service_accounts_only = true;
     let state = AppState {
         pool: e.pool.clone(),
-        authorization: e.authorization.clone(),
         agent_catalog: platform,
         auth: Arc::new(
             Authenticator::start(config.security().unwrap())

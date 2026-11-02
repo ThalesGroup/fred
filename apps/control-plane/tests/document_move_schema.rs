@@ -4,7 +4,7 @@
 use sqlx::{AssertSqlSafe, PgPool};
 use uuid::Uuid;
 
-async fn database(version: Option<i64>) -> PgPool {
+async fn database() -> PgPool {
     let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES")
         .expect("needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES");
     let name = format!("t_{}", Uuid::new_v4().simple());
@@ -18,12 +18,7 @@ async fn database(version: Option<i64>) -> PgPool {
     let pool = PgPool::connect(&format!("{postgres}/{name}"))
         .await
         .unwrap();
-    let migrator = sqlx::migrate!();
-    if let Some(version) = version {
-        migrator.run_to(version, &pool).await.unwrap();
-    } else {
-        migrator.run(&pool).await.unwrap();
-    }
+    sqlx::migrate!().run(&pool).await.unwrap();
     pool
 }
 
@@ -88,7 +83,7 @@ async fn request(
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn move_request_captures_source_and_checks_destination() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, team, project, personal] = spaces(&pool).await;
     let other = spaces(&pool).await[0];
     let target = folder(&pool, project).await;
@@ -133,7 +128,7 @@ async fn move_request_captures_source_and_checks_destination() {
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn move_identity_single_active_request_and_terminal_outcome_are_protected() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, team, project, _] = spaces(&pool).await;
     let doc = document(&pool, team).await;
     let first = request(&pool, doc, project, None).await.unwrap();
@@ -205,7 +200,7 @@ async fn move_identity_single_active_request_and_terminal_outcome_are_protected(
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn requests_reject_existing_processing_and_inclusion_work() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, team, _, _] = spaces(&pool).await;
     let processing_doc = document(&pool, team).await;
     sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$1,'alice',$2,'fast',$1::text,'{}',now()+interval '1 hour','{}',1,1,1)")
@@ -226,7 +221,7 @@ async fn requests_reject_existing_processing_and_inclusion_work() {
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn schema_preparation_does_not_move_existing_documents_or_weaken_immutability() {
-    let pool = database(Some(8)).await;
+    let pool = database().await;
     let [org, team, _, _] = spaces(&pool).await;
     let doc = document(&pool, team).await;
     let before: serde_json::Value =
@@ -235,7 +230,6 @@ async fn schema_preparation_does_not_move_existing_documents_or_weaken_immutabil
             .fetch_one(&pool)
             .await
             .unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>("select count(*) from document_move")
             .fetch_one(&pool)
@@ -277,7 +271,7 @@ async fn schema_preparation_does_not_move_existing_documents_or_weaken_immutabil
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn request_provenance_is_canonical_and_destination_history_does_not_block_purge() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, team, project, _] = spaces(&pool).await;
     let doc = document(&pool, org).await;
     let target = folder(&pool, project).await;

@@ -51,7 +51,6 @@ async fn provisioning_browser_journey() {
     storage_config.temp_dir = spool.path().to_str().unwrap().into();
     let content = control_plane::documents::Storage::start(
         &e.pool,
-        &e.authorization,
         config.app.gcu_version.clone(),
         storage_config,
         "fixture-access".into(),
@@ -66,7 +65,6 @@ async fn provisioning_browser_journey() {
             lifecycle: Default::default(),
             auth,
             pool: e.pool.clone(),
-            authorization: e.authorization.clone(),
             directory: Some(directory.clone()),
             content: Some(content),
             processing: None,
@@ -74,11 +72,7 @@ async fn provisioning_browser_journey() {
         "/control-plane/v1",
         &[],
     )
-    .merge(browser_resources::router(
-        e.pool.clone(),
-        e.authorization.clone(),
-        directory.clone(),
-    ));
+    .merge(browser_resources::router(e.pool.clone(), directory.clone()));
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
@@ -164,15 +158,12 @@ async fn provisioning_browser_journey() {
         );
         return;
     }
-    let org = named_space(&e.pool, &e.authorization, None, "Acme")
+    let org = named_space(&e.pool, None, "Acme").await.unwrap().unwrap();
+    let north = named_space(&e.pool, Some(org.id), "Research")
         .await
         .unwrap()
         .unwrap();
-    let north = named_space(&e.pool, &e.authorization, Some(org.id), "Research")
-        .await
-        .unwrap()
-        .unwrap();
-    let project = named_space(&e.pool, &e.authorization, Some(north.id), "Atlas")
+    let project = named_space(&e.pool, Some(north.id), "Atlas")
         .await
         .unwrap()
         .unwrap();
@@ -186,9 +177,13 @@ async fn provisioning_browser_journey() {
     );
     let oscar = directory.find_username("oscar").await.unwrap().unwrap();
     assert!(
-        !e.authorization
-            .check(&oscar.id, control_plane::domain::Permission::Read, north.id)
-            .await
-            .unwrap()
+        control_plane::authorization::authorize(
+            &e.pool,
+            &oscar.id,
+            north.id,
+            control_plane::domain::Permission::Read
+        )
+        .await
+        .is_err()
     );
 }

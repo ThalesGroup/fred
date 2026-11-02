@@ -35,15 +35,9 @@ pub async fn preview(
     headers: HeaderMap,
 ) -> AppResult<Response> {
     let document = db::document(&state.pool, id).await?;
-    crate::spaces::authorize(
-        &state.pool,
-        &state.authorization,
-        actor,
-        document.space_id,
-        Permission::Read,
-    )
-    .await
-    .map_err(crate::documents::dependency_error)?;
+    crate::authorization::authorize(&state.pool, actor, document.space_id, Permission::Read)
+        .await
+        .map_err(crate::documents::dependency_error)?;
     let storage = state.content.as_ref().ok_or_else(unavailable)?;
     if query.artifact == "native" && document.name.to_lowercase().ends_with(".pdf") {
         let key: String = sqlx::query_scalar(

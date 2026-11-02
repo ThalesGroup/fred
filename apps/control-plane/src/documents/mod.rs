@@ -11,7 +11,7 @@ mod reads;
 mod upload;
 
 use crate::{
-    authorization::Authorization,
+    domain::Permission,
     domain::{Space, SpaceKind},
     error::{AppError, AppResult},
 };
@@ -33,13 +33,14 @@ pub(crate) async fn authorized_mutation(
 ) -> AppResult<Transaction<'static, Postgres>> {
     match session_id {
         Some(session) => crate::sessions::lock_owner(pool, actor, space_id, session).await,
-        None => crate::spaces::authorized_write(pool, actor, space_id).await,
+        None => crate::spaces::authorized_mutation(pool, actor, space_id, Permission::Write)
+            .await
+            .map(|(tx, _)| tx),
     }
 }
 
 pub struct Storage {
     pub(crate) pool: PgPool,
-    pub(crate) authorization: Authorization,
     pub(crate) terms: Option<String>,
     pub config: ContentConfig,
     pub objects: ObjectStore,
@@ -54,7 +55,6 @@ impl Storage {
     /// Initialize the namespace before serving; a fresh database never adopts old keys.
     pub async fn start(
         pool: &PgPool,
-        authorization: &Authorization,
         terms: Option<String>,
         config: ContentConfig,
         access: String,
@@ -123,7 +123,6 @@ impl Storage {
         .context("content spool initialization failed")??;
         Ok(Arc::new(Self {
             pool: pool.clone(),
-            authorization: authorization.clone(),
             terms,
             prefix: if prefix.is_empty() {
                 prefix

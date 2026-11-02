@@ -14,6 +14,12 @@ contract is not versioned: `make -C apps/control-plane generate-openapi` writes 
 Every operation requires a bearer token unless marked public, and every error
 answers an `ErrorBody`.
 
+Prompt publication uses the same space authorization errors as other business
+mutations: 404 for a missing space or no role in its organization, then 409
+`space_pending_deletion` for retirement, then 403 for missing direct Write.
+An organization admin alone receives 403. A missing prompt gives 404 after the
+space check. See [the action matrix](A7-action-role-matrix.md#content-actions).
+
 Descriptions come from the `///` doc comments on handlers, parameters and types;
 an operation or field without one shows no description. Regenerate with
 `make -C docs/architecture generate`.

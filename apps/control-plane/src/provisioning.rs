@@ -18,11 +18,12 @@
 //! authenticates the operator once; each mutation boundary rechecks SQL authority.
 
 use crate::{
-    authorization::{self, Authorization},
-    bootstrap, db,
+    authorization, bootstrap, db,
     domain::{Role, Space, SpaceKind, SpaceRow},
     keycloak::Directory,
-    logging, platform, spaces,
+    logging,
+    roles::PlatformPermission,
+    spaces,
 };
 use anyhow::{Result, ensure};
 use serde::Serialize;
@@ -112,7 +113,6 @@ impl std::fmt::Display for Report {
 
 pub struct Importer<'a> {
     pub pool: &'a PgPool,
-    pub authorization: &'a Authorization,
     pub directory: &'a Directory,
     /// Operator uid, authenticated at admission against the directory's realm.
     pub operator: &'a str,
@@ -120,15 +120,15 @@ pub struct Importer<'a> {
 impl Importer<'_> {
     /// Recheck platform administration at every mutation boundary, including after lock waits;
     /// bearer expiry after admission does not bound the import's duration.
-    async fn authorize(&self) -> Result<()> {
-        platform::require_admin(self.authorization, self.operator).await?;
-        Ok(())
-    }
-
     /// All predictable conflicts are checked for the whole bundle before writes.
     /// Directory traversal does not hold mutation locks; reconciliation rereads state.
     async fn preflight(&self, bundle: &Bundle) -> Result<()> {
-        self.authorize().await?;
+        authorization::require_platform(
+            self.pool,
+            self.operator,
+            PlatformPermission::ManagePlatform,
+        )
+        .await?;
         let mut subjects = BTreeMap::new();
         let mut emails = std::collections::BTreeSet::new();
         for entry in &bundle.users {
@@ -152,7 +152,12 @@ impl Importer<'_> {
             }
         }
         let mut tx = bootstrap::locked(self.pool).await?;
-        platform::require_admin_locked(&mut tx, self.operator).await?;
+        authorization::require_platform(
+            &mut *tx,
+            self.operator,
+            PlatformPermission::ManagePlatform,
+        )
+        .await?;
         let resolved = self.resolve_spaces(&mut tx, bundle).await?;
         self.validate_parents(&mut tx, bundle, &resolved, &subjects, None)
             .await?;
@@ -310,7 +315,12 @@ impl Importer<'_> {
         for entry in &bundle.users {
             let result = async {
                 let mut tx = bootstrap::locked(self.pool).await?;
-                platform::require_admin_locked(&mut tx, self.operator).await?;
+                authorization::require_platform(
+                    &mut *tx,
+                    self.operator,
+                    PlatformPermission::ManagePlatform,
+                )
+                .await?;
                 // Authorize external dispatch; a timeout is not remote rollback.
 
                 let user = &entry.identity;
@@ -346,7 +356,12 @@ impl Importer<'_> {
         report: &mut Report,
     ) -> Result<()> {
         let mut tx = bootstrap::locked(self.pool).await?;
-        platform::require_admin_locked(&mut tx, self.operator).await?;
+        authorization::require_platform(
+            &mut *tx,
+            self.operator,
+            PlatformPermission::ManagePlatform,
+        )
+        .await?;
         let resolved = self.resolve_spaces(&mut tx, bundle).await?;
         // Validate the whole bundle under the same locks as its writes.
         self.validate_parents(&mut tx, bundle, &resolved, subjects, None)

@@ -37,7 +37,6 @@ from fred_runtime.app.config import AgentPodConfig
 if TYPE_CHECKING:
     from fred_core.filesystem.structures import BaseFilesystem
 
-    from fred_runtime.app.platform_sql import PlatformSqlAdapter
     from fred_runtime.app.web_research import WebResearchService
     from fred_runtime.app.web_research_activity import WebResearchActivityStore
 
@@ -116,9 +115,8 @@ class PodApplicationContext:
     1. initialize_kpi_writer()          — sync, fast; needed by bootstrap_observability
     2. initialize_control_plane_client() — sync, fast; no network until first call
     3. initialize_sql()                 — async; may take time on first start
-    4. initialize_platform_sql()        — sync, lazy engine; Postgres-only (OPSCAP-01-PG)
-    5. start_metrics_exporter()         — sync; starts prometheus thread if configured
-    6. start_kpi_tasks()                — async; starts background asyncio tasks
+    4. start_metrics_exporter()         — sync; starts prometheus thread if configured
+    5. start_kpi_tasks()                — async; starts background asyncio tasks
     """
 
     def __init__(self, configuration: AgentPodConfig) -> None:
@@ -128,7 +126,6 @@ class PodApplicationContext:
         self._history_store: HistoryStorePort | None = None
         self._filesystem: BaseFilesystem | None = None
         self._kpi_writer: BaseKPIWriter | None = None
-        self._platform_sql: PlatformSqlAdapter | None = None
         self.web_research: WebResearchService | None = None
         self.web_research_activity: WebResearchActivityStore | None = None
         self._control_plane_http_client: httpx.AsyncClient | None = None
@@ -230,28 +227,6 @@ class PodApplicationContext:
             "[fred-runtime] SQL checkpointer and history store ready (dialect=%s)",
             engine.dialect.name,
         )
-
-    def initialize_platform_sql(self) -> None:
-        """Build the dedicated read-only platform SQL adapter (OPSCAP-01-PG).
-
-        Called after initialize_sql(): the shared engine has already proven
-        the Postgres config reachable and migrated, so no second boot ping is
-        needed here — the dedicated engine stays lazy until the first
-        `platform_postgres` tool call. Postgres-only: on the SQLite dev
-        escape hatch the factory returns None (and logs why), leaving the
-        `platform_sql` runtime service unset so the capability's missing-port
-        guard fails loud instead of pretending SQLite can enforce read-only.
-        """
-        from fred_runtime.app.platform_sql import build_platform_sql_adapter
-
-        self._platform_sql = build_platform_sql_adapter(
-            self.configuration.storage.postgres
-        )
-        if self._platform_sql is not None:
-            logger.info(
-                "[fred-runtime] platform SQL adapter ready (dedicated pool, "
-                "read-only enforced server-side)"
-            )
 
     async def initialize_web_research(self) -> None:
         from fred_runtime.app.web_research import WebResearchService
@@ -355,9 +330,6 @@ class PodApplicationContext:
             )
         return self._filesystem
 
-    def get_platform_sql(self) -> PlatformSqlAdapter | None:
-        return self._platform_sql
-
     def get_control_plane_http_client(self) -> httpx.AsyncClient:
         if self._control_plane_http_client is None:
             raise RuntimeError(
@@ -388,10 +360,6 @@ class PodApplicationContext:
         try:
             for label, close in (
                 ("SQL engine", self._sql_engine.dispose if self._sql_engine else None),
-                (
-                    "platform SQL",
-                    self._platform_sql.dispose if self._platform_sql else None,
-                ),
                 (
                     "web research",
                     self.web_research.close if self.web_research else None,

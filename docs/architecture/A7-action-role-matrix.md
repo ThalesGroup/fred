@@ -55,6 +55,18 @@ each mutation rechecks it. Names are display metadata; paths use immutable UUIDs
 Original upload and individual download use manager; processing controls preserve
 their presentation with processing unavailable in this view.
 
+Organization participation means a direct business role (owner, member, editor or
+analyst) on an active collective space in that organization, with active organization
+and parent. It admits both the personal space and the published-prompt marketplace;
+technical administration alone admits neither. Private prompts still require local
+`Read` (owner alone is excluded). Publication requires local `Write` on a team.
+Invitations do not contribute rights and have no persisted tables.
+`PUT /spaces/{space_id}/prompts/{prompt_id}/publication` uses the shared space
+error order: missing or outside-organization space gives 404, retirement gives
+409 `space_pending_deletion`, and missing local Write gives 403. An organization
+admin alone is in context and receives 403; a retired team gives 409 even to an
+in-context non-editor. A missing prompt still gives 404 after access is checked.
+
 ## Model administration and the first managed chat
 
 Companion to [Alice and Bob's journey](02.3-agent-administration.md). Dana's source
@@ -90,8 +102,8 @@ conversation.
 | Grant/revoke organization `owner` - same role routes | No | No | Yes, on organization | No | Yes | None |
 | Read organization/team supervision - `GET /organizations/{organization_id}/supervision` and `/teams/{team_id}` suffix | No | No | No | No | Yes, on target organization | None |
 | Grant/revoke `organization_admin` - same role routes | No | No | No | No | No | `platform_admin` |
-| First creation of own personal space - `POST /me/personal-space` | No | No | Yes, any active organization/team/project in the organization | No | No | None |
-| Reuse existing own personal space - `POST /me/personal-space` | No alone | No alone | Yes, plus personal read | No alone | No | None |
+| First creation of own personal space - `POST /me/personal-space` | Yes | Yes | Yes | Yes | No | Organization participant |
+| Reuse existing own personal space - `POST /me/personal-space` | Yes | Yes | Yes | Yes | No | Organization participant and personal Read; no removed grant is restored |
 | Add roles in a personal space - `PUT /spaces/{id}/roles/{role}/{user}` | No | No | No | No | No | None |
 | Remove a personal-space role - `DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on its organization | No | No | None |
 
@@ -110,9 +122,12 @@ Conditions are part of these rights:
 - Role attribution, parent-membership requirements, eligibility, accumulation and
   last-owner/admin safeguards are defined in the
   [roles annex](A11-roles.md#attribution-accumulation-and-removal).
-- Personal-space creation requires current owner eligibility at any active scope
-  in the organization; reuse also needs personal read, without restoring removed
-  roles. The same eligibility gates new Control Plane access to existing spaces.
+- Personal-space creation requires current organization participation; reuse also
+  needs personal read, without restoring removed roles. The same eligibility gates new Control Plane access to existing spaces.
+- Organization-only operations reject a non-organization identifier with 404 before
+  checking context, retirement or permission. Grant/revoke use the common
+  404 (outside context), 409 `space_pending_deletion`, 403 (permission denied)
+  precedence, while organization-admin assignment retains its explicit platform check.
 - Every grant names a subject usable as an authorization subject and known to the configured
   user directory, checked after authorization; otherwise 422 (I27).
 - Owner changes are platform operations and do not require the actor to belong to
@@ -171,7 +186,7 @@ an evaluation permission answer does not run an evaluation or read a conversatio
 | `manage_evaluation_corpus` | No | No | Yes | Yes | No |
 | `read_conversations_for_evaluation` | No | No | No | Yes | No |
 | `administer_organization` | No | No | No | No | Yes, organization |
-| `create_personal_space` | No | No | Yes, any active scope in the organization | No | No |
+| `create_personal_space` | Yes | Yes | Yes | Yes | No |
 
 
 | Platform permission queried | platform_admin | platform_observer | feature_manager | prompt_editor |

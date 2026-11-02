@@ -142,7 +142,7 @@ const cap = (over: Partial<CapabilityEnablementItem>): CapabilityEnablementItem 
     ...over,
   }) as CapabilityEnablementItem;
 
-const DEP = cap({ id: "platform_postgres" });
+const DEP = cap({ id: "sample_capability" });
 
 let container: HTMLDivElement;
 let root: Root;
@@ -184,7 +184,7 @@ const clickConfirm = async () => {
 // OWN scope: a team row enables the dependency for that team, the personal
 // class row sets its personal scope.
 describe("CapabilityTeamMatrixDrawer grant-all (#2470)", () => {
-  const AGENT_DEP = cap({ id: "platform_ops", kind: "agent", default_capability_ids: ["platform_postgres"] });
+  const AGENT_DEP = cap({ id: "sample_agent", kind: "agent", default_capability_ids: ["sample_capability"] });
 
   function renderDrawer(over: Partial<Parameters<typeof CapabilityTeamMatrixDrawer>[0]> = {}) {
     act(() =>
@@ -219,16 +219,16 @@ describe("CapabilityTeamMatrixDrawer grant-all (#2470)", () => {
     expect(dialog()?.textContent).toContain("grantAllConfirm.messageTeam");
 
     await clickConfirm();
-    expect(h.calls.map((c) => c.id)).toEqual(["platform_postgres", "platform_ops"]);
+    expect(h.calls.map((c) => c.id)).toEqual(["sample_capability", "sample_agent"]);
   });
 
   it("team row: a failing dependency aborts before the template", async () => {
-    h.failFor = new Set(["platform_postgres"]);
+    h.failFor = new Set(["sample_capability"]);
     renderDrawer();
     act(() => enableButton(false).click());
     await clickConfirm();
 
-    expect(h.calls.map((c) => c.id)).toEqual(["platform_postgres"]);
+    expect(h.calls.map((c) => c.id)).toEqual(["sample_capability"]);
     expect(h.errors.join()).toContain("grantAllConfirm.depFailed");
   });
 
@@ -239,16 +239,16 @@ describe("CapabilityTeamMatrixDrawer grant-all (#2470)", () => {
     expect(dialog()?.textContent).toContain("grantAllConfirm.messagePersonal");
 
     await clickConfirm();
-    expect(h.calls.map((c) => c.id)).toEqual(["platform_postgres", "platform_ops"]);
+    expect(h.calls.map((c) => c.id)).toEqual(["sample_capability", "sample_agent"]);
   });
 
   it("personal class row: a failing dependency aborts before the template", async () => {
-    h.failFor = new Set(["platform_postgres"]);
+    h.failFor = new Set(["sample_capability"]);
     renderDrawer();
     act(() => enableButton(true).click());
     await clickConfirm();
 
-    expect(h.calls.map((c) => c.id)).toEqual(["platform_postgres"]);
+    expect(h.calls.map((c) => c.id)).toEqual(["sample_capability"]);
   });
 
   it("warns that the settings form still has to be saved when the template carries fields", () => {
@@ -265,11 +265,11 @@ describe("CapabilityTeamMatrixDrawer grant-all (#2470)", () => {
   });
 
   it("no dialog at all once the dependency is usable by that team", async () => {
-    renderDrawer({ allCapabilities: [AGENT_DEP, cap({ id: "platform_postgres", enabled_team_ids: ["nb"] })] });
+    renderDrawer({ allCapabilities: [AGENT_DEP, cap({ id: "sample_capability", enabled_team_ids: ["nb"] })] });
     await act(async () => enableButton(false).click());
 
     expect(dialog()).toBeNull();
-    expect(h.calls.map((c) => c.id)).toEqual(["platform_ops"]);
+    expect(h.calls.map((c) => c.id)).toEqual(["sample_agent"]);
   });
 });
 

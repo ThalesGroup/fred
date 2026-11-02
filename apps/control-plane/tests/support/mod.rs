@@ -257,7 +257,6 @@ pub mod real_keycloak;
 /// to the business administrator. The temporary platform grant leaves bootstrap untouched.
 pub async fn member_organization(
     pool: &sqlx::PgPool,
-    authorization: &control_plane::authorization::Authorization,
     name: &str,
     admin: &str,
 ) -> Result<control_plane::domain::Space, (u16, serde_json::Value)> {
@@ -288,7 +287,6 @@ pub async fn member_organization(
     let app = routes(AppState {
         agent_catalog: Default::default(),
         pool: pool.clone(),
-        authorization: authorization.clone(),
         auth: std::sync::Arc::new(identity.auth().await),
         directory: Some(identity.directory()),
         content: None,

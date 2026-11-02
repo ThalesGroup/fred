@@ -11,7 +11,6 @@ use support::{IdentityServer, request};
 async fn app(e: &Env, identity: &IdentityServer) -> Router {
     routes(AppState {
         pool: e.pool.clone(),
-        authorization: e.authorization.clone(),
         agent_catalog: Default::default(),
         auth: Arc::new(identity.auth().await),
         directory: Some(identity.directory()),
@@ -309,7 +308,7 @@ async fn prompts_authorization_admission_and_placement() {
     )
     .await
     .unwrap();
-    let other = support::member_organization(&e.pool, &e.authorization, "Other", "carol")
+    let other = support::member_organization(&e.pool, "Other", "carol")
         .await
         .unwrap();
     for actor in ["alice", "reader", "platform-editor", "carol"] {
@@ -447,10 +446,7 @@ async fn prompts_authorization_admission_and_placement() {
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
-    lifecycle
-        .accept(&e.pool, &e.authorization, "root", team.id)
-        .await
-        .unwrap();
+    lifecycle.accept(&e.pool, "root", team.id).await.unwrap();
     for (method, path, body) in [
         ("GET", collection(team.id), Value::Null),
         ("GET", format!("{}/{id}", collection(team.id)), Value::Null),
@@ -1202,13 +1198,14 @@ async fn prompt_tags_and_caller_favorites_preserve_access_and_attribution() {
     );
 }
 
+// Proves: I8, I20, I23
 #[tokio::test]
 #[ignore = "needs disposable Postgres: make test-integration"]
-async fn publication_uses_current_definition_and_scoped_temporary_titles() {
+async fn publication_uses_current_definition_and_organization_participation() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
-    let other = support::member_organization(&e.pool, &e.authorization, "Other", "carol")
+    let other = support::member_organization(&e.pool, "Other", "carol")
         .await
         .unwrap();
     for (actor, role) in [
@@ -1223,31 +1220,12 @@ async fn publication_uses_current_definition_and_scoped_temporary_titles() {
             .await
             .unwrap();
     }
-    let editor_invite = Uuid::new_v4();
-    let reader_invite = Uuid::new_v4();
-    for (id, actor, role) in [
-        (editor_invite, "guest-editor", "editor"),
-        (reader_invite, "guest-reader", "member"),
-    ] {
-        sqlx::query("insert into space_invitation(id,space_id,subject,invited_by,created_at,expires_at) values($1,$2,$3,'alice',now()-interval '1 day',now()+interval '1 day')")
-            .bind(id).bind(team.id).bind(actor).execute(&e.pool).await.unwrap();
-        sqlx::query("insert into space_invitation_role(invitation_id,role) values($1,$2)")
-            .bind(id)
-            .bind(role)
-            .execute(&e.pool)
-            .await
-            .unwrap();
-    }
-    for actor in [
-        "alice",
-        "owner-only",
-        "technical-only",
-        "guest-editor",
-        "guest-reader",
-        "carol",
-    ] {
+    for actor in ["alice", "owner-only", "technical-only", "carol"] {
         admit(&e, actor).await;
     }
+    grant(&e, org.id, Role::Member, "team-owner").await;
+    grant(&e, team.id, Role::Owner, "team-owner").await;
+    admit(&e, "team-owner").await;
     let identity = IdentityServer::start().await;
     let app = app(&e, &identity).await;
     let prompt = create(&app, &identity, team.id, creation("publication")).await;
@@ -1269,46 +1247,82 @@ async fn publication_uses_current_definition_and_scoped_temporary_titles() {
     .await;
     assert_eq!(status, 200);
     assert_eq!(page["items"], json!([]));
+    for (actor, expected_marketplace, expected_team) in [
+        ("alice", true, true),
+        ("owner-only", true, false),
+        ("technical-only", false, false),
+    ] {
+        let (status, marketplaces) = request(
+            &app,
+            &identity,
+            Some(actor),
+            "GET",
+            "/me/prompt-marketplaces",
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(
+            marketplaces["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["organization_id"] == org.id.to_string()),
+            expected_marketplace
+        );
+        let (status, teams) = request(
+            &app,
+            &identity,
+            Some(actor),
+            "GET",
+            "/me/prompt-publication-teams",
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(
+            teams["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["id"] == team.id.to_string()),
+            expected_team
+        );
+    }
     assert_eq!(
         request(
             &app,
             &identity,
-            Some("guest-editor"),
+            Some("team-owner"),
             "GET",
             &private,
             Value::Null
         )
         .await
         .0,
-        200
+        403
     );
-    assert!(
+    // Organization participation opens the marketplace, never private team content.
+    assert_eq!(
         request(
             &app,
             &identity,
-            Some("guest-reader"),
+            Some("owner-only"),
             "GET",
             &private,
             Value::Null
         )
         .await
-        .0 >= 400
+        .0,
+        403
     );
-    // The exception does not activate permanent roles, CRUD or favorites.
-    for (method, path, body) in [
-        ("POST", collection(team.id), creation("denied")),
-        ("PATCH", private.clone(), json!({"text":"denied"})),
-        ("PUT", format!("{private}/favorite"), Value::Null),
+    for (actor, expected) in [
+        ("owner-only", 403),
+        ("team-owner", 403),
+        ("technical-only", 403),
+        ("carol", 404),
     ] {
-        assert!(
-            request(&app, &identity, Some("guest-editor"), method, &path, body)
-                .await
-                .0
-                >= 400
-        );
-    }
-    for actor in ["owner-only", "technical-only", "guest-reader", "carol"] {
-        assert!(
+        assert_eq!(
             request(
                 &app,
                 &identity,
@@ -1318,14 +1332,15 @@ async fn publication_uses_current_definition_and_scoped_temporary_titles() {
                 json!({"published":true})
             )
             .await
-            .0 >= 400
+            .0,
+            expected
         );
     }
     assert_eq!(
         request(
             &app,
             &identity,
-            Some("guest-editor"),
+            Some("alice"),
             "PUT",
             &publication,
             json!({"published":true})
@@ -1334,7 +1349,7 @@ async fn publication_uses_current_definition_and_scoped_temporary_titles() {
         .0,
         204
     );
-    for actor in ["owner-only", "guest-editor", "guest-reader"] {
+    for actor in ["owner-only", "team-owner", "alice"] {
         assert_eq!(
             request(&app, &identity, Some(actor), "GET", &detail, Value::Null)
                 .await
@@ -1382,7 +1397,7 @@ async fn publication_uses_current_definition_and_scoped_temporary_titles() {
         request(
             &app,
             &identity,
-            Some("guest-reader"),
+            Some("owner-only"),
             "GET",
             &detail,
             Value::Null
@@ -1392,76 +1407,6 @@ async fn publication_uses_current_definition_and_scoped_temporary_titles() {
         "Current text"
     );
 
-    sqlx::query("update space_invitation set expires_at=now()-interval '1 second' where id=$1")
-        .bind(reader_invite)
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("guest-reader"),
-            "GET",
-            &detail,
-            Value::Null
-        )
-        .await
-        .0,
-        404
-    );
-    // Another title remains sufficient; expiration is not an account-wide denial.
-    sqlx::query(
-        "insert into space_role_grant(space_id,subject,role) values($1,'guest-reader','owner')",
-    )
-    .bind(org.id)
-    .execute(&e.pool)
-    .await
-    .unwrap();
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("guest-reader"),
-            "GET",
-            &detail,
-            Value::Null
-        )
-        .await
-        .0,
-        200
-    );
-    sqlx::query("update space_invitation set revoked_at=now(),revoked_by='alice' where id=$1")
-        .bind(editor_invite)
-        .execute(&e.pool)
-        .await
-        .unwrap();
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("guest-editor"),
-            "GET",
-            &private,
-            Value::Null
-        )
-        .await
-        .0,
-        404
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("guest-editor"),
-            "PUT",
-            &publication,
-            json!({"published":false})
-        )
-        .await
-        .0,
-        404
-    );
     assert_eq!(
         request(
             &app,
@@ -1500,7 +1445,7 @@ async fn publication_uses_current_definition_and_scoped_temporary_titles() {
         .unwrap();
     let personal_prompt = create(&app, &identity, personal.id, creation("private")).await;
     let personal_id = personal_prompt["prompt_id"].as_str().unwrap();
-    assert!(
+    assert_eq!(
         request(
             &app,
             &identity,
@@ -1510,13 +1455,56 @@ async fn publication_uses_current_definition_and_scoped_temporary_titles() {
             json!({"published":true})
         )
         .await
-        .0 >= 400
+        .0,
+        403
     );
-    let grants: i64 =
-        sqlx::query_scalar("select count(*) from space_role_grant where subject='guest-editor'")
-            .fetch_one(&e.pool)
-            .await
-            .unwrap();
-    assert_eq!(grants, 0);
+    // Removing the last collective business role also removes marketplace visibility.
+    sqlx::query("delete from space_role_grant where subject='owner-only'")
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("owner-only"),
+            "GET",
+            &catalog,
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+    lifecycle.config.enabled = true;
+    lifecycle.accept(&e.pool, "root", team.id).await.unwrap();
+    for actor in ["alice", "technical-only"] {
+        let (status, body) = request(
+            &app,
+            &identity,
+            Some(actor),
+            "PUT",
+            &publication,
+            json!({"published": true}),
+        )
+        .await;
+        assert_eq!(status, 409);
+        assert_eq!(body["code"], "space_pending_deletion");
+    }
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("carol"),
+            "PUT",
+            &publication,
+            json!({"published": true})
+        )
+        .await
+        .0,
+        404
+    );
     e.pool.close().await;
 }

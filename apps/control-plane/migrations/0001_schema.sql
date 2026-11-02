@@ -1,6 +1,7 @@
 -- Copyright Thales 2026
 -- SPDX-License-Identifier: Apache-2.0
--- Control Plane schema: placement, direct roles and organization policies.
+-- Weaver initial schema. Fresh databases only; no incremental upgrade path.
+-- SQLx executes this file atomically and records its fingerprint for startup checks.
 
 create type space_kind as enum ('organization', 'team', 'project', 'personal');
 
@@ -45,13 +46,24 @@ create table space (
     constraint space_personal_identity check (
         (kind = 'personal') = (personal_owner is not null)
         and (kind <> 'personal' or parent_id is null)
-    )
+    ),
+    constraint space_placement_shape check (
+        (kind = 'organization' and organization_id = id and parent_id is null)
+        or (kind = 'personal' and organization_id <> id and parent_id is null)
+        or (kind = 'team' and organization_id <> id and parent_id = organization_id and parent_id is not null)
+        or (kind = 'project' and organization_id <> id and parent_id is not null and parent_id <> id)
+    ),
+    constraint space_id_organization_key unique (id, organization_id),
+    constraint space_parent_organization_fkey foreign key (parent_id, organization_id)
+        references space (id, organization_id)
 );
 comment on column space.personal_owner is 'Owner identity of a personal space; null for other space kinds';
 create unique index space_organization_name on space (name) where kind = 'organization';
 create index space_deletion_manifest on space (deletion_id, kind, id) where deletion_id is not null;
 create index space_organization on space (organization_id);
 create index space_parent on space (parent_id);
+-- Retired siblings keep their names until purge.
+create unique index space_sibling_name on space (parent_id, name) where kind in ('team', 'project');
 -- One active personal space per owner and organization; retired rows do not count.
 create unique index space_personal_owner on space (organization_id, personal_owner)
     where personal_owner is not null and deletion_id is null;
@@ -267,7 +279,8 @@ create table document_processing (
     extraction_seconds integer not null check(extraction_seconds>0),
     indexing_seconds integer not null check(indexing_seconds>0),
     unique(actor,request_key),
-    check((status in ('succeeded','failed')) = (completed_at is not null))
+    check((status in ('succeeded','failed')) = (completed_at is not null)),
+    constraint document_processing_id_document_key unique (id, document_id)
 );
 create unique index document_processing_active on document_processing(document_id) where status in ('pending','running');
 create unique index document_processing_success on document_processing(document_id) where status='succeeded';
@@ -291,7 +304,8 @@ create trigger document_processing_identity before update on document_processing
 -- readers never recompute a location. `chunks` fences the vector ordinals it may write.
 create table generation (
     id uuid primary key,
-    processing_id uuid not null references document_processing(id) on delete cascade,
+    processing_id uuid not null,
+    document_id uuid not null,
     stage text not null check(stage in ('preparation','extraction','indexing')),
     execution_id uuid not null,
     activity_id uuid not null,
@@ -306,7 +320,10 @@ create table generation (
     cleanup_cursor integer not null default 0 check(cleanup_cursor>=0),
     -- Cleanup queue order: the lease end plus 60 s, pushed back by each claim.
     cleanup_after timestamptz not null,
-    cleaned_at timestamptz
+    cleaned_at timestamptz,
+    constraint generation_processing_document_fkey foreign key (processing_id, document_id)
+        references document_processing (id, document_id) on delete cascade,
+    constraint generation_id_document_key unique (id, document_id)
 );
 create index generation_processing on generation(processing_id,created_at,id);
 create index generation_cleanup on generation(cleanup_after,id) where cleaned_at is null;
@@ -321,7 +338,8 @@ create table artifact (
 );
 
 -- Deferred: a purge deletes the document together with its processing and generations.
-alter table document add foreign key (published_generation) references generation(id)
+alter table document add constraint document_published_generation_fkey
+    foreign key (published_generation, id) references generation(id, document_id)
     deferrable initially deferred;
 
 -- The organization lock orders application mutations; these checks also protect SQL callers.
@@ -350,11 +368,14 @@ create table agent_instance (
     display_name varchar(255) not null,
     description varchar(500),
     enabled boolean not null default true,
-    created_by text,
-    updated_by text,
+    created_by text not null,
+    updated_by text not null,
     tuning jsonb not null,
     created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
+    updated_at timestamptz not null default now(),
+    configuration_revision bigint not null default 1 check (configuration_revision > 0),
+    logical_name text collate "C" not null check (logical_name ~ '^[a-z0-9_-]{1,64}$'),
+    constraint agent_instance_space_logical_name_key unique (space_id, logical_name)
 );
 -- Names are trimmed on write; the index arbitrates concurrent creates.
 create unique index uq_agent_instance_space_name on agent_instance (space_id, lower(display_name));
@@ -415,7 +436,10 @@ create table model_source (
     checked_at timestamptz,
     last_success_at timestamptz,
     snapshot_revision bigint not null default 0 check (snapshot_revision >= 0),
-    snapshot_source_revision bigint
+    snapshot_source_revision bigint,
+    constraint model_source_required_configuration_fields check (
+        configuration->>'source_id' is not null and configuration->>'revision' is not null
+    )
 );
 
 create table model_offer (
@@ -491,7 +515,10 @@ create table session_metadata (
     title varchar(500),
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    deletion_id uuid references deletion (id)
+    deletion_id uuid references deletion (id),
+    agent_configuration_revision bigint not null check (agent_configuration_revision > 0),
+    -- Provenance survives independent agent/space purge; no foreign key.
+    agent_space_id uuid
 );
 create index session_metadata_owner_activity
     on session_metadata (space_id, user_id, updated_at desc, session_id);
@@ -543,3 +570,402 @@ create table agent_template_policy (
  template_id uuid not null,
  primary key(organization_id, template_id)
 );
+
+-- Referenced kinds and placement are immutable; only creation needs this check.
+create function require_space_hierarchy() returns trigger language plpgsql as $$
+begin
+    if new.kind <> 'organization' and not exists (
+        select 1 from space where id = new.organization_id and kind = 'organization'
+    ) then
+        raise exception 'space requires an organization root' using errcode = '23514';
+    end if;
+    if new.kind = 'project' and not exists (
+        select 1 from space where id = new.parent_id and kind = 'team'
+    ) then
+        raise exception 'project requires a team parent' using errcode = '23514';
+    end if;
+    return new;
+end $$;
+
+create trigger space_hierarchy after insert on space
+    for each row execute function require_space_hierarchy();
+
+create function require_space_role_scope() returns trigger language plpgsql as $$
+declare
+    target_kind space_kind;
+    target_owner text;
+begin
+    select kind, personal_owner into target_kind, target_owner from space where id = new.space_id;
+    if target_kind = 'personal' and target_owner <> new.subject then
+        raise exception 'personal space roles require its owner' using errcode = '23514';
+    end if;
+    if new.role = 'organization_admin' and target_kind <> 'organization' then
+        raise exception 'organization admin requires an organization' using errcode = '23514';
+    end if;
+    return new;
+end $$;
+
+create trigger space_role_scope before insert or update of space_id, subject, role
+    on space_role_grant for each row execute function require_space_role_scope();
+
+
+create trigger agent_template_policy_organization before insert or update of organization_id
+    on agent_template_policy for each row execute function require_organization_space();
+
+-- Storage only: the Control Plane still uses configured limits and live sums.
+-- Populate these accounts only together with transactional counter maintenance.
+create table storage_budget (
+    space_id uuid not null references space(id) on delete cascade,
+    scope text not null check (scope in ('local', 'organization_total')),
+    limit_bytes bigint not null check (limit_bytes > 0),
+    used_bytes bigint not null check (used_bytes >= 0),
+    reserved_bytes bigint not null check (reserved_bytes >= 0),
+    primary key (space_id, scope)
+);
+-- A limit can fall below existing usage; admission must then refuse new bytes.
+-- No zero defaults: initialization must account for existing originals/uploads.
+comment on table storage_budget is
+    'Original-file usage and pending uploads only; excludes derived outputs and retired documents. Local and organization_total accounts overlap and must not be summed together.';
+
+create function require_storage_budget_scope() returns trigger language plpgsql as $$
+declare
+    target_kind space_kind;
+begin
+    if TG_OP = 'UPDATE' then
+        if (new.space_id, new.scope) is distinct from (old.space_id, old.scope) then
+            raise exception 'storage budget identity is immutable' using errcode = '23514';
+        end if;
+        return new;
+    end if;
+    select kind into target_kind from space where id = new.space_id;
+    if target_kind = 'project' then
+        raise exception 'projects share their team storage budget' using errcode = '23514';
+    end if;
+    if new.scope = 'organization_total' and target_kind <> 'organization' then
+        raise exception 'total storage budget requires an organization' using errcode = '23514';
+    end if;
+    return new;
+end $$;
+create trigger storage_budget_scope before insert or update on storage_budget
+    for each row execute function require_storage_budget_scope();
+
+-- Categories belong to the prompt's space, never to a global taxonomy.
+create table prompt_category (
+    id uuid primary key,
+    space_id uuid not null references space (id) on delete cascade,
+    name varchar(120) not null check (btrim(name) <> ''),
+    constraint prompt_category_space_name_key unique (space_id, name),
+    constraint prompt_category_space_id_key unique (space_id, id)
+);
+
+
+-- One canonical ASCII name per type and space. The prompt command is '/' || logical_name.
+-- Reject noncanonical input instead of silently renaming resources or promotions.
+create table prompt (
+    prompt_id uuid primary key,
+    space_id uuid not null references space (id) on delete cascade,
+    logical_name text collate "C" not null
+        check (logical_name ~ '^[a-z0-9_-]{1,64}$')
+        check (logical_name <> 'skill'), -- Existing reserved slash command, not a skill schema.
+    display_name varchar(255) not null check (btrim(display_name) <> ''),
+    description text,
+    text text not null,
+    created_at timestamptz not null default now(),
+    created_by text not null check (btrim(created_by) <> ''),
+    updated_at timestamptz not null default now(),
+    updated_by text not null check (btrim(updated_by) <> ''),
+    constraint prompt_space_logical_name_key unique (space_id, logical_name),
+    category_id uuid,
+    tags text[] not null default '{}' check (cardinality(tags) <= 20 and array_position(tags, null) is null),
+    published boolean not null default false,
+    constraint prompt_nonblank_text check (text ~ '[^[:space:]]'),
+    constraint prompt_category_same_space_fkey foreign key (space_id, category_id)
+        references prompt_category (space_id, id)
+);
+
+-- NO ACTION protects used categories while allowing the owning space's atomic purge.
+create index prompt_space_category_idx on prompt (space_id, category_id);
+
+create function protect_prompt_definition() returns trigger language plpgsql as $$
+begin
+    if tg_op = 'INSERT' then
+        new.updated_at := new.created_at;
+        new.updated_by := new.created_by;
+    else
+        if (new.prompt_id, new.space_id, new.logical_name, new.created_at, new.created_by)
+            is distinct from
+            (old.prompt_id, old.space_id, old.logical_name, old.created_at, old.created_by) then
+            raise exception 'prompt identity and creation metadata are immutable' using errcode = '23514';
+        end if;
+        if (new.display_name, new.description, new.text, new.category_id, new.tags)
+            is distinct from (old.display_name, old.description, old.text, old.category_id, old.tags) then
+            new.updated_at := clock_timestamp();
+        else
+            new.updated_at := old.updated_at;
+            new.updated_by := old.updated_by;
+        end if;
+    end if;
+    return new;
+end $$;
+create trigger prompt_definition before insert or update on prompt
+    for each row execute function protect_prompt_definition();
+
+-- Like users_preferences, the verified subject is text. user_identity is a
+-- best-effort directory cache, not the account authority and cannot own this FK.
+-- Account erasure must purge this table alongside users_preferences. Access
+-- revocation retains the preference; authorized reads never expose it without access.
+create table prompt_favorite (
+    user_id text not null check (btrim(user_id) <> ''),
+    prompt_id uuid not null references prompt(prompt_id) on delete cascade,
+    primary key (user_id, prompt_id)
+);
+create index prompt_favorite_prompt_idx on prompt_favorite(prompt_id);
+
+create function require_prompt_publication_team() returns trigger language plpgsql as $$
+begin
+    if new.published and not exists (
+        select 1 from space where id = new.space_id and kind = 'team'
+    ) then
+        raise exception 'only team prompts can be published' using errcode = '23514';
+    end if;
+    return new;
+end $$;
+create trigger prompt_publication_team before insert or update of published, space_id on prompt
+    for each row execute function require_prompt_publication_team();
+
+-- The organization is derived from placement. Walk each team's published UUIDs
+-- without reading private definitions; UUID is an immutable keyset cursor.
+create index prompt_published_space_id on prompt (space_id, prompt_id) where published;
+
+-- Authenticated writers supply author identities. Logical identity is immutable.
+create function protect_agent_definition() returns trigger language plpgsql as $$
+begin
+    if tg_op = 'INSERT' then
+        if new.created_by is null or btrim(new.created_by) = '' then
+            raise exception 'agent creation requires an author' using errcode = '23514';
+        end if;
+        new.updated_at := new.created_at;
+        new.updated_by := new.created_by;
+    else
+        if new.logical_name is distinct from old.logical_name then
+            raise exception 'agent logical name is immutable' using errcode = '23514';
+        end if;
+        if (new.agent_instance_id, new.space_id, new.template_id, new.source_runtime_id,
+                new.source_agent_id, new.created_at, new.created_by)
+            is distinct from
+            (old.agent_instance_id, old.space_id, old.template_id, old.source_runtime_id,
+                old.source_agent_id, old.created_at, old.created_by) then
+            raise exception 'agent identity, placement and creation metadata are immutable'
+                using errcode = '23514';
+        end if;
+        if (new.display_name, new.description, new.enabled, new.tuning)
+            is distinct from (old.display_name, old.description, old.enabled, old.tuning) then
+            if new.updated_by is null or btrim(new.updated_by) = '' then
+                raise exception 'agent edit requires an author' using errcode = '23514';
+            end if;
+            new.updated_at := clock_timestamp();
+        else
+            new.updated_at := old.updated_at;
+            new.updated_by := old.updated_by;
+        end if;
+    end if;
+    return new;
+end $$;
+create trigger agent_definition before insert or update on agent_instance
+    for each row execute function protect_agent_definition();
+
+create function protect_session_association() returns trigger language plpgsql as $$
+declare
+    deployment uuid;
+    agent_organization uuid;
+    chat_organization uuid;
+    agent_template uuid;
+    agent_runtime text;
+begin
+    if tg_op = 'INSERT' then
+        -- Hold the association's sources through commit, including against concurrent purge.
+        select a.space_id, sa.organization_id, sc.organization_id, a.template_id, a.source_runtime_id
+            into deployment, agent_organization, chat_organization, agent_template, agent_runtime
+            from agent_instance a
+            join space sa on sa.id = a.space_id
+            join space sc on sc.id = new.space_id
+            where a.agent_instance_id = new.agent_instance_id
+            for key share of a, sa, sc;
+        if not found then
+            raise exception 'conversation requires an existing agent and conversation space'
+                using errcode = '23503';
+        end if;
+        if (new.agent_space_id is not null and new.agent_space_id <> deployment)
+            or agent_organization <> chat_organization
+            or new.template_id <> agent_template or new.runtime_id <> agent_runtime then
+            raise exception 'conversation agent association is inconsistent' using errcode = '23514';
+        end if;
+        new.agent_space_id := deployment;
+    elsif (new.session_id, new.space_id, new.user_id, new.agent_instance_id,
+            new.agent_space_id, new.template_id, new.runtime_id)
+        is distinct from
+          (old.session_id, old.space_id, old.user_id, old.agent_instance_id,
+            old.agent_space_id, old.template_id, old.runtime_id) then
+        raise exception 'conversation ownership and agent association are immutable'
+            using errcode = '23514';
+    end if;
+    return new;
+end $$;
+
+create trigger session_association before insert or update on session_metadata
+    for each row execute function protect_session_association();
+
+-- Preparation only: document_immutable still forbids changing document placement.
+-- These receipts neither move data nor schedule work; activation needs the SQL/index writer.
+create table document_move (
+    id uuid primary key,
+    document_id uuid not null references document(id) on delete cascade,
+    actor text not null check (btrim(actor) <> ''),
+    source_space_id uuid not null,
+    source_folder_id uuid,
+    destination_space_id uuid not null,
+    destination_folder_id uuid,
+    generation_id uuid,
+    phase text not null default 'requested'
+        check (phase in ('requested', 'projecting', 'completed', 'cancelled')),
+    created_at timestamptz not null default now() check (isfinite(created_at)),
+    finished_at timestamptz check (isfinite(finished_at)),
+    check ((phase in ('completed', 'cancelled')) = (finished_at is not null)),
+    check (finished_at >= created_at),
+    check ((source_space_id, source_folder_id)
+        is distinct from (destination_space_id, destination_folder_id))
+);
+create unique index document_move_active on document_move(document_id)
+    where phase in ('requested', 'projecting');
+create index document_move_history on document_move(document_id, created_at desc, id);
+
+-- Placement/generation are historical facts, not permanent FKs that block purge.
+-- Only the document owns the receipt; its definitive purge removes the receipts.
+create function protect_document_move() returns trigger language plpgsql as $$
+declare
+    source document%rowtype;
+    source_organization uuid;
+    destination_organization uuid;
+begin
+    if tg_op = 'INSERT' then
+        if new.phase <> 'requested' or new.finished_at is not null then
+            raise exception 'a document move starts as requested' using errcode = '23514';
+        end if;
+        select * into source from document where id = new.document_id for update;
+        if not found then
+            raise exception 'document move requires an existing document' using errcode = '23503';
+        end if;
+        if source.session_id is not null or source.deletion_id is not null then
+            raise exception 'only live drive documents can be moved' using errcode = '23514';
+        end if;
+        if source.retrievable_pending or exists (
+            select 1 from document_processing where document_id = source.id
+                and status in ('pending', 'running')
+        ) then
+            raise exception 'document has unfinished processing or inclusion work' using errcode = '23514';
+        end if;
+        select organization_id into source_organization
+            from space where id = source.space_id and deletion_id is null for share;
+        if not found then
+            raise exception 'source space must be live' using errcode = '23514';
+        end if;
+        select organization_id into destination_organization
+            from space where id = new.destination_space_id and deletion_id is null for share;
+        if not found then
+            raise exception 'destination space must exist and be live' using errcode = '23503';
+        end if;
+        if source_organization <> destination_organization then
+            raise exception 'document move must stay within one organization' using errcode = '23514';
+        end if;
+        if new.destination_folder_id is not null then
+            perform 1 from folder where id = new.destination_folder_id
+                and space_id = new.destination_space_id and deletion_id is null for share;
+            if not found then
+                raise exception 'destination folder must be live in destination space' using errcode = '23503';
+            end if;
+        end if;
+        -- Always capture database facts, never source placement asserted by the caller.
+        new.source_space_id := source.space_id;
+        new.source_folder_id := source.folder_id;
+        new.generation_id := source.published_generation;
+    else
+        if (new.id, new.document_id, new.actor, new.source_space_id, new.source_folder_id,
+                new.destination_space_id, new.destination_folder_id, new.generation_id, new.created_at)
+            is distinct from
+            (old.id, old.document_id, old.actor, old.source_space_id, old.source_folder_id,
+                old.destination_space_id, old.destination_folder_id, old.generation_id, old.created_at) then
+            raise exception 'document move request is immutable' using errcode = '23514';
+        end if;
+        if new.phase = old.phase then
+            if new.finished_at is distinct from old.finished_at then
+                raise exception 'document move outcome is immutable' using errcode = '23514';
+            end if;
+            return new;
+        end if;
+        if not ((old.phase = 'requested' and new.phase in ('projecting', 'cancelled'))
+            or (old.phase = 'projecting' and new.phase = 'completed')) then
+            raise exception 'invalid document move transition' using errcode = '23514';
+        end if;
+        if new.phase in ('projecting', 'completed') then
+            select * into source from document where id = new.document_id for update;
+            if not found then
+                raise exception 'document move requires an existing document' using errcode = '23503';
+            end if;
+            if (source.space_id, source.folder_id, source.published_generation)
+                is distinct from
+                (new.destination_space_id, new.destination_folder_id, new.generation_id)
+                or source.session_id is not null or source.deletion_id is not null then
+                raise exception 'document move placement or generation does not match' using errcode = '23514';
+            end if;
+        end if;
+        if new.phase in ('completed', 'cancelled') then
+            new.finished_at := clock_timestamp();
+        end if;
+    end if;
+    return new;
+end $$;
+create trigger document_move_identity before insert or update on document_move
+    for each row execute function protect_document_move();
+
+-- Placement lookups and foreign-key checks must include retired documents.
+create index document_space_folder on document (space_id, folder_id);
+
+-- Purge selects each space's folders in ID order, including retired rows.
+create index folder_space on folder (space_id, id);
+
+-- Leaf detection looks up children by parent alone, regardless of deletion state.
+create index folder_parent on folder (parent_id) where parent_id is not null;
+
+-- Explicit platform assignments; discovery never grants organization access.
+create table organization_model_source (
+    organization_id uuid not null references space (id) on delete cascade,
+    source_id text collate "C" not null references model_source (source_id),
+    primary key (organization_id, source_id)
+);
+create trigger model_source_organization before insert or update of organization_id
+    on organization_model_source for each row execute function require_model_policy_organization();
+
+-- A row also remembers an administered policy, even after that policy is deleted.
+-- completed_at additionally records completion of the one-time source assignment.
+-- Neither deleting permissions/policy nor removing YAML resets this receipt.
+create table organization_model_initialization (
+    organization_id uuid primary key references space (id) on delete cascade,
+    completed_at timestamptz
+);
+create trigger model_initialization_organization before insert or update of organization_id
+    on organization_model_initialization for each row execute function require_model_policy_organization();
+
+create function remember_model_policy_initialization() returns trigger language plpgsql as $$
+begin
+    insert into organization_model_initialization (organization_id) values (new.organization_id)
+        on conflict (organization_id) do nothing;
+    return new;
+end $$;
+create trigger remember_model_policy after insert on organization_model_policy
+    for each row execute function remember_model_policy_initialization();
+
+-- Every permission requires an explicit platform source assignment from creation.
+alter table organization_model_permission
+    add constraint organization_model_permission_source_assignment
+    foreign key (organization_id, source_id)
+    references organization_model_source (organization_id, source_id);

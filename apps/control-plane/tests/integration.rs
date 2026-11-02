@@ -19,7 +19,6 @@
 use std::time::Duration;
 
 use control_plane::{
-    authorization::Authorization,
     bootstrap, db,
     domain::{self, Document, Folder, Permission, Role, Space, SpaceKind},
     error::AppError,
@@ -70,7 +69,7 @@ async fn hold_organization_lock(e: &Env, org: Uuid) -> sqlx::Transaction<'static
 
 /// Organization TSN administered by alice, team BID under it, alice member of both.
 async fn org_and_team(e: &Env) -> (Space, Space) {
-    let org = crate::support::member_organization(&e.pool, &e.authorization, "TSN", "alice")
+    let org = crate::support::member_organization(&e.pool, "TSN", "alice")
         .await
         .unwrap();
     let team = spaces::create_space(
@@ -103,10 +102,9 @@ async fn grant(e: &Env, space: Uuid, role: Role, user: &str) {
 }
 
 async fn reads(e: &Env, user: &str, space: Uuid) -> bool {
-    e.authorization
-        .check(user, Permission::Read, space)
+    control_plane::authorization::authorize(&e.pool, user, space, Permission::Read)
         .await
-        .unwrap()
+        .is_ok()
 }
 
 // Proves: I4
@@ -210,10 +208,9 @@ async fn a_revoked_admin_cannot_finish_a_waiting_request() {
 
     assert!(matches!(pending.await.unwrap(), Err(AppError::Forbidden)));
     assert!(
-        !e.authorization
-            .check("bob", Permission::Manage, team.id)
+        control_plane::authorization::authorize(&e.pool, "bob", team.id, Permission::Manage)
             .await
-            .unwrap()
+            .is_err()
     );
 }
 
@@ -266,7 +263,11 @@ async fn a_member_with_a_personal_space_can_leave_the_organization() {
 async fn bootstrap_promotes_one_person_once() {
     let e = env().await;
     bootstrap::grant_root(&e.pool, "alice").await.unwrap();
-    assert!(e.authorization.is_platform_admin("alice").await.unwrap());
+    assert!(
+        control_plane::authorization::is_platform_admin(&e.pool, "alice")
+            .await
+            .unwrap()
+    );
     for user in ["bob", "alice"] {
         let again = bootstrap::grant_root(&e.pool, user).await;
         assert!(
@@ -274,7 +275,11 @@ async fn bootstrap_promotes_one_person_once() {
             "{user} must get 409"
         );
     }
-    assert!(!e.authorization.is_platform_admin("bob").await.unwrap());
+    assert!(
+        !control_plane::authorization::is_platform_admin(&e.pool, "bob")
+            .await
+            .unwrap()
+    );
 }
 
 // Proves: I9
@@ -286,7 +291,11 @@ async fn a_finished_bootstrap_stays_closed_after_its_admin_is_removed() {
     delete_tuple(&e, "alice", "platform_admin", "platform:root").await;
     let again = bootstrap::grant_root(&e.pool, "alice").await;
     assert!(matches!(again, Err(AppError::Conflict(_))));
-    assert!(!e.authorization.is_platform_admin("alice").await.unwrap());
+    assert!(
+        !control_plane::authorization::is_platform_admin(&e.pool, "alice")
+            .await
+            .unwrap()
+    );
 }
 
 // Proves: I9
@@ -416,10 +425,9 @@ async fn owner_roles_grant_no_content_access() {
     .await
     .unwrap();
     assert!(
-        e.authorization
-            .check("carol", Permission::Manage, team.id)
+        control_plane::authorization::authorize(&e.pool, "carol", team.id, Permission::Manage)
             .await
-            .unwrap()
+            .is_ok()
     );
     assert!(
         !reads(&e, "carol", team.id).await,
@@ -450,13 +458,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
     .await
     .unwrap();
     // Enumerate every subset: cumulative grants must equal the union of their individual rights.
-    let roles = [
-        Role::Member,
-        Role::Editor,
-        Role::Owner,
-        Role::Analyst,
-        Role::OrganizationAdmin,
-    ];
+    let roles = Role::ALL;
     for mask in 0..(1 << roles.len()) {
         let user = format!("space-{mask}");
         let held: Vec<_> = roles
@@ -476,6 +478,9 @@ async fn complete_role_permission_matrix_and_space_isolation() {
             .await
             .unwrap();
         }
+        let facts = control_plane::authorization::load_facts(&e.pool, &user, space)
+            .await
+            .unwrap();
         for permission in SP::ALL {
             let expected = held.iter().any(|role| match permission {
                 SP::Read => matches!(role, Role::Member | Role::Editor | Role::Analyst),
@@ -492,18 +497,21 @@ async fn complete_role_permission_matrix_and_space_isolation() {
                 ),
             });
             assert_eq!(
-                e.authorization
-                    .check_space(&user, permission, space)
+                control_plane::authorization::authorize(&e.pool, &user, space, permission)
                     .await
-                    .unwrap(),
+                    .is_ok(),
                 expected,
                 "{mask} {permission:?}"
             );
+            assert_eq!(
+                control_plane::authorization::decide(&facts, permission).is_ok(),
+                expected,
+                "loaded facts: {mask} {permission:?}"
+            );
             assert!(
-                !e.authorization
-                    .check_space(&user, permission, other)
+                control_plane::authorization::authorize(&e.pool, &user, other, permission)
                     .await
-                    .unwrap()
+                    .is_err()
             );
         }
     }
@@ -545,8 +553,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
                     )
             });
             assert_eq!(
-                e.authorization
-                    .check_platform(&user, permission)
+                control_plane::authorization::check_platform(&e.pool, &user, permission)
                     .await
                     .unwrap(),
                 expected,
@@ -555,15 +562,12 @@ async fn complete_role_permission_matrix_and_space_isolation() {
         }
         for permission in SP::ALL {
             assert!(
-                !e.authorization
-                    .check_space(&user, permission, space)
+                control_plane::authorization::authorize(&e.pool, &user, space, permission)
                     .await
-                    .unwrap()
+                    .is_err()
             );
         }
-        let effective = e
-            .authorization
-            .effective_platform_roles(&user)
+        let effective = control_plane::authorization::platform_roles(&e.pool, &user)
             .await
             .unwrap();
         assert_eq!(effective, held);
@@ -637,8 +641,7 @@ async fn concurrent_owner_revocations_leave_one_owner_at_every_level() {
         );
         assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
         assert_eq!(
-            e.authorization
-                .space_holders(space, Role::Owner)
+            control_plane::authorization::space_holders(&e.pool, space, Role::Owner)
                 .await
                 .unwrap()
                 .len(),
@@ -689,8 +692,7 @@ async fn teams_are_created_by_organization_owners_only() {
     .await
     .unwrap();
     assert!(
-        e.authorization
-            .direct_roles_on("organization_owner", owned.id)
+        control_plane::authorization::direct_roles_on(&e.pool, "organization_owner", owned.id)
             .await
             .unwrap()
             .is_empty()
@@ -786,8 +788,7 @@ async fn platform_admins_manage_each_other_and_keep_one() {
             .is_err()
         );
         assert!(
-            e.authorization
-                .effective_platform_roles(target)
+            control_plane::authorization::platform_roles(&e.pool, target)
                 .await
                 .unwrap()
                 .is_empty()
@@ -821,24 +822,26 @@ async fn platform_admins_manage_each_other_and_keep_one() {
     platform::revoke(&e.pool, "owner", "observer", P::PlatformObserver)
         .await
         .unwrap();
-    assert_eq!(
-        platform::list(&e.authorization, "root")
-            .await
-            .unwrap()
-            .len(),
-        2
-    );
+    assert_eq!(platform::list(&e.pool, "root").await.unwrap().len(), 2);
 
     // Any owner hands over ownership, root included; the last owner stays.
     platform::revoke(&e.pool, "owner", "root", P::PlatformAdmin)
         .await
         .unwrap();
-    assert!(!e.authorization.is_platform_admin("root").await.unwrap());
+    assert!(
+        !control_plane::authorization::is_platform_admin(&e.pool, "root")
+            .await
+            .unwrap()
+    );
     assert!(matches!(
         platform::revoke(&e.pool, "owner", "owner", P::PlatformAdmin).await,
         Err(AppError::Conflict(_))
     ));
-    assert!(e.authorization.is_platform_admin("owner").await.unwrap());
+    assert!(
+        control_plane::authorization::is_platform_admin(&e.pool, "owner")
+            .await
+            .unwrap()
+    );
 }
 
 async fn wait_for_advisory_waiter(pool: &PgPool) {
@@ -954,7 +957,6 @@ async fn governance_http_reports_effective_roles_and_checks_only_its_caller() {
         lifecycle: Default::default(),
         auth: Arc::new(server.auth().await),
         pool: e.pool.clone(),
-        authorization: e.authorization.clone(),
         directory: Some(server.directory()),
         content: None,
         processing: None,
@@ -1092,7 +1094,6 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
                     .unwrap(),
             ),
             pool: e.pool.clone(),
-            authorization: e.authorization.clone(),
             content: None,
             processing: None,
             directory: Some(if other_realm {
@@ -1114,8 +1115,7 @@ async fn directory_grants_refuse_non_subject_mapping_and_other_realms() {
             .unwrap();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert!(
-            !e.authorization
-                .platform_grants()
+            !control_plane::authorization::platform_grants(&e.pool)
                 .await
                 .unwrap()
                 .contains(&("bob-sub".into(), PlatformRole::PlatformObserver))
@@ -1193,21 +1193,20 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
     let directory = server.directory();
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     db::require_initialized(&e.pool).await.unwrap();
-    let authorization = e.authorization.clone();
+    let authorization_pool = e.pool.clone();
     let bundle = provisioning_bundle();
     let importer = Importer {
         pool: &e.pool,
-        authorization: &authorization,
         directory: &directory,
         operator: "root",
     };
     let first = importer.run(&bundle).await.unwrap();
     assert_eq!(first.identities_created, 3);
-    let org = named_space(&e.pool, &e.authorization, None, "Provisioned")
+    let org = named_space(&e.pool, None, "Provisioned")
         .await
         .unwrap()
         .unwrap();
-    let team = named_space(&e.pool, &e.authorization, Some(org.id), "BID")
+    let team = named_space(&e.pool, Some(org.id), "BID")
         .await
         .unwrap()
         .unwrap();
@@ -1219,39 +1218,56 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
         .unwrap()
         .unwrap()
         .id;
-    assert!(authorization.roles_of("root").await.unwrap().is_empty());
-    assert!(authorization.roles_of(&platform).await.unwrap().is_empty());
     assert!(
-        !authorization
-            .check(&alice, Permission::Read, team.id)
+        control_plane::authorization::roles_of(&authorization_pool, "root")
             .await
             .unwrap()
+            .is_empty()
     );
     assert!(
-        authorization
-            .roles_of(&alice)
+        control_plane::authorization::roles_of(&authorization_pool, &platform)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        control_plane::authorization::authorize(
+            &authorization_pool,
+            &alice,
+            team.id,
+            Permission::Read
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        control_plane::authorization::roles_of(&authorization_pool, &alice)
             .await
             .unwrap()
             .contains(&(org.id, Role::Member))
     );
     for role in [Role::Member, Role::Editor, Role::Analyst] {
         assert!(
-            authorization
-                .roles_of(&bob)
+            control_plane::authorization::roles_of(&authorization_pool, &bob)
                 .await
                 .unwrap()
                 .contains(&(team.id, role))
         );
     }
     for role in PlatformRole::ALL {
-        assert!(authorization.platform_grants().await.unwrap().contains(&(
-            if role == PlatformRole::PlatformAdmin {
-                platform.clone()
-            } else {
-                bob.clone()
-            },
-            role
-        )));
+        assert!(
+            control_plane::authorization::platform_grants(&authorization_pool)
+                .await
+                .unwrap()
+                .contains(&(
+                    if role == PlatformRole::PlatformAdmin {
+                        platform.clone()
+                    } else {
+                        bob.clone()
+                    },
+                    role
+                ))
+        );
     }
     // Undeclared roles survive; missing requested grants are repaired on committed IDs.
     control_plane::authorization::write_role(
@@ -1272,7 +1288,7 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
     assert_eq!(body["enabled"], true);
     assert_eq!(body["credentials"][0]["temporary"], false);
     assert_eq!(
-        named_space(&e.pool, &e.authorization, Some(org.id), "BID")
+        named_space(&e.pool, Some(org.id), "BID")
             .await
             .unwrap()
             .unwrap()
@@ -1280,15 +1296,13 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
         team.id
     );
     assert!(
-        authorization
-            .roles_of(&bob)
+        control_plane::authorization::roles_of(&authorization_pool, &bob)
             .await
             .unwrap()
             .contains(&(team.id, Role::Analyst))
     );
     assert!(
-        authorization
-            .roles_of("unrelated")
+        control_plane::authorization::roles_of(&authorization_pool, "unrelated")
             .await
             .unwrap()
             .contains(&(org.id, Role::Member))
@@ -1312,12 +1326,13 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
     )
     .await
     .unwrap();
-    let before = e.authorization.platform_grants().await.unwrap();
+    let before = control_plane::authorization::platform_grants(&e.pool)
+        .await
+        .unwrap();
     // Bearer validity is checked at admission (HTTP and CLI); here only authority.
     for operator in ["observer", "nobody"] {
         let result = Importer {
             pool: &e.pool,
-            authorization: &e.authorization,
             directory: &directory,
             operator,
         }
@@ -1338,7 +1353,6 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
         let bundle = parse_blueprint(&serde_json::to_vec(&serde_json::json!({"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["owner","member","organization_admin"]}}],"users":users,"teams":teams,"projects":[]})).unwrap()).unwrap();
         let error = Importer {
             pool: &e.pool,
-            authorization: &e.authorization,
             directory: &directory,
             operator: "root",
         }
@@ -1356,7 +1370,12 @@ async fn provisioning_preflight_failures_have_no_identity_space_or_role_writes()
             .unwrap(),
         0
     );
-    assert_eq!(e.authorization.platform_grants().await.unwrap(), before);
+    assert_eq!(
+        control_plane::authorization::platform_grants(&e.pool)
+            .await
+            .unwrap(),
+        before
+    );
 }
 
 // Proves: I11, I17
@@ -1423,7 +1442,6 @@ async fn provisioning_replay_after_identity_and_sql_failures_reuses_committed_st
     let bundle = provisioning_bundle();
     let importer = Importer {
         pool: &e.pool,
-        authorization: &e.authorization,
         directory: &directory,
         operator: "root",
     };
@@ -1435,7 +1453,7 @@ async fn provisioning_replay_after_identity_and_sql_failures_reuses_committed_st
     assert!(!format!("{error:?}").contains("private-password"));
     assert_eq!(server.users.lock().await.len(), 3);
     assert!(
-        named_space(&e.pool, &e.authorization, None, "Provisioned")
+        named_space(&e.pool, None, "Provisioned")
             .await
             .unwrap()
             .is_none()
@@ -1461,7 +1479,6 @@ async fn simultaneous_imports_reuse_usernames_and_space_names() {
     let bundle = provisioning_bundle();
     let importer = Importer {
         pool: &e.pool,
-        authorization: &e.authorization,
         directory: &directory,
         operator: "root",
     };
@@ -1499,11 +1516,10 @@ async fn provisioning_waiter_rechecks_revocation_but_not_bearer_expiry() {
             .await
             .unwrap();
         let pending = if revoked {
-            let (pool, authorization) = (e.pool.clone(), e.authorization.clone());
+            let pool = e.pool.clone();
             tokio::spawn(async move {
                 Importer {
                     pool: &pool,
-                    authorization: &authorization,
                     directory: &directory,
                     operator: "root",
                 }
@@ -1519,7 +1535,6 @@ async fn provisioning_waiter_rechecks_revocation_but_not_bearer_expiry() {
                 lifecycle: Default::default(),
                 auth: std::sync::Arc::new(server.auth().await),
                 pool: e.pool.clone(),
-                authorization: e.authorization.clone(),
                 directory: Some(directory),
                 content: None,
                 processing: None,
@@ -1562,11 +1577,10 @@ async fn preflight_does_not_block_revocation_and_cancelled_identity_creation_rep
             server.control.lock().await.lookup_gate = Some(gate.clone());
         }
         let pool = e.pool.clone();
-        let authorization = e.authorization.clone();
+
         let pending = tokio::spawn(async move {
             Importer {
                 pool: &pool,
-                authorization: &authorization,
                 directory: &directory,
                 operator: "root",
             }
@@ -1583,7 +1597,6 @@ async fn preflight_does_not_block_revocation_and_cancelled_identity_creation_rep
             let directory = server.directory();
             let result = Importer {
                 pool: &e.pool,
-                authorization: &e.authorization,
                 directory: &directory,
                 operator: "root",
             }
@@ -1644,7 +1657,6 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     let directory = Directory::new(&realm, "control-plane", "it-manager".into()).unwrap();
     let importer = Importer {
         pool: &e.pool,
-        authorization: &e.authorization,
         directory: &directory,
         operator: &root.uid,
     };
@@ -1683,24 +1695,22 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(report.identities_created, 3);
     let alice = directory.find_username("alice").await.unwrap().unwrap();
     let bob = directory.find_username("bob").await.unwrap().unwrap();
-    let org = named_space(&e.pool, &e.authorization, None, "Provisioned")
+    let org = named_space(&e.pool, None, "Provisioned")
         .await
         .unwrap()
         .unwrap();
-    let team = named_space(&e.pool, &e.authorization, Some(org.id), "BID")
+    let team = named_space(&e.pool, Some(org.id), "BID")
         .await
         .unwrap()
         .unwrap();
     assert!(
-        !e.authorization
-            .check(&alice.id, Permission::Read, team.id)
+        control_plane::authorization::authorize(&e.pool, &alice.id, team.id, Permission::Read)
             .await
-            .unwrap()
+            .is_err()
     );
     for role in [Role::Member, Role::Editor, Role::Analyst] {
         assert!(
-            e.authorization
-                .roles_of(&bob.id)
+            control_plane::authorization::roles_of(&e.pool, &bob.id)
                 .await
                 .unwrap()
                 .contains(&(team.id, role))
@@ -1720,7 +1730,9 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
             .await
             .is_empty()
     );
-    let grants = e.authorization.platform_grants().await.unwrap();
+    let grants = control_plane::authorization::platform_grants(&e.pool)
+        .await
+        .unwrap();
     for role in control_plane::roles::PlatformRole::ALL {
         let subject = if role == control_plane::roles::PlatformRole::PlatformAdmin {
             directory
@@ -1752,14 +1764,12 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     let bytes = std::fs::read(&output).unwrap();
     std::fs::remove_file(output).unwrap();
 
-    let observed = Authorization::new(e.pool.clone());
     let app = control_plane::api::routes(control_plane::api::AppState {
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(auth),
         pool: e.pool.clone(),
-        authorization: observed,
         directory: Some(directory.clone()),
         content: None,
         processing: None,
@@ -1768,36 +1778,32 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(status, 200, "{report}");
     assert_eq!(report["identities_created"], 9); // Alice and Bob already exist.
     assert_eq!(report["spaces_reconciled"], 5);
-    let acme = named_space(&e.pool, &e.authorization, None, "Acme")
-        .await
-        .unwrap()
-        .unwrap();
-    let research = named_space(&e.pool, &e.authorization, Some(acme.id), "Research")
+    let acme = named_space(&e.pool, None, "Acme").await.unwrap().unwrap();
+    let research = named_space(&e.pool, Some(acme.id), "Research")
         .await
         .unwrap()
         .unwrap();
     let carl = directory.find_username("carl").await.unwrap().unwrap();
     assert!(
-        !e.authorization
-            .check(&carl.id, Permission::Read, research.id)
+        control_plane::authorization::authorize(&e.pool, &carl.id, research.id, Permission::Read)
             .await
-            .unwrap()
+            .is_err()
     );
     assert!(
-        e.authorization
-            .check(&carl.id, Permission::Manage, research.id)
+        control_plane::authorization::authorize(&e.pool, &carl.id, research.id, Permission::Manage)
             .await
-            .unwrap()
+            .is_ok()
     );
     assert!(
-        e.authorization
-            .check(&carl.id, Permission::Read, acme.id)
+        control_plane::authorization::authorize(&e.pool, &carl.id, acme.id, Permission::Read)
             .await
-            .unwrap()
+            .is_ok()
     );
     // Demo provisioning adds platform authority only to the `boss` convenience account.
     let boss = directory.find_username("boss").await.unwrap().unwrap();
-    let mut platform = e.authorization.platform_grants().await.unwrap();
+    let mut platform = control_plane::authorization::platform_grants(&e.pool)
+        .await
+        .unwrap();
     platform.sort();
     let mut expected: Vec<_> = control_plane::roles::PlatformRole::ALL
         .into_iter()
@@ -1809,25 +1815,21 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
         .collect();
     expected.sort();
     assert_eq!(platform, expected);
-    let globex = named_space(&e.pool, &e.authorization, None, "Globex")
-        .await
-        .unwrap()
-        .unwrap();
-    let support = named_space(&e.pool, &e.authorization, Some(globex.id), "Support")
+    let globex = named_space(&e.pool, None, "Globex").await.unwrap().unwrap();
+    let support = named_space(&e.pool, Some(globex.id), "Support")
         .await
         .unwrap()
         .unwrap();
     assert!(
-        !e.authorization
-            .check(&bob.id, Permission::Read, support.id)
+        control_plane::authorization::authorize(&e.pool, &bob.id, support.id, Permission::Read)
             .await
-            .unwrap()
+            .is_err()
     );
     let (status, report) = http_import(&app, &token, &bytes).await;
     assert_eq!(status, 200, "{report}");
     assert_eq!(report["identities_created"], 0);
     assert_eq!(
-        named_space(&e.pool, &e.authorization, None, "Acme")
+        named_space(&e.pool, None, "Acme")
             .await
             .unwrap()
             .unwrap()
@@ -1877,27 +1879,24 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     let variant = fixture_zip(br#"{"users":[{"username":"carl"},{"username":"bob"}],"organizations":[{"ref":"acme","name":"Acme","roles":{}}],"teams":[{"ref":"research","name":"Research","organization":"acme","roles":{"carl":["member"]}}],"projects":[{"ref":"project","name":"Project","team":"research","roles":{"carl":["owner"],"bob":["member","editor","analyst"]}}]}"#);
     let (status, report) = http_import(&app, &token, &variant).await;
     assert_eq!(status, 200, "{report}");
-    let project = named_space(&e.pool, &e.authorization, Some(research.id), "Project")
+    let project = named_space(&e.pool, Some(research.id), "Project")
         .await
         .unwrap()
         .unwrap();
     assert_eq!(project.path, vec![acme.id, research.id, project.id]);
     assert!(
-        !e.authorization
-            .check(&carl.id, Permission::Read, project.id)
+        control_plane::authorization::authorize(&e.pool, &carl.id, project.id, Permission::Read)
             .await
-            .unwrap()
+            .is_err()
     );
     assert!(
-        e.authorization
-            .check(&carl.id, Permission::Manage, project.id)
+        control_plane::authorization::authorize(&e.pool, &carl.id, project.id, Permission::Manage)
             .await
-            .unwrap()
+            .is_ok()
     );
     for role in [Role::Member, Role::Editor, Role::Analyst] {
         assert!(
-            e.authorization
-                .roles_of(&bob.id)
+            control_plane::authorization::roles_of(&e.pool, &bob.id)
                 .await
                 .unwrap()
                 .contains(&(project.id, role))
@@ -1938,7 +1937,7 @@ async fn waiting_content_writers_release_the_shared_pool() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
-    let peer = crate::support::member_organization(&e.pool, &e.authorization, "peer", "carol")
+    let peer = crate::support::member_organization(&e.pool, "peer", "carol")
         .await
         .unwrap();
     spaces::grant(
@@ -2096,7 +2095,6 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
         lifecycle: Default::default(),
         auth: auth.clone(),
         pool: e.pool.clone(),
-        authorization: e.authorization.clone(),
         directory: Some(directory.clone()),
         content: None,
         processing: None,
@@ -2221,37 +2219,36 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     let bob = directory.find_username("bob").await.unwrap().unwrap().id;
     let mut ids = Vec::new();
     for (name, subject, other) in [("A", &alice, &bob), ("B", &bob, &alice)] {
-        let org = named_space(&e.pool, &e.authorization, None, name)
+        let org = named_space(&e.pool, None, name).await.unwrap().unwrap();
+        let team = named_space(&e.pool, Some(org.id), "Team")
             .await
             .unwrap()
             .unwrap();
-        let team = named_space(&e.pool, &e.authorization, Some(org.id), "Team")
-            .await
-            .unwrap()
-            .unwrap();
-        let project = named_space(&e.pool, &e.authorization, Some(team.id), "Project")
+        let project = named_space(&e.pool, Some(team.id), "Project")
             .await
             .unwrap()
             .unwrap();
         assert_eq!(project.path, vec![org.id, team.id, project.id]);
         for space in [org.id, team.id, project.id] {
             assert!(
-                e.authorization
-                    .check(subject, Permission::Manage, space)
-                    .await
-                    .unwrap()
+                control_plane::authorization::authorize(
+                    &e.pool,
+                    subject,
+                    space,
+                    Permission::Manage
+                )
+                .await
+                .is_ok()
             );
             assert!(
-                !e.authorization
-                    .check(other, Permission::Read, space)
+                control_plane::authorization::authorize(&e.pool, other, space, Permission::Read)
                     .await
-                    .unwrap()
+                    .is_err()
             );
             assert!(
-                !e.authorization
-                    .check(other, Permission::Manage, space)
+                control_plane::authorization::authorize(&e.pool, other, space, Permission::Manage)
                     .await
-                    .unwrap()
+                    .is_err()
             );
         }
         ids.push(project.id);
@@ -2301,7 +2298,6 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         agent_catalog: Default::default(),
         auth: Arc::new(server.auth().await),
         pool: e.pool.clone(),
-        authorization: e.authorization.clone(),
         directory: None,
         content: None,
         processing: None,
@@ -2436,8 +2432,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         first.accepted_at
     );
     assert!(
-        e.authorization
-            .effective_platform_roles("root")
+        control_plane::authorization::platform_roles(&e.pool, "root")
             .await
             .unwrap()
             .is_empty()
@@ -2610,16 +2605,13 @@ async fn roles_stay_on_their_space() {
                 P::ReadConversationsForEvaluation,
             ] {
                 assert!(
-                    !e.authorization
-                        .check_space(user, permission, space)
+                    control_plane::authorization::authorize(&e.pool, user, space, permission)
                         .await
-                        .unwrap()
+                        .is_err()
                 );
             }
         }
-        let memberships = spaces::memberships(&e.pool, &e.authorization, user)
-            .await
-            .unwrap();
+        let memberships = spaces::memberships(&e.pool, user).await.unwrap();
         assert_eq!(memberships.len(), 1);
         assert_eq!(memberships[0].space.id, org.id);
 
@@ -2635,10 +2627,9 @@ async fn roles_stay_on_their_space() {
             P::ReadConversationsForEvaluation,
         ] {
             assert!(
-                !e.authorization
-                    .check_space(user, permission, project.id)
+                control_plane::authorization::authorize(&e.pool, user, project.id, permission)
                     .await
-                    .unwrap()
+                    .is_err()
             );
         }
         grant(&e, team.id, Role::Member, user).await;
@@ -2658,10 +2649,9 @@ async fn roles_stay_on_their_space() {
             (P::ReadConversationsForEvaluation, role == Role::Analyst),
         ] {
             assert_eq!(
-                e.authorization
-                    .check_space(user, permission, project.id)
+                control_plane::authorization::authorize(&e.pool, user, project.id, permission)
                     .await
-                    .unwrap(),
+                    .is_ok(),
                 allowed
             );
         }
@@ -2682,10 +2672,9 @@ async fn roles_stay_on_their_space() {
         assert!(!reads(&e, user, personal.id).await);
     }
     assert!(
-        !e.authorization
-            .check("bob", Permission::Write, personal.id)
+        control_plane::authorization::authorize(&e.pool, "bob", personal.id, Permission::Write)
             .await
-            .unwrap()
+            .is_err()
     );
     let again = spaces::create_personal_space(&e.pool, "pat", org.id).await;
     assert_eq!(again.unwrap().0.id, personal.id);
@@ -2734,10 +2723,9 @@ async fn child_roles_require_direct_parent_content() {
         .unwrap();
     assert!(reads(&e, "bob", project.id).await);
     assert!(
-        !e.authorization
-            .check("bob", Permission::Write, project.id)
+        control_plane::authorization::authorize(&e.pool, "bob", project.id, Permission::Write)
             .await
-            .unwrap()
+            .is_err()
     );
 }
 
@@ -2749,9 +2737,7 @@ async fn memberships_list_direct_spaces_with_their_paths() {
     let (org, team, project) = tree(&e).await;
     grant(&e, org.id, Role::Analyst, "ana").await;
     grant(&e, org.id, Role::Owner, "ana").await;
-    let organization_only = spaces::memberships(&e.pool, &e.authorization, "ana")
-        .await
-        .unwrap();
+    let organization_only = spaces::memberships(&e.pool, "ana").await.unwrap();
     assert_eq!(organization_only.len(), 1);
     assert_eq!(organization_only[0].space.id, org.id);
     assert!(!organization_only.iter().any(|m| m.space.id == team.id));
@@ -2764,7 +2750,7 @@ async fn memberships_list_direct_spaces_with_their_paths() {
         .unwrap()
         .0;
     let listed: std::collections::BTreeMap<Uuid, spaces::Membership> =
-        spaces::memberships(&e.pool, &e.authorization, "ana")
+        spaces::memberships(&e.pool, "ana")
             .await
             .unwrap()
             .into_iter()
@@ -2798,9 +2784,7 @@ async fn memberships_list_direct_spaces_with_their_paths() {
     );
 
     // Each membership reports exactly its direct roles.
-    let alice = spaces::memberships(&e.pool, &e.authorization, "alice")
-        .await
-        .unwrap();
+    let alice = spaces::memberships(&e.pool, "alice").await.unwrap();
     let on_team = alice.iter().find(|m| m.space.id == team.id).unwrap();
     assert_eq!(on_team.roles, vec![Role::Member, Role::Owner]);
 }
@@ -2876,8 +2860,7 @@ async fn space_and_folder_names_are_unique_in_canonical_form() {
     grant(&e, team.id, Role::Editor, "writer").await;
     // Surrounding whitespace and Unicode composition do not make a different name.
     for name in [" TSN", "TSN\u{a0}"] {
-        let refused =
-            crate::support::member_organization(&e.pool, &e.authorization, name, "bob").await;
+        let refused = crate::support::member_organization(&e.pool, name, "bob").await;
         assert_eq!(refused.unwrap_err().0, 409, "{name:?}");
     }
     let create_team = |name: &str| {
@@ -2967,16 +2950,14 @@ async fn organization_admins_name_owners_and_read_nothing() {
         .await
         .unwrap();
     assert!(
-        !e.authorization
-            .check("bob", Permission::Manage, team.id)
+        control_plane::authorization::authorize(&e.pool, "bob", team.id, Permission::Manage)
             .await
-            .unwrap()
+            .is_err()
     );
     assert!(
-        e.authorization
-            .check("bob", Permission::Manage, org.id)
+        control_plane::authorization::authorize(&e.pool, "bob", org.id, Permission::Manage)
             .await
-            .unwrap()
+            .is_ok()
     );
     assert!(!reads(&e, "bob", org.id).await);
     assert!(matches!(
@@ -2994,10 +2975,9 @@ async fn organization_admins_name_owners_and_read_nothing() {
     for space in [org.id, team.id] {
         assert!(!reads(&e, "olga", space).await);
         assert!(
-            !e.authorization
-                .check("olga", Permission::Manage, space)
+            control_plane::authorization::authorize(&e.pool, "olga", space, Permission::Manage)
                 .await
-                .unwrap()
+                .is_err()
         );
     }
     let member = spaces::grant(
@@ -3034,8 +3014,7 @@ async fn organization_admins_name_owners_and_read_nothing() {
     let last = spaces::revoke(&e.pool, "root", org.id, Role::OrganizationAdmin, "olga").await;
     assert!(matches!(last, Err(AppError::Conflict(_))));
     assert_eq!(
-        e.authorization
-            .space_holders(org.id, Role::OrganizationAdmin)
+        control_plane::authorization::space_holders(&e.pool, org.id, Role::OrganizationAdmin)
             .await
             .unwrap(),
         vec!["olga".to_string()]
@@ -3048,7 +3027,6 @@ async fn content_app(e: &Env, identity: &support::IdentityServer) -> axum::Route
             agent_catalog: Default::default(),
             auth: std::sync::Arc::new(identity.auth().await),
             pool: e.pool.clone(),
-            authorization: e.authorization.clone(),
             onboarding: Default::default(),
             lifecycle: Default::default(),
             directory: Some(identity.directory()),
@@ -3097,7 +3075,7 @@ async fn business_routes_share_one_authorization_answer() {
     grant(&e, org.id, Role::Editor, "writer").await;
     grant(&e, team.id, Role::Editor, "writer").await;
     grant(&e, org.id, Role::Member, "bystander").await;
-    crate::support::member_organization(&e.pool, &e.authorization, "Other", "carol")
+    crate::support::member_organization(&e.pool, "Other", "carol")
         .await
         .unwrap();
     let folder = spaces::create_folder(&e.pool, "writer", team.id, None, "kept".into())
@@ -3120,10 +3098,16 @@ async fn business_routes_share_one_authorization_answer() {
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
-    lifecycle
-        .accept(&e.pool, &e.authorization, "root", retired.id)
+    let retired_org =
+        crate::support::member_organization(&e.pool, "Retired personal organization", "writer")
+            .await
+            .unwrap();
+    let (retired_personal, _) = spaces::create_personal_space(&e.pool, "writer", retired_org.id)
         .await
         .unwrap();
+    for id in [retired.id, retired_org.id] {
+        lifecycle.accept(&e.pool, "root", id).await.unwrap();
+    }
 
     let identity = support::IdentityServer::start().await;
     let app = content_app(&e, &identity).await;
@@ -3148,6 +3132,30 @@ async fn business_routes_share_one_authorization_answer() {
             )
         }
     };
+    // Organization-only reads and mutations reject kind before permission or retirement.
+    for user in ["alice", "bystander", "carol"] {
+        for id in [team.id, retired.id] {
+            let (status, body) = call(
+                user,
+                "GET",
+                format!("/organizations/{id}/models"),
+                Value::Null,
+            )
+            .await;
+            assert_eq!(
+                status, 404,
+                "organization kind before access: {user}: {body}"
+            );
+            let (status, body) = call(
+                user,
+                "PUT",
+                format!("/organizations/{id}/capabilities/pod/offer/default-on"),
+                json!({"default_on": true}),
+            )
+            .await;
+            assert_eq!(status, 404, "organization kind under lock: {user}: {body}");
+        }
+    }
     let missing = Uuid::new_v4();
     // (case, user, space, folder, expected status)
     let table = [
@@ -3160,6 +3168,28 @@ async fn business_routes_share_one_authorization_answer() {
             404,
         ),
         ("no permission", "bystander", team.id, Some(folder.id), 403),
+        (
+            "retired before permission",
+            "bystander",
+            retired.id,
+            None,
+            409,
+        ),
+        ("context before retirement", "carol", retired.id, None, 404),
+        (
+            "personal retirement before fixed roles",
+            "writer",
+            retired_personal.id,
+            None,
+            409,
+        ),
+        (
+            "personal context before fixed roles",
+            "carol",
+            retired_personal.id,
+            None,
+            404,
+        ),
         (
             "retired space",
             "writer",
@@ -3178,6 +3208,16 @@ async fn business_routes_share_one_authorization_answer() {
         .await;
         let listed = call(user, "GET", format!("/spaces/{space}/entries"), Value::Null).await;
         let mut answers = vec![("create folder", created), ("list documents", listed)];
+        for method in ["PUT", "DELETE"] {
+            let answer = call(
+                user,
+                method,
+                format!("/spaces/{space}/roles/member/bystander"),
+                Value::Null,
+            )
+            .await;
+            answers.push((method, answer));
+        }
         if let Some(folder) = folder {
             let renamed = call(
                 user,
@@ -3369,11 +3409,10 @@ async fn organization_admin_grants_require_directory_identity_and_deleted_admins
     let app = content_app(&e, &identity).await;
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let token = identity.token("root");
-    let before = e
-        .authorization
-        .space_holders(org.id, Role::OrganizationAdmin)
-        .await
-        .unwrap();
+    let before =
+        control_plane::authorization::space_holders(&e.pool, org.id, Role::OrganizationAdmin)
+            .await
+            .unwrap();
     for (subject, expected) in [("missing", 422), ("unavailable", 500)] {
         assert_eq!(
             content_request(
@@ -3387,8 +3426,7 @@ async fn organization_admin_grants_require_directory_identity_and_deleted_admins
             expected
         );
         assert_eq!(
-            e.authorization
-                .space_holders(org.id, Role::OrganizationAdmin)
+            control_plane::authorization::space_holders(&e.pool, org.id, Role::OrganizationAdmin)
                 .await
                 .unwrap(),
             before
@@ -3504,11 +3542,10 @@ async fn import_rechecks_admin_identity_before_publishing_spaces() {
     server.control.lock().await.create_gate = Some(gate.clone());
     let bundle = parse_blueprint(br#"{"users":[{"username":"alice"},{"username":"bob","password":"fixture-password"}],"organizations":[{"ref":"org","name":"Race","roles":{"alice":["organization_admin","owner"]}}],"teams":[],"projects":[]}"#).unwrap();
     let pool = e.pool.clone();
-    let authorization = e.authorization.clone();
+
     let pending = tokio::spawn(async move {
         control_plane::provisioning::Importer {
             pool: &pool,
-            authorization: &authorization,
             directory: &directory,
             operator: "root",
         }
@@ -3535,8 +3572,7 @@ async fn import_rechecks_admin_identity_before_publishing_spaces() {
         .unwrap();
     assert_eq!(spaces, 0);
     assert!(
-        e.authorization
-            .roles_of("alice-sub")
+        control_plane::authorization::roles_of(&e.pool, "alice-sub")
             .await
             .unwrap()
             .is_empty()
@@ -3565,7 +3601,6 @@ async fn import_checks_distinct_admins_once_with_bounded_concurrency() {
     let directory = server.directory();
     control_plane::provisioning::Importer {
         pool: &e.pool,
-        authorization: &e.authorization,
         directory: &directory,
         operator: "root",
     }
@@ -3588,10 +3623,10 @@ async fn import_checks_distinct_admins_once_with_bounded_concurrency() {
 #[ignore = "needs Postgres: make test-integration"]
 async fn a_person_may_hold_roles_in_several_organizations() {
     let e = env().await;
-    let a = crate::support::member_organization(&e.pool, &e.authorization, "A", "alice")
+    let a = crate::support::member_organization(&e.pool, "A", "alice")
         .await
         .unwrap();
-    let b = crate::support::member_organization(&e.pool, &e.authorization, "B", "carol")
+    let b = crate::support::member_organization(&e.pool, "B", "carol")
         .await
         .unwrap();
     let subjects = e.subjects();
@@ -3603,13 +3638,13 @@ async fn a_person_may_hold_roles_in_several_organizations() {
     second.unwrap();
     for organization in [a.id, b.id] {
         assert!(
-            spaces::in_organization(&e.pool, "bob", organization)
+            control_plane::authorization::in_organization(&e.pool, "bob", organization)
                 .await
                 .unwrap()
         );
     }
     assert!(
-        !spaces::in_organization(&e.pool, "unattached", a.id)
+        !control_plane::authorization::in_organization(&e.pool, "unattached", a.id)
             .await
             .unwrap()
     );
@@ -3617,7 +3652,7 @@ async fn a_person_may_hold_roles_in_several_organizations() {
     // member of B reads B.
     assert!(!reads(&e, "bob", a.id).await);
     assert!(reads(&e, "bob", b.id).await);
-    let listed: Vec<_> = spaces::memberships(&e.pool, &e.authorization, "bob")
+    let listed: Vec<_> = spaces::memberships(&e.pool, "bob")
         .await
         .unwrap()
         .into_iter()
@@ -3626,7 +3661,7 @@ async fn a_person_may_hold_roles_in_several_organizations() {
     assert!(listed.contains(&(a.id, vec![Role::Owner])));
     assert!(listed.contains(&(b.id, vec![Role::Member])));
     // A third organization can name the same person.
-    crate::support::member_organization(&e.pool, &e.authorization, "Third", "bob")
+    crate::support::member_organization(&e.pool, "Third", "bob")
         .await
         .unwrap();
 }
@@ -3637,12 +3672,20 @@ async fn a_person_may_hold_roles_in_several_organizations() {
 async fn organization_context_follows_direct_grants() {
     let e = env().await;
     let (a, _, project) = tree(&e).await;
-    let b = crate::support::member_organization(&e.pool, &e.authorization, "B", "carol")
+    let b = crate::support::member_organization(&e.pool, "B", "carol")
         .await
         .unwrap();
     grant(&e, a.id, Role::Owner, "bob").await;
-    assert!(spaces::in_organization(&e.pool, "bob", a.id).await.unwrap());
-    assert!(!spaces::in_organization(&e.pool, "bob", b.id).await.unwrap());
+    assert!(
+        control_plane::authorization::in_organization(&e.pool, "bob", a.id)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !control_plane::authorization::in_organization(&e.pool, "bob", b.id)
+            .await
+            .unwrap()
+    );
     assert!(!reads(&e, "bob", a.id).await);
     // Context resolution agrees with direct SQL grants; it does not repair missing parent roles.
     control_plane::authorization::write_role(
@@ -3655,45 +3698,47 @@ async fn organization_context_follows_direct_grants() {
     .await
     .unwrap();
     assert!(
-        spaces::in_organization(&e.pool, "orphan", a.id)
+        control_plane::authorization::in_organization(&e.pool, "orphan", a.id)
             .await
             .unwrap()
     );
-    let memberships = spaces::memberships(&e.pool, &e.authorization, "orphan")
-        .await
-        .unwrap();
+    let memberships = spaces::memberships(&e.pool, "orphan").await.unwrap();
     assert_eq!(memberships.len(), 1);
     assert_eq!(memberships[0].space.id, project.id);
     assert_eq!(memberships[0].space.path, project.path);
     assert_eq!(memberships[0].space.organization, a.id);
     assert_eq!(
-        e.authorization.roles_of("orphan").await.unwrap(),
+        control_plane::authorization::roles_of(&e.pool, "orphan")
+            .await
+            .unwrap(),
         vec![(project.id, Role::Editor)]
     );
     // A second organization adds its own context without changing the first.
     spaces::grant(&e.pool, &e.subjects(), "carol", b.id, Role::Member, "bob")
         .await
         .unwrap();
-    assert_eq!(
-        spaces::memberships(&e.pool, &e.authorization, "bob")
-            .await
-            .unwrap()
-            .len(),
-        2
-    );
+    assert_eq!(spaces::memberships(&e.pool, "bob").await.unwrap().len(), 2);
     assert_eq!(
         spaces::scope(&e.pool, "bob", b.id, None).await.unwrap(),
         vec![b.id]
     );
     assert!(matches!(
-        spaces::authorized_write(&e.pool, "bob", b.id).await,
+        spaces::authorized_mutation(&e.pool, "bob", b.id, Permission::Write).await,
         Err(AppError::Forbidden)
     ));
     spaces::revoke(&e.pool, "carol", b.id, Role::Member, "bob")
         .await
         .unwrap();
-    assert!(!spaces::in_organization(&e.pool, "bob", b.id).await.unwrap());
-    assert!(spaces::in_organization(&e.pool, "bob", a.id).await.unwrap());
+    assert!(
+        !control_plane::authorization::in_organization(&e.pool, "bob", b.id)
+            .await
+            .unwrap()
+    );
+    assert!(
+        control_plane::authorization::in_organization(&e.pool, "bob", a.id)
+            .await
+            .unwrap()
+    );
 }
 
 // Proves: I23
@@ -3709,7 +3754,6 @@ async fn import_accepts_one_person_in_several_organizations() {
     let bundle = parse_blueprint(&serde_json::to_vec(&value).unwrap()).unwrap();
     Importer {
         pool: &e.pool,
-        authorization: &e.authorization,
         directory: &directory,
         operator: "root",
     }
@@ -3718,12 +3762,9 @@ async fn import_accepts_one_person_in_several_organizations() {
     .unwrap();
     let bob = directory.find_username("bob").await.unwrap().unwrap();
     for name in ["A", "B"] {
-        let organization = named_space(&e.pool, &e.authorization, None, name)
-            .await
-            .unwrap()
-            .unwrap();
+        let organization = named_space(&e.pool, None, name).await.unwrap().unwrap();
         assert!(
-            spaces::in_organization(&e.pool, &bob.id, organization.id)
+            control_plane::authorization::in_organization(&e.pool, &bob.id, organization.id)
                 .await
                 .unwrap()
         );
@@ -3738,10 +3779,10 @@ async fn business_http_checks_each_organization_while_platform_metadata_stays_av
     use serde_json::json;
     use tower::ServiceExt;
     let e = env().await;
-    let a = crate::support::member_organization(&e.pool, &e.authorization, "A", "alice")
+    let a = crate::support::member_organization(&e.pool, "A", "alice")
         .await
         .unwrap();
-    let b = crate::support::member_organization(&e.pool, &e.authorization, "B", "carol")
+    let b = crate::support::member_organization(&e.pool, "B", "carol")
         .await
         .unwrap();
     grant(&e, a.id, Role::Editor, "bob").await;
@@ -3819,7 +3860,7 @@ async fn business_http_checks_each_organization_while_platform_metadata_stays_av
 #[ignore = "needs Postgres: make test-integration"]
 async fn import_and_a_waiting_grant_both_commit_across_organizations() {
     let e = env().await;
-    let a = crate::support::member_organization(&e.pool, &e.authorization, "A", "alice")
+    let a = crate::support::member_organization(&e.pool, "A", "alice")
         .await
         .unwrap();
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
@@ -3829,11 +3870,10 @@ async fn import_and_a_waiting_grant_both_commit_across_organizations() {
     server.control.lock().await.create_gate = Some(gate.clone());
     let directory = server.directory();
     let bundle = parse_blueprint(br#"{"users":[{"username":"carol","password":"private-password"},{"username":"bob"}],"organizations":[{"ref":"b","name":"B","roles":{"carol":["organization_admin","owner"],"bob":["member"]}}],"teams":[],"projects":[]}"#).unwrap();
-    let (pool, authorization) = (e.pool.clone(), e.authorization.clone());
+    let pool = e.pool.clone();
     let import = tokio::spawn(async move {
         control_plane::provisioning::Importer {
             pool: &pool,
-            authorization: &authorization,
             directory: &directory,
             operator: "root",
         }
@@ -3861,13 +3901,10 @@ async fn import_and_a_waiting_grant_both_commit_across_organizations() {
     gate.release.notify_one();
     grant.await.unwrap().unwrap();
     import.await.unwrap().unwrap();
-    let b = named_space(&e.pool, &e.authorization, None, "B")
-        .await
-        .unwrap()
-        .unwrap();
+    let b = named_space(&e.pool, None, "B").await.unwrap().unwrap();
     for organization in [a.id, b.id] {
         assert!(
-            spaces::in_organization(&e.pool, "bob", organization)
+            control_plane::authorization::in_organization(&e.pool, "bob", organization)
                 .await
                 .unwrap()
         );
@@ -3936,10 +3973,9 @@ async fn personal_open_requires_business_role_and_never_repairs_revocation() {
     assert_eq!(again.id, personal.id);
 
     assert!(
-        !e.authorization
-            .check("priya", Permission::Write, personal.id)
+        control_plane::authorization::authorize(&e.pool, "priya", personal.id, Permission::Write)
             .await
-            .unwrap()
+            .is_err()
     );
     spaces::revoke(&e.pool, "alice", personal.id, Role::Member, "priya")
         .await
@@ -3968,7 +4004,7 @@ async fn personal_open_requires_business_role_and_never_repairs_revocation() {
         assert!(created && reads(&e, user, personal.id).await);
         assert!(!reads(&e, "alice", personal.id).await);
         assert!(
-            spaces::memberships(&e.pool, &e.authorization, user)
+            spaces::memberships(&e.pool, user)
                 .await
                 .unwrap()
                 .iter()
@@ -3989,7 +4025,7 @@ async fn personal_open_requires_business_role_and_never_repairs_revocation() {
         assert!(!created);
         assert_eq!(again.id, own.id);
     }
-    let foreign = crate::support::member_organization(&e.pool, &e.authorization, "Other", "carol")
+    let foreign = crate::support::member_organization(&e.pool, "Other", "carol")
         .await
         .unwrap();
     let (private, _) = spaces::create_personal_space(&e.pool, "carol", foreign.id)
@@ -4002,9 +4038,7 @@ async fn personal_open_requires_business_role_and_never_repairs_revocation() {
         spaces::create_personal_space(&e.pool, "priya", foreign.id).await,
         Err(AppError::NotFound)
     ));
-    let listed = spaces::memberships(&e.pool, &e.authorization, "carol")
-        .await
-        .unwrap();
+    let listed = spaces::memberships(&e.pool, "carol").await.unwrap();
     assert!(listed.iter().all(|m| m.space.organization == foreign.id));
     assert!(listed.iter().all(|m| m.space.id != personal.id));
 }
@@ -4263,29 +4297,17 @@ async fn personal_access_survives_owner_revocation_while_membership_remains() {
         let (personal, _) = spaces::create_personal_space(&e.pool, user, org.id)
             .await
             .unwrap();
-        spaces::authorize(
-            &e.pool,
-            &e.authorization,
-            user,
-            personal.id,
-            Permission::Read,
-        )
-        .await
-        .unwrap();
+        control_plane::authorization::authorize(&e.pool, user, personal.id, Permission::Read)
+            .await
+            .unwrap();
         spaces::revoke(&e.pool, "alice", scope, Role::Owner, user)
             .await
             .unwrap();
-        spaces::authorize(
-            &e.pool,
-            &e.authorization,
-            user,
-            personal.id,
-            Permission::Read,
-        )
-        .await
-        .unwrap();
+        control_plane::authorization::authorize(&e.pool, user, personal.id, Permission::Read)
+            .await
+            .unwrap();
         assert!(
-            spaces::memberships(&e.pool, &e.authorization, user)
+            spaces::memberships(&e.pool, user)
                 .await
                 .unwrap()
                 .iter()
@@ -4362,7 +4384,6 @@ async fn decisions_delegate_person_and_return_exact_readable_corpus() {
     .unwrap();
     let app = routes(AppState {
         pool: e.pool.clone(),
-        authorization: e.authorization.clone(),
         auth: std::sync::Arc::new(auth),
         onboarding: Onboarding {
             gcu_version: Some("v1".into()),
@@ -4538,8 +4559,7 @@ async fn role_grants_require_a_valid_known_subject() {
             Err(AppError::Unprocessable(_))
         ));
         assert!(
-            e.authorization
-                .direct_roles_on(subject, org.id)
+            control_plane::authorization::direct_roles_on(&e.pool, subject, org.id)
                 .await
                 .unwrap()
                 .is_empty()
@@ -4554,10 +4574,9 @@ async fn role_grants_require_a_valid_known_subject() {
         .await
         .unwrap();
     assert!(
-        e.authorization
-            .check("known", Permission::Read, org.id)
+        control_plane::authorization::authorize(&e.pool, "known", org.id, Permission::Read)
             .await
-            .unwrap()
+            .is_ok()
     );
 }
 

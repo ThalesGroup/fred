@@ -61,10 +61,12 @@ only those the person can read through a direct role on that ancestor.
 
 A person may hold roles in several organizations; each one is reached only through
 the roles held there. Folders and documents use their owning space's permissions. **Personal spaces inherit no content rights** from the
-organization or teams. Any business role (owner, member, editor or analyst) on an
-active organization, team or project lets a person open their own personal space;
-an admin role alone does not. Losing the last business role hides and closes
-access to the personal space without deleting its data.
+organization or teams. An **organization participant** holds a business role (owner, member,
+editor or analyst) on an active collective space whose organization and parent are
+also active. Participation lets a person open their own personal space and browse
+the organization's published prompts; an admin role alone does neither. Losing the
+last such role closes both accesses without deleting personal data. Private prompts
+require a local content-reading role; publishing requires an editor role on the team.
 
 ## 3.4. Rights remain current
 

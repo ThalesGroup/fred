@@ -196,10 +196,8 @@ impl Documents {
         config.limits.team_bytes = quota;
         config.limits.file_bytes = 1024 * 1024;
 
-        let observed = control_plane::authorization::Authorization::new(e.pool.clone());
         let storage = Storage::start(
             &e.pool,
-            &observed,
             None,
             config,
             "fixture-access".into(),
@@ -212,7 +210,6 @@ impl Documents {
             api::AppState {
                 agent_catalog: Default::default(),
                 pool: e.pool.clone(),
-                authorization: observed,
                 auth: Arc::new(identity.auth().await),
                 content: Some(storage.clone()),
                 processing: None,
@@ -463,7 +460,6 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
                 .unwrap();
             let storage = Storage::start(
                 &d.e.pool,
-                &d.e.authorization,
                 Some("v1".into()),
                 d.storage.config.clone(),
                 "fixture-access".into(),
@@ -475,7 +471,6 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
                 api::AppState {
                     agent_catalog: Default::default(),
                     pool: d.e.pool.clone(),
-                    authorization: d.e.authorization.clone(),
                     auth: Arc::new(d.identity.auth().await),
                     content: Some(storage),
                     processing: None,
@@ -1134,10 +1129,9 @@ async fn document_cleanup_skips_a_contended_organization_without_starving_other_
             .0,
         201
     );
-    let peer =
-        crate::support::member_organization(&d.e.pool, &d.e.authorization, "Peer", "peer-owner")
-            .await
-            .unwrap();
+    let peer = crate::support::member_organization(&d.e.pool, "Peer", "peer-owner")
+        .await
+        .unwrap();
     let id = Uuid::new_v4();
     let failed = Uuid::new_v4();
     let pending_key:String=sqlx::query_scalar("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at) select $1,$1,actor,organization_id,space_id,folder_id,quota_owner,'pending.txt',mime,size,sha256,replace(object_key,id::text,$1::text),'pending',clock_timestamp()-interval '1 second' from document_upload where status='stored' returning object_key")

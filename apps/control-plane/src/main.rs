@@ -12,17 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! control-plane CLI: serve, migrations, authenticated provisioning.
+//! control-plane CLI: serve, schema initialization, authenticated provisioning.
 
 use anyhow::{Context, Result};
 use futures::{FutureExt, StreamExt, future::LocalBoxFuture, stream::FuturesUnordered};
 use sqlx::postgres::PgPoolOptions;
 
-use control_plane::{
-    api, auth, authorization::Authorization, config::Configuration as Config, logging,
-};
+use control_plane::{api, auth, config::Configuration as Config, logging};
 
-const USAGE: &str = "usage: control-plane [serve | initialize-models | discover-agents | migrate | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | initialize-models | discover-agents | initialize-schema | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -53,7 +51,7 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     // Helm's pre-install Job has only DATABASE_URL; release config and identities do not exist yet.
-    if args == ["migrate"] {
+    if args == ["initialize-schema"] {
         let url = std::env::var("DATABASE_URL").context("DATABASE_URL is required")?;
         let url = match url.strip_prefix("postgresql+asyncpg://") {
             Some(rest) => format!("postgresql://{rest}"),
@@ -63,12 +61,19 @@ async fn main() -> Result<()> {
             .max_connections(1)
             .connect(&url)
             .await
-            .map_err(|_| anyhow::anyhow!("migration database connection failed"))?;
+            .map_err(|_| anyhow::anyhow!("schema initialization database connection failed"))?;
         sqlx::migrate!()
             .run(&pool)
             .await
-            .map_err(|_| anyhow::anyhow!("manager SQL migration failed"))?;
-        println!("Manager SQL migrations completed");
+            .map_err(|error| {
+                use sqlx::migrate::MigrateError;
+                match error {
+                    MigrateError::VersionMissing(_) | MigrateError::VersionMismatch(_) | MigrateError::Dirty(_) =>
+                        anyhow::anyhow!("incompatible control-plane schema: this Weaver build requires a fresh database; no incremental upgrade or automatic reset is supported; do not rewrite SQLx history"),
+                    _ => anyhow::anyhow!("control-plane schema initialization failed; check database privileges and that the target is empty or already initialized by this build"),
+                }
+            })?;
+        println!("Control Plane schema initialized");
         return Ok(());
     }
     // Same rule as fred-pod: ENV_FILE, default ./config/.env, never overriding the process.
@@ -147,7 +152,7 @@ async fn pool(config: &Config) -> Result<sqlx::PgPool> {
         .await
         .context("postgres unreachable")?;
     control_plane::db::require_initialized(&pool).await.context(
-        "database schema does not match this control-plane binary; apply pending migrations with the deployment Job or `control-plane migrate` before starting the API; if history or checksums differ, inspect them without rewriting applied migrations",
+        "database schema does not match this control-plane binary; run `control-plane initialize-schema` on a fresh database before starting the API; an incompatible database requires explicit recreation, never rewriting SQLx history",
     )?;
     Ok(pool)
 }
@@ -157,7 +162,7 @@ async fn serve(config: Config) -> Result<()> {
     control_plane::model_catalog::configure_sources(&pool, &config.platform.model_sources).await?;
     control_plane::model_catalog::initialization::initialize(&pool, &config.platform, false)
         .await?;
-    let authorization = Authorization::new(pool.clone());
+
     let content = if let Some(content) = config.storage.content.clone() {
         let access =
             std::env::var(&content.access_key_env_var).context("missing content access key")?;
@@ -166,7 +171,6 @@ async fn serve(config: Config) -> Result<()> {
         Some(
             control_plane::documents::Storage::start(
                 &pool,
-                &authorization,
                 config
                     .app
                     .gcu_version
@@ -204,7 +208,6 @@ async fn serve(config: Config) -> Result<()> {
         },
         auth: std::sync::Arc::new(auth::Authenticator::start(config.security()?).await?),
         pool: pool.clone(),
-        authorization: authorization.clone(),
         onboarding: (&config).into(),
         lifecycle: control_plane::lifecycle::Lifecycle {
             config: config.scheduler.lifecycle.clone(),
@@ -345,7 +348,7 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
             .map_err(|_| anyhow::anyhow!("import database unavailable"))?;
         db::require_initialized(&pool).await.map_err(|_| {
             anyhow::anyhow!(
-                "initialize the compatible control-plane schema with migrate before import"
+                "initialize the compatible control-plane schema with initialize-schema before import"
             )
         })?;
         control_plane::onboarding::require_accepted(
@@ -354,9 +357,9 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
             &caller.uid,
         )
         .await?;
-        let authorization = Authorization::new(pool.clone());
+
         anyhow::ensure!(
-            authorization.is_platform_admin(&caller.uid).await?,
+            control_plane::authorization::is_platform_admin(&pool, &caller.uid).await?,
             "import requires platform admin"
         );
         use tokio::io::AsyncReadExt;
@@ -369,14 +372,12 @@ async fn import(config: Config, bundle_file: &str, token_file: &str) -> Result<(
             .await
             .map_err(|_| anyhow::anyhow!("cannot read provisioning bundle"))?;
         let bundle = tokio::task::spawn_blocking(move || Bundle::parse(&bytes)).await??;
-        Ok::<_, anyhow::Error>((pool, authorization, directory, caller.uid, bundle))
+        Ok::<_, anyhow::Error>((pool, directory, caller.uid, bundle))
     }
     .await;
-    let (pool, authorization, directory, operator, bundle) =
-        prepared.map_err(import_setup_error)?;
+    let (pool, directory, operator, bundle) = prepared.map_err(import_setup_error)?;
     let report = Importer {
         pool: &pool,
-        authorization: &authorization,
         directory: &directory,
         operator: &operator,
     }
@@ -403,7 +404,7 @@ fn import_setup_error(error: anyhow::Error) -> anyhow::Error {
         | "import requires configured Keycloak service credentials"
         | "import requires enabled Keycloak subject authentication in the directory realm"
         | "import database unavailable"
-        | "initialize the compatible control-plane schema with migrate before import"
+        | "initialize the compatible control-plane schema with initialize-schema before import"
         | "initialize control-plane with serve before import"
         | "initialize the compatible control-plane model with serve before import"
         | "not_yet_supported"

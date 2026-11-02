@@ -193,8 +193,8 @@ factory's identity helpers.
 The five application deployments are `control-plane-backend`, `knowledge-flow-backend`,
 `knowledge-flow-worker`, `frontend` and `fred-agents`. The manager image occupies the
 chart's `control-plane-backend` key and runs `control-plane serve`; the separate
-control-plane worker and the KF SQL migration remain disabled. Manager
-and runtime migrations are enabled. Manager and the Python agent runtime access
+control-plane worker and the KF SQL migration remain disabled. Manager schema initialization
+and Python runtime migrations are enabled. Manager and the Python agent runtime access
 PostgreSQL; Control Plane owns permission decisions, and the ingestion worker keeps
 its scoped storage credentials.
 

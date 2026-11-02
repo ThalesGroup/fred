@@ -117,7 +117,7 @@ def _wiki_tool_failure(
     *, action: str, exc: Exception, elapsed_s: float
 ) -> tuple[str, ToolInvocationResult]:
     """Turn a wiki tool-call failure into an actionable message plus an
-    ``is_error=True`` artifact (same doctrine as `platform_postgres`).
+    ``is_error=True`` artifact.
 
     The runtime surfaces `ToolInvocationResult.is_error` directly, so a failing
     tool returns such a result instead of raising. Failure shape arrives via

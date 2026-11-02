@@ -38,7 +38,6 @@ Example:
 """
 
 from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
     FieldSpec,
     MCPServerRef,
     UIHints,
@@ -103,17 +102,10 @@ class DeepAssistantDefinition(DeepAgentDefinition):
     tags: tuple[str, ...] = ("general", "deep")
     system_prompt_template: str = _SYSTEM_PROMPT_EN
 
-    # Same slim end-user defaults as GENERAL_ASSISTANT_AGENT (#2429): document
-    # search (the `document_access` #1906 pilot) + tabular analysis - see that
-    # template's comment for the full rationale (admin/ops servers out, #2408
-    # dependency gate). Filesystem stays excluded - see module docstring.
-    default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id="document_access"),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
-        # Removed from the prod defaults (#2429) - uncomment to restore (and
-        # re-import the constants from fred_sdk):
-        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
-    )
+    # Like the general assistant, start without external capabilities so template
+    # activation does not require tools the operator may not need.
+    # Operators select capabilities per instance; Deep's filesystem is built in.
+    default_mcp_servers: tuple[MCPServerRef, ...] = ()
 
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(

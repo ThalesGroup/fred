@@ -4,7 +4,7 @@
 use sqlx::{AssertSqlSafe, PgPool};
 use uuid::Uuid;
 
-async fn database(version: Option<i64>) -> PgPool {
+async fn database() -> PgPool {
     let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES")
         .expect("needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES");
     let name = format!("t_{}", Uuid::new_v4().simple());
@@ -18,12 +18,7 @@ async fn database(version: Option<i64>) -> PgPool {
     let pool = PgPool::connect(&format!("{postgres}/{name}"))
         .await
         .unwrap();
-    let migrator = sqlx::migrate!();
-    if let Some(version) = version {
-        migrator.run_to(version, &pool).await.unwrap();
-    } else {
-        migrator.run(&pool).await.unwrap();
-    }
+    sqlx::migrate!().run(&pool).await.unwrap();
     pool
 }
 
@@ -62,7 +57,7 @@ async fn budget(pool: &PgPool, space: Uuid, scope: &str) -> Result<(), sqlx::Err
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn budgets_distinguish_local_and_total_and_exclude_project_accounts() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, team, project, personal] = spaces(&pool).await;
     for space in [org, team, personal] {
         budget(&pool, space, "local").await.unwrap();
@@ -105,7 +100,7 @@ async fn budgets_distinguish_local_and_total_and_exclude_project_accounts() {
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn budget_numbers_are_required_and_nonnegative_without_forcing_usage_below_limit() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, _, _, _] = spaces(&pool).await;
     for (limit, used, reserved, code) in [
         (None, Some(0), Some(0), "23502"),
@@ -151,12 +146,11 @@ async fn budget_numbers_are_required_and_nonnegative_without_forcing_usage_below
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
-async fn migration_does_not_create_zero_counters_for_existing_documents() {
-    let pool = database(Some(6)).await;
+async fn document_creation_does_not_invent_storage_counters() {
+    let pool = database().await;
     let [org, _, _, _] = spaces(&pool).await;
     sqlx::query("insert into document(id,space_id,name,mime,size,sha256,created_by,object_key,quota_owner) values($1,$1,'existing.txt','text/plain',400,repeat('a',64),'alice',$1::text,$1)")
         .bind(org).execute(&pool).await.unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
     let accounts: i64 = sqlx::query_scalar("select count(*) from storage_budget")
         .fetch_one(&pool)
         .await
@@ -175,7 +169,7 @@ async fn migration_does_not_create_zero_counters_for_existing_documents() {
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
 async fn budgets_follow_space_purge_without_deleting_other_accounts() {
-    let pool = database(None).await;
+    let pool = database().await;
     let [org, team, project, _] = spaces(&pool).await;
     for (space, scope) in [(org, "local"), (org, "organization_total"), (team, "local")] {
         budget(&pool, space, scope).await.unwrap();

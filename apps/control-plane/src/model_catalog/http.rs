@@ -5,7 +5,6 @@
 
 use axum::{Json, extract::State, http::StatusCode};
 use serde::Serialize;
-use sqlx::{Postgres, Transaction};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
@@ -17,10 +16,11 @@ use super::{
 };
 use crate::{
     api::AppState,
-    domain::{Permission, Space, SpaceKind},
+    authorization,
+    domain::Permission,
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath},
-    onboarding::{self, AdmittedUser},
+    onboarding::AdmittedUser,
     spaces,
 };
 
@@ -32,42 +32,6 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
             organization_model_policy,
             replace_organization_model_policy
         ))
-}
-
-async fn authorize(s: &AppState, uid: &str, organization_id: Uuid) -> AppResult<Space> {
-    if s.auth.enabled() {
-        onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), uid).await?;
-    }
-    let org = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        uid,
-        organization_id,
-        Permission::Manage,
-    )
-    .await?;
-    if org.kind != SpaceKind::Organization {
-        return Err(AppError::NotFound);
-    }
-    Ok(org)
-}
-
-/// Same lock/guard/fence sequence as capability administration, with renewed consent.
-async fn authorized_transaction(
-    s: &AppState,
-    uid: &str,
-    org: &Space,
-) -> AppResult<Transaction<'static, Postgres>> {
-    let mut tx = spaces::lock_for(&s.pool, org).await?;
-    if s.auth.enabled() {
-        onboarding::require_accepted(&mut *tx, s.onboarding.gcu_version.as_deref(), uid).await?;
-    }
-    let current = spaces::authorize_locked(&mut tx, uid, org.id, Permission::Manage).await?;
-    if current.kind != SpaceKind::Organization {
-        return Err(AppError::NotFound);
-    }
-
-    Ok(tx)
 }
 
 #[derive(Serialize, ToSchema)]
@@ -96,7 +60,8 @@ async fn organization_models(
     AdmittedUser(user): AdmittedUser,
     ApiPath(organization_id): ApiPath<Uuid>,
 ) -> AppResult<Json<OrganizationModelInventory>> {
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     let mut tx = s.pool.begin().await?;
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
@@ -106,7 +71,8 @@ async fn organization_models(
         policy: policy::read(&mut tx, organization_id).await?,
     };
     tx.commit().await?;
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     Ok(Json(inventory))
 }
 
@@ -128,14 +94,16 @@ async fn organization_model_policy(
     AdmittedUser(user): AdmittedUser,
     ApiPath(organization_id): ApiPath<Uuid>,
 ) -> AppResult<Json<OrganizationModelPolicy>> {
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     let mut tx = s.pool.begin().await?;
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
         .await?;
     let policy = policy::read(&mut tx, organization_id).await?;
     tx.commit().await?;
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     Ok(Json(policy))
 }
 
@@ -159,8 +127,13 @@ async fn replace_organization_model_policy(
     ApiPath(organization_id): ApiPath<Uuid>,
     ApiJson(request): ApiJson<ReplaceModelPolicy>,
 ) -> AppResult<Json<OrganizationModelPolicy>> {
-    let org = authorize(&s, &user.uid, organization_id).await?;
-    let mut tx = authorized_transaction(&s, &user.uid, &org).await?;
+    let (mut tx, _) = spaces::authorized_mutation(
+        &s.pool,
+        &user.uid,
+        spaces::MutationTarget::Organization(organization_id),
+        Permission::Manage,
+    )
+    .await?;
     let policy = policy::replace(&mut tx, organization_id, &user.uid, request).await?;
     tx.commit().await?;
     Ok(Json(policy))
@@ -185,33 +158,41 @@ async fn refresh_model_source(
     AdmittedUser(user): AdmittedUser,
     ApiPath((organization_id, source_id)): ApiPath<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let org = authorize(&s, &user.uid, organization_id).await?;
+    let (mut tx, _) = spaces::authorized_mutation(
+        &s.pool,
+        &user.uid,
+        spaces::MutationTarget::Organization(organization_id),
+        Permission::Manage,
+    )
+    .await?;
     let source = s
         .agent_catalog
         .model_sources
         .iter()
         .find(|source| source.source_id == source_id)
         .ok_or(AppError::NotFound)?;
-    let token = {
-        let mut tx = authorized_transaction(&s, &user.uid, &org).await?;
-        policy::require_assigned(
-            &mut tx,
-            organization_id,
-            &std::collections::BTreeSet::from([source_id.clone()]),
-        )
-        .await?;
-        if !source.enabled {
-            return Err(AppError::Conflict("model source is disabled".into()));
-        }
-        let token = store::claim(&mut tx, source)
-            .await?
-            .ok_or_else(|| AppError::Conflict("model source configuration changed".into()))?;
-        tx.commit().await?;
-        token
-    };
+    policy::require_assigned(
+        &mut tx,
+        organization_id,
+        &std::collections::BTreeSet::from([source_id.clone()]),
+    )
+    .await?;
+    if !source.enabled {
+        return Err(AppError::Conflict("model source is disabled".into()));
+    }
+    let token = store::claim(&mut tx, source)
+        .await?
+        .ok_or_else(|| AppError::Conflict("model source configuration changed".into()))?;
+    tx.commit().await?;
     // No SQL connection or transaction survives the bounded discovery call.
     let result = discovery::discover(source).await;
-    let mut tx = authorized_transaction(&s, &user.uid, &org).await?;
+    let (mut tx, _) = spaces::authorized_mutation(
+        &s.pool,
+        &user.uid,
+        spaces::MutationTarget::Organization(organization_id),
+        Permission::Manage,
+    )
+    .await?;
     policy::require_assigned(
         &mut tx,
         organization_id,

@@ -1118,10 +1118,6 @@ def _build_runtime_services(
         document_markdown=document_markdown,
         document_extraction=document_extraction,
         document_similarity=document_similarity,
-        # Read-only platform SQL (OPSCAP-01-PG): pod-lifetime adapter (like
-        # checkpointer/kpi_writer, NOT per-turn) — read-only enforcement,
-        # row cap and timeout clamp all live server-side in the adapter.
-        platform_sql=runtime_config.platform_sql,
         web_research=(
             runtime_config.web_research_factory(binding)
             if runtime_config.web_research_factory
@@ -6438,7 +6434,6 @@ def create_agent_app(
 
             steering_cleanup_task = asyncio.create_task(cleanup_expired_steering())
             await container.initialize_web_research()
-            container.initialize_platform_sql()
             container.start_metrics_exporter()
             await container.start_kpi_tasks()
             checkpointer = container.get_checkpointer()
@@ -6483,7 +6478,6 @@ def create_agent_app(
                             security.profile if security is not None else None
                         ),
                         kpi_writer=container.get_kpi_writer(),
-                        platform_sql=container.get_platform_sql(),
                         web_research_factory=(
                             container.web_research.bind
                             if container.web_research

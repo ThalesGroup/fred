@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 use crate::{
     api::AppState,
-    db,
     domain::Permission,
     error::{AppError, AppResult},
     extract::ApiPath,
@@ -31,8 +30,9 @@ async fn set_favorite(
     prompt_id: Uuid,
     favorite: bool,
 ) -> AppResult<StatusCode> {
-    let mut tx = spaces::authorized_mutation(&s.pool, actor, space_id, Permission::Read).await?;
-    super::require_prompt_space(db::space(&mut *tx, space_id).await?.kind)?;
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, actor, space_id, Permission::Read).await?;
+    super::require_prompt_space(space.kind)?;
     let exists: bool = sqlx::query_scalar(
         "select exists(select 1 from prompt where space_id=$1 and prompt_id=$2)",
     )

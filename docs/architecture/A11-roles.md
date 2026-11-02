@@ -44,9 +44,10 @@ another person's conversation. The evaluation permissions above are the model's
 `read_conversations_for_evaluation`: a positive permission answer does not prove
 that an evaluation or conversation-reading journey is wired and validated.
 
-Any business role (`owner`, `member`, `editor` or `analyst`) on an active
-organization, team or project makes the person eligible for their personal space
-in that organization. Technical
+A person is an **organization participant** when they hold a business role
+(`owner`, `member`, `editor` or `analyst`) on an active collective space in that
+organization; its organization and parent must also be active. This same predicate
+admits access to their personal space and the organization's published-prompt marketplace. Technical
 `platform_admin` and `organization_admin` roles alone do not. The roles can
 accumulate: an admin who also holds a business role remains eligible. Personal content
 still belongs only to its own member/editor, never to other business owners.
@@ -140,14 +141,14 @@ Role definitions and implication rules are recorded in the
 [space roles](../../apps/control-plane/src/domain.rs) and
 [typed permissions](../../apps/control-plane/src/roles.rs).
 The comparison above is grounded in [`model_catalog/http.rs`](../../apps/control-plane/src/model_catalog/http.rs)
-(`authorize`, `authorized_transaction`);
-[`spaces.rs`](../../apps/control-plane/src/spaces.rs) (`create_space`, `in_organization`,
+(organization model handlers);
+[`spaces.rs`](../../apps/control-plane/src/spaces.rs) (`create_space`,
 `may_change`, `grant`, `create_managed_organization`);
 [`typed permission evaluator`](../../apps/control-plane/src/authorization.rs);
 [`platform.rs`](../../apps/control-plane/src/platform.rs);
 [`provisioning.rs`](../../apps/control-plane/src/provisioning.rs);
-[`lifecycle/store.rs`](../../apps/control-plane/src/lifecycle/store.rs) (`permitted`);
-[`supervision/mod.rs`](../../apps/control-plane/src/supervision/mod.rs) (`authorize`);
+[`lifecycle/store.rs`](../../apps/control-plane/src/lifecycle/store.rs) (platform deletion checks);
+[`supervision/mod.rs`](../../apps/control-plane/src/supervision/mod.rs) (organization supervision handlers);
 and the [organization creation contract](A5-user-journeys.md#a-platform-admin-creates-an-organization).
 
 The canonical role identifiers are `platform_admin`, `organization_admin` and

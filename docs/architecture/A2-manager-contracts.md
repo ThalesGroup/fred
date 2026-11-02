@@ -19,7 +19,7 @@ an ambiguous context. A role grant answers 422 for an invalid or unknown subject
 and 503 when the directory is unavailable.
 
 `GET /organizations/{organization_id}/agents` reuses runtime discovery after
-`spaces::authorize(..., Manage)` and an organization-kind check. The target must
+`authorization::authorize(..., Manage)` and an organization-kind check. The target must
 belong to an organization where the admitted caller holds a direct role, and be
 active. Organization attachment alone, team/project ownership and platform roles
 confer no access.
@@ -207,11 +207,10 @@ rechecks admission/Manage and fences authorization after HTTP, preserving the M1
 configuration/token fences. Turn admission consumes this policy through the
 [model contract below](#chat-model-preparation-and-turn-admission); saving the policy
 alone does not prove provider connectivity or pod credential provisioning.
-Migration [`0011`](../../apps/control-plane/migrations/0011_organization_model_sources.sql)
-adds explicit `organization_model_source` assignments and a durable initialization
-receipt independent of policy deletion. Historical permissions are retained, but
-unassigned sources are filtered from inventory and admission and refused on new
-writes/refresh. [`initialization.rs`](../../apps/control-plane/src/model_catalog/initialization.rs)
+The [initial schema](../../apps/control-plane/migrations/0001_schema.sql)
+includes explicit `organization_model_source` assignments and a durable initialization
+receipt independent of policy deletion. Every permission requires a source assignment;
+unassigned sources are filtered from inventory and admission and refused on writes/refresh. [`initialization.rs`](../../apps/control-plane/src/model_catalog/initialization.rs)
 resolves exact organization names after provisioning and publishes once using the
 shared policy operations. This is implemented with isolated SQL/provider-fixture
 coverage; it is not a claim of a validated k3d/provider journey or Rust inference.
@@ -266,15 +265,12 @@ silently trimming, lowercasing or adding a suffix. The same name can exist in tw
 spaces or in the agent and prompt tables. Prompt name `skill` remains reserved
 for the existing slash-command convention. This does not introduce a skill table.
 
-[`0008_resource_identity.sql`](../../apps/control-plane/migrations/0008_resource_identity.sql)
-implements these constraints; [`0014_agent_logical_identity.sql`](../../apps/control-plane/migrations/0014_agent_logical_identity.sql)
-makes persisted agent references and authors mandatory.
-[`0015_agent_display_name_uniqueness.sql`](../../apps/control-plane/migrations/0015_agent_display_name_uniqueness.sql)
-restores the unique index on `(space_id, lower(display_name))`: two agents in one
+[`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql)
+implements these constraints and makes persisted agent references and authors mandatory.
+The unique index on `(space_id, lower(display_name))` means two agents in one
 space cannot share a display name, including case variants. The API trims surrounding
 whitespace on creation and rename. The same display name is allowed in different
-spaces. Migration fails on existing duplicates without renaming or deleting them;
-they require explicit resolution before retrying. Prompts still require an explicit logical name.
+spaces. Prompts still require an explicit logical name.
 
 The agent creation API accepts an omitted or null `logical_name`.
 [`agent_instances::create`](../../apps/control-plane/src/agent_instances.rs)
@@ -901,7 +897,7 @@ In particular, parent kinds and organization agreement are validated by the
 application; foreign keys guarantee existence, not those domain rules. Sibling
 space names and membership eligibility are enforced by the application. See [security](03-security.md) and [organizations](04-organizations.md).
 For deployment and schema inspection, see
-[SQLx schema evolution](A3-manager-operations.md#sqlx-schema-evolution).
+[SQLx schema initialization](A3-manager-operations.md#sqlx-schema-initialization).
 
 ## Permission storage and evaluation
 

@@ -8,13 +8,12 @@ use control_plane::{agents::template_id, authorization::set_agent_default_on};
 async fn defaults_are_isolated_and_revocable() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
-    let other = support::member_organization(&e.pool, &e.authorization, "Other", "bob")
+    let other = support::member_organization(&e.pool, "Other", "bob")
         .await
         .unwrap();
     let template = template_id(org.id, "runtime", "hello");
     assert!(
-        !e.authorization
-            .can_use_agent(template, &team)
+        !control_plane::authorization::can_use_agent(&e.pool, template, &team)
             .await
             .unwrap()
     );
@@ -26,14 +25,12 @@ async fn defaults_are_isolated_and_revocable() {
     );
     tx.commit().await.unwrap();
     assert!(
-        e.authorization
-            .can_use_agent(template, &team)
+        control_plane::authorization::can_use_agent(&e.pool, template, &team)
             .await
             .unwrap()
     );
     assert!(
-        !e.authorization
-            .agent_default_on(other.id, template)
+        !control_plane::authorization::agent_default_on(&e.pool, other.id, template)
             .await
             .unwrap()
     );
@@ -41,8 +38,7 @@ async fn defaults_are_isolated_and_revocable() {
         .await
         .unwrap();
     assert!(
-        e.authorization
-            .can_use_agent(template, &personal)
+        control_plane::authorization::can_use_agent(&e.pool, template, &personal)
             .await
             .unwrap()
     );
@@ -54,14 +50,12 @@ async fn defaults_are_isolated_and_revocable() {
     );
     tx.commit().await.unwrap();
     assert!(
-        !e.authorization
-            .can_use_agent(template, &team)
+        !control_plane::authorization::can_use_agent(&e.pool, template, &team)
             .await
             .unwrap()
     );
     assert!(
-        !e.authorization
-            .can_use_agent(template, &personal)
+        !control_plane::authorization::can_use_agent(&e.pool, template, &personal)
             .await
             .unwrap()
     );

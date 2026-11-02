@@ -3,10 +3,9 @@
 
 use super::{Storage, conflict, dependency_error, invalid, models::*, unavailable, upload};
 use crate::{
-    db,
+    authorization, db,
     domain::{Document, Folder, Permission, Space},
     error::{AppError, AppResult},
-    spaces,
 };
 use axum::{
     body::{Body, Bytes},
@@ -25,15 +24,9 @@ impl Storage {
                 .bind(key)
                 .fetch_one(&self.pool)
                 .await?;
-        spaces::authorize(
-            &self.pool,
-            &self.authorization,
-            actor,
-            row.space_id,
-            Permission::Read,
-        )
-        .await
-        .map_err(dependency_error)?;
+        authorization::authorize(&self.pool, actor, row.space_id, Permission::Read)
+            .await
+            .map_err(dependency_error)?;
         if let Some(id) = row.document_id {
             row.processing = crate::processing::store::summaries(&self.pool, &[id])
                 .await?
@@ -48,15 +41,9 @@ impl Storage {
         space: Uuid,
         query: ReceiptQuery,
     ) -> AppResult<Vec<UploadReceipt>> {
-        spaces::authorize(
-            &self.pool,
-            &self.authorization,
-            actor,
-            space,
-            Permission::Read,
-        )
-        .await
-        .map_err(dependency_error)?;
+        authorization::authorize(&self.pool, actor, space, Permission::Read)
+            .await
+            .map_err(dependency_error)?;
         if query.before.is_some() != query.before_key.is_some() {
             return Err(invalid("Both receipt cursor fields are required"));
         }
@@ -96,7 +83,7 @@ impl Storage {
     }
 
     pub async fn summary(&self, actor: &str, id: Uuid) -> AppResult<StorageSummary> {
-        let space = spaces::authorize(&self.pool, &self.authorization, actor, id, Permission::Read)
+        let space = authorization::authorize(&self.pool, actor, id, Permission::Read)
             .await
             .map_err(dependency_error)?;
         self.usage(&space).await
@@ -134,15 +121,9 @@ impl Storage {
         input: Preflight,
     ) -> AppResult<PreflightResult> {
         let folder = db::folder(&self.pool, id).await?;
-        let space = spaces::authorize(
-            &self.pool,
-            &self.authorization,
-            actor,
-            folder.space_id,
-            Permission::Write,
-        )
-        .await
-        .map_err(dependency_error)?;
+        let space = authorization::authorize(&self.pool, actor, folder.space_id, Permission::Write)
+            .await
+            .map_err(dependency_error)?;
         if input.files.is_empty() || input.files.len() > 200 {
             return Err(invalid("Preflight accepts 1..200 files"));
         }
@@ -167,7 +148,6 @@ impl Storage {
 
     pub async fn directory(
         pool: &sqlx::PgPool,
-        authorization: &crate::authorization::Authorization,
         actor: &str,
         space: Uuid,
         query: EntryQuery,
@@ -179,13 +159,11 @@ impl Storage {
         {
             return Err(invalid("Directory search exceeds 255 characters"));
         }
-        spaces::authorize(pool, authorization, actor, space, Permission::Read)
+        let facts = authorization::load_facts(pool, actor, space)
             .await
             .map_err(dependency_error)?;
-        let can_write = authorization
-            .check(actor, Permission::Write, space)
-            .await
-            .map_err(|_| unavailable())?;
+        authorization::decide(&facts, Permission::Read.into())?;
+        let can_write = authorization::decide(&facts, Permission::Write.into()).is_ok();
         let mut tx = pool.begin().await?;
         sqlx::query("set transaction isolation level repeatable read, read only")
             .execute(&mut *tx)
@@ -263,15 +241,9 @@ impl Storage {
     /// Hold one chunk until EOF/checksum verification so corruption cannot look complete.
     pub async fn content(&self, actor: &str, id: Uuid) -> AppResult<Response> {
         let document = db::document(&self.pool, id).await?;
-        spaces::authorize(
-            &self.pool,
-            &self.authorization,
-            actor,
-            document.space_id,
-            Permission::Read,
-        )
-        .await
-        .map_err(dependency_error)?;
+        authorization::authorize(&self.pool, actor, document.space_id, Permission::Read)
+            .await
+            .map_err(dependency_error)?;
         self.stream_original(document).await
     }
 

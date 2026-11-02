@@ -11,7 +11,8 @@ use uuid::Uuid;
 
 use crate::{
     api::AppState,
-    db, domain,
+    domain,
+    domain::Permission,
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath, ApiQuery},
     onboarding::AdmittedUser,
@@ -104,7 +105,8 @@ async fn list_prompt_categories(
     ApiPath(space_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<CategoryQuery>,
 ) -> AppResult<Json<PromptCategoryPage>> {
-    let space = super::authorize_read(&s.pool, &s.authorization, &user.uid, space_id).await?;
+    let space =
+        crate::authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     require_prompt_space(space.kind)?;
     let mut items: Vec<PromptCategory> = sqlx::query_as(
         "select id, space_id, name from prompt_category
@@ -137,8 +139,9 @@ async fn create_prompt_category(
     ApiJson(mut body): ApiJson<PromptCategoryRequest>,
 ) -> AppResult<(StatusCode, Json<PromptCategory>)> {
     body.normalize()?;
-    let mut tx = spaces::authorized_write(&s.pool, &user.uid, space_id).await?;
-    require_prompt_space(db::space(&mut *tx, space_id).await?.kind)?;
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
+    require_prompt_space(space.kind)?;
     let category = sqlx::query_as(
         "insert into prompt_category (id, space_id, name) values ($1, $2, $3) returning *",
     )
@@ -168,8 +171,9 @@ async fn rename_prompt_category(
     ApiJson(mut body): ApiJson<PromptCategoryRequest>,
 ) -> AppResult<Json<PromptCategory>> {
     body.normalize()?;
-    let mut tx = spaces::authorized_write(&s.pool, &user.uid, space_id).await?;
-    require_prompt_space(db::space(&mut *tx, space_id).await?.kind)?;
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
+    require_prompt_space(space.kind)?;
     let category = sqlx::query_as(
         "update prompt_category set name = $3 where space_id = $1 and id = $2 returning *",
     )
@@ -198,8 +202,9 @@ async fn delete_prompt_category(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, category_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<StatusCode> {
-    let mut tx = spaces::authorized_write(&s.pool, &user.uid, space_id).await?;
-    require_prompt_space(db::space(&mut *tx, space_id).await?.kind)?;
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
+    require_prompt_space(space.kind)?;
     let deleted = sqlx::query("delete from prompt_category where space_id = $1 and id = $2")
         .bind(space_id)
         .bind(category_id)

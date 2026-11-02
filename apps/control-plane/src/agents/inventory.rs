@@ -21,7 +21,8 @@ use super::{RuntimeCatalogSource, SetDefaultOnRequest, catalog, enablement};
 use crate::{
     agent_instances::{self, SelectingInstance},
     api::AppState,
-    domain::{Permission, Space, SpaceKind},
+    authorization,
+    domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath},
     onboarding::AdmittedUser,
@@ -347,21 +348,6 @@ async fn read_inventory(
     Ok(items)
 }
 
-async fn authorize(s: &AppState, uid: &str, organization_id: Uuid) -> AppResult<Space> {
-    let org = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        uid,
-        organization_id,
-        Permission::Manage,
-    )
-    .await?;
-    if org.kind != SpaceKind::Organization {
-        return Err(AppError::NotFound);
-    }
-    Ok(org)
-}
-
 fn require_source(s: &AppState, runtime_id: &str) -> AppResult<()> {
     if s.agent_catalog
         .runtime_catalog_sources
@@ -372,18 +358,6 @@ fn require_source(s: &AppState, runtime_id: &str) -> AppResult<()> {
     } else {
         Err(AppError::NotFound)
     }
-}
-
-/// Organization lock and Manage recheck on the transaction connection.
-async fn authorized_transaction(
-    s: &AppState,
-    uid: &str,
-    org: &Space,
-) -> AppResult<Transaction<'static, Postgres>> {
-    let mut tx = spaces::lock_for(&s.pool, org).await?;
-    spaces::authorize_locked(&mut tx, uid, org.id, Permission::Manage).await?;
-
-    Ok(tx)
 }
 
 pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
@@ -412,9 +386,11 @@ async fn organization_capabilities(
     AdmittedUser(user): AdmittedUser,
     ApiPath(organization_id): ApiPath<Uuid>,
 ) -> AppResult<Json<Vec<PodCapabilityInventory>>> {
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     let inventory = read_inventory(&s, organization_id).await?;
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     Ok(Json(inventory))
 }
 
@@ -488,7 +464,8 @@ async fn refresh_organization_capabilities(
     AdmittedUser(user): AdmittedUser,
     ApiPath((organization_id, runtime_id)): ApiPath<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let org = authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     let source = s
         .agent_catalog
         .runtime_catalog_sources
@@ -500,7 +477,13 @@ async fn refresh_organization_capabilities(
     }
     // No SQL connection or organization lock survives the bounded pod request.
     let snapshot = fetch(source).await;
-    let mut tx = authorized_transaction(&s, &user.uid, &org).await?;
+    let (mut tx, _) = spaces::authorized_mutation(
+        &s.pool,
+        &user.uid,
+        spaces::MutationTarget::Organization(organization_id),
+        Permission::Manage,
+    )
+    .await?;
     match &snapshot {
         Ok(snapshot) => catalog::replace(&mut tx, &source.runtime_id, snapshot).await?,
         Err(_) => catalog::mark_unreachable(&mut tx, &source.runtime_id).await?,
@@ -534,9 +517,14 @@ async fn set_organization_capability_default(
     ApiPath((organization_id, runtime_id, capability_id)): ApiPath<(Uuid, String, String)>,
     ApiJson(body): ApiJson<SetDefaultOnRequest>,
 ) -> AppResult<StatusCode> {
-    let org = authorize(&s, &user.uid, organization_id).await?;
+    let (mut tx, _) = spaces::authorized_mutation(
+        &s.pool,
+        &user.uid,
+        spaces::MutationTarget::Organization(organization_id),
+        Permission::Manage,
+    )
+    .await?;
     require_source(&s, &runtime_id)?;
-    let mut tx = authorized_transaction(&s, &user.uid, &org).await?;
     let changed = enablement::set_default_on(
         &mut tx,
         organization_id,
@@ -577,7 +565,8 @@ async fn organization_capability_revoke_impact(
     AdmittedUser(user): AdmittedUser,
     ApiPath((organization_id, runtime_id, capability_id)): ApiPath<(Uuid, String, String)>,
 ) -> AppResult<Json<Vec<AffectedAgentInstance>>> {
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     require_source(&s, &runtime_id)?;
     let mut tx = read_snapshot(&s).await?;
     if !catalog::capabilities(&mut *tx, &runtime_id)
@@ -608,6 +597,7 @@ async fn organization_capability_revoke_impact(
         .map(AffectedAgentInstance::from)
         .collect();
     name_owners(&s, &personal_owners(&instances), &mut affected).await;
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     Ok(Json(affected))
 }

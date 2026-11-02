@@ -22,7 +22,7 @@ use uuid::Uuid;
 use crate::{
     agent_instances::{self, AgentInstance},
     api::AppState,
-    authorization::Authorization,
+    authorization,
     domain::{Permission, Space},
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath},
@@ -129,12 +129,11 @@ async fn owned<'e>(
 /// The caller's live conversation in a space they can read; write access is not required.
 pub(crate) async fn require_owner(
     pool: &PgPool,
-    authorization: &Authorization,
     actor: &str,
     space_id: Uuid,
     session_id: Uuid,
 ) -> AppResult<Space> {
-    let space = spaces::authorize(pool, authorization, actor, space_id, Permission::Read).await?;
+    let space = authorization::authorize(pool, actor, space_id, Permission::Read).await?;
     owned(pool, space_id, actor, session_id).await?;
     Ok(space)
 }
@@ -147,7 +146,7 @@ pub(crate) async fn lock_owner(
     space_id: Uuid,
     session_id: Uuid,
 ) -> AppResult<Transaction<'static, Postgres>> {
-    let mut tx = spaces::authorized_mutation(pool, actor, space_id, Permission::Read).await?;
+    let (mut tx, _) = spaces::authorized_mutation(pool, actor, space_id, Permission::Read).await?;
     sqlx::query_scalar::<_, Uuid>(
         "select session_id from session_metadata where session_id = $1 and space_id = $2
          and user_id = $3 and deletion_id is null for update",
@@ -240,17 +239,9 @@ async fn create_session(
     ApiJson(body): ApiJson<CreateSessionRequest>,
 ) -> AppResult<impl IntoResponse> {
     validate_title(body.title.as_deref())?;
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Read).await?;
     agent_instances::http::require_instance_space(space.kind)?;
-    let mut tx = spaces::lock_for(&s.pool, &space).await?;
-    let space = spaces::authorize_locked(&mut tx, &user.uid, space_id, Permission::Read).await?;
     onboarding::require_accepted(&mut *tx, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
     let existing: bool =
         sqlx::query_scalar("select exists(select 1 from session_metadata where session_id = $1)")
@@ -262,7 +253,7 @@ async fn create_session(
         let instance = agent_instances::get_for_space(&mut *tx, space_id, body.agent_instance_id)
             .await?
             .ok_or(AppError::NotFound)?;
-        if !crate::authorization::can_use_agent(&mut *tx, instance.template_id, &space).await? {
+        if !authorization::can_use_agent(&mut *tx, instance.template_id, &space).await? {
             return Err(AppError::NotFound);
         }
         agent_instances::require_revision(
@@ -313,14 +304,7 @@ async fn list_sessions(
     AdmittedUser(user): AdmittedUser,
     ApiPath(space_id): ApiPath<Uuid>,
 ) -> AppResult<impl IntoResponse> {
-    spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     let records: Vec<SessionRecord> = sqlx::query_as(SELECT)
         .bind(space_id)
         .bind(&user.uid)
@@ -346,14 +330,7 @@ async fn get_session(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, session_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<impl IntoResponse> {
-    spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     let record = owned(&s.pool, space_id, &user.uid, session_id).await?;
     Ok((
         [(header::CACHE_CONTROL, "no-store")],
@@ -375,16 +352,8 @@ async fn update_session(
     ApiJson(body): ApiJson<UpdateSessionRequest>,
 ) -> AppResult<impl IntoResponse> {
     validate_title(body.title.as_deref())?;
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
-    let mut tx = spaces::lock_for(&s.pool, &space).await?;
-    spaces::authorize_locked(&mut tx, &user.uid, space_id, Permission::Read).await?;
+    let (mut tx, _) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Read).await?;
     onboarding::require_accepted(&mut *tx, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
 
     sqlx::query(
@@ -421,7 +390,7 @@ async fn delete_session(
 ) -> AppResult<impl IntoResponse> {
     let receipt = s
         .lifecycle
-        .accept_session(&s.pool, &s.authorization, &user.uid, space_id, session_id)
+        .accept_session(&s.pool, &user.uid, space_id, session_id)
         .await?;
     Ok((
         if receipt.status == crate::lifecycle::Status::Completed {

@@ -530,11 +530,11 @@ fn configuration_schema_is_generated_offline_and_matches_the_chart_input() {
 }
 
 #[test]
-fn migration_command_requires_only_database_url_and_redacts_errors() {
+fn schema_initialization_requires_only_database_url_and_redacts_errors() {
     for url in [None, Some("invalid://private-password@invalid")] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_control-plane"));
         command
-            .arg("migrate")
+            .arg("initialize-schema")
             .env("CONFIG_FILE", "/nonexistent/manager-configuration")
             .env("ENV_FILE", "/nonexistent/manager-env")
             .env_remove("DATABASE_URL");
@@ -548,7 +548,7 @@ fn migration_command_requires_only_database_url_and_redacts_errors() {
             error.contains(if url.is_none() {
                 "DATABASE_URL is required"
             } else {
-                "migration database connection failed"
+                "schema initialization database connection failed"
             }),
             "{error}"
         );

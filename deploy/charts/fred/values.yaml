@@ -1723,11 +1723,12 @@ applications:
       enabled: false
     job: &manager-job
       enabled: false
-    migration: &manager-migration
+    # Reuse the common database hook settings for fresh-schema initialization.
+    migration:
       enabled: false
       scaleDown: false
       command: [control-plane]
-      args: [migrate]
+      args: [initialize-schema]
     rollingUpdate: &manager-rolling-update
       maxSurge: 1
       maxUnavailable: 0

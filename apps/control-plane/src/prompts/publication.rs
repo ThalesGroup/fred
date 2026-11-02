@@ -3,7 +3,7 @@
 
 //! Current-definition publication. Reads authorize within a request-local SQL
 //! snapshot; each page/detail is a new admission. Mutations authorize after the
-//! shared organization lock. An admitted operation may finish after title expiry.
+//! shared organization lock. An admitted operation may finish after role revocation.
 
 use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
@@ -14,12 +14,12 @@ use uuid::Uuid;
 use super::{PAGE_SIZE, Prompt, PromptSummary};
 use crate::{
     api::AppState,
-    authorization::prompt_publication_access,
-    db,
+    authorization::{self, subject_spaces},
     domain::{Space, SpaceKind, SpaceRow},
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath, ApiQuery},
     onboarding::AdmittedUser,
+    roles::SpacePermission,
     spaces,
 };
 
@@ -86,8 +86,7 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(set_prompt_publication))
 }
 
-/// Only organizations reached through an active collective business title,
-/// including temporary invitations. This grants no ordinary space permissions.
+/// Organizations where the caller participates through an active collective business role.
 #[utoipa::path(get, path = "/me/prompt-marketplaces",
     params(("after" = Option<Uuid>, Query)),
     responses((status = 200, body = PromptMarketplacePage),
@@ -103,13 +102,16 @@ async fn prompt_marketplaces(
     ApiQuery(query): ApiQuery<PageQuery>,
 ) -> AppResult<Json<PromptMarketplacePage>> {
     let mut items: Vec<PromptMarketplace> = sqlx::query_as(concat!(
-        prompt_publication_access!(),
+        subject_spaces!(),
         "
         select o.id as organization_id, o.name from space o
-        where exists(select 1 from prompt_access a where a.organization_id = o.id)
-          and o.id > $2 order by o.id limit $3"
+        where exists(select 1 from organization_participants a where a.organization_id = o.id)
+          and o.id > $3 order by o.id limit $4"
     ))
     .bind(&user.uid)
+    .bind(authorization::roles_granting(
+        SpacePermission::CreatePersonalSpace,
+    ))
     .bind(query.after.unwrap_or(Uuid::nil()))
     .bind((PAGE_SIZE + 1) as i64)
     .fetch_all(&s.pool)
@@ -134,8 +136,7 @@ pub struct PromptPublicationTeamPage {
     pub next_cursor: Option<Uuid>,
 }
 
-/// Navigation for direct team editors, including guests. Does not advertise
-/// membership or authority over any domain other than prompt publication/reads.
+/// Active teams where the caller has direct Write permission.
 #[utoipa::path(get, path = "/me/prompt-publication-teams",
     params(("after" = Option<Uuid>, Query)),
     responses((status = 200, body = PromptPublicationTeamPage),
@@ -151,14 +152,19 @@ async fn prompt_publication_teams(
     ApiQuery(query): ApiQuery<PageQuery>,
 ) -> AppResult<Json<PromptPublicationTeamPage>> {
     let mut rows: Vec<SpaceRow> = sqlx::query_as(concat!(
-        prompt_publication_access!(),
+        subject_spaces!(),
         "select s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id
-         from space s join prompt_access a on a.space_id=s.id
-         where s.kind='team' and a.can_publish and s.id > $2 order by s.id limit $3"
+         from subject_spaces s
+         where s.kind='team' and s.active and s.direct_roles && $5::text[]
+         and s.id > $3 order by s.id limit $4"
     ))
     .bind(&user.uid)
+    .bind(authorization::roles_granting(
+        SpacePermission::CreatePersonalSpace,
+    ))
     .bind(query.after.unwrap_or(Uuid::nil()))
     .bind((PAGE_SIZE + 1) as i64)
+    .bind(authorization::roles_granting(SpacePermission::Write))
     .fetch_all(&s.pool)
     .await?;
     let next_cursor = (rows.len() > PAGE_SIZE).then(|| rows[PAGE_SIZE - 1].id);
@@ -173,7 +179,7 @@ async fn prompt_publication_teams(
     Ok(Json(PromptPublicationTeamPage { items, next_cursor }))
 }
 
-async fn authorized_read(
+async fn read_snapshot(
     pool: &PgPool,
     actor: &str,
     organization: Uuid,
@@ -185,15 +191,8 @@ async fn authorized_read(
     sqlx::query("set local statement_timeout = '15s'")
         .execute(&mut *tx)
         .await?;
-    let allowed: bool = sqlx::query_scalar(concat!(
-        prompt_publication_access!(),
-        " select exists(select 1 from prompt_access where organization_id = $2)"
-    ))
-    .bind(actor)
-    .bind(organization)
-    .fetch_one(&mut *tx)
-    .await?;
-    if !allowed {
+    let facts = authorization::load_facts(&mut *tx, actor, organization).await?;
+    if facts.space.kind != SpaceKind::Organization || !facts.organization_participant {
         return Err(AppError::NotFound);
     }
     Ok(tx)
@@ -217,21 +216,22 @@ async fn published_prompts(
     ApiPath(organization): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<PageQuery>,
 ) -> AppResult<Json<PublishedPromptPage>> {
-    let mut tx = authorized_read(&s.pool, &user.uid, organization).await?;
+    let mut tx = read_snapshot(&s.pool, &user.uid, organization).await?;
     let mut items: Vec<PublishedPromptSummary> = sqlx::query_as(concat!(
-        prompt_publication_access!(), "
+        subject_spaces!(), "
         select p.prompt_id, p.space_id, p.published, p.logical_name, p.display_name,
             p.description, p.category_id, p.tags, p.created_at, p.created_by,
             p.updated_at, p.updated_by, left(p.text, 240) as text_preview,
             exists(select 1 from prompt_favorite f where f.prompt_id=p.prompt_id and f.user_id=$1) as is_favorite,
             s.name as team_name,
-            exists(select 1 from prompt_access a where a.space_id=s.id and a.can_publish) as can_publish
+            exists(select 1 from subject_spaces a where a.id=s.id and a.active and a.direct_roles && $6::text[]) as can_publish
         from prompt p join space s on s.id=p.space_id
-        where s.organization_id=$2 and s.kind='team' and s.deletion_id is null
-          and p.published and p.prompt_id > $3
-        order by p.prompt_id limit $4"
-    )).bind(&user.uid).bind(organization).bind(query.after.unwrap_or(Uuid::nil()))
-        .bind((PAGE_SIZE + 1) as i64).fetch_all(&mut *tx).await?;
+        where s.organization_id=$3 and s.kind='team' and s.deletion_id is null
+          and p.published and p.prompt_id > $4
+        order by p.prompt_id limit $5"
+    )).bind(&user.uid).bind(authorization::roles_granting(SpacePermission::CreatePersonalSpace))
+        .bind(organization).bind(query.after.unwrap_or(Uuid::nil()))
+        .bind((PAGE_SIZE + 1) as i64).bind(authorization::roles_granting(SpacePermission::Write)).fetch_all(&mut *tx).await?;
     let next_cursor =
         (items.len() > PAGE_SIZE).then(|| items[PAGE_SIZE - 1].prompt.metadata.prompt_id);
     items.truncate(PAGE_SIZE);
@@ -254,7 +254,7 @@ async fn published_prompt(
     AdmittedUser(user): AdmittedUser,
     ApiPath((organization, prompt_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<Json<PublishedPrompt>> {
-    let mut tx = authorized_read(&s.pool, &user.uid, organization).await?;
+    let mut tx = read_snapshot(&s.pool, &user.uid, organization).await?;
     let prompt = sqlx::query_as(
         "select p.*, s.name as team_name,
             exists(select 1 from prompt_favorite f where f.prompt_id=p.prompt_id and f.user_id=$3) as is_favorite
@@ -267,8 +267,9 @@ async fn published_prompt(
     Ok(Json(prompt))
 }
 
-/// Idempotent publication/retraction by a direct permanent or actively invited
-/// team editor. Neither ancestor roles nor technical administration qualify.
+/// Idempotent publication/retraction by a direct team editor.
+/// Missing or outside-organization space: 404; retired space: 409 space_pending_deletion;
+/// missing direct Write permission, including organization admin alone: 403.
 #[utoipa::path(put, path = "/spaces/{space_id}/prompts/{prompt_id}/publication",
     params(("space_id" = Uuid, Path), ("prompt_id" = Uuid, Path)),
     request_body = PromptPublicationRequest,
@@ -287,23 +288,10 @@ async fn set_prompt_publication(
     ApiPath((space_id, prompt_id)): ApiPath<(Uuid, Uuid)>,
     ApiJson(body): ApiJson<PromptPublicationRequest>,
 ) -> AppResult<StatusCode> {
-    let mut tx = spaces::mutation_transaction(&s.pool, space_id).await?;
-    let space = db::space(&mut *tx, space_id).await?;
-    let (inside, editor): (bool, bool) = sqlx::query_as(concat!(
-        prompt_publication_access!(),
-        " select
-        exists(select 1 from prompt_access where organization_id=$2),
-        exists(select 1 from prompt_access where space_id=$3 and can_publish)"
-    ))
-    .bind(&user.uid)
-    .bind(space.organization_id)
-    .bind(space_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    if !inside {
-        return Err(AppError::NotFound);
-    }
-    if !editor {
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, SpacePermission::Write).await?;
+    // Personal prompts have no publication scope, even for their own editor.
+    if space.kind == SpaceKind::Personal {
         return Err(AppError::Forbidden);
     }
     if space.kind != SpaceKind::Team {
@@ -311,7 +299,6 @@ async fn set_prompt_publication(
             "only team prompts can be published".into(),
         ));
     }
-    crate::lifecycle::store::require_active(&mut *tx, space_id).await?;
     let result = sqlx::query("update prompt set published=$3 where space_id=$1 and prompt_id=$2")
         .bind(space_id)
         .bind(prompt_id)

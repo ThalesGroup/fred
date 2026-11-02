@@ -20,6 +20,7 @@ use uuid::Uuid;
 use crate::{
     agents::{self, enablement::usable_capability_ids},
     api::AppState,
+    authorization,
     domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath, ApiQuery, present},
@@ -240,20 +241,9 @@ async fn create_agent_instance(
     headers: HeaderMap,
     ApiJson(mut body): ApiJson<CreateAgentInstanceRequest>,
 ) -> AppResult<(StatusCode, Json<ManagedAgentInstanceSummary>)> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Write,
-    )
-    .await?;
+    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
-    if !s
-        .authorization
-        .can_use_agent(body.template_id, &space)
-        .await?
-    {
+    if !authorization::can_use_agent(&s.pool, body.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     tuning::validate_request(&mut body)?;
@@ -283,10 +273,10 @@ async fn create_agent_instance(
         created_by: user.uid.clone(),
         tuning,
     };
-    let mut tx = spaces::lock_for(&s.pool, &space).await?;
-    let space = spaces::authorize_locked(&mut tx, &user.uid, space_id, Permission::Write).await?;
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
-    if !crate::authorization::can_use_agent(&mut *tx, instance.template_id, &space).await? {
+    if !authorization::can_use_agent(&mut *tx, instance.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     models::validate_write(&mut tx, space.organization, &instance.tuning, true).await?;
@@ -336,14 +326,7 @@ async fn list_agent_instances(
     ApiPath(space_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<AgentQuery>,
 ) -> AppResult<Json<AgentInstancePage>> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     require_instance_space(space.kind)?;
     if query
         .after
@@ -386,23 +369,12 @@ async fn get_agent_instance(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, agent_instance_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<Json<ManagedAgentInstanceSummary>> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     require_instance_space(space.kind)?;
     let record = super::get_for_space(&s.pool, space_id, agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !s
-        .authorization
-        .can_use_agent(record.template_id, &space)
-        .await?
-    {
+    if !authorization::can_use_agent(&s.pool, record.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     Ok(Json(record_to_summary(record)?))
@@ -450,23 +422,12 @@ async fn update_agent_instance(
     headers: HeaderMap,
     ApiJson(mut body): ApiJson<UpdateAgentInstanceRequest>,
 ) -> AppResult<Json<ManagedAgentInstanceSummary>> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Write,
-    )
-    .await?;
+    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
     let record = super::get_for_space(&s.pool, space_id, agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !s
-        .authorization
-        .can_use_agent(record.template_id, &space)
-        .await?
-    {
+    if !authorization::can_use_agent(&s.pool, record.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     tuning::validate_update_request(&mut body)?;
@@ -511,14 +472,14 @@ async fn update_agent_instance(
         }
         _ => None,
     };
-    let mut tx = spaces::lock_for(&s.pool, &space).await?;
-    let space = spaces::authorize_locked(&mut tx, &user.uid, space_id, Permission::Write).await?;
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
     // Apply omissions to the current row, not the snapshot read before discovery.
     let mut current = super::get_for_space(&mut *tx, space_id, agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !crate::authorization::can_use_agent(&mut *tx, current.template_id, &space).await? {
+    if !authorization::can_use_agent(&mut *tx, current.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     let previous = SavedModelSettings::read(&current.tuning.0)?;
@@ -567,17 +528,8 @@ async fn delete_agent_instance(
     AdmittedUser(user): AdmittedUser,
     ApiPath((space_id, agent_instance_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<StatusCode> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Write,
-    )
-    .await?;
-    require_instance_space(space.kind)?;
-    let mut tx = spaces::lock_for(&s.pool, &space).await?;
-    let space = spaces::authorize_locked(&mut tx, &user.uid, space_id, Permission::Write).await?;
+    let (mut tx, space) =
+        spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
     // Space editors can remove an instance even after its template is revoked.
 

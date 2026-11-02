@@ -12,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from fred_agents.deep_assistant import DEEP_ASSISTANT_AGENT
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
-from fred_agents.platform_ops import PLATFORM_OPS_AGENT
-from fred_agents.rag_expert import RAG_EXPERT_AGENT
-from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
-from fred_agents.sql_expert import SQL_EXPERT_AGENT
 
 _EXPECTED_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
 _EXPECTED_FALLBACK_RULE = (
@@ -30,10 +27,7 @@ def test_base_agents_do_not_bake_global_base_prompt_contract() -> None:
 
     prompts = (
         GENERAL_ASSISTANT_AGENT.system_prompt_template,
-        RAG_EXPERT_AGENT.system_prompt_template,
-        REACT_RAG_MCP_AGENT.system_prompt_template,
-        SQL_EXPERT_AGENT.system_prompt_template,
-        PLATFORM_OPS_AGENT.system_prompt_template,
+        DEEP_ASSISTANT_AGENT.system_prompt_template,
     )
 
     for prompt in prompts:

@@ -19,7 +19,7 @@ use crate::{
     db,
     domain::{Permission, Space},
     error::{AppError, AppResult},
-    onboarding, spaces,
+    onboarding,
 };
 
 pub(crate) struct Spool {
@@ -117,9 +117,8 @@ impl Storage {
         let space = match destination {
             Destination::Folder(id) => {
                 let folder = db::folder(&self.pool, id).await?;
-                spaces::authorize(
+                crate::authorization::authorize(
                     &self.pool,
-                    &self.authorization,
                     &user.uid,
                     folder.space_id,
                     Permission::Write,
@@ -129,16 +128,7 @@ impl Storage {
             Destination::Conversation {
                 space_id,
                 session_id,
-            } => {
-                crate::sessions::require_owner(
-                    &self.pool,
-                    &self.authorization,
-                    &user.uid,
-                    space_id,
-                    session_id,
-                )
-                .await
-            }
+            } => crate::sessions::require_owner(&self.pool, &user.uid, space_id, session_id).await,
         }
         .map_err(dependency_error)?;
         if profile.is_some() {

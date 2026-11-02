@@ -3,62 +3,12 @@
 
 //! Direct role storage and the bounded organization/team/project permission matrix.
 use crate::{
-    domain::{Permission, Role, Space, SpaceKind},
+    domain::{Permission, Role, Space, SpaceKind, SpaceRow},
+    error::{AppError, AppResult},
     roles::{PlatformPermission, PlatformRole, SpacePermission},
 };
-use sqlx::{PgConnection, PgPool};
+use sqlx::PgConnection;
 use uuid::Uuid;
-
-#[derive(Clone)]
-pub struct Authorization {
-    pub pool: PgPool,
-}
-pub const READ_CONCURRENCY: usize = 8;
-
-/// Publication-only access facts, evaluated at the SQL statement's admission
-/// time. Do not use this to enable invitations in general space authorization.
-/// $1 is the authenticated subject; permanent and temporary titles accumulate.
-macro_rules! prompt_publication_access {
-    () => {
-        "
-with prompt_titles as (
-    select space_id, role from space_role_grant where subject = $1
-    union all
-    select i.space_id, r.role from space_invitation i
-    join space_invitation_role r on r.invitation_id = i.id
-    where i.subject = $1 and i.revoked_at is null
-      and i.created_at <= statement_timestamp() and i.expires_at > statement_timestamp()
-), prompt_access as (
-    select s.id as space_id, s.organization_id, bool_or(t.role = 'editor') as can_publish
-    from prompt_titles t join space s on s.id = t.space_id
-    join space o on o.id = s.organization_id
-    left join space parent on parent.id = s.parent_id
-    where t.role in ('owner', 'member', 'editor', 'analyst')
-      and s.kind in ('organization', 'team', 'project')
-      and s.deletion_id is null and o.deletion_id is null
-      and (parent.id is null or parent.deletion_id is null)
-    group by s.id, s.organization_id
-) "
-    };
-}
-pub(crate) use prompt_publication_access;
-
-/// Source-team editor authority for prompt reading and publication only.
-pub(crate) async fn can_publish_prompts<'e>(
-    ex: impl sqlx::PgExecutor<'e>,
-    subject: &str,
-    space: Uuid,
-) -> sqlx::Result<bool> {
-    sqlx::query_scalar(concat!(
-        prompt_publication_access!(),
-        "select exists(select 1 from prompt_access a join space s on s.id=a.space_id
-         where a.space_id=$2 and s.kind='team' and a.can_publish)"
-    ))
-    .bind(subject)
-    .bind(space)
-    .fetch_one(ex)
-    .await
-}
 
 /// Direct roles on the requested space grant permissions through this shared matrix.
 pub fn grants(role: Role, permission: SpacePermission) -> bool {
@@ -84,24 +34,200 @@ impl From<Permission> for SpacePermission {
     }
 }
 
-pub async fn check_space<'e>(
+/// SQL facts shared by single-space decisions and set-based navigation. $1 is
+/// the subject, $2 the business roles derived from the Rust permission matrix.
+/// This contains no permission implication and never follows a parent grant.
+macro_rules! subject_spaces {
+    () => {
+        "with subject_spaces as (
+            select s.*, array_agg(r.role) as direct_roles,
+                s.deletion_id is null and o.deletion_id is null
+                and (p.id is null or p.deletion_id is null) as active
+            from space_role_grant r join space s on s.id=r.space_id
+            join space o on o.id=s.organization_id
+            left join space p on p.id=s.parent_id
+            where r.subject=$1
+            group by s.id, o.deletion_id, p.id, p.deletion_id
+        ), organization_participants as (
+            select distinct organization_id from subject_spaces
+            where active and kind <> 'personal' and direct_roles && $2::text[]
+        ) "
+    };
+}
+pub(crate) use subject_spaces;
+
+/// SQL consumers bind these roles instead of maintaining another role matrix.
+pub fn roles_granting(permission: SpacePermission) -> Vec<&'static str> {
+    Role::ALL
+        .into_iter()
+        .filter(|role| grants(*role, permission))
+        .map(Role::as_str)
+        .collect()
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct SpaceFacts {
+    #[sqlx(flatten)]
+    pub space: SpaceRow,
+    pub active: bool,
+    pub in_organization: bool,
+    pub organization_participant: bool,
+    pub direct_roles: Vec<String>,
+}
+
+/// One coherent statement for a pool or an already locked transaction connection.
+/// Organization context includes retired/governance grants; participation does not.
+pub async fn load_facts<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     subject: &str,
-    permission: SpacePermission,
-    space: Uuid,
-) -> sqlx::Result<bool> {
-    let roles: Vec<String> = sqlx::query_scalar(
-        "select role from space_role_grant where space_id = $1 and subject = $2",
-    )
-    .bind(space)
-    .bind(subject)
-    .fetch_all(ex)
-    .await?;
-    Ok(roles
-        .iter()
-        .any(|role| Role::parse(role).is_some_and(|r| grants(r, permission))))
+    id: Uuid,
+) -> AppResult<SpaceFacts> {
+    Ok(sqlx::query_as(concat!(subject_spaces!(), "
+        select s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id,
+            s.deletion_id is null and o.deletion_id is null
+                and (p.id is null or p.deletion_id is null) as active,
+            exists(select 1 from subject_spaces a where a.organization_id=s.organization_id) as in_organization,
+            exists(select 1 from organization_participants a where a.organization_id=s.organization_id) as organization_participant,
+            coalesce((select a.direct_roles from subject_spaces a where a.id=s.id), array[]::text[]) as direct_roles
+        from space s join space o on o.id=s.organization_id
+        left join space p on p.id=s.parent_id where s.id=$3"))
+        .bind(subject)
+        .bind(roles_granting(SpacePermission::CreatePersonalSpace))
+        .bind(id)
+        .fetch_one(ex)
+        .await?)
 }
-pub use fred_rust_sdk::security::platform::platform_roles;
+
+impl SpaceFacts {
+    /// Retirement also applies to explicit platform governance of an organization.
+    pub(crate) fn require_active(&self) -> AppResult<()> {
+        if !self.active {
+            return Err(AppError::problem(
+                axum::http::StatusCode::CONFLICT,
+                crate::lifecycle::store::PENDING_DELETION,
+                "space is pending deletion",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Preserve the business error precedence: outside context, retired, then denied.
+/// Parent placement affects activity only, never the subject's direct permissions.
+pub fn decide(facts: &SpaceFacts, permission: SpacePermission) -> AppResult<()> {
+    if !facts.in_organization {
+        return Err(AppError::NotFound);
+    }
+    facts.require_active()?;
+    if (facts.space.kind == SpaceKind::Personal
+        || permission == SpacePermission::CreatePersonalSpace)
+        && !facts.organization_participant
+    {
+        return Err(AppError::Forbidden);
+    }
+    if permission != SpacePermission::CreatePersonalSpace
+        && !facts
+            .direct_roles
+            .iter()
+            .any(|role| Role::parse(role).is_some_and(|role| grants(role, permission)))
+    {
+        return Err(AppError::Forbidden);
+    }
+    Ok(())
+}
+
+pub async fn authorize<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    subject: &str,
+    id: Uuid,
+    permission: impl Into<SpacePermission>,
+) -> AppResult<Space> {
+    let facts = load_facts(ex, subject, id).await?;
+    decide(&facts, permission.into())?;
+    Ok(facts.space.into())
+}
+
+/// An organization identifier is checked before context, lifecycle or permission.
+pub async fn authorize_organization<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    subject: &str,
+    id: Uuid,
+    permission: impl Into<SpacePermission>,
+) -> AppResult<Space> {
+    let facts = load_facts(ex, subject, id).await?;
+    if facts.space.kind != SpaceKind::Organization {
+        return Err(AppError::NotFound);
+    }
+    decide(&facts, permission.into())?;
+    Ok(facts.space.into())
+}
+
+pub async fn require_platform<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    subject: &str,
+    permission: PlatformPermission,
+) -> AppResult<()> {
+    if check_platform(ex, subject, permission).await? {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden)
+    }
+}
+
+/// Context alone is used for grant recipients and governance, including retired roles.
+pub async fn in_organization<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    user: &str,
+    organization: Uuid,
+) -> AppResult<bool> {
+    Ok(sqlx::query_scalar("select exists(select 1 from space s join space_role_grant r on r.space_id=s.id where r.subject=$1 and s.organization_id=$2)")
+        .bind(user).bind(organization).fetch_one(ex).await?)
+}
+
+pub async fn readable_path<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    subject: &str,
+    path: &[Uuid],
+    levels: Option<&[SpaceKind]>,
+) -> sqlx::Result<Vec<Uuid>> {
+    sqlx::query_scalar("select s.id from space s where s.id=any($1) and s.deletion_id is null
+        and ($3::space_kind[] is null or s.kind=any($3))
+        and exists(select 1 from space_role_grant r where r.space_id=s.id and r.subject=$2 and r.role=any($4))
+        order by array_position($1, s.id)")
+        .bind(path).bind(subject).bind(levels).bind(roles_granting(SpacePermission::Read))
+        .fetch_all(ex).await
+}
+
+pub async fn memberships<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    subject: &str,
+) -> sqlx::Result<Vec<(SpaceRow, Vec<Role>)>> {
+    #[derive(sqlx::FromRow)]
+    struct MembershipRow {
+        #[sqlx(flatten)]
+        space: SpaceRow,
+        direct_roles: Vec<String>,
+    }
+    let rows: Vec<MembershipRow> = sqlx::query_as(concat!(subject_spaces!(), "
+        select s.* from subject_spaces s where active and
+        (kind <> 'personal' or exists(select 1 from organization_participants a where a.organization_id=s.organization_id))"))
+        .bind(subject).bind(roles_granting(SpacePermission::CreatePersonalSpace))
+        .fetch_all(ex).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let mut roles: Vec<_> = row
+                .direct_roles
+                .iter()
+                .filter_map(|r| Role::parse(r))
+                .collect();
+            roles.sort();
+            (row.space, roles)
+        })
+        .collect())
+}
+
+pub use fred_rust_sdk::security::platform::{is_platform_admin, platform_roles};
 
 pub async fn write_role(
     conn: &mut PgConnection,
@@ -155,105 +281,65 @@ pub async fn roles_of<'e>(
         .filter_map(|(id, r)| Role::parse(&r).map(|r| (id, r)))
         .collect())
 }
-impl Authorization {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-    pub async fn check(&self, user: &str, p: Permission, id: Uuid) -> sqlx::Result<bool> {
-        self.check_space(user, p.into(), id).await
-    }
-    pub async fn check_space(
-        &self,
-        user: &str,
-        p: SpacePermission,
-        id: Uuid,
-    ) -> sqlx::Result<bool> {
-        check_space(&self.pool, user, p, id).await
-    }
-    pub async fn is_platform_admin(&self, user: &str) -> sqlx::Result<bool> {
-        fred_rust_sdk::security::platform::is_platform_admin(&self.pool, user).await
-    }
-    pub async fn effective_platform_roles(&self, user: &str) -> sqlx::Result<Vec<PlatformRole>> {
-        // Platform governance never implies delegated business or observer roles.
-        platform_roles(&self.pool, user).await
-    }
-    pub async fn check_platform(&self, user: &str, p: PlatformPermission) -> sqlx::Result<bool> {
-        let required = match p {
-            PlatformPermission::ListAllTeams | PlatformPermission::ManageCapabilities => {
-                PlatformRole::FeatureManager
-            }
-            PlatformPermission::ObservePlatform => PlatformRole::PlatformObserver,
-            PlatformPermission::EditPlatformPrompt => PlatformRole::PromptEditor,
-            _ => PlatformRole::PlatformAdmin,
-        };
-        Ok(self
-            .effective_platform_roles(user)
-            .await?
-            .contains(&required))
-    }
-    pub async fn platform_grants(&self) -> sqlx::Result<Vec<(String, PlatformRole)>> {
-        platform_grants(&self.pool).await
-    }
-    pub async fn roles_of(&self, user: &str) -> sqlx::Result<Vec<(Uuid, Role)>> {
-        roles_of(&self.pool, user).await
-    }
-    pub async fn direct_roles_on(&self, user: &str, id: Uuid) -> sqlx::Result<Vec<Role>> {
-        Ok(self
-            .roles_of(user)
-            .await?
-            .into_iter()
-            .filter(|(s, _)| *s == id)
-            .map(|(_, r)| r)
-            .collect())
-    }
-    pub async fn space_holders(&self, id: Uuid, role: Role) -> sqlx::Result<Vec<String>> {
-        sqlx::query_scalar(
-            "select subject from space_role_grant where space_id=$1 and role=$2 order by subject",
-        )
-        .bind(id)
-        .bind(role.as_str())
-        .fetch_all(&self.pool)
-        .await
-    }
-    pub async fn grants_on(&self, ids: &[Uuid]) -> sqlx::Result<Vec<(Uuid, Vec<(String, Role)>)>> {
-        let rows: Vec<(Uuid, String, String)> = sqlx::query_as(
-            "select space_id,subject,role from space_role_grant where space_id=any($1)",
-        )
-        .bind(ids)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(ids
-            .iter()
-            .map(|id| {
-                (
-                    *id,
-                    rows.iter()
-                        .filter(|(s, _, _)| s == id)
-                        .filter_map(|(_, u, r)| Role::parse(r).map(|r| (u.clone(), r)))
-                        .collect(),
-                )
-            })
-            .collect())
-    }
-    pub async fn linked_to(&self, parent: Uuid, personal: bool) -> sqlx::Result<Vec<Uuid>> {
-        sqlx::query_scalar(if personal {
-            "select id from space where organization_id=$1 and kind='personal'"
-        } else {
-            "select id from space where parent_id=$1"
-        })
-        .bind(parent)
-        .fetch_all(&self.pool)
-        .await
-    }
-    pub async fn agent_default_on(&self, organization: Uuid, template: Uuid) -> sqlx::Result<bool> {
-        sqlx::query_scalar("select exists(select 1 from agent_template_policy where organization_id=$1 and template_id=$2)").bind(organization).bind(template).fetch_one(&self.pool).await
-    }
-    pub async fn can_use_agent(&self, template: Uuid, space: &Space) -> sqlx::Result<bool> {
-        if !matches!(space.kind, SpaceKind::Team | SpaceKind::Personal) {
-            return Ok(false);
+pub async fn check_platform<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    user: &str,
+    p: PlatformPermission,
+) -> sqlx::Result<bool> {
+    let required = match p {
+        PlatformPermission::ListAllTeams | PlatformPermission::ManageCapabilities => {
+            PlatformRole::FeatureManager
         }
-        self.agent_default_on(space.organization, template).await
-    }
+        PlatformPermission::ObservePlatform => PlatformRole::PlatformObserver,
+        PlatformPermission::EditPlatformPrompt => PlatformRole::PromptEditor,
+        _ => PlatformRole::PlatformAdmin,
+    };
+    Ok(platform_roles(ex, user).await?.contains(&required))
+}
+
+pub async fn direct_roles_on<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    user: &str,
+    id: Uuid,
+) -> sqlx::Result<Vec<Role>> {
+    let roles: Vec<String> =
+        sqlx::query_scalar("select role from space_role_grant where space_id=$1 and subject=$2")
+            .bind(id)
+            .bind(user)
+            .fetch_all(ex)
+            .await?;
+    Ok(roles.iter().filter_map(|role| Role::parse(role)).collect())
+}
+
+pub async fn grants_on<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    ids: &[Uuid],
+) -> sqlx::Result<Vec<(Uuid, Vec<(String, Role)>)>> {
+    let rows: Vec<(Uuid, String, String)> =
+        sqlx::query_as("select space_id,subject,role from space_role_grant where space_id=any($1)")
+            .bind(ids)
+            .fetch_all(ex)
+            .await?;
+    Ok(ids
+        .iter()
+        .map(|id| {
+            (
+                *id,
+                rows.iter()
+                    .filter(|(s, _, _)| s == id)
+                    .filter_map(|(_, u, r)| Role::parse(r).map(|r| (u.clone(), r)))
+                    .collect(),
+            )
+        })
+        .collect())
+}
+
+pub async fn agent_default_on<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    organization: Uuid,
+    template: Uuid,
+) -> sqlx::Result<bool> {
+    sqlx::query_scalar("select exists(select 1 from agent_template_policy where organization_id=$1 and template_id=$2)").bind(organization).bind(template).fetch_one(ex).await
 }
 pub async fn set_agent_default_on(
     conn: &mut PgConnection,
@@ -404,5 +490,5 @@ pub async fn can_use_agent<'e>(
     if !matches!(space.kind, SpaceKind::Team | SpaceKind::Personal) {
         return Ok(false);
     }
-    sqlx::query_scalar("select exists(select 1 from agent_template_policy where organization_id=$1 and template_id=$2)").bind(space.organization).bind(template).fetch_one(ex).await
+    agent_default_on(ex, space.organization, template).await
 }

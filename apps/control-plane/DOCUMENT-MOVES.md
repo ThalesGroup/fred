@@ -1,9 +1,9 @@
 # Document move schema: preparation and activation boundary
 
-`migrations/0009_document_moves.sql` prepares a durable operation receipt. It does
+`migrations/0001_schema.sql` prepares a durable operation receipt. It does
 not enable document moves. No HTTP handler, worker, search reader or scheduler
 consumes this table. `document_immutable` still rejects every placement change.
-The migration creates an empty table and does not rewrite existing documents,
+The initial schema creates an empty receipt table without rewriting documents,
 processing records, generations, quotas, S3 objects or embeddings.
 
 ## Why a separate table
@@ -73,7 +73,7 @@ from an old worker by itself.
 
 In this preparation lot, the positive transition to `projecting` is deliberately
 unreachable through ordinary writes: the unchanged placement trigger prevents the
-required document mutation. The later activation migration must replace that
+required document mutation. Activating moves must replace that
 guard with a coordinated operation, not simply remove it.
 
 ## Required application integration before activation
@@ -114,13 +114,13 @@ do not rewrite checksummed S3 artifacts to update their historical metadata.
 
 The separate reprocessing change remains outstanding: both
 `document_processing_success` and current admission prevent a new successful
-processing cycle. This migration does not relax either restriction.
+processing cycle. The initial schema does not relax either restriction.
 
 ## Verification boundary
 
 `tests/document_move_schema.rs` contains focused PostgreSQL checks for destination
 scope, canonical source capture, immutable requests, one active request, stale
-confirmations, busy documents, migration inertness and purge behavior. The SQL
+confirmations, busy documents, receipt inertness and purge behavior. The SQL
 tests require a disposable database and are separate from local compilation:
 
 ```sh

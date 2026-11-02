@@ -20,11 +20,12 @@ use crate::{
     agents::{self, enablement},
     api::AppState,
     auth::{CurrentUser, bearer},
+    authorization,
     domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
     extract::{ApiPath, ApiQuery},
     model_catalog::instance::{self as models, RuntimeModels},
-    onboarding, spaces,
+    onboarding,
 };
 
 /// Keep the authenticated caller intact; an asserted person never becomes a
@@ -66,7 +67,7 @@ impl RuntimeQuery {
         caller: &'a CurrentUser,
         instance_id: Uuid,
     ) -> AppResult<&'a str> {
-        let assertion = crate::authorization::Delegation {
+        let assertion = authorization::Delegation {
             person: self.person.clone(),
             run: self.run.clone(),
             agent: self.agent.clone(),
@@ -236,23 +237,12 @@ async fn resolve_runtime_binding(
         subject,
     )
     .await?;
-    let space = spaces::authorize(
-        &state.pool,
-        &state.authorization,
-        subject,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    let space = authorization::authorize(&state.pool, subject, space_id, Permission::Read).await?;
     super::http::require_instance_space(space.kind)?;
     let initial = super::get_for_space(&state.pool, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !state
-        .authorization
-        .can_use_agent(initial.template_id, &space)
-        .await?
-    {
+    if !authorization::can_use_agent(&state.pool, initial.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     let mut tx = state.pool.begin().await?;
@@ -322,19 +312,8 @@ async fn resolve_runtime_binding(
         subject,
     )
     .await?;
-    let space = spaces::authorize(
-        &state.pool,
-        &state.authorization,
-        subject,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
-    if !state
-        .authorization
-        .can_use_agent(record.template_id, &space)
-        .await?
-    {
+    let space = authorization::authorize(&state.pool, subject, space_id, Permission::Read).await?;
+    if !authorization::can_use_agent(&state.pool, record.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     if let Some(configuration) = record.tuning.0.as_object_mut() {

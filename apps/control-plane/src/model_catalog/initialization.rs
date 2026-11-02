@@ -16,7 +16,7 @@ use super::{
     policy::{self, ModelOfferKey, ReplaceModelPolicy},
     store,
 };
-use crate::{agents::PlatformConfig, db, domain::SpaceKind, error::AppError, spaces};
+use crate::{agents::PlatformConfig, db, error::AppError, spaces};
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -177,9 +177,9 @@ async fn apply(
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
     spaces::lock_organization_id(&mut tx, organization).await?;
+    let org = spaces::load_organization(&mut *tx, organization).await?;
     crate::lifecycle::store::require_active(&mut *tx, organization).await?;
-    let org = db::space(&mut *tx, organization).await?;
-    if org.kind != SpaceKind::Organization || org.name != declaration.organization {
+    if org.name != declaration.organization {
         return Err(AppError::NotFound);
     }
     policy::initialize(

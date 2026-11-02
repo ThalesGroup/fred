@@ -27,11 +27,13 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
+    authorization,
     domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
     spaces,
 };
 
+const READ_CONCURRENCY: usize = 8;
 const NATIVE_RUNTIME_ID: &str = fred_rust_agent::DEFINITION.provider;
 
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
@@ -413,14 +415,7 @@ async fn space_agent_templates(
     crate::onboarding::AdmittedUser(user): crate::onboarding::AdmittedUser,
     crate::extract::ApiPath(space_id): crate::extract::ApiPath<Uuid>,
 ) -> AppResult<axum::Json<Vec<AgentTemplateSummary>>> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     if !matches!(space.kind, SpaceKind::Team | SpaceKind::Personal) {
         return Err(AppError::BadRequest(
             "agent templates require a team or personal space".into(),
@@ -434,7 +429,7 @@ async fn space_agent_templates(
         let ids = enablement::usable_capability_ids(&s.pool, &space, &catalog.runtime_id).await?;
         usable.insert(catalog.runtime_id.clone(), ids);
     }
-    let authorization = &s.authorization;
+    let authorization_pool = &s.pool;
     let space = &space;
     let usable = &usable;
     let items: Vec<Option<AgentTemplateSummary>> =
@@ -447,7 +442,7 @@ async fn space_agent_templates(
         }))
         .map(|(runtime, template)| async move {
             let id = template_id(space.organization, &runtime, &template.template_agent_id);
-            if !authorization.can_use_agent(id, space).await? {
+            if !authorization::can_use_agent(authorization_pool, id, space).await? {
                 return Ok(None);
             }
             let usable = usable.get(&runtime);
@@ -465,7 +460,7 @@ async fn space_agent_templates(
             summary.default_capability_ids.retain(|id| allowed(id));
             Ok::<_, anyhow::Error>(Some(summary))
         })
-        .buffered(crate::authorization::READ_CONCURRENCY)
+        .buffered(READ_CONCURRENCY)
         .try_collect()
         .await?;
     Ok(axum::Json(items.into_iter().flatten().collect()))
@@ -488,23 +483,12 @@ async fn organization_agents(
     crate::onboarding::AdmittedUser(user): crate::onboarding::AdmittedUser,
     crate::extract::ApiPath(organization_id): crate::extract::ApiPath<uuid::Uuid>,
 ) -> crate::error::AppResult<axum::Json<Vec<AgentEnablement>>> {
-    let organization = crate::spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        organization_id,
-        crate::domain::Permission::Manage,
-    )
-    .await?;
-    if organization.kind != crate::domain::SpaceKind::Organization {
-        return Err(crate::error::AppError::NotFound);
-    }
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     let mut items = project(organization_id, discover(&s.agent_catalog).await?)?;
     for item in &mut items {
-        item.default_on = s
-            .authorization
-            .agent_default_on(organization_id, item.id)
-            .await?;
+        item.default_on =
+            authorization::agent_default_on(&s.pool, organization_id, item.id).await?;
     }
     Ok(axum::Json(items))
 }
@@ -529,25 +513,21 @@ async fn set_organization_agent_default(
     crate::extract::ApiPath((organization_id, agent_id)): crate::extract::ApiPath<(Uuid, Uuid)>,
     crate::extract::ApiJson(body): crate::extract::ApiJson<SetDefaultOnRequest>,
 ) -> AppResult<axum::Json<AgentDefaultOnResult>> {
-    let organization = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        organization_id,
-        Permission::Manage,
-    )
-    .await?;
-    if organization.kind != SpaceKind::Organization {
-        return Err(AppError::NotFound);
-    }
+    authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
+        .await?;
     // Runtime discovery never holds a SQL connection or transaction.
     let items = project(organization_id, discover(&s.agent_catalog).await?)?;
     let item = items
         .iter()
         .find(|item| item.id == agent_id)
         .ok_or(AppError::NotFound)?;
-    let mut tx = spaces::lock_for(&s.pool, &organization).await?;
-    spaces::authorize_locked(&mut tx, &user.uid, organization_id, Permission::Manage).await?;
+    let (mut tx, _) = spaces::authorized_mutation(
+        &s.pool,
+        &user.uid,
+        spaces::MutationTarget::Organization(organization_id),
+        Permission::Manage,
+    )
+    .await?;
     if body.default_on {
         // Read under the organization lock, which offer default-off also takes.
         let policy = enablement::Policy::load(&mut *tx, organization_id).await?;
@@ -563,13 +543,9 @@ async fn set_organization_agent_default(
             ));
         }
     }
-    let changed = crate::authorization::set_agent_default_on(
-        &mut tx,
-        organization_id,
-        agent_id,
-        body.default_on,
-    )
-    .await?;
+    let changed =
+        authorization::set_agent_default_on(&mut tx, organization_id, agent_id, body.default_on)
+            .await?;
     tx.commit().await?;
     if changed {
         tracing::info!(target: "fred.security.audit", audit_event="agent.default_changed",

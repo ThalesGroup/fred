@@ -299,7 +299,8 @@ impl Processing {
             .await
             .map_err(|_| super::unavailable())?;
         let d = db::document(&self.pool, id).await?;
-        let mut tx = spaces::authorized_write(&self.pool, actor, d.space_id).await?;
+        let (mut tx, _) =
+            spaces::authorized_mutation(&self.pool, actor, d.space_id, Permission::Write).await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
         let summary = self.admit(&mut tx, actor, key, id, &start).await?;
         tx.commit().await?;
@@ -322,15 +323,9 @@ impl Processing {
         before: Option<Uuid>,
     ) -> AppResult<Vec<Summary>> {
         let d = db::document(&self.pool, id).await?;
-        crate::spaces::authorize(
-            &self.pool,
-            &self.authorization,
-            actor,
-            d.space_id,
-            Permission::Read,
-        )
-        .await
-        .map_err(crate::documents::dependency_error)?;
+        crate::authorization::authorize(&self.pool, actor, d.space_id, Permission::Read)
+            .await
+            .map_err(crate::documents::dependency_error)?;
         Ok(sqlx::query_as(concat!("select ", summary_from!(), " where p.document_id=$1 and ($2::uuid is null or (p.created_at,p.id)<(select created_at,id from document_processing where id=$2 and document_id=$1)) order by p.created_at desc,p.id desc limit 50")).bind(id).bind(before).fetch_all(&self.pool).await?)
     }
     pub async fn claim(&self, c: Claim) -> AppResult<Descriptor> {

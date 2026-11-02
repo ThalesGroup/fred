@@ -23,8 +23,11 @@ setting.
 | `knowledge-flow-worker-extraction-{fast,medium,rich}` | optional dedicated extraction workers | no |
 
 Python applications can run database migrations as Helm hook Jobs
-(`applications.<name>.migration.enabled`). The control-plane hook runs `control-plane migrate` using only `DATABASE_URL`;
-manager also applies its SQL migrations at API startup.
+(`applications.<name>.migration.enabled`). Control Plane reuses these hook settings
+for a `schema-init` Job running `control-plane initialize-schema` with only
+`DATABASE_URL`. It creates the complete Weaver schema on a fresh database, does
+nothing on a matching schema and refuses an incompatible one. API startup only
+verifies the schema; it never changes it.
 
 ## Requirements
 

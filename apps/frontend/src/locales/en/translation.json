@@ -353,16 +353,6 @@
         }
       }
     },
-    "platform_postgres": {
-      "name": "Platform database (read-only SQL)",
-      "description": "Admin capability: answer operational questions with read-only SQL over the platform's own Postgres database.",
-      "fields": {
-        "statement_timeout_s": {
-          "title": "Statement timeout (seconds)",
-          "description": "Maximum time a single SQL statement may run before the server cancels it (1–120 seconds)."
-        }
-      }
-    },
     "document_triage": {
       "name": "Document Triage",
       "description": "Review a folder of documents and record what was decided."

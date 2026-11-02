@@ -169,7 +169,7 @@ async fn entries(
     ApiPath(id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<EntryQuery>,
 ) -> AppResult<Json<Directory>> {
-    let mut directory = Storage::directory(&s.pool, &s.authorization, &user.uid, id, query).await?;
+    let mut directory = Storage::directory(&s.pool, &user.uid, id, query).await?;
     directory.processing_enabled = s.processing.as_ref().is_some_and(|p| p.config.enabled);
     let subjects = directory
         .items

@@ -34,8 +34,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::{Authenticator, CurrentUser},
-    authorization::Authorization,
-    bootstrap, db,
+    authorization, bootstrap, db,
     domain::{Folder, Permission, Role, Space, SpaceKind, SpaceRow},
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath, ApiQuery},
@@ -52,7 +51,6 @@ pub struct AppState {
     pub agent_catalog: crate::agents::PlatformConfig,
     pub auth: Arc<Authenticator>,
     pub pool: PgPool,
-    pub authorization: Authorization,
     pub onboarding: Onboarding,
     pub lifecycle: crate::lifecycle::Lifecycle,
     pub directory: Option<Directory>,
@@ -281,7 +279,7 @@ struct Me {
 )]
 async fn me(State(s): State<AppState>, AdmittedUser(user): AdmittedUser) -> AppResult<Json<Me>> {
     Ok(Json(Me {
-        platform_roles: s.authorization.effective_platform_roles(&user.uid).await?,
+        platform_roles: authorization::platform_roles(&s.pool, &user.uid).await?,
         user_id: user.uid,
         username: user.username,
     }))
@@ -312,7 +310,7 @@ async fn my_spaces(
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
 ) -> AppResult<Json<Vec<MySpace>>> {
     Ok(Json(
-        spaces::memberships(&s.pool, &s.authorization, &user)
+        spaces::memberships(&s.pool, &user)
             .await?
             .into_iter()
             .map(|m| MySpace {
@@ -530,7 +528,8 @@ async fn rename_folder(
     ApiJson(req): ApiJson<Rename>,
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
-    let mut tx = spaces::authorized_write(&s.pool, &user, folder.space_id).await?;
+    let (mut tx, _) =
+        spaces::authorized_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
     db::folder(&mut *tx, id).await?;
     db::rename_folder(&mut *tx, id, &spaces::folder_name(&req.name)?).await?;
     tx.commit().await?;
@@ -556,7 +555,8 @@ async fn delete_folder(
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<StatusCode> {
     let folder = db::folder(&s.pool, id).await?;
-    let mut tx = spaces::authorized_write(&s.pool, &user, folder.space_id).await?;
+    let (mut tx, _) =
+        spaces::authorized_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
     db::folder(&mut *tx, id).await?;
     db::delete_folder(&mut *tx, id).await?;
     tx.commit().await?;
@@ -599,15 +599,9 @@ async fn authorize_document(
         Err(sqlx::Error::RowNotFound) => return Ok(Json(Allowed { allowed: false })),
         document => document?,
     };
-    let decision = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user,
-        document.space_id,
-        req.permission,
-    )
-    .await
-    .map(|_| true);
+    let decision = authorization::authorize(&s.pool, &user, document.space_id, req.permission)
+        .await
+        .map(|_| true);
     Ok(Json(Allowed {
         allowed: probe(decision)?,
     }))
@@ -683,7 +677,7 @@ struct Scope {
 )]
 async fn authorize_scope(
     State(s): State<AppState>,
-    crate::authorization::DecisionUser(user): crate::authorization::DecisionUser,
+    authorization::DecisionUser(user): authorization::DecisionUser,
     ApiJson(req): ApiJson<AuthorizeScope>,
 ) -> AppResult<impl IntoResponse> {
     let levels: Option<Vec<SpaceKind>> = req
@@ -722,7 +716,7 @@ async fn list_platform_roles(
     AdmittedUser(user): AdmittedUser,
 ) -> AppResult<Json<Vec<platform::Grant>>> {
     require_real_authentication(&s)?;
-    Ok(Json(platform::list(&s.authorization, &user.uid).await?))
+    Ok(Json(platform::list(&s.pool, &user.uid).await?))
 }
 fn platform_role(name: &str) -> AppResult<PlatformRole> {
     PlatformRole::parse(name).ok_or_else(|| AppError::BadRequest("unknown platform role".into()))
@@ -814,16 +808,13 @@ struct PlatformCheck {
 )]
 async fn authorize_platform(
     State(s): State<AppState>,
-    crate::authorization::DecisionUser(user): crate::authorization::DecisionUser,
+    authorization::DecisionUser(user): authorization::DecisionUser,
     ApiJson(req): ApiJson<PlatformCheck>,
 ) -> AppResult<impl IntoResponse> {
     Ok((
         [(axum::http::header::CACHE_CONTROL, "no-store")],
         Json(Allowed {
-            allowed: s
-                .authorization
-                .check_platform(&user, req.permission)
-                .await?,
+            allowed: authorization::check_platform(&s.pool, &user, req.permission).await?,
         }),
     ))
 }
@@ -853,28 +844,14 @@ struct SpaceCheck {
 )]
 async fn authorize_space(
     State(s): State<AppState>,
-    crate::authorization::DecisionUser(user): crate::authorization::DecisionUser,
+    authorization::DecisionUser(user): authorization::DecisionUser,
     ApiJson(req): ApiJson<SpaceCheck>,
 ) -> AppResult<impl IntoResponse> {
-    let decision = async {
-        let space = spaces::load(&s.pool, req.space_id).await?;
-        let allowed = spaces::in_organization(&s.pool, &user, space.organization).await?
-            && if req.permission == SpacePermission::CreatePersonalSpace {
-                spaces::can_open_personal(&s.pool, &user, space.organization).await?
-            } else {
-                (space.kind != SpaceKind::Personal
-                    || spaces::can_open_personal(&s.pool, &user, space.organization).await?)
-                    && s.authorization
-                        .check_space(&user, req.permission, req.space_id)
-                        .await?
-            };
-        crate::lifecycle::store::require_active(&s.pool, space.id).await?;
-        Ok(allowed)
-    };
+    let decision = authorization::authorize(&s.pool, &user, req.space_id, req.permission);
     Ok((
         [(axum::http::header::CACHE_CONTROL, "no-store")],
         Json(Allowed {
-            allowed: probe(decision.await)?,
+            allowed: probe(decision.await.map(|_| true))?,
         }),
     ))
 }
@@ -898,11 +875,7 @@ async fn team_registry(
     AdmittedUser(user): AdmittedUser,
     ApiQuery(query): ApiQuery<RegistryQuery>,
 ) -> AppResult<Json<Vec<Space>>> {
-    if !s
-        .authorization
-        .check_platform(&user.uid, PlatformPermission::ListAllTeams)
-        .await?
-    {
+    if !authorization::check_platform(&s.pool, &user.uid, PlatformPermission::ListAllTeams).await? {
         return Err(AppError::Forbidden);
     }
     // Registry metadata only, bounded independently of content and role memberships.
@@ -933,7 +906,7 @@ async fn organization_registry(
     AdmittedUser(user): AdmittedUser,
     ApiQuery(query): ApiQuery<RegistryQuery>,
 ) -> AppResult<Json<OrganizationPage>> {
-    platform::require_admin(&s.authorization, &user.uid).await?;
+    authorization::require_platform(&s.pool, &user.uid, PlatformPermission::ManagePlatform).await?;
     let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
         .bind(query.after).fetch_all(&s.pool).await?;
     let next_cursor = (rows.len() > 100).then(|| rows[99].id);
@@ -982,7 +955,7 @@ async fn search_organization_candidates(
     AdmittedUser(user): AdmittedUser,
     ApiQuery(query): ApiQuery<CandidateQuery>,
 ) -> AppResult<Json<Vec<crate::users::UserSummary>>> {
-    platform::require_admin(&s.authorization, &user.uid).await?;
+    authorization::require_platform(&s.pool, &user.uid, PlatformPermission::ManagePlatform).await?;
     if query.query.chars().count() < 2 {
         return Err(AppError::Unprocessable(
             "query must contain at least 2 characters".into(),
@@ -1022,7 +995,6 @@ async fn create_organization(
     let directory = organization_directory(&s)?;
     let org = spaces::create_managed_organization(
         &s.pool,
-        &s.authorization,
         &directory,
         &user.uid,
         &req.name,
@@ -1045,9 +1017,8 @@ struct OrganizationDetail {
 async fn organization_detail(s: &AppState, organization: Space) -> AppResult<OrganizationDetail> {
     let directory = organization_directory(s)?;
     let (admins, owners) = tokio::try_join!(
-        s.authorization
-            .space_holders(organization.id, Role::OrganizationAdmin),
-        s.authorization.space_holders(organization.id, Role::Owner),
+        authorization::space_holders(&s.pool, organization.id, Role::OrganizationAdmin),
+        authorization::space_holders(&s.pool, organization.id, Role::Owner),
     )?;
     Ok(OrganizationDetail {
         admins: directory.summaries(&admins).await?,
@@ -1094,7 +1065,7 @@ async fn get_organization(
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<OrganizationDetail>> {
-    platform::require_admin(&s.authorization, &user.uid).await?;
+    authorization::require_platform(&s.pool, &user.uid, PlatformPermission::ManagePlatform).await?;
     let organization = spaces::load_organization(&s.pool, id).await?;
     crate::lifecycle::store::require_active(&s.pool, id).await?;
     Ok(Json(organization_detail(&s, organization).await?))
@@ -1133,7 +1104,6 @@ async fn update_organization(
     let directory = organization_directory(&s)?;
     let governance = spaces::update_managed_organization(
         &s.pool,
-        &s.authorization,
         &directory,
         &user.uid,
         id,
@@ -1338,7 +1308,7 @@ async fn import_blueprint(
     };
     let result = async {
         require_real_authentication(&s).map_err(IntoResponse::into_response)?;
-        match s.authorization.is_platform_admin(&user.uid).await {
+        match authorization::is_platform_admin(&s.pool, &user.uid).await {
             Ok(true) => (),
             Ok(false) => return Err(AppError::Forbidden.into_response()),
             Err(_) => return Err(AppError::Unavailable("authorization unavailable".into()).into_response()),
@@ -1362,7 +1332,7 @@ async fn import_blueprint(
                 let status = match error { InputError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE, _ => StatusCode::UNPROCESSABLE_ENTITY };
                 (status, Json(serde_json::json!({"detail":error.to_string()}))).into_response()
             })?;
-        let report = Importer { pool: &s.pool, authorization: &s.authorization, directory, operator: &user.uid }.run(&bundle).await
+        let report = Importer { pool: &s.pool, directory, operator: &user.uid }.run(&bundle).await
             .map_err(|error| {
                 let status = error.downcast_ref::<crate::provisioning::Failure>().map(|e| e.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
                 (status, Json(serde_json::json!({"detail":error.to_string()}))).into_response()
@@ -1408,10 +1378,7 @@ async fn delete_space(
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<(StatusCode, Json<crate::lifecycle::Receipt>)> {
     require_real_authentication(&s)?;
-    let receipt = s
-        .lifecycle
-        .accept(&s.pool, &s.authorization, &user.uid, id)
-        .await?;
+    let receipt = s.lifecycle.accept(&s.pool, &user.uid, id).await?;
     Ok((
         if receipt.status == crate::lifecycle::Status::Completed {
             StatusCode::OK
@@ -1433,6 +1400,6 @@ async fn deletion_status(
 ) -> AppResult<Json<crate::lifecycle::Receipt>> {
     require_real_authentication(&s)?;
     Ok(Json(
-        crate::lifecycle::store::status(&s.pool, &s.authorization, &user.uid, id).await?,
+        crate::lifecycle::store::status(&s.pool, &user.uid, id).await?,
     ))
 }

@@ -24,7 +24,6 @@ from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import MCPServerConfiguration
-from fred_sdk.contracts.runtime import PlatformSqlPort
 from fred_sdk.contracts.skills import SkillsPort
 from fred_sdk.contracts.web_research import WebResearchPort
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -127,8 +126,7 @@ class RuntimeConfig:
     # The pod-wide async HTTP client for control-plane calls, built once at
     # startup (`PodApplicationContext.initialize_control_plane_client`). Carried
     # here so per-turn adapters deep in the execution path reach the shared
-    # connection pool instead of opening a client each — the same reason
-    # `platform_sql` below is a pod-lifetime object rather than a per-turn one.
+    # connection pool instead of opening a client each.
     # Typed Any to avoid importing httpx in this module.
     control_plane_http_client: Any | None = None
     # Hardened security profile name from `security.profile` (e.g. "c3"), or None.
@@ -144,11 +142,6 @@ class RuntimeConfig:
     checkpointer: Any | None = None  # FredSqlCheckpointer — avoids circular import
     history_store: Any | None = None  # PostgresHistoryStore — avoids circular import
     http_client_limits: Mapping[str, Any] | None = None
-    # Read-only SQL over the platform database (OPSCAP-01-PG): pod-lifetime
-    # adapter behind `RuntimeServices.platform_sql`, built by
-    # `PodApplicationContext.initialize_platform_sql()`. None on the SQLite
-    # dev escape hatch (Postgres-only enforcement).
-    platform_sql: PlatformSqlPort | None = None
     web_research_factory: Callable[[BoundRuntimeContext], WebResearchPort] | None = None
     # The two head blocks from the pod's `config/platform_prompt.json`, threaded
     # through from `AgentPodConfig.get_platform_prompt_file()` at boot.

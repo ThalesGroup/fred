@@ -34,15 +34,10 @@ async fn request(
     let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
 }
-async fn state(
-    e: &Env,
-    identity: &support::IdentityServer,
-    authorization: Authorization,
-) -> AppState {
+async fn state(e: &Env, identity: &support::IdentityServer) -> AppState {
     AppState {
         agent_catalog: Default::default(),
         pool: e.pool.clone(),
-        authorization,
         auth: Arc::new(identity.auth().await),
         directory: Some(identity.directory()),
         content: None,
@@ -79,15 +74,10 @@ async fn organization_console_rechecks_waiting_creator_and_allows_several_organi
         .execute(&mut *tx)
         .await
         .unwrap();
-    let (pool, authorization, directory) = (
-        e.pool.clone(),
-        e.authorization.clone(),
-        identity.directory(),
-    );
+    let (pool, directory) = (e.pool.clone(), identity.directory());
     let pending = tokio::spawn(async move {
         spaces::create_managed_organization(
             &pool,
-            &authorization,
             &control_plane::users::Directory::Keycloak(Some(&directory)),
             "delegate",
             "Revoked",
@@ -109,24 +99,8 @@ async fn organization_console_rechecks_waiting_creator_and_allows_several_organi
     let directory = identity.directory();
     let resolver = control_plane::users::Directory::Keycloak(Some(&directory));
     let (a, b) = tokio::join!(
-        spaces::create_managed_organization(
-            &e.pool,
-            &e.authorization,
-            &resolver,
-            "root",
-            "One",
-            "target",
-            "target"
-        ),
-        spaces::create_managed_organization(
-            &e.pool,
-            &e.authorization,
-            &resolver,
-            "root",
-            "Two",
-            "target",
-            "target"
-        )
+        spaces::create_managed_organization(&e.pool, &resolver, "root", "One", "target", "target"),
+        spaces::create_managed_organization(&e.pool, &resolver, "root", "Two", "target", "target")
     );
     // The same person may govern several organizations.
     a.unwrap();
@@ -157,7 +131,7 @@ async fn supervision_team_pagination_preserves_full_totals() {
         .await
         .unwrap();
     let identity = support::IdentityServer::start().await;
-    let app = routes(state(&e, &identity, e.authorization.clone()).await);
+    let app = routes(state(&e, &identity).await);
     let path = format!("/organizations/{}/supervision", org.id);
     let (status, first) = request(
         &app,
@@ -311,7 +285,7 @@ async fn supervision_separates_attempts_publications_unknown_rows_and_purge() {
         .await
         .unwrap();
     let identity = support::IdentityServer::start().await;
-    let app = routes(state(&e, &identity, e.authorization.clone()).await);
+    let app = routes(state(&e, &identity).await);
     let (status, result) = request(
         &app,
         &identity,

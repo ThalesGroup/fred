@@ -36,8 +36,8 @@ macro_rules! document {
     };
 }
 
-/// Read-only migration verification for API startup and CLI commands.
-/// Only the explicit migration command applies schema changes.
+/// Read-only schema fingerprint verification for API startup and CLI commands.
+/// Only initialize-schema creates the schema, using the single SQLx baseline.
 pub async fn require_initialized(pool: &PgPool) -> anyhow::Result<()> {
     use sqlx::migrate::Migrate;
     let mut connection = pool.acquire().await?;
@@ -50,7 +50,7 @@ pub async fn require_initialized(pool: &PgPool) -> anyhow::Result<()> {
             .dirty_version("_sqlx_migrations")
             .await?
             .is_none(),
-        "incomplete schema migration"
+        "incomplete schema initialization"
     );
     anyhow::ensure!(
         applied.len() == migrator.iter().count(),
@@ -113,20 +113,6 @@ pub async fn spaces<'e>(
         .bind(ids)
         .fetch_all(ex)
         .await
-}
-
-/// Active business listings omit retired rows without changing operational lookups.
-pub async fn active_spaces<'e>(
-    ex: impl sqlx::PgExecutor<'e>,
-    ids: &[Uuid],
-) -> sqlx::Result<Vec<SpaceRow>> {
-    sqlx::query_as(concat!(
-        space!(),
-        " where id = any($1) and deletion_id is null order by id"
-    ))
-    .bind(ids)
-    .fetch_all(ex)
-    .await
 }
 
 pub async fn insert_space(tx: &mut Transaction<'_, Postgres>, s: &Space) -> sqlx::Result<()> {

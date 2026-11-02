@@ -227,7 +227,7 @@ as compensation.
 ## Deployment topology
 
 Both stories run against the infrastructure of fred-deployment-factory. control-plane
-requires its SQL migrations to be applied before startup; the Keycloak realm starts empty.
+requires its schema to be initialized before startup; the Keycloak realm starts empty.
 
 ```mermaid
 flowchart LR
@@ -269,7 +269,7 @@ offline; `make generate-chart-schema` embeds the application contracts.
 The image (`dockerfiles/Dockerfile-prod`) uses the repository root as its build
 context, including the shared Rust SDK and workspace lockfile. It builds the
 release binary with `protoc` and
-`libprotobuf-dev`, then runs it as user 1000 on Debian slim; migrations are compiled into the binary.
+`libprotobuf-dev`, then runs it as user 1000 on Debian slim; the schema is compiled into the binary.
 
 The factory's standard `control-plane` confidential client has the
 `realm-management/query-users`, `view-users` and `manage-users` grants. The cluster
@@ -278,54 +278,44 @@ A host process keeps its own `security.m2m.client_id` and `secret_env_var` setti
 when reusing this client, configure both settings and supply its secret in `.env`.
 
 The local profile runs `control-plane-backend` using the image built from
-`apps/control-plane`. Port 8222 serves `/control-plane/v1`. The migration hook
-invokes `control-plane migrate` with `DATABASE_URL` alone, including the factory's
-`postgresql+asyncpg` scheme. It applies SQL migrations without loading identity,
-authorization or runtime configuration. API startup verifies migration versions
+`apps/control-plane`. Port 8222 serves `/control-plane/v1`. The initialization hook
+invokes `control-plane initialize-schema` with `DATABASE_URL` alone, including the factory's
+`postgresql+asyncpg` scheme. It creates the complete schema without loading identity,
+authorization or runtime configuration. API startup verifies the baseline version
 and checksums without applying them.
 
-## SQLx schema evolution
+## SQLx schema initialization
 
 The [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue) identifies
-the control-plane tables and their responsibilities. Ordered files in
-[`apps/control-plane/migrations`](../../apps/control-plane/migrations) are the
-schema source of truth. SQLx embeds them in the Rust binary and records applied
-versions and checksums in `_sqlx_migrations`.
+the control-plane tables and their responsibilities. The single file
+[`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql) creates
+the complete current schema, including constraints, indexes and triggers. SQLx
+embeds it in the Rust binary and records its fingerprint in `_sqlx_migrations`.
+There is no incremental upgrade path for draft Weaver installations.
 
-`0001_schema.sql` defines the schema, including immutable organization/parent
-placement, the unique index of active personal spaces and the local identity
-directory with its search indexes. A fresh installation
-applies the whole chain; an existing installation applies only pending files.
-Applied files are immutable, including comments and whitespace. A database whose
-recorded versions or checksums differ from the embedded files is refused by the API
-and by `migrate`; it is recreated explicitly, never reset automatically. Do not repair
-a changed file by editing the database's stored checksum.
+`control-plane initialize-schema` connects using `DATABASE_URL` without loading
+application configuration. SQLx serializes concurrent initializers with a database
+lock and creates the schema in one transaction. Repeating initialization on the
+same schema preserves data. An incompatible history or checksum is refused with
+an explicit fresh-database requirement; no automatic reset or checksum rewrite occurs.
 
-The `control-plane migrate` command connects using `DATABASE_URL` without loading
-the application configuration. When enabled, the chart's pre-install/pre-upgrade
-migration Job executes it before rolling the application. The secondary k3d
-factory profile enables that Job. The base chart defaults the Job to disabled.
-API pool initialization calls the read-only `db::require_initialized` check. It
-requires the exact embedded migration versions and checksums, with no incomplete
-migration. An empty, older, newer or checksum-mismatched history prevents startup;
-the error directs the operator to the migration Job/command or history inspection.
-The API does not create tables or update migration history. Provisioning import
-also verifies initialization without migration.
-SQLx serializes the explicit migration runner with database locking.
+When enabled through `applications.control-plane-backend.migration.enabled`, the
+shared chart renders a `control-plane-backend-schema-init` pre-install/pre-upgrade
+Job. The checkout's k3d profile enables it and owns its command and database secret
+reference. The base chart leaves the Job disabled. The existing hook settings are
+reused; Python applications retain their separate migration commands and histories.
 
-Outside Kubernetes, set `DATABASE_URL` for the target database and run
-`control-plane migrate` before starting the API. This separates schema execution
-from normal application startup; database privilege separation is not enforced by
-this code change. Exact history matching also means restarting an older binary
-after applying a newer migration is refused, even for an additive migration.
+API pool initialization uses the read-only `db::require_initialized` check and
+refuses empty, incomplete or incompatible history. Provisioning import performs
+the same verification. Outside Kubernetes, run `control-plane initialize-schema`
+before starting the API. This separates schema execution from normal startup;
+database privilege separation is not enforced by the application.
 
-A schema change adds the next numbered SQL file. Back up the target database
-before applying it; rebuild the Rust image so that the file is embedded, then
-redeploy through the existing application command. Additive changes can preserve
-compatibility with the previous running application. Data transformations,
-constraint changes and destructive DDL need their own explicit deployment and
-recovery procedure: neither SQLx history nor rolling back an image restores lost
-data.
+During this fresh-install phase, schema changes update the baseline file and
+require rebuilding the image and explicitly recreating the disposable installation.
+An application-only redeployment reuses the matching schema. Preserve needed data
+before a separately authorized recreation; deployment does not perform it. A future
+supported upgrade path requires an explicit release decision and immutable migrations.
 
 These read-only queries inspect an installation without reading user profiles or
 document contents. Run them in the configured control-plane database (`fred` in
@@ -358,7 +348,7 @@ reference through the dossier generator.
 
 ## Running provisioning
 
-Apply SQL migrations with the migration Job or `control-plane migrate`, then start
+Initialize SQL with the schema-init Job or `control-plane initialize-schema`, then start
 the service. Accept CGU and complete root bootstrap in the UI. CLI import itself
 never migrates SQL. It needs PostgreSQL and Keycloak; it does not need the HTTP
 server or Temporal to remain running.
@@ -540,7 +530,7 @@ set both `uploads_enabled: false` and `cleanup_enabled: false`; uploads cannot b
 active with cleanup suspended. Re-enable after validating namespace and originals.
 Restoring only SQL can lose bytes; restoring only objects lets cleanup remove keys
 without matching metadata. The ordinary local reset does not migrate content.
-SQL migration and recovery rules are described under [SQLx schema evolution](#sqlx-schema-evolution).
+SQL migration and recovery rules are described under [SQLx schema initialization](#sqlx-schema-initialization).
 
 
 ## Document processing

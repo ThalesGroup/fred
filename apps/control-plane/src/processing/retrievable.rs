@@ -5,6 +5,7 @@ use super::{Processing, conflict, models::*, store};
 use crate::{
     db,
     domain::Document,
+    domain::Permission,
     error::{AppError, AppResult},
     onboarding, spaces,
 };
@@ -151,7 +152,9 @@ impl Processing {
         input: SetRetrievable,
     ) -> AppResult<Document> {
         let document = db::document(&self.pool, id).await?;
-        let mut tx = spaces::authorized_write(&self.pool, actor, document.space_id).await?;
+        let (mut tx, _) =
+            spaces::authorized_mutation(&self.pool, actor, document.space_id, Permission::Write)
+                .await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
         let document: Document =
             sqlx::query_as("select * from document where id=$1 and deletion_id is null for update")
@@ -226,14 +229,8 @@ impl Processing {
             return Err(conflict("retrieval_changed"));
         }
         let document = db::pipeline_document(&self.pool, id).await?;
-        spaces::authorize(
-            &self.pool,
-            &self.authorization,
-            &c.actor,
-            document.space_id,
-            crate::domain::Permission::Write,
-        )
-        .await?;
+        crate::authorization::authorize(&self.pool, &c.actor, document.space_id, Permission::Write)
+            .await?;
         onboarding::require_accepted(&self.pool, self.terms.as_deref(), &c.actor).await?;
         let published: store::Generation = sqlx::query_as(
             "select g.* from document d join generation g on g.id=d.published_generation where d.id=$1",
@@ -263,7 +260,9 @@ impl Processing {
         }
         let document = db::pipeline_document(&self.pool, id).await?;
         let c = self.retrieval_command(id).await?;
-        let mut tx = spaces::authorized_write(&self.pool, &c.actor, document.space_id).await?;
+        let (mut tx, _) =
+            spaces::authorized_mutation(&self.pool, &c.actor, document.space_id, Permission::Write)
+                .await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &c.actor).await?;
         // The atomic phase fence survives worker/API restarts and Temporal history expiry.
         let changed = match input.step {

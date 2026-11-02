@@ -45,6 +45,13 @@ applications:
       security:
         profile: c3
   control-plane-backend:
+    # Own the Weaver initialization command even when the factory supplies hook settings.
+    migration:
+      enabled: true
+      scaleDown: false
+      command: [control-plane]
+      args: [initialize-schema]
+      extraEnvVars: [*postgres]
     lifecycle_policy_catalog:
       space_policies:
         purge:

@@ -1,6 +1,7 @@
 {{- define "common-library.hook-migration" -}}
 
 {{- if and .app.migration .app.migration.enabled }}
+{{- $operation := ternary "schema-init" "migration" (has "initialize-schema" (default (list) .app.migration.args)) }}
 {{- /*
   The migration Job is self-sufficient (#2440 follow-up): it mounts none of the
   application's own ConfigMaps/Secret, which are regular release resources that
@@ -28,11 +29,11 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ .app.applicationName }}-migration-db
+  name: {{ .app.applicationName }}-{{ $operation }}-db
   namespace: {{ .root.Release.Namespace }}
   labels:
     app: {{ .app.applicationName }}
-    type: migration
+    type: {{ $operation }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-1"
@@ -49,11 +50,11 @@ stringData:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .app.applicationName }}-migration-{{ .root.Release.Revision }}
+  name: {{ .app.applicationName }}-{{ $operation }}-{{ .root.Release.Revision }}
   namespace: {{ .root.Release.Namespace }}
   labels:
     app: {{ .app.applicationName }}
-    type: migration
+    type: {{ $operation }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "0"
@@ -73,7 +74,7 @@ spec:
       {{- end }}
       labels:
         app: {{ .app.applicationName }}
-        type: migration
+        type: {{ $operation }}
     spec:
       {{- if .app.imagePullSecrets }}
       imagePullSecrets:
@@ -89,7 +90,7 @@ spec:
       automountServiceAccountToken: false
 
       containers:
-        - name: {{ .app.applicationName }}-migration
+        - name: {{ .app.applicationName }}-{{ $operation }}
           image: "{{ .app.image.repository }}:{{ .app.image.tag | default .root.Chart.AppVersion }}"
           imagePullPolicy: {{ default "IfNotPresent" .app.image.pullPolicy }}
 
@@ -106,7 +107,7 @@ spec:
           {{- if $dbPassword }}
           envFrom:
             - secretRef:
-                name: {{ .app.applicationName }}-migration-db
+                name: {{ .app.applicationName }}-{{ $operation }}-db
           {{- end }}
 
           env:

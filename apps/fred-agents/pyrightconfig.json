@@ -13,7 +13,6 @@
     "../../libs/fred-runtime/tests",
     "../../libs/capabilities/fred-capability-writable-document",
     "../../libs/capabilities/fred-capability-ppt-filler",
-    "../../libs/capabilities/fred-capability-platform-ops",
     "../../libs/capabilities/fred-capability-html-artifact",
     "../../libs/capabilities/fred-capability-team-wiki",
     "../../libs/capabilities/fred-capability-documents",

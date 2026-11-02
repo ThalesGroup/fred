@@ -155,8 +155,10 @@ For each proposal, identify which responsibility enforces each guarantee:
 - external projection synchronization, including stale data and retry behavior.
 
 Reuse a table when its meaning, ownership and lifecycle fit. Do not force unrelated
-objects into one table to avoid a justified new table. Preserve applied migrations
-and inspect the next sequence number just before adding one.
+objects into one table to avoid a justified new table. Follow `AGENTS.md`'s
+persistence phase: Weaver Control Plane currently maintains one complete initial
+schema for fresh installations, without incremental migrations. Never rewrite a
+live database's SQLx history. Other components retain their immutable histories.
 
 ## Cost and concurrency
 

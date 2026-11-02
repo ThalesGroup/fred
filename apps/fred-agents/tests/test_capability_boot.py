@@ -131,7 +131,6 @@ _SHIPPED_CAPABILITY_IDS = frozenset(
         "document_label_search",
         "html_artifact",
         "open_writable_document",
-        "platform_postgres",
         "ppt_filler",
         "team_wiki",
         "writable_document",
@@ -199,12 +198,3 @@ def test_default_mcp_catalog_loads_packaged_instructions(
     assert set(by_id) == set(expected_paths)
     for server_id, path in expected_paths.items():
         assert by_id[server_id].url == f"https://kf.example:9443/custom/v2/{path}"
-
-
-def test_document_templates_default_to_native_document_access() -> None:
-    from fred_agents.comparison.graph_agent import COMPARISON_AGENT
-    from fred_agents.mindmap.graph_agent import MINDMAP_AGENT
-    from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
-
-    for template in (REACT_RAG_MCP_AGENT, MINDMAP_AGENT, COMPARISON_AGENT):
-        assert [ref.id for ref in template.default_mcp_servers] == ["document_access"]

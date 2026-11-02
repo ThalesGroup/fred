@@ -3,8 +3,7 @@
 
 use super::policy::{Catalog, LifecycleConfig};
 use crate::{
-    authorization::Authorization,
-    bootstrap, db,
+    authorization, bootstrap, db,
     domain::{Permission, Space, SpaceKind},
     error::{AppError, AppResult},
     roles::PlatformPermission,
@@ -79,23 +78,8 @@ pub struct Lifecycle {
     pub catalog: Catalog,
 }
 
-async fn permitted(authorization: &Authorization, actor: &str) -> AppResult<()> {
-    if authorization
-        .check_platform(actor, PlatformPermission::DeleteSpace)
-        .await?
-    {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden)
-    }
-}
-pub async fn status(
-    pool: &PgPool,
-    authorization: &Authorization,
-    actor: &str,
-    id: Uuid,
-) -> AppResult<Receipt> {
-    permitted(authorization, actor).await?;
+pub async fn status(pool: &PgPool, actor: &str, id: Uuid) -> AppResult<Receipt> {
+    authorization::require_platform(pool, actor, PlatformPermission::DeleteSpace).await?;
     Ok(sqlx::query_as("select * from deletion where id = $1")
         .bind(id)
         .fetch_one(pool)
@@ -247,15 +231,12 @@ impl Lifecycle {
     pub async fn accept_session(
         &self,
         pool: &PgPool,
-        authorization: &Authorization,
         actor: &str,
         space_id: Uuid,
         session_id: Uuid,
     ) -> AppResult<Receipt> {
-        let space =
-            spaces::authorize(pool, authorization, actor, space_id, Permission::Read).await?;
-        let mut tx = spaces::lock_for(pool, &space).await?;
-        let space = spaces::authorize_locked(&mut tx, actor, space_id, Permission::Read).await?;
+        let (mut tx, space) =
+            spaces::authorized_mutation(pool, actor, space_id, Permission::Read).await?;
         let retired: Option<Option<Uuid>> = sqlx::query_scalar(
             "select deletion_id from session_metadata where space_id = $1 and user_id = $2 and session_id = $3 for update",
         )
@@ -301,28 +282,23 @@ impl Lifecycle {
         Ok(receipt)
     }
 
-    pub async fn accept(
-        &self,
-        pool: &PgPool,
-        authorization: &Authorization,
-        actor: &str,
-        id: Uuid,
-    ) -> AppResult<Receipt> {
+    pub async fn accept(&self, pool: &PgPool, actor: &str, id: Uuid) -> AppResult<Receipt> {
         // Repeat requests never require a target row or a running scheduler.
         const REPLAY: &str = concat!(
             "select * from deletion where target_id = $1 and ",
             space_target!()
         );
         if let Some(receipt) = sqlx::query_as(REPLAY).bind(id).fetch_optional(pool).await? {
-            permitted(authorization, actor).await?;
+            authorization::require_platform(pool, actor, PlatformPermission::DeleteSpace).await?;
             return Ok(receipt);
         }
         if !self.config.enabled {
-            permitted(authorization, actor).await?;
+            authorization::require_platform(pool, actor, PlatformPermission::DeleteSpace).await?;
             return Err(AppError::Unavailable("space deletion is disabled".into()));
         }
         let mut tx = bootstrap::locked(pool).await?;
-        crate::platform::require_admin_locked(&mut tx, actor).await?;
+        authorization::require_platform(&mut *tx, actor, PlatformPermission::ManagePlatform)
+            .await?;
         if let Some(receipt) = sqlx::query_as(REPLAY)
             .bind(id)
             .fetch_optional(&mut *tx)

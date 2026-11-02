@@ -14,7 +14,6 @@ dependencies = [
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
   "fred-capability-writable-document>=5.0.0,<6",
   "fred-capability-ppt-filler>=5.0.0,<6",
-  "fred-capability-platform-ops>=5.0.0,<6",
   "fred-capability-html-artifact>=5.0.0,<6",
   "fred-capability-team-wiki>=5.0.0,<6",
   "fred-capability-documents>=5.0.0,<6",
@@ -46,9 +45,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["fred_agents*"]
 
-[tool.setuptools.package-data]
-"fred_agents" = ["prompts/*.md", "mindmap/prompts/*.md"]
-
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra"
@@ -62,7 +58,6 @@ fred-sdk = { path = "../../libs/fred-sdk", editable = true }
 fred-runtime = { path = "../../libs/fred-runtime", editable = true }
 fred-capability-writable-document = { path = "../../libs/capabilities/fred-capability-writable-document", editable = true }
 fred-capability-ppt-filler = { path = "../../libs/capabilities/fred-capability-ppt-filler", editable = true }
-fred-capability-platform-ops = { path = "../../libs/capabilities/fred-capability-platform-ops", editable = true }
 fred-capability-html-artifact = { path = "../../libs/capabilities/fred-capability-html-artifact", editable = true }
 fred-capability-team-wiki = { path = "../../libs/capabilities/fred-capability-team-wiki", editable = true }
 fred-capability-documents = { path = "../../libs/capabilities/fred-capability-documents", editable = true }

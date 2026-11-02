@@ -114,7 +114,7 @@ while writing code; a specialist review or campaign is not automatically require
   `create_all` — DDL belongs to the owning Alembic tree alone, and a process
   that queries tables (knowledge-flow API and worker, fred-runtime) fails
   boot on a missing schema via `fred_core.sql.require_tables`. The Rust Control
-  Plane uses [SQLx migrations](architecture/A3-manager-operations.md#sqlx-schema-evolution).
+  Plane uses [SQLx schema initialization](architecture/A3-manager-operations.md#sqlx-schema-initialization).
 - **Wrap bare `for x in SomeEnum:` in `list(...)`.** `EnumMeta.__iter__` makes an
   `Enum` class itself iterable, but CodeQL's Python analysis doesn't model that and
   flags `for x in SomeEnum:` as "non-iterable used in for loop" — a false positive,

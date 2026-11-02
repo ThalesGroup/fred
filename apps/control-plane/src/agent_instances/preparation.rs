@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::{
     agents::{self, PlatformConfig, enablement},
     api::AppState,
+    authorization,
     domain::Permission,
     error::{AppError, AppResult},
     extract::{ApiPath, ApiQuery},
@@ -29,7 +30,7 @@ use crate::{
         },
     },
     onboarding::{self, AdmittedUser},
-    sessions, spaces,
+    sessions,
 };
 
 #[derive(Deserialize)]
@@ -200,23 +201,12 @@ async fn prepare_execution(
     ApiQuery(query): ApiQuery<PreparationQuery>,
     headers: HeaderMap,
 ) -> AppResult<impl IntoResponse> {
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
+    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     super::http::require_instance_space(space.kind)?;
     let initial = super::get_for_space(&s.pool, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
-    if !s
-        .authorization
-        .can_use_agent(initial.template_id, &space)
-        .await?
-    {
+    if !authorization::can_use_agent(&s.pool, initial.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     let base = public_base(&s.agent_catalog, &initial.source_runtime_id).ok_or_else(|| {
@@ -272,19 +262,8 @@ async fn prepare_execution(
     };
     tx.commit().await?;
     onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
-    let space = spaces::authorize(
-        &s.pool,
-        &s.authorization,
-        &user.uid,
-        space_id,
-        Permission::Read,
-    )
-    .await?;
-    if !s
-        .authorization
-        .can_use_agent(current.template_id, &space)
-        .await?
-    {
+    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
+    if !authorization::can_use_agent(&s.pool, current.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
     let models: PreparationModels = models.into();

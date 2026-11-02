@@ -46,16 +46,17 @@ No additional server or deployment is required.
 
 **Host run, after `make docker-up` or `make k3d-up`:**
 
-With `DATABASE_URL` pointing to the configured control-plane database, apply
-migrations explicitly before starting the API:
+With `DATABASE_URL` pointing to a fresh control-plane database, initialize the
+complete schema before starting the API:
 
 ```sh
-cargo run --locked -- migrate
+cargo run --locked -- initialize-schema
 make run
 ```
 
-API startup only checks the installed migration history and checksums. It does
-not initialize an empty database or apply pending migrations.
+API startup only verifies the installed schema fingerprint. The explicit
+initialization command creates the schema atomically, or does nothing when the
+same schema is already installed. It refuses an incompatible database.
 
 **In the cluster, after `make k3d-up`**, from fred-deployment-factory:
 
@@ -89,7 +90,7 @@ manager consent or bootstrap records.
 | --- | --- |
 | `control-plane serve` | HTTP API and its background tasks (default) |
 | `control-plane discover-agents` | Describes the embedded agent and public templates from enabled configured runtimes; JSON output, no SQL or enrollment |
-| `control-plane migrate` | Applies pending SQL migrations from `DATABASE_URL` |
+| `control-plane initialize-schema` | Creates the complete schema from `DATABASE_URL`; repeatable on the same schema, refuses incompatible history |
 | `control-plane generate-openapi` | Prints the HTTP contract, without configuration or services |
 | `control-plane generate-config-schema` | Prints the configuration JSON Schema |
 | `control-plane processing-schema` | Prints the wire contracts shared with the Knowledge Flow worker |
@@ -146,7 +147,7 @@ poll runtimes. This command does not enroll or execute agents.
 `platform.model_sources` defaults to `[]` in the schema. The host development
 configuration and checkout-owned k3d overlay opt into the Mistral test source;
 see [the local model setup](../../deploy/k3d/README.md#models-for-local-testing).
-`serve` applies these non-secret approvals to SQL after checking migrations, then
+`serve` applies these non-secret approvals to SQL after checking the schema, then
 runs the bounded organization initialization below. Organization APIs expose only
 assigned sources and persist explicit choices. There is no background model polling. The internal `configure_sources`,
 `refresh` and `inventory` operations remain available to trusted Rust callers;
@@ -213,7 +214,7 @@ offer. A missing or unavailable model fails initialization; no substitute is pic
 Deployment order:
 
 1. Provision existing Kubernetes Secrets/environment references and runtime-local
-   inference bindings; apply SQLx migrations through the existing deployment Job.
+   inference bindings; initialize the schema through the deployment Job.
 2. Start Control Plane with platform source approvals and organization declarations.
    The initial pass defers missing organizations, with a diagnostic.
 3. Provision organizations through the existing organization API, Provisioning UI
@@ -241,15 +242,10 @@ credential rotation and disabling remain handled by `configure_sources`, indepen
 of the receipt. Keep identical declarations across replicas; a concurrent refresh
 may report `model_refresh_superseded`, which is safely replayable.
 
-Migration `0011` retains historical policies without assigning any source. Before
-cutover, declare an exact source mapping covering all permissions of every existing
-organization. Existing policies (including empty ones) are preserved instead of
-being replaced by YAML. Missing mappings produce `model_source_assignment_missing`
-or `historical_model_source_mapping_missing`; unmapped offers are denied by inventory,
-policy writes, recommendations and admission. The added permission foreign key is
-`NOT VALID` solely to retain those old rows during transition; every new write must
-reference an assignment. Once all historical mappings are established, an operator
-may validate that constraint using the normal migration procedure.
+Every model permission references an explicit organization source assignment from
+creation. The foreign key is validated in the initial schema. Already administered
+policies (including empty or deleted policies) remain protected from YAML reseeding;
+there is no migration of historical model decisions.
 
 Failures identify the declaration index and a fixed diagnostic such as
 `unknown_model_offer`, `model_offer_not_selectable` or `model_discovery_failed`.
@@ -361,8 +357,8 @@ consistency. A trigger restricts the policy owner to an organization. Policy and
 permissions cascade only on physical organization purge, not retirement or a user's
 departure. Model policies remain organization scoped.
 
-Use the existing migration procedure before deploying this binary; startup checks
-the full sequence. Instance settings and resolver data are described below.
+Initialize the complete schema before deploying this binary; startup checks
+its fingerprint. Instance settings and resolver data are described below.
 
 ### Instance recommendations and resolver data (M3)
 
@@ -735,20 +731,22 @@ dependencies and Chromium are already installed.
 ## Existing local state
 
 The architecture dossier contains the [SQL table catalogue](../../docs/architecture/A2-manager-contracts.md#control-plane-sql-catalogue)
-and [SQLx operations](../../docs/architecture/A3-manager-operations.md#sqlx-schema-evolution).
+and [SQLx operations](../../docs/architecture/A3-manager-operations.md#sqlx-schema-initialization).
 
-SQLx records applied versions and checksums in `_sqlx_migrations`. Before upgrading,
-inspect that history and back up the database. The `control-plane migrate` command
-applies pending SQL files. API startup only verifies that the migration history
-matches the binary's embedded versions and checksums, and refuses an incompatible
-or uninitialized database. The k3d factory profile enables the chart's
-pre-install/pre-upgrade migration Job. Rebuilding the Rust
-image embeds new migration files; no manual SQL command is needed for this upgrade.
+`migrations/0001_schema.sql` contains the complete current Weaver schema. SQLx
+records its fingerprint in `_sqlx_migrations`, serializes initialization and applies
+it in one transaction. There is no incremental Control Plane migration chain.
+`control-plane initialize-schema` creates it on a fresh database; repeating the
+command with the same binary preserves all data. The API only verifies the fingerprint.
 
-`0001_schema.sql` creates the new Weaver schema, including platform and space roles
-and organization template policy; later numbered files evolve it. This branch requires
-a fresh database. There is no transfer of prior authorization data or compatibility mode.
-Startup rejects migration histories or checksums differing from the embedded schema.
+The k3d profile enables the pre-install/pre-upgrade `control-plane-backend-schema-init`
+Job through the shared chart's `migration` settings. An application-only redeployment
+reuses the matching schema. A schema change requires rebuilding the image and an
+explicitly recreated disposable installation. Existing draft databases, including
+those with the old numbered migration history, are incompatible. Initialization and
+startup refuse them without resetting data or rewriting recorded checksums.
+Back up anything needed before separately authorizing recreation; the deployment
+command does not perform it. Python runtimes keep their own Alembic histories.
 
 Role mutations, initial space grants and bootstrap commit atomically in PostgreSQL.
 The service and binary are named `control-plane`; the image remains

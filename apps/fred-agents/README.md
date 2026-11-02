@@ -1,7 +1,14 @@
 # fred-agents
 
-Small standalone Fred agent pod used to exercise `fred-sdk` and `fred-runtime`
-outside `agentic-backend`.
+Fred's Weaver agent pod ships three templates:
+
+- **Custom assistant** (`fred.github.assistant`): configurable ReAct assistant.
+- **Custom planning assistant** (`fred.github.deep_assistant`): configurable Deep assistant with built-in workspace tools.
+- **Test assistant** (`fred.github.test_assistant`): deterministic scenarios for UI and runtime validation.
+
+The Custom and Planning templates impose no external capabilities by default.
+Operators select each instance's tools from the capabilities authorized for its
+organization. Capability packages remain installed independently of agent templates.
 
 ## Local Runtime Wiring
 

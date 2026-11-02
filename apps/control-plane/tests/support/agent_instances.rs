@@ -114,15 +114,9 @@ fn definition() -> Value {
                 {"key":"code","type":"string","pattern":"[A-Z]+"}, {"key":"items","type":"array","item_type":"integer"},
                 {"key":"object","type":"object"}]}})
 }
-async fn app(
-    e: &Env,
-    identity: &support::IdentityServer,
-    catalog: &Catalog,
-    authorization: Authorization,
-) -> Router {
+async fn app(e: &Env, identity: &support::IdentityServer, catalog: &Catalog) -> Router {
     routes(AppState {
         pool: e.pool.clone(),
-        authorization,
         agent_catalog: catalog.config(),
         auth: Arc::new(identity.auth().await),
         directory: Some(identity.directory()),
@@ -211,7 +205,7 @@ async fn instances_round_trip_validation_and_saved_snapshot() {
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     let template = enable(&e, org.id, "custom", true).await;
     enable_capability(&e, org.id, "tool").await;
     let (status, templates) = request(
@@ -531,7 +525,7 @@ async fn instances_capabilities_and_profiles_fail_explicitly() {
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Existing")).await;
     // Metadata edits preserve opaque, not-yet-connected saved settings.
@@ -685,7 +679,7 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = Arc::new(support::IdentityServer::start().await);
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Existing")).await;
     for actor in [None, Some("stranger")] {
@@ -766,7 +760,7 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
         .await,
         (200, json!({"items":[personal_instance],"next_cursor":null}))
     );
-    let other = support::member_organization(&e.pool, &e.authorization, "Other", "bob")
+    let other = support::member_organization(&e.pool, "Other", "bob")
         .await
         .unwrap();
     let other_team = spaces::create_space(
@@ -949,7 +943,7 @@ async fn instances_retention_and_exact_space_purge() {
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let identity = Arc::new(support::IdentityServer::start().await);
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Retained")).await;
     let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
@@ -986,10 +980,7 @@ async fn instances_retention_and_exact_space_purge() {
     tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
         .await
         .unwrap();
-    let receipt = lifecycle
-        .accept(&e.pool, &e.authorization, "root", team.id)
-        .await
-        .unwrap();
+    let receipt = lifecycle.accept(&e.pool, "root", team.id).await.unwrap();
     gate.release.notify_one();
     assert_eq!(pending.await.unwrap().0, 409);
     cleanup::batch(&e.pool, receipt.id).await.unwrap();
@@ -1036,7 +1027,7 @@ async fn instances_retention_and_exact_space_purge() {
         .unwrap();
     for _ in 0..100 {
         cleanup::batch(&e.pool, receipt.id).await.unwrap();
-        if store::status(&e.pool, &e.authorization, "root", receipt.id)
+        if store::status(&e.pool, "root", receipt.id)
             .await
             .unwrap()
             .status
@@ -1046,7 +1037,7 @@ async fn instances_retention_and_exact_space_purge() {
         }
     }
     assert_eq!(
-        store::status(&e.pool, &e.authorization, "root", receipt.id)
+        store::status(&e.pool, "root", receipt.id)
             .await
             .unwrap()
             .status,
@@ -1096,7 +1087,7 @@ async fn instances_space_revocation_during_discovery_preserves_configuration() {
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = Arc::new(support::IdentityServer::start().await);
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Existing")).await;
     for method in ["POST", "PATCH"] {
@@ -1179,7 +1170,7 @@ async fn preparation_combines_pod_controls_and_reasoning_after_capability_govern
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     let template = enable(&e, org.id, "custom", true).await;
     sqlx::query("insert into runtime_catalog (runtime_id, reachable) values ('fixture', true)")
         .execute(&e.pool)
@@ -1285,7 +1276,7 @@ async fn conversations_pin_configuration_and_keep_history_after_agent_edits() {
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Revision")).await;
     let base = item(team.id, &instance);
@@ -1494,7 +1485,7 @@ async fn runtime_binding_lists_all_eligible_conversation_attachments() {
     grant(&e, team.id, Role::Member, "bob").await;
     let identity = support::IdentityServer::start().await;
     let catalog = Catalog::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Files")).await;
     let base = item(team.id, &instance);
@@ -1622,7 +1613,7 @@ async fn instances_generate_references_for_creation_and_copies_but_keep_them_on_
     let template = enable(&e, org.id, "custom", true).await;
     let catalog = Catalog::start().await;
     let identity = support::IdentityServer::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     enable_capability(&e, org.id, "tool").await;
 
     for label in [
@@ -1691,7 +1682,7 @@ async fn instances_display_names_are_unique_per_space_on_create_and_rename() {
     let template = enable(&e, org.id, "custom", true).await;
     let catalog = Catalog::start().await;
     let identity = support::IdentityServer::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     enable_capability(&e, org.id, "tool").await;
     let body =
         |name: &str| json!({"template_id":template,"display_name":name,"usage_statement":"Use me"});
@@ -1771,7 +1762,7 @@ async fn instances_logical_identity_and_authorized_catalog_pagination() {
     let template = enable(&e, org.id, "custom", true).await;
     let catalog = Catalog::start().await;
     let identity = support::IdentityServer::start().await;
-    let app = app(&e, &identity, &catalog, e.authorization.clone()).await;
+    let app = app(&e, &identity, &catalog).await;
     enable_capability(&e, org.id, "tool").await;
     let mut body = creation(template, "Shared label");
     body["logical_name"] = json!("b-reference");

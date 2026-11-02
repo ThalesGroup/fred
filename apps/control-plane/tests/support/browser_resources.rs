@@ -3,7 +3,6 @@
 
 //! Metadata only, in the disposable browser database. Not a production route or import format.
 use control_plane::{
-    authorization::Authorization,
     db,
     domain::{Document, Folder},
     keycloak::Directory,
@@ -11,12 +10,12 @@ use control_plane::{
 use sqlx::PgPool;
 use uuid::Uuid;
 
-pub fn router(pool: PgPool, authorization: Authorization, directory: Directory) -> axum::Router {
+pub fn router(pool: PgPool, directory: Directory) -> axum::Router {
     axum::Router::new().route("/test-fixture/resources", axum::routing::post(move || {
-        let (pool, authorization, directory) = (pool.clone(), authorization.clone(), directory.clone());
+        let (pool, directory) = (pool.clone(), directory.clone());
         async move {
             let carl = directory.find_username("carl").await.unwrap().unwrap();
-            let memberships = control_plane::spaces::memberships(&pool, &authorization, &carl.id).await.unwrap();
+            let memberships = control_plane::spaces::memberships(&pool, &carl.id).await.unwrap();
             let team = memberships.iter().find(|m| m.space.name == "Research").unwrap().space.id;
             let personal = memberships.iter().find(|m| m.space.personal_owner.as_deref() == Some(&carl.id)).unwrap().space.id;
             let folder = Folder { created_at: chrono::Utc::now(), id: Uuid::new_v4(), space_id: team, parent_id: None, name:"Library".into(), path:String::new() };

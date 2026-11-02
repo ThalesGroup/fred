@@ -39,7 +39,6 @@ from fred_runtime.runtime_context import (
     get_runtime_context_or_none,
     set_runtime_context,
 )
-from fred_sdk import load_agent_prompt_markdown
 from fred_sdk.contracts.weaver import WeaverRuntimeBinding
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
@@ -380,19 +379,28 @@ def test_fred_agents_pod_registers_and_streams_custom_assistant_offline(
         list_response = client.get("/fred/agents/v2/agents")
         assert list_response.status_code == 200
         registered = list_response.json()
-        assert "fred.github.assistant" in registered
-        assert "fred.github.rag_expert" in registered
-        assert "fred.dt.mindmap.graph" in registered
+        expected_ids = {
+            "fred.github.assistant",
+            "fred.github.deep_assistant",
+            "fred.github.test_assistant",
+        }
+        assert set(registered) == expected_ids
 
         templates_response = client.get("/fred/agents/v2/agents/templates")
         assert templates_response.status_code == 200
         template_ids = {
             template["template_agent_id"] for template in templates_response.json()
         }
-        assert "fred.dt.mindmap.graph" in template_ids
-        assert "fred.github.assistant" in template_ids
-        assert "fred.github.rag_expert" in template_ids
-        assert "fred.github.test_assistant" in template_ids
+        assert template_ids == expected_ids
+        all_templates = client.get(
+            "/fred/agents/v2/agents/templates?include_non_public=true"
+        ).json()
+        assert {
+            template["template_agent_id"] for template in all_templates
+        } == expected_ids
+        for template in templates_response.json():
+            if template["template_agent_id"] != "fred.github.test_assistant":
+                assert template["default_capability_ids"] == []
 
         test_assistant_template = next(
             template
@@ -439,18 +447,6 @@ def test_fred_agents_pod_registers_and_streams_custom_assistant_offline(
         # chat_options.attach_files is no longer an agent-level field — it now lives in
         # the MCP catalog (search-documents server) per MCP-CATALOG-CONFIG-FIELDS-RFC §10.
         assert "chat_options.attach_files" not in general_assistant_field_keys
-
-        react_rag_mcp_template = next(
-            template
-            for template in templates_response.json()
-            if template["template_agent_id"] == "fred.github.react_rag_mcp"
-        )
-        react_rag_mcp_field_keys = {
-            field["key"] for field in react_rag_mcp_template["default_tuning"]["fields"]
-        }
-        # Migrated to the MCP catalog (search-documents server), see
-        # MCP-CATALOG-CONFIG-FIELDS-RFC §10 — no longer an agent-level field.
-        assert "chat_options.attach_files" not in react_rag_mcp_field_keys
 
         stream_response = client.post(
             "/fred/agents/v2/agents/execute/stream",
@@ -528,53 +524,3 @@ def test_fred_agents_pod_streams_deep_assistant_offline(monkeypatch, tmp_path) -
     assert not any("error" in payload for payload in payloads)
     assert payloads[-1]["kind"] == "final"
     assert payloads[-1]["content"] == "Deep assistant is ready."
-
-
-def test_mindmap_prompt_files_load_from_packaged_module() -> None:
-    """
-    Verify packaged mindmap prompts resolve through the shipped module path.
-
-    Why this test exists:
-    - the graph steps load prompt markdown dynamically from the package name
-    - a stale package reference breaks the agent at runtime even when imports succeed
-
-    How to use it:
-    - run via `make test` from the `fred-agents` project
-
-    Example:
-    - `pytest tests/test_smoke.py -q`
-    """
-
-    for prompt_name in (
-        "extract_mindmap.md",
-        "refine_mindmap.md",
-        "render_response.md",
-    ):
-        prompt = load_agent_prompt_markdown(
-            package="fred_agents.mindmap",
-            file_name=prompt_name,
-        )
-        assert prompt.strip()
-
-
-def test_non_public_agent_is_hidden_unless_explicitly_requested(monkeypatch, tmp_path):
-    """The shipped self-test template stays out of the default public catalog."""
-    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
-    app = _build_offline_agents_app(
-        monkeypatch, tmp_path, StaticChatModelFactory(model)
-    )
-
-    with TestClient(app) as client:
-        default_ids = {
-            t["template_agent_id"]
-            for t in client.get("/fred/agents/v2/agents/templates").json()
-        }
-        assert "fred.github.self_test" not in default_ids
-
-        all_ids = {
-            t["template_agent_id"]
-            for t in client.get(
-                "/fred/agents/v2/agents/templates?include_non_public=true"
-            ).json()
-        }
-        assert "fred.github.self_test" in all_ids

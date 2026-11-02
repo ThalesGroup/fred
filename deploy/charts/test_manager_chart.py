@@ -271,11 +271,11 @@ class ManagerChartTests(unittest.TestCase):
             d
             for d in docs
             if d["kind"] == "Job"
-            and d["metadata"]["name"].startswith("control-plane-backend-migration")
+            and d["metadata"]["name"].startswith("control-plane-backend-schema-init")
         )
         container = job["spec"]["template"]["spec"]["containers"][0]
         self.assertEqual(
-            container["command"] + container["args"], ["control-plane", "migrate"]
+            container["command"] + container["args"], ["control-plane", "initialize-schema"]
         )
         configmap = next(
             d

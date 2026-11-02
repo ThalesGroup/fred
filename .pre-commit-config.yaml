@@ -57,12 +57,6 @@ repos:
         pass_filenames: false
         args: ["--project", "libs/capabilities/fred-capability-html-artifact", "--baseline-file", "libs/capabilities/fred-capability-html-artifact/.baseline/basedpyright-baseline.json"]
       - id: basedpyright
-        name: type-check-fred-capability-platform-ops
-        files: ^libs/capabilities/fred-capability-platform-ops/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
-        types: [file]
-        pass_filenames: false
-        args: ["--project", "libs/capabilities/fred-capability-platform-ops", "--baseline-file", "libs/capabilities/fred-capability-platform-ops/.baseline/basedpyright-baseline.json"]
-      - id: basedpyright
         name: type-check-fred-capability-ppt-filler
         files: ^libs/capabilities/fred-capability-ppt-filler/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
         types: [file]

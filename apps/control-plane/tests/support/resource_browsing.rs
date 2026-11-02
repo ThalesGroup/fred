@@ -89,14 +89,12 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         expected.push(d.id);
     }
 
-    let observed = Authorization::new(e.pool.clone());
     let app = control_plane::api::routes(control_plane::api::AppState {
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
         pool: e.pool.clone(),
-        authorization: observed,
         directory: None,
         content: None,
         processing: None,
@@ -172,7 +170,7 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
         .unwrap();
     assert_eq!(get(&app, &reader, &docs).await.0, 403);
     assert_eq!(get(&app, &reader, &format!("{base}/entries")).await.0, 403);
-    let other = crate::support::member_organization(&e.pool, &e.authorization, "Other", "outsider")
+    let other = crate::support::member_organization(&e.pool, "Other", "outsider")
         .await
         .unwrap();
     assert_eq!(
@@ -237,18 +235,16 @@ async fn folder_creation_governance_contract_and_request_budget() {
         .await
         .unwrap()
         .0;
-    let other = crate::support::member_organization(&e.pool, &e.authorization, "Other", "outsider")
+    let other = crate::support::member_organization(&e.pool, "Other", "outsider")
         .await
         .unwrap();
 
-    let observed = Authorization::new(e.pool.clone());
     let app = control_plane::api::routes(control_plane::api::AppState {
         agent_catalog: Default::default(),
         onboarding: Default::default(),
         lifecycle: Default::default(),
         auth: std::sync::Arc::new(identity.auth().await),
         pool: e.pool.clone(),
-        authorization: observed,
         directory: None,
         content: None,
         processing: None,
@@ -420,7 +416,7 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
     let app = content_app(&e, &identity).await;
     for name in ["".into(), "  ".into(), "a\nb".into(), "é".repeat(181)] {
         assert!(matches!(
-            crate::support::member_organization(&e.pool, &e.authorization, &name, "bob").await,
+            crate::support::member_organization(&e.pool, &name, "bob").await,
             Err((422, _))
         ));
         for (kind, parent) in [("team", org.id), ("project", team.id)] {
@@ -440,9 +436,14 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
             );
         }
     }
-    assert!(e.authorization.roles_of("bob").await.unwrap().is_empty());
+    assert!(
+        control_plane::authorization::roles_of(&e.pool, "bob")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let name = format!(" /{} ", "é".repeat(177));
-    let other = crate::support::member_organization(&e.pool, &e.authorization, &name, "bob")
+    let other = crate::support::member_organization(&e.pool, &name, "bob")
         .await
         .unwrap();
     // Inner spaces and slashes are kept; surrounding whitespace is not.

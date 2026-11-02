@@ -17,19 +17,16 @@
 //! transaction-scoped advisory lock per organization: no concurrent mutation can
 //! interleave between check and write. Placement and direct grants commit atomically in PostgreSQL.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::Duration,
-};
+use std::time::Duration;
 
 use sqlx::{PgConnection, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    authorization::{self, Authorization},
-    bootstrap, db,
+    authorization, bootstrap, db,
     domain::{self, Folder, Permission, Role, Space, SpaceKind, SpaceRow},
     error::{AppError, AppResult},
+    roles::PlatformPermission,
     roles::SpacePermission,
 };
 
@@ -63,99 +60,9 @@ const CHILDREN_FIRST: &str = "remove dependent child roles first";
 const ADMIN_NOT_FOUND: &str = "organization admin account was not found";
 const OWNER_NOT_FOUND: &str = "organization owner account was not found";
 
-async fn require(
-    authorization: &Authorization,
-    user: &str,
-    permission: Permission,
-    space: Uuid,
-) -> AppResult<()> {
-    if authorization.check(user, permission, space).await? {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden)
-    }
-}
-
 /// The space row only: retirement is reported after authorization, never before.
 pub async fn load(pool: &PgPool, id: Uuid) -> AppResult<Space> {
     Ok(db::space(pool, id).await?.into())
-}
-
-/// The business authorization of every route: a missing space, or one outside the
-/// caller's organization, is 404; then a retired space is 409; then a missing
-/// permission is 403. Full rule: 03-security.md.
-pub async fn authorize(
-    pool: &PgPool,
-    authorization: &Authorization,
-    caller: &str,
-    id: Uuid,
-    permission: Permission,
-) -> AppResult<Space> {
-    let space = load(pool, id).await?;
-    in_context(in_organization(pool, caller, space.organization).await?)?;
-    crate::lifecycle::store::require_active(pool, id).await?;
-    require_personal_access(pool, caller, &space).await?;
-    require(authorization, caller, permission, id).await?;
-    Ok(space)
-}
-
-/// The same rule on the connection that already holds the organization lock.
-pub(crate) async fn authorize_locked(
-    conn: &mut PgConnection,
-    caller: &str,
-    id: Uuid,
-    permission: Permission,
-) -> AppResult<Space> {
-    let space: Space = db::space(&mut *conn, id).await?.into();
-    in_context(in_organization(&mut *conn, caller, space.organization).await?)?;
-    crate::lifecycle::store::require_active(&mut *conn, id).await?;
-    require_personal_access(&mut *conn, caller, &space).await?;
-    if !authorization::check_space(&mut *conn, caller, permission.into(), id).await? {
-        return Err(AppError::Forbidden);
-    }
-    Ok(space)
-}
-
-/// Any current business role on an active collective space admits its holder to
-/// their personal space. Technical administration alone grants no business access.
-pub async fn can_open_personal<'e>(
-    ex: impl sqlx::PgExecutor<'e>,
-    user: &str,
-    organization: Uuid,
-) -> AppResult<bool> {
-    let eligible: bool = sqlx::query_scalar("select exists(select 1 from space_role_grant r join space s on s.id=r.space_id where r.subject=$1 and r.role in ('owner','member','editor','analyst') and s.organization_id=$2 and s.kind <> 'personal' and s.deletion_id is null)").bind(user).bind(organization).fetch_one(ex).await?;
-    Ok(eligible)
-}
-
-async fn require_personal_access<'e>(
-    ex: impl sqlx::PgExecutor<'e>,
-    user: &str,
-    space: &Space,
-) -> AppResult<()> {
-    if space.kind == SpaceKind::Personal && !can_open_personal(ex, user, space.organization).await?
-    {
-        return Err(AppError::Forbidden);
-    }
-    Ok(())
-}
-
-/// Outside the caller's organization, a space does not exist for them.
-fn in_context(inside: bool) -> AppResult<()> {
-    if inside {
-        Ok(())
-    } else {
-        Err(AppError::NotFound)
-    }
-}
-
-/// I23: a person belongs to every organization where they hold a direct role, governance
-/// and roles on retired spaces included. Context is independent of the requested permission.
-pub async fn in_organization<'e>(
-    ex: impl sqlx::PgExecutor<'e>,
-    user: &str,
-    target: Uuid,
-) -> AppResult<bool> {
-    Ok(sqlx::query_scalar("select exists(select 1 from space s join space_role_grant r on r.space_id=s.id where r.subject=$1 and s.organization_id=$2)").bind(user).bind(target).fetch_one(ex).await?)
 }
 
 pub async fn require_context<'e>(
@@ -163,7 +70,7 @@ pub async fn require_context<'e>(
     user: &str,
     target: Uuid,
 ) -> AppResult<()> {
-    if in_organization(ex, user, target).await? {
+    if authorization::in_organization(ex, user, target).await? {
         Ok(())
     } else {
         Err(AppError::Forbidden)
@@ -182,22 +89,8 @@ pub async fn scope(
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
         .await?;
-    let space = authorize_locked(&mut tx, user, space_id, Permission::Read).await?;
-    let rows: Vec<(Uuid, SpaceKind, String)> = sqlx::query_as("select s.id,s.kind,r.role from space s join space_role_grant r on r.space_id=s.id where s.id=any($1) and s.deletion_id is null and r.subject=$2")
-        .bind(&space.path).bind(user).fetch_all(&mut *tx).await?;
-    let result = space
-        .path
-        .iter()
-        .copied()
-        .filter(|id| {
-            rows.iter().any(|(candidate, kind, role)| {
-                candidate == id
-                    && levels.is_none_or(|levels| levels.contains(kind))
-                    && Role::parse(role)
-                        .is_some_and(|role| authorization::grants(role, SpacePermission::Read))
-            })
-        })
-        .collect();
+    let space = authorization::authorize(&mut *tx, user, space_id, Permission::Read).await?;
+    let result = authorization::readable_path(&mut *tx, user, &space.path, levels).await?;
     tx.commit().await?;
     Ok(result)
 }
@@ -209,40 +102,13 @@ pub struct Membership {
 }
 
 /// Display active spaces with direct roles; access checks remain separate.
-pub async fn memberships(
-    pool: &PgPool,
-    authorization: &Authorization,
-    user: &str,
-) -> AppResult<Vec<Membership>> {
-    let direct = authorization.roles_of(user).await?;
-    let ids: Vec<Uuid> = direct.iter().map(|(id, _)| *id).collect();
-    let mut rows: BTreeMap<Uuid, SpaceRow> = db::active_spaces(pool, &ids)
+pub async fn memberships(pool: &PgPool, user: &str) -> AppResult<Vec<Membership>> {
+    let mut out: Vec<Membership> = authorization::memberships(pool, user)
         .await?
         .into_iter()
-        .map(|r| (r.id, r))
-        .collect();
-    let personal_organizations: BTreeSet<_> = direct
-        .iter()
-        .filter(|(_, role)| *role == Role::Owner || role.grants_content())
-        .filter_map(|(id, _)| rows.get(id))
-        .filter(|row| row.kind != SpaceKind::Personal)
-        .map(|row| row.organization_id)
-        .collect();
-    rows.retain(|_, row| {
-        row.kind != SpaceKind::Personal || personal_organizations.contains(&row.organization_id)
-    });
-    let mut out: Vec<Membership> = rows
-        .into_values()
-        .map(|row| {
-            let own: BTreeSet<Role> = direct
-                .iter()
-                .filter(|(s, _)| *s == row.id)
-                .map(|(_, r)| *r)
-                .collect();
-            Membership {
-                roles: own.into_iter().collect(),
-                space: row.into(),
-            }
+        .map(|(row, roles)| Membership {
+            space: row.into(),
+            roles,
         })
         .collect();
     out.sort_by(|a, b| a.space.path.cmp(&b.space.path));
@@ -297,45 +163,47 @@ async fn may_change(
     caller: &str,
     space: &Space,
     role: Role,
+    granting: bool,
 ) -> AppResult<()> {
-    let allowed = match (role, space.kind) {
-        (Role::OrganizationAdmin, SpaceKind::Organization) => {
-            authorization::platform_roles(&mut *conn, caller)
-                .await?
-                .contains(&crate::roles::PlatformRole::PlatformAdmin)
-        }
-        (Role::OrganizationAdmin, _) => {
+    let facts = authorization::load_facts(&mut *conn, caller, space.id).await?;
+    if role == Role::OrganizationAdmin && space.kind != SpaceKind::Personal {
+        facts.require_active()?;
+        if space.kind != SpaceKind::Organization {
             return Err(AppError::Conflict(ADMIN_ON_ORGANIZATIONS.into()));
         }
-        (Role::Owner, SpaceKind::Organization) => {
-            authorization::check_space(&mut *conn, caller, SpacePermission::Manage, space.id)
-                .await?
-                || authorization::check_space(
-                    &mut *conn,
-                    caller,
-                    SpacePermission::AdministerOrganization,
-                    space.id,
-                )
-                .await?
+        return authorization::require_platform(conn, caller, PlatformPermission::ManagePlatform)
+            .await;
+    }
+    let decision = authorization::decide(&facts, SpacePermission::Manage);
+    if space.kind == SpaceKind::Personal && granting {
+        return match decision {
+            Ok(()) | Err(AppError::Forbidden) => Err(AppError::Conflict(PERSONAL_FIXED.into())),
+            Err(error) => Err(error),
+        };
+    }
+    match decision {
+        Err(AppError::Forbidden) if space.kind == SpaceKind::Personal => {
+            authorization::authorize_organization(
+                conn,
+                caller,
+                space.organization,
+                Permission::Manage,
+            )
+            .await?;
+            Ok(())
         }
-        _ => {
-            authorization::check_space(&mut *conn, caller, SpacePermission::Manage, space.id)
-                .await?
-        }
-    };
-    if allowed {
-        Ok(())
-    } else {
         Err(AppError::Forbidden)
+            if role == Role::Owner && space.kind == SpaceKind::Organization =>
+        {
+            authorization::decide(&facts, SpacePermission::AdministerOrganization)
+        }
+        decision => decision,
     }
 }
 
 /// Role mutations serialize with import and organization creation across organizations.
 /// Lock order is always platform, then organization.
-pub(crate) async fn lock_for(
-    pool: &PgPool,
-    space: &Space,
-) -> AppResult<Transaction<'static, Postgres>> {
+async fn lock_for(pool: &PgPool, space: &Space) -> AppResult<Transaction<'static, Postgres>> {
     let mut tx = bootstrap::locked(pool).await?;
     lock_organization(&mut tx, space).await?;
     Ok(tx)
@@ -421,8 +289,8 @@ async fn resolve_account(
 }
 
 /// An active or retired organization row; any other space id does not exist here.
-pub async fn load_organization(pool: &PgPool, id: Uuid) -> AppResult<Space> {
-    let space = load(pool, id).await?;
+pub async fn load_organization<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> AppResult<Space> {
+    let space = Space::from(db::space(ex, id).await?);
     if space.kind != SpaceKind::Organization {
         return Err(AppError::NotFound);
     }
@@ -446,14 +314,13 @@ pub struct OrganizationChange<'a> {
 /// HTTP governance creates only the two explicitly selected roles, never content access.
 pub async fn create_managed_organization(
     pool: &PgPool,
-    authorization: &Authorization,
     directory: &crate::users::Directory<'_>,
     caller: &str,
     name: &str,
     admin_username: &str,
     owner_username: &str,
 ) -> AppResult<Space> {
-    crate::platform::require_admin(authorization, caller).await?;
+    authorization::require_platform(pool, caller, PlatformPermission::ManagePlatform).await?;
     let name = &validate_space_name(name)?;
     for username in [admin_username, owner_username] {
         validate_username(username)?;
@@ -491,7 +358,7 @@ pub async fn create_managed_organization(
     if db::organization_named(&mut *tx, name).await?.is_some() {
         return Err(AppError::Conflict(SIBLING_NAME.into()));
     }
-    crate::platform::require_admin_locked(&mut tx, caller).await?;
+    authorization::require_platform(&mut *tx, caller, PlatformPermission::ManagePlatform).await?;
     persist(tx, &org, &grants, Some(caller)).await?;
     Ok(org)
 }
@@ -501,13 +368,12 @@ pub async fn create_managed_organization(
 /// the renamed row commit together in the same SQL transaction.
 pub async fn update_managed_organization(
     pool: &PgPool,
-    authorization: &Authorization,
     directory: &crate::users::Directory<'_>,
     caller: &str,
     id: Uuid,
     change: OrganizationChange<'_>,
 ) -> AppResult<OrganizationGovernance> {
-    crate::platform::require_admin(authorization, caller).await?;
+    authorization::require_platform(pool, caller, PlatformPermission::ManagePlatform).await?;
     let name = change.name.map(validate_space_name).transpose()?;
     if name.is_none() && change.admin_username.is_none() && change.owner_username.is_none() {
         return Err(AppError::Unprocessable(
@@ -530,7 +396,7 @@ pub async fn update_managed_organization(
         None => None,
     };
     let mut tx = lock_for(pool, &load_organization(pool, id).await?).await?;
-    crate::platform::require_admin_locked(&mut tx, caller).await?;
+    authorization::require_platform(&mut *tx, caller, PlatformPermission::ManagePlatform).await?;
     // Re-read under the lock: a concurrent rename may have committed meanwhile.
     let mut organization: Space = db::space(&mut *tx, id).await?.into();
     crate::lifecycle::store::require_active(&mut *tx, id).await?;
@@ -615,9 +481,7 @@ pub async fn create_space(
     let name = validate_space_name(&name)?;
     let parent = load(pool, parent_id).await?;
     domain::check_parent(kind, Some(&parent))?;
-    let mut tx = pool.begin().await?;
-    lock_organization(&mut tx, &parent).await?;
-    authorize_locked(&mut tx, caller, parent.id, Permission::Manage).await?;
+    let (mut tx, parent) = authorized_mutation(pool, caller, parent.id, Permission::Manage).await?;
     if !holds_parent_content(&mut tx, owner, parent.id).await? {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
@@ -658,24 +522,16 @@ pub async fn create_personal_space(
     caller: &str,
     organization_id: Uuid,
 ) -> AppResult<(Space, bool)> {
-    let org = load(pool, organization_id).await?;
-    if org.kind != SpaceKind::Organization {
-        return Err(AppError::BadRequest(
-            "a personal space must belong to an organization".into(),
-        ));
-    }
-    let mut tx = pool.begin().await?;
-    lock_organization(&mut tx, &org).await?;
-    in_context(in_organization(&mut *tx, caller, org.id).await?)?;
-    crate::lifecycle::store::require_active(&mut *tx, org.id).await?;
-    if !can_open_personal(&mut *tx, caller, org.id).await? {
-        return Err(AppError::Forbidden);
-    }
+    let (mut tx, org) = authorized_mutation(
+        pool,
+        caller,
+        MutationTarget::Organization(organization_id),
+        SpacePermission::CreatePersonalSpace,
+    )
+    .await?;
     if let Some(row) = db::personal_space(&mut *tx, org.id, caller).await? {
-        if !authorization::check_space(&mut *tx, caller, SpacePermission::Read, row.id).await? {
-            return Err(AppError::Forbidden);
-        }
-        return Ok((Space::from(row), false));
+        let space = authorization::authorize(&mut *tx, caller, row.id, Permission::Read).await?;
+        return Ok((space, false));
     }
     let id = Uuid::new_v4();
     let space = Space::from(SpaceRow {
@@ -716,16 +572,8 @@ pub async fn grant(
         return Err(AppError::Unprocessable(INVALID_SUBJECT.into()));
     }
     let space = load(pool, space_id).await?;
-    if space.kind == SpaceKind::Personal {
-        return Err(AppError::Conflict(PERSONAL_FIXED.into()));
-    }
     let mut tx = lock_for(pool, &space).await?;
-    if role != Role::OrganizationAdmin {
-        require_context(&mut *tx, caller, space.organization).await?;
-    }
-    may_change(&mut tx, caller, &space, role).await?;
-    // Retirement is reported only once the caller is authorized.
-    crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
+    may_change(&mut tx, caller, &space, role, true).await?;
     if !directory.exists(target).await? {
         return Err(AppError::Unprocessable(UNKNOWN_SUBJECT.into()));
     }
@@ -766,24 +614,7 @@ pub async fn revoke(
 ) -> AppResult<()> {
     let space = load(pool, space_id).await?;
     let mut tx = lock_for(pool, &space).await?;
-    if role != Role::OrganizationAdmin {
-        require_context(&mut *tx, caller, space.organization).await?;
-    }
-    if space.kind == SpaceKind::Personal {
-        if !authorization::check_space(
-            &mut *tx,
-            caller,
-            SpacePermission::Manage,
-            space.organization,
-        )
-        .await?
-        {
-            return Err(AppError::Forbidden);
-        }
-    } else {
-        may_change(&mut tx, caller, &space, role).await?;
-    }
-    crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
+    may_change(&mut tx, caller, &space, role, false).await?;
     let held = authorization::roles_of(&mut *tx, target).await?;
     let on_space: Vec<Role> = held
         .iter()
@@ -838,32 +669,43 @@ pub async fn revoke(
     Ok(())
 }
 
-/// Authorize a local SQL mutation or external dispatch while retaining the organization
-/// lock. The caller commits its SQL changes before releasing this transaction.
-pub async fn authorized_write(
-    pool: &PgPool,
-    caller: &str,
-    space_id: Uuid,
-) -> AppResult<Transaction<'static, Postgres>> {
-    authorized_mutation(pool, caller, space_id, Permission::Write).await
+/// Organization routes reject another space kind before deciding access.
+pub enum MutationTarget {
+    Space(Uuid),
+    Organization(Uuid),
 }
 
-/// The same bounded organization lock for a mutation that `permission` authorizes,
-/// such as a reader's conversation attachment.
-pub(crate) async fn authorized_mutation(
-    pool: &PgPool,
-    caller: &str,
-    space_id: Uuid,
-    permission: Permission,
-) -> AppResult<Transaction<'static, Postgres>> {
-    let mut tx = mutation_transaction(pool, space_id).await?;
-    authorize_locked(&mut tx, caller, space_id, permission).await?;
-    Ok(tx)
+impl From<Uuid> for MutationTarget {
+    fn from(id: Uuid) -> Self {
+        Self::Space(id)
+    }
 }
 
-/// Shared cross-replica mutation boundary. A domain using this directly must
-/// authorize on this connection after the lock, before reading private content.
-pub(crate) async fn mutation_transaction(
+/// Acquire the bounded organization lock, then decide against current facts.
+pub async fn authorized_mutation(
+    pool: &PgPool,
+    caller: &str,
+    target: impl Into<MutationTarget>,
+    permission: impl Into<SpacePermission>,
+) -> AppResult<(Transaction<'static, Postgres>, Space)> {
+    let target = target.into();
+    let id = match target {
+        MutationTarget::Space(id) | MutationTarget::Organization(id) => id,
+    };
+    let mut tx = mutation_transaction(pool, id).await?;
+    let space = match target {
+        MutationTarget::Space(_) => {
+            authorization::authorize(&mut *tx, caller, id, permission).await?
+        }
+        MutationTarget::Organization(_) => {
+            authorization::authorize_organization(&mut *tx, caller, id, permission).await?
+        }
+    };
+    Ok((tx, space))
+}
+
+/// Retry without retaining a SQL connection while another mutation owns the lock.
+async fn mutation_transaction(
     pool: &PgPool,
     space_id: Uuid,
 ) -> AppResult<Transaction<'static, Postgres>> {
@@ -915,7 +757,7 @@ pub async fn create_folder(
     name: String,
 ) -> AppResult<Folder> {
     let name = folder_name(&name)?;
-    let mut tx = authorized_write(pool, caller, space_id).await?;
+    let (mut tx, _) = authorized_mutation(pool, caller, space_id, Permission::Write).await?;
     let parent = match parent_id {
         Some(id) => Some(db::folder(&mut *tx, id).await?),
         None => None,

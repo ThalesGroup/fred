@@ -28,13 +28,14 @@ The hook does not infer resources from a component-name prefix. The worker uses 
 same rendered configuration as the permission setup. The local profile selects
 `document-vectors`, separately from Swift's retrieval index.
 
-## SQL migrations and recovery
+## Schema initialization and recovery
 
-The pre-install/pre-upgrade Job invokes `control-plane migrate`, applying the
-embedded, numbered SQLx migration chain. API startup checks versions and checksums;
-it never modifies the schema. Applied migrations are immutable. See the
+Weaver Control Plane installs its complete schema on a fresh database. The
+pre-install/pre-upgrade initialization Job is repeatable when the schema matches;
+it refuses an incompatible database without transforming or resetting data.
+API startup verifies the schema and never modifies it. See the
 [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue) and
-[SQLx procedure](A3-manager-operations.md#sqlx-schema-evolution).
+[initialization procedure](A3-manager-operations.md#sqlx-schema-initialization).
 
 SQL and its matching object namespace form one backup unit. Restore suspends
 uploads and cleanup until both are consistent. Application deployment does not

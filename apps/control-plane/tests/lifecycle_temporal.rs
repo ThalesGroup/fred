@@ -73,7 +73,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     let host = std::env::var("CONTROL_PLANE_IT_TEMPORAL").expect("make test-lifecycle-temporal");
     let e = environment::env().await;
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
-    let org = crate::support::member_organization(&e.pool, &e.authorization, "TSN", "alice")
+    let org = crate::support::member_organization(&e.pool, "TSN", "alice")
         .await
         .unwrap();
     let team = spaces::create_space(
@@ -108,7 +108,6 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         agent_catalog: Default::default(),
         auth: Arc::new(identity.auth().await),
         pool: e.pool.clone(),
-        authorization: e.authorization.clone(),
         directory: None,
         content: None,
         processing: None,
@@ -154,7 +153,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     wait_for(&e.pool, operation, false, &mut first).await;
     first.kill().await.unwrap();
     first.wait().await.unwrap();
-    let receipt = lifecycle::store::status(&e.pool, &e.authorization, "root", operation)
+    let receipt = lifecycle::store::status(&e.pool, "root", operation)
         .await
         .unwrap();
     assert_ne!(receipt.status, Status::Completed);
@@ -174,7 +173,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .await
         .unwrap();
     wait_for(&e.pool, operation, true, &mut second).await;
-    let done = lifecycle::store::status(&e.pool, &e.authorization, "root", operation)
+    let done = lifecycle::store::status(&e.pool, "root", operation)
         .await
         .unwrap();
     assert_eq!(done.folders_deleted, 1001);
@@ -211,10 +210,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     )
     .await
     .unwrap();
-    let waiting_receipt = lifecycle
-        .accept(&e.pool, &e.authorization, "root", waiting.id)
-        .await
-        .unwrap();
+    let waiting_receipt = lifecycle.accept(&e.pool, "root", waiting.id).await.unwrap();
     let mut held = e.pool.begin().await.unwrap();
     sqlx::query("select pg_advisory_xact_lock($1)")
         .bind(bootstrap::LOCK_KEY)
@@ -252,7 +248,7 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     }).await.expect("cancelled SQL must release its server-side wait");
     held.rollback().await.unwrap();
     assert_ne!(
-        lifecycle::store::status(&e.pool, &e.authorization, "root", waiting_receipt.id)
+        lifecycle::store::status(&e.pool, "root", waiting_receipt.id)
             .await
             .unwrap()
             .status,
@@ -273,16 +269,12 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     .unwrap();
     sqlx::raw_sql("create function fail_lifecycle_test() returns trigger language plpgsql as $$ begin raise exception 'private dependency detail'; end $$; create trigger fail_lifecycle_test before delete on space for each row execute function fail_lifecycle_test()")
         .execute(&e.pool).await.unwrap();
-    let failing_receipt = lifecycle
-        .accept(&e.pool, &e.authorization, "root", failing.id)
-        .await
-        .unwrap();
+    let failing_receipt = lifecycle.accept(&e.pool, "root", failing.id).await.unwrap();
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
-            let receipt =
-                lifecycle::store::status(&e.pool, &e.authorization, "root", failing_receipt.id)
-                    .await
-                    .unwrap();
+            let receipt = lifecycle::store::status(&e.pool, "root", failing_receipt.id)
+                .await
+                .unwrap();
             if receipt.status == Status::Retrying {
                 assert_eq!(
                     receipt.error_code.as_deref(),

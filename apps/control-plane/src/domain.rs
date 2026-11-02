@@ -154,6 +154,14 @@ pub enum Role {
 }
 
 impl Role {
+    pub const ALL: [Self; 5] = [
+        Self::Member,
+        Self::Editor,
+        Self::Owner,
+        Self::Analyst,
+        Self::OrganizationAdmin,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Role::Member => "member",

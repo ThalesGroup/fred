@@ -15,13 +15,13 @@ use uuid::Uuid;
 
 use crate::{
     api::AppState,
+    authorization,
     domain::{Role, SpaceKind},
     error::{AppError, AppResult, ErrorBody},
     extract::{ApiPath, ApiQuery},
     onboarding::AdmittedUser,
     processing::models::ProcessingStatus,
     roles::SpacePermission,
-    spaces,
 };
 use models::*;
 
@@ -56,7 +56,13 @@ async fn organization_supervision(
     ApiQuery(page): ApiQuery<Page>,
 ) -> AppResult<Json<OrganizationSupervision>> {
     let collection_started_at = Utc::now();
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(
+        &s.pool,
+        &user.uid,
+        organization_id,
+        SpacePermission::AdministerOrganization,
+    )
+    .await?;
     let snapshot = store::load(&s.pool, organization_id, None, page.after).await?;
     let active_teams = snapshot
         .scopes
@@ -103,7 +109,13 @@ async fn team_supervision(
     ApiPath((organization_id, team_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<Json<TeamSupervisionDetail>> {
     let collection_started_at = Utc::now();
-    authorize(&s, &user.uid, organization_id).await?;
+    authorization::authorize_organization(
+        &s.pool,
+        &user.uid,
+        organization_id,
+        SpacePermission::AdministerOrganization,
+    )
+    .await?;
     let snapshot = store::load(&s.pool, organization_id, Some(team_id), None).await?;
     let (_, mut teams) = collect(&s, snapshot).await?;
     let team = teams.pop().ok_or(AppError::NotFound)?;
@@ -113,32 +125,6 @@ async fn team_supervision(
         collection_finished_at: Utc::now(),
         team,
     }))
-}
-
-async fn authorize(s: &AppState, user: &str, id: Uuid) -> AppResult<()> {
-    let organization = spaces::load(&s.pool, id).await?;
-    if organization.kind != SpaceKind::Organization {
-        return Err(AppError::NotFound);
-    }
-    let inside = spaces::in_organization(&s.pool, user, id)
-        .await
-        .map_err(|error| match error {
-            AppError::Internal(_) => unavailable(),
-            other => other,
-        })?;
-    if !inside {
-        return Err(AppError::NotFound);
-    }
-    crate::lifecycle::store::require_active(&s.pool, id).await?;
-    if !s
-        .authorization
-        .check_space(user, SpacePermission::AdministerOrganization, id)
-        .await
-        .map_err(|_| unavailable())?
-    {
-        return Err(AppError::Forbidden);
-    }
-    Ok(())
 }
 
 fn unavailable() -> AppError {
@@ -288,9 +274,7 @@ async fn collect(
         .filter(|s| s.active)
         .map(|s| s.id)
         .collect();
-    let grants = s
-        .authorization
-        .grants_on(&active)
+    let grants = authorization::grants_on(&s.pool, &active)
         .await
         .map_err(|_| unavailable())?;
     for (id, grants) in grants {

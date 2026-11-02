@@ -114,9 +114,12 @@ Keycloak subjects in the configured realm, which import also verifies. Revocatio
 deleted identity so stale grants can be removed. The check proves existence at
 lookup time; external IAM deletion is not transactional with PostgreSQL.
 
-Personal-space eligibility is checked against direct organization content
-membership. Provisioning publishes content grants before eligibility across batches;
-reuse of a personal space writes no new role. See the
+Personal-space eligibility and the published-prompt marketplace share one
+organization-participant predicate: a direct business role on an active collective
+space, with active organization and parent. The Rust matrix supplies the role sets
+bound by SQL lists. Invitations supply no rights and have no persisted tables.
+Provisioning publishes content grants before eligibility across batches; reuse of
+a personal space writes no new role. See the
 [role-attribution rules](A11-roles.md#attribution-accumulation-and-removal).
 
 Direct role grants and immutable hierarchy live in PostgreSQL. The typed Rust
@@ -144,12 +147,20 @@ A permission probe is an observation, not a lease.
 ## Business authorization answer
 
 Every business route on a space, including folder, document, processing, scope,
-team/project and personal-space routes, answers one way (`spaces::authorize`): a
+team/project and personal-space routes, answers one way (`authorization::authorize`): a
 missing space, or one outside the caller's organization, returns 404; then a retired
 space returns 409 `space_pending_deletion`; then a missing permission returns 403.
-Writes evaluate the same rule on the connection that holds the organization lock.
-Role grants and revocations keep their own role rules and report retirement only
-after them. Authorization probes answer `allowed: false` for each of these refusals.
+`load_facts` reads placement, activity, organization context, participation and
+direct roles in one SQL statement; `decide` is a pure Rust decision. Reads and writes
+use the same executor-generic `authorize` function. Organization-only operations use
+`authorize_organization`, which rejects another space kind with 404 before any access
+decision. `spaces::authorized_mutation` acquires the organization lock and returns
+both the transaction and the authorized space; its organization target uses
+`authorize_organization`. The lock stays held through commit. A pool authorization
+before this boundary is retained when it protects external discovery before the lock.
+Role grants and revocations keep their governance rules and platform-then-organization
+lock order, but now apply the common context, retirement, permission precedence.
+Organization-admin assignment still requires explicit platform authority. Authorization probes answer `allowed: false` for each of these refusals.
 
 ## Original-document boundary
 

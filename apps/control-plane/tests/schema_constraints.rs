@@ -6,10 +6,6 @@ use sqlx::{AssertSqlSafe, PgPool};
 use uuid::Uuid;
 
 async fn database() -> PgPool {
-    database_at(None).await
-}
-
-async fn database_at(version: Option<i64>) -> PgPool {
     let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES")
         .expect("needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES");
     let name = format!("t_{}", Uuid::new_v4().simple());
@@ -23,12 +19,7 @@ async fn database_at(version: Option<i64>) -> PgPool {
     let pool = PgPool::connect(&format!("{postgres}/{name}"))
         .await
         .unwrap();
-    let migrator = sqlx::migrate!();
-    if let Some(version) = version {
-        migrator.run_to(version, &pool).await.unwrap();
-    } else {
-        migrator.run(&pool).await.unwrap();
-    }
+    sqlx::migrate!().run(&pool).await.unwrap();
     pool
 }
 
@@ -454,82 +445,62 @@ async fn publication_allows_atomic_purge_but_rejects_dangling_references() {
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
-async fn agent_display_name_migration_preserves_identities_and_refuses_existing_duplicates() {
-    for duplicate in [false, true] {
-        let pool = database_at(Some(14)).await;
-        let org = organization(&pool, "Org").await;
-        let first = Uuid::new_v4();
-        let second = Uuid::new_v4();
-        sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values
-            ($1,$3,$1,'native','assistant','Simon','{}','alice','simon-reference'),
-            ($2,$3,$2,'native','assistant',$4,'{}','alice','eva-reference')")
-            .bind(first).bind(second).bind(org).bind(if duplicate { "simon" } else { "Eva" })
-            .execute(&pool).await.unwrap();
-        let before: Vec<(Uuid, String, String)> = sqlx::query_as("select agent_instance_id,display_name,logical_name from agent_instance order by agent_instance_id")
-            .fetch_all(&pool).await.unwrap();
-        let mut connection = pool.acquire().await.unwrap();
-        let result = sqlx::migrate!().run(&mut *connection).await;
-        // A failed SQLx migration retains its session lock; emulate the CLI's exit
-        // instead of returning that connection to the pool before the retry.
-        connection.close().await.unwrap();
-        if duplicate {
-            match result.unwrap_err() {
-                sqlx::migrate::MigrateError::ExecuteMigration(error, 15) => {
-                    violation(error, "23505")
-                }
-                other => panic!("unexpected migration failure: {other}"),
-            }
-        } else {
-            result.unwrap();
-        }
-        let after: Vec<(Uuid, String, String)> = sqlx::query_as("select agent_instance_id,display_name,logical_name from agent_instance order by agent_instance_id")
-            .fetch_all(&pool).await.unwrap();
-        assert_eq!(after, before);
-        if duplicate {
-            // An explicit rename resolves the data conflict; retrying needs no history rewrite.
-            sqlx::query("update agent_instance set display_name='Eva',updated_by='alice' where agent_instance_id=$1")
-                .bind(second).execute(&pool).await.unwrap();
-            sqlx::migrate!().run(&pool).await.unwrap();
-        }
-        violation(sqlx::query("update agent_instance set display_name='SIMON',updated_by='alice' where agent_instance_id=$1")
-            .bind(second).execute(&pool).await.unwrap_err(), "23505");
-    }
+async fn agent_display_names_are_unique_from_creation_and_on_rename() {
+    let pool = database().await;
+    let org = organization(&pool, "Org").await;
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values
+        ($1,$3,$1,'native','assistant','Simon','{}','alice','simon-reference'),
+        ($2,$3,$2,'native','assistant','Eva','{}','alice','eva-reference')")
+        .bind(first).bind(second).bind(org).execute(&pool).await.unwrap();
+    violation(sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values
+        ($1,$2,$1,'native','assistant','simon','{}','alice','another-reference')")
+        .bind(Uuid::new_v4()).bind(org).execute(&pool).await.unwrap_err(), "23505");
+    violation(sqlx::query("update agent_instance set display_name='SIMON',updated_by='alice' where agent_instance_id=$1")
+        .bind(second).execute(&pool).await.unwrap_err(), "23505");
 }
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
-async fn publication_migration_backfills_identity_and_rejects_existing_mismatch() {
-    for mismatch in [false, true] {
-        let pool = database_at(Some(4)).await;
-        let org = organization(&pool, "Org").await;
-        let a = processing_document(&pool, org).await;
-        let b = processing_document(&pool, org).await;
-        sqlx::query("insert into generation(id,processing_id,stage,execution_id,activity_id,attempt,expires_at,prefix,cleanup_after)
-            values($1,$1,'indexing',$1,$1,1,now()+interval '1 hour',$1::text,now()+interval '2 hours')")
-            .bind(a).execute(&pool).await.unwrap();
-        sqlx::query("update document set published_generation=$1 where id=$2")
-            .bind(a)
-            .bind(if mismatch { b } else { a })
-            .execute(&pool)
-            .await
-            .unwrap();
-        let result = sqlx::migrate!().run(&pool).await;
-        if mismatch {
-            match result.unwrap_err() {
-                sqlx::migrate::MigrateError::ExecuteMigration(error, 5) => {
-                    violation(error, "23503")
-                }
-                other => panic!("unexpected migration failure: {other}"),
-            }
-        } else {
-            result.unwrap();
-            let document: Uuid =
-                sqlx::query_scalar("select document_id from generation where id=$1")
-                    .bind(a)
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap();
-            assert_eq!(document, a);
-        }
-    }
+async fn initialization_replays_without_data_changes_and_refuses_incompatible_history() {
+    let pool = database().await;
+    let org = organization(&pool, "Keep this organization").await;
+    let name: String = sqlx::query_scalar("select current_database()")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let url = format!(
+        "{}/{name}",
+        std::env::var("CONTROL_PLANE_IT_POSTGRES").unwrap()
+    );
+    let initialize = || {
+        std::process::Command::new(env!("CARGO_BIN_EXE_control-plane"))
+            .arg("initialize-schema")
+            .env("DATABASE_URL", &url)
+            .env("CONFIG_FILE", "/nonexistent/config")
+            .output()
+            .unwrap()
+    };
+    assert!(initialize().status.success());
+    control_plane::db::require_initialized(&pool).await.unwrap();
+    let versions: Vec<i64> = sqlx::query_scalar("select version from _sqlx_migrations")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(versions, vec![1]);
+
+    // Simulate a draft installation's obsolete history only in this disposable fixture.
+    sqlx::query("insert into _sqlx_migrations(version,description,success,checksum,execution_time) values(99,'obsolete draft',true,decode('00','hex'),0)")
+        .execute(&pool).await.unwrap();
+    let rejected = initialize();
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("requires a fresh database"));
+    assert!(control_plane::db::require_initialized(&pool).await.is_err());
+    let retained: String = sqlx::query_scalar("select name from space where id=$1")
+        .bind(org)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(retained, "Keep this organization");
 }

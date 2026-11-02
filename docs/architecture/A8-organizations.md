@@ -20,7 +20,7 @@ access in each according to the roles held there, never across them.
 | Personal space | A private workspace managed by one organization; a person may have one per organization. Attachment does not create it. |
 | Platform role | Authority to administer Fred independently of organization membership; no implicit access to business content. |
 
-`spaces::in_organization` answers whether a person holds any direct role on a space
+`authorization::in_organization` answers whether a person holds any direct role on a space
 of an organization, retired rows included. Every granted role counts, including
 governance-only roles; attachment itself grants no extra permission. Removing the
 last role in an organization removes attachment, subject to the existing
@@ -132,9 +132,9 @@ identity snapshot; the supervision module itself makes no writes.
 
 ### Authorization and disclosure boundary
 
-`supervision::authorize` loads an organization, resolves the caller's unique
-organization through `spaces::in_organization`, checks retirement, then asks
-the typed evaluator for `administer_organization` on that organization. The model grants this
+`authorization::load_facts` loads the organization, its activity and the caller's
+organization context and direct roles in one statement. Supervision checks the
+organization kind and calls `authorization::decide` for `administer_organization`. The model grants this
 permission only through `organization_admin`. No platform, owner or content role
 substitutes for it. A caller holding several roles is allowed when technical administration is
 among them; no content permission is additionally required.

@@ -12,12 +12,7 @@ fn immediate() -> Lifecycle {
 }
 async fn drain(e: &Env, id: Uuid) {
     for _ in 0..100 {
-        if store::status(&e.pool, &e.authorization, "root", id)
-            .await
-            .unwrap()
-            .status
-            == Status::Completed
-        {
+        if store::status(&e.pool, "root", id).await.unwrap().status == Status::Completed {
             return;
         }
         cleanup::batch(&e.pool, id).await.unwrap();
@@ -44,13 +39,11 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
     .unwrap();
     let l = immediate();
     assert!(matches!(
-        l.accept(&e.pool, &e.authorization, "alice", org.id).await,
+        l.accept(&e.pool, "alice", org.id).await,
         Err(AppError::Forbidden)
     ));
     assert!(matches!(
-        Lifecycle::default()
-            .accept(&e.pool, &e.authorization, "root", team.id)
-            .await,
+        Lifecycle::default().accept(&e.pool, "root", team.id).await,
         Err(AppError::Unavailable(_))
     ));
     let document = Document {
@@ -70,7 +63,7 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
         .await
         .unwrap();
     assert!(matches!(
-        l.accept(&e.pool, &e.authorization, "root", team.id).await,
+        l.accept(&e.pool, "root", team.id).await,
         Err(AppError::Conflict(_))
     ));
     let count: i64 = sqlx::query_scalar("select count(*) from deletion")
@@ -84,29 +77,20 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
         .execute(&e.pool)
         .await
         .unwrap();
-    let receipt = l
-        .accept(&e.pool, &e.authorization, "root", team.id)
-        .await
-        .unwrap();
+    let receipt = l.accept(&e.pool, "root", team.id).await.unwrap();
     assert_eq!(receipt.due_at, receipt.requested_at);
     assert_eq!(
         Lifecycle::default()
-            .accept(&e.pool, &e.authorization, "root", team.id)
+            .accept(&e.pool, "root", team.id)
             .await
             .unwrap()
             .id,
         receipt.id
     );
-    // Retirement is reported once the caller is authorized.
+    // In-context retirement is reported before the direct permission decision.
     assert!(matches!(
-        spaces::authorize(
-            &e.pool,
-            &e.authorization,
-            "alice",
-            project.id,
-            Permission::Read
-        )
-        .await,
+        control_plane::authorization::authorize(&e.pool, "alice", project.id, Permission::Read)
+            .await,
         Err(AppError::Problem {
             code: control_plane::lifecycle::store::PENDING_DELETION,
             ..
@@ -129,35 +113,31 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
         .await
         .is_err()
     );
+    assert!(l.accept(&e.pool, "root", org.id).await.is_err());
     assert!(
-        l.accept(&e.pool, &e.authorization, "root", org.id)
-            .await
-            .is_err()
-    );
-    assert!(
-        !spaces::memberships(&e.pool, &e.authorization, "alice")
+        !spaces::memberships(&e.pool, "alice")
             .await
             .unwrap()
             .iter()
             .any(|m| m.space.id == team.id || m.space.id == project.id)
     );
     drain(&e, receipt.id).await;
-    let done = l
-        .accept(&e.pool, &e.authorization, "root", team.id)
-        .await
-        .unwrap();
+    let done = l.accept(&e.pool, "root", team.id).await.unwrap();
     assert_eq!(done.status, Status::Completed);
     assert_eq!(done.spaces_deleted, 2);
     assert!(db::space(&e.pool, team.id).await.is_err());
     assert!(
-        e.authorization
-            .roles_of("alice")
+        control_plane::authorization::roles_of(&e.pool, "alice")
             .await
             .unwrap()
             .iter()
             .all(|(id, _)| *id == org.id)
     );
-    assert!(e.authorization.is_platform_admin("root").await.unwrap());
+    assert!(
+        control_plane::authorization::is_platform_admin(&e.pool, "root")
+            .await
+            .unwrap()
+    );
     let recreated = spaces::create_space(
         &e.pool,
         "alice",
@@ -190,14 +170,8 @@ async fn lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates() {
     .await
     .unwrap();
     let l = immediate();
-    let first = l
-        .accept(&e.pool, &e.authorization, "root", team.id)
-        .await
-        .unwrap();
-    let second = l
-        .accept(&e.pool, &e.authorization, "root", sibling.id)
-        .await
-        .unwrap();
+    let first = l.accept(&e.pool, "root", team.id).await.unwrap();
+    let second = l.accept(&e.pool, "root", sibling.id).await.unwrap();
     let doc = Document {
         retrievable: false,
         retrievable_pending: false,
@@ -216,9 +190,7 @@ async fn lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates() {
         .unwrap();
     assert_eq!(cleanup::candidates(&e.pool, 1).await.unwrap(), [first.id]);
     cleanup::batch(&e.pool, first.id).await.unwrap();
-    let blocked = store::status(&e.pool, &e.authorization, "root", first.id)
-        .await
-        .unwrap();
+    let blocked = store::status(&e.pool, "root", first.id).await.unwrap();
     assert_eq!(blocked.status, Status::Blocked);
     assert_eq!(blocked.error_code.as_deref(), Some("unsupported_documents"));
     assert_eq!(cleanup::candidates(&e.pool, 1).await.unwrap(), [second.id]);
