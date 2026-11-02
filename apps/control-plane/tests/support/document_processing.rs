@@ -733,10 +733,10 @@ async fn processing_existing_worker_journey_without_kf_http() {
             .append(true)
             .open(folder.join("worker.log"))
             .unwrap();
-        let mut child = tokio::process::Command::new("../knowledge-flow-backend/.venv/bin/python")
+        let mut child = tokio::process::Command::new("../knowledge-flow-worker/.venv/bin/python")
             .arg(std::fs::canonicalize("tests/support/processing_worker.py").unwrap())
             .arg(input)
-            .current_dir("../knowledge-flow-backend")
+            .current_dir("../knowledge-flow-worker")
             .stdout(log.try_clone().unwrap())
             .stderr(log)
             .kill_on_drop(true)

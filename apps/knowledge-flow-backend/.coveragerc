@@ -1,0 +1,3 @@
+[run]
+source = knowledge_flow_backend
+omit = tests/*

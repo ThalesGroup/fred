@@ -150,7 +150,7 @@ def extract(path: Path, engine: str, output: Path) -> None:
     """Exercise the installed Fred implementation and retain text or rendered slide sizes."""
     with tempfile.TemporaryDirectory() as work:
         if engine == "render":
-            from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_renderer import (
+            from knowledge_flow_worker.core.processors.input.pptx_markdown_processor.utils.pptx_slide_renderer import (
                 render_pdf_pages_to_png,
             )
             from PIL import Image
@@ -163,13 +163,13 @@ def extract(path: Path, engine: str, output: Path) -> None:
             result = {"images": sizes}
         else:
             if engine == "lite":
-                from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import (
+                from knowledge_flow_worker.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import (
                     LitePdfToMdProcessor,
                 )
 
                 processor = LitePdfToMdProcessor()
             else:
-                from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor import (
+                from knowledge_flow_worker.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor import (
                     LitePdfToMdExtractor,
                 )
 
@@ -279,10 +279,8 @@ def measure(folder: Path, engine: str, output: Path, jobs: int) -> None:
 
 def summarize(path: Path, output: Path) -> None:
     """Summarize measured runs and downstream chunk/citation examples."""
+    from fred_knowledge.text.semantic_splitter import SemanticSplitter
     from langchain_core.documents import Document
-    from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import (
-        SemanticSplitter,
-    )
 
     data = json.loads(path.read_text())
     files = {}

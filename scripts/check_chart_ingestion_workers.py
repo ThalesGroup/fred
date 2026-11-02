@@ -162,17 +162,29 @@ _SHARED_INGESTION_CONFIGURATION = {
 }
 
 
-def _shared_ingestion_configuration() -> dict:
-    return copy.deepcopy(_SHARED_INGESTION_CONFIGURATION)
+def _worker_configuration() -> dict:
+    return {
+        key: copy.deepcopy(value)
+        for key, value in _SHARED_INGESTION_CONFIGURATION.items()
+        if key != "published_artifacts"
+    }
+
+
+def _api_configuration() -> dict:
+    return {
+        key: copy.deepcopy(value)
+        for key, value in _SHARED_INGESTION_CONFIGURATION.items()
+        if key in {"published_artifacts", "storage"}
+    }
 
 
 FULL_DEPLOYMENT = {
     "applications": {
-        API_GROUP: {"configuration": _shared_ingestion_configuration()},
+        API_GROUP: {"configuration": _api_configuration()},
         "knowledge-flow-worker": {
             **_ENABLE,
             "configuration": {
-                **_shared_ingestion_configuration(),
+                **_worker_configuration(),
                 "scheduler": {
                     **_SHARED_INGESTION_CONFIGURATION["scheduler"],
                     "worker_roles": ["common"],
@@ -298,34 +310,33 @@ def _check_api_and_workers_agree(chart: Path) -> list[str]:
         return [f"whole-deployment render failed: {rendered.strip()}"]
 
     applications = {API_GROUP, *WORKER_GROUPS}
-    configs, _ = _rendered_configs(rendered, applications)
+    configs, images = _rendered_configs(rendered, applications)
     missing = applications - set(configs)
     if missing:
         return [f"applications missing from the render: {', '.join(sorted(missing))}"]
 
     errors = []
-    # What every application must agree on. An application left on the chart
-    # defaults may not carry the artifact settings, so report the divergence.
-    shared = {
-        ("scheduler", "temporal", "host"): FULL_DEPLOYMENT_OVERRIDES["host"],
-        ("scheduler", "temporal", "namespace"): FULL_DEPLOYMENT_OVERRIDES["namespace"],
-        ("scheduler", "temporal", "task_queue"): FULL_DEPLOYMENT_OVERRIDES[
-            "task_queue"
-        ],
-        ("manager_processing", "bucket"): FULL_DEPLOYMENT_OVERRIDES["bucket_name"],
-        ("published_artifacts", "bucket"): FULL_DEPLOYMENT_OVERRIDES["bucket_name"],
-        ("manager_processing", "vector_store", "index"): FULL_DEPLOYMENT_OVERRIDES[
-            "vector_index"
-        ],
-        ("storage", "vector_store", "index"): FULL_DEPLOYMENT_OVERRIDES["vector_index"],
-    }
-    for path, expected in shared.items():
-        actual = {app: _dig(configs[app], path) for app in sorted(applications)}
-        disagreeing = {app: value for app, value in actual.items() if value != expected}
-        if disagreeing:
-            errors.append(
-                f"{'.'.join(path)}: expected {expected!r} everywhere, got {disagreeing!r}"
-            )
+    for group in WORKER_GROUPS:
+        worker = configs[group]
+        for key in ("host", "namespace", "task_queue"):
+            if worker["scheduler"]["temporal"][key] != FULL_DEPLOYMENT_OVERRIDES[key]:
+                errors.append(f"{group}: Temporal {key} differs")
+        if (
+            worker["manager_processing"]["bucket"]
+            != configs[API_GROUP]["published_artifacts"]["bucket"]
+        ):
+            errors.append(f"{group}: published artifact bucket differs from API reader")
+        if (
+            worker["manager_processing"]["vector_store"]["index"]
+            != configs[API_GROUP]["storage"]["vector_store"]["index"]
+        ):
+            errors.append(f"{group}: vector index differs from API reader")
+        if worker["embedding_model"] != configs[API_GROUP]["embedding_model"]:
+            errors.append(f"{group}: embedding model differs from API query model")
+        if images[group] == images[API_GROUP]:
+            errors.append(f"{group}: worker and API must use distinct images")
+    if {"scheduler", "processing", "manager_processing"} & configs[API_GROUP].keys():
+        errors.append("API configuration contains worker-only settings")
 
     # Agreeing on the shared settings must not have flattened what each group is for.
     for group, role in WORKER_GROUPS.items():

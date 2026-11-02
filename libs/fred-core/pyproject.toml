@@ -51,8 +51,6 @@ dependencies = [
     "python-keycloak>=5.8.1",
     "minio>=7.2.20",
     "google-cloud-storage>=3.1.0",
-    # Patched embedded PyO3, quinn-proto and OpenTelemetry dependencies.
-    "temporalio>=1.30.0,<2.0.0",
     "asyncpg>=0.31.0",
     "aiosqlite>=0.22.1",
     "greenlet>=3.4.0",
@@ -76,6 +74,7 @@ include = ["fred_core*"]
 
 [dependency-groups]
 dev = [
+    "temporalio>=1.30.0,<2.0.0",
     "detect-secrets>=1.5.0",
     # Test-only: builds the fixture deck for the real-LibreOffice conversion test,
     # which skips itself (green, but inert) when the import is missing.
@@ -88,6 +87,7 @@ dev = [
 ]
 
 [project.optional-dependencies]
+temporal = ["temporalio>=1.30.0,<2.0.0"]
 # Preserve the optional MCP installation surface for wheel consumers.
 mcp = [
     "mcp>=2.3.0,<3",
@@ -101,6 +101,7 @@ vertexai = [
     "langchain-google-vertexai>=3.2.2",
 ]
 dev = [
+    "temporalio>=1.30.0,<2.0.0",
     "alembic>=1.18.4",
     "langchain-google-vertexai>=3.2.2",
     "bandit>=1.8.6",

@@ -34,7 +34,7 @@ def inventory() -> dict:
 
 def runtime_closure(packages: dict, extras: tuple[str, ...] = ()) -> set[str]:
     """Follow installed metadata's active dependency edges, including extra markers."""
-    pending = [("knowledge-flow-backend", extras)]
+    pending = [("knowledge-flow-worker", extras)]
     seen = set()
     reached = set()
     while pending:

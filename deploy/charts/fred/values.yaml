@@ -23,7 +23,7 @@ postgresBootstrap:
 #    1. Domain      : replace "your.host" with your actual hostname
 #    2. API Keys    : applications.*.dotenv.OPENAI_API_KEY (or AZURE_OPENAI_API_KEY)
 #    3. Auth        : applications.*.configuration.security.*.realm_url (Keycloak URL)
-#    4. Temporal    : applications.knowledge-flow-backend.configuration.scheduler.temporal.host
+#    4. Temporal    : applications.knowledge-flow-worker.configuration.scheduler.temporal.host
 #    5. Storage     : switch DuckDB stores to postgres/opensearch for production
 #
 #  DISABLE A COMPONENT  : applications.<name>.enabled: false
@@ -53,91 +53,91 @@ postgresBootstrap:
 
 x-fast-input-processors: &fast-input-processors
   - suffix: ".pdf"
-    class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
   - suffix: ".docx"
-    class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - suffix: ".doc"
-    class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
   - suffix: ".odt"
-    class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
   - suffix: ".pptx"
-    class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
   - suffix: ".ppt"
-    class_path: knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
   - suffix: ".csv"
-    class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+    class_path: knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
   - suffix: ".xlsx"
-    class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+    class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
   - suffix: ".xls"
-    class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+    class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
   - suffix: ".xlsm"
-    class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+    class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
   - suffix: ".txt"
-    class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
   - suffix: ".md"
-    class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
   - suffix: ".jsonl"
-    class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
   - suffix: ".png"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".jpg"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".jpeg"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".gif"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".bmp"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".svg"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".webp"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".ico"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
 
 x-rich-input-processors: &rich-input-processors
   - suffix: ".pdf"
-    class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
   - suffix: ".docx"
-    class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
   - suffix: ".doc"
-    class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
   - suffix: ".odt"
-    class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
   - suffix: ".pptx"
-    class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
   - suffix: ".ppt"
-    class_path: knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
   - suffix: ".csv"
-    class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+    class_path: knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
   - suffix: ".xlsx"
-    class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+    class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
   - suffix: ".xls"
-    class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+    class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
   - suffix: ".xlsm"
-    class_path: knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+    class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
   - suffix: ".txt"
-    class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
   - suffix: ".md"
-    class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
   - suffix: ".jsonl"
-    class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+    class_path: knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
   - suffix: ".png"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".jpg"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".jpeg"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".gif"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".bmp"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".svg"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".webp"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
   - suffix: ".ico"
-    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
 
 # ── Ingestion profiles ──────────────────────────────────────────────────────────────
 #   fast   : pypdfium2, no OCR                  — ideal for text PDFs, fastest
@@ -182,15 +182,13 @@ x-profile-medium: &profile-medium
     extractor: docling
     do_ocr: true
     # Sized against the extraction-medium pod: 2 threads x its 2 concurrent
-    # activities fills its 4 CPU without oversubscribing them. This anchor is also
-    # the API pod's medium profile, whose in-process extraction (library sync, the
-    # no-scheduler upload path) therefore gets 2 threads instead of the default 4.
+    # activities fills its 4 CPU without oversubscribing them.
     docling_num_threads: 2
   input_processors: *rich-input-processors
 
-x-profile-rich-backend: &profile-rich-backend
+x-profile-rich-worker: &profile-rich-worker
   use_gpu: true
-  generate_summary: false
+  generate_summary: true
   input_activity_timeout: 2h
   activity_heartbeat_timeout: 5m
   retry_initial_interval: 30s
@@ -207,31 +205,25 @@ x-profile-rich-backend: &profile-rich-backend
     extractor: docling
     do_ocr: true
     # Sized against the extraction-rich pod: one concurrent extraction, so a
-    # single document may use all 4 of its CPU. Also the API pod's rich profile,
-    # for which 4 is what the unset default already gave.
+    # single document may use all 4 of its CPU.
     docling_num_threads: 4
   input_processors: *rich-input-processors
 
-# Rich profile for the Temporal worker: same as backend but generate_summary: true
-x-profile-rich-worker: &profile-rich-worker
-  <<: *profile-rich-backend
-  generate_summary: true
-
 # x-fast-attachment-processors: &fast-attachment-processors
 #   - suffix: ".pdf"
-#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor.FastLitePdfProcessor
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_pdf_processor.FastLitePdfProcessor
 #   - suffix: ".docx"
-#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor.FastLiteDocxProcessor
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_docx_processor.FastLiteDocxProcessor
 #   - suffix: ".doc"
-#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_doc_processor.FastLiteDocProcessor
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_doc_processor.FastLiteDocProcessor
 #   - suffix: ".odt"
-#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_odt_processor.FastLiteOdtProcessor
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_odt_processor.FastLiteOdtProcessor
 #   - suffix: ".pptx"
-#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
 #   - suffix: ".ppt"
-#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_ppt_processor.FastLitePptProcessor
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_ppt_processor.FastLitePptProcessor
 #   - suffix: ".csv"
-#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
 
 # ── Shared knowledge-flow configuration (backend + worker) ──────────────────────────
 
@@ -239,8 +231,7 @@ x-kf-security: &kf-security
   # ── Classification posture (RUNTIME-07 rev. 2) ────────────────────────────────
   # `profile: c3` makes knowledge-flow refuse to boot unless user + m2m are both
   # enabled, and forces strict JWT issuer/audience validation (fail-closed).
-  # Enforced at startup by the knowledge-flow backend; the knowledge-flow-worker shares
-  # this block but serves no auth'd requests, so the gate is a no-op there.
+  # Enforced by the Knowledge Flow API at startup; the worker has its own workload configuration.
   # Leave unset for C1/C2 (dev / baseline). See deploy/README.md.
   # profile: c3
   m2m:
@@ -289,34 +280,16 @@ x-kf-security: &kf-security
     act_for_people: true
     accept_delegated_calls: true
 
-# Shared by the knowledge-flow API and by the workers, here, in this file. It is an
-# anchor, so it is resolved when this file is parsed — it does NOT carry an override
-# from a -f values file or a --set. Retuning ingestion for an environment therefore
-# means editing two applications in that overlay:
-#
-#   applications.knowledge-flow-backend   the API: submits the workflows, derives
-#                                         each profile's extraction queue name, and
-#                                         writes the uploaded document to storage
-#   applications.knowledge-flow-worker    the common worker; the three
-#                                         knowledge-flow-worker-extraction-* groups
-#                                         inherit it at render time (`inheritFrom`)
-#
-# Overriding the worker alone leaves the API on the values below, and the two then
-# disagree on the queue names and on where the document is: submissions land on
-# queues nobody polls, or extraction cannot find its input. `make
-# check-chart-ingestion-workers` renders a whole retuned deployment and checks that
-# the API and the four groups come out with one Temporal server, one namespace, one
-# base queue, one content storage and one vector index.
+# The worker scheduler is inherited by extraction groups at render time.
+# Control Plane submits using its exported contract. The API shares the corpus
+# and published bucket, not this scheduler configuration.
 x-kf-scheduler: &kf-scheduler
   enabled: true
   backend: "temporal"
   temporal:
     host: "localhost:7233"
     namespace: "default"
-    # The base queue. Every workflow runs here, and each profile's extraction queue
-    # is derived from this one name ("ingestion-rich", …) by the submitting API and
-    # by the worker alike, so the two sides cannot disagree on it — provided both
-    # carry the same value, which is the overlay's job (see above).
+    # The base queue; exported to Control Plane together with profile queues.
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
@@ -1160,6 +1133,11 @@ applications:
       frontend: false
     # ── Application configuration (rendered as ConfigMap) ───────────────
     configuration:
+      use_gpu: true
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       control_plane_url: "http://control-plane-backend:8222/control-plane/v1"
       app:
         name: "Knowledge Flow Backend"
@@ -1175,21 +1153,9 @@ applications:
           prometheus:
             port: 9111
 
-      # ── Ingestion profiles — see Section 1 for anchor definitions ──────────
-      processing:
-        path_base_model: "."
-        default_profile: fast
-        profiles:
-          fast:   *profile-fast
-          medium: *profile-medium
-          rich:   *profile-rich-backend
-      # attachment_processors: *fast-attachment-processors # WHEN NOT SET, FALLS BACK TO THE FAST PROCESSING PROFILE
-
       security:        *kf-security
-      scheduler:       *kf-scheduler
       embedding_model: *kf-embedding-model
       chat_model:      *kf-chat-model
-      vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
     dotenv:
@@ -1267,14 +1233,14 @@ applications:
       maxSurge: 1
       maxUnavailable: 0
     image:
-      repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
+      repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-worker
       tag: ""
     command:
       enabled: true
       data:
         - "python"
         - "-m"
-        - "knowledge_flow_backend.main_worker"
+        - "knowledge_flow_worker.main"
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1389,7 +1355,6 @@ applications:
     # not through a YAML anchor: an anchor is resolved when this file is parsed, so
     # it would not carry an override supplied by a -f values file or a --set.
     configuration:
-      control_plane_url: "http://control-plane-backend:8222/control-plane/v1"
       app:
         name: "Knowledge Flow Backend"
         base_url: "/knowledge-flow/v2"
@@ -1414,15 +1379,12 @@ applications:
           rich:   *profile-rich-worker
       # attachment_processors: *fast-attachment-processors # WHEN NOT SET, FALLS BACK TO THE FAST PROCESSING PROFILE
 
-      security:        *kf-security
-      # One worker serves all ingestion roles in the default five-workload composition.
       scheduler:
         <<: *kf-scheduler
         worker_roles: ["common", "extraction-fast", "extraction-medium", "extraction-rich"]
       embedding_model: *kf-embedding-model
       chat_model:      *kf-chat-model
       vision_model:    *kf-vision-model
-      crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
     dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""

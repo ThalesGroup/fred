@@ -1,6 +1,6 @@
+import hashlib
 import importlib.machinery
 import importlib.util
-import hashlib
 import json
 import subprocess
 import tempfile
@@ -31,12 +31,21 @@ class BuildImagesTests(unittest.TestCase):
                     app = Path(command[command.index("-C") + 1]).name
                     return f"localhost:5000/fred/{'control-plane-backend' if app == 'control-plane' else app}:dev\n"
                 inspection += 1
-                return json.dumps([{
-                    "Id": f"sha256:{inspection:064x}",
-                    "Created": f"build-{inspection}",
-                    "RootFS": {"Type": "layers", "Layers": ["sha256:" + "a" * 64]},
-                    "Config": {}, "Os": "linux", "Architecture": "amd64",
-                }])
+                return json.dumps(
+                    [
+                        {
+                            "Id": f"sha256:{inspection:064x}",
+                            "Created": f"build-{inspection}",
+                            "RootFS": {
+                                "Type": "layers",
+                                "Layers": ["sha256:" + "a" * 64],
+                            },
+                            "Config": {},
+                            "Os": "linux",
+                            "Architecture": "amd64",
+                        }
+                    ]
+                )
 
             with (
                 patch.object(module.subprocess, "check_output", side_effect=capture),
@@ -67,26 +76,41 @@ class BuildImagesTests(unittest.TestCase):
                 "localhost:5000/fred/fred-agents",
             )
             for api, worker in (("knowledge-flow-backend", "knowledge-flow-worker"),):
-                self.assertEqual(
-                    applications[api], applications[worker]
-                )
+                self.assertNotEqual(applications[api], applications[worker])
             self.assertEqual(
-                applications["frontend"]["image"]["tag"], "k3d-" + hashlib.sha256(json.dumps({"rootfs": {"Type": "layers", "Layers": ["sha256:" + "a" * 64]}, "config": {}, "os": "linux", "architecture": "amd64", "variant": ""}, sort_keys=True).encode()).hexdigest()[:16]
+                applications["frontend"]["image"]["tag"],
+                "k3d-"
+                + hashlib.sha256(
+                    json.dumps(
+                        {
+                            "rootfs": {
+                                "Type": "layers",
+                                "Layers": ["sha256:" + "a" * 64],
+                            },
+                            "config": {},
+                            "os": "linux",
+                            "architecture": "amd64",
+                            "variant": "",
+                        },
+                        sort_keys=True,
+                    ).encode()
+                ).hexdigest()[:16],
             )
-            self.assertEqual(len((output / "images.txt").read_text().splitlines()), 5)
+            self.assertEqual(len((output / "images.txt").read_text().splitlines()), 6)
             builds = [
                 call.args[0]
                 for call in run.call_args_list
                 if "docker-build" in call.args[0]
             ]
-            self.assertEqual(len(builds), 10)
+            self.assertEqual(len(builds), 12)
             self.assertEqual(builds[0][3], str(root / "apps/control-plane"))
 
     def test_runtime_changes_get_new_tags(self) -> None:
         metadata = {
             "RootFS": {"Type": "layers", "Layers": ["sha256:" + "a" * 64]},
             "Config": {"Env": ["MODE=original"]},
-            "Os": "linux", "Architecture": "amd64",
+            "Os": "linux",
+            "Architecture": "amd64",
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -99,11 +123,17 @@ class BuildImagesTests(unittest.TestCase):
 
             def tag():
                 module.build(root, output)
-                return json.loads((output / "images.yaml").read_text())["applications"]["frontend"]["image"]["tag"]
+                return json.loads((output / "images.yaml").read_text())["applications"][
+                    "frontend"
+                ]["image"]["tag"]
 
             with (
                 patch.object(module.subprocess, "check_output", side_effect=capture),
-                patch.object(module.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)),
+                patch.object(
+                    module.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0),
+                ),
             ):
                 original = tag()
                 metadata["Config"]["Env"] = ["MODE=changed"]

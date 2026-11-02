@@ -152,14 +152,14 @@ jobs:
           cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.name) || '' }}
 
       - name: Set up uv for PDF corpus generation
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && startsWith(matrix.name, 'knowledge-flow-backend') }}
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && startsWith(matrix.name, 'knowledge-flow-worker') }}
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.13.5"
 
       - name: Verify PDF image inventory and real processors
         timeout-minutes: 15
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && startsWith(matrix.name, 'knowledge-flow-backend') }}
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && startsWith(matrix.name, 'knowledge-flow-worker') }}
         env:
           IMAGE_NAME: ${{ matrix.name }}
         run: |
@@ -173,10 +173,10 @@ jobs:
           option=()
           if [[ "$IMAGE_NAME" == *-pymupdf ]]; then option=(--pymupdf); fi
           docker run --rm --entrypoint python -v "$PWD/scripts:/checks:ro" "$image" /checks/check_pdf_dependencies.py "${option[@]}" > /tmp/pdf-evidence/inventory.json
-          docker run --rm --entrypoint python -v "$PWD/developer_tools/benchmarks:/checks:ro" -v /tmp/pdf-corpus:/corpus:ro -v "$PWD/apps/knowledge-flow-backend/config:/config:ro" "$image" /checks/pdf_image_smoke.py /corpus "${option[@]}" > /tmp/pdf-evidence/processors.json 2> /tmp/pdf-evidence/processors.log
+          docker run --rm --entrypoint python -v "$PWD/developer_tools/benchmarks:/checks:ro" -v /tmp/pdf-corpus:/corpus:ro -v "$PWD/apps/knowledge-flow-worker/config:/config:ro" "$image" /checks/pdf_image_smoke.py /corpus "${option[@]}" > /tmp/pdf-evidence/processors.json 2> /tmp/pdf-evidence/processors.log
 
       - name: Retain PDF image evidence
-        if: ${{ always() && github.event_name == 'pull_request' && !inputs.publish && startsWith(matrix.name, 'knowledge-flow-backend') }}
+        if: ${{ always() && github.event_name == 'pull_request' && !inputs.publish && startsWith(matrix.name, 'knowledge-flow-worker') }}
         uses: actions/upload-artifact@v4
         with:
           name: pdf-evidence-${{ matrix.name }}
@@ -227,14 +227,20 @@ jobs:
           output: trivy-results.json
           exit-code: '0'
 
+      - name: Verify isolated API production dependencies and imports
+        if: ${{ matrix.name == 'knowledge-flow-backend' }}
+        run: |
+          image=$(docker load --input /tmp/pr-image.tar | sed -n 's/^Loaded image: //p' | tail -1)
+          docker run --rm --entrypoint python -v "$PWD/scripts/check_knowledge_api.py:/checks/check_api.py:ro" "$image" /checks/check_api.py
+
       - name: Record image licenses and SBOM
-        if: ${{ startsWith(matrix.name, 'knowledge-flow-backend') }}
+        if: ${{ startsWith(matrix.name, 'knowledge-flow-') }}
         run: |
           trivy image --input /tmp/pr-image.tar --scanners license --license-full --format json --output image-licenses.json
           trivy image --input /tmp/pr-image.tar --format cyclonedx --output image-sbom.cdx.json
 
       - name: Retain image license evidence
-        if: ${{ startsWith(matrix.name, 'knowledge-flow-backend') }}
+        if: ${{ startsWith(matrix.name, 'knowledge-flow-') }}
         uses: actions/upload-artifact@v4
         with:
           name: licenses-${{ matrix.name }}

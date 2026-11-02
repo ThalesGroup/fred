@@ -19,11 +19,11 @@ from typing import List, Optional
 
 from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
+from fred_knowledge.text.smart_llm_summarizer import SmartDocSummarizer
 from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.core.processors.output.summarizer.smart_llm_summarizer import SmartDocSummarizer
 from knowledge_flow_backend.features.content.published_markdown import published_markdown
 
 logger = logging.getLogger(__name__)

@@ -32,24 +32,12 @@ from fred_core.documents.access import PublishedArtifact, SpaceNotFoundError, Sp
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
+from fred_knowledge.artifacts.contracts import Artifact
+from fred_knowledge.artifacts.reader import safe_path
+from fred_knowledge.tabular.artifacts import TabularArtifactV1, TabularTableArtifactV1, build_default_query_alias, describe_numeric_column, read_tabular_artifact, read_tabular_multi_artifact
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.features.manager_processing.artifacts import safe_path
-from knowledge_flow_backend.features.manager_processing.contracts import Artifact
-from knowledge_flow_backend.features.tabular.artifacts import (
-    TabularArtifactV1,
-    TabularTableArtifactV1,
-    build_default_query_alias,
-    describe_numeric_column,
-    read_tabular_artifact,
-    read_tabular_multi_artifact,
-)
-from knowledge_flow_backend.features.tabular.execution import (
-    DuckDBAbortHandle,
-    close_duckdb_connection,
-    open_duckdb_connection,
-    run_duckdb_job,
-)
+from knowledge_flow_backend.features.tabular.execution import DuckDBAbortHandle, close_duckdb_connection, open_duckdb_connection, run_duckdb_job
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
     TabularColumnSchema,

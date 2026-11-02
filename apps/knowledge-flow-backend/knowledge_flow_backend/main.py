@@ -66,7 +66,7 @@ def create_app() -> FastAPI:
     )
     logger.info("%s Embedding model: [%s] %s", LOG_PREFIX, configuration.embedding_model.provider, configuration.embedding_model.name)
 
-    if not configuration.processing.is_gpu_enabled_any_profile():
+    if not configuration.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         os.environ["MPS_VISIBLE_DEVICES"] = ""
         import torch

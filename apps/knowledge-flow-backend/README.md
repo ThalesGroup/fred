@@ -1,221 +1,41 @@
-# Knowledge Flow Backend
+# Knowledge Flow API
 
-**Knowledge Flow** is a modular FastAPI backend that extracts and structures knowledge from documents or tabular data
-for intelligent applications.
+Knowledge Flow API serves authorized search, published Markdown, tabular REST/MCP queries, summaries and exhaustive LLM extraction from published text. Control Plane owns access decisions and publication; indexes remain projections.
 
-It is used by the open-source [Fred](https://github.com/ThalesGroup/fred) multi-agent assistant, exposing both REST and
-MCP (Model Composition and Prompting) endpoints to serve structured knowledge to agents.
+Ingestion runs in the separate [Knowledge Flow worker](../knowledge-flow-worker/README.md). Both applications use [fred-knowledge](../../libs/fred-knowledge/README.md) for artifact integrity, tabular contracts, index adapters and text primitives. Neither application depends on the other.
 
----
+## Local development
 
-> PDF/PPTX ingestion works with the standard dependency set. PyMuPDF is an
-> explicit optional extra and image variant; see [optional processing](#optional-pymupdf-processing)
-> for installation, configuration and the licenses of the complete dependency family.
+From this directory:
 
----
-
-For Temporal roles, queues and the document lifecycle, see the
-[ingestion architecture](../../docs/architecture/A9-documents.md).
-
-## What It Does
-
-Knowledge Flow provides two primary services:
-
-1. **Document Ingestion**  
-   Converts unstructured files (PDF, DOCX, PPTX, etc.) into clean Markdown and metadata, splits the content into chunks,
-   and vectorizes them using an embedding model. The results can be stored locally or in a vector store for semantic
-   search (e.g., RAG pipelines).
-
-2. **Structured Data Ingestion**  
-   Processes CSV files into dataset-scoped Parquet artifacts stored in the generation artifact store.
-   The primary ingestion path inspects delimiter and encoding once, converts CSV to Parquet directly with DuckDB,
-   then derives row counts and column schema from the generated Parquet artifact instead of materializing a full
-   pandas DataFrame. These datasets are then exposed through read-only REST and MCP endpoints and queried on demand
-   with DuckDB, instead of being materialized into one global SQL database.
-
-Knowledge Flow supports one tabular data runtime that can be queried with SQL:
-
-| Runtime                 | Main config                                 | Backing storage                                          | Status      |
-| ----------------------- | ------------------------------------------- | -------------------------------------------------------- | ----------- |
-| Dataset-centric runtime | `manager_processing` + `storage.tabular_store` | One Parquet artifact per document + DuckDB at query time | Recommended |
-
-Tabular access denials return HTTP 403 and direct callers to `list_tabular_documents`
-for valid `document_uid` values: filenames and SQL aliases are not document UIDs.
-The same guidance applies to inaccessible and invalid identifiers without revealing
-whether a denied document exists; permission checks remain unchanged.
-
-All processing pipelines are defined declaratively in `config/configuration.yaml`.
-
----
-
-## Developer Docs
-
-To learn how to:
-
-- Add custom input or output processors
-- Create new storage backends
-- Extend the ingestion and search logic
-
-→ See the [**Developer Guide**](docs/DEVELOPER_GUIDE.md)
-
-For shared startup config and policy conventions across all Fred backends, read:
-
-- [Knowledge Flow configuration](config/README.md)
-
-Key point: Knowledge Flow uses the same `ENV_FILE` + `CONFIG_FILE` contract as Agentic and Control Plane.
-
----
-
-## Quick Start
-
-Knowledge Flow uses the Weaver processing pipeline coordinated by Control Plane.
-See the [configuration guide](./config/README.md) for API and worker settings.
-
-### Storage credentials
-
-- `storage.postgres` serves publication/access reads and pgvector when selected.
-  Its password comes from `FRED_POSTGRES_PASSWORD`.
-- Vector projections support only OpenSearch and pgvector.
-- `manager_processing` configures worker authentication and generation artifact writes.
-- `published_artifacts` configures API reads of published S3 artifacts.
-  API readiness checks PostgreSQL, OpenSearch and Control Plane, without probing S3.
-  Existing artifact-reading routes still require S3 until the API/worker separation is complete.
-- `storage.tabular_store` configures Parquet generation and bounded DuckDB queries.
-
-```bash
-git clone https://github.com/ThalesGroup/knowledge-flow.git
-cd knowledge-flow
+```sh
 make dev
 cp config/.env.template config/.env
-# Edit .env to add OPENAI_API_KEY
+# Supply credentials through your local environment file.
 make run
 ```
 
-Then visit:
+The API retains `/knowledge-flow/v2`, its JWT/delegation boundary, and tabular MCP under `/knowledge-flow/v2/mcp/tabular`. PostgreSQL publication/access reads use `cp_read`; the configured search projection is OpenSearch or pgvector.
 
-- Swagger UI: http://localhost:8111/knowledge-flow/v2/docs
-- ReDoc: http://localhost:8111/knowledge-flow/v2/redoc
+## Configuration
 
-Prefer a zero-install workflow? Open the project in VS Code’s Dev Container to get the app ready with all local-only
-dependencies (no MinIO or OpenSearch). Follow the “Dev-Container mode” section in the root `README.md` for step-by-step
-instructions.
+`CONFIG_FILE` and `ENV_FILE` retain their existing meaning. See [configuration](config/README.md).
 
----
+- `published_artifacts`: S3 reader endpoint, bucket and environment-variable credential references.
+- `storage`: PostgreSQL, optional OpenSearch, vector projection, logs and bounded tabular query settings.
+- `embedding_model`: query embeddings, matching the worker's indexing model.
+- `crossencoder_model`: the retained local reranker. Its default model is baked into the production image.
+- `chat_model` and `text_splitter`: utility LLM and independent splitting parameters for summary/exhaustive extraction.
+- `use_gpu`: explicit API device policy, derived from the former effective profile settings in each shipped configuration.
 
-## Features
+There is no scheduler, processing profile or processor registry in the API configuration. PyMuPDF, OCR, Office and audio extraction options belong to the worker.
 
-- Ingests files: PDF, DOCX, DOC, ODT, PPTX, PPT → Markdown (legacy DOC/PPT and OpenDocument ODT are upgraded to DOCX/PPTX via LibreOffice)
-- Ingests data: CSV → Parquet datasets queried with DuckDB
-- Vectorizes content using OpenAI, Azure, or Ollama
-- Stores content and metadata in pluggable backends
-- Runs standalone with only an OpenAI key and local file system
-- Exposes REST and MCP endpoints for agents to query
+## Build and validation
 
----
+`make docker-build` builds `knowledge-flow-backend` with production dependencies only. The image installs no ingestion converters or ingestion-model caches. Torch and sentence-transformers remain necessary for reranking; no image-size or memory saving has been measured.
 
-## Supported Embedding Providers
+Developer validation targets: `make code-quality`, `make test`, `make generate-config-schema`, `make check-config-schema-drift`. Run `python ../../scripts/check_knowledge_api.py --development` in this application's environment to inspect its installed dependency boundary. Run the same script without `--development` inside the built image to check executables too.
 
-| Provider       | How to enable                                                           |
-| -------------- | ----------------------------------------------------------------------- |
-| OpenAI         | Set `OPENAI_API_KEY` in `.env`                                          |
-| Azure OpenAI   | Set Azure variables and update `configuration.yaml`                     |
-| Ollama (local) | Set `OLLAMA_BASE_URL` and configure model block in `configuration.yaml` |
+The separation has not yet been validated through isolated installation, image builds or the end-to-end ingestion/search journey. The [k3d guide](../../deploy/k3d/README.md) describes the deployment prerequisites.
 
-See the `ai:` section in `config/configuration.yaml` for complete setup examples.
-
----
-
-## Make Commands
-
-| Command             | Description                 |
-| ------------------- | --------------------------- |
-| `make dev`          | Set up virtualenv with `uv` |
-| `make run`          | Launch FastAPI server       |
-| `make build`        | Package the app             |
-| `make docker-build` | Build Docker image          |
-| `make test`         | Run all tests               |
-| `make clean`        | Remove build artifacts      |
-
----
-
-## Production Deployment
-
-Use the [fred-deployment-factory](https://github.com/ThalesGroup/fred-deployment-factory) to run a full stack including:
-
-- Keycloak (authentication)
-- Storage options:
-  - PostgreSQL + `pgvector` (no OpenSearch dependency), or
-  - OpenSearch for the vector projection, with PostgreSQL for publication/access reads
-- An S3-compatible bucket owned by the control plane for originals and generation artifacts
-- Control plane, Fred runtime and Knowledge Flow API/worker containers
-
-Pick the storage flavour that matches your platform constraints; both are supported end-to-end.
-
----
-
-## Documentation
-
-- [Knowledge Backend Developer Guide](docs/DEVELOPER_GUIDE.md)
-
----
-
-## License
-
-Apache 2.0 — © Thales 2025
-
-## Optional PyMuPDF processing
-
-The standard installation uses pypdf for fast PDF extraction and attachments,
-Docling for advanced PDF/OCR, and pypdfium2/PDFium for PPTX slide rendering.
-No PyMuPDF family package is installed by ordinary `uv sync` or `make dev`.
-Installing an extra never changes the configured processor automatically.
-
-To enable PyMuPDF locally, from this directory:
-
-```sh
-uv sync --extra dev --extra pymupdf
-```
-
-To build the optional production image, from the repository root:
-
-```sh
-docker build -f apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod \
-  --build-arg INSTALL_PYMUPDF=true -t knowledge-flow-backend-pymupdf:local .
-```
-
-Release CI builds `knowledge-flow-backend` and `knowledge-flow-backend-pymupdf`
-under `ghcr.io/thalesgroup/fred-agent/`, with the same release tag (or `swift-dev`).
-`INSTALL_CHROMA=true` is independent and can be combined with `INSTALL_PYMUPDF=true`
-when building a custom image. Both flags default to false. No source recompilation
-or package installation inside a running container is needed when using a published
-variant; deploy the chosen image and restart the pods.
-
-Then select the optional processor explicitly in the deployment's configuration:
-
-- Fast PDF: in `processing.profiles.fast.input_processors`, replace only the `.pdf`
-  entry's class path with
-  `knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor.LitePdfMarkdownProcessor`.
-- Advanced PDF: retain `PdfMarkdownProcessor` and set
-  `processing.profiles.medium.pdf.extractor: pymupdf` and/or the equivalent rich key.
-- Standard fast PDF uses `lite_pdf_to_md_processor.LitePdfMarkdownProcessor`;
-  advanced PDF defaults to `docling`. PPTX always uses PDFium.
-
-With Helm, supply the selected repository/tag under
-`applications.knowledge-flow-backend.image` and
-`applications.knowledge-flow-worker.image`. The extraction deployments inherit
-from the worker; update any explicit image overrides on those deployments too.
-Set processing overrides under both applications' `configuration.processing`.
-Helm replaces processor lists, so preserve the other suffix entries when
-replacing `input_processors`. All selectable profiles are validated at startup,
-even when they are not the current default. An optional selection without its
-extra fails with the installation/build remedy before ingestion starts.
-
-The extra includes `pymupdf`, `pymupdf4llm` and `pymupdf-layout`. Their terms differ;
-retain and review the license notices supplied with each selected package.
-
-Drain in-flight ingestion before changing processor images or configuration,
-and update API and worker images together. Existing indexed text and embeddings
-remain unchanged; re-ingest documents only when the new extraction is desired.
-For rollback, drain ingestion and restore matching images and configuration.
-Keep database and storage volumes; already re-ingested chunks remain until the
-document is explicitly re-ingested again.
+Apache 2.0 - Copyright Thales.

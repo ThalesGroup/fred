@@ -9,12 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fred_core.documents.access import SpaceNotFoundError, SpacePendingDeletionError, published_artifact, resolve_scope
 from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
+from fred_knowledge.artifacts.contracts import Artifact
 from minio.error import S3Error
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.document_scope import document_access_context
-from knowledge_flow_backend.features.manager_processing.contracts import Artifact
 from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person, require_space_read
 
 

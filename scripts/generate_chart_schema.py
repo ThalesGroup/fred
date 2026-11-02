@@ -32,16 +32,16 @@ Usage (called automatically by python-config-schema.mk):
 """
 
 import argparse
-import shutil
 import copy
 import json
+import shutil
 import sys
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _load(path: Path) -> dict:
     with open(path) as f:
@@ -63,7 +63,7 @@ def _inline_refs(schema: dict) -> dict:
             if "$ref" in node:
                 ref = node["$ref"]
                 if ref.startswith("#/$defs/"):
-                    name = ref[len("#/$defs/"):]
+                    name = ref[len("#/$defs/") :]
                     if name in seen:
                         return {}  # cycle guard: emit empty object
                     if name not in defs:
@@ -89,12 +89,20 @@ def _inline_refs(schema: dict) -> dict:
 _STRING = {"type": "string"}
 _BOOL = {"type": "boolean"}
 _INT = {"type": "integer"}
-_OBJECT_FREE = {"type": "object"}  # used only where the shape is truly open (annotations, labels)
+_OBJECT_FREE = {
+    "type": "object"
+}  # used only where the shape is truly open (annotations, labels)
 _ANY = {}
 
 
-def _obj(props: dict, required: list[str] | None = None, additional: bool = False) -> dict:
-    s: dict = {"type": "object", "properties": props, "additionalProperties": additional}
+def _obj(
+    props: dict, required: list[str] | None = None, additional: bool = False
+) -> dict:
+    s: dict = {
+        "type": "object",
+        "properties": props,
+        "additionalProperties": additional,
+    }
     if required:
         s["required"] = required
     return s
@@ -106,241 +114,336 @@ def _arr(items: dict) -> dict:
 
 # ── Kubernetes primitives ────────────────────────────────────────────────────
 
-_IMAGE = _obj({
-    "repository": _STRING,
-    "tag": _STRING,
-    "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]},
-})
+_IMAGE = _obj(
+    {
+        "repository": _STRING,
+        "tag": _STRING,
+        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]},
+    }
+)
 
-_ROLLING_UPDATE = _obj({
-    "maxSurge": {"anyOf": [_INT, _STRING]},
-    "maxUnavailable": {"anyOf": [_INT, _STRING]},
-})
+_ROLLING_UPDATE = _obj(
+    {
+        "maxSurge": {"anyOf": [_INT, _STRING]},
+        "maxUnavailable": {"anyOf": [_INT, _STRING]},
+    }
+)
 
-_HPA_METRIC = _obj({
-    "type": {"const": "Resource"},
-    "resource": _obj({
-        "name": {"enum": ["cpu", "memory"]},
-        "target": _obj({
-            "type": {"const": "Utilization"},
-            "averageUtilization": {"type": "integer", "minimum": 1},
-        }, required=["type", "averageUtilization"]),
-    }, required=["name", "target"]),
-}, required=["type", "resource"])
+_HPA_METRIC = _obj(
+    {
+        "type": {"const": "Resource"},
+        "resource": _obj(
+            {
+                "name": {"enum": ["cpu", "memory"]},
+                "target": _obj(
+                    {
+                        "type": {"const": "Utilization"},
+                        "averageUtilization": {"type": "integer", "minimum": 1},
+                    },
+                    required=["type", "averageUtilization"],
+                ),
+            },
+            required=["name", "target"],
+        ),
+    },
+    required=["type", "resource"],
+)
 
-_HPA_POLICY = _obj({
-    "type": {"enum": ["Pods", "Percent"]},
-    "value": {"type": "integer", "minimum": 1},
-    "periodSeconds": {"type": "integer", "minimum": 1, "maximum": 1800},
-}, required=["type", "value", "periodSeconds"])
+_HPA_POLICY = _obj(
+    {
+        "type": {"enum": ["Pods", "Percent"]},
+        "value": {"type": "integer", "minimum": 1},
+        "periodSeconds": {"type": "integer", "minimum": 1, "maximum": 1800},
+    },
+    required=["type", "value", "periodSeconds"],
+)
 
-_HPA_BEHAVIOR_RULE = _obj({
-    "stabilizationWindowSeconds": {"type": "integer", "minimum": 0, "maximum": 3600},
-    "selectPolicy": {"enum": ["Max", "Min", "Disabled"]},
-    "policies": _arr(_HPA_POLICY),
-})
+_HPA_BEHAVIOR_RULE = _obj(
+    {
+        "stabilizationWindowSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600,
+        },
+        "selectPolicy": {"enum": ["Max", "Min", "Disabled"]},
+        "policies": _arr(_HPA_POLICY),
+    }
+)
 
-_AUTOSCALING = _obj({
-    "enabled": _BOOL,
-    "minReplicas": {"type": "integer", "minimum": 1},
-    "maxReplicas": {"type": "integer", "minimum": 1},
-    "metrics": {"type": "array", "items": _HPA_METRIC, "minItems": 1},
-    "behavior": _obj({
-        "scaleUp": _HPA_BEHAVIOR_RULE,
-        "scaleDown": _HPA_BEHAVIOR_RULE,
-    }),
-}, required=["enabled", "minReplicas", "maxReplicas", "metrics"])
+_AUTOSCALING = _obj(
+    {
+        "enabled": _BOOL,
+        "minReplicas": {"type": "integer", "minimum": 1},
+        "maxReplicas": {"type": "integer", "minimum": 1},
+        "metrics": {"type": "array", "items": _HPA_METRIC, "minItems": 1},
+        "behavior": _obj(
+            {
+                "scaleUp": _HPA_BEHAVIOR_RULE,
+                "scaleDown": _HPA_BEHAVIOR_RULE,
+            }
+        ),
+    },
+    required=["enabled", "minReplicas", "maxReplicas", "metrics"],
+)
 
-_PORT_DEF = _obj({
-    "name": _STRING,
-    "containerPort": _INT,
-    "protocol": _STRING,
-}, additional=True)
-
-_SERVICE_PORT = _obj({
-    "name": _STRING,
-    "port": _INT,
-    "targetPort": {"anyOf": [_INT, _STRING]},
-    "protocol": _STRING,
-}, additional=True)
-
-_SERVICE_MONITOR = _obj({
-    "enabled": _BOOL,
-    "annotations": _OBJECT_FREE,
-    "labels": _OBJECT_FREE,
-    "interval": _STRING,
-    "scrapeTimeout": _STRING,
-    "path": _STRING,
-    "scheme": _STRING,
-    "honorLabels": _BOOL,
-    "relabelings": _arr(_ANY),
-    "metricRelabelings": _arr(_ANY),
-    "namespaceSelector": _OBJECT_FREE,
-})
-
-_SERVICE = _obj({
-    "enabled": _BOOL,
-    "annotations": _OBJECT_FREE,
-    "extraLabels": _OBJECT_FREE,
-    "type": _STRING,
-    "ports": _arr(_SERVICE_PORT),
-})
-
-_METRICS_SERVICE = _obj({
-    "enabled": _BOOL,
-    "annotations": _OBJECT_FREE,
-    "extraLabels": _OBJECT_FREE,
-    "type": _STRING,
-    "port": _INT,
-    "targetPort": {"anyOf": [_INT, _STRING]},
-    "serviceMonitor": _SERVICE_MONITOR,
-})
-
-_INGRESS_HOST_PATH = _obj({
-    "path": _STRING,
-    "pathType": _STRING,
-    "service": _obj({
+_PORT_DEF = _obj(
+    {
         "name": _STRING,
-        "port": {"anyOf": [_INT, _STRING]},
-    }, additional=True),
-}, additional=True)
+        "containerPort": _INT,
+        "protocol": _STRING,
+    },
+    additional=True,
+)
 
-_INGRESS_HOST = _obj({
-    "host": _STRING,
-    "paths": _arr(_INGRESS_HOST_PATH),
-}, additional=True)
+_SERVICE_PORT = _obj(
+    {
+        "name": _STRING,
+        "port": _INT,
+        "targetPort": {"anyOf": [_INT, _STRING]},
+        "protocol": _STRING,
+    },
+    additional=True,
+)
 
-_INGRESS_TLS = _obj({
-    "secretName": _STRING,
-    "hosts": _arr(_STRING),
-}, additional=True)
+_SERVICE_MONITOR = _obj(
+    {
+        "enabled": _BOOL,
+        "annotations": _OBJECT_FREE,
+        "labels": _OBJECT_FREE,
+        "interval": _STRING,
+        "scrapeTimeout": _STRING,
+        "path": _STRING,
+        "scheme": _STRING,
+        "honorLabels": _BOOL,
+        "relabelings": _arr(_ANY),
+        "metricRelabelings": _arr(_ANY),
+        "namespaceSelector": _OBJECT_FREE,
+    }
+)
 
-_INGRESS = _obj({
-    "enabled": _BOOL,
-    "className": _STRING,
-    "hosts": _arr(_INGRESS_HOST),
-    "tls": _arr(_INGRESS_TLS),
-}, additional=True)
+_SERVICE = _obj(
+    {
+        "enabled": _BOOL,
+        "annotations": _OBJECT_FREE,
+        "extraLabels": _OBJECT_FREE,
+        "type": _STRING,
+        "ports": _arr(_SERVICE_PORT),
+    }
+)
+
+_METRICS_SERVICE = _obj(
+    {
+        "enabled": _BOOL,
+        "annotations": _OBJECT_FREE,
+        "extraLabels": _OBJECT_FREE,
+        "type": _STRING,
+        "port": _INT,
+        "targetPort": {"anyOf": [_INT, _STRING]},
+        "serviceMonitor": _SERVICE_MONITOR,
+    }
+)
+
+_INGRESS_HOST_PATH = _obj(
+    {
+        "path": _STRING,
+        "pathType": _STRING,
+        "service": _obj(
+            {
+                "name": _STRING,
+                "port": {"anyOf": [_INT, _STRING]},
+            },
+            additional=True,
+        ),
+    },
+    additional=True,
+)
+
+_INGRESS_HOST = _obj(
+    {
+        "host": _STRING,
+        "paths": _arr(_INGRESS_HOST_PATH),
+    },
+    additional=True,
+)
+
+_INGRESS_TLS = _obj(
+    {
+        "secretName": _STRING,
+        "hosts": _arr(_STRING),
+    },
+    additional=True,
+)
+
+_INGRESS = _obj(
+    {
+        "enabled": _BOOL,
+        "className": _STRING,
+        "hosts": _arr(_INGRESS_HOST),
+        "tls": _arr(_INGRESS_TLS),
+    },
+    additional=True,
+)
 
 # ── Gateway API HTTPRoute ────────────────────────────────────────────────────
 # parentRefs and rules are passed through to the HTTPRoute spec verbatim
 # (templates/http-route.yaml uses `toYaml`), so their items stay free-form to
 # accept the full Gateway API shape without re-modelling it here.
-_HTTP_ROUTE_PARENT_REF = _obj({
-    "group": _STRING,
-    "kind": _STRING,
-    "name": _STRING,
-    "namespace": _STRING,
-    "sectionName": _STRING,
-    "port": _INT,
-}, additional=True)
+_HTTP_ROUTE_PARENT_REF = _obj(
+    {
+        "group": _STRING,
+        "kind": _STRING,
+        "name": _STRING,
+        "namespace": _STRING,
+        "sectionName": _STRING,
+        "port": _INT,
+    },
+    additional=True,
+)
 
-_HTTP_ROUTE = _obj({
-    "enabled": _BOOL,
-    "annotations": _OBJECT_FREE,
-    "parentRefs": _arr(_HTTP_ROUTE_PARENT_REF),
-    "hostnames": _arr(_STRING),
-    "rules": _arr(_ANY),
-}, additional=True)
+_HTTP_ROUTE = _obj(
+    {
+        "enabled": _BOOL,
+        "annotations": _OBJECT_FREE,
+        "parentRefs": _arr(_HTTP_ROUTE_PARENT_REF),
+        "hostnames": _arr(_STRING),
+        "rules": _arr(_ANY),
+    },
+    additional=True,
+)
 
-_VOLUME_MOUNT = _obj({
-    "name": _STRING,
-    "mountPath": _STRING,
-    "subPath": _STRING,
-    "readOnly": _BOOL,
-}, additional=True)
+_VOLUME_MOUNT = _obj(
+    {
+        "name": _STRING,
+        "mountPath": _STRING,
+        "subPath": _STRING,
+        "readOnly": _BOOL,
+    },
+    additional=True,
+)
 
-_VOLUME = _obj({
-    "name": _STRING,
-}, additional=True)
+_VOLUME = _obj(
+    {
+        "name": _STRING,
+    },
+    additional=True,
+)
 
 _PROBE_DATA = _obj({}, additional=True)
 
-_PROBE_ENTRY = _obj({
-    "enabled": _BOOL,
-    "data": _PROBE_DATA,
-})
+_PROBE_ENTRY = _obj(
+    {
+        "enabled": _BOOL,
+        "data": _PROBE_DATA,
+    }
+)
 
-_PROBES = _obj({
-    "lifecycle": _obj({"enabled": _BOOL}, additional=True),
-    "livenessProbe": _PROBE_ENTRY,
-    "readinessProbe": _PROBE_ENTRY,
-    "startupProbe": _PROBE_ENTRY,
-})
+_PROBES = _obj(
+    {
+        "lifecycle": _obj({"enabled": _BOOL}, additional=True),
+        "livenessProbe": _PROBE_ENTRY,
+        "readinessProbe": _PROBE_ENTRY,
+        "startupProbe": _PROBE_ENTRY,
+    }
+)
 
-_SECURITY_CONTEXT = _obj({
-    "allowPrivilegeEscalation": _BOOL,
-    "capabilities": _obj({
-        "drop": _arr(_STRING),
-        "add": _arr(_STRING),
-    }),
-    "runAsUser": _INT,
-    "runAsNonRoot": _BOOL,
-    "readOnlyRootFilesystem": _BOOL,
-    "seccompProfile": _obj({"type": _STRING}, additional=True),
-})
+_SECURITY_CONTEXT = _obj(
+    {
+        "allowPrivilegeEscalation": _BOOL,
+        "capabilities": _obj(
+            {
+                "drop": _arr(_STRING),
+                "add": _arr(_STRING),
+            }
+        ),
+        "runAsUser": _INT,
+        "runAsNonRoot": _BOOL,
+        "readOnlyRootFilesystem": _BOOL,
+        "seccompProfile": _obj({"type": _STRING}, additional=True),
+    }
+)
 
-_RBAC_RULE = _obj({
-    "apiGroups": _arr(_STRING),
-    "resources": _arr(_STRING),
-    "verbs": _arr(_STRING),
-}, additional=True)
+_RBAC_RULE = _obj(
+    {
+        "apiGroups": _arr(_STRING),
+        "resources": _arr(_STRING),
+        "verbs": _arr(_STRING),
+    },
+    additional=True,
+)
 
-_RBAC = _obj({
-    "enabled": _BOOL,
-    "permissions": _obj({
-        "namespaced": _arr(_RBAC_RULE),
-        "cluster": _arr(_RBAC_RULE),
-    }, additional=True),
-})
+_RBAC = _obj(
+    {
+        "enabled": _BOOL,
+        "permissions": _obj(
+            {
+                "namespaced": _arr(_RBAC_RULE),
+                "cluster": _arr(_RBAC_RULE),
+            },
+            additional=True,
+        ),
+    }
+)
 
-_SERVICE_ACCOUNT = _obj({
-    "enabled": _BOOL,
-    "name": _STRING,
-    "annotations": _OBJECT_FREE,
-    "labels": _OBJECT_FREE,
-    "automountServiceAccountToken": _BOOL,
-    "rbac": _RBAC,
-})
+_SERVICE_ACCOUNT = _obj(
+    {
+        "enabled": _BOOL,
+        "name": _STRING,
+        "annotations": _OBJECT_FREE,
+        "labels": _OBJECT_FREE,
+        "automountServiceAccountToken": _BOOL,
+        "rbac": _RBAC,
+    }
+)
 
-_ENV_VAR = _obj({
-    "name": _STRING,
-    "value": _STRING,
-    "valueFrom": _obj({}, additional=True),
-}, additional=True)
+_ENV_VAR = _obj(
+    {
+        "name": _STRING,
+        "value": _STRING,
+        "valueFrom": _obj({}, additional=True),
+    },
+    additional=True,
+)
 
-_MIGRATION = _obj({
-    "enabled": _BOOL,
-    "scaleDown": _BOOL,
-    "backoffLimit": _INT,
-    "command": _arr(_STRING),
-    "args": _arr(_STRING),
-    "resources": _OBJECT_FREE,
-    # Annotations for the migration Job pod only. Distinct from the app-level
-    # podAnnotations, which are shared with the Deployment: a service-mesh
-    # sidecar that is desirable on a long-running Deployment keeps a hook Job
-    # from ever completing, so the opt-out must target the Job alone.
-    "podAnnotations": _OBJECT_FREE,
-    # Env for the migration Job only. The Job inherits nothing from the app
-    # (its env may reference release-created resources that do not exist yet
-    # on a fresh install); use this to source FRED_POSTGRES_PASSWORD from a
-    # pre-existing Secret when it is not in dotenv.
-    "extraEnvVars": _arr(_ENV_VAR),
-})
+_MIGRATION = _obj(
+    {
+        "enabled": _BOOL,
+        "scaleDown": _BOOL,
+        "backoffLimit": _INT,
+        "command": _arr(_STRING),
+        "args": _arr(_STRING),
+        "resources": _OBJECT_FREE,
+        # Annotations for the migration Job pod only. Distinct from the app-level
+        # podAnnotations, which are shared with the Deployment: a service-mesh
+        # sidecar that is desirable on a long-running Deployment keeps a hook Job
+        # from ever completing, so the opt-out must target the Job alone.
+        "podAnnotations": _OBJECT_FREE,
+        # Env for the migration Job only. The Job inherits nothing from the app
+        # (its env may reference release-created resources that do not exist yet
+        # on a fresh install); use this to source FRED_POSTGRES_PASSWORD from a
+        # pre-existing Secret when it is not in dotenv.
+        "extraEnvVars": _arr(_ENV_VAR),
+    }
+)
 
-_COMMAND = _obj({
-    "enabled": _BOOL,
-    "data": _arr(_STRING),
-})
+_COMMAND = _obj(
+    {
+        "enabled": _BOOL,
+        "data": _arr(_STRING),
+    }
+)
 
-_CONFIGURATION_TYPE = _obj({
-    "backend": _BOOL,
-    "frontend": _BOOL,
-})
+_CONFIGURATION_TYPE = _obj(
+    {
+        "backend": _BOOL,
+        "frontend": _BOOL,
+    }
+)
 
-_KUBECONFIG = _obj({
-    "enabled": _BOOL,
-})
+_KUBECONFIG = _obj(
+    {
+        "enabled": _BOOL,
+    }
+)
 
 
 def _base_app_props(extra: dict | None = None) -> dict:
@@ -398,60 +501,87 @@ def _base_app_props(extra: dict | None = None) -> dict:
 # Application-specific schemas
 # ---------------------------------------------------------------------------
 
-_MCP_EXTERNAL_SERVER = _obj({
-    "id": _STRING,
-    "name": _STRING,
-    "description": {"anyOf": [_STRING, {"type": "null"}]},
-    "transport": {"enum": ["sse", "stdio", "websocket", "streamable_http", None]},
-    "url": {"anyOf": [_STRING, {"type": "null"}]},
-    "enabled": _BOOL,
-    "auth_mode": {"enum": ["user_token", "no_token", "delegated"]},
-    "sse_read_timeout": {"anyOf": [_INT, {"type": "null"}]},
-    "command": {"anyOf": [_STRING, {"type": "null"}]},
-    "args": {"anyOf": [_arr(_STRING), {"type": "null"}]},
-    "env": {"anyOf": [{"type": "object", "additionalProperties": _STRING}, {"type": "null"}]},
-    "prompt_file": {"anyOf": [_STRING, {"type": "null"}]},
-    "agent_instructions": {"anyOf": [_STRING, {"type": "null"}]},
-    "prompt_group_title": {"anyOf": [_STRING, {"type": "null"}]},
-    "config_fields": _arr(_ANY),
-    "team_scope": {"enum": ["default_on", "admin_gated"]},
-    "service": {"enum": ["knowledge_flow", "control_plane", None]},
-    "path": {"anyOf": [_STRING, {"type": "null"}]},
-}, required=["id", "name"])
+_MCP_EXTERNAL_SERVER = _obj(
+    {
+        "id": _STRING,
+        "name": _STRING,
+        "description": {"anyOf": [_STRING, {"type": "null"}]},
+        "transport": {"enum": ["sse", "stdio", "websocket", "streamable_http", None]},
+        "url": {"anyOf": [_STRING, {"type": "null"}]},
+        "enabled": _BOOL,
+        "auth_mode": {"enum": ["user_token", "no_token", "delegated"]},
+        "sse_read_timeout": {"anyOf": [_INT, {"type": "null"}]},
+        "command": {"anyOf": [_STRING, {"type": "null"}]},
+        "args": {"anyOf": [_arr(_STRING), {"type": "null"}]},
+        "env": {
+            "anyOf": [
+                {"type": "object", "additionalProperties": _STRING},
+                {"type": "null"},
+            ]
+        },
+        "prompt_file": {"anyOf": [_STRING, {"type": "null"}]},
+        "agent_instructions": {"anyOf": [_STRING, {"type": "null"}]},
+        "prompt_group_title": {"anyOf": [_STRING, {"type": "null"}]},
+        "config_fields": _arr(_ANY),
+        "team_scope": {"enum": ["default_on", "admin_gated"]},
+        "service": {"enum": ["knowledge_flow", "control_plane", None]},
+        "path": {"anyOf": [_STRING, {"type": "null"}]},
+    },
+    required=["id", "name"],
+)
 
-_MCP_EXTERNAL_CATALOG = _obj({
-    "version": {"const": "v1"},
-    "servers": _arr(_MCP_EXTERNAL_SERVER),
-})
+_MCP_EXTERNAL_CATALOG = _obj(
+    {
+        "version": {"const": "v1"},
+        "servers": _arr(_MCP_EXTERNAL_SERVER),
+    }
+)
+
 
 def _fred_agents_app(fa_config: dict) -> dict:
     # models_catalog: free-form (large catalog structure, fully user-defined)
     # dotenv: key/value env secrets
-    return _obj(_base_app_props({
-        "configuration": fa_config,
-        "dotenv": _obj({}, additional=True),
-        "models_catalog": _obj({}, additional=True),
-        "mcp_catalog_external": _MCP_EXTERNAL_CATALOG,
-    }))
+    return _obj(
+        _base_app_props(
+            {
+                "configuration": fa_config,
+                "dotenv": _obj({}, additional=True),
+                "models_catalog": _obj({}, additional=True),
+                "mcp_catalog_external": _MCP_EXTERNAL_CATALOG,
+            }
+        )
+    )
 
 
 def _frontend_app() -> dict:
-    _frontend_config = _obj({
-        "config_json": _obj({
-            "frontend_basename": _STRING,
-        }, additional=True),
-    }, additional=True)
+    _frontend_config = _obj(
+        {
+            "config_json": _obj(
+                {
+                    "frontend_basename": _STRING,
+                },
+                additional=True,
+            ),
+        },
+        additional=True,
+    )
 
-    return _obj(_base_app_props({
-        "configuration": _frontend_config,
-    }))
+    return _obj(
+        _base_app_props(
+            {
+                "configuration": _frontend_config,
+            }
+        )
+    )
 
 
 def _kf_app(kf_config: dict) -> dict:
-    props = _base_app_props({
-        "configuration": kf_config,
-        "dotenv": _obj({}, additional=True),
-    })
+    props = _base_app_props(
+        {
+            "configuration": kf_config,
+            "dotenv": _obj({}, additional=True),
+        }
+    )
     props.pop("migration")
     return _obj(props)
 
@@ -465,18 +595,28 @@ def _drop_required(schema: object) -> object:
     because completeness is a property of the merged result, not of the fragment.
     """
     if isinstance(schema, dict):
-        return {key: _drop_required(value) for key, value in schema.items() if key != "required"}
+        return {
+            key: _drop_required(value)
+            for key, value in schema.items()
+            if key != "required"
+        }
     if isinstance(schema, list):
         return [_drop_required(item) for item in schema]
     return schema
 
 
-def _kf_worker_app(kf_config: dict, *, partial_configuration: bool = False) -> dict:
-    configuration = _drop_required(copy.deepcopy(kf_config)) if partial_configuration else kf_config
-    props = _base_app_props({
-        "configuration": configuration,
-        "dotenv": _obj({}, additional=True),
-    })
+def _kf_worker_app(worker_config: dict, *, partial_configuration: bool = False) -> dict:
+    configuration = (
+        _drop_required(copy.deepcopy(worker_config))
+        if partial_configuration
+        else worker_config
+    )
+    props = _base_app_props(
+        {
+            "configuration": configuration,
+            "dotenv": _obj({}, additional=True),
+        }
+    )
     props.pop("migration")
     return _obj(props)
 
@@ -486,37 +626,48 @@ def _manager_app(config: dict) -> dict:
     # scheduler.temporal is a chart input only: the template folds it into the
     # lifecycle connection and removes it, since the manager refuses unknown keys.
     config = copy.deepcopy(config)
-    config["properties"]["scheduler"]["properties"]["temporal"] = _obj({
-        "host": _STRING,
-        "namespace": _STRING,
-    })
-    return _obj(_base_app_props({
-        "configuration": config,
-        "lifecycle_policy_catalog": {"type": ["object", "null"]},
-        "dotenv": _obj({}, additional=True),
-    }))
+    config["properties"]["scheduler"]["properties"]["temporal"] = _obj(
+        {
+            "host": _STRING,
+            "namespace": _STRING,
+        }
+    )
+    return _obj(
+        _base_app_props(
+            {
+                "configuration": config,
+                "lifecycle_policy_catalog": {"type": ["object", "null"]},
+                "dotenv": _obj({}, additional=True),
+            }
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
 # Global schema
 # ---------------------------------------------------------------------------
 
-_GLOBAL = _obj({
-    "kubeconfig": _STRING,
-    "persistence": _obj({
-        "enabled": _BOOL,
-        "dynamic": _BOOL,
-        "accessModes": _STRING,
-        "reclaimPolicy": _STRING,
-        "storageClass": _STRING,
-        "hostPath": _STRING,
-    }),
-})
+_GLOBAL = _obj(
+    {
+        "kubeconfig": _STRING,
+        "persistence": _obj(
+            {
+                "enabled": _BOOL,
+                "dynamic": _BOOL,
+                "accessModes": _STRING,
+                "reclaimPolicy": _STRING,
+                "storageClass": _STRING,
+                "hostPath": _STRING,
+            }
+        ),
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # Registrations
 # ---------------------------------------------------------------------------
+
 
 def _registrations() -> dict:
     """Reserved until application and KB publisher registration is ported to Rust."""
@@ -525,20 +676,29 @@ def _registrations() -> dict:
         "maxProperties": 0,
         "description": "Non-empty registrations are not supported by the Rust control plane yet (#3211).",
     }
-    return _obj({
-        "applications": unsupported,
-        "knowledgeBasePublishers": unsupported,
-    })
+    return _obj(
+        {
+            "applications": unsupported,
+            "knowledgeBasePublishers": unsupported,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Assembly
 # ---------------------------------------------------------------------------
 
-def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> dict:
+
+def build(
+    fa_schema_path: Path,
+    kf_schema_path: Path,
+    cp_schema_path: Path,
+    worker_schema_path: Path,
+) -> dict:
     manager_config = _inline_refs(_load(cp_schema_path))
     fa_config = _inline_refs(_load(fa_schema_path))
     kf_config = _inline_refs(_load(kf_schema_path))
+    worker_config = _inline_refs(_load(worker_schema_path))
 
     return {
         "$schema": "https://json-schema.org/draft-07/schema#",
@@ -550,33 +710,62 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
         # validators, so we allow any x-* key with any value at the root.
         "patternProperties": {"^x-": {}},
         "properties": {
-            "postgresSecrets": _obj({key: _STRING for key in (
-                "name", "controlPlaneKey", "knowledgeKey", "runtimeKey", "monitorKey", "monitorUrlKey"
-            )}),
-            "postgresBootstrap": _obj({
-                "enabled": _BOOL, "port": _INT,
-                **{key: _STRING for key in (
-                    "image", "host", "database", "adminUser", "adminSecretName", "adminPasswordKey"
-                )},
-            }),
+            "postgresSecrets": _obj(
+                {
+                    key: _STRING
+                    for key in (
+                        "name",
+                        "controlPlaneKey",
+                        "knowledgeKey",
+                        "runtimeKey",
+                        "monitorKey",
+                        "monitorUrlKey",
+                    )
+                }
+            ),
+            "postgresBootstrap": _obj(
+                {
+                    "enabled": _BOOL,
+                    "port": _INT,
+                    **{
+                        key: _STRING
+                        for key in (
+                            "image",
+                            "host",
+                            "database",
+                            "adminUser",
+                            "adminSecretName",
+                            "adminPasswordKey",
+                        )
+                    },
+                }
+            ),
             "global": _GLOBAL,
             "registrations": _registrations(),
-            "applications": _obj({
-                "fred-agents": _fred_agents_app(fa_config),
-                "frontend": _frontend_app(),
-                "monitor": _obj(_base_app_props()),
-                "knowledge-flow-backend": _kf_app(kf_config),
-                "knowledge-flow-worker": _kf_worker_app(kf_config),
-                # Same shape, one per profile: each polls that profile's extraction
-                # queue so a slow document cannot take the slots of a cheap one.
-                # They inherit knowledge-flow-worker's configuration and state only
-                # their overrides, so their own block is validated as a fragment.
-                "knowledge-flow-worker-extraction-fast": _kf_worker_app(kf_config, partial_configuration=True),
-                "knowledge-flow-worker-extraction-medium": _kf_worker_app(kf_config, partial_configuration=True),
-                "knowledge-flow-worker-extraction-rich": _kf_worker_app(kf_config, partial_configuration=True),
-                "control-plane-backend": _manager_app(manager_config),
-                "control-plane-worker": _manager_app(manager_config),
-            }),
+            "applications": _obj(
+                {
+                    "fred-agents": _fred_agents_app(fa_config),
+                    "frontend": _frontend_app(),
+                    "monitor": _obj(_base_app_props()),
+                    "knowledge-flow-backend": _kf_app(kf_config),
+                    "knowledge-flow-worker": _kf_worker_app(worker_config),
+                    # Same shape, one per profile: each polls that profile's extraction
+                    # queue so a slow document cannot take the slots of a cheap one.
+                    # They inherit knowledge-flow-worker's configuration and state only
+                    # their overrides, so their own block is validated as a fragment.
+                    "knowledge-flow-worker-extraction-fast": _kf_worker_app(
+                        worker_config, partial_configuration=True
+                    ),
+                    "knowledge-flow-worker-extraction-medium": _kf_worker_app(
+                        worker_config, partial_configuration=True
+                    ),
+                    "knowledge-flow-worker-extraction-rich": _kf_worker_app(
+                        worker_config, partial_configuration=True
+                    ),
+                    "control-plane-backend": _manager_app(manager_config),
+                    "control-plane-worker": _manager_app(manager_config),
+                }
+            ),
         },
     }
 
@@ -585,10 +774,14 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fred-agents", required=True, type=Path, metavar="SCHEMA")
     parser.add_argument("--knowledge-flow", required=True, type=Path, metavar="SCHEMA")
+    parser.add_argument(
+        "--knowledge-flow-worker", required=True, type=Path, metavar="SCHEMA"
+    )
     parser.add_argument("--control-plane", required=True, type=Path, metavar="SCHEMA")
     parser.add_argument("--output", required=True, type=Path, metavar="OUTPUT")
     args = parser.parse_args()
@@ -597,12 +790,22 @@ def main() -> None:
     packaged.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(root / "deploy/postgres/bootstrap.sql", packaged)
 
-    for p in (args.fred_agents, args.knowledge_flow, args.control_plane):
+    for p in (
+        args.fred_agents,
+        args.knowledge_flow,
+        args.control_plane,
+        args.knowledge_flow_worker,
+    ):
         if not p.exists():
             print(f"ERROR: schema not found: {p}", file=sys.stderr)
             sys.exit(1)
 
-    schema = build(args.fred_agents, args.knowledge_flow, args.control_plane)
+    schema = build(
+        args.fred_agents,
+        args.knowledge_flow,
+        args.control_plane,
+        args.knowledge_flow_worker,
+    )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w") as f:

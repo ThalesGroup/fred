@@ -33,8 +33,8 @@ from fastapi import HTTPException
 from fred_core import KeycloakUser
 from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DocumentAccessContext
+from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 
-from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 
 

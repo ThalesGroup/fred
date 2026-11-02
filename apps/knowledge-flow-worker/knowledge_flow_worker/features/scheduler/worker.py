@@ -1,0 +1,179 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Temporal worker responsible for running ingestion pipelines.
+
+One process serves one or more roles (`scheduler.worker_roles`), each with its own
+Temporal worker on its own queue: the common role runs every workflow and every
+activity but extraction, while an extraction role runs nothing but the
+extraction activity for one processing profile. A Kubernetes deployment declares
+a single role so its pods size and scale independently; a developer's single
+process declares all four.
+"""
+
+import asyncio
+import concurrent.futures
+import logging
+from datetime import timedelta
+
+from temporalio.client import Client
+from temporalio.worker import Worker
+
+from knowledge_flow_worker.common.structures import IngestionWorkerRole, TemporalSchedulerConfig, extraction_task_queue
+from knowledge_flow_worker.features.manager_processing.cleanup import run as manager_cleanup
+from knowledge_flow_worker.features.manager_processing.retrievable import confirm_document_retrievable, record_retrievable_applied, set_document_retrievable
+from knowledge_flow_worker.features.manager_processing.retrievable_workflow import SetDocumentRetrievable
+from knowledge_flow_worker.features.scheduler.activities import output_process
+from knowledge_flow_worker.features.scheduler.fault_injection import read_ingestion_fault
+from knowledge_flow_worker.features.scheduler.push_files_activities import get_push_file_metadata, push_input_process
+from knowledge_flow_worker.features.scheduler.workflow import GetPushFileMetadata, OutputProcess, ProcessPush, ProcessPushFile, PushInputProcess
+
+logger = logging.getLogger(__name__)
+
+
+# Every workflow in the ingestion namespace, plus the recurring-maintenance one.
+# They run on the common queue whatever profile their documents carry: only the
+# extraction activity is routed away.
+def _role_task_queue(config: TemporalSchedulerConfig, role: IngestionWorkerRole) -> str:
+    """The queue a role polls. Derived through the same function the submission
+    side uses, so the two cannot name a queue differently."""
+    profile = role.extraction_profile
+    return config.task_queue if profile is None else extraction_task_queue(config.task_queue, profile)
+
+
+def _build_worker(
+    *,
+    client: Client,
+    config: TemporalSchedulerConfig,
+    role: IngestionWorkerRole,
+    workflow_task_concurrency: int,
+    activity_concurrency: int,
+) -> Worker:
+    """One Temporal worker for one role, registering only what that role runs."""
+    is_common = role is IngestionWorkerRole.common
+    queue = _role_task_queue(config, role)
+    if is_common:
+        logger.info(
+            "[SCHEDULER] role=%s queue=%s max_concurrent_activities=%d max_concurrent_workflow_tasks=%d",
+            role.value,
+            queue,
+            activity_concurrency,
+            workflow_task_concurrency,
+        )
+    else:
+        # No workflow is registered here, so the workflow-task limit would say
+        # nothing about what this pod actually does.
+        logger.info(
+            "[SCHEDULER] role=%s queue=%s max_concurrent_activities=%d (extraction only, no workflows)",
+            role.value,
+            queue,
+            activity_concurrency,
+        )
+
+    workflows = [ProcessPush, ProcessPushFile, GetPushFileMetadata, PushInputProcess, OutputProcess, SetDocumentRetrievable] if is_common else []
+    activities = [get_push_file_metadata, output_process, set_document_retrievable, record_retrievable_applied, confirm_document_retrievable] if is_common else [push_input_process]
+
+    return Worker(
+        client=client,
+        task_queue=queue,
+        workflows=workflows,
+        activities=activities,
+        # Sync activities run in threads; one pool per role keeps a saturated
+        # extraction role from starving the common one in a multi-role process.
+        activity_executor=concurrent.futures.ThreadPoolExecutor(max_workers=activity_concurrency),
+        max_concurrent_workflow_tasks=workflow_task_concurrency,
+        max_concurrent_activities=activity_concurrency,
+        # Heartbeat responses are how the server tells a running activity it was
+        # cancelled, and the SDK throttles outgoing heartbeats — by default to
+        # min(80% of heartbeat_timeout, 60s), i.e. one per minute with our 300s
+        # timeouts, no matter how often the activity calls heartbeat(). That
+        # throttle IS the cancellation latency: a user's stop took ~40s to reach
+        # the vectorization stage (#2315). 5s makes a cancel land in seconds for
+        # one cheap RPC per running activity every 5s.
+        max_heartbeat_throttle_interval=timedelta(seconds=5),
+        default_heartbeat_throttle_interval=timedelta(seconds=5),
+    )
+
+
+async def run_worker(
+    config: TemporalSchedulerConfig,
+    *,
+    roles: list[IngestionWorkerRole] | None = None,
+    max_concurrent_workflow_tasks: int = 1,
+    max_concurrent_activities: int = 1,
+):
+    """
+    Connect to Temporal and start one worker per configured role.
+
+    Why:
+        Extraction is the expensive, profile-dependent stage; serving it from its
+        own queue and pods keeps a slow document from holding the activity slots
+        a cheap one needs. Workflow-task and activity concurrency have different
+        runtime bottlenecks, so they stay independently configured.
+    How:
+        Build one `Worker` per role — the common role registers every workflow and
+        every activity but extraction, an extraction role registers nothing but the
+        extraction activity — and run them together until one stops.
+    Usage example:
+        `await run_worker(config, roles=[IngestionWorkerRole.extraction_rich], max_concurrent_activities=1)`
+
+    Args:
+        config (TemporalSchedulerConfig): Temporal connection + base task queue.
+        roles (list[IngestionWorkerRole] | None): Roles this process serves;
+            defaults to the common role alone.
+        max_concurrent_workflow_tasks (int): Max concurrent workflow tasks per role.
+        max_concurrent_activities (int): Max concurrent activity tasks per role.
+    """
+
+    fault = read_ingestion_fault()
+    if fault is not None:
+        logger.warning("[SIMULATED INGESTION FAULT] worker started with %s", fault)
+
+    active_roles = list(roles) if roles else [IngestionWorkerRole.common]
+    workflow_task_concurrency = max(1, int(max_concurrent_workflow_tasks))
+    activity_concurrency = max(1, int(max_concurrent_activities))
+
+    logger.info(f"🔗 Connecting to Temporal at {config.host} (namespace={config.namespace})")
+    client = await Client.connect(
+        target_host=config.host,
+        namespace=config.namespace,
+    )
+
+    workers = [
+        _build_worker(
+            client=client,
+            config=config,
+            role=role,
+            workflow_task_concurrency=workflow_task_concurrency,
+            activity_concurrency=activity_concurrency,
+        )
+        for role in active_roles
+    ]
+
+    if len(workers) > 1:
+        logger.info(
+            "[SCHEDULER] %d roles in this process: up to %d activities at once across them",
+            len(workers),
+            len(workers) * activity_concurrency,
+        )
+    logger.info("[SCHEDULER] Temporal worker is now running and ready to receive ingestion jobs.")
+    # A TaskGroup, not gather: when one role's worker dies the others must be
+    # cancelled before the caller's shutdown disposes the database engine and the
+    # KPI writer their activities are still using.
+    async with asyncio.TaskGroup() as group:
+        if IngestionWorkerRole.common in active_roles:
+            group.create_task(manager_cleanup())
+        for worker in workers:
+            group.create_task(worker.run())

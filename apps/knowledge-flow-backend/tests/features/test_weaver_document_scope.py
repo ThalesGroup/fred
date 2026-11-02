@@ -13,9 +13,9 @@ from fred_core.documents.access import SearchScope
 from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
+from fred_knowledge.vector.base_vector_store import SearchFilter
+from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 
-from knowledge_flow_backend.core.stores.vector.base_vector_store import SearchFilter
-from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.features.content import published_markdown as markdown_module
 from knowledge_flow_backend.features.extract import service as extract_module
 from knowledge_flow_backend.features.summarize import service as summarize_module
@@ -252,9 +252,8 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
     import asyncio
     from uuid import uuid5
 
+    from fred_knowledge.vector.base_vector_store import BaseVectorHit
     from langchain_core.documents import Document
-
-    from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorHit
 
     attachment_id, generation = UUID(int=8), UUID(int=9)
     context = DocumentAccessContext(space_id=SPACE, document_scope=corpus, conversation_id=CONVERSATION, attachment_ids=(attachment_id,))
@@ -308,9 +307,8 @@ async def test_search_union_prefilters_concurrently_then_verifies_sql_and_bounds
 
 
 def test_rank_fusion_deduplicates_and_ignores_incomparable_scores():
+    from fred_knowledge.vector.base_vector_store import BaseVectorHit
     from langchain_core.documents import Document
-
-    from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorHit
 
     def hit(uid, score):
         return BaseVectorHit(document=Document(page_content=uid, metadata={"chunk_uid": uid}), score=score)

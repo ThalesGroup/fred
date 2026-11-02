@@ -1,22 +1,9 @@
-# Copyright Thales 2025
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-import importlib
+# Copyright Thales 2026
+# SPDX-License-Identifier: Apache-2.0
 import logging
 import os
-import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import httpx
 from fred_core import BaseLogStore, ModelProvider, build_log_store, get_embeddings, get_model, split_realm_url
@@ -25,69 +12,21 @@ from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
 from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MBearerAuth, M2MTokenProvider
 from fred_core.sql import create_async_engine_from_config
+from fred_knowledge.artifacts.reader import ArtifactReader
+from fred_knowledge.text.base_text_splitter import BaseTextSplitter
+from fred_knowledge.text.semantic_splitter import SemanticSplitter
+from fred_knowledge.vector.base_vector_store import BaseVectorStore
+from fred_knowledge.vector.factory import build_vector_store
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from langchain_core.embeddings import Embeddings
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from knowledge_flow_backend.common.structures import Configuration, PgVectorStorageConfig, TabularStoreConfig
+
 if TYPE_CHECKING:
     from sentence_transformers import CrossEncoder
-
-    from knowledge_flow_backend.features.manager_processing.persistence import LocalTabularArtifacts
-
-from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
-from knowledge_flow_backend.common.structures import Configuration, OpenSearchVectorIndexConfig, PgVectorStorageConfig, TabularStoreConfig
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseTabularProcessor
-from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import BaseFastTextProcessor
-from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
-from knowledge_flow_backend.core.processors.output.vectorization_processor.semantic_splitter import SemanticSplitter
-from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
-from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
-from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
-from knowledge_flow_backend.core.stores.vector.pgvector_store import PgVectorStoreAdapter
-from knowledge_flow_backend.features.manager_processing.artifacts import ArtifactReader
-
-# Default mapping for output processors by category
-DEFAULT_OUTPUT_PROCESSORS = {
-    "markdown": "knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_processor.VectorizationProcessor",
-    "tabular": "knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor.TabularProcessor",
-    "spreadsheet": "knowledge_flow_backend.core.processors.output.excel_processor.excel_table_registration_processor.ExcelTableRegistrationProcessor",
-}
-
-# Mapping file extensions to categories.
-# "spreadsheet" documents produce a markdown preview (output.md) plus N Parquet
-# tables: they are PREVIEW_READY like markdown files and SQL_INDEXED like
-# tabular files, but never vectorized.
-EXTENSION_CATEGORY = {
-    ".pdf": "markdown",
-    ".docx": "markdown",
-    ".pptx": "markdown",
-    ".txt": "markdown",
-    ".md": "markdown",
-    ".csv": "tabular",
-    ".xlsx": "spreadsheet",
-    ".xls": "spreadsheet",
-    ".xlsm": "spreadsheet",
-    ".duckdb": "duckdb",
-    ".jsonl": "markdown",
-    # Image extensions - processed as markdown with metadata
-    ".png": "markdown",
-    ".jpg": "markdown",
-    ".jpeg": "markdown",
-    ".gif": "markdown",
-    ".bmp": "markdown",
-    ".svg": "markdown",
-    ".webp": "markdown",
-    ".ico": "markdown",
-}
-
 logger = logging.getLogger(__name__)
-
-
-def _mask(value: Optional[str]) -> str:
-    """Never reveal any character of a secret — a partial preview is still a leak
-    (a short secret's `left`/`right` window can cover most of its length)."""
-    return "<empty>" if not value else "<redacted>"
 
 
 def get_configuration() -> Configuration:
@@ -125,203 +64,128 @@ def get_app_context() -> "ApplicationContext":
     return ApplicationContext._instance
 
 
-def _validate_pdf_dependencies(class_path: str, selection: str, extractor: str = "docling") -> None:
-    prefix = "knowledge_flow_backend.core.processors.input."
-    if class_path == prefix + "lightweight_markdown_processor.lite2_pdf_to_md_processor.LitePdfMarkdownProcessor" or (
-        class_path == prefix + "pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor" and extractor == "pymupdf"
-    ):
-        from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.optional_pymupdf import require_pymupdf
-
-        require_pymupdf(selection)
-
-
-def validate_profile_input_processor_config(config: Configuration):
-    """Ensure all profile input processor classes can be imported and subclass BaseInputProcessor."""
-    default_profile_cfg = config.processing.get_profile_config(config.processing.default_profile)
-    if not default_profile_cfg.input_processors:
-        raise ValueError(
-            f"processing.profiles.{config.processing.default_profile.value}.input_processors must not be empty",
-        )
-
-    for profile_name in ("fast", "medium", "rich"):
-        profile_cfg = config.processing.get_profile_config(profile_name)
-        seen_suffixes: set[str] = set()
-        for entry in profile_cfg.input_processors:
-            suffix = entry.suffix.lower()
-            if suffix in seen_suffixes:
-                raise ValueError(
-                    f"Duplicate input processor suffix '{suffix}' in processing.profiles.{profile_name}.input_processors",
-                )
-            seen_suffixes.add(suffix)
-
-            _validate_pdf_dependencies(entry.class_path, f"processing.profiles.{profile_name} ({entry.class_path}, pdf.extractor={profile_cfg.pdf.extractor})", profile_cfg.pdf.extractor)
-            module_path, class_name = entry.class_path.rsplit(".", 1)
-            try:
-                module = importlib.import_module(module_path)
-                cls = getattr(module, class_name)
-                if not issubclass(cls, BaseInputProcessor):
-                    raise TypeError(f"{entry.class_path} is not a subclass of BaseInputProcessor")
-                logger.debug(
-                    "Validated profile input processor: %s for profile=%s suffix=%s",
-                    entry.class_path,
-                    profile_name,
-                    suffix,
-                )
-            except (ImportError, AttributeError, TypeError) as e:
-                raise ImportError(f"Input Processor '{entry.class_path}' could not be loaded: {e}")
-
-
-def validate_output_processor_config(config: Configuration):
-    """Ensure all output processor classes can be imported and subclass BaseProcessor."""
-    if not config.output_processors:
-        return
-    for entry in config.output_processors:
-        module_path, class_name = entry.class_path.rsplit(".", 1)
-        try:
-            module = importlib.import_module(module_path)
-            cls = getattr(module, class_name)
-            if not issubclass(cls, BaseOutputProcessor):
-                raise TypeError(f"{entry.class_path} is not a subclass of BaseProcessor")
-            logger.debug(f"Validated output processor: {entry.class_path} for prefix: {entry.suffix}")
-        except (ImportError, AttributeError, TypeError) as e:
-            raise ImportError(f"Output Processor '{entry.class_path}' could not be loaded: {e}")
-
-
-def validate_attachment_processor_config(config: Configuration):
-    """Ensure all attachment fast-text processor classes can be imported and subclass BaseFastTextProcessor."""
-    if not config.attachment_processors:
-        return
-    for entry in config.attachment_processors:
-        module_path, class_name = entry.class_path.rsplit(".", 1)
-        try:
-            module = importlib.import_module(module_path)
-            cls = getattr(module, class_name)
-            if not issubclass(cls, BaseFastTextProcessor):
-                raise TypeError(f"{entry.class_path} is not a subclass of BaseFastTextProcessor")
-            logger.debug("Validated attachment processor: %s for prefix: %s", entry.class_path, entry.suffix)
-        except (ImportError, AttributeError, TypeError) as e:
-            raise ImportError(f"Attachment Processor '{entry.class_path}' could not be loaded: {e}")
-
-
-def _require_env(var: str) -> None:
-    """Log presence of a required env var or raise loudly if missing."""
-    val = os.getenv(var, "")
-    if val:
-        logger.info("     • %s: present (%s)", var, _mask(val))
-        return
-    logger.error("     ❌ %s is not set", var)
-    raise ValueError(f"Missing required environment variable: {var}")
-
-
 class ApplicationContext:
     _instance: Optional["ApplicationContext"] = None
-    configuration: Configuration
-    _input_processor_instances: Dict[str, BaseInputProcessor] = {}
-    _output_processor_instances: Dict[str, BaseOutputProcessor] = {}
-    _vector_store_instance: Optional[BaseVectorStore] = None
-
-    _log_store_instance: Optional[BaseLogStore] = None
-    _opensearch_client: Optional[OpenSearch] = None
-    _content_store_instance: Optional["LocalTabularArtifacts"] = None
-    _embedder_instance: Optional[Embeddings] = None
-    _kpi_writer: Optional[BaseKPIWriter] = None
-    _control_plane_client: httpx.AsyncClient | None = None
-    _pg_async_engine: Optional[AsyncEngine] = None
 
     def __init__(self, configuration: Configuration):
-        self._manager_vector_lock = threading.Lock()
-        self._manager_vector_store = None
-        # Allow reuse if already initialized with same config
         if ApplicationContext._instance is not None:
-            # Optionally: log or assert config equality here
             return
-
         self.configuration = configuration
         self._published_artifact_reader: ArtifactReader | None = None
-        validate_profile_input_processor_config(configuration)
-        validate_output_processor_config(configuration)
-        validate_attachment_processor_config(configuration)
-        self.input_processor_registry: Dict[str, Type[BaseInputProcessor]] = self._load_input_processor_registry()
-        self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
+        self._vector_store_instance: BaseVectorStore | None = None
+        self._log_store_instance: BaseLogStore | None = None
+        self._embedder_instance: Embeddings | None = None
+        self._kpi_writer: BaseKPIWriter | None = None
+        self._control_plane_client: httpx.AsyncClient | None = None
+        self._pg_async_engine: AsyncEngine | None = None
+        self._opensearch_client: OpenSearch | None = None
         ApplicationContext._instance = self
         self._log_config_summary()
 
-    def is_tabular_file(self, file_name: str) -> bool:
-        """
-        Returns True if the file is handled by a tabular input processor.
-        This allows detecting if a file should produce a dataset-centric
-        Parquet artifact for the tabular runtime.
-        """
-        ext = Path(file_name).suffix.lower()
+    def get_text_splitter(self) -> BaseTextSplitter:
+        return SemanticSplitter(**self.configuration.text_splitter.model_dump())
+
+    def _log_sensitive(self, name: str, value: Optional[str]):
+        logger.info("%s configured: %s", name, bool(value))
+
+    def _log_config_summary(self):
+        sec = self.configuration.security.user
+
+        logger.info("  🔒 security (Knowledge → Knowledge/Third Party):")
+        logger.info("     • enabled: %s", sec.enabled)
+        logger.info("     • client_id: %s", sec.client_id or "<unset>")
+        logger.info("     • %s: %s", "issuer" if sec.provider == "oidc" else "keycloak_url", sec.realm_url or "<unset>")
+
+        if sec.enabled:
+            if sec.provider == "keycloak":
+                try:
+                    base, realm = split_realm_url(str(sec.realm_url))
+                    logger.info("     • realm: %s  (base=%s)", realm, base)
+                except Exception as e:
+                    logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
+                    raise ValueError("Invalid Keycloak URL") from e
+        embedding = self.configuration.embedding_model
+        # Non-secret settings from YAML
+        for k, v in (embedding.settings or {}).items():
+            # Heuristic mask for anything that *looks* sensitive even if put in YAML by mistake
+            if any(t in k.lower() for t in ("secret", "token", "key")):
+                logger.info("     ↳ %s: (masked)", k)
+            else:
+                logger.info("     ↳ %s: %s", k, v)
+
+        # Required env vars by provider
+        provider = (embedding.provider or "").lower()
+        if provider == ModelProvider.OPENAI.value:
+            _require_env("OPENAI_API_KEY")
+        elif provider == ModelProvider.AZURE_OPENAI.value:
+            _require_env("AZURE_OPENAI_API_KEY")
+        elif provider == ModelProvider.AZURE_APIM.value:
+            _require_env("AZURE_AD_CLIENT_SECRET")
+            _require_env("AZURE_APIM_SUBSCRIPTION_KEY")
+        elif provider == ModelProvider.OLLAMA.value:
+            # Usually no secrets; base_url is in settings
+            pass
+        elif provider == ModelProvider.VERTEX_AI.value:
+            pass
+        elif provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
+            pass
+        else:
+            logger.error("     ❌ Unsupported embedding provider: %s", provider)
+            raise ValueError(f"Unsupported embedding provider: {provider}")
+
+        vector_type = self.configuration.storage.vector_store
+        logger.info(f"  📚 Vector store backend: {vector_type}")
         try:
-            processor = self.get_input_processor_instance(ext)
-            return isinstance(processor, BaseTabularProcessor)
-        except ValueError:
-            return False
+            store = self.configuration.storage.vector_store
 
-    def is_spreadsheet_file(self, file_name: str) -> bool:
-        """
-        Returns True if the file belongs to the "spreadsheet" category.
-        Spreadsheet documents keep the markdown preview flow (output.md) but
-        route their output stage to per-table Parquet registration
-        (SQL_INDEXED) instead of vectorization.
-        """
-        ext = Path(file_name).suffix.lower()
-        return EXTENSION_CATEGORY.get(ext) == "spreadsheet"
+            if isinstance(store, OpenSearchIndexConfig):
+                s = self.configuration.storage.opensearch
+                if not s:
+                    logger.error("     ❌ Missing OpenSearch configuration (required for OpenSearch-backed vector store)")
+                    raise RuntimeError("OpenSearch configuration is required for OpenSearch vector store")
+                _require_env("OPENSEARCH_PASSWORD")
+                logger.info(f"     ↳ Host: {s.host}")
+                logger.info(f"     ↳ Vector Index: {store.index}")
+                logger.info(f"     ↳ Secure (TLS): {s.secure}")
+                logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
+                logger.info(f"     ↳ Username: {s.username}")
+                self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
+            elif isinstance(store, PgVectorStorageConfig):
+                pg = self.configuration.storage.postgres
+                _require_env("FRED_POSTGRES_PASSWORD")
+                logger.info("     ↳ Backend: pgvector")
+                logger.info("     ↳ Host: %s  Port: %s  DB: %s", pg.host, pg.port, pg.database)
+                logger.info("     ↳ Collection: %s", store.collection_name)
+                logger.info("     ↳ Username: %s", pg.username)
+                self._log_sensitive("FRED_POSTGRES_PASSWORD", os.getenv("FRED_POSTGRES_PASSWORD"))
+        except Exception:
+            logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
 
-    def get_output_processor_instance(self, extension: str) -> BaseOutputProcessor:
-        """
-        Get an instance of the output processor for a given file extension.
-        This method ensures that the processor is instantiated only once per class path.
-        Args:
-            extension (str): The file extension for which to get the processor.
-        Returns:
-            BaseOutputProcessor: An instance of the output processor.
-        Raises:
-            ValueError: If no processor is found for the given extension.
-        """
-        processor_class = self._get_output_processor_class(extension)
-
-        if processor_class is None:
-            raise ValueError(f"No output processor found for extension '{extension}'")
-
-        class_path = f"{processor_class.__module__}.{processor_class.__name__}"
-
-        if class_path not in self._output_processor_instances:
-            logger.debug(f"Creating new instance of output processor: {class_path}")
-            self._output_processor_instances[class_path] = processor_class(context=self) if getattr(self, "_inject_processor_context", False) else processor_class()
-
-        return self._output_processor_instances[class_path]
-
-    def get_input_processor_instance(self, extension: str) -> BaseInputProcessor:
-        """
-        Get an instance of the input processor for a given file extension.
-        This method ensures that the processor is instantiated only once per class path.
-        Args:
-            extension (str): The file extension for which to get the processor.
-        Returns:
-            BaseInputProcessor: An instance of the input processor.
-        Raises:
-            ValueError: If no processor is found for the given extension.
-        """
-        processor_class = self._get_input_processor_class(extension)
-
-        if processor_class is None:
-            raise ValueError(f"No input processor found for extension '{extension}'")
-
-        class_path = f"{processor_class.__module__}.{processor_class.__name__}"
-
-        if class_path not in self._input_processor_instances:
-            logger.debug(f"Creating new instance of input processor: {class_path}")
-            self._input_processor_instances[class_path] = processor_class()
-
-        return self._input_processor_instances[class_path]
+        try:
+            tabular_store: TabularStoreConfig = self.configuration.storage.tabular_store
+            logger.info("  📊 Tabular runtime:")
+            logger.info(
+                "     • prefix=%s  format=%s  compression=%s",
+                tabular_store.artifacts_prefix,
+                tabular_store.format,
+                tabular_store.compression,
+            )
+            logger.info(
+                "     • engine=%s  access=%s  default_max_rows=%s  max_rows=%s  internal_presigned_ttl_seconds=%s",
+                tabular_store.query.engine,
+                tabular_store.query.access_mode,
+                tabular_store.query.default_max_rows,
+                tabular_store.query.max_rows,
+                tabular_store.query.internal_presigned_ttl_seconds,
+            )
+        except Exception:
+            logger.warning("  ⚠️ Failed to read tabular runtime section.")
 
     @classmethod
     def get_instance(cls) -> "ApplicationContext":
         """
         Get the singleton instance of ApplicationContext. It provides access to the
-        configuration and processor registry.
+        configuration and API resources.
         Raises:
             RuntimeError: If the ApplicationContext is not initialized.
         """
@@ -334,88 +198,12 @@ class ApplicationContext:
         """Reset the singleton instance (used in tests)."""
         cls._instance = None
 
-    def _load_input_processor_registry(self) -> Dict[str, Type[BaseInputProcessor]]:
-        registry: Dict[str, Type[BaseInputProcessor]] = {}
-        default_profile = self.configuration.processing.default_profile
-        profile_cfg = self.configuration.processing.get_profile_config(default_profile)
-
-        for entry in profile_cfg.input_processors:
-            cls = self._dynamic_import(entry.class_path)
-            if not issubclass(cls, BaseInputProcessor):
-                raise TypeError(f"{entry.class_path} is not a subclass of BaseProcessor")
-            suffix = entry.suffix.lower()
-            logger.debug(
-                "Loaded input processor: %s for default profile=%s suffix=%s",
-                entry.class_path,
-                default_profile.value,
-                suffix,
-            )
-            registry[suffix] = cls
-
-        if not registry:
-            raise ValueError(
-                f"No input processors configured for default profile '{default_profile.value}'",
-            )
-        return registry
-
-    def _load_output_processor_registry(self) -> Dict[str, Type[BaseOutputProcessor]]:
-        registry = {}
-        if not self.configuration.output_processors:
-            return registry
-        for entry in self.configuration.output_processors:
-            cls = self._dynamic_import(entry.class_path)
-            if not issubclass(cls, BaseOutputProcessor):
-                raise TypeError(f"{entry.class_path} is not a subclass of BaseOutputProcessor")
-            logger.debug(f"Loaded output processor: {entry.class_path} for prefix: {entry.suffix}")
-            registry[entry.suffix.lower()] = cls
-        return registry
-
     def get_config(self) -> Configuration:
         """
         Get the application configuration. This corresponds to the initial YAML file
         loaded at startup.
         """
         return self.configuration
-
-    def _get_input_processor_class(self, extension: str) -> Optional[Type[BaseInputProcessor]]:
-        """
-        Get the input processor class for a given file extension. The mapping is
-        resolved from processing.default_profile.input_processors.
-        Args:
-            extension (str): The file extension for which to get the processor class.
-        Returns:
-            Optional[Type[BaseInputProcessor]]: The input processor class, or None if not found.
-        """
-        return self.input_processor_registry.get(extension.lower())
-
-    def _get_output_processor_class(self, extension: str) -> Optional[Type[BaseOutputProcessor]]:
-        """
-        Get the output processor class for a given file extension. The mapping is
-        defined in the configuration.yaml file but defaults may be used.
-        Args:
-            extension (str): The file extension for which to get the processor class.
-        Returns:
-            Optional[Type[BaseOutputProcessor]]: The output processor class, or None if not found.
-        """
-        processor_class = self.output_processor_registry.get(extension.lower())
-        if processor_class:
-            return processor_class
-
-        # Else fallback: infer category and default processor
-        category = EXTENSION_CATEGORY.get(extension.lower())
-        if category:
-            default_class_path = DEFAULT_OUTPUT_PROCESSORS.get(category)
-            if default_class_path:
-                return self._dynamic_import(default_class_path)
-
-        raise ValueError(f"No output processor found for extension '{extension}'")
-
-    def _dynamic_import(self, class_path: str) -> Type:
-        """Helper to dynamically import a class from its full path."""
-        module_path, class_name = class_path.rsplit(".", 1)
-        module = importlib.import_module(module_path)
-        cls = getattr(module, class_name)
-        return cls
 
     def get_published_artifact_reader(self) -> ArtifactReader:
         if self._published_artifact_reader is None:
@@ -453,12 +241,6 @@ class ApplicationContext:
                 opensearch_config=config.opensearch,
             )
         return self._log_store_instance
-
-    def get_content_store(self) -> "LocalTabularArtifacts":
-        """Return the attempt-local writer installed by scoped_pipeline."""
-        if self._content_store_instance is None:
-            raise RuntimeError("Tabular artifacts require a manager processing attempt")
-        return self._content_store_instance
 
     def get_embedder(self) -> Embeddings:
         """
@@ -558,59 +340,6 @@ class ApplicationContext:
         self._vector_store_instance = self.build_vector_store(embedding_model, self.configuration.storage.vector_store, read_only=read_only)
         return self._vector_store_instance
 
-    def get_manager_vector_store(self):
-        with self._manager_vector_lock:
-            if self._manager_vector_store is None:
-                settings = self.configuration.manager_processing
-                if settings is None:
-                    raise ValueError("Manager processing is not configured")
-                instance = self.build_vector_store(self.get_embedder(), settings.vector_store)
-                instance.strict_operations = True
-                self._manager_vector_store = instance
-            return self._manager_vector_store
-
-    def build_vector_store(self, embedding_model: Embeddings, store, *, read_only: bool = False) -> BaseVectorStore:
-        """Construct an explicitly selected namespace for the API or a processing attempt."""
-        embedding_model_name = self.configuration.embedding_model.name or "unknown"
-
-        if isinstance(store, OpenSearchVectorIndexConfig):
-            opensearch_config = self.configuration.storage.opensearch
-            if not opensearch_config:
-                raise ValueError("Missing OpenSearch configuration")
-            password = opensearch_config.password
-            if not password:
-                raise ValueError("Missing OpenSearch credentials: OPENSEARCH_PASSWORD")
-
-            instance = OpenSearchVectorStoreAdapter(
-                embedding_model=embedding_model,
-                embedding_model_name=embedding_model_name,
-                kpi=self.get_kpi_writer(),
-                host=opensearch_config.host,
-                index=store.index,
-                username=opensearch_config.username,
-                password=password,
-                secure=opensearch_config.secure,
-                verify_certs=opensearch_config.verify_certs,
-                bulk_size=store.bulk_size,
-                read_only=read_only,
-            )
-            return instance
-        elif isinstance(store, PgVectorStorageConfig):
-            pg = self.configuration.storage.postgres
-            instance = PgVectorStoreAdapter(
-                embedding_model=embedding_model,
-                embedding_model_name=embedding_model_name,
-                postgres_config=pg,
-                collection_name=store.collection_name,
-            )
-            logger.info(
-                "[VECTOR][PGVECTOR] Using postgres collection=%s (default table)",
-                store.collection_name,
-            )
-        else:
-            raise ValueError("Unsupported vector store backend")
-        return instance
-
     def get_opensearch_client(self) -> OpenSearch:
         if self._opensearch_client is not None:
             return self._opensearch_client
@@ -656,161 +385,6 @@ class ApplicationContext:
             raise RuntimeError("Control Plane client is opened at API startup")
         return self._control_plane_client
 
-    def get_text_splitter(self) -> BaseTextSplitter:
-        """
-        Factory method to create a text splitter instance based on configuration.
-        Currently returns RecursiveSplitter.
-        """
-        profile = get_current_processing_profile()
-        profile_cfg = self.configuration.processing.get_profile_config(profile)
-        splitter_cfg = profile_cfg.text_splitter
-        return SemanticSplitter(
-            chunk_size=splitter_cfg.chunk_size,
-            chunk_overlap=splitter_cfg.chunk_overlap,
-            preserve_tables=splitter_cfg.preserve_tables,
-        )
-
-    def is_summary_generation_enabled(self) -> bool:
-        """
-        Checks if the summary generation feature is enabled in the configuration.
-        Returns:
-            bool: True if enabled, False otherwise.
-        """
-        profile = get_current_processing_profile()
-        profile_cfg = self.configuration.processing.get_profile_config(profile)
-        return profile_cfg.generate_summary
-
-    def _log_sensitive(self, name: str, value: Optional[str]):
-        logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
-
-    def _log_config_summary(self):
-        sec = self.configuration.security.user
-
-        logger.info("  🔒 security (Knowledge → Knowledge/Third Party):")
-        logger.info("     • enabled: %s", sec.enabled)
-        logger.info("     • client_id: %s", sec.client_id or "<unset>")
-        logger.info("     • %s: %s", "issuer" if sec.provider == "oidc" else "keycloak_url", sec.realm_url or "<unset>")
-
-        if sec.enabled:
-            if sec.provider == "keycloak":
-                try:
-                    base, realm = split_realm_url(str(sec.realm_url))
-                    logger.info("     • realm: %s  (base=%s)", realm, base)
-                except Exception as e:
-                    logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
-                    raise ValueError("Invalid Keycloak URL") from e
-        embedding = self.configuration.embedding_model
-        # Non-secret settings from YAML
-        for k, v in (embedding.settings or {}).items():
-            # Heuristic mask for anything that *looks* sensitive even if put in YAML by mistake
-            if any(t in k.lower() for t in ("secret", "token", "key")):
-                logger.info("     ↳ %s: (masked)", k)
-            else:
-                logger.info("     ↳ %s: %s", k, v)
-
-        # Required env vars by provider
-        provider = (embedding.provider or "").lower()
-        if provider == ModelProvider.OPENAI.value:
-            _require_env("OPENAI_API_KEY")
-        elif provider == ModelProvider.AZURE_OPENAI.value:
-            _require_env("AZURE_OPENAI_API_KEY")
-        elif provider == ModelProvider.AZURE_APIM.value:
-            _require_env("AZURE_AD_CLIENT_SECRET")
-            _require_env("AZURE_APIM_SUBSCRIPTION_KEY")
-        elif provider == ModelProvider.OLLAMA.value:
-            # Usually no secrets; base_url is in settings
-            pass
-        elif provider == ModelProvider.VERTEX_AI.value:
-            pass
-        elif provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
-            pass
-        else:
-            logger.error("     ❌ Unsupported embedding provider: %s", provider)
-            raise ValueError(f"Unsupported embedding provider: {provider}")
-
-        processing = self.configuration.processing
-        # Processing flags (your new simple shape)
-        logger.info("  ⚙️ Processing policy:")
-        logger.info("     ↳ default_profile: %s", processing.default_profile)
-        logger.info("     ↳ any_profile_use_gpu: %s", processing.is_gpu_enabled_any_profile())
-        for profile_name in ("fast", "medium", "rich"):
-            profile_cfg = processing.get_profile_config(profile_name)
-            logger.info("     ↳ profile.%s.use_gpu: %s", profile_name, profile_cfg.use_gpu)
-            logger.info("     ↳ profile.%s.process_images: %s", profile_name, profile_cfg.process_images)
-            logger.info("     ↳ profile.%s.generate_summary: %s", profile_name, profile_cfg.generate_summary)
-            logger.info("     ↳ profile.%s.pdf.extractor: %s", profile_name, profile_cfg.pdf.extractor)
-            logger.info("     ↳ profile.%s.pdf.do_ocr: %s", profile_name, profile_cfg.pdf.do_ocr)
-            logger.info("     ↳ profile.%s.input_processors: %s", profile_name, [entry.suffix for entry in profile_cfg.input_processors])
-        vector_type = self.configuration.storage.vector_store
-        logger.info(f"  📚 Vector store backend: {vector_type}")
-        try:
-            store = self.configuration.storage.vector_store
-
-            if isinstance(store, OpenSearchIndexConfig):
-                s = self.configuration.storage.opensearch
-                if not s:
-                    logger.error("     ❌ Missing OpenSearch configuration (required for OpenSearch-backed vector store)")
-                    raise RuntimeError("OpenSearch configuration is required for OpenSearch vector store")
-                _require_env("OPENSEARCH_PASSWORD")
-                logger.info(f"     ↳ Host: {s.host}")
-                logger.info(f"     ↳ Vector Index: {store.index}")
-                logger.info(f"     ↳ Secure (TLS): {s.secure}")
-                logger.info(f"     ↳ Verify Certs: {s.verify_certs}")
-                logger.info(f"     ↳ Username: {s.username}")
-                self._log_sensitive("OPENSEARCH_PASSWORD", os.getenv("OPENSEARCH_PASSWORD"))
-            elif isinstance(store, PgVectorStorageConfig):
-                pg = self.configuration.storage.postgres
-                _require_env("FRED_POSTGRES_PASSWORD")
-                logger.info("     ↳ Backend: pgvector")
-                logger.info("     ↳ Host: %s  Port: %s  DB: %s", pg.host, pg.port, pg.database)
-                logger.info("     ↳ Collection: %s", store.collection_name)
-                logger.info("     ↳ Username: %s", pg.username)
-                self._log_sensitive("FRED_POSTGRES_PASSWORD", os.getenv("FRED_POSTGRES_PASSWORD"))
-        except Exception:
-            logger.warning("⚠️ Failed to load vector store settings — some variables may be missing or misconfigured.")
-
-        try:
-            tabular_store: TabularStoreConfig = self.configuration.storage.tabular_store
-            logger.info("  📊 Tabular runtime:")
-            logger.info(
-                "     • prefix=%s  format=%s  compression=%s",
-                tabular_store.artifacts_prefix,
-                tabular_store.format,
-                tabular_store.compression,
-            )
-            logger.info(
-                "     • engine=%s  access=%s  default_max_rows=%s  max_rows=%s  internal_presigned_ttl_seconds=%s",
-                tabular_store.query.engine,
-                tabular_store.query.access_mode,
-                tabular_store.query.default_max_rows,
-                tabular_store.query.max_rows,
-                tabular_store.query.internal_presigned_ttl_seconds,
-            )
-        except Exception:
-            logger.warning("  ⚠️ Failed to read tabular runtime section.")
-
-        logger.info("  🧩 Input Processor Mappings:")
-        for ext, cls in self.input_processor_registry.items():
-            logger.info(f"    • {ext} → {cls.__name__}")
-
-        logger.info("  📤 Output Processor Mappings:")
-        all_extensions = set(EXTENSION_CATEGORY.keys())
-        for ext in sorted(all_extensions):
-            if ext in self.output_processor_registry:
-                cls = self.output_processor_registry[ext]
-            else:
-                category = EXTENSION_CATEGORY.get(ext)
-                if not category:
-                    continue
-                default_path = DEFAULT_OUTPUT_PROCESSORS.get(category)
-                if default_path:
-                    cls = self._dynamic_import(default_path)
-                else:
-                    continue
-            logger.info(f"    • {ext} → {cls.__name__}")
-
-        logger.info("--------------------------------------------------")
-
     async def shutdown(self) -> None:
         """
         Best-effort cleanup of shared resources.
@@ -839,3 +413,31 @@ class ApplicationContext:
                 logger.debug("[OS] Error closing OpenSearch client", exc_info=True)
             finally:
                 self._opensearch_client = None
+
+    def build_vector_store(self, embedding_model: Embeddings, store, *, read_only: bool = False) -> BaseVectorStore:
+        return build_vector_store(
+            embedding_model,
+            store,
+            embedding_model_name=self.configuration.embedding_model.name or "unknown",
+            opensearch_config=self.configuration.storage.opensearch,
+            postgres_config=self.configuration.storage.postgres,
+            kpi=self.get_kpi_writer(),
+            splitter=self.get_text_splitter(),
+            read_only=read_only,
+        )
+
+
+def _mask(value: Optional[str]) -> str:
+    """Never reveal any character of a secret — a partial preview is still a leak
+    (a short secret's `left`/`right` window can cover most of its length)."""
+    return "<empty>" if not value else "<redacted>"
+
+
+def _require_env(var: str) -> None:
+    """Log presence of a required env var or raise loudly if missing."""
+    val = os.getenv(var, "")
+    if val:
+        logger.info("     • %s: present (%s)", var, _mask(val))
+        return
+    logger.error("     ❌ %s is not set", var)
+    raise ValueError(f"Missing required environment variable: {var}")

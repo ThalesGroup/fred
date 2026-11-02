@@ -15,10 +15,10 @@ from fred_core.documents.document_structures import DocumentMetadata, FileInfo, 
 from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
+from fred_knowledge.tabular.artifacts import TabularArtifactV1, build_default_query_alias
 
 from knowledge_flow_backend.common.structures import TabularStoreConfig
 from knowledge_flow_backend.features.tabular import service as module
-from knowledge_flow_backend.features.tabular.artifacts import TabularArtifactV1, build_default_query_alias
 from knowledge_flow_backend.features.tabular.structures import TabularColumnSchema, TabularQueryRequest, TabularSearchRequest
 
 SPACE, OTHER_SPACE, A, B, D1, D2, D3, CONVERSATION = [UUID(int=i) for i in range(1, 9)]

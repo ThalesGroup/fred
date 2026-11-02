@@ -1,0 +1,963 @@
+# Copyright Thales 2026
+# SPDX-License-Identifier: Apache-2.0
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
+from uuid import UUID, uuid4, uuid5
+
+import pytest
+import yaml
+from langchain_core.documents import Document
+from pydantic import ValidationError
+
+from knowledge_flow_worker.common.structures import ProcessingConfig, SchedulerConfig
+from knowledge_flow_worker.features.manager_processing.contracts import Descriptor, Work
+from knowledge_flow_worker.features.manager_processing.persistence import ScopedVectors, _placement
+from knowledge_flow_worker.features.scheduler.export_contract import export
+from knowledge_flow_worker.features.scheduler.scheduler_structures import PipelineDefinition
+
+
+@pytest.fixture
+def descriptor():
+    return Descriptor(
+        work=Work(contract_version=1, installation_id=uuid4(), processing_id=uuid4(), document_id=uuid4(), original_sha256="a" * 64, profile="fast"),
+        organization_id=uuid4(),
+        space_id=uuid4(),
+        folder_id=uuid4(),
+        folder_path="/folder",
+        session_id=None,
+        name="test.txt",
+        mime="text/plain",
+        size=10,
+        actor="writer",
+        stage="indexing",
+        generation=uuid4(),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        output_prefix="document/output/generation/",
+        max_output_bytes=100000,
+        max_artifacts=100,
+        max_chunks=100,
+        file={},
+        profile_settings={},
+        predecessor=None,
+        committed=None,
+    )
+
+
+@pytest.fixture
+def journal(monkeypatch):
+    from knowledge_flow_worker.application_context import ApplicationContext
+    from knowledge_flow_worker.features.manager_processing import client
+
+    writes = []
+
+    class FakeClient:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, path, body):
+            writes.append(body.count)
+
+    monkeypatch.setattr(client, "ManagerClient", FakeClient)
+    monkeypatch.setattr(ApplicationContext, "get_instance", lambda: SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace())))
+    return writes
+
+
+def test_export_uses_the_existing_temporal_models():
+    fixture = Path(__file__).resolve().parents[4] / "control-plane/tests/fixtures/processing/worker-contract.json"
+    contract = json.loads(fixture.read_text())
+    assert contract["workflow"] == "ProcessPush"
+    assert contract["schema"] == PipelineDefinition.model_json_schema()
+    configuration = yaml.safe_load(fixture.with_name("worker-configuration.yaml").read_text())
+    exported = export(
+        SimpleNamespace(
+            processing=ProcessingConfig.model_validate(configuration["processing"]),
+            scheduler=SchedulerConfig.model_validate(configuration["scheduler"]),
+        )
+    )
+    assert contract == exported, "Regenerate with make -C apps/knowledge-flow-worker generate-control-plane-contract"
+    for profile in contract["processor_profiles"].values():
+        for processor in profile["input_processors"]:
+            assert processor["class_path"].startswith("knowledge_flow_worker.core.processors.")
+    submissions = json.loads(fixture.with_name("submissions.json").read_text())
+    for submitted in submissions:
+        parsed = PipelineDefinition.model_validate(submitted)
+        file = parsed.files[0]
+        assert file.document_uid
+        assert file.processed_by.roles == []
+        from fred_core.logs.propagation import decode_log_context
+
+        context, error = decode_log_context(file.logging_context)
+        assert error is None
+        assert context["workflow_id"] == parsed.workflow_id
+        assert context["user_id"] == file.processed_by.uid
+        assert file.logging_context == parsed.logging_context
+        for key, value in contract["profiles"][file.profile.value].items():
+            assert getattr(file, key) == value
+
+
+def test_adaptive_retry_ids_are_fenced_before_writes(descriptor, tmp_path, journal):
+    from fred_knowledge.vector.base_vector_store import vector_write_observer
+
+    store = SimpleNamespace()
+
+    def add(documents, ids):
+        # The existing OpenSearch adaptive retry splits after a provider rejection.
+        observer = vector_write_observer.get()
+        parts = [Document(page_content="first", metadata=dict(documents[0].metadata)), Document(page_content="second", metadata=dict(documents[0].metadata))]
+        assigned = observer.before_write(parts, [f"{ids[0]}::part::{i}" for i in range(2)])
+        assert journal == [1, 3]
+        store.saved = dict(zip(assigned, parts, strict=True))
+        return assigned
+
+    store.add_documents = add
+    store.get_chunk = lambda document, identifier: {"text": store.saved[identifier].page_content, "metadata": store.saved[identifier].metadata}
+    vectors = ScopedVectors(store, descriptor, None, tmp_path, None)
+    written = vectors.add_documents([Document(page_content="first second", metadata={"date_added": datetime.now(timezone.utc), "retrievable": True})])
+    assert vectors.ordinals == [1, 2]
+    assert vectors.count == 2
+    assert written == [str(uuid5(descriptor.generation, str(i))) for i in (1, 2)]
+    assert len((tmp_path / "chunks.jsonl").read_text().splitlines()) == 2
+    assert vector_write_observer.get() is None
+
+
+@pytest.mark.parametrize("attachment", [False, True])
+def test_descriptor_placement_overrides_extractor_values_on_every_chunk(descriptor, tmp_path, journal, attachment):
+    from fred_knowledge.vector.base_vector_store import vector_write_observer
+
+    if attachment:
+        descriptor = Descriptor.model_validate({**descriptor.model_dump(), "folder_id": None, "folder_path": None, "session_id": uuid4()})
+    forged = {"organization_id": "forged", "space_id": "forged", "folder_path": "/forged/", "session_id": "forged"}
+    placement = _placement(descriptor)
+    store = SimpleNamespace()
+
+    def add(documents, ids):
+        # Adaptive retry parts arrive with extractor values again; the fence must rewrite them.
+        observer = vector_write_observer.get()
+        parts = [Document(page_content=text, metadata={**documents[0].metadata, **forged}) for text in ("first", "second")]
+        assigned = observer.before_write(parts, [f"{ids[0]}::part::{i}" for i in range(2)])
+        store.saved = dict(zip(assigned, parts, strict=True))
+        return assigned
+
+    store.add_documents = add
+    store.get_chunk = lambda document, identifier: {"text": store.saved[identifier].page_content, "metadata": store.saved[identifier].metadata}
+    vectors = ScopedVectors(store, descriptor, None, tmp_path, None)
+    vectors.add_documents([Document(page_content="first second", metadata={"retrievable": True, **forged})])
+    assert [{key: doc.metadata[key] for key in placement} for doc in store.saved.values()] == [placement, placement]
+    records = [json.loads(line) for line in (tmp_path / "chunks.jsonl").read_text().splitlines()]
+    assert [{key: record["metadata"][key] for key in placement} for record in records] == [placement, placement]
+    if attachment:
+        assert all("folder_path" not in doc.metadata for doc in store.saved.values())
+        assert all("folder_path" not in record["metadata"] for record in records)
+
+
+def test_placement_distinguishes_drive_and_conversation(descriptor):
+    assert _placement(descriptor) == {
+        "organization_id": str(descriptor.organization_id),
+        "space_id": str(descriptor.space_id),
+        "folder_path": descriptor.folder_path,
+        "session_id": "",
+    }
+    session = uuid4()
+    attachment = Descriptor.model_validate({**descriptor.model_dump(), "folder_id": None, "folder_path": None, "session_id": session})
+    assert _placement(attachment) == {
+        "organization_id": str(descriptor.organization_id),
+        "space_id": str(descriptor.space_id),
+        "session_id": str(session),
+    }
+
+
+@pytest.mark.parametrize(
+    "placement",
+    [
+        {"session_id": uuid4()},
+        {"folder_id": None, "folder_path": None},
+        {"folder_path": None},
+        {"folder_id": None, "session_id": uuid4()},
+    ],
+    ids=["both-containers", "no-container", "drive-without-path", "attachment-with-path"],
+)
+def test_descriptor_refuses_ambiguous_placement(descriptor, placement):
+    with pytest.raises(ValidationError):
+        Descriptor.model_validate({**descriptor.model_dump(), **placement})
+
+
+def test_stored_chunk_with_another_space_fails_indexing(descriptor, tmp_path, journal):
+    saved = {}
+
+    def add(documents, ids):
+        saved.update(zip(ids, documents, strict=True))
+        return ids
+
+    store = SimpleNamespace(add_documents=add, get_chunk=lambda _, identifier: {"text": saved[identifier].page_content, "metadata": {**saved[identifier].metadata, "space_id": str(uuid4())}})
+    vectors = ScopedVectors(store, descriptor, None, tmp_path, None)
+    with pytest.raises(RuntimeError, match="indexing_failed"):
+        vectors.add_documents([Document(page_content="moved", metadata={"retrievable": True})])
+    assert vectors.count == 0
+
+
+def test_placement_fields_are_opensearch_keywords():
+    from fred_knowledge.vector.opensearch_vector_store import VECTOR_METADATA_PROPERTIES
+
+    for field in ("organization_id", "space_id", "folder_path", "session_id"):
+        assert VECTOR_METADATA_PROPERTIES[field] == {"type": "keyword"}
+
+
+def test_optional_pointer_failure_keeps_cleanup_journal_separate(descriptor, tmp_path, journal):
+    def fail(*_, **__):
+        raise RuntimeError("provider unavailable")
+
+    vectors = ScopedVectors(SimpleNamespace(add_documents=fail), descriptor, None, tmp_path, None)
+    with pytest.raises(RuntimeError):
+        vectors.add_documents([Document(page_content="dataset pointer")])
+    assert journal == [1]
+    assert vectors.count == 0
+    assert vectors.ordinals == []
+
+
+def test_partial_store_success_cannot_publish_a_success_count(descriptor, tmp_path, journal):
+    store = SimpleNamespace(add_documents=lambda documents, ids: ids, get_chunk=lambda *_: {})
+    vectors = ScopedVectors(store, descriptor, None, tmp_path, None)
+    with pytest.raises(RuntimeError, match="indexing_failed"):
+        vectors.add_documents([Document(page_content="lost")])
+    assert vectors.count == 0
+
+
+def test_actual_opensearch_resplit_preserves_concurrent_generation_scopes(descriptor, tmp_path, journal):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from fred_knowledge.text.semantic_splitter import SemanticSplitter
+    from fred_knowledge.vector.base_vector_store import vector_write_observer
+    from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
+
+    rendezvous = Barrier(2)
+    saved = {}
+    initial = set()
+
+    class ProviderLimit(RuntimeError):
+        status_code = 400
+        code = "3210"
+        type = "invalid_request_prompt"
+        body = {"code": "3210", "type": "invalid_request_prompt", "raw_status_code": 400}
+
+    def write(documents, ids):
+        observer = vector_write_observer.get()
+        scope = str(observer.descriptor.generation)
+        assert all(not any(key.startswith("manager_") for key in doc.metadata) for doc in documents)
+        if scope not in initial:
+            initial.add(scope)
+            rendezvous.wait(timeout=5)
+        if len(documents) > 1 or any(len(doc.page_content) > 400 for doc in documents):
+            raise ProviderLimit("provider input limit")
+        for identifier, doc in zip(ids, documents, strict=True):
+            assert identifier in observer.aliases
+            saved[identifier] = doc
+        return ids
+
+    # Real adapter algorithm, with only the remote model/index write replaced.
+    store = object.__new__(OpenSearchVectorStoreAdapter)
+    store._index = "manager-fixture"
+    store._bulk_size = 100
+    store._learned_embedding_batch_cap = None
+    store._cap_success_streak = 0
+    store._embedding_model_name = "fixture"
+    store._vs = SimpleNamespace(add_documents=write)
+    store.get_chunk = lambda _, identifier: {"text": saved[identifier].page_content, "metadata": saved[identifier].metadata}
+
+    def ingest(index):
+        scoped = descriptor.model_copy(update={"generation": uuid4()})
+        directory = tmp_path / str(index)
+        directory.mkdir()
+        vectors = ScopedVectors(store, scoped, None, directory, SemanticSplitter(chunk_size=800, chunk_overlap=0))
+        ids = vectors.add_documents([Document(page_content="long content " * 80, metadata={"retrievable": True}), Document(page_content="short", metadata={"retrievable": True})])
+        assert str(uuid5(scoped.generation, "0")) not in ids
+        assert str(uuid5(scoped.generation, "1")) in ids
+        assert vectors.count == len(ids) > 2
+        assert len(vectors.documents) == vectors.count + 1
+        assert vector_write_observer.get() is None
+        return set(ids)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first, second = list(executor.map(ingest, (1, 2)))
+    assert first.isdisjoint(second)
+
+
+@pytest.mark.parametrize("failure", ["authority", "delete", "read", "ack", None])
+def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(monkeypatch, descriptor, failure):
+    from knowledge_flow_worker.features.manager_processing import cleanup
+
+    candidate = {
+        "work": descriptor.work.model_dump(mode="json"),
+        "generation": str(descriptor.generation),
+        "cursor": 0,
+        "chunks": 4,
+        "batch": 200,
+        "preserve_objects": True,
+        "protected_ordinals": [1, 3],
+    }
+    acknowledgments = []
+    deleted = []
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def get(self, _):
+            if failure == "authority":
+                raise RuntimeError("manager SQL unavailable")
+            return [candidate]
+
+        def post(self, _, body):
+            if failure == "ack":
+                raise RuntimeError("manager SQL unavailable")
+            acknowledgments.append(body)
+
+    def delete(_, identifier):
+        if failure == "delete":
+            raise RuntimeError("store unavailable")
+        deleted.append(identifier)
+
+    def read(*_):
+        if failure == "read":
+            raise RuntimeError("store unavailable")
+        return {}
+
+    vectors = SimpleNamespace(delete_chunk=delete, get_chunk=read)
+    monkeypatch.setattr(cleanup, "ManagerClient", Client)
+    monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
+    if failure:
+        if failure == "authority":
+            with pytest.raises(RuntimeError):
+                cleanup.sweep(context)
+        else:
+            cleanup.sweep(context)  # The failing candidate is logged; the sweep goes on.
+        assert not acknowledgments
+        if failure == "authority":
+            assert not deleted
+        failure = None
+        cleanup.sweep(context)
+        assert len(acknowledgments) == 1
+    else:
+        cleanup.sweep(context)
+        cleanup.sweep(context)  # A late write is included in the repeated sweep.
+        assert deleted == [str(uuid5(descriptor.generation, str(i))) for i in (0, 2, 0, 2)]
+        assert len(acknowledgments) == 2
+        assert all(not ack.objects_empty for ack in acknowledgments)
+
+
+def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descriptor):
+    from knowledge_flow_worker.features.manager_processing import cleanup
+
+    failing, later = (
+        {"work": descriptor.work.model_dump(mode="json"), "generation": str(uuid4()), "cursor": 0, "chunks": 1, "batch": 200, "preserve_objects": True, "protected_ordinals": []} for _ in range(2)
+    )
+    acknowledgments = []
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def get(self, _):
+            return [failing, later]
+
+        def post(self, _, body):
+            acknowledgments.append(body)
+
+    def delete(_, identifier):
+        if identifier == str(uuid5(UUID(failing["generation"]), "0")):
+            raise RuntimeError("store unavailable")
+
+    vectors = SimpleNamespace(delete_chunk=delete, get_chunk=lambda *_: {})
+    monkeypatch.setattr(cleanup, "ManagerClient", Client)
+    monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
+    cleanup.sweep(context)
+    assert [str(ack.generation) for ack in acknowledgments] == [later["generation"]]
+
+
+@pytest.mark.parametrize("remaining", [0, 1])
+@pytest.mark.parametrize("object_count", [0, 200, 201])
+def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch, descriptor, remaining, object_count):
+    from knowledge_flow_worker.features.manager_processing import cleanup
+
+    prefix = f"derived/{descriptor.work.document_id}/output/"
+    candidate = {
+        "work": descriptor.work.model_dump(mode="json"),
+        "generation": str(descriptor.generation),
+        "output_prefix": prefix,
+        "cursor": 0,
+        "chunks": 0,
+        "batch": 200,
+        "preserve_objects": False,
+        "protected_ordinals": [],
+        "purge_document": True,
+    }
+    second_document = str(uuid4())
+    second_prefix = f"derived/{second_document}/output/"
+    second = {
+        **candidate,
+        "work": {**candidate["work"], "document_id": second_document, "processing_id": str(uuid4())},
+        "generation": str(uuid4()),
+        "output_prefix": second_prefix,
+    }
+    processed_prefix = second_prefix if remaining else prefix
+    acknowledgments = []
+    events = []
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def get(self, _):
+            return [candidate, second] if remaining else [candidate]
+
+        def post(self, path, body):
+            assert path == "/document-processing/cleanup"
+            events.append("ack")
+            acknowledgments.append(body)
+
+    def delete(*, document_uid):
+        assert document_uid in (str(descriptor.work.document_id), second_document)
+        events.append("delete_vectors")
+
+    def count(*, document_uid):
+        assert document_uid in (str(descriptor.work.document_id), second_document)
+        events.append("count_vectors")
+        return remaining if document_uid == str(descriptor.work.document_id) else 0
+
+    def objects(bucket, **kwargs):
+        assert bucket == "derived"
+        assert kwargs == {"prefix": processed_prefix, "recursive": True}
+        events.append("list_objects")
+        for i in range(object_count):
+            yield SimpleNamespace(object_name=f"{processed_prefix}{i}")
+
+    def remove(bucket, key):
+        assert bucket == "derived"
+        events.append(key)
+
+    vectors = SimpleNamespace(delete_vectors_for_document=delete, get_document_chunk_count=count)
+    artifacts = SimpleNamespace(bucket="derived", client=SimpleNamespace(list_objects=objects, remove_object=remove))
+    monkeypatch.setattr(cleanup, "ManagerClient", Client)
+    monkeypatch.setattr(cleanup, "Artifacts", lambda _: artifacts)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_manager_vector_store=lambda: vectors)
+    if remaining:
+        cleanup.sweep(context)
+        assert all(ack.work.document_id != descriptor.work.document_id for ack in acknowledgments)
+        assert len(acknowledgments) == 1
+        ack = acknowledgments[0]
+        assert ack.work.model_dump(mode="json") == second["work"]
+        assert str(ack.generation) == second["generation"]
+        assert ack.purge_document
+        assert ack.cursor == ack.next_cursor == 0
+        assert ack.objects_empty == (object_count <= 200)
+        assert events == ["delete_vectors", "count_vectors", "delete_vectors", "count_vectors", "list_objects", *[f"{second_prefix}{i}" for i in range(min(object_count, 200))], "ack"]
+    else:
+        cleanup.sweep(context)
+        assert events == ["delete_vectors", "count_vectors", "list_objects", *[f"{prefix}{i}" for i in range(min(object_count, 200))], "ack"]
+        assert len(acknowledgments) == 1
+        ack = acknowledgments[0]
+        assert ack.purge_document
+        assert ack.work == descriptor.work
+        assert ack.generation == descriptor.generation
+        assert ack.cursor == ack.next_cursor == 0
+        assert ack.objects_empty == (object_count <= 200)
+
+
+def test_restore_reads_the_predecessor_stored_prefix(descriptor, tmp_path):
+    from knowledge_flow_worker.features.manager_processing.artifacts import Artifacts
+    from knowledge_flow_worker.features.manager_processing.contracts import Artifact, Manifest, Predecessor
+
+    artifact = Artifact(path="output.md", size=4, sha256="b" * 64)
+    # Deliberately unrelated to output_prefix: the worker never rebuilds a location.
+    descriptor.predecessor = Predecessor(prefix="relocated/elsewhere/", manifest=Manifest(generation=uuid4(), artifacts=[artifact], chunks=0, vectors=0))
+    reads = []
+    artifacts = Artifacts.__new__(Artifacts)
+    artifacts.read = lambda prefix, item, destination: reads.append((prefix, item, destination))
+    artifacts.restore(descriptor, tmp_path)
+    assert reads == [("relocated/elsewhere/", artifact, tmp_path / "output.md")]
+
+
+@pytest.mark.parametrize("rendered", [True, False])
+def test_extraction_child_freezes_profile_before_context_and_requires_office_preview(monkeypatch, descriptor, tmp_path, rendered):
+    import tempfile
+    from unittest.mock import Mock
+
+    import fred_core
+
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    from knowledge_flow_worker import application_context
+    from knowledge_flow_worker.common import config_loader
+    from knowledge_flow_worker.features.manager_processing import artifacts, persistence
+    from knowledge_flow_worker.features.scheduler import extraction_process
+
+    fixture = Path(__file__).resolve().parents[4] / "control-plane/tests/fixtures/processing/worker-contract.json"
+    profile = json.loads(fixture.read_text())["processor_profiles"]["fast"]
+    descriptor = descriptor.model_copy(update={"profile_settings": profile, "file": {"input_activity_timeout_seconds": 60}})
+    configuration = SimpleNamespace(processing=SimpleNamespace(profiles=SimpleNamespace(fast=None)), manager_processing=SimpleNamespace())
+    context = SimpleNamespace(configuration=configuration)
+
+    def build(received):
+        assert received.processing.profiles.fast == type(received.processing.profiles.fast).model_validate(profile)
+        return context
+
+    monkeypatch.setattr(config_loader, "load_configuration", lambda: configuration)
+    monkeypatch.setattr(application_context, "ApplicationContext", build)
+    monkeypatch.setattr(artifacts, "Artifacts", lambda _: object())
+    pipeline = Mock()
+    monkeypatch.setattr(persistence, "scoped_pipeline", lambda *_args, **_kwargs: (pipeline, None))
+    monkeypatch.setattr(extraction_process.os, "setsid", lambda: None)
+    monkeypatch.setattr(extraction_process, "_install_parent_death_signal", lambda _: None)
+    monkeypatch.setattr(extraction_process.DocumentMetadata, "model_validate_json", lambda _: "metadata")
+    pdf = tmp_path / "original.pdf"
+    pdf.write_bytes(b"%PDF-fixture")
+    monkeypatch.setattr(fred_core, "convert_office_file_to_pdf", lambda *_args, **_kwargs: pdf if rendered else None)
+    results = []
+    causes = []
+    monkeypatch.setattr(extraction_process, "_is_permanent", lambda exc: causes.append(repr(exc)) or False)
+    monkeypatch.setattr(extraction_process, "_send_outcome", lambda _, result: results.append(result))
+
+    class Exited(BaseException):
+        pass
+
+    def exit_process(code):
+        raise Exited(code)
+
+    monkeypatch.setattr(extraction_process.os, "_exit", exit_process)
+    request = SimpleNamespace(manager_job_json=descriptor.model_dump_json(), config_file=None, input_path=str(tmp_path / "original.docx"), output_dir=str(tmp_path), metadata_json="{}", profile="fast")
+    with pytest.raises(Exited):
+        extraction_process._child_main(request, None, 1)
+    assert pipeline.run_input.call_count == 1, (results, causes)
+    expected = {"error": None if rendered else "preview_failed", "permanent": False}
+    assert results == [expected]
+    assert (tmp_path / "native.pdf").exists() is rendered
+
+
+@pytest.mark.parametrize("kind", ["native.pdf", "datasets/table.parquet"])
+def test_adopt_output_moves_once_and_rejects_excess_before_move(descriptor, tmp_path, kind):
+    from knowledge_flow_worker.features.manager_processing.artifacts import adopt_output
+    from knowledge_flow_worker.features.manager_processing.client import ManagerError
+
+    output = tmp_path / "output"
+    output.mkdir()
+    (output / "metadata.json").write_bytes(b"{}")
+    source = tmp_path / "scratch.bin"
+    source.write_bytes(b"x" * 98)
+    bounded = descriptor.model_copy(update={"max_output_bytes": 100})
+    inode = source.stat().st_ino
+    target = adopt_output(bounded, output, source, kind)
+    assert not source.exists()
+    assert target.stat().st_ino == inode
+    source.write_bytes(b"y" * 99)
+    with pytest.raises(ManagerError, match="capacity_exceeded"):
+        adopt_output(bounded, output, source, kind)
+    assert target.read_bytes() == b"x" * 98
+    assert source.exists()
+
+
+def test_excel_recalculation_scratch_is_removed_on_failed_load(monkeypatch, tmp_path):
+    from knowledge_flow_worker.core.processors.input.excel_processor import excel_processor as excel
+
+    scratch = tmp_path / "recalculation"
+    scratch.mkdir()
+    result = scratch / "input.xlsx"
+    result.write_bytes(b"bad workbook")
+    monkeypatch.setattr(excel, "recalc_with_libreoffice", lambda _: str(result))
+    processor = excel.ExcelProcessor()
+    processor.recalc = True
+    with pytest.raises(Exception):
+        processor._build_extractor("input.xlsx")
+    assert not scratch.exists()
+
+
+def test_excel_converter_scratch_is_removed_on_interruption(monkeypatch, tmp_path):
+    from knowledge_flow_worker.core.processors.input.excel_processor import excel_processor as excel
+
+    scratch = tmp_path / "converter"
+    scratch.mkdir()
+    monkeypatch.setattr(excel.tempfile, "mkdtemp", lambda: str(scratch))
+    monkeypatch.setattr(excel.shutil, "which", lambda _: "/fixture/soffice")
+
+    def interrupted(*_args, **_kwargs):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(excel.subprocess, "run", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        excel.recalc_with_libreoffice("input.xlsx")
+    assert not scratch.exists()
+
+
+@pytest.mark.parametrize("code", ["preview_failed", "capacity_exceeded", "integrity_failure", "unsupported_input"])
+def test_failure_callbacks_preserve_safe_child_codes(code):
+    from knowledge_flow_worker.features.manager_processing.service import ManagedIngestionService
+    from knowledge_flow_worker.features.scheduler.extraction_process import ExtractionProcessError
+
+    service = object.__new__(ManagedIngestionService)
+    service.failure_code = "extraction_failed"
+    wrapped = RuntimeError("private provider diagnostic")
+    wrapped.__cause__ = ExtractionProcessError(code, permanent=False)
+    service.record_failure(wrapped)
+    assert service.failure_code == code
+    service.record_failure(RuntimeError("secret diagnostic"))
+    assert service.failure_code == code
+
+
+def test_tabular_conversion_interrupts_while_scratch_grows(descriptor, tmp_path):
+    import threading
+
+    from knowledge_flow_worker.features.manager_processing.client import ManagerError
+    from knowledge_flow_worker.features.manager_processing.persistence import LocalTabularArtifacts
+
+    output = tmp_path / "output"
+    output.mkdir()
+    store = LocalTabularArtifacts(output, descriptor, temporary_bytes=100)
+    interrupted = threading.Event()
+    connection = SimpleNamespace(interrupt=interrupted.set)
+    with pytest.raises(ManagerError, match="capacity_exceeded"):
+        with store.watch_conversion(connection):
+            scratch = store.temporary_directory / "growing.parquet"
+            with scratch.open("wb") as file:
+                for _ in range(100):
+                    file.write(b"x" * 30)
+                    file.flush()
+                    if interrupted.wait(0.01):
+                        break
+            assert interrupted.is_set()
+            assert scratch.stat().st_size < 3000
+    assert not any(t.name == "manager-parquet-capacity" for t in threading.enumerate())
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_parent_capacity_failure_is_non_retryable_even_with_worker_retry_policy(wrapped):
+    from temporalio.exceptions import ApplicationError
+
+    from knowledge_flow_worker.features.manager_processing.client import ManagerError, raise_permanent_failure
+
+    error = ManagerError("capacity_exceeded", permanent=True)
+    if wrapped:
+        wrapper = RuntimeError("output conversion failed")
+        wrapper.__cause__ = error
+        error = wrapper
+    contract = json.loads((Path(__file__).resolve().parents[4] / "control-plane/tests/fixtures/processing/worker-contract.json").read_text())
+    assert contract["profiles"]["fast"]["retry_maximum_attempts"] > 1
+    with pytest.raises(ApplicationError) as caught:
+        raise_permanent_failure(error)
+    assert caught.value.non_retryable
+    assert caught.value.message == "capacity_exceeded"
+    assert raise_permanent_failure(ManagerError("worker_failed")) is None
+
+
+@pytest.mark.parametrize("received", [b"original", b"origina", b"original!", b"modified"])
+def test_original_stream_checks_size_and_digest(descriptor, tmp_path, received):
+    import hashlib
+    from contextlib import nullcontext
+
+    from knowledge_flow_worker.features.manager_processing.client import ManagerClient, ManagerError
+
+    descriptor.size = len(b"original")
+    descriptor.work.original_sha256 = hashlib.sha256(b"original").hexdigest()
+    client = ManagerClient.__new__(ManagerClient)
+    client.request = lambda *args, **kwargs: nullcontext(SimpleNamespace(iter_content=lambda _: iter([received[:3], received[3:]])))
+    target = tmp_path / "original"
+    if received == b"original":
+        client.original(descriptor, target)
+        assert target.read_bytes() == received
+    else:
+        with pytest.raises(ManagerError, match="integrity_failure") as error:
+            client.original(descriptor, target)
+        assert error.value.permanent
+
+
+@pytest.mark.parametrize("fault", ["lost_ack", "conflict", "unavailable"])
+def test_artifact_write_reconciles_remote_ack_and_verifies_bytes(monkeypatch, tmp_path, fault):
+    import hashlib
+
+    import requests
+
+    from knowledge_flow_worker.features.manager_processing.artifacts import Artifacts
+    from knowledge_flow_worker.features.manager_processing.client import ManagerError
+    from knowledge_flow_worker.features.manager_processing.contracts import Artifact
+
+    source = tmp_path / "output.md"
+    source.write_bytes(b"original")
+    artifact = Artifact(path="output.md", size=8, sha256=hashlib.sha256(b"original").hexdigest())
+    stored = []
+    released = []
+
+    class Response:
+        status_code = 412 if fault == "conflict" else 503
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+    def put(*args, **kwargs):
+        assert kwargs["headers"]["If-None-Match"] == "*"
+        if fault == "lost_ack":
+            raise requests.ConnectionError("lost response")
+        return Response()
+
+    def get(*_):
+        stored.append(True)
+        return SimpleNamespace(stream=lambda _: iter([b"original"]), close=lambda: released.append("close"), release_conn=lambda: released.append("release"))
+
+    service = Artifacts.__new__(Artifacts)
+    service.bucket = "derived"
+    service.client = SimpleNamespace(presigned_put_object=lambda *args, **kwargs: "https://fixture.invalid", get_object=get)
+    monkeypatch.setattr(requests, "put", put)
+    if fault == "unavailable":
+        with pytest.raises(ManagerError):
+            service.put("generation/", source, artifact)
+        assert not stored
+    else:
+        service.put("generation/", source, artifact)
+        assert released == ["close", "release"]
+        artifact.sha256 = "0" * 64
+        with pytest.raises(ManagerError, match="integrity_failure"):
+            service.put("generation/", source, artifact)
+
+
+def test_manager_http_transient_failure_is_retryable_and_refreshes_auth():
+    from knowledge_flow_worker.features.manager_processing.client import ManagerClient, ManagerError
+
+    client = ManagerClient.__new__(ManagerClient)
+    client.url = "https://manager.invalid"
+    refreshed = []
+
+    class Tokens:
+        def __call__(self):
+            return "fixture"
+
+        def force_refresh(self):
+            refreshed.append(True)
+
+    client.tokens = Tokens()
+    closed = []
+    status = iter([503, 401, 200])
+    client.session = SimpleNamespace(request=lambda *args, **kwargs: SimpleNamespace(status_code=next(status), close=lambda: closed.append(True)))
+    for code in ("worker_failed", "access_changed"):
+        with pytest.raises(ManagerError, match=code) as error:
+            client.request("GET", "/document-processing/fixture/work")
+        assert not error.value.permanent
+    assert client.request("GET", "/document-processing/fixture/work").status_code == 200
+    assert closed == [True, True] and refreshed == [True]
+
+
+@pytest.mark.parametrize("kind,done,expected", [("single", True, True), ("multi", True, True), ("single", False, False), ("none", True, False)])
+def test_indexing_publishes_tabular_inclusion_without_vectors(monkeypatch, descriptor, tmp_path, kind, done, expected):
+    from fred_core.documents.document_structures import DocumentMetadata, FileInfo, Identity, ProcessingStage, SourceInfo, SourceType
+    from fred_knowledge.tabular.artifacts import TabularArtifactV1, TabularTableArtifactV1
+
+    from knowledge_flow_worker.features.manager_processing import service as module
+    from knowledge_flow_worker.features.manager_processing.contracts import Manifest
+
+    table = TabularArtifactV1(
+        dataset_uid=str(descriptor.work.document_id),
+        object_key="datasets/table.parquet",
+        source_revision=descriptor.work.original_sha256,
+        row_count=2,
+        generated_at="2026-01-01T00:00:00Z",
+        file_size_bytes=100,
+    )
+    extensions = {}
+    if kind == "single":
+        extensions["tabular_v1"] = table.model_dump()
+    if kind == "multi":
+        extensions["tabular_multi_v1"] = {"tables": [TabularTableArtifactV1(**table.model_dump(), query_alias="sales", sheet="Sales", table_id="t1").model_dump()]}
+    metadata = DocumentMetadata(
+        identity=Identity(document_uid=str(descriptor.work.document_id), document_name="table.csv"),
+        source=SourceInfo(source_type=SourceType.PUSH),
+        file=FileInfo(row_count=2, sha256=descriptor.work.original_sha256),
+        extensions=extensions,
+    )
+    if done:
+        metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
+    published, commits = [], []
+
+    def publish(d, output, **counts):
+        published.append(json.loads((output / "metadata.json").read_text()))
+        return Manifest(generation=d.generation, artifacts=[], **counts)
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, path, body):
+            commits.append(body)
+
+    monkeypatch.setattr(module, "ManagerClient", Client)
+    instance = module.ManagedIngestionService.__new__(module.ManagedIngestionService)
+    descriptor.name = "table.xlsx" if kind == "multi" else "table.csv"
+    instance.descriptor, instance.settings, instance.vectors = descriptor, object(), None
+    instance.artifacts = SimpleNamespace(publish=publish)
+    if not expected:
+        with pytest.raises(module.ManagerError, match="indexing_failed"):
+            instance._commit(tmp_path, metadata)
+        assert not published and not commits
+        return
+    instance._commit(tmp_path, metadata)
+    assert published[0]["source"]["retrievable"] is expected
+    assert commits[0].manifest.vectors == 0
+    assert commits[0].manifest.rows == 2
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+def test_managed_tabular_pipeline_publishes_complete_datasets_without_vector_dependencies(monkeypatch, app_context, descriptor, tmp_path, suffix):
+    import hashlib
+
+    import duckdb
+    from fred_core.documents.document_structures import DocumentMetadata, FileInfo, Identity, SourceInfo, SourceType
+    from fred_knowledge.tabular.artifacts import read_tabular_artifact, read_tabular_multi_artifact
+    from openpyxl import Workbook
+    from openpyxl.worksheet.table import Table
+
+    from knowledge_flow_worker.common.structures import ManagerProcessingConfig, ProcessingConfig
+    from knowledge_flow_worker.core.processors.input.excel_processor.excel_processor import ExcelProcessor
+    from knowledge_flow_worker.features.manager_processing import service as module
+    from knowledge_flow_worker.features.manager_processing.artifacts import Artifacts
+    from knowledge_flow_worker.features.manager_processing.contracts import Predecessor
+    from knowledge_flow_worker.features.manager_processing.persistence import scoped_pipeline
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Tabular attachments must not initialize vectors or shared content storage")
+
+    monkeypatch.setattr(app_context, "get_manager_vector_store", forbidden)
+    monkeypatch.setattr(app_context, "get_embedder", forbidden)
+    get_content_store = type(app_context).get_content_store
+
+    def scoped_content_store(context):
+        assert context is not app_context
+        return get_content_store(context)
+
+    monkeypatch.setattr(type(app_context), "get_content_store", scoped_content_store)
+    monkeypatch.setattr(ExcelProcessor, "recalc", False)
+    app_context.configuration.manager_processing = ManagerProcessingConfig.model_construct(temporary_bytes=1_048_576)
+    app_context.configuration.storage.tabular_store.pointer_chunks_enabled = True
+    profile = ProcessingConfig.ProfileConfig(
+        input_processors=[
+            ProcessingConfig.ProfileInputProcessorConfig(suffix=".csv", class_path="knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor"),
+            ProcessingConfig.ProfileInputProcessorConfig(suffix=".xlsx", class_path="knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor"),
+        ]
+    )
+    descriptor = Descriptor.model_validate(
+        {**descriptor.model_dump(), "name": f"sales{suffix}", "folder_id": None, "folder_path": None, "session_id": uuid4(), "stage": "extraction", "max_output_bytes": 1_000_000}
+    )
+    original = tmp_path / "extract" / "input" / descriptor.name
+    original.parent.mkdir(parents=True)
+    if suffix == ".csv":
+        original.write_text("city,amount\n" + "".join(f"city-{i},{i}\n" for i in range(350)))
+        expected_rows, expected_sum = 350, sum(range(350))
+    else:
+        workbook = Workbook()
+        for index, name in enumerate(["Sales", "Targets"]):
+            sheet = workbook.active if index == 0 else workbook.create_sheet()
+            sheet.title = name
+            sheet.append(["city", "amount"])
+            for i in range(10):
+                sheet.append([f"city-{i}", i])
+            sheet.add_table(Table(displayName=name, ref="A1:B11"))
+        workbook.save(original)
+        workbook.close()
+        expected_rows, expected_sum = 20, 2 * sum(range(10))
+    descriptor.work.original_sha256 = hashlib.sha256(original.read_bytes()).hexdigest()
+    descriptor.size = original.stat().st_size
+    metadata = DocumentMetadata(
+        identity=Identity(document_uid=str(descriptor.work.document_id), document_name=descriptor.name),
+        source=SourceInfo(source_type=SourceType.PUSH),
+        file=FileInfo(sha256=descriptor.work.original_sha256),
+    )
+    extracted = original.parent.parent / "output"
+    extracted.mkdir()
+    (extracted / "policy.json").write_text(profile.model_dump_json())
+    objects, commits = {}, []
+    artifacts = Artifacts.__new__(Artifacts)
+    artifacts.put = lambda prefix, path, artifact: objects.__setitem__(prefix + artifact.path, path.read_bytes())
+    artifacts.read = lambda prefix, artifact, destination: (destination.parent.mkdir(parents=True, exist_ok=True), destination.write_bytes(objects[prefix + artifact.path]))
+    pipeline, vectors = scoped_pipeline(app_context, descriptor, extracted, artifacts, include_output=False)
+    assert vectors is None
+    pipeline.run_input(input_path=original, output_dir=extracted, metadata=metadata, profile="fast")
+    extraction = artifacts.publish(descriptor, extracted)
+    # Indexing restores the generation into a different activity workspace.
+    output = tmp_path / "index" / "output"
+    source = output.parent / "input" / descriptor.name
+    source.parent.mkdir(parents=True)
+    source.write_bytes(original.read_bytes())
+    descriptor = descriptor.model_copy(
+        update={"stage": "indexing", "generation": uuid4(), "output_prefix": "index/generation/", "predecessor": Predecessor(prefix=descriptor.output_prefix, manifest=extraction)}
+    )
+    artifacts.restore(descriptor, output)
+    instance = module.ManagedIngestionService.__new__(module.ManagedIngestionService)
+    instance.context, instance.descriptor, instance.settings, instance.artifacts = app_context, descriptor, object(), artifacts
+    result = instance.process_output(SimpleNamespace(uid=descriptor.actor), descriptor.name, output, metadata, "fast")
+    assert instance.vectors is None
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, path, body):
+            commits.append(body)
+
+    monkeypatch.setattr(module, "ManagerClient", Client)
+    instance._commit(output, result)
+    manifest = commits[0].manifest
+    assert manifest.vectors == manifest.chunks == 0
+    assert manifest.rows == expected_rows
+    assert result.source.retrievable
+    single, multi = read_tabular_artifact(result), read_tabular_multi_artifact(result)
+    tables = [single] if single else multi.tables
+    paths = {artifact.path for artifact in manifest.artifacts}
+    assert all(table.object_key in paths for table in tables)
+    assert all(descriptor.output_prefix + table.object_key in objects for table in tables)
+    with duckdb.connect(":memory:") as connection:
+        counts = [connection.read_parquet(str(output / table.object_key)).aggregate("count(*), sum(amount)").fetchall()[0] for table in tables]
+    assert sum(row[0] for row in counts) == expected_rows
+    assert sum(row[1] for row in counts) == expected_sum
+    if suffix == ".xlsx":
+        assert {table.sheet for table in tables} == {"Sales", "Targets"}
+        assert "tables.json" in paths
+        catalog = json.loads(objects[descriptor.output_prefix + "tables.json"])
+        assert {entry["object_key"] for entry in catalog} == {table.object_key for table in tables}
+    else:
+        assert "city-349" not in (output / "output.md").read_text()

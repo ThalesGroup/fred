@@ -15,7 +15,7 @@ spec.loader.exec_module(module)
 class DependencyProfileTest(unittest.TestCase):
     def test_extra_is_the_only_path_into_the_family(self):
         packages = {
-            "knowledge-flow-backend": {
+            "knowledge-flow-worker": {
                 "requires": ['pymupdf4llm; extra == "pymupdf"', "pypdf", "shared"]
             },
             "pymupdf4llm": {"requires": ["pymupdf", "pymupdf-layout", "shared"]},

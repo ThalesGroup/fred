@@ -18,14 +18,23 @@ the union across the enabled deployments, not one role each.
 {{- $allRoles := list "common" "extraction-fast" "extraction-medium" "extraction-rich" -}}
 {{- $served := list -}}
 {{- $workers := list -}}
+{{- $api := index .Values.applications "knowledge-flow-backend" -}}
+{{- $apiRunning := and (dig "enabled" false $api) (dig "deployment" "enabled" false $api) -}}
+{{- $apiImage := printf "%s:%s" $api.image.repository ($api.image.tag | default .Chart.AppVersion) -}}
 {{- range $name, $rawApp := .Values.applications -}}
   {{- $app := $rawApp -}}
   {{- if hasKey $rawApp "inheritFrom" -}}
     {{- $app = include "fred.resolvedApp" (dict "app" $rawApp "root" $ "name" $name) | fromYaml -}}
   {{- end -}}
   {{- $command := (($app.command) | default dict) -}}
-  {{- $isWorker := and $command.enabled (has "knowledge_flow_backend.main_worker" ($command.data | default list)) -}}
+  {{- $isWorker := and $command.enabled (has "knowledge_flow_worker.main" ($command.data | default list)) -}}
   {{- $running := and (dig "enabled" false $app) (dig "deployment" "enabled" false $app) -}}
+  {{- if and $isWorker $running $apiRunning -}}
+    {{- $workerImage := printf "%s:%s" $app.image.repository ($app.image.tag | default $.Chart.AppVersion) -}}
+    {{- if eq $apiImage $workerImage -}}
+      {{- fail (printf "knowledge-flow ingestion: %s and knowledge-flow-backend use the same image %s. E1 requires independent API and worker images; rebuild both and replace stale image overrides." $name $workerImage) -}}
+    {{- end -}}
+  {{- end -}}
   {{- $scheduler := (($app.configuration) | default dict).scheduler | default dict -}}
   {{- if and $isWorker $running $scheduler.enabled (eq ($scheduler.backend | default "temporal") "temporal") -}}
     {{- $workers = append $workers $name -}}

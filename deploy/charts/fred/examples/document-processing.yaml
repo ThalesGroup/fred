@@ -2,7 +2,8 @@
 # preserve every SQL/identity/model entry and volume already in your deployment.
 # See deploy/k3d/ for the complete factory profile and contract preparation.
 # Use the same documents bucket as document-storage.yaml; grant only output
-# writes to the worker and input writes plus input/output reads to the API.
+# writes to the worker and input writes plus input/output reads to Control Plane.
+# Knowledge Flow reads the published generation using the configured artifact credentials.
 applications:
   control-plane-backend:
     extraEnvVars:
@@ -81,3 +82,24 @@ applications:
         ephemeral-storage: 5Gi
       limits:
         ephemeral-storage: 8Gi
+
+  knowledge-flow-backend:
+    extraEnvVars:
+      - name: MANAGER_DERIVED_ACCESS_KEY
+        valueFrom:
+          secretKeyRef: {name: manager-processing, key: access-key}
+      - name: MANAGER_DERIVED_SECRET_KEY
+        valueFrom:
+          secretKeyRef: {name: manager-processing, key: secret-key}
+    configuration:
+      control_plane_url: https://manager.example.test/control-plane/v1
+      published_artifacts:
+        endpoint: https://s3.example.test
+        bucket: app-content-documents
+        access_key_env: MANAGER_DERIVED_ACCESS_KEY
+        secret_key_env: MANAGER_DERIVED_SECRET_KEY
+      storage:
+        vector_store:
+          type: opensearch
+          collection_name: null
+          index: document-vectors

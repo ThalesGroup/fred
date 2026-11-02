@@ -117,7 +117,7 @@ there is no required S3 `manifest.json`. Artifact presence alone is not publicat
 The source definitions are [original keys](../../apps/control-plane/src/documents/mod.rs)
 and [upload identity](../../apps/control-plane/src/documents/upload.rs),
 [derived prefixes](../../apps/control-plane/src/processing/store.rs), and
-[generation artifact storage](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/artifacts.py).
+[generation artifact storage](../../apps/knowledge-flow-worker/knowledge_flow_worker/features/manager_processing/artifacts.py).
 The [document journey](02.2-document-journey.md) gives the user-facing PDF example;
 its [technical annex](A4-document-journey.md) provides read-only inspection steps.
 
@@ -258,7 +258,7 @@ output processors, and stage immutable derived artifacts and generation-scoped
 vectors in separate stores. Native Word/ODT/PowerPoint previews use the existing
 Office-to-PDF converter in the supervised extraction process. CSV/Excel use the
 existing tabular processors with attempt-local
-[`LocalTabularArtifacts`](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/persistence.py).
+[`LocalTabularArtifacts`](../../apps/knowledge-flow-worker/knowledge_flow_worker/features/manager_processing/persistence.py).
 Vector projections use OpenSearch or pgvector.
 
 Preparation, extraction and indexing claim monotonically fenced generations.

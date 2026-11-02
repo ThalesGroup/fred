@@ -1,0 +1,150 @@
+[project]
+name = "knowledge-flow-worker"
+readme = "README.md"
+version = "5.0.0"
+license = "Apache-2.0"
+description = "Knowledge Flow ingestion worker"
+authors = [{ name = "Fred", email = "noreply@example.com" }]
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+  "fred-knowledge>=5.0.0,<6",
+  "temporalio>=1.30.0,<2.0.0",
+  "langchain-core>=1.6.5",
+  "langchain-community>=0.4.1",
+  "langchain-text-splitters>=1.1.2",
+  "langchain-postgres>=0.0.17",
+  "openai>=1.104.2,<2.29.0",
+  "coloredlogs==15.0.1",
+  "PyYAML>=6.0.1",
+  "pydantic>=2.5.2,<3.0.0",
+  "pydantic-settings>=2.14.2,<3.0.0",
+  "opensearch-py==2.8.0",
+  "python-docx==1.2.0",
+  "pypandoc-binary==1.15",
+  "pypandoc==1.15",
+  "pandas==2.2.3",
+  # Parquet engine required by the Excel processor's pandas exports.
+  "pyarrow==23.0.1",
+  "pypdf==6.21.2",
+  "pypdfium2>=5.10.1",
+  "python-pptx==1.0.2",
+  "rich==14.0.0",
+  "openpyxl==3.1.5",
+  "docling==2.142.0",
+  "openvino==2026.0.0; sys_platform == 'linux'",
+  "hf-xet==1.6.0",
+  "duckdb>=1.3.2",
+  "fred-core[temporal]>=5.0.0,<6",
+  "pymysql>=1.1.1",
+  "duckdb-engine>=0.17.0",
+  "psycopg2-binary>=2.9.10",
+  "sqlparse>=0.6.0",
+  # MarkItDown extras: ensure .docx support is available for the lite DOCX path
+  # Note: keep python-docx pinned above; markitdown[docx] will ensure runtime deps
+  "markitdown[all]>=0.1.3",
+  "pgvector>=0.2.5",
+  "psycopg[binary]>=3.2.1",
+  # PyTorch for amd64: CPU-only wheels from pytorch-cpu index
+  "torch==2.13.0+cpu; platform_machine == 'x86_64' and sys_platform == 'linux'",
+  "torchvision==0.28.0+cpu; platform_machine == 'x86_64' and sys_platform == 'linux'",
+  # PyTorch for ARM64 (M1/M2 Macs, Graviton, Raspberry Pi)
+  "torch==2.13.0; platform_machine == 'aarch64' or platform_machine == 'arm64'",
+  "torchvision==0.28.0; platform_machine == 'aarch64' or platform_machine == 'arm64'",
+  # Docling excludes several earlier 5.x releases on macOS.
+  "transformers>=5.16.0,<6.0.0",
+  "python-magic>=0.4.27",
+  # Audio/video ingestion
+  "av>=14.0.0",
+  "faster-whisper>=1.1.0",
+  "paddleocr>=3.6.0",
+  # PyPI ships no Linux ARM64 wheels for paddlepaddle.
+  "paddlepaddle>=3.3.1; platform_machine == 'x86_64' or sys_platform == 'darwin'"
+]
+
+[project.optional-dependencies]
+pymupdf = ["pymupdf>=1.27.2.3", "pymupdf4llm>=1.27.2.3"]
+dev = [
+  "pytest-cov==6.1.1",
+  "httpx2>=2.13.1",
+  "reportlab==4.3.1",
+  "pytest==9.0.3",
+  "pytest-asyncio==1.4.0",
+  "pytest-socket>=0.7.0",
+  "black==26.10.1",
+  "isort==5.10.1",
+  "tox==4.27.0",
+  "pre-commit==4.2.0",
+  "bandit==1.8.5",
+  "ruff==0.12.0",
+]
+
+[build-system]
+requires = ["setuptools>=83.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+packages = [{ include = "knowledge_flow_worker" }]
+
+[tool.ruff]
+# Inherit the shared monorepo lint policy (see /ruff.toml); keep the wider line-length here.
+extend = "../../ruff.toml"
+line-length = 200
+
+[tool.setuptools.packages.find]
+include = ["knowledge_flow_worker*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+cache_dir = "/tmp/.pytest"
+
+markers = [
+  "integration: mark integration tests",
+  "integration_postgres: integration tests that specifically need a real PostgreSQL",
+  "metadata_storage_type(type): mark test to select a metadata store backend",
+  "vector_storage_type(type): mark test to select a vector store backend",
+]
+
+[tool.uv.sources]
+fred-knowledge = { path = "../../libs/fred-knowledge", editable = true }
+fred-pod = { path = "../../libs/fred-pod", editable = true }
+fred-core = { path = "../../libs/fred-core", editable = true }
+
+# Keep CPU-only index for x86_64
+torch = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }
+torchvision = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+
+[dependency-groups]
+dev = [
+  "bandit>=1.8.5",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "pytest>=9.0.3",
+  "httpx2>=2.13.1",  # starlette TestClient transport (plain httpx is deprecated)
+  "pytest-asyncio>=1.4.0",
+  "pytest-cov>=6.1.1",
+  "pytest-socket>=0.8.0",
+  "ruff>=0.12.0",
+]
+
+[tool.uv]
+# Cover transitive torch variants on architectures outside the explicit pins above.
+constraint-dependencies = ["torch>=2.13.0", "torchvision>=0.28.0"]
+# Using `editable_mode = "compat"` when installing fred-core to make editable install work with Pylance (vscode):
+# https://github.com/microsoft/pylance-release/blob/main/TROUBLESHOOTING.md#editable-install-modules-not-found
+config-settings = { editable_mode = "compat" }
+# The lockfile is used for both Linux (deploy/CI) and macOS (local dev).
+# uv requires wheels for every environment listed, so name the real targets only.
+environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+

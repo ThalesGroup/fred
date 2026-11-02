@@ -1,3 +1,4 @@
+# Knowledge Flow API; worker metadata lives in INFO-knowledge-flow-worker.mk.
 # Project Metadata
 PROJECT_NAME        ?= knowledge-flow-backend
 PROJECT_SLUG		?= knowledge-flow-backend

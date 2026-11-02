@@ -24,18 +24,17 @@ import yaml
 
 
 def run(corpus: Path, optional: bool) -> dict:
-    from knowledge_flow_backend.application_context import ApplicationContext
-    from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import (
+    from knowledge_flow_worker.application_context import ApplicationContext
+    from knowledge_flow_worker.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import (
         LitePdfMarkdownProcessor,
     )
-    from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.docling_processor import (
+    from knowledge_flow_worker.core.processors.input.pdf_markdown_processor.docling_processor import (
         DoclingPdfExtractor,
     )
-    from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_renderer import (
+    from knowledge_flow_worker.core.processors.input.pptx_markdown_processor.utils.pptx_slide_renderer import (
         render_pdf_pages_to_png,
     )
-    from knowledge_flow_backend.main import create_app
-    from knowledge_flow_backend.main_worker import main as worker_main
+    from knowledge_flow_worker.main import main as worker_main
 
     with tempfile.TemporaryDirectory() as work:
         folder = Path(work)
@@ -45,9 +44,6 @@ def run(corpus: Path, optional: bool) -> dict:
         raw["observability"]["kpi"]["opensearch"] = {"enabled": False}
         raw["observability"]["kpi"]["prometheus"]["enabled"] = False
         raw["storage"]["log_store"] = None
-        raw["content_storage"] = {"type": "local", "root_path": str(folder / "content")}
-        raw["filesystem"] = {"type": "local", "root": str(folder / "filesystem")}
-        raw["storage"]["vector_store"] = {"type": "in_memory"}
         for profile in raw["processing"]["profiles"].values():
             profile["process_images"] = False
             profile["generate_summary"] = False
@@ -65,18 +61,16 @@ def run(corpus: Path, optional: bool) -> dict:
         os.environ["OPENAI_API_KEY"] = "unused-image-smoke"
         os.environ["OPENSEARCH_PASSWORD"] = "unused-image-smoke"
         os.environ["FRED_POSTGRES_PASSWORD"] = "unused-image-smoke"
-        app = create_app()
-        assert app.routes
         ApplicationContext._instance = None
         asyncio.run(worker_main())
         report = {
-            "startup": "API factory and scheduler-disabled worker; no service lifespan",
+            "startup": "scheduler-disabled worker; no service calls",
             "files": {},
         }
         manifest = json.loads((corpus / "manifest.json").read_text())
         fast = LitePdfMarkdownProcessor()
         if optional:
-            from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor import (
+            from knowledge_flow_worker.core.processors.input.lightweight_markdown_processor.lite2_pdf_to_md_processor import (
                 LitePdfMarkdownProcessor as OptionalProcessor,
             )
 
@@ -159,7 +153,7 @@ def run(corpus: Path, optional: bool) -> dict:
         with ThreadPoolExecutor(max_workers=4) as pool:
             report["files"].update(pool.map(ingest, mixed_records))
         if optional:
-            from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pymupdf_processor import (
+            from knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pymupdf_processor import (
                 PyMuPdfExtractor,
             )
 

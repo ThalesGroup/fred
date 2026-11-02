@@ -1,0 +1,19 @@
+// Pyright config used when opening project with workspace
+// in vscode and by the pyright CLI
+{
+  "include": ["knowledge_flow_worker"],
+  "typeCheckingMode": "basic",
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["../libs/fred-core"],
+  "reportMissingTypeStubs": false,
+  "reportIncompatibleMethodOverride": "error",
+  "reportIncompatibleVariableOverride": "error",
+  "reportUnreachable": "warning",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": ["../libs/fred-core"]
+    }
+  ]
+}

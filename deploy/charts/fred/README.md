@@ -18,7 +18,7 @@ setting.
 | `fred-agents` | legacy agent runtime | no |
 | `monitor` | read-only namespaced technical status for platform administrators | no |
 | `frontend` | web UI, behind your ingress | yes |
-| `knowledge-flow-backend` | document ingestion, search and storage API | yes |
+| `knowledge-flow-backend` | authorized search and published-content API | yes |
 | `knowledge-flow-worker` | ingestion worker serving all roles | yes |
 | `knowledge-flow-worker-extraction-{fast,medium,rich}` | optional dedicated extraction workers | no |
 
@@ -50,20 +50,23 @@ attached to its [GitHub release](https://github.com/ThalesGroup/fred/releases).
 
 ## Images
 
-The default chart runs three images, `ghcr.io/thalesgroup/fred-agent/<app>`:
-`control-plane-backend`, `knowledge-flow-backend` and `frontend`. Each API/worker pair uses
-its backend's image. The tag defaults to the chart's `appVersion`; set matching
-`applications.<app>.image.tag` values for each pair when overriding it.
-`deploy/k3d/build` builds these three images from the same checkout. The control-plane image is built from `apps/control-plane`; the Python
-control-plane image is not published by this checkout.
+Knowledge Flow uses two independent images under `ghcr.io/thalesgroup/fred-agent/`:
+`knowledge-flow-backend` for the API and `knowledge-flow-worker` for ingestion.
+`knowledge-flow-worker-pymupdf` is the optional worker variant. The extraction
+worker groups inherit the common worker's image and configuration at render time.
+The API has its own configuration schema and retains its service name and routes.
+
+`deploy/k3d/build` builds both applications independently, alongside Control Plane,
+Agent Pod, frontend and monitor. The split still requires developer image and
+end-to-end validation; sizes and startup memory have not been measured.
 
 ## Your values file
 
 Write one values file for your deployment and pass it with `-f`. Two things to know:
 
-- **Anchors do not carry overrides.** `values.yaml` shares blocks between an API and its
-  worker through YAML anchors, which Helm resolves when it reads the file. A setting shared
-  by `knowledge-flow-backend` and `knowledge-flow-worker` must therefore be repeated for both in your file.
+- **Match the corpus contract.** API query embeddings and index/collection must match
+  worker indexing. API `published_artifacts` must read the worker publication bucket.
+  Set processing and scheduler overrides only on the worker; extraction groups inherit them.
 - **Manager configuration is shared.** Set configuration and `lifecycle_policy_catalog`
   on `applications.control-plane-backend`: both manager processes mount these same ConfigMaps
   and restart when either changes. Worker credentials remain separate.

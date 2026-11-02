@@ -10,14 +10,15 @@ import os
 import re
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
+
+import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 PATCH = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 PROJECT_TABLE = re.compile(r"^\[project\]\n(.*?)(?=^\[|\Z)", re.M | re.S)
 PROJECT_VERSION = re.compile(r'^version = "[^"]*"$', re.M)
-SHARED = ("fred-core", "fred-sdk", "fred-runtime")
+SHARED = ("fred-core", "fred-knowledge", "fred-sdk", "fred-runtime")
 POD = "fred-pod"
 IGNORED_PARTS = {"target", ".venv", "__pycache__", "node_modules"}
 
@@ -81,8 +82,7 @@ def version_plan(root: Path, base: str, names: set[str]) -> dict[str, str]:
         previous_text = tagged_text(root, base, path.relative_to(root))
         current = str(project(path)["version"])
         if previous_text is None:
-            if name in SHARED:
-                raise ValueError(f"{name} did not exist at {base}")
+            # A newly introduced library keeps its declared first-release version.
             versions[name] = current
             continue
         previous = str(tomllib.loads(previous_text)["project"]["version"])

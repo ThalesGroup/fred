@@ -29,10 +29,10 @@ from typing import Awaitable, Callable, Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from sqlalchemy import text
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 
 logger = logging.getLogger(__name__)
 

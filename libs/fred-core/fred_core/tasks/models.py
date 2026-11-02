@@ -20,6 +20,8 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
 
+from fred_core.documents.processing_profile import IngestionProcessingProfile
+
 
 class TaskState(StrEnum):
     pending = "pending"
@@ -32,12 +34,6 @@ class TaskState(StrEnum):
     @property
     def is_terminal(self) -> bool:
         return self in (TaskState.succeeded, TaskState.failed, TaskState.cancelled)
-
-
-class IngestionProcessingProfile(StrEnum):
-    fast = "fast"
-    medium = "medium"
-    rich = "rich"
 
 
 # ── per-kind detail models ────────────────────────────────────────────────────

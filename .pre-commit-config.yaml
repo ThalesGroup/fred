@@ -34,10 +34,16 @@ repos:
         args: ["--project", "apps/fred-agents", "--baseline-file", "apps/fred-agents/.baseline/basedpyright-baseline.json"]
       - id: basedpyright
         name: type-check-knowledge-flow-backend
-        files: ^apps/knowledge-flow-backend/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        files: ^(apps/knowledge-flow-backend|libs/fred-knowledge)/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
         types: [file]
         pass_filenames: false
         args: ["--project", "apps/knowledge-flow-backend", "--baseline-file", "apps/knowledge-flow-backend/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-knowledge-flow-worker
+        files: ^(apps/knowledge-flow-worker|libs/fred-knowledge)/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "apps/knowledge-flow-worker"]
       - id: basedpyright
         name: type-check-fred-capability-document-access
         files: ^libs/capabilities/fred-capability-document-access/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
@@ -80,6 +86,12 @@ repos:
         types: [file]
         pass_filenames: false
         args: ["--project", "libs/fred-core", "--baseline-file", "libs/fred-core/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
+        name: type-check-fred-knowledge
+        files: ^libs/fred-knowledge/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/fred-knowledge"]
       - id: basedpyright
         name: type-check-fred-pod
         files: ^libs/fred-pod/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$

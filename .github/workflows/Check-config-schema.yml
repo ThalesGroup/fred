@@ -12,6 +12,7 @@ on:
     # Pull requests only: a base-branch push still checks every schema.
     paths:
       - 'apps/knowledge-flow-backend/**'
+      - 'apps/knowledge-flow-worker/**'
       - 'apps/fred-agents/**'
       - 'apps/control-plane/**'
       - 'Cargo.toml'
@@ -42,6 +43,9 @@ jobs:
         include:
           - app: knowledge-flow-backend
             dir: apps/knowledge-flow-backend
+            uv_args: --extra dev
+          - app: knowledge-flow-worker
+            dir: apps/knowledge-flow-worker
             uv_args: --extra dev
           - app: fred-agents
             dir: apps/fred-agents

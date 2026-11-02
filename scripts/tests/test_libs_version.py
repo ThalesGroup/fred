@@ -8,14 +8,16 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import tomllib
 import unittest
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+import tomllib
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import validate_python_release as release_validator  # noqa: E402
 from libs_version import (  # noqa: E402
     candidates,
     package_dir,
@@ -23,8 +25,8 @@ from libs_version import (  # noqa: E402
     prepare,
     rewrite,
     verify_locks,
+    version_plan,
 )
-import validate_python_release as release_validator  # noqa: E402
 
 
 def run_git(root: Path, *args: str) -> None:
@@ -55,7 +57,13 @@ class ReleaseFixture:
         run_git(root, "init", "-q")
         run_git(root, "config", "user.email", "test@example.com")
         run_git(root, "config", "user.name", "Release Test")
-        for name in ("fred-pod", "fred-core", "fred-sdk", "fred-runtime"):
+        for name in (
+            "fred-pod",
+            "fred-core",
+            "fred-knowledge",
+            "fred-sdk",
+            "fred-runtime",
+        ):
             self.write(
                 f"libs/{name}/pyproject.toml",
                 f'[project]\nname = "{name}"\nversion = "4.5.0"\n',
@@ -172,6 +180,13 @@ class PrepareTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.fixture = ReleaseFixture(self.root)
 
+    def test_first_publication_of_shared_library_keeps_declared_version(self):
+        with patch("libs_version.tagged_text", return_value=None):
+            self.assertEqual(
+                version_plan(self.root, "code/v4.5.0", {"fred-knowledge"}),
+                {"fred-knowledge": "4.5.0"},
+            )
+
     def test_selected_package_and_manifest_are_idempotent(self) -> None:
         self.fixture.change_documents()
         self.assertIn("fred-capability-documents", candidates(self.root, "code/v1.0.0"))
@@ -245,7 +260,13 @@ class PrepareTest(unittest.TestCase):
         verify_locks([self.root / "apps/consumer"], first["selected_packages"])
         packages = [
             self.root / "libs" / name
-            for name in ("fred-pod", "fred-core", "fred-sdk", "fred-runtime")
+            for name in (
+                "fred-pod",
+                "fred-core",
+                "fred-knowledge",
+                "fred-sdk",
+                "fred-runtime",
+            )
         ]
         packages.extend(
             path.parent

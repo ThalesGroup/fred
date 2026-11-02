@@ -74,13 +74,13 @@ class ModelHandler(BaseHTTPRequestHandler):
 
 
 def create_inputs(folder):
-    from pypdf import PdfWriter
-    from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
     from docx import Document
     from openpyxl import Workbook
+    from PIL import Image
     from pptx import Presentation
     from pptx.util import Inches
-    from PIL import Image
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
     image = folder / "diagram.png"
     Image.new("RGB", (100, 60), (40, 100, 180)).save(image)
@@ -151,8 +151,8 @@ async def main():
     folder = Path(sys.argv[1]).parent
     if not (folder / "report.pdf").exists():
         create_inputs(folder)
-    import shutil
     import shlex
+    import shutil
 
     real_soffice = shutil.which("soffice")
     assert real_soffice
@@ -176,14 +176,14 @@ async def main():
         MANAGER_DERIVED_ACCESS_KEY="fixture-access",
         MANAGER_DERIVED_SECRET_KEY="fixture-secret",
     )
-    from knowledge_flow_backend.common.config_loader import load_configuration
-    from knowledge_flow_backend.common.structures import (
+    from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+    from knowledge_flow_worker.application_context import ApplicationContext
+    from knowledge_flow_worker.common.config_loader import load_configuration
+    from knowledge_flow_worker.common.structures import (
         Configuration,
         IngestionWorkerRole,
     )
-    from knowledge_flow_backend.application_context import ApplicationContext
-    from knowledge_flow_backend.features.scheduler.worker import _build_worker
-    from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+    from knowledge_flow_worker.features.scheduler.worker import _build_worker
     from temporalio.client import Client
 
     model = ThreadingHTTPServer(("127.0.0.1", 0), ModelHandler)
@@ -202,7 +202,6 @@ async def main():
         "collection_name": "legacy_fixture",
     }
     config["manager_processing"] = {
-        "enabled": True,
         "url": fixture["manager"],
         "issuer": fixture["issuer"],
         "audience": "app",
@@ -229,7 +228,12 @@ async def main():
         }
     config["scheduler"]["temporal"]["host"] = fixture["temporal"]
     config["scheduler"]["temporal"]["task_queue"] = "ingestion"
-    config["observability"]["kpi"] = {"enabled": False}
+    config["observability"]["kpi"] = {
+        "log": {"enabled": False},
+        "prometheus": {"enabled": False},
+        "opensearch": {"enabled": False},
+        "process_metrics_interval_sec": 0,
+    }
     config["processing"]["profiles"] = json.loads(
         Path(fixture["contract"]).read_text()
     )["processor_profiles"]
@@ -269,10 +273,8 @@ async def main():
 
         return invoke
 
-    for method in ("get_metadata_store", "get_content_store", "get_tag_store"):
-        setattr(
-            ApplicationContext, method, guarded(getattr(ApplicationContext, method))
-        )
+    # Metadata/tag stores were removed; only attempt-local content storage remains.
+    ApplicationContext.get_content_store = guarded(ApplicationContext.get_content_store)
     client = None
     for _ in range(60):
         try:

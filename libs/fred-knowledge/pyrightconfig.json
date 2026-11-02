@@ -1,0 +1,10 @@
+{
+  "include": [
+    "fred_knowledge"
+  ],
+  "typeCheckingMode": "basic",
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["../fred-core", "../fred-pod"],
+  "reportMissingTypeStubs": false
+}

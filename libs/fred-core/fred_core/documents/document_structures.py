@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator, model_validator
 
-from fred_core.tasks.models import IngestionProcessingProfile
+from fred_core.documents.processing_profile import IngestionProcessingProfile
 
 
 class SourceType(str, Enum):

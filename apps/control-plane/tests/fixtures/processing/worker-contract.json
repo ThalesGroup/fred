@@ -377,107 +377,107 @@
       "input_processors": [
         {
           "suffix": ".pdf",
-          "class_path": "knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".docx",
-          "class_path": "knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".doc",
-          "class_path": "knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".odt",
-          "class_path": "knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".pptx",
-          "class_path": "knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".ppt",
-          "class_path": "knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".csv",
-          "class_path": "knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor",
           "description": null
         },
         {
           "suffix": ".xlsx",
-          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
           "description": null
         },
         {
           "suffix": ".xls",
-          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
           "description": null
         },
         {
           "suffix": ".xlsm",
-          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
           "description": null
         },
         {
           "suffix": ".txt",
-          "class_path": "knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".md",
-          "class_path": "knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".jsonl",
-          "class_path": "knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".png",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".jpg",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".jpeg",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".gif",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".bmp",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".svg",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".webp",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".ico",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         }
       ],
@@ -508,107 +508,107 @@
       "input_processors": [
         {
           "suffix": ".pdf",
-          "class_path": "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".docx",
-          "class_path": "knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".doc",
-          "class_path": "knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".odt",
-          "class_path": "knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".pptx",
-          "class_path": "knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".ppt",
-          "class_path": "knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".csv",
-          "class_path": "knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor",
           "description": null
         },
         {
           "suffix": ".xlsx",
-          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
           "description": null
         },
         {
           "suffix": ".xls",
-          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
           "description": null
         },
         {
           "suffix": ".xlsm",
-          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
           "description": null
         },
         {
           "suffix": ".txt",
-          "class_path": "knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".md",
-          "class_path": "knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".jsonl",
-          "class_path": "knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".png",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".jpg",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".jpeg",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".gif",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".bmp",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".svg",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".webp",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".ico",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         }
       ],
@@ -639,107 +639,107 @@
       "input_processors": [
         {
           "suffix": ".pdf",
-          "class_path": "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".docx",
-          "class_path": "knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".doc",
-          "class_path": "knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".odt",
-          "class_path": "knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".pptx",
-          "class_path": "knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".ppt",
-          "class_path": "knowledge_flow_backend.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".csv",
-          "class_path": "knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor",
           "description": null
         },
         {
           "suffix": ".xlsx",
-          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
           "description": null
         },
         {
           "suffix": ".xls",
-          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
           "description": null
         },
         {
           "suffix": ".xlsm",
-          "class_path": "knowledge_flow_backend.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor",
           "description": null
         },
         {
           "suffix": ".txt",
-          "class_path": "knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".md",
-          "class_path": "knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".jsonl",
-          "class_path": "knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor",
           "description": null
         },
         {
           "suffix": ".png",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".jpg",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".jpeg",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".gif",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".bmp",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".svg",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".webp",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         },
         {
           "suffix": ".ico",
-          "class_path": "knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor",
+          "class_path": "knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor",
           "description": null
         }
       ],

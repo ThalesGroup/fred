@@ -217,7 +217,7 @@ its scoped storage credentials.
 The generic identity hook provisions `knowledge-flow-worker`. The checkout's
 `prepare` hook bootstraps PostgreSQL roles and schemas before it:
 
-- exports the processing contract from the built KF image and effective config;
+- exports the processing contract from the separately built KF worker image and effective config;
 - creates retained application credentials in `fred-ingestion`;
 - supplies SeaweedFS with an application-owned Secret containing its existing
   identities plus manager/input and worker/output policies, and waits for its
@@ -341,3 +341,15 @@ No bucket rename or data migration runs with these commands.
 Read [operations](../../docs/architecture/A3-manager-operations.md#complete-local-ingestion-profile)
 and [costs/limits](../../docs/architecture/09-quality.md#original-storage-costs-and-failure-evidence)
 for shared-bucket scan cost, cleanup retry behavior and the callback timeout boundary.
+
+## Independent Knowledge Flow applications
+
+The build hook produces distinct API and worker image references. The worker's
+`knowledge_flow_worker.features.scheduler.export_contract` exports Temporal policy
+inside that image, without installing or importing the API. All extraction groups
+inherit the worker image; optional PyMuPDF affects only that image.
+
+The API keeps its service and routes. Its configuration has `published_artifacts`,
+`use_gpu` and `text_splitter`; processing profiles and Temporal configuration live
+only in the worker. The existing `fred_kf` role, E0 schemas and grants are unchanged.
+This packaging split has not yet been built or validated end to end.

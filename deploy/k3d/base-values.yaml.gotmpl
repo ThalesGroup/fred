@@ -23,7 +23,12 @@ The factory also serves released charts with a different configuration contract.
     {{- if ne .name "MINIO_SECRET_KEY" -}}{{- $env = append $env . -}}{{- end -}}
   {{- end -}}
   {{- $_ := set $app "extraEnvVars" $env -}}
-  {{- $configuration := pick $app.configuration "security" "embedding_model" "chat_model" "vision_model" "crossencoder_model" "storage" "observability" "scheduler" -}}
+  {{- $configuration := pick $app.configuration "embedding_model" "chat_model" "storage" "observability" -}}
+  {{- if eq $name "knowledge-flow-backend" -}}
+    {{- $configuration = merge $configuration (pick $app.configuration "security" "crossencoder_model" "published_artifacts" "use_gpu" "text_splitter") -}}
+  {{- else -}}
+    {{- $configuration = merge $configuration (pick $app.configuration "vision_model" "ocr_model" "processing" "scheduler" "manager_processing") -}}
+  {{- end -}}
   {{- $storage := pick $configuration.storage "postgres" "opensearch" "vector_store" "log_store" "tabular_store" -}}
   {{- /* Helm must drop the chart's pgvector collection when merging OpenSearch. */ -}}
   {{- $_ := set $storage.vector_store "collection_name" nil -}}

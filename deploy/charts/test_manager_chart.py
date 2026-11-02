@@ -1,11 +1,11 @@
 """Render the real chart: manager topology and shared-config rollout regressions."""
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 import yaml
 
@@ -140,8 +140,8 @@ class ManagerChartTests(unittest.TestCase):
             n: d["spec"]["template"]["spec"]["containers"][0]["image"]
             for n, d in apps.items()
         }
-        self.assertEqual(len(set(images.values())), 3)
-        self.assertEqual(
+        self.assertEqual(len(set(images.values())), 4)
+        self.assertNotEqual(
             images["knowledge-flow-backend"], images["knowledge-flow-worker"]
         )
         self.assertFalse(
@@ -158,6 +158,39 @@ class ManagerChartTests(unittest.TestCase):
             self.assertEqual(
                 apps[name]["spec"]["template"]["spec"]["serviceAccountName"], name
             )
+
+    def test_api_image_is_rejected_for_each_worker_group(self):
+        for worker in (
+            "knowledge-flow-worker",
+            "knowledge-flow-worker-extraction-fast",
+            "knowledge-flow-worker-extraction-medium",
+            "knowledge-flow-worker-extraction-rich",
+        ):
+            with self.subTest(worker=worker):
+                result = subprocess.run(
+                    [
+                        "helm",
+                        "template",
+                        "fred-app",
+                        str(CHART),
+                        "--set",
+                        "applications.knowledge-flow-backend.image.repository=example/api",
+                        "--set",
+                        "applications.knowledge-flow-backend.image.tag=audit",
+                        "--set",
+                        f"applications.{worker}.enabled=true",
+                        "--set",
+                        f"applications.{worker}.image.repository=example/api",
+                        "--set",
+                        f"applications.{worker}.image.tag=audit",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    "requires independent API and worker images", result.stderr
+                )
 
     def test_shared_manager_configuration_and_catalog_roll_both_processes(self):
         baseline = deployments(render("applications.control-plane-worker.enabled=true"))
@@ -267,6 +300,7 @@ class ManagerChartTests(unittest.TestCase):
             set(apps),
             {
                 "control-plane-backend",
+                "monitor",
                 "knowledge-flow-backend",
                 "knowledge-flow-worker",
                 "frontend",

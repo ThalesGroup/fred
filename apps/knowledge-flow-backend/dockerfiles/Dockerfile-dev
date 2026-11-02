@@ -11,7 +11,7 @@ ARG HF_OFFLINE_STRICT=0
 
 # Install required system dependencies
 RUN apt-get update && \
-    apt-get install -y git curl make net-tools inkscape libgl1 libreoffice && \
+    apt-get install -y git curl make net-tools && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv globally
@@ -43,31 +43,22 @@ ENV HUGGINGFACE_HUB_CACHE=${RERANKER_MODEL_CACHE}
 ENV SENTENCE_TRANSFORMERS_HOME=${RERANKER_MODEL_CACHE}
 ENV TRANSFORMERS_CACHE=${RERANKER_MODEL_CACHE}
 ENV TORCH_HOME=${CACHE_HOME}/torch
-ENV DOCLING_ARTIFACTS_PATH=/app/docling-artifacts
 ENV HF_HUB_OFFLINE=${HF_OFFLINE_STRICT}
 ENV TRANSFORMERS_OFFLINE=${HF_OFFLINE_STRICT}
 ENV HF_HUB_DISABLE_TELEMETRY=1
-RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${TORCH_HOME} ${DOCLING_ARTIFACTS_PATH} && \
-    chown -R ${USER_ID}:${GROUP_ID} ${CACHE_HOME} ${DOCLING_ARTIFACTS_PATH}
+RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${TORCH_HOME} && \
+    chown -R ${USER_ID}:${GROUP_ID} ${CACHE_HOME}
 
-# Set working directory
-WORKDIR /app
-
-# Copy only dependency files first to leverage Docker layer caching
-COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/Makefile apps/knowledge-flow-backend/pyproject.toml apps/knowledge-flow-backend/uv.lock* knowledge-flow-backend/
-COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod fred-pod
-COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core fred-core
-# Install the same canonical model used by Rust, including editable installs.
-COPY --chown=${USER_ID}:${GROUP_ID} scripts scripts
-
-# Copy the rest of the project files
-COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/knowledge_flow_backend knowledge-flow-backend/
-
-# Switch to the created user
+# Keep editable dependency paths identical to the repository layout.
+WORKDIR /workspace/apps/knowledge-flow-backend
+COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/Makefile apps/knowledge-flow-backend/pyproject.toml apps/knowledge-flow-backend/uv.lock apps/knowledge-flow-backend/README.md ./
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-pod /workspace/libs/fred-pod
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /workspace/libs/fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-knowledge /workspace/libs/fred-knowledge
+COPY --chown=${USER_ID}:${GROUP_ID} scripts /workspace/scripts
+COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/knowledge_flow_backend ./knowledge_flow_backend
+COPY --chown=${USER_ID}:${GROUP_ID} apps/knowledge-flow-backend/config ./config
 USER ${USER_NAME}
-
-# Set working directory
-WORKDIR /app/knowledge-flow-backend
 
 # Install dependencies with uv
 RUN make dev
@@ -82,5 +73,5 @@ con.execute('LOAD httpfs')"
 EXPOSE 8111
 
 # Run the application
-ENV PYTHONPATH=/app/knowledge-flow-backend
+ENV PYTHONPATH=/workspace/apps/knowledge-flow-backend
 ENTRYPOINT ["make", "run-local"]

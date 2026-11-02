@@ -5,9 +5,10 @@ import json
 import subprocess
 import sys
 import tempfile
-import tomllib
 import unittest
 from pathlib import Path
+
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "select_docker_images.py"
@@ -39,7 +40,7 @@ class SelectionTest(unittest.TestCase):
         # The fred-agents pyproject builds with its README, so it is not documentation.
         self.assertEqual(
             built("apps/fred-agents/README.md"),
-            ALL - {KF, "knowledge-flow-backend-pymupdf"},
+            ALL - {KF, "knowledge-flow-worker", "knowledge-flow-worker-pymupdf"},
         )
 
     def test_manager_publishes_the_control_plane_image(self):
@@ -50,9 +51,7 @@ class SelectionTest(unittest.TestCase):
         )
         images = {entry["name"]: entry for entry in manifest["images"]}
         self.assertNotIn("control-plane", images)
-        self.assertEqual(
-            images["control-plane-backend"]["context"], "."
-        )
+        self.assertEqual(images["control-plane-backend"]["context"], ".")
         self.assertEqual(
             images["control-plane-backend"]["dockerfile"],
             "apps/control-plane/dockerfiles/Dockerfile-prod",
@@ -76,12 +75,13 @@ class SelectionTest(unittest.TestCase):
             "apps/fred-agents/dockerfiles/Dockerfile-prod",
         ):
             self.assertEqual(
-                built(path), ALL - {KF, "knowledge-flow-backend-pymupdf"}, path
+                built(path),
+                ALL - {KF, "knowledge-flow-worker", "knowledge-flow-worker-pymupdf"},
+                path,
             )
 
     def test_knowledge_flow_inputs_build_everything(self):
         for path in (
-            "apps/knowledge-flow-backend/app/main.py",
             "libs/fred-core/fred_core/a.py",
             "libs/fred-pod/pyproject.toml",
             "scripts/download_models.py",
@@ -93,6 +93,20 @@ class SelectionTest(unittest.TestCase):
         ):
             self.assertEqual(built(path), ALL, path)
 
+    def test_knowledge_consumers_are_selected_independently(self):
+        api = built("apps/knowledge-flow-backend/pyproject.toml")
+        worker = built("apps/knowledge-flow-worker/pyproject.toml")
+        self.assertIn(KF, api)
+        self.assertNotIn("knowledge-flow-worker", api)
+        self.assertNotIn(KF, worker)
+        self.assertTrue(
+            {"knowledge-flow-worker", "knowledge-flow-worker-pymupdf"} <= worker
+        )
+        self.assertTrue(
+            {KF, "knowledge-flow-worker", "knowledge-flow-worker-pymupdf"}
+            <= built("libs/fred-knowledge/fred_knowledge/configuration.py")
+        )
+
     def test_missing_copy_regression_still_rebuilds(self):
         # Declaring a new local dependency edits a pyproject already in the inputs,
         # so the image builds and an absent COPY fails the check.
@@ -102,7 +116,7 @@ class SelectionTest(unittest.TestCase):
     def test_unknown_path_falls_back_to_general(self):
         self.assertEqual(
             built("new-top-level/thing.py"),
-            ALL - {KF, "knowledge-flow-backend-pymupdf"},
+            ALL - {KF, "knowledge-flow-worker", "knowledge-flow-worker-pymupdf"},
         )
 
     def test_selection_is_a_union(self):
@@ -125,14 +139,15 @@ class SelectionTest(unittest.TestCase):
 class KnowledgeFlowInputsTest(unittest.TestCase):
     """The static list must cover what the image really consumes."""
 
+    project = "apps/knowledge-flow-backend"
+    inputs = KF_INPUTS
+
     def covered(self, path: str) -> bool:
-        return any(s.matches(path, p) or s.matches(path + "/x", p) for p in KF_INPUTS)
+        return any(s.matches(path, p) or s.matches(path + "/x", p) for p in self.inputs)
 
     def test_every_copy_source_is_an_input(self):
-        dockerfile = ROOT / "apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod"
-        self.assertTrue(
-            self.covered("apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod")
-        )
+        dockerfile = ROOT / self.project / "dockerfiles/Dockerfile-prod"
+        self.assertTrue(self.covered(self.project + "/dockerfiles/Dockerfile-prod"))
         for line in dockerfile.read_text().splitlines():
             if not line.startswith("COPY") or "--from=" in line:
                 continue
@@ -144,7 +159,7 @@ class KnowledgeFlowInputsTest(unittest.TestCase):
                 )
 
     def test_every_local_dependency_is_an_input(self):
-        pending, seen = [ROOT / "apps/knowledge-flow-backend"], set()
+        pending, seen = [ROOT / self.project], set()
         while pending:
             project = pending.pop()
             if project in seen:
@@ -161,6 +176,15 @@ class KnowledgeFlowInputsTest(unittest.TestCase):
                 if isinstance(source, dict) and "path" in source:
                     pending.append((project / source["path"]).resolve())
         self.assertGreater(len(seen), 1)
+
+
+class WorkerInputsTest(KnowledgeFlowInputsTest):
+    project = "apps/knowledge-flow-worker"
+    inputs = next(
+        image["pr_inputs"]
+        for image in MANIFEST["images"]
+        if image["name"] == "knowledge-flow-worker"
+    )
 
 
 class ChangedPathsTest(unittest.TestCase):

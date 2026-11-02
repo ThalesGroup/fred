@@ -1,0 +1,314 @@
+# yaml-language-server: $schema=./schema/configuration.schema.json
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+app:
+  name: "Knowledge Flow Backend"
+  base_url: "/knowledge-flow/v2"
+  address: "127.0.0.1"
+  port: 8112
+  log_level: "info"
+  log_format: text
+  reload: false
+  reload_dir: "."
+observability:
+  kpi:
+    process_metrics_interval_sec: 0
+    prometheus:
+      port: 9112
+
+processing:
+  path_base_model: "." # Use "/app" for docker
+  # path_base_model: "/app" # Use for docker
+  default_profile: fast
+  profiles:
+    fast:
+      use_gpu: false
+      generate_summary: false
+      input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
+      retry_initial_interval: 5s
+      retry_backoff_coefficient: 2.0
+      retry_maximum_interval: 20s
+      retry_maximum_attempts: 3
+      retry_non_retryable_error_types: []
+      process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      pdf:
+        do_ocr: false
+      input_processors:
+        - suffix: ".pdf"
+          class_path: knowledge_flow_worker.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+        - suffix: ".docx"
+          class_path: knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - suffix: ".doc"
+          class_path: knowledge_flow_worker.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
+        - suffix: ".odt"
+          class_path: knowledge_flow_worker.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+        - suffix: ".pptx"
+          class_path: knowledge_flow_worker.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - suffix: ".ppt"
+          class_path: knowledge_flow_worker.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
+        - suffix: ".csv"
+          class_path: knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".xlsx"
+          class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xls"
+          class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xlsm"
+          class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".txt"
+          class_path: knowledge_flow_worker.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - suffix: ".md"
+          class_path: knowledge_flow_worker.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+    medium:
+      use_gpu: false
+      generate_summary: false
+      process_images: false
+      input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
+      retry_initial_interval: 20s
+      retry_backoff_coefficient: 2.0
+      retry_maximum_interval: 2m
+      retry_maximum_attempts: 5
+      retry_non_retryable_error_types: []
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      pdf:
+        extractor: docling
+        do_ocr: true
+        # 8 cores / ingestion_max_concurrent_activities=3 ~= 2 threads/extraction before CPU oversubscription
+        docling_num_threads: 2
+      input_processors:
+        - suffix: ".pdf"
+          class_path: knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+        - suffix: ".docx"
+          class_path: knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - suffix: ".doc"
+          class_path: knowledge_flow_worker.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
+        - suffix: ".odt"
+          class_path: knowledge_flow_worker.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+        - suffix: ".pptx"
+          class_path: knowledge_flow_worker.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - suffix: ".ppt"
+          class_path: knowledge_flow_worker.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
+        - suffix: ".csv"
+          class_path: knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".xlsx"
+          class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xls"
+          class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xlsm"
+          class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".txt"
+          class_path: knowledge_flow_worker.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - suffix: ".md"
+          class_path: knowledge_flow_worker.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+    rich:
+      use_gpu: false
+      generate_summary: false
+      process_images: true
+      input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
+      retry_initial_interval: 30s
+      retry_backoff_coefficient: 2.0
+      retry_maximum_interval: 5m
+      retry_maximum_attempts: 7
+      retry_non_retryable_error_types: []
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      pdf:
+        extractor: docling
+        do_ocr: true
+        # 8 cores / ingestion_max_concurrent_activities=3 ~= 2 threads/extraction before CPU oversubscription
+        docling_num_threads: 2
+      input_processors:
+        - suffix: ".pdf"
+          class_path: knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+        - suffix: ".docx"
+          class_path: knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - suffix: ".doc"
+          class_path: knowledge_flow_worker.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
+        - suffix: ".odt"
+          class_path: knowledge_flow_worker.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+        - suffix: ".pptx"
+          class_path: knowledge_flow_worker.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - suffix: ".ppt"
+          class_path: knowledge_flow_worker.core.processors.input.ppt_markdown_processor.ppt_markdown_processor.PptMarkdownProcessor
+        - suffix: ".csv"
+          class_path: knowledge_flow_worker.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".xlsx"
+          class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xls"
+          class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".xlsm"
+          class_path: knowledge_flow_worker.core.processors.input.excel_processor.excel_processor.ExcelProcessor
+        - suffix: ".txt"
+          class_path: knowledge_flow_worker.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - suffix: ".md"
+          class_path: knowledge_flow_worker.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_worker.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_worker.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+# attachment_processors:
+#   - suffix: ".pdf"
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_pdf_processor.FastLitePdfProcessor
+#   - suffix: ".docx"
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_docx_processor.FastLiteDocxProcessor
+#   - suffix: ".doc"
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_doc_processor.FastLiteDocProcessor
+#   - suffix: ".odt"
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_odt_processor.FastLiteOdtProcessor
+#   - suffix: ".pptx"
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
+#   - suffix: ".ppt"
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_ppt_processor.FastLitePptProcessor
+#   - suffix: ".csv"
+#     class_path: knowledge_flow_worker.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
+scheduler:
+  enabled: true
+  backend: "temporal"
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
+    task_queue: "ingestion"
+    workflow_id_prefix: "pipeline"
+    connect_timeout_seconds: 5
+    ingestion_workflow_parallelism: 3
+    ingestion_max_concurrent_workflow_tasks: 3
+    ingestion_max_concurrent_activities: 3
+chat_model:
+  provider: openai
+  name: mistral-medium-2508 # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
+  settings:
+    base_url: https://api.mistral.ai/v1
+embedding_model:
+  provider: openai
+  name: mistral-embed # or text-embedding-3-small
+  settings:
+    base_url: https://api.mistral.ai/v1
+    check_embedding_ctx_length: false
+vision_model:
+  provider: openai
+  name: pixtral-12b-2409 # mistral-medium-latest is NOT vision-capable; pixtral-12b-2409 or mistral-small-3.1 required
+  settings:
+    base_url: https://api.mistral.ai/v1
+# ocr_model:
+#   provider: openai
+#   name: mistral-ocr-latest
+#   settings:
+#     base_url: https://api.mistral.ai/v1
+#     request_timeout: 300
+#     signed_url_expiry_hours: 1
+storage:
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    pool_size: 2
+    max_overflow: 0
+    pool_timeout: 30
+    pool_recycle: 1800
+    pool_pre_ping: true
+    username: fred_kf
+    schema: knowledge
+  opensearch:
+    host: https://localhost:9200
+    secure: true
+    verify_certs: false
+    username: admin
+
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    pointer_chunks_enabled: false
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
+      # Execution guardrails: DuckDB runs on a dedicated bounded thread pool.
+      # max_concurrent_queries x duckdb_memory_limit bounds the buffer manager;
+      # it does not bound scalar allocation (see #2182).
+      max_concurrent_queries: 2
+      max_queued_queries: 4
+      query_timeout_seconds: 30.0
+      duckdb_threads: 1
+      duckdb_memory_limit: "256MB"
+      max_selected_datasets: 50
+  vector_store:
+    type: opensearch
+    index: vector-index-mistral
+    bulk_size: 1000
+  log_store:
+    type: opensearch
+    index: app-logs-index

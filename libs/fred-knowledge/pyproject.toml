@@ -1,0 +1,48 @@
+[project]
+name = "fred-knowledge"
+version = "5.0.0"
+description = "Shared published-artifact, tabular, text and vector primitives for Knowledge Flow."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "attrs>=25",
+  "sqlalchemy>=2.0.42",
+  "fred-core>=5.0.0,<6",
+  "langchain-core>=1.6.5",
+  "langchain-community>=0.4.1",
+  "langchain-text-splitters>=1.1.2",
+  "langchain-postgres>=0.0.17",
+  "opensearch-py==2.8.0",
+  "pydantic>=2.5.2,<3.0.0",
+  "pandas==2.2.3",
+  "minio>=7.2.20",
+  "urllib3>=2",
+  "pgvector>=0.2.5",
+  "psycopg[binary]>=3.2.1"
+]
+
+[build-system]
+requires = ["setuptools>=83.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fred_knowledge*"]
+
+[tool.setuptools.package-data]
+fred_knowledge = ["py.typed"]
+
+[tool.uv.sources]
+fred-core = { path = "../fred-core", editable = true }
+fred-pod = { path = "../fred-pod", editable = true }
+
+[project.optional-dependencies]
+dev = ["pytest>=9.0.3", "pytest-asyncio>=1.4.0", "pytest-cov>=6.1.1", "pytest-socket>=0.8.0", "ruff>=0.12.0", "basedpyright==1.31.0", "bandit>=1.8.5", "detect-secrets>=1.5.0"]
+
+[tool.ruff]
+extend = "../../ruff.toml"
+line-length = 200
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"

@@ -7,12 +7,12 @@ import json
 import os
 import re
 import secrets
-from pathlib import Path
 import ssl
 import subprocess
 import tempfile
-from urllib.request import Request, urlopen
+from pathlib import Path
 from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
 
 import yaml
 
@@ -111,7 +111,7 @@ def prepare() -> None:
                 f"{directory}:/export:ro",
                 image,
                 "-m",
-                "knowledge_flow_backend.features.scheduler.export_contract",
+                "knowledge_flow_worker.features.scheduler.export_contract",
                 "--configuration",
                 "/export/configuration.yaml",
             ]
@@ -133,7 +133,7 @@ def prepare() -> None:
                 "python",
                 image,
                 "-c",
-                "import json; from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import HYBRID_SEARCH_PIPELINE_NAME, HYBRID_SEARCH_PIPELINE_CONFIG; print(json.dumps({'name': HYBRID_SEARCH_PIPELINE_NAME, 'body': HYBRID_SEARCH_PIPELINE_CONFIG}))",
+                "import json; from fred_knowledge.vector.opensearch_vector_store import HYBRID_SEARCH_PIPELINE_NAME, HYBRID_SEARCH_PIPELINE_CONFIG; print(json.dumps({'name': HYBRID_SEARCH_PIPELINE_NAME, 'body': HYBRID_SEARCH_PIPELINE_CONFIG}))",
             ]
         )
     )

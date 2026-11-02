@@ -1,3 +1,5 @@
+# Copyright Thales 2026
+# SPDX-License-Identifier: Apache-2.0
 # app/features/vector_search/service.py
 # Copyright Thales 2025
 #
@@ -26,11 +28,11 @@ from fred_core.documents.transport import DocumentAccessContext
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.security.delegation import AssertedUser
 from fred_core.store import VectorSearchHit
+from fred_knowledge.vector.base_vector_store import AnnHit, BaseVectorHit, FullTextHit, HybridHit, SearchFilter
+from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, BaseVectorHit, FullTextHit, HybridHit, SearchFilter
-from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)

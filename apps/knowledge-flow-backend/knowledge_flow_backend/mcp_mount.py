@@ -1,3 +1,5 @@
+# Copyright Thales 2026
+# SPDX-License-Identifier: Apache-2.0
 """Mount Knowledge Flow's FastAPI routes as authenticated MCP tools."""
 
 from __future__ import annotations
@@ -12,10 +14,7 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.server.providers.openapi import MCPType, RouteMap
 from fastmcp.tools import ToolResult
 from fastmcp.utilities.lifespan import combine_lifespans
-from fred_core.common.fastapi_handlers import (
-    ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
-    DENIAL_CAUSE_HEADER,
-)
+from fred_core.common.fastapi_handlers import ACCOUNT_STATUS_UNAVAILABLE_CAUSE, DENIAL_CAUSE_HEADER
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER
 from fred_core.logs.propagation import CONTEXT_HEADER, outbound_context_headers
 from fred_core.security.delegation import GRANT_PARAM_NAMES

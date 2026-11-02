@@ -10,6 +10,7 @@ _CHART_SCHEMA_FILE := $(_CHART_REPO_ROOT)/deploy/charts/fred/values.schema.json
 _CHART_VALUES_FILE := $(_CHART_REPO_ROOT)/deploy/charts/fred/values.yaml
 
 _FA_SCHEMA  := $(_CHART_REPO_ROOT)/apps/fred-agents/config/schema/configuration.schema.json
+_KFW_SCHEMA := $(_CHART_REPO_ROOT)/apps/knowledge-flow-worker/config/schema/configuration.schema.json
 _KF_SCHEMA  := $(_CHART_REPO_ROOT)/apps/knowledge-flow-backend/config/schema/configuration.schema.json
 _CP_SCHEMA  := $(_CHART_REPO_ROOT)/apps/control-plane/config/schema/configuration.schema.json
 
@@ -20,7 +21,7 @@ _KB_SCHEMA  := $(_CHART_REPO_ROOT)/libs/fred-sdk/config/schema/configuration.sch
 _POD_CHARTS := agent-pod knowledge-base
 
 _ALL_BACKEND_SCHEMAS_PRESENT = \
-	$(if $(and $(wildcard $(_FA_SCHEMA)),$(wildcard $(_KF_SCHEMA)),$(wildcard $(_CP_SCHEMA)),$(wildcard $(_KB_SCHEMA))),yes,)
+	$(if $(and $(wildcard $(_FA_SCHEMA)),$(wildcard $(_KF_SCHEMA)),$(wildcard $(_KFW_SCHEMA)),$(wildcard $(_CP_SCHEMA)),$(wildcard $(_KB_SCHEMA))),yes,)
 
 include $(_CHART_SCHEMA_MK_DIR)/scripts-uv.mk
 
@@ -30,6 +31,7 @@ generate-chart-schema: $(SCRIPTS_UV_READY) ## Regenerate the fred, agent-pod and
 		$(SCRIPTS_UV) run $(_GEN_CHART_SCHEMA_SCRIPT) \
 			--fred-agents    "$(_FA_SCHEMA)" \
 			--knowledge-flow "$(_KF_SCHEMA)" \
+			--knowledge-flow-worker "$(_KFW_SCHEMA)" \
 			--control-plane  "$(_CP_SCHEMA)" \
 			--output         "$(_CHART_SCHEMA_FILE)" && \
 		$(SCRIPTS_UV) run $(_GEN_POD_CHART_SCHEMAS_SCRIPT) \
@@ -47,6 +49,7 @@ check-chart-schema-drift: $(SCRIPTS_UV_READY) ## Fail if values.schema.json diff
 		$(SCRIPTS_UV) run $(_GEN_CHART_SCHEMA_SCRIPT) \
 			--fred-agents    "$(_FA_SCHEMA)" \
 			--knowledge-flow "$(_KF_SCHEMA)" \
+			--knowledge-flow-worker "$(_KFW_SCHEMA)" \
 			--control-plane  "$(_CP_SCHEMA)" \
 			--output         "$(_CHART_DRIFT_TMP)/values.schema.json" && \
 		(diff "$(_CHART_SCHEMA_FILE)" "$(_CHART_DRIFT_TMP)/values.schema.json" \

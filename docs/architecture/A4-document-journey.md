@@ -98,7 +98,7 @@ HTTP callbacks are a separate contract from the unchanged Temporal input.
 
 Read [submission](../../apps/control-plane/src/processing/worker_contract.rs),
 [dispatch](../../apps/control-plane/src/processing/dispatch.rs) and
-[manager adapter](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/service.py).
+[manager adapter](../../apps/knowledge-flow-worker/knowledge_flow_worker/features/manager_processing/service.py).
 
 ### 4. Extract, chunk and index
 
@@ -128,9 +128,9 @@ The separate `document-vectors` index prevents legacy retrieval from exposing
 staged manager chunks or applying legacy ACLs to manager documents. Generation
 UUID-based IDs fence stale writes without changing the Swift chunk schema.
 
-Read [scoped pipeline and vectors](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/persistence.py),
-[artifact persistence](../../apps/knowledge-flow-backend/knowledge_flow_backend/features/manager_processing/artifacts.py)
-and the [OpenSearch mapping](../../apps/knowledge-flow-backend/knowledge_flow_backend/core/stores/vector/opensearch_vector_store.py).
+Read [scoped pipeline and vectors](../../apps/knowledge-flow-worker/knowledge_flow_worker/features/manager_processing/persistence.py),
+[artifact persistence](../../apps/knowledge-flow-worker/knowledge_flow_worker/features/manager_processing/artifacts.py)
+and the [OpenSearch mapping](../../libs/fred-knowledge/fred_knowledge/vector/opensearch_vector_store.py).
 
 ### 5. Publish and read the result
 

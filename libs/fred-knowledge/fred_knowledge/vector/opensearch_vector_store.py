@@ -1,0 +1,1817 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import hashlib
+import logging
+import time
+from contextlib import nullcontext
+from copy import deepcopy
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from threading import Lock
+from typing import Any, Dict, List, Optional, Sequence, Type, TypeVar
+
+from fred_core.kpi import BaseKPIWriter, KPIActor
+from fred_core.store import MappingValidationError, validate_index_mapping
+from langchain_community.vectorstores import OpenSearchVectorSearch
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
+from opensearchpy import NotFoundError, OpenSearch, OpenSearchException, RequestError, RequestsHttpConnection
+
+from fred_knowledge.text.base_text_splitter import BaseTextSplitter
+from fred_knowledge.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorHit, BaseVectorStore, FullTextHit, HybridHit, SearchFilter
+from fred_knowledge.vector.cancellation import WorkCancelled, raise_if_cancelled
+
+logger = logging.getLogger(__name__)
+DEBUG = True
+
+
+@dataclass(frozen=True)
+class ExpectedIndexSpec:
+    dim: int
+    engine: str  # "lucene"
+    space_type: str  # "cosinesimil"
+    method_name: str  # "hnsw"
+
+
+MODEL_INDEX_SPECS: dict[str, ExpectedIndexSpec] = {
+    # OpenAI 3-series
+    "text-embedding-3-large": ExpectedIndexSpec(dim=3072, engine="lucene", space_type="cosinesimil", method_name="hnsw"),
+    "text-embedding-3-small": ExpectedIndexSpec(dim=1536, engine="lucene", space_type="cosinesimil", method_name="hnsw"),
+    # Legacy (still supported but discouraged)
+    "text-embedding-ada-002": ExpectedIndexSpec(dim=1536, engine="lucene", space_type="cosinesimil", method_name="hnsw"),
+}
+
+REQUIRED_METADATA_FIELDS: dict[str, Dict[str, str]] = {
+    "session_id": {"type": "keyword"},
+    "user_id": {"type": "keyword"},
+    "scope": {"type": "keyword"},
+}
+
+SAFE_METADATA_MAPPING_UPDATES: dict[str, Dict[str, str]] = {
+    **REQUIRED_METADATA_FIELDS,
+    "retrievable": {"type": "boolean"},
+    # Discriminates a real ingested chunk ("content", the default when the field
+    # is absent — see chunks written before this field existed) from a synthetic
+    # "dataset_pointer" chunk describing a structured/tabular dataset that isn't
+    # itself vectorized (RAG-DATASET-DISCOVERY-RFC.md).
+    "chunk_kind": {"type": "keyword"},
+    # Weaver ingestion placement, written from the Control Plane descriptor.
+    "organization_id": {"type": "keyword"},
+    "space_id": {"type": "keyword"},
+    "folder_path": {"type": "keyword"},
+}
+
+VECTOR_METADATA_PROPERTIES: Dict[str, Any] = {
+    "document_uid": {"type": "keyword"},
+    "document_name": {
+        "type": "text",
+        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+    },
+    "title": {
+        "type": "text",
+        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+    },
+    "author": {
+        "type": "text",
+        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+    },
+    "created": {"type": "date"},
+    "modified": {"type": "date"},
+    "last_modified_by": {"type": "keyword"},
+    "repository": {"type": "keyword"},
+    "pull_location": {"type": "keyword"},
+    "repository_web": {"type": "keyword"},
+    "repo_ref": {"type": "keyword"},
+    "file_path": {"type": "keyword"},
+    "date_added_to_kb": {"type": "date"},
+    "type": {"type": "keyword"},
+    "mime_type": {"type": "keyword"},
+    "file_size_bytes": {"type": "long"},
+    "page_count": {"type": "long"},
+    "row_count": {"type": "long"},
+    "sha256": {"type": "keyword"},
+    "language": {"type": "keyword"},
+    "tag_ids": {"type": "keyword"},
+    "license": {"type": "keyword"},
+    "confidential": {"type": "boolean"},
+    "acl": {"type": "keyword"},
+    "chunk_index": {"type": "long"},
+    "chunk_uid": {"type": "keyword"},
+    "char_start": {"type": "long"},
+    "char_end": {"type": "long"},
+    "heading_slug": {"type": "keyword"},
+    "viewer_fragment": {"type": "keyword"},
+    "original_doc_length": {"type": "long"},
+    "section": {
+        "type": "text",
+        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+    },
+    **{field_name: {"type": field_mapping["type"]} for field_name, field_mapping in SAFE_METADATA_MAPPING_UPDATES.items()},
+}
+
+VECTOR_INDEX_MAPPING_TEMPLATE: Dict[str, Any] = {
+    "settings": {
+        "index": {
+            "knn": True,
+            "number_of_shards": 1,
+            "number_of_replicas": 1,
+            "knn.algo_param": {"ef_search": "512"},
+        }
+    },
+    "mappings": {
+        "dynamic": False,
+        "properties": {
+            "text": {
+                "type": "text",
+                "fields": {
+                    "keyword": {"type": "keyword", "ignore_above": 256},
+                },
+            },
+            "vector_field": {
+                "type": "knn_vector",
+                "dimension": 0,
+                "method": {
+                    "name": "hnsw",
+                    "engine": "lucene",
+                    "space_type": "cosinesimil",
+                    "parameters": {"ef_construction": 512, "m": 16},
+                },
+            },
+            "metadata": {
+                "type": "object",
+                "dynamic": False,
+                "properties": VECTOR_METADATA_PROPERTIES,
+            },
+        },
+    },
+}
+
+HYBRID_SEARCH_PIPELINE_NAME = "hybrid-search-pipeline"
+
+HYBRID_SEARCH_PIPELINE_CONFIG = {
+    "description": "Post processor for hybrid search",
+    "phase_results_processors": [{"normalization-processor": {"normalization": {"technique": "min_max"}, "combination": {"technique": "arithmetic_mean", "parameters": {"weights": [0.5, 0.5]}}}}],
+}
+
+
+def _safe_get(d: dict, path: list[str], default=None):
+    cur = d
+    for key in path:
+        if not isinstance(cur, dict) or key not in cur:
+            return default
+        cur = cur[key]
+    return cur
+
+
+def _norm_str(value: object) -> str:
+    """Safely convert any mapping value (dict/None/str) to lowercase str."""
+    if isinstance(value, dict):
+        # Sometimes OpenSearch returns {"engine": "lucene"} instead of "lucene"
+        return next(iter(value.values()), "").lower()
+    if isinstance(value, (list, tuple)):
+        return str(value[0]).lower() if value else ""
+    return str(value or "").lower()
+
+
+def _is_true_value(value: object) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return value is True
+
+
+def _is_false_value(value: object) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() == "false"
+    return value is False
+
+
+def build_vector_index_mapping(dim: int) -> Dict[str, Any]:
+    mapping = deepcopy(VECTOR_INDEX_MAPPING_TEMPLATE)
+    mapping["mappings"]["properties"]["vector_field"]["dimension"] = dim
+    return mapping
+
+
+T = TypeVar("T", bound=BaseVectorHit)
+
+EMBEDDING_RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})
+EMBEDDING_RETRY_BASE_DELAY_SECONDS = 0.5
+EMBEDDING_RETRY_MAX_ATTEMPTS = 3
+EMBEDDING_CAP_PROBE_AFTER_SUCCESSES = 10
+
+
+@dataclass(frozen=True)
+class EmbeddingRequestFailure:
+    status_code: int | None
+    provider_code: str | None
+    provider_type: str | None
+    exception_type: str
+
+
+def scan_document_uids_composite(
+    client: OpenSearch,
+    index: str,
+    *,
+    page_size: int = 1000,
+    request_timeout: int = 30,
+) -> List[str]:
+    """
+    Page through every distinct `metadata.document_uid` in `index` via a
+    `composite` aggregation (`after_key`), using `client` as given.
+
+    Takes an already-constructed client and index name and issues only
+    `search` calls. `OpenSearchVectorStoreAdapter.list_document_uids`
+    delegates here so there is exactly one paging implementation.
+
+    Pages through a `composite` aggregation instead of a single `terms`
+    aggregation capped at a fixed bucket count. A one-shot `terms` agg
+    silently truncates once the index holds more distinct document_uids than
+    its `size`, ordered by descending chunk count -- so once a deployment's
+    real document count crosses that cap, correctly-vectorized documents with
+    fewer chunks silently drop out of the list. `page_size` bounds each
+    round-trip only, never the total result. `request_timeout` bounds each
+    individual `search` call so a stuck OpenSearch node fails this scan
+    instead of hanging it indefinitely.
+
+    This audit listing is best-effort: any failure logs and returns an empty
+    result.
+    """
+    doc_uids: list[str] = []
+    after: dict[str, object] | None = None
+    try:
+        while True:
+            composite: dict[str, object] = {
+                "size": page_size,
+                "sources": [{"doc_uid": {"terms": {"field": "metadata.document_uid"}}}],
+            }
+            if after is not None:
+                composite["after"] = after
+            body = {"size": 0, "aggs": {"by_doc": {"composite": composite}}}
+            resp = client.search(index=index, body=body, request_timeout=request_timeout)  # type: ignore[call-arg]  # opensearch-py's @query_params decorator accepts this at runtime; its type stub doesn't reflect that
+            agg = resp.get("aggregations", {}).get("by_doc", {})  # type: ignore[dict-item]
+            buckets = agg.get("buckets", [])
+            if not buckets:
+                break
+            doc_uids.extend(str(b["key"]["doc_uid"]) for b in buckets if b.get("key", {}).get("doc_uid"))
+            after = agg.get("after_key")
+            if after is None:
+                break
+        return doc_uids
+    except Exception:
+        logger.warning("[VECTOR][OPENSEARCH] Could not list document_uids from index=%s", index, exc_info=True)
+        return []
+
+
+class OpenSearchVectorStoreAdapter(BaseVectorStore):
+    """
+    Fred — OpenSearch-backed Vector Store (LangChain for ANN + OS client for lexical/phrase).
+
+    Why this shape:
+      - Matches the minimal BaseVectorStore contract (ingest + ANN).
+      - Keeps your existing LangChain usage; we only adapt the signatures + add 2 methods.
+    """
+
+    def __init__(
+        self,
+        embedding_model: Embeddings,
+        embedding_model_name: str,
+        kpi: BaseKPIWriter | None,
+        host: str,
+        index: str,
+        username: str,
+        password: str,
+        splitter: BaseTextSplitter,
+        secure: bool = False,
+        verify_certs: bool = False,
+        bulk_size: int = 1000,
+        read_only: bool = False,
+    ):
+        self._splitter = splitter
+        self._index = index
+        self._embedding_model = embedding_model
+        self._host = host
+        self._username = username
+        self._password = password
+        self._secure = secure
+        self._verify_certs = verify_certs
+        self._bulk_size = bulk_size
+        # Largest batch size the embedding provider has accepted after rejecting a
+        # bigger one (None until a batch-limit error is seen). Lowered on rejection;
+        # after EMBEDDING_CAP_PROBE_AFTER_SUCCESSES consecutive successes at the cap,
+        # one batch probes double the size so a dense early batch cannot pin the cap
+        # low for the rest of the corpus.
+        self._learned_embedding_batch_cap: Optional[int] = None
+        self._cap_success_streak: int = 0
+        self._embedding_model_name = embedding_model_name
+        self._kpi = kpi
+        self._vs: OpenSearchVectorSearch | None = None
+        self._expected_dim: int | None = None
+        self._ready = False
+        self._read_only = read_only
+        self._ready_lock = Lock()
+        self.client = OpenSearch(
+            host,
+            http_auth=(username, password),
+            use_ssl=secure,
+            verify_certs=verify_certs,
+            connection_class=RequestsHttpConnection,
+            ssl_show_warn=False,
+        )
+
+        if not read_only:
+            self.ensure_ready()
+        logger.info("[VECTOR][OPENSEARCH] initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
+
+    def _phase_timer(self, phase: str):
+        if self._kpi is None:
+            return nullcontext({})
+        return self._kpi.timer(
+            "app.phase_latency_ms",
+            dims={"phase": phase},
+            actor=KPIActor(type="system"),
+        )
+
+    # ---------- lazy LangChain wrapper + raw client ----------
+
+    @property
+    def _lc(self) -> OpenSearchVectorSearch:
+        if self._vs is None:
+            self._vs = OpenSearchVectorSearch(
+                opensearch_url=self._host,
+                index_name=self._index,
+                embedding_function=self._embedding_model,
+                use_ssl=self._secure,
+                verify_certs=self._verify_certs,
+                http_auth=(self._username, self._password),
+                pool_maxsize=20,
+                bulk_size=self._bulk_size,
+            )
+        return self._vs
+
+    @property
+    def _client(self):
+        # low-level OpenSearch client for BM25/phrase
+        return self.client
+
+    def ensure_ready(self) -> None:
+        if self._ready:
+            return
+        # A slow embedding probe must not accumulate waiting readiness threads.
+        if not self._ready_lock.acquire(blocking=False):
+            raise RuntimeError("Corpus validation is in progress")
+        try:
+            if self._ready:
+                return
+            if not self.pipeline_exists(pipeline_name=HYBRID_SEARCH_PIPELINE_NAME):
+                if self._read_only:
+                    raise RuntimeError("Corpus search pipeline is not initialized")
+                self.create_pipeline(pipeline_name=HYBRID_SEARCH_PIPELINE_NAME, pipeline_config=HYBRID_SEARCH_PIPELINE_CONFIG)
+            exists = self._client.indices.exists(index=self._index)
+            if not exists and self._read_only:
+                raise RuntimeError("Corpus index is not initialized")
+
+            expected_dim = self._get_embedding_dimension()
+            self._expected_dim = expected_dim
+            expected_mapping = build_vector_index_mapping(expected_dim)
+            if not exists:
+                try:
+                    self._client.indices.create(index=self._index, body=expected_mapping)
+                except RequestError as exc:
+                    # Another worker replica may have created the same index first.
+                    if exc.error != "resource_already_exists_exception":
+                        raise
+                logger.info("[VECTOR][OPENSEARCH] initialized index '%s' with dimension=%s", self._index, expected_dim)
+            self._validate_index_compatibility(expected_dim, allow_metadata_mapping_update=not self._read_only)
+            validate_index_mapping(self._client, self._index, expected_mapping)
+            self._ready = True
+        except OpenSearchException as exc:
+            logger.error("[VECTOR][OPENSEARCH] ensure_ready failed for index '%s': %s", self._index, exc)
+            raise
+        finally:
+            self._ready_lock.release()
+
+    def validate_index_or_fail(self) -> None:
+        """
+        Force initialization + mapping validation so callers can fail fast at startup.
+        """
+        logger.info("[VECTOR][OPENSEARCH] validating vector index=%s", self._index)
+        try:
+            self.ensure_ready()
+        except (MappingValidationError, OpenSearchException, ValueError) as e:
+            logger.critical("[VECTOR][OPENSEARCH] index validation failed: %s", e)
+            raise SystemExit(1) from e
+
+    def pipeline_exists(self, pipeline_name: str) -> bool:
+        """
+        Check whether a search pipeline exists in OpenSearch.
+
+        Args:
+            pipeline_name (str): Name of the OpenSearch search pipeline to check.
+
+        Returns:
+            bool: True if the pipeline exists, False if it does not exist or if an
+            error occurs while checking.
+        """
+        try:
+            self._client.search_pipeline.get(id=pipeline_name)
+            return True
+        except NotFoundError:
+            return False
+        except Exception as e:
+            logger.warning("[OPENSEARCH][PIPELINE] Error checking pipeline '%s': %s", pipeline_name, e)
+            return False
+
+    def create_pipeline(self, pipeline_name: str, pipeline_config: Dict[str, Any]) -> bool:
+        """
+        Create a search pipeline in OpenSearch if it does not already exist.
+
+        Args:
+            pipeline_name (str): Name of the OpenSearch search pipeline to create.
+            pipeline_config (Dict[str, Any]): Configuration body of the search pipeline.
+
+        Returns:
+            bool: True if the pipeline was successfully created, False if the
+            pipeline already exists.
+
+        Raises:
+            RequestError: If OpenSearch returns an error while creating the pipeline.
+        """
+        logger.info("[OPENSEARCH][PIPELINE] Creating pipeline '%s'", pipeline_name)
+
+        try:
+            self._client.search_pipeline.put(id=pipeline_name, body=pipeline_config)
+            logger.info("[OPENSEARCH][PIPELINE] Successfully created pipeline '%s'", pipeline_name)
+            return True
+
+        except RequestError as e:
+            logger.error("[OPENSEARCH][PIPELINE] Failed to create pipeline '%s': %s", pipeline_name, e)
+            raise
+
+    # ---------- BaseVectorStore: identification ----------
+
+    @property
+    def index_name(self) -> Optional[str]:
+        return self._index
+
+    # ---------- BaseVectorStore: ingestion ----------
+
+    def _get_embedding_request_failure(self, error: Exception) -> EmbeddingRequestFailure | None:
+        """
+        Why:
+            Embedding provider errors are sometimes wrapped by LangChain or by retry
+            machinery. We need a single normalized view of the nearest provider failure
+            to decide whether to split a batch or retry it as-is.
+
+        How to use:
+            Pass the exception raised while adding documents. The helper walks the
+            exception chain breadth-first and returns the first provider-like failure
+            carrying structured status/type/code information.
+        """
+        pending: list[BaseException] = [error]
+        seen: set[int] = set()
+
+        while pending:
+            current = pending.pop(0)
+            marker = id(current)
+            if marker in seen:
+                continue
+            seen.add(marker)
+
+            status_code = getattr(current, "status_code", None)
+            provider_code = getattr(current, "code", None)
+            provider_type = getattr(current, "type", None)
+            body = getattr(current, "body", None)
+            exception_type = type(current).__name__
+
+            if isinstance(body, dict):
+                provider_code = provider_code or body.get("code")
+                provider_type = provider_type or body.get("type")
+                status_code = status_code or body.get("raw_status_code")
+
+            normalized_code = str(provider_code) if provider_code is not None else None
+            normalized_type = str(provider_type) if provider_type is not None else None
+
+            if (
+                status_code is not None
+                or normalized_code is not None
+                or normalized_type is not None
+                or exception_type
+                in {
+                    "APIConnectionError",
+                    "APITimeoutError",
+                }
+            ):
+                return EmbeddingRequestFailure(
+                    status_code=int(status_code) if status_code is not None else None,
+                    provider_code=normalized_code,
+                    provider_type=normalized_type,
+                    exception_type=exception_type,
+                )
+
+            cause = getattr(current, "__cause__", None)
+            context = getattr(current, "__context__", None)
+            if cause is not None:
+                pending.append(cause)
+            if context is not None:
+                pending.append(context)
+
+        return None
+
+    def _is_embedding_batch_too_large_error(self, error: Exception) -> bool:
+        """
+        Why:
+            OpenSearch ingestion delegates embedding generation to the embedding backend.
+            Some providers reject a request when it contains too many inputs, even when the
+            OpenSearch bulk size itself is valid.
+
+        How to use:
+            Pass the exception raised by the embedding/vector stack. The helper walks the
+            exception chain and returns True only for the known "too many inputs" provider
+            failure so callers can retry with smaller batches instead of failing the whole
+            document ingestion.
+        """
+        failure = self._get_embedding_request_failure(error)
+        if failure is None:
+            return False
+        return failure.status_code == 400 and failure.provider_code == "3210" and failure.provider_type == "invalid_request_prompt"
+
+    def _is_retryable_embedding_error(self, error: Exception) -> bool:
+        """
+        Why:
+            Remote embedding providers can temporarily fail with overload, timeout, or
+            rate-limit responses. These cases should be retried before we fail the whole
+            document ingestion.
+
+        How to use:
+            Pass the exception raised by the embedding/vector stack. The helper returns
+            True only for transient provider failures that are safe to retry as-is.
+        """
+        failure = self._get_embedding_request_failure(error)
+        if failure is None:
+            return False
+        if failure.exception_type in {"APIConnectionError", "APITimeoutError"}:
+            return True
+        if failure.status_code in EMBEDDING_RETRYABLE_STATUS_CODES:
+            return True
+        return failure.status_code is not None and failure.status_code >= 500
+
+    def _embedding_retry_delay_seconds(self, attempt: int) -> float:
+        """
+        Why:
+            Short exponential backoff gives remote embedding services time to recover from
+            transient overload without delaying ingestion for too long.
+
+        How to use:
+            Pass a 1-based retry attempt number. The returned delay is bounded by the
+            configured retry count and is intended for transient embedding failures only.
+
+        Example:
+            `time.sleep(self._embedding_retry_delay_seconds(attempt=2))`
+        """
+        return EMBEDDING_RETRY_BASE_DELAY_SECONDS * (2 ** max(0, attempt - 1))
+
+    def _build_retry_split_base_id(self, document: Document, *, forced_id: Optional[str]) -> str:
+        """
+        Why:
+            When one stored chunk is re-split after an embedding-limit failure, each child
+            chunk still needs a stable id so the retry remains idempotent.
+
+        How to use:
+            Pass the original logical document and its caller-provided id when available.
+            The helper returns the stable base prefix used for retry child chunks.
+
+        Example:
+            `self._build_retry_split_base_id(doc, forced_id="chunk-1")`
+        """
+        if isinstance(forced_id, str) and forced_id:
+            return forced_id
+
+        metadata = document.metadata or {}
+        chunk_uid = metadata.get(CHUNK_ID_FIELD)
+        if isinstance(chunk_uid, str) and chunk_uid:
+            return chunk_uid
+
+        seed = f"{metadata.get('document_uid') or 'doc'}|{document.page_content[:256]}"
+        digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:16]  # nosec B324
+        return f"{metadata.get('document_uid') or 'doc'}::{digest}"
+
+    def _next_retry_split_chunk_size(self, previous_chunk_size: Optional[int]) -> Optional[int]:
+        """
+        Why:
+            A document that is too large for the embedding backend should be retried with
+            progressively smaller chunks rather than failing immediately.
+
+        How to use:
+            Pass the previous retry chunk size, or `None` for the first retry.
+            The helper derives the next smaller chunk size from the configured text splitter.
+
+        Example:
+            `self._next_retry_split_chunk_size(previous_chunk_size=None)`
+        """
+        from fred_knowledge.vector.base_vector_store import vector_write_observer
+
+        observer = vector_write_observer.get()
+        configured_splitter = observer.splitter if observer is not None else self._splitter
+        configured_chunk_size = getattr(configured_splitter, "chunk_size", None)
+        base_chunk_size = previous_chunk_size or configured_chunk_size
+        if not isinstance(base_chunk_size, int) or base_chunk_size <= 128:
+            logger.warning(
+                "[VECTOR][OPENSEARCH] cannot reduce retry chunk size for index=%s current_chunk_size=%s configured_chunk_size=%s",
+                self._index,
+                previous_chunk_size,
+                configured_chunk_size,
+            )
+            return None
+
+        next_chunk_size = max(128, base_chunk_size // 2)
+        if next_chunk_size >= base_chunk_size:
+            logger.warning(
+                "[VECTOR][OPENSEARCH] next retry chunk size is not smaller for index=%s current=%s next=%s",
+                self._index,
+                base_chunk_size,
+                next_chunk_size,
+            )
+            return None
+        logger.info(
+            "[VECTOR][OPENSEARCH] reducing retry chunk size for index=%s from=%s to=%s",
+            self._index,
+            base_chunk_size,
+            next_chunk_size,
+        )
+        return next_chunk_size
+
+    def _split_single_document_for_retry(
+        self,
+        document: Document,
+        *,
+        forced_id: Optional[str],
+        chunk_size: int,
+    ) -> tuple[List[Document], List[str]]:
+        """
+        Why:
+            Some embedding failures come from one chunk being too large even after the
+            normal ingestion path. Reusing the configured text splitter keeps retry
+            behavior aligned with the standard chunking strategy.
+
+        How to use:
+            Pass the oversized document, its logical id, and the smaller target chunk size.
+            The helper returns the retry child documents and their derived ids.
+
+        Example:
+            `self._split_single_document_for_retry(doc, forced_id="chunk-1", chunk_size=750)`
+        """
+        from fred_knowledge.vector.base_vector_store import vector_write_observer
+
+        observer = vector_write_observer.get()
+        configured_splitter = observer.splitter if observer is not None else self._splitter
+        retry_splitter_type: Any = type(configured_splitter)
+        chunk_overlap = getattr(configured_splitter, "chunk_overlap", 0)
+        preserve_tables = getattr(configured_splitter, "preserve_tables", True)
+        reduced_overlap = min(max(0, int(chunk_overlap)), max(0, chunk_size - 1))
+
+        try:
+            retry_splitter = retry_splitter_type(
+                chunk_size=chunk_size,
+                chunk_overlap=reduced_overlap,
+                preserve_tables=preserve_tables,
+            )
+        except TypeError:
+            retry_splitter = retry_splitter_type(
+                chunk_size=chunk_size,
+                chunk_overlap=reduced_overlap,
+            )
+
+        split_documents = retry_splitter.split(
+            Document(
+                page_content=document.page_content or "",
+                metadata=dict(document.metadata or {}),
+            )
+        )
+        if len(split_documents) <= 1:
+            logger.warning(
+                "[VECTOR][OPENSEARCH] retry split did not reduce oversized chunk for index=%s chunk_id=%s target_chunk_size=%s",
+                self._index,
+                forced_id or document.metadata.get(CHUNK_ID_FIELD),
+                chunk_size,
+            )
+            return [document], [forced_id or str(document.metadata.get(CHUNK_ID_FIELD) or "")]
+
+        base_id = self._build_retry_split_base_id(document, forced_id=forced_id)
+        prepared_documents: List[Document] = []
+        prepared_ids: List[str] = []
+
+        for index, split_document in enumerate(split_documents):
+            metadata = dict(split_document.metadata or {})
+            chunk_id = f"{base_id}::part::{index}"
+            metadata[CHUNK_ID_FIELD] = chunk_id
+            prepared_documents.append(Document(page_content=split_document.page_content or "", metadata=metadata))
+            prepared_ids.append(chunk_id)
+
+        logger.info(
+            "[VECTOR][OPENSEARCH] split oversized chunk for retry index=%s original_chunk_id=%s target_chunk_size=%s produced=%s",
+            self._index,
+            base_id,
+            chunk_size,
+            len(prepared_documents),
+        )
+        return prepared_documents, prepared_ids
+
+    def _current_embedding_attempt_limit(self) -> Optional[int]:
+        """
+        Largest batch size worth attempting right now: the learned cap, or — once
+        EMBEDDING_CAP_PROBE_AFTER_SUCCESSES consecutive full-cap batches have
+        succeeded — a one-shot upward probe at double the cap (bounded by
+        bulk_size) so the cap can recover from an unusually dense early batch.
+        """
+        cap = self._learned_embedding_batch_cap
+        if cap is None:
+            return None
+        if self._cap_success_streak >= EMBEDDING_CAP_PROBE_AFTER_SUCCESSES:
+            return min(self._bulk_size, cap * 2)
+        return cap
+
+    def _effective_embedding_batch_size(self) -> int:
+        limit = self._current_embedding_attempt_limit()
+        if limit is None:
+            return self._bulk_size
+        return max(1, min(self._bulk_size, limit))
+
+    def _lower_learned_embedding_batch_cap(self, new_cap: int) -> None:
+        current = self._learned_embedding_batch_cap
+        if current is not None and current <= new_cap:
+            return
+        self._learned_embedding_batch_cap = new_cap
+        logger.info(
+            "[VECTOR][OPENSEARCH] learned embedding batch cap for index=%s lowered to %s (was %s)",
+            self._index,
+            new_cap,
+            current,
+        )
+
+    def _add_documents_with_adaptive_batching(
+        self,
+        documents: List[Document],
+        ids: List[str],
+        retry_attempt: int = 0,
+        split_chunk_size: Optional[int] = None,
+    ) -> List[str]:
+        """
+        Why:
+            A single ingestion batch can be acceptable for OpenSearch while still exceeding
+            the embedding provider input-count limit, or it can fail transiently because
+            the provider is overloaded. Handling both cases here keeps ingestion working
+            for large files without changing higher-level pipeline logic.
+
+        How to use:
+            Call this helper with one ordered batch of documents and their matching ids.
+            It first tries the batch as-is. If the embedding backend reports a
+            structured batch-limit error, the helper splits the batch in half and retries
+            recursively until each sub-batch is accepted or only one document remains.
+            The size that triggered the split is remembered on the instance
+            (`_learned_embedding_batch_cap`) so later batches are pre-split without
+            re-attempting a provider call that is known to fail. The cap is lowered
+            on rejection; after EMBEDDING_CAP_PROBE_AFTER_SUCCESSES consecutive
+            successes at the cap, one batch probes double the size so the cap
+            converges back up when an early dense batch pushed it lower than the
+            rest of the corpus needs. A failed probe costs a single rejected call
+            and resets the streak. If the backend reports a transient server-side
+            failure, the helper retries the same batch with exponential backoff
+            before giving up.
+        """
+        # Checkpoint before every provider attempt, not only between bulk
+        # slices: one slice hides many sub-batch attempts and retries, so a
+        # cancel landing mid-slice kept paying for embeddings ~12s longer
+        # (six more sub-batches observed) before the slice-level check fired.
+        raise_if_cancelled(f"vector indexing for index={self._index}")
+        limit = self._current_embedding_attempt_limit()
+        if limit is not None and len(documents) > limit:
+            split_index = max(1, len(documents) // 2)
+            logger.info(
+                "[VECTOR][OPENSEARCH] batch exceeds learned embedding cap for index=%s batch_size=%s attempt_limit=%s; splitting without provider attempt",
+                self._index,
+                len(documents),
+                limit,
+            )
+            left_ids = self._add_documents_with_adaptive_batching(
+                documents=documents[:split_index],
+                ids=ids[:split_index],
+                split_chunk_size=split_chunk_size,
+            )
+            right_ids = self._add_documents_with_adaptive_batching(
+                documents=documents[split_index:],
+                ids=ids[split_index:],
+                split_chunk_size=split_chunk_size,
+            )
+            return left_ids + right_ids
+
+        try:
+            logger.info(
+                "[VECTOR][OPENSEARCH] add batch attempt index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s ids_sample=%s",
+                self._index,
+                len(documents),
+                retry_attempt,
+                split_chunk_size,
+                ids[:3],
+            )
+            model_name = self._embedding_model_name or "unknown"
+            now_iso = datetime.now(timezone.utc).isoformat()
+            for doc, cid in zip(documents, ids):
+                if CHUNK_ID_FIELD not in doc.metadata:
+                    doc.metadata[CHUNK_ID_FIELD] = cid
+                doc.metadata.setdefault("embedding_model", model_name)
+                doc.metadata.setdefault("vector_index", self._index)
+                doc.metadata.setdefault("token_count", len((doc.page_content or "").split()))
+                doc.metadata.setdefault("ingested_at", now_iso)
+            from fred_knowledge.vector.base_vector_store import vector_write_observer
+
+            observer = vector_write_observer.get()
+            if observer is not None:
+                ids = observer.before_write(documents, ids)
+            assigned_ids = list(self._lc.add_documents(documents, ids=ids))
+            logger.info(
+                "[VECTOR][OPENSEARCH] batch attempt succeeded index=%s batch_size=%s assigned=%s retry_attempt=%s split_chunk_size=%s",
+                self._index,
+                len(documents),
+                len(assigned_ids),
+                retry_attempt,
+                split_chunk_size,
+            )
+            cap = self._learned_embedding_batch_cap
+            if cap is not None:
+                if len(documents) > cap:
+                    # Successful upward probe: adopt the bigger size.
+                    self._learned_embedding_batch_cap = len(documents)
+                    self._cap_success_streak = 0
+                    logger.info(
+                        "[VECTOR][OPENSEARCH] learned embedding batch cap for index=%s raised to %s after successful probe (was %s)",
+                        self._index,
+                        len(documents),
+                        cap,
+                    )
+                elif len(documents) == cap:
+                    self._cap_success_streak += 1
+            return assigned_ids
+        except Exception as error:
+            failure = self._get_embedding_request_failure(error)
+            logger.warning(
+                "[VECTOR][OPENSEARCH] batch attempt failed index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s status=%s code=%s type=%s error=%s",
+                self._index,
+                len(documents),
+                retry_attempt,
+                split_chunk_size,
+                failure.status_code if failure else None,
+                failure.provider_code if failure else None,
+                failure.provider_type if failure else None,
+                type(error).__name__,
+            )
+
+            if self._is_embedding_batch_too_large_error(error):
+                if len(documents) == 1:
+                    next_chunk_size = self._next_retry_split_chunk_size(split_chunk_size)
+                    if next_chunk_size is None:
+                        raise
+
+                    split_documents, split_ids = self._split_single_document_for_retry(
+                        documents[0],
+                        forced_id=ids[0],
+                        chunk_size=next_chunk_size,
+                    )
+                    if len(split_documents) <= 1:
+                        raise
+
+                    logger.warning(
+                        "[VECTOR][OPENSEARCH] oversized single chunk for index=%s; retrying with text_splitter chunk_size=%s produced=%s",
+                        self._index,
+                        next_chunk_size,
+                        len(split_documents),
+                    )
+                    return self._add_documents_with_adaptive_batching(
+                        documents=split_documents,
+                        ids=split_ids,
+                        split_chunk_size=next_chunk_size,
+                    )
+
+                split_index = max(1, len(documents) // 2)
+                self._cap_success_streak = 0
+                self._lower_learned_embedding_batch_cap(split_index)
+                logger.warning(
+                    "[VECTOR][OPENSEARCH] embedding batch exceeds provider limit for index=%s batch_size=%s; splitting into sub-batches %s and %s",
+                    self._index,
+                    len(documents),
+                    split_index,
+                    len(documents) - split_index,
+                )
+                left_ids = self._add_documents_with_adaptive_batching(
+                    documents=documents[:split_index],
+                    ids=ids[:split_index],
+                    split_chunk_size=split_chunk_size,
+                )
+                right_ids = self._add_documents_with_adaptive_batching(
+                    documents=documents[split_index:],
+                    ids=ids[split_index:],
+                    split_chunk_size=split_chunk_size,
+                )
+                return left_ids + right_ids
+
+            if self._is_retryable_embedding_error(error) and retry_attempt < EMBEDDING_RETRY_MAX_ATTEMPTS:
+                next_attempt = retry_attempt + 1
+                delay_seconds = self._embedding_retry_delay_seconds(next_attempt)
+                logger.warning(
+                    "[VECTOR][OPENSEARCH] transient embedding failure for index=%s batch_size=%s status=%s type=%s attempt=%s/%s; retrying same batch in %.2fs",
+                    self._index,
+                    len(documents),
+                    failure.status_code if failure else None,
+                    failure.exception_type if failure else type(error).__name__,
+                    next_attempt,
+                    EMBEDDING_RETRY_MAX_ATTEMPTS,
+                    delay_seconds,
+                )
+                time.sleep(delay_seconds)
+                return self._add_documents_with_adaptive_batching(
+                    documents=documents,
+                    ids=ids,
+                    retry_attempt=next_attempt,
+                    split_chunk_size=split_chunk_size,
+                )
+
+            raise
+
+    def add_documents(self, documents: List[Document], *, ids: Optional[List[str]] = None) -> List[str]:
+        """
+        Why:
+            Fred stores chunk vectors idempotently with stable ids so re-ingestion of the
+            same logical chunk updates the existing vector instead of creating duplicates.
+
+        How to use:
+            Pass the chunk documents produced by the ingestion pipeline. If ids are omitted,
+            the adapter derives them from `metadata["chunk_uid"]`. The adapter writes the
+            documents in OpenSearch-sized batches and automatically re-splits a batch when
+            the embedding provider rejects too many inputs in one request.
+
+        Example:
+            `store.add_documents([Document(page_content="...", metadata={"chunk_uid": "c1"})])`
+        """
+        assigned_ids: List[str] = []
+        try:
+            if not documents:
+                logger.info("[VECTOR][OPENSEARCH] add_documents called with empty payload for index=%s", self._index)
+                return []
+
+            if self._bulk_size <= 0:
+                raise ValueError("bulk_size must be a positive integer")
+
+            if ids is not None and len(ids) != len(documents):
+                raise ValueError("ids length must match documents length")
+
+            # If ids are not provided, derive them from metadata[chunk_uid]
+            if ids is None:
+                ids = []
+                for d in documents:
+                    cid = d.metadata.get(CHUNK_ID_FIELD)
+                    if not cid:
+                        raise ValueError(f"Document missing {CHUNK_ID_FIELD} in metadata")
+                    ids.append(cid)
+
+            logger.info(
+                "[VECTOR][OPENSEARCH] add_documents start index=%s documents=%s bulk_size=%s ids_provided=%s",
+                self._index,
+                len(documents),
+                self._bulk_size,
+                ids is not None,
+            )
+
+            start = 0
+            while start < len(documents):
+                # Between slices is the one place stopping is free: nothing is
+                # half-written, and each remaining slice costs a paid embedding
+                # call plus a bulk index. A cancelled ingestion used to pay for
+                # all of them — 4038 chunks, ~3 minutes past the user's stop, for
+                # a document already deleted (#2315).
+                raise_if_cancelled(f"vector indexing for index={self._index}")
+                # Re-read each iteration: an earlier slice may have lowered the cap.
+                end = min(start + self._effective_embedding_batch_size(), len(documents))
+                batch_documents = documents[start:end]
+                batch_ids = ids[start:end]
+                logger.info(
+                    "[VECTOR][OPENSEARCH] processing bulk slice index=%s start=%s end=%s batch_size=%s",
+                    self._index,
+                    start,
+                    end,
+                    len(batch_documents),
+                )
+                assigned_ids.extend(
+                    self._add_documents_with_adaptive_batching(
+                        documents=batch_documents,
+                        ids=batch_ids,
+                    )
+                )
+                start = end
+
+            logger.info(
+                "[VECTOR][OPENSEARCH] add_documents complete index=%s input_documents=%s stored_chunks=%s",
+                self._index,
+                len(documents),
+                len(assigned_ids),
+            )
+            return assigned_ids
+
+        except WorkCancelled:
+            # The expected end of a cancelled ingestion, not a failure: one
+            # line, no stacktrace, and no RuntimeError wrapping so callers can
+            # tell it apart and clean up what this run already wrote.
+            logger.info(
+                "[VECTOR][OPENSEARCH] indexing cancelled index=%s after %s of %s chunks (completed slices only; the caller deletes any partial writes); abandoning the rest",
+                self._index,
+                len(assigned_ids),
+                len(documents),
+            )
+            raise
+        except Exception as e:
+            logger.exception("[VECTOR][OPENSEARCH] failed to add documents to OpenSearch.")
+            raise RuntimeError("Unexpected error during vector indexing.") from e
+
+    def delete_vectors_for_document(self, *, document_uid: str) -> None:
+        try:
+            body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
+            # conflicts="proceed": the purge is idempotent and may race a second pass on a
+            # cancelled ingestion. refresh: deleted chunks must stop being searchable and
+            # counted when this returns, like the per-document update paths below.
+            resp = self._client.delete_by_query(index=self._index, body=body, params={"conflicts": "proceed", "refresh": "true"})
+            deleted = int(resp.get("deleted", 0))
+            logger.info("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to delete vectors for document_uid=%s.", document_uid)
+            raise RuntimeError("Failed to delete vectors from OpenSearch.")
+
+    def get_document_chunk_count(self, *, document_uid: str) -> int:
+        """
+        Return the number of vector chunks stored for a given logical document.
+        This is a convenience method used by diagnostic and visualization features.
+        """
+        try:
+            body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
+            resp = self._client.count(index=self._index, body=body)
+            count = int(resp.get("count", 0))
+            logger.debug(
+                "[VECTOR][OPENSEARCH] counted %s vector chunks for document_uid=%s in index=%s",
+                count,
+                document_uid,
+                self._index,
+            )
+            return count
+        except Exception:
+            logger.exception(
+                "[VECTOR][OPENSEARCH] failed to count vector chunks for document_uid=%s in index=%s",
+                document_uid,
+                self._index,
+            )
+            return 0
+
+    def list_document_uids(self, *, page_size: int = 1000) -> List[str]:
+        """
+        Return every distinct document_uid known to this vector index.
+
+        Used by `audit_stores`; failures log and return an empty result.
+        Delegates paging to `scan_document_uids_composite`.
+        """
+        return scan_document_uids_composite(self._client, self._index, page_size=page_size)
+
+    def verify_chunks_retrievable(self, *, document_uid: str, chunk_ids: List[str], value: bool) -> None:
+        for offset in range(0, len(chunk_ids), 500):
+            ids = chunk_ids[offset : offset + 500]
+            response = self._client.mget(
+                index=self._index,
+                body={"ids": ids},
+                params={"_source_includes": "metadata.document_uid,metadata.retrievable"},
+            )
+            docs = response.get("docs", [])
+            if len(docs) != len(ids) or {doc.get("_id") for doc in docs} != set(ids):
+                raise RuntimeError("Incomplete published chunk verification.")
+            for doc in docs:
+                metadata = doc.get("_source", {}).get("metadata", {})
+                if doc.get("error") or doc.get("found") is not True or metadata.get("document_uid") != document_uid or metadata.get("retrievable") is not value:
+                    raise RuntimeError("Published chunk inclusion does not match.")
+
+    def set_chunks_retrievable(self, *, document_uid: str, chunk_ids: List[str], value: bool) -> None:
+        for offset in range(0, len(chunk_ids), 500):
+            ids = chunk_ids[offset : offset + 500]
+            response = self._client.update_by_query(
+                index=self._index,
+                body={
+                    "query": {"bool": {"filter": [{"ids": {"values": ids}}, {"term": {"metadata.document_uid": document_uid}}]}},
+                    "script": {"source": "ctx._source.metadata.retrievable = params.value", "lang": "painless", "params": {"value": value}},
+                },
+                params={"refresh": "true"},
+            )
+            if response.get("timed_out") or response.get("failures") or response.get("version_conflicts", 0) or response.get("updated") != len(ids):
+                raise RuntimeError("Published chunk inclusion was not fully applied.")
+
+    def set_document_retrievable(self, *, document_uid: str, value: bool) -> None:
+        """
+        Update the 'retrievable' flag for all chunks of a document without deleting vectors.
+        This is used when a user toggles retrievability in the UI.
+        """
+        try:
+            script = {
+                "source": "ctx._source.metadata.retrievable = params.value",
+                "lang": "painless",
+                "params": {"value": bool(value)},
+            }
+            body = {
+                "script": script,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+            }
+            resp = self._client.update_by_query(
+                index=self._index,
+                body=body,
+                params={"refresh": "true"},
+            )
+            updated = int(resp.get("updated", 0))
+            logger.info(
+                "[VECTOR][OPENSEARCH] updated retrievable=%s on %s vector chunks for document_uid=%s.",
+                value,
+                updated,
+                document_uid,
+            )
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to update retrievable flag for document_uid=%s.", document_uid)
+            raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
+
+    def set_document_name(self, *, document_uid: str, document_name: str) -> None:
+        """
+        Update the 'document_name' metadata field for all chunks of a document without
+        deleting vectors or re-embedding. Used after a document rename.
+        """
+        try:
+            script = {
+                "source": "ctx._source.metadata.document_name = params.value",
+                "lang": "painless",
+                "params": {"value": document_name},
+            }
+            body = {
+                "script": script,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+            }
+            resp = self._client.update_by_query(
+                index=self._index,
+                body=body,
+                params={"refresh": "true"},
+            )
+            updated = int(resp.get("updated", 0))
+            failures = resp.get("failures") or []
+            if failures:
+                # update_by_query does not raise on a per-document script failure (e.g. a
+                # version conflict) — it reports it here instead, so a caller that only
+                # checked for a raised exception would call this a silent success.
+                logger.error(
+                    "[VECTOR][OPENSEARCH] document_name update_by_query reported %s failure(s) for document_uid=%s: %s",
+                    len(failures),
+                    document_uid,
+                    failures,
+                )
+            elif updated == 0:
+                # This is only called for a document known to be vectorized (see
+                # rename_document's ProcessingStage.VECTORIZED guard), so matching zero
+                # chunks here is unexpected — the rename didn't reach the vector index,
+                # and the caller's best-effort try/except means nothing else will surface it.
+                logger.error(
+                    "[VECTOR][OPENSEARCH] document_name update matched 0 vector chunks for document_uid=%s — rename not reflected in search results.",
+                    document_uid,
+                )
+            else:
+                logger.info(
+                    "[VECTOR][OPENSEARCH] updated document_name on %s vector chunks for document_uid=%s.",
+                    updated,
+                    document_uid,
+                )
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to update document_name for document_uid=%s.", document_uid)
+            raise RuntimeError("Failed to update document_name in OpenSearch.")
+
+    def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
+        body = {
+            "script": {"source": "ctx._source.metadata.tag_ids = params.value", "lang": "painless", "params": {"value": [str(t) for t in tag_ids]}},
+            "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+        }
+        resp = self._client.update_by_query(index=self._index, body=body, params={"refresh": "true"})
+        # Per-document failures (e.g. version conflicts) are reported, not raised.
+        failures = resp.get("failures") or []
+        if failures:
+            raise RuntimeError(f"OpenSearch failed to update tag_ids on {len(failures)} chunk(s) of document {document_uid}.")
+        logger.info("[VECTOR][OPENSEARCH] updated tag_ids on %s chunk(s) for document_uid=%s.", resp.get("updated", 0), document_uid)
+
+    # ---------- Diagnostics / Introspection ----------
+
+    def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
+        """
+        Return all vectors for the given document. Depending on index mapping, the raw vector
+        may or may not be stored in _source. If not available, entries without vectors are skipped.
+
+        Returns: [{"chunk_uid": str, "vector": list[float], (optional) "text": str}]
+        """
+        try:
+            body = {
+                "size": 10000,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+                "_source": ["vector_field", "text"],
+            }
+            res = self._client.search(index=self._index, body=body)
+            hits = res.get("hits", {}).get("hits", [])
+            out: List[Dict[str, Any]] = []
+            for h in hits:
+                src = h.get("_source", {}) or {}
+                vec = src.get("vector_field")
+                if vec is None:
+                    # vector might not be stored in _source
+                    continue
+                entry: Dict[str, Any] = {"chunk_uid": h.get("_id"), "vector": vec}
+                if with_document:
+                    entry["text"] = src.get("text", "")
+                out.append(entry)
+            logger.debug(
+                "[VECTOR][OPENSEARCH] fetched %d vectors for document_uid=%s from index=%s",
+                len(out),
+                document_uid,
+                self._index,
+            )
+            return out
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to fetch vectors for document_uid=%s", document_uid)
+            return []
+
+    def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
+        """
+        Return all chunks (text + metadata) for the given document.
+
+        Returns: [{"chunk_uid": str, "text": str, "metadata": dict}]
+        """
+        try:
+            body = {
+                "size": 10000,
+                "query": {"term": {"metadata.document_uid": {"value": document_uid}}},
+                "_source": ["text", "metadata"],
+            }
+            res = self._client.search(index=self._index, body=body)
+            hits = res.get("hits", {}).get("hits", [])
+            out: List[Dict[str, Any]] = []
+            for h in hits:
+                src = h.get("_source", {}) or {}
+                out.append(
+                    {
+                        "chunk_uid": h.get("_id"),
+                        "text": src.get("text", ""),
+                        "metadata": src.get("metadata", {}) or {},
+                    }
+                )
+            logger.debug(
+                "[VECTOR][OPENSEARCH] fetched %d chunks for document_uid=%s from index=%s",
+                len(out),
+                document_uid,
+                self._index,
+            )
+            return out
+        except Exception:
+            logger.exception("[VECTOR][OPENSEARCH] failed to fetch chunks for document_uid=%s", document_uid)
+            raise RuntimeError("Failed to fetch chunks from OpenSearch.")
+
+    def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
+        """
+        Return a single chunk (text + metadata) if it belongs to the given document.
+        """
+        try:
+            res = self._client.get(index=self._index, id=chunk_uid)
+            if not res or res.get("found") is not True:
+                logger.warning("[VECTOR][OPENSEARCH] chunk not found: %s", chunk_uid)
+                return {"chunk_uid": chunk_uid}
+            src = res.get("_source", {}) or {}
+            md = src.get("metadata", {}) or {}
+            if md.get("document_uid") != document_uid:
+                logger.warning(
+                    "[VECTOR][OPENSEARCH] chunk %s does not belong to document_uid=%s",
+                    chunk_uid,
+                    document_uid,
+                )
+                return {"chunk_uid": chunk_uid}
+            return {
+                "chunk_uid": chunk_uid,
+                "text": src.get("text", ""),
+                "metadata": md,
+            }
+        except Exception as error:
+            if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
+                raise
+            logger.exception("[VECTOR][OPENSEARCH] failed to fetch chunk %s", chunk_uid)
+            return {"chunk_uid": chunk_uid}
+
+    def delete_chunk(self, document_uid: str, chunk_uid: str) -> None:
+        """Delete a single chunk by id; if it doesn't belong to the given document, do nothing."""
+        try:
+            # Ensure ownership by checking metadata.document_uid
+            res = self._client.get(index=self._index, id=chunk_uid)
+            if not res or res.get("found") is not True:
+                logger.warning("[VECTOR][OPENSEARCH] cannot delete; chunk not found: %s", chunk_uid)
+                return
+            src = res.get("_source", {}) or {}
+            md = src.get("metadata", {}) or {}
+            if md.get("document_uid") != document_uid:
+                logger.warning(
+                    "[VECTOR][OPENSEARCH] not deleting chunk %s: mismatched document_uid=%s",
+                    chunk_uid,
+                    document_uid,
+                )
+                return
+            self._client.delete(index=self._index, id=chunk_uid)
+            logger.debug("[VECTOR][OPENSEARCH] deleted chunk %s for document_uid=%s", chunk_uid, document_uid)
+        except Exception as error:
+            if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
+                raise
+            logger.exception("[VECTOR][OPENSEARCH] failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)
+
+    def _build_hits(self, hits_data: List, hit_type: Type[T]) -> List[T]:
+        """
+        Build a list of hit objects from OpenSearch hits data.
+
+        Args:
+            hits_data (List): Raw hit data from OpenSearch search results.
+            hit_type (Type[T]): The type of hit object to construct.
+
+        Returns:
+            List[T]: A list of constructed hit objects.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        model_name = self._embedding_model_name or "unknown"
+        results: List[T] = []
+
+        for rank, h in enumerate(hits_data, start=1):
+            src = h.get("_source", {})
+            meta = src.get("metadata", {})
+            text = src.get("text", "")
+            cid = meta.get(CHUNK_ID_FIELD) or h.get("_id")
+
+            doc = Document(
+                page_content=text,
+                metadata={
+                    **meta,
+                    CHUNK_ID_FIELD: cid,
+                    "score": float(h.get("_score", 0.0)),
+                    "rank": rank,
+                    "retrieved_at": now_iso,
+                    "embedding_model": model_name,
+                    "vector_index": self._index,
+                    "token_count": len(text.split()),
+                },
+            )
+
+            results.append(hit_type(document=doc, score=float(h.get("_score", 0.0))))
+
+        return results
+
+    # ---- helpers ----------------------------------------------------------
+    def _build_ann_hits(self, hits_data: List) -> List[AnnHit]:
+        hits = self._build_hits(hits_data, AnnHit)
+        if DEBUG and hits:
+            logger.debug("[VECTOR][OPENSEARCH][ANN] built hits count=%d", len(hits))
+        return hits
+
+    def _build_hybrid_hits(self, hits_data: List) -> List[HybridHit]:
+        hits = self._build_hits(hits_data, HybridHit)
+        if DEBUG and hits:
+            logger.debug("[VECTOR][OPENSEARCH][HYBRID] built hits count=%d", len(hits))
+        return hits
+
+    def _build_fulltext_hits(self, hits_data: list) -> List[FullTextHit]:
+        hits = self._build_hits(hits_data, FullTextHit)
+        if DEBUG and hits:
+            logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] built hits count=%d", len(hits))
+        return hits
+
+    def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
+        """
+        Perform an approximate nearest neighbor (ANN) search in the OpenSearch index.
+
+        Args:
+            query (str): The search query string to embed and search for.
+            k (int): The number of top results to return.
+            search_filter (Optional[SearchFilter]): Optional filter to apply to the search.
+
+        Returns:
+            List[AnnHit]: A list of AnnHit objects representing the search results.
+
+        Raises:
+            RuntimeError: If the embedding model fails or if the search query fails.
+        """
+        logger.debug("[VECTOR][OPENSEARCH][ANN] query=%r k=%d search_filter=%s", query, k, search_filter)
+        filters = self._to_filter_clause(search_filter)
+        logger.debug("[VECTOR][OPENSEARCH][ANN] computed filters=%s", filters or [])
+
+        try:
+            with self._phase_timer("vector_ann_embed_query"):
+                vector = self._embedding_model.embed_query(query)
+            logger.debug("[VECTOR][OPENSEARCH][ANN] embedding_dim=%d", len(vector))
+        except Exception as e:
+            logger.exception("[VECTOR][OPENSEARCH] failed to compute embedding.")
+            raise RuntimeError(f"Embedding model failed: {e}") from e
+
+        knn_query = {
+            "vector": vector,
+            "k": k,
+        }
+
+        if filters:
+            knn_query["filter"] = {"bool": {"filter": filters}}
+
+        bool_knn_body = {
+            "size": k,
+            "query": {"knn": {"vector_field": knn_query}},
+            "_source": True,
+        }
+
+        try:
+            with self._phase_timer("vector_ann_opensearch_query"):
+                res = self._client.search(index=self._index, body=bool_knn_body)
+            hits_data = res.get("hits", {}).get("hits", [])
+            logger.debug("[VECTOR][OPENSEARCH][ANN] search returned %d hits", len(hits_data))
+        except Exception as e:
+            logger.warning("[VECTOR][OPENSEARCH][ANN] query failed: %s", str(e))
+            raise OpenSearchException(f"{str(e)}") from e
+
+        return self._build_ann_hits(hits_data)
+
+    def hybrid_search(
+        self,
+        query: str,
+        top_k: int,
+        search_filter: Optional[SearchFilter] = None,
+    ) -> List[HybridHit]:
+        """
+        Perform a hybrid search combining full-text and vector search in the OpenSearch index.
+
+        Args:
+            query (str): The search query string to use for both full-text and vector search.
+            top_k (int): The number of top results to return.
+            search_filter (Optional[SearchFilter]): Optional filter to apply to the search.
+
+        Returns:
+            List[HybridHit]: A list of HybridHit objects representing the hybrid search results.
+
+        Raises:
+            OpenSearchException: If the search query fails.
+        """
+        filters = self._to_filter_clause(search_filter)
+
+        def _build_match_query(query: str, filters: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+            if not filters:
+                return {"match": {"text": {"query": query}}}
+
+            return {"bool": {"must": [{"match": {"text": {"query": query}}}], "filter": filters}}
+
+        def _build_knn_query(embedding_vector: List[float], k: int, filters: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+            knn_query = {
+                "knn": {
+                    "vector_field": {
+                        "vector": embedding_vector,
+                        "k": k,
+                    }
+                }
+            }
+
+            if filters:
+                knn_query["knn"]["vector_field"]["filter"] = {"bool": {"filter": filters}}
+
+            return knn_query
+
+        embedding_vector = self._embedding_model.embed_query(query)
+        search_body = {
+            "size": top_k,
+            "query": {
+                "hybrid": {
+                    "queries": [
+                        _build_match_query(query, filters),
+                        _build_knn_query(embedding_vector, top_k * 2, filters),
+                    ]
+                }
+            },
+        }
+
+        try:
+            response = self._client.search(index=self._index, body=search_body, params={"search_pipeline": HYBRID_SEARCH_PIPELINE_NAME})
+            hits_data = response.get("hits", {}).get("hits", [])
+            logger.debug("[VECTOR][OPENSEARCH][HYBRID] search returned %d hits", len(hits_data))
+        except Exception as e:
+            logger.warning("[VECTOR][OPENSEARCH][HYBRID] query failed: %s", str(e))
+            raise OpenSearchException(f"{str(e)}") from e
+
+        return self._build_hybrid_hits(hits_data=hits_data)
+
+    def full_text_search(
+        self,
+        query: str,
+        top_k: int,
+        search_filter: Optional[SearchFilter] = None,
+    ) -> List[FullTextHit]:
+        """
+        Perform a full-text search in the OpenSearch index.
+
+        Args:
+            query (str): The search query string to use for full-text search.
+            top_k (int): The number of top results to return.
+            search_filter (Optional[SearchFilter]): Optional filter to apply to the search.
+
+        Returns:
+            List[FullTextHit]: A list of FullTextHit objects representing the full-text search results.
+
+        Raises:
+            OpenSearchException: If the search query fails.
+        """
+        filters = self._to_filter_clause(search_filter)
+
+        if filters:
+            search_body = {"size": top_k, "query": {"bool": {"must": [{"match": {"text": {"query": query}}}], "filter": filters}}}
+        else:
+            search_body = {"size": top_k, "query": {"match": {"text": {"query": query}}}}
+
+        try:
+            response = self._client.search(index=self._index, body=search_body)
+            hits_data = response.get("hits", {}).get("hits", [])
+            logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] search returned %d hits", len(hits_data))
+        except Exception as e:
+            logger.warning("[VECTOR][OPENSEARCH][FULLTEXT] query failed: %s", str(e))
+            raise OpenSearchException(f"{str(e)}") from e
+
+        return self._build_fulltext_hits(hits_data=hits_data)
+
+    # ---------- helpers ----------
+
+    def _apply_metadata_mapping_updates(self, missing_fields: List[str]) -> bool:
+        """
+        Try to add missing metadata fields when they are safe to introduce on an existing index.
+        """
+        payload = {"properties": {"metadata": {"properties": {field: deepcopy(SAFE_METADATA_MAPPING_UPDATES[field]) for field in missing_fields if field in SAFE_METADATA_MAPPING_UPDATES}}}}
+        try:
+            self._client.indices.put_mapping(index=self._index, body=payload)
+            logger.info(
+                "[VECTOR][OPENSEARCH][MAPPING] added safe metadata fields %s to index %s",
+                missing_fields,
+                self._index,
+            )
+            return True
+        except Exception as exc:
+            logger.error(
+                "[VECTOR][OPENSEARCH][MAPPING] failed to add safe metadata fields %s to index %s: %s",
+                missing_fields,
+                self._index,
+                exc,
+            )
+            return False
+
+    def _get_embedding_dimension(self) -> int:
+        dummy_vector = self._embedding_model.embed_query("dummy")
+        return len(dummy_vector)
+
+    def _expected_index_spec(self, expected_dim: int) -> ExpectedIndexSpec:
+        model_name = self._embedding_model_name or "unknown"
+        spec = MODEL_INDEX_SPECS.get(model_name)
+        if spec is None:
+            return ExpectedIndexSpec(
+                dim=expected_dim,
+                engine="lucene",
+                space_type="cosinesimil",
+                method_name="hnsw",
+            )
+
+        if spec.dim != expected_dim:
+            logger.warning(
+                "[VECTOR][OPENSEARCH] runtime embedding dimension %s differs from catalog dimension %s for model %s; using runtime dimension",
+                expected_dim,
+                spec.dim,
+                model_name,
+            )
+
+        return ExpectedIndexSpec(
+            dim=expected_dim,
+            engine=spec.engine,
+            space_type=spec.space_type,
+            method_name=spec.method_name,
+        )
+
+    def _validate_index_compatibility(self, expected_dim: int, allow_metadata_mapping_update: bool = True):
+        """
+        Fred rationale:
+        - We fail fast if index mapping cannot faithfully serve the configured embedding model.
+        - Checks: vector dimension, engine, space type, and HNSW method.
+        """
+        try:
+            mapping = self._client.indices.get_mapping(index=self._index)
+        except Exception as e:
+            logger.warning("[VECTOR][OPENSEARCH] could not fetch mapping for %r: %s", self._index, e)
+            return  # Don't block init; ANN calls will fail later with clearer errors.
+
+        m = mapping.get(self._index, {}).get("mappings", {})
+        actual_dim = _safe_get(m, ["properties", "vector_field", "dimension"])
+        method_engine = _norm_str(_safe_get(m, ["properties", "vector_field", "method", "engine"]))
+        method_space = _norm_str(_safe_get(m, ["properties", "vector_field", "method", "space_type"]))
+        method_name = _norm_str(_safe_get(m, ["properties", "vector_field", "method", "name"]))
+
+        model_name = self._embedding_model_name or "unknown"
+        spec = self._expected_index_spec(expected_dim)
+
+        problems: list[str] = []
+        warnings: list[str] = []
+
+        # 1) Dimension
+        if actual_dim != spec.dim:
+            problems.append(f"- Dimension mismatch: index has {actual_dim}, model '{model_name}' requires {spec.dim}.")
+
+        # 2) Engine (we standardize on lucene)
+        if (method_engine or "") != spec.engine:
+            if (method_engine or "").lower() == "nmslib":
+                warnings.append("- Engine mismatch: index uses 'nmslib', expected 'lucene'. Continuing for backward compatibility, but expect reduced recall and less reliable filtering.")
+            else:
+                problems.append(f"- Engine mismatch: index uses '{method_engine}', expected '{spec.engine}'. Lucene is recommended; nmslib may degrade recall and complicate filters.")
+
+        # 3) Space type (cosine for OpenAI)
+        if (method_space or "") != spec.space_type:
+            msg = f"- Space mismatch: index uses '{method_space}', expected '{spec.space_type}' for OpenAI embeddings."
+            if (method_space or "").lower() in {"l2", "euclidean"}:
+                # Do not hard fail to stay compatible with old indices, but warn loudly.
+                warnings.append(f"{msg} L2 is deprecated; reindex with '{spec.space_type}'. Until then, L2-normalize vectors at ingest and query time.")
+            else:
+                problems.append(msg)
+
+        # 4) Method name (HNSW)
+        if (method_name or "") != spec.method_name:
+            problems.append(f"- Method mismatch: index uses '{method_name}', expected '{spec.method_name}'.")
+
+        # 5) Optional sanity: index setting 'knn' should be true
+        try:
+            settings = self._client.indices.get_settings(index=self._index)
+            knn_enabled = _safe_get(settings, [self._index, "settings", "index", "knn"])
+            if str(knn_enabled).lower() not in {"true", "1"}:
+                problems.append("- Index setting 'index.knn' is not enabled (should be true).")
+        except Exception as e:
+            logger.warning("Could not check index.knn setting: %s", e)
+
+        metadata_props = _safe_get(m, ["properties", "metadata", "properties"], {}) or {}
+        missing_metadata_fields = [field for field in SAFE_METADATA_MAPPING_UPDATES if field not in metadata_props]
+        if missing_metadata_fields:
+            logger.critical(
+                "[VECTOR][OPENSEARCH][MAPPING] index %s missing safe metadata fields %s",
+                self._index,
+                missing_metadata_fields,
+            )
+            if allow_metadata_mapping_update and self._apply_metadata_mapping_updates(missing_metadata_fields):
+                self._validate_index_compatibility(expected_dim, allow_metadata_mapping_update=False)
+                return
+            problems.append(f"- Missing metadata fields {', '.join(missing_metadata_fields)}. These fields must be mapped to keep vector metadata filters consistent.")
+
+        try:
+            tag_field = metadata_props.get("tag_ids")
+            if tag_field is None:
+                problems.append("- Missing field 'metadata.tag_ids'. Fred relies on this keyword field for library filters.")
+            else:
+                tag_type = str(tag_field.get("type", "")).lower()
+                subfields = tag_field.get("fields") or {}
+
+                # Legacy buggy pattern: text + keyword subfield
+                if tag_type == "text" and "keyword" in subfields:
+                    problems.append(
+                        "- 'metadata.tag_ids' is mapped as text+keyword. "
+                        "Fred expects a pure 'keyword' field to avoid silent zero-hit filters. "
+                        '💡 Fix: reindex with \'metadata.tag_ids\': {"type": "keyword"}.'
+                    )
+                elif tag_type != "keyword":
+                    problems.append(f"- 'metadata.tag_ids' has unsupported type '{tag_type}'. Fred expects 'keyword' so that UUID filters are exact and predictable.")
+        except Exception as e:
+            # If this introspection itself fails, treat it as a hard problem:
+            problems.append(f"- Could not inspect 'metadata.tag_ids' mapping (error: {e}). Fred requires this field as 'keyword' for tag/library filters.")
+
+        if problems:
+            raise ValueError(
+                "OpenSearch index is not compatible with the configured embedding model.\n"
+                f"   Index: {self._index}\n"
+                f"   Model: {model_name}\n"
+                "   Problems:\n" + "\n".join(f"   {p}" for p in problems) + "\n\n✔ Expected vector_field.method:\n"
+                f"   engine={spec.engine}, space_type={spec.space_type}, name={spec.method_name}, dimension={spec.dim}\n"
+                "Fix: recreate the index with the correct index mappin"
+            )
+        if warnings:
+            for w in warnings:
+                logger.warning("[VECTOR][OPENSEARCH] %s", w)
+            logger.warning(
+                "[VECTOR][OPENSEARCH] index mapping accepted with warnings: engine=%s space=%s method=%s dim=%s",
+                method_engine,
+                method_space,
+                method_name,
+                actual_dim,
+            )
+        else:
+            logger.info("[VECTOR][OPENSEARCH] index mapping compatible: engine=%s space=%s method=%s dim=%s", method_engine, method_space, method_name, actual_dim)
+
+    # --- helper: return a flat list of term filters (or None) ---
+    def _to_filter_clause(self, f: Optional[SearchFilter]) -> Optional[List[Dict]]:
+        """
+        Fred rationale:
+        - LangChain's OpenSearchVectorSearch expects `boolean_filter` to be a LIST of filters.
+        - Our raw OS queries also expect that list under `bool.filter`.
+        - Returning a dict with `bool.filter` here causes double nesting upstream.
+
+        Backward compatibility:
+        - For the special field `retrievable=True`, we include documents where the
+          field is missing as well. This keeps older indices (that don't yet store
+          `metadata.retrievable`) searchable until re-indexing occurs.
+        """
+        if not f:
+            return None
+        filters: List[Dict] = []
+        for clause in f.metadata_any:
+            alternatives = [{"terms": {f"metadata.{key}": list(values)}} for key, values in clause.items() if values]
+            filters.append({"bool": {"should": alternatives, "minimum_should_match": 1}} if alternatives else {"match_none": {}})
+        if f.tag_ids is not None:
+            filters.append({"terms": {"metadata.tag_ids": list(f.tag_ids)}})
+        if f.metadata_terms:
+            for field, values in f.metadata_terms.items():
+                meta_field = f"metadata.{field}"
+                try:
+                    values_list = list(values) if values is not None else []
+                except TypeError:
+                    values_list = [values]
+
+                if field == "retrievable":
+                    want_true = any(_is_true_value(v) for v in values_list)
+                    want_false = any(_is_false_value(v) for v in values_list)
+                    if not (want_true or want_false):
+                        continue
+
+                    logger.debug(
+                        "[VECTOR][OPENSEARCH][FILTER] building retrievable filter: field=%s values=%s want_true=%s want_false=%s",
+                        meta_field,
+                        values_list,
+                        want_true,
+                        want_false,
+                    )
+
+                    def _retrievable_clause(value: bool) -> Dict:
+                        # Accept missing field for backward compatibility with legacy indices.
+                        return {
+                            "bool": {
+                                "should": [
+                                    {"terms": {meta_field: [value]}},
+                                    {"bool": {"must_not": {"exists": {"field": meta_field}}}},
+                                ],
+                                "minimum_should_match": 1,
+                            }
+                        }
+
+                    if want_true and want_false:
+                        filters.append(
+                            {
+                                "bool": {
+                                    "should": [
+                                        _retrievable_clause(True),
+                                        _retrievable_clause(False),
+                                    ],
+                                    "minimum_should_match": 1,
+                                }
+                            }
+                        )
+                    elif want_true:
+                        filters.append(_retrievable_clause(True))
+                    elif want_false:
+                        filters.append(_retrievable_clause(False))
+                else:
+                    include_values: List[Any] = []
+                    exclude_values: List[Any] = []
+                    for v in values_list:
+                        if isinstance(v, str) and v.startswith("!"):
+                            if v[1:]:
+                                exclude_values.append(v[1:])
+                        else:
+                            include_values.append(v)
+                    if include_values:
+                        logger.debug(
+                            "[VECTOR][OPENSEARCH][FILTER] adding terms filter: field=%s values=%s",
+                            meta_field,
+                            include_values,
+                        )
+                        filters.append({"terms": {meta_field: include_values}})
+                    if exclude_values:
+                        logger.debug(
+                            "[VECTOR][OPENSEARCH][FILTER] adding must_not terms: field=%s values=%s",
+                            meta_field,
+                            exclude_values,
+                        )
+                        filters.append({"bool": {"must_not": {"terms": {meta_field: exclude_values}}}})
+        if filters:
+            logger.debug("[VECTOR][OPENSEARCH][FILTER] final filter list=%s", filters)
+        return filters or None

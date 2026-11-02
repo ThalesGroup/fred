@@ -17,7 +17,7 @@ from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
 from fred_core.common import ModelConfiguration, PostgresStoreConfig
 from pydantic import AnyHttpUrl, AnyUrl
 
-from knowledge_flow_backend.common.structures import AppConfig, Configuration, PgVectorStorageConfig, SchedulerConfig, StorageConfig, TemporalSchedulerConfig
+from knowledge_flow_backend.common.structures import AppConfig, Configuration, PgVectorStorageConfig, StorageConfig
 
 
 def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:
@@ -49,16 +49,6 @@ def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:
             ),
             authorized_origins=[AnyHttpUrl("http://localhost:5173")],
             rebac=None,
-        ),
-        scheduler=SchedulerConfig(
-            enabled=False,
-            temporal=TemporalSchedulerConfig(
-                host="localhost:7233",
-                namespace="default",
-                task_queue="ingestion",
-                workflow_id_prefix="test",
-                connect_timeout_seconds=5,
-            ),
         ),
         storage=storage,
         chat_model=ModelConfiguration(provider="openai", name="gpt-4o", settings={}),

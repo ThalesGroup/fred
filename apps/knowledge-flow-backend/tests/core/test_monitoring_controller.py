@@ -26,9 +26,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
+from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 
 from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
-from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 
 
 class _AsyncCM:

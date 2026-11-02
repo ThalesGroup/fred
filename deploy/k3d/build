@@ -19,7 +19,8 @@ def build(root: Path, output: Path) -> None:
     for app, consumers in {
         "control-plane": ["control-plane-backend"],
         "monitor": ["monitor"],
-        "knowledge-flow-backend": ["knowledge-flow-backend", "knowledge-flow-worker"],
+        "knowledge-flow-backend": ["knowledge-flow-backend"],
+        "knowledge-flow-worker": ["knowledge-flow-worker"],
         "frontend": ["frontend"],
         "fred-agents": ["fred-agents"],
     }.items():

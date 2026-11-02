@@ -1,34 +1,3 @@
 {
-    "files": {
-        "./knowledge_flow_backend/common/processing_profile_context.py": [
-            {
-                "code": "reportUnreachable",
-                "range": {
-                    "startColumn": 4,
-                    "endColumn": 78,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./knowledge_flow_backend/core/processors/input/common/image_describer.py": [
-            {
-                "code": "reportUnreachable",
-                "range": {
-                    "startColumn": 4,
-                    "endColumn": 13,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./knowledge_flow_backend/core/processors/output/vectorization_processor/vectorization_processor.py": [
-            {
-                "code": "reportUnreachable",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 78,
-                    "lineCount": 1
-                }
-            }
-        ]
-    }
+    "files": {}
 }

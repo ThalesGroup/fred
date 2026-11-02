@@ -1,8 +1,8 @@
-CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane apps/knowledge-flow-backend apps/frontend
-TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane apps/knowledge-flow-backend apps/frontend
-DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane apps/frontend
-RUN_DIRS := apps/control-plane apps/fred-agents apps/knowledge-flow-backend apps/frontend
-ENV_APPS := apps/control-plane apps/fred-agents apps/knowledge-flow-backend
+CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-knowledge libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane apps/knowledge-flow-backend apps/knowledge-flow-worker apps/frontend
+TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-knowledge libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane apps/knowledge-flow-backend apps/knowledge-flow-worker apps/frontend
+DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/knowledge-flow-worker apps/control-plane apps/frontend
+RUN_DIRS := apps/control-plane apps/fred-agents apps/knowledge-flow-backend apps/knowledge-flow-worker apps/frontend
+ENV_APPS := apps/control-plane apps/fred-agents apps/knowledge-flow-backend apps/knowledge-flow-worker
 
 .DEFAULT_GOAL := help
 
@@ -193,6 +193,7 @@ PYPI_RELEASE_CHECK ?= python3 scripts/validate_python_release.py
 PYPI_PACKAGES := \
 	libs/fred-pod \
 	libs/fred-core \
+	libs/fred-knowledge \
 	libs/fred-sdk \
 	libs/fred-runtime \
 	libs/capabilities/fred-capability-document-access \
@@ -279,6 +280,8 @@ set-version: ## Update the chart and application versions; Python packages have 
 	@echo "--- knowledge-flow-backend ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/knowledge-flow-backend/pyproject.toml
 	cd apps/knowledge-flow-backend && uv lock
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/knowledge-flow-worker/pyproject.toml
+	cd apps/knowledge-flow-worker && uv lock
 	@echo "--- frontend ---"
 	cd apps/frontend && npm version $(VERSION) --no-git-tag-version
 	@echo "Version updated to $(VERSION) in all components."
@@ -374,3 +377,8 @@ release-guide: ## Generate and validate the DevOps guide: make release-guide REL
 
 migration-tests: ## Validate release migration tooling offline with synthetic Git histories
 	uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
+
+.PHONY: test-knowledge-flow-contracts
+test-knowledge-flow-contracts:
+	$(MAKE) -C apps/knowledge-flow-worker dev
+	PYTHONPATH=$(CURDIR)/validation/knowledge_flow:$(CURDIR)/apps/knowledge-flow-backend:$(CURDIR)/apps/knowledge-flow-worker apps/knowledge-flow-worker/.venv/bin/python -m pytest validation/knowledge_flow/tests --disable-socket --allow-unix-socket

@@ -45,7 +45,7 @@ sast: dev ## Run bandit
 	$(UV) run bandit \
 		-r ${PY_PACKAGE} \
 		-s ${BANDIT_IGNORED_RULES} \
-		--baseline ${BANDIT_BASELINE_FILE}
+		$(if $(wildcard ${BANDIT_BASELINE_FILE}),--baseline ${BANDIT_BASELINE_FILE})
 
 .PHONY: detect-secret
 detect-secret: dev ## Run a secret detection tool
@@ -55,13 +55,13 @@ detect-secret: dev ## Run a secret detection tool
 		git ls-files -z "${CURDIR}" > "$$files" && \
 		xargs -0 "${VENV}/bin/detect-secrets-hook" \
 		--no-verify --json \
-		--baseline "${DETECT_SECRET_BASELINE_FILE}" \
+		$(if $(wildcard ${DETECT_SECRET_BASELINE_FILE}),--baseline "${DETECT_SECRET_BASELINE_FILE}") \
 		--exclude-files '${DETECT_SECRET_EXCLUDE_FILES}' < "$$files"
 
 .PHONY: type-check
 type-check: dev ## Run type checker (basedpyright)
 	@echo "************ Executing Basedpyright type checker ************"
-	$(UV) run basedpyright --baseline-file ${BASEDPYRIGHT_BASELINE_FILE}
+	$(UV) run basedpyright $(if $(wildcard ${BASEDPYRIGHT_BASELINE_FILE}),--baseline-file ${BASEDPYRIGHT_BASELINE_FILE})
 
 .PHONY: code-quality-fix
 code-quality-fix: dev lint-fix import-order-fix format-fix ## Auto-fix formatting/imports/linting

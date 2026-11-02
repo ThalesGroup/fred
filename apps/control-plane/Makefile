@@ -79,3 +79,12 @@ generate-config-schema: ## Generate the manager configuration schema without sta
 	trap 'rm -f "$$tmp"' EXIT; \
 	$(CARGO) run --quiet --locked -- generate-config-schema > "$$tmp"; \
 	mv "$$tmp" config/schema/configuration.schema.json
+
+# The real processing journey is opt-in; its subprocess owns the worker venv.
+ifneq ($(origin CONTROL_PLANE_IT_PROCESSING),undefined)
+test-integration: prepare-processing-worker
+endif
+
+.PHONY: prepare-processing-worker
+prepare-processing-worker: ## Prepare the Python worker used by document-processing integration tests
+	$(MAKE) -C ../knowledge-flow-worker dev
