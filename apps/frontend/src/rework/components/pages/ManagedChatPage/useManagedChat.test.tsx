@@ -74,8 +74,9 @@ vi.mock("react-router-dom", () => ({
 }));
 
 const showErrorMock = vi.fn();
+const showWarnMock = vi.fn();
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showError: showErrorMock, showSuccess: vi.fn(), showWarn: vi.fn() }),
+  useToast: () => ({ showError: showErrorMock, showSuccess: vi.fn(), showWarn: showWarnMock }),
 }));
 
 const notifyApiErrorMock = vi.fn();
@@ -171,8 +172,16 @@ const composerValue = {
   bindSession: composerBindSessionMock,
   discardDraft: vi.fn(),
 };
+let dropModelChoice: (label: string) => void = () => {};
 vi.mock("./useComposerSettings", () => ({
-  useComposerSettings: (_sessionId: unknown, _controls: unknown, _models: unknown) => {
+  useComposerSettings: (
+    _sessionId: unknown,
+    _controls: unknown,
+    _models: unknown,
+    _scope: unknown,
+    onChoiceDropped: (label: string) => void,
+  ) => {
+    dropModelChoice = onChoiceDropped;
     return composerValue;
   },
 }));
@@ -686,6 +695,12 @@ describe("useManagedChat — session write reliability", () => {
       await first;
     });
     expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("warns when the composer drops a model that is no longer offered", () => {
+    mount();
+    act(() => dropModelChoice("Old model"));
+    expect(showWarnMock).toHaveBeenCalledWith({ summary: "chatbot.composerSettings.modelChoiceLost" });
   });
 
   it("accepts an exact-limit Unicode draft", async () => {

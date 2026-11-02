@@ -52,7 +52,7 @@ const msg = (id: string): ChatMessage => ({ id }) as unknown as ChatMessage;
 
 // Per-test fetch behavior, keyed on the session id present in the URL.
 let routeOverride: string | null | undefined = "default";
-let fetchImpl: (url: string) => Promise<{ ok: boolean; json: () => Promise<ChatMessage[]> }>;
+let fetchImpl: (url: string) => Promise<{ ok: boolean; status?: number; json: () => Promise<ChatMessage[]> }>;
 const okResponse = (msgs: ChatMessage[]) => ({ ok: true, json: async () => msgs });
 
 function deferred<T>() {
@@ -317,6 +317,51 @@ describe("useSessionHistory authorized reads", () => {
     expect(latest.isUnavailable).toBe(true);
     expect(latest.isSettled).toBe(true);
     expect(onLoaded.mock.calls.every(([messages]) => messages.length === 0)).toBe(true);
+  });
+
+  describe("a reload after a successful load", () => {
+    const reload = async (response: () => Promise<never | ReturnType<typeof okResponse>>) => {
+      fetchImpl = async () => okResponse([msg("m1")]);
+      mount("session-a");
+      await settle();
+      onLoaded.mockClear();
+      fetchImpl = response;
+      routeOverride = "/runtime/sessions/session-a/messages?reload";
+      render("session-a");
+      await settle();
+    };
+
+    it.each([
+      ["a server error", async () => ({ ok: false, status: 503, json: async () => [] })],
+      ["a network failure", () => Promise.reject(new TypeError("offline"))],
+    ])("keeps the thread and its cache through %s", async (_label, response) => {
+      await reload(response);
+      expect(onLoaded).not.toHaveBeenCalled();
+      expect(getCachedSessionHistory(historyKey("session-a"))).toEqual([msg("m1")]);
+      expect(latest.isUnavailable).toBe(false);
+    });
+
+    it.each([401, 403, 404])("clears the thread and its cache on a %i refusal", async (status) => {
+      await reload(async () => ({ ok: false, status, json: async () => [] }));
+      expect(onLoaded).toHaveBeenLastCalledWith([]);
+      expect(getCachedSessionHistory(historyKey("session-a"))).toBeUndefined();
+      expect(latest.isUnavailable).toBe(true);
+      expect(latest.errorKey).toBe("rework.weaverAgents.scopeUnavailable");
+    });
+
+    it("leaves a live turn on screen when a refusal arrives during it", async () => {
+      turnActive = true;
+      await reload(async () => ({ ok: false, status: 403, json: async () => [] }));
+      expect(onLoaded).not.toHaveBeenCalled();
+      expect(latest.isUnavailable).toBe(true);
+    });
+  });
+
+  it("stays unavailable when the first load fails transiently", async () => {
+    fetchImpl = () => Promise.reject(new TypeError("offline"));
+    mount("session-a");
+    await settle();
+    expect(latest.isUnavailable).toBe(true);
   });
 
   it("preserves platform admission denial handling when a history read is refused", async () => {

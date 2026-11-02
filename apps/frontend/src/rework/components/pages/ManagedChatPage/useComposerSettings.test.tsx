@@ -51,13 +51,15 @@ function Host({
   facts,
   controls,
   scope = "",
+  onChoiceDropped,
 }: {
   session: string | null;
   facts?: PreparationModels;
   controls: ChatControlDescriptor[];
   scope?: string;
+  onChoiceDropped?: (label: string) => void;
 }) {
-  latest = useComposerSettings(session, controls, facts, scope);
+  latest = useComposerSettings(session, controls, facts, scope, onChoiceDropped);
   return null;
 }
 function render(
@@ -98,12 +100,38 @@ describe("Weaver composer choices (prepared, not executed in M5c)", () => {
     render("conversation");
     expect(parseModelChoice(latest.chatProfileId!)).toEqual(second);
   });
-  it("does not drop a revoked, withdrawn or temporarily missing choice", () => {
+  it("does not drop a choice on an empty or missing offer list", () => {
     render("conversation");
     act(() => latest.setChatProfileId(modelChoiceKey(second)));
     render("conversation", { ...models, offers: [] });
     expect(latest.chatProfileId).toBe(modelChoiceKey(second));
     render("conversation", undefined);
+    expect(latest.chatProfileId).toBe(modelChoiceKey(second));
+  });
+  it.each([
+    ["no longer offered", models.offers.slice(0, 1)],
+    ["no longer permitted", models.offers.map((offer) => ({ ...offer, permitted: false }))],
+  ])("drops a choice %s, says so and keeps it dropped after a reload", (_label, offers) => {
+    const onChoiceDropped = vi.fn();
+    const rerender = (facts: PreparationModels) =>
+      act(() =>
+        root.render(<Host session="conversation" facts={facts} controls={[]} onChoiceDropped={onChoiceDropped} />),
+      );
+    rerender(models);
+    act(() => latest.setChatProfileId(modelChoiceKey(second)));
+    rerender({ ...models, offers });
+    expect(latest.chatProfileId).toBeNull();
+    expect(onChoiceDropped).toHaveBeenCalledExactlyOnceWith("Shared model (source-b)");
+    reload("conversation");
+    expect(latest.chatProfileId).toBeNull();
+  });
+  it("keeps a withdrawn choice, which the server serves through its fallback", () => {
+    render("conversation");
+    act(() => latest.setChatProfileId(modelChoiceKey(second)));
+    render("conversation", {
+      ...models,
+      offers: models.offers.map((offer) => ({ ...offer, candidate: false, selectable: false })),
+    });
     expect(latest.chatProfileId).toBe(modelChoiceKey(second));
   });
   it("cannot select a source that preparation does not offer for selection", () => {

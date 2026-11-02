@@ -56,17 +56,16 @@ export default function ChatList({ teamId, spaceId }: ChatListProps) {
   const [deleteSession] = useDeleteSessionMutation();
   const [groupByAgent, setGroupByAgent] = useState(false);
 
-  const {
-    currentData,
-    isFetching: isLoading,
-    isError,
-    refetch,
-  } = useListSessionsQuery(
+  const { currentData, isFetching, error, isError, refetch } = useListSessionsQuery(
     { spaceId: spaceId ?? "" },
     { ...crossSessionRefreshOptions(!spaceId), refetchOnMountOrArgChange: true },
   );
   useRefetchOnWindowFocus(refetch, !spaceId);
-  const managedSessions = !spaceId || isError ? [] : (currentData ?? []);
+  // Only a read with nothing to show loads: a refetch keeps the list on screen.
+  const isLoading = isFetching && !currentData;
+  // A refusal hides the retained list; a failed poll keeps it.
+  const refused = [401, 403, 404].includes(Number((error as { status?: unknown } | undefined)?.status));
+  const managedSessions = !spaceId || refused ? [] : (currentData ?? []);
   const agentName = (session: Session) =>
     session.agent_display_name || t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
   const agentDeleted = (id: string) =>
@@ -146,7 +145,9 @@ export default function ChatList({ teamId, spaceId }: ChatListProps) {
       </div>
       <div className={styles.chatListItems}>
         {isLoading && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.loading")}</div>}
-        {isError && <div className={styles.chatListPlaceholder}>{t("chatbot.historyUnavailable")}</div>}
+        {isError && managedSessions.length === 0 && (
+          <div className={styles.chatListPlaceholder}>{t("chatbot.historyUnavailable")}</div>
+        )}
         {isEmpty && (
           <div className={styles.chatListPlaceholder}>
             {t("rework.sidebar.chatList.emptyManaged", { agentsNicknameSingular })}

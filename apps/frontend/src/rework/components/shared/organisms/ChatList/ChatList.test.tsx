@@ -28,7 +28,7 @@ const defaultSession = {
 };
 let sessions: (typeof defaultSession)[] | undefined;
 let loading = false;
-let error = false;
+let error: { status: number } | undefined;
 const readSessions = vi.hoisted(() => vi.fn());
 vi.mock("../../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "" }),
@@ -41,7 +41,7 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () =>
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useListSessionsQuery: (args: unknown, options: unknown) => {
     readSessions(args, options);
-    return { currentData: sessions, isFetching: loading, isError: error, refetch: vi.fn() };
+    return { currentData: sessions, isFetching: loading, error, isError: !!error, refetch: vi.fn() };
   },
   useDeleteSessionMutation: () => [vi.fn()],
 }));
@@ -63,7 +63,7 @@ import ChatList from "./ChatList";
 beforeEach(() => {
   sessions = [{ ...defaultSession }];
   loading = false;
-  error = false;
+  error = undefined;
   readSessions.mockClear();
 });
 
@@ -92,9 +92,30 @@ it("shows loading rather than inferring deletion from an unresolved read", () =>
   expect(html).not.toContain('data-agent-deleted="true"');
 });
 
-it("hides retained session metadata after a current read fails", () => {
+it("keeps the list without a loading row during a refetch", () => {
+  loading = true;
+  const html = renderToStaticMarkup(<ChatList teamId="team-1" spaceId="space-1" />);
+  expect(html).toContain("Preserved conversation");
+  expect(html).not.toContain("rework.sidebar.chatList.loading");
+});
+
+it("keeps the list through a failed poll", () => {
+  error = { status: 503 };
+  const html = renderToStaticMarkup(<ChatList teamId="team-1" spaceId="space-1" />);
+  expect(html).toContain("Preserved conversation");
+  expect(html).not.toContain("chatbot.historyUnavailable");
+});
+
+it("shows the unavailable state when a failed read left no data", () => {
+  sessions = undefined;
+  error = { status: 503 };
+  const html = renderToStaticMarkup(<ChatList teamId="team-1" spaceId="space-1" />);
+  expect(html).toContain("chatbot.historyUnavailable");
+});
+
+it("hides retained session metadata after a refused read", () => {
   sessions = [{ ...defaultSession, agent_deleted: true }];
-  error = true;
+  error = { status: 403 };
   const html = renderToStaticMarkup(<ChatList teamId="team-1" spaceId="space-1" />);
   expect(html).not.toContain("Preserved conversation");
   expect(html).not.toContain("Preserved assistant");
