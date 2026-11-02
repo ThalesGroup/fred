@@ -148,8 +148,8 @@ it("keeps polling, window focus and manual refresh", () => {
   expect(h.query.refetch).toHaveBeenCalledTimes(2);
   h.query.isFetching = true;
   render();
-  expect(refresh.disabled).toBe(true);
-  expect(host.querySelector('[role="status"]')!.textContent).toBe("Refreshing…");
+  expect(refresh.disabled).toBe(false);
+  expect(host.querySelector('[role="status"]')!.textContent).toContain("refreshed every 15 s");
 });
 
 it("shows refreshing during the first snapshot request", () => {

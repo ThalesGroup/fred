@@ -34,14 +34,12 @@ export function useHomeSearchIndex(active: boolean) {
     () => (context.currentData ?? []).filter((space) => space.kind === "team" || space.kind === "personal"),
     [context.currentData],
   );
-  const scope = useMemo(
-    () => ({ spaces, stamp: context.fulfilledTimeStamp, active, refresh, fetching: context.isFetching }),
-    [spaces, context.fulfilledTimeStamp, active, refresh, context.isFetching],
-  );
+  // Structural sharing keeps `spaces` through a refresh that changes nothing: no reindex.
+  const scope = useMemo(() => ({ spaces, active, refresh }), [spaces, active, refresh]);
   const [snapshot, setSnapshot] = useState<{ scope: typeof scope; sources: SearchSources; failed: boolean }>();
 
   useEffect(() => {
-    if (!active || context.isFetching || !context.currentData || context.isError) return;
+    if (!active || !context.currentData || context.isError) return;
     let cancelled = false;
     let nextSpace = 0;
     let failed = false;
@@ -108,9 +106,9 @@ export function useHomeSearchIndex(active: boolean) {
       clearTimeout(timeout);
       stop();
     };
-  }, [active, context.currentData, context.isError, context.isFetching, dispatch, scope, spaces]);
+  }, [active, context.currentData, context.isError, dispatch, scope, spaces]);
 
-  const current = snapshot?.scope === scope && !context.isError && !context.isFetching ? snapshot : undefined;
+  const current = snapshot?.scope === scope && !context.isError ? snapshot : undefined;
   return {
     ...(current?.sources ?? EMPTY),
     scope,

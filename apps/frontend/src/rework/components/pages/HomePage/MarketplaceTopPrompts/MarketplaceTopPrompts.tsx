@@ -46,9 +46,7 @@ function PublishedCards({ organizationId }: { organizationId: string }) {
   const prompts = query.currentData.items.slice(0, TOP_N);
   return (
     <>
-      {query.isFetching ? (
-        <Spinner size={20} />
-      ) : prompts.length === 0 ? (
+      {prompts.length === 0 ? (
         <div className={styles.empty}>{t("rework.home.topPrompts.empty")}</div>
       ) : (
         <div className={styles.grid}>

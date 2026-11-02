@@ -120,7 +120,7 @@ export default function UserSettingsPage() {
           <h2 id="profile-access-title" className={styles.userSettingsCardTitle}>
             {t("rework.userSettings.accessTitle")}
           </h2>
-          {me.isLoading || me.isFetching ? (
+          {me.isLoading || (me.isFetching && !me.currentData) ? (
             <span role="status" className={styles.userSettingsIdentityRole}>
               {t("common.loading")}
             </span>

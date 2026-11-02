@@ -18,7 +18,7 @@ export default function ProvisioningPage() {
   const [importBlueprint, result] = useImportBlueprintMutation();
   const submitting = useRef(false);
   const error = result.error ? normalizeApiError(result.error) : null;
-  const busy = result.isLoading || access.isFetching;
+  const busy = result.isLoading || (access.isFetching && !access.currentData);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();

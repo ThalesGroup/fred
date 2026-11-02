@@ -49,7 +49,7 @@ export default function OrganizationsPage() {
           )
         }
       />
-      {access.isLoading || access.isFetching ? (
+      {access.isLoading || (access.isFetching && !access.currentData) ? (
         <p role="status">{t("common.loading")}</p>
       ) : access.isError ? (
         <div role="alert">

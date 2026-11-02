@@ -125,6 +125,24 @@ it("loads personal and shared catalogs through Weaver and discards data after a 
   await render();
   expect(host.textContent).not.toContain("Known prompt");
 });
+it("keeps its results through a memberships refresh that changes nothing", async () => {
+  h.context.currentData = SPACES;
+  fetch.mockImplementation(async (request) =>
+    response(
+      new URL(request.url).pathname.endsWith("/prompts")
+        ? [promptSummaryFixture({ display_name: "Known prompt" })]
+        : [],
+    ),
+  );
+  await render();
+  const calls = fetch.mock.calls.length;
+  h.context.isFetching = true;
+  await render();
+  h.context.isFetching = false;
+  await render();
+  expect(host.textContent).toContain("Known prompt");
+  expect(fetch).toHaveBeenCalledTimes(calls);
+});
 it("surfaces an unavailable catalog without a render or request loop", async () => {
   h.context.currentData = [SPACES[0]];
   fetch.mockImplementation(async () => response([], 503));
