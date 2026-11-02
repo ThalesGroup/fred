@@ -64,6 +64,11 @@
   .content:has([data-shell-card="none"]) {
     background-color: transparent;
   }
+
+  /* A rail beside the page's cards brings its own edge gap. */
+  .content:has([data-shell-rail]) {
+    margin-right: 0;
+  }
 }
 
 @media (pointer: coarse) {

@@ -13,13 +13,12 @@
  * limitations under the License.
  */
 
-/* Outside the cards, on the app background, its gap matching the shell's margin.
-   Launchers stack from the top, first-party ones above the capability-derived
+/* Outside the cards, on the app background. Launchers stack from the top, first-party ones above the capability-derived
    ones. */
 .rail {
   display: flex;
   flex-direction: column;
-  padding-left: var(--spacing-s);
+  padding: 0 var(--spacing-2xs);
 }
 
 /* The shell card goes edge to edge, so the rail moves into it, set off by a divider. */

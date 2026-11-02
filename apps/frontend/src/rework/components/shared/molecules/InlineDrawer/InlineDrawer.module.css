@@ -131,14 +131,14 @@
    slide, and the resize handle sits in it. */
 .drawer[data-floating="true"][data-layout="push"] .panel {
   border: none;
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-s) var(--radius-l) var(--radius-l) var(--radius-s);
   background: var(--drawer-background, var(--surface-main));
-  width: calc(var(--drawer-width) - var(--spacing-s));
+  width: calc(var(--drawer-width) - var(--spacing-2xs));
 }
 
 @media (pointer: coarse) {
   .drawer[data-floating="true"][data-layout="push"] .panel {
-    border-radius: var(--radius-m);
+    border-radius: var(--radius-s) var(--radius-m) var(--radius-m) var(--radius-s);
   }
 }
 
@@ -148,24 +148,24 @@
 
 /* ── Drag-to-resize handle (push + `resizable`) ───────────────────────────
  * The grip idiom ported from the legacy chat's ResizablePaneShell: a slim
- * col-resize strip hugging the drawer's left edge, with a small rounded bar
- * that highlights while hovered or dragged. */
+ * col-resize strip hugging the drawer's left edge, with a small rounded bar in
+ * the gap, shown only while hovered or dragged. */
 .resizeHandle {
   display: flex;
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  justify-content: center;
   align-items: center;
   z-index: 2;
   cursor: col-resize;
-  width: var(--spacing-s);
+  width: var(--spacing-xs);
   touch-action: none;
 }
 
 .resizeHandle::before {
   transition:
+    opacity 0.15s,
     background-color 0.15s,
     height 0.15s;
   border-radius: var(--radius-s);
@@ -179,6 +179,13 @@
 .drawer[data-dragging="true"] .resizeHandle::before {
   background: var(--primary);
   height: 56px;
+}
+
+/* Touch has no hover: the bar stays, or nothing would say the panel resizes. */
+@media (hover: hover) {
+  .drawer:not([data-dragging="true"]) .resizeHandle:not(:hover)::before {
+    opacity: 0;
+  }
 }
 
 /* A width transition mid-drag would lag the pointer — the drag must be 1:1. */

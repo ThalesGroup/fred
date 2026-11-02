@@ -64,6 +64,14 @@
   }
 }
 
+/* Facing corners tighten while a panel is open: the two cards work as one. */
+@media (min-width: 768px) {
+  .pageBody:has([data-layout="push"][data-open="true"]) .leftStack {
+    border-top-right-radius: var(--radius-s);
+    border-bottom-right-radius: var(--radius-s);
+  }
+}
+
 /* ── Content row — holds the main column below the header ────────────────── */
 .contentRow {
   display: flex;

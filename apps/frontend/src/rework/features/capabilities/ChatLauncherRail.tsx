@@ -132,7 +132,7 @@ export function ChatLauncherRail({
   if (entries.length === 0 && launchers.length === 0 && footerLaunchers.length === 0) return null;
 
   return (
-    <div className={styles.rail}>
+    <div className={styles.rail} data-shell-rail>
       {launchers.map((launcher) => (
         <RailButton
           key={launcher.key}
