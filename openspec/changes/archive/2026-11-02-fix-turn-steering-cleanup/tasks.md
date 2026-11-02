@@ -14,7 +14,7 @@
 
 - [x] 3.1 Run affected offline suites, real PostgreSQL concurrent claim/renew/sweep coverage, applicable raw type checks and root quality checks once near commit; record commands, results and any unavailable environment here or in the PR.
 - [x] 3.2 Complete full branch author review and independent read-only runtime performance/concurrency review; record actual base/head, affected consumers, findings/dispositions and verification in the task response or PR.
-- [ ] 3.3 Reconcile verified behavior/evidence, validate and sync/archive this change using the repository procedures, then commit, push and open a draft PR targeting `swift` linked to #3396; verify only this coherent queue-recovery change is included.
+- [x] 3.3 Reconcile verified behavior/evidence, validate and sync/archive this change using the repository procedures, then commit, push and open a draft PR targeting `swift` linked to #3396; verify only this coherent queue-recovery change is included.
 
 ## Verification and review evidence
 
@@ -25,4 +25,4 @@
 - API generation: runtime `scripts/generate_openapi.py`, then frontend `npx --no-install @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json`.
 - Author and independent review: base/head `origin/swift = 7a2bbcbc5c8cc34f0eb7d9472715d57ca7faf35f`, full queue working-tree delta including index and untracked files; backend, SDK, generated client, frontend, docs, and runtime performance/concurrency reviewed. Dispositions: independent queue DTO; reject queue IDs on nonstream/resume paths; preserve queue on checkpoint-only erasure; bounded sweep with retained rows outside expiration scan; canonical personal identity; generation checks after refresh and owner-checked drain callbacks. Final independent delta review found no open actionable finding.
 - Exclusions: separate Temporal dependency worktree, external LLM/load campaigns, and image vulnerability scanning. PostgreSQL tests use a dedicated temporary database, not the application database. The live local runtime OpenAPI exposes the updated flat queue DTO.
-- Root `make code-quality UV=<external uv 0.13.5>` passed across all modules. The external executable avoids the local bootstrap removing its own uv executable during sync. Both migration-note checks and strict OpenSpec validation passed. Final publication/archive remains pending below.
+- Root `make code-quality UV=<external uv 0.13.5>` passed across all modules. The external executable avoids the local bootstrap removing its own uv executable during sync. Both migration-note checks and strict OpenSpec validation passed. Implementation commit `a5df17026` was pushed in draft PR #3399. Main-spec synchronization passed validation (38 specs, 0 failures); the completed change is archived under `2026-11-02-fix-turn-steering-cleanup`.
