@@ -60,7 +60,7 @@ function BusinessMainNavBar() {
       isPlatformAdminRoute(pathname) ||
       ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
   );
-  const organization = useOrganizationOwner(pathname.replace(/\/$/, "") !== "/admin/supervision");
+  const organization = useOrganizationOwner();
   const supervision = useOrganizationSupervisionAccess();
   const manager = useManagerPlatformAdmin();
   // Basename-aware href — the Help Center opens in its own tab (HELP-01).

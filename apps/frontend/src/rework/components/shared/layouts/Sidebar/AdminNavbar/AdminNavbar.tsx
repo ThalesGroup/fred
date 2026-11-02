@@ -37,7 +37,7 @@ function BusinessAdminNavbar() {
   const capabilities = useUserCapabilities(
     ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
   );
-  const organization = useOrganizationOwner(pathname.replace(/\/$/, "") !== "/admin/supervision");
+  const organization = useOrganizationOwner();
   const supervision = useOrganizationSupervisionAccess();
   const pages = organizationOwnerPages({
     capabilities: { ...capabilities, canManageFeatures: organization.isOwner },
@@ -64,26 +64,27 @@ export default function AdminNavbar({ platformArea = false }: { platformArea?: b
   );
 }
 
-/** The switcher appears only when the person has both spaces; otherwise the same block, read-only. */
+/** One available context stays read-only; multiple organizations also enable switching. */
 function AdminSpaceHeader({ current }: { current: AdminSpace }) {
   const { t } = useTranslation();
-  const { pathname } = useLocation();
   const manager = useManagerPlatformAdmin();
-  const organization = useOrganizationOwner(pathname.replace(/\/$/, "") !== "/admin/supervision");
-  const supervision = useOrganizationSupervisionAccess();
-  // /me/spaces rows all belong to one organization; its own row carries the name and roles.
-  const row = organization.currentData?.find((space) => space.kind === "organization");
+  const { organization, organizations, selectOrganization } = useOrganizationSupervisionAccess();
   // Small line: whose administration; big line: the section.
   const identity: SpaceHeaderProps = {
-    eyebrow: current === "platform" ? t("rework.sidebar.admin.platformTitle") : row?.name,
+    eyebrow: current === "platform" ? t("rework.sidebar.admin.platformTitle") : organization?.name,
     title: t("rework.sidebar.admin.title"),
   };
-  // Display only, the pages keep their guards: the role names stay put while the
-  // supervision check refetches, so the header does not flip between forms.
-  const organizationSpace =
-    !!row && (row.roles.includes("owner") || row.roles.includes("organization_admin") || supervision.allowed);
-  if (manager.isAdmin && row && organizationSpace)
-    return <AdminSpaceSwitcher current={current} identity={identity} organization={row} />;
+  if (organizations.length + Number(manager.isAdmin) > 1)
+    return (
+      <AdminSpaceSwitcher
+        current={current}
+        identity={identity}
+        organizations={organizations}
+        organizationId={organization?.id}
+        onSelectOrganization={selectOrganization}
+        platformAdmin={manager.isAdmin}
+      />
+    );
   return <SpaceHeader {...identity} />;
 }
 

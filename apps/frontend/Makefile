@@ -188,8 +188,8 @@ code-quality-fix: format-fix  ## Auto-fix what code-quality flags (currently pre
 ##@ Tests
 
 .PHONY: test
-test: check-node node_modules ## Run the unit test suite (vitest) with coverage
-	npm run test:coverage
+test: check-node node_modules ## Run all tests with coverage, or targeted Vitest files with TEST_FILES="path ..."
+	$(if $(TEST_FILES),npx --no-install vitest run $(TEST_FILES),npm run test:coverage)
 
 .PHONY: application-container-smoke
 application-container-smoke: ## Verify /apps and /app-services routing in an already-built frontend image

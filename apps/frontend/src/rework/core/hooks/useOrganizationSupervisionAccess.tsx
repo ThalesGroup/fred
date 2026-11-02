@@ -3,12 +3,35 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type PropsWithChildren } from "react";
 import { useAuthorizeSpaceMutation, useMySpacesQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
-import { useRefetchOnWindowFocus } from "./crossSessionRefresh";
+import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
+import { KeyCloakService } from "../../../security/KeycloakService";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "./crossSessionRefresh";
 
 function useAccess() {
-  const context = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
-  // /me/spaces rejects ambiguous attachments; every row carries the same organization.
-  const organizationId = context.currentData?.[0]?.organization_id;
+  const context = useMySpacesQuery(undefined, {
+    ...crossSessionRefreshOptions(false),
+    refetchOnMountOrArgChange: true,
+  });
+  const [selectedId, selectOrganization] = useLocalStorageState<string | undefined>(
+    `admin.organization:${KeyCloakService.GetSessionIdentity()}`,
+    undefined,
+  );
+  // Direct organization roles offer a context; platform and child-space roles grant none.
+  const organizations = context.isError
+    ? []
+    : (context.currentData?.filter(
+        (space) =>
+          space.kind === "organization" &&
+          (space.roles.includes("owner") || space.roles.includes("organization_admin")),
+      ) ?? []);
+  const organization = organizations.find((space) => space.id === selectedId) ?? organizations[0];
+  const organizationId = organization?.id;
+  // A stored preference is never authority. Replace revoked/unknown choices only
+  // after a successful refresh, retaining the preference on transient failures.
+  useEffect(() => {
+    if (context.currentData && !context.isFetching && !context.isError && selectedId !== organizationId)
+      selectOrganization(organizationId);
+  }, [context.currentData, context.isFetching, context.isError, selectedId, organizationId, selectOrganization]);
   const [authorize] = useAuthorizeSpaceMutation();
   const [decision, setDecision] = useState<{
     organizationId: string;
@@ -19,6 +42,8 @@ function useAccess() {
   const stamp = context.fulfilledTimeStamp;
 
   useEffect(() => {
+    // Do not reuse A's decision if the person returns to A while B is still pending.
+    setDecision(undefined);
     if (!organizationId || !stamp || context.isFetching || context.isError) return;
     let active = true;
     const request = authorize({ spaceCheck: { space_id: organizationId, permission: "administer_organization" } });
@@ -49,6 +74,10 @@ function useAccess() {
     setDecision((previous) => (previous ? { ...previous, allowed: false } : previous));
   }, []);
   return {
+    memberships: context,
+    organizations,
+    organization,
+    selectOrganization,
     organizationId,
     allowed: !!organizationId && current?.allowed === true,
     loading: !context.isError && (context.isFetching || context.isLoading || (!!organizationId && !current)),

@@ -32,7 +32,7 @@ vi.mock("@core/hooks/useOrganizationOwner", () => ({
   useOrganizationOwner: () => ({ isOwner: true, organizationId: "org-1", currentData: ORG }),
 }));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
-  useOrganizationSupervisionAccess: () => ({ allowed: true }),
+  useOrganizationSupervisionAccess: () => ({ allowed: true, organizations: ORG, organization: ORG[0] }),
 }));
 vi.mock("@hooks/useUserCapabilities.ts", () => ({ useUserCapabilities: () => ({ canAdmin: true }) }));
 vi.mock("@shared/molecules/UserProfile/UserProfile.tsx", () => ({ default: () => null }));

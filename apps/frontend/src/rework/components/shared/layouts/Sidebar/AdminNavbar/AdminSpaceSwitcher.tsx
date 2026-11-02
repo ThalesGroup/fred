@@ -14,11 +14,11 @@
 
 import { type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import SpaceHeader, { type SpaceHeaderProps } from "@shared/molecules/SpaceHeader/SpaceHeader.tsx";
-import type { Role } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { MySpace, Role } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AdminSpaceSwitcher.module.css";
 
 export type AdminSpace = "platform" | "organization";
@@ -31,15 +31,22 @@ const SPACE_HOME: Record<AdminSpace, string> = { platform: "/admin/organizations
 export default function AdminSpaceSwitcher({
   current,
   identity,
-  organization,
+  organizations,
+  organizationId,
+  onSelectOrganization,
+  platformAdmin,
 }: {
   current: AdminSpace;
   /** The current space as the read-only header shows it. */
   identity: SpaceHeaderProps;
-  organization: { name: string; roles: Role[] };
+  organizations: MySpace[];
+  organizationId?: string;
+  onSelectOrganization: (id: string) => void;
+  platformAdmin: boolean;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -67,10 +74,15 @@ export default function AdminSpaceSwitcher({
     };
   }, [open]);
 
-  const choose = (space: AdminSpace) => {
+  const choose = (space: AdminSpace, id?: string) => {
     setOpen(false);
     triggerRef.current?.focus();
+    if (id) onSelectOrganization(id);
     if (space !== current) navigate(SPACE_HOME[space]);
+    // Supervision handles a denied decision in place. Other pages may require
+    // Owner, so re-enter through the landing guard when their context changes.
+    else if (id && id !== organizationId && pathname.replace(/\/$/, "") !== "/admin/supervision")
+      navigate(SPACE_HOME.organization);
   };
   // Menu keys, kept local until the shared focus handoff reaches this base.
   const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -86,9 +98,6 @@ export default function AdminSpaceSwitcher({
   const onMenuBlur = (event: FocusEvent<HTMLDivElement>) => {
     if (event.relatedTarget && !containerRef.current?.contains(event.relatedTarget)) setOpen(false);
   };
-  const roles = SHOWN_ROLES.filter((role) => organization.roles.includes(role))
-    .map((role) => t(`rework.supervision.roleNames.${role}`))
-    .join(", ");
 
   return (
     <div ref={containerRef}>
@@ -99,33 +108,42 @@ export default function AdminSpaceSwitcher({
               ref={menuRef}
               aria-label={t("rework.sidebar.admin.spaces.switch")}
               groups={[
-                [
-                  <div key="platform" role="group" aria-labelledby={`${groupId}-platform`}>
-                    <span id={`${groupId}-platform`} className={styles.groupLabel}>
-                      {t("rework.sidebar.admin.platformTitle")}
-                    </span>
-                    <MenuPopoverItem
-                      role="menuitemradio"
-                      icon={{ category: "outlined", type: "admin_panel_settings" }}
-                      label={t("rework.sidebar.admin.spaces.platform")}
-                      selected={current === "platform"}
-                      onClick={() => choose("platform")}
-                    />
-                  </div>,
-                ],
+                ...(platformAdmin
+                  ? [
+                      [
+                        <div key="platform" role="group" aria-labelledby={`${groupId}-platform`}>
+                          <span id={`${groupId}-platform`} className={styles.groupLabel}>
+                            {t("rework.sidebar.admin.platformTitle")}
+                          </span>
+                          <MenuPopoverItem
+                            role="menuitemradio"
+                            icon={{ category: "outlined", type: "admin_panel_settings" }}
+                            label={t("rework.sidebar.admin.spaces.platform")}
+                            selected={current === "platform"}
+                            onClick={() => choose("platform")}
+                          />
+                        </div>,
+                      ],
+                    ]
+                  : []),
                 [
                   <div key="organization" role="group" aria-labelledby={`${groupId}-organization`}>
                     <span id={`${groupId}-organization`} className={styles.groupLabel}>
                       {t("rework.sidebar.admin.spaces.organizations")}
                     </span>
-                    <MenuPopoverItem
-                      role="menuitemradio"
-                      icon={{ category: "outlined", type: "groups" }}
-                      label={organization.name}
-                      description={roles || undefined}
-                      selected={current === "organization"}
-                      onClick={() => choose("organization")}
-                    />
+                    {organizations.map((organization) => (
+                      <MenuPopoverItem
+                        key={organization.id}
+                        role="menuitemradio"
+                        icon={{ category: "outlined", type: "groups" }}
+                        label={organization.name}
+                        description={SHOWN_ROLES.filter((role) => organization.roles.includes(role))
+                          .map((role) => t(`rework.supervision.roleNames.${role}`))
+                          .join(", ")}
+                        selected={current === "organization" && organization.id === organizationId}
+                        onClick={() => choose("organization", organization.id)}
+                      />
+                    ))}
                   </div>,
                 ],
               ]}

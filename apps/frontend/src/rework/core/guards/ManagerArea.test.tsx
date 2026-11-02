@@ -36,7 +36,7 @@ vi.mock("@core/hooks/useOrganizationOwner", () => ({
   useOrganizationOwner: () => ({ isOwner: false }),
 }));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
-  useOrganizationSupervisionAccess: () => ({ allowed: false }),
+  useOrganizationSupervisionAccess: () => ({ allowed: false, organizations: [] }),
 }));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => h.access }));
 vi.mock("@shared/layouts/MainLayout/MainLayout", () => ({ default: ({ children }) => <div>{children}</div> }));

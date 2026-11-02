@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   platformOwner: true,
   organizationOwner: true,
   supervision: true,
+  selectOrganization: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -36,7 +37,20 @@ vi.mock("@hooks/useUserCapabilities.ts", () => ({
   useUserCapabilities: () => ({ canAdmin: true, canManageTeams: true, canManagePlatformAccess: true }),
 }));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
-  useOrganizationSupervisionAccess: () => ({ allowed: h.supervision }),
+  useOrganizationSupervisionAccess: () => {
+    const organizations =
+      h.spaces?.filter(
+        (space) =>
+          space.kind === "organization" &&
+          (space.roles.includes("owner") || space.roles.includes("organization_admin")),
+      ) ?? [];
+    return {
+      allowed: h.supervision,
+      organizations,
+      organization: organizations[0],
+      selectOrganization: h.selectOrganization,
+    };
+  },
 }));
 vi.mock("@core/hooks/useOrganizationOwner", () => ({
   useOrganizationOwner: () => ({ isOwner: h.organizationOwner, organizationId: "org-1", currentData: h.spaces }),
@@ -58,6 +72,7 @@ let root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   Object.assign(h, { spaces: [], platformOwner: true, organizationOwner: true, supervision: true });
+  h.selectOrganization.mockClear();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -92,6 +107,28 @@ const trigger = () => host.querySelector<HTMLButtonElement>('button[aria-haspopu
 const items = () => [...host.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')];
 
 describe("AdminNavbar", () => {
+  it("offers multiple organizations without platform rights and selects one", () => {
+    h.platformOwner = false;
+    h.spaces = [...ACME, { kind: "organization", name: "Globex", roles: ["organization_admin"], id: "org-2" }];
+    render("/admin/supervision");
+    act(() => trigger()!.click());
+    expect(items()).toHaveLength(2);
+    expect(items()[0].textContent).toContain("Acme");
+    expect(items()[1].textContent).toContain("Globex");
+    act(() => items()[1].click());
+    expect(h.selectOrganization).toHaveBeenCalledWith("org-2");
+    expect(path()).toBe("/admin/supervision");
+  });
+
+  it("re-enters the guarded landing when changing organization from an Owner page", () => {
+    h.spaces = [...ACME, { kind: "organization", name: "Globex", roles: ["organization_admin"], id: "org-2" }];
+    render("/admin/features");
+    act(() => trigger()!.click());
+    act(() => items()[2].click());
+    expect(h.selectOrganization).toHaveBeenCalledWith("org-2");
+    expect(path()).toBe("/admin");
+  });
+
   it("lists only platform pages in the platform space", () => {
     h.spaces = ACME;
     render("/admin/organizations");

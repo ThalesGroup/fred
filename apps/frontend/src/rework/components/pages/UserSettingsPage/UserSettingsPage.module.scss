@@ -21,7 +21,9 @@
   box-sizing: border-box;
   padding: var(--spacing-l) var(--spacing-m);
   width: 100%;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
 }
 
 .userSettingsPage {

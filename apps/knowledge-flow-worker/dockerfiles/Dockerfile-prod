@@ -122,7 +122,8 @@ ENV DUCKDB_EXTENSION_DIRECTORY=${HOME}/.duckdb/extensions
 
 ENV HF_HOME=/home/${USER_NAME}/.cache/huggingface
 ENV HF_HUB_CACHE=${HF_HOME}/hub
-RUN mkdir -p ${HF_HUB_CACHE} ${PADDLE_MODELS_DIR} && chown -R ${USER_ID}:${GROUP_ID} ${HF_HOME} ${PADDLE_MODELS_DIR}
+# Own the cache parent too, so the runtime user can create Paddle's cache.
+RUN mkdir -p ${HF_HUB_CACHE} ${PADDLE_MODELS_DIR} && chown -R ${USER_ID}:${GROUP_ID} ${HOME}/.cache ${PADDLE_MODELS_DIR}
 
 # Warm caches during build (faster startup, offline-friendly runtime)
 USER ${USER_NAME}

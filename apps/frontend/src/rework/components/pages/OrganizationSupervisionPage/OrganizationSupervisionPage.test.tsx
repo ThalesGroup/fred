@@ -4,16 +4,29 @@
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { Provider } from "react-redux";
 import { configureStore } from "@reduxjs/toolkit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { enhancedControlPlaneApi as api } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { OrganizationSupervision, SupervisionCounts } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  MySpace,
+  OrganizationSupervision,
+  SupervisionCounts,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   OrganizationSupervisionAccessProvider,
   useOrganizationSupervisionAccess,
 } from "@core/hooks/useOrganizationSupervisionAccess";
 import OrganizationSupervisionPage from "./OrganizationSupervisionPage";
+import AdminNavbar from "../../shared/layouts/Sidebar/AdminNavbar/AdminNavbar";
+import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
+import { localStorageKey } from "../../../../hooks/useLocalStorageState";
+
+vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => ({ isAdmin: false }) }));
+vi.mock("@hooks/useUserCapabilities.ts", () => ({ useUserCapabilities: () => ({}) }));
+vi.mock("../../../../common/config", () => ({ getConfig: () => ({ platform_access_enabled: false }) }));
+vi.mock("../../../features/tasks/taskSlice", () => ({ selectActiveCount: () => 0 }));
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 vi.mock("../../../../security/KeycloakService", () => ({
@@ -54,12 +67,30 @@ const summary = (organization_id = "org"): OrganizationSupervision => ({
   teams: { items: [{ id: "team", name: `Team ${organization_id}`, counts }], next_cursor: null },
 });
 const detail = () => ({ ...summary(), team: summary().teams.items[0] });
+const membership = (id: string, roles: MySpace["roles"] = ["organization_admin", "owner"]): MySpace => ({
+  id,
+  organization_id: id,
+  kind: "organization",
+  name: id,
+  roles,
+  parent_id: null,
+  personal_owner: null,
+  path: [id],
+});
+const preferenceKey = localStorageKey("admin.organization:fixture/owner");
 const NativeRequest = globalThis.Request;
-let requests: { path: string; body?: unknown; resolve: (response: Response) => void; reject: (error: Error) => void }[];
+let requests: {
+  search: string;
+  path: string;
+  body?: unknown;
+  resolve: (response: Response) => void;
+  reject: (error: Error) => void;
+}[];
 let store: ReturnType<typeof makeStore>;
 let container: HTMLDivElement;
 let root: Root;
 let access: ReturnType<typeof useOrganizationSupervisionAccess>;
+let owner: ReturnType<typeof useOrganizationOwner>;
 function makeStore() {
   return configureStore({
     reducer: { [api.reducerPath]: api.reducer },
@@ -68,6 +99,7 @@ function makeStore() {
 }
 function AccessProbe() {
   access = useOrganizationSupervisionAccess();
+  owner = useOrganizationOwner();
   return null;
 }
 async function waitFor(check: () => void) {
@@ -89,7 +121,7 @@ async function reply(path: string, data: unknown, status = 200) {
   );
 }
 async function authorize(org = "org") {
-  await reply("/me/spaces", [{ id: org, organization_id: org }]);
+  await reply("/me/spaces", [membership(org)]);
   await waitFor(() =>
     expect(requests.find((request) => request.path === "/authorize/space")?.body).toEqual({
       space_id: org,
@@ -116,6 +148,7 @@ async function loaded(org = "org") {
 }
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  localStorage.clear();
   requests = [];
   vi.stubGlobal(
     "Request",
@@ -128,24 +161,54 @@ beforeEach(() => {
   vi.stubGlobal("fetch", async (request: Request) => {
     const body = request.method === "POST" ? await request.json() : undefined;
     return new Promise<Response>((resolve, reject) =>
-      requests.push({ path: new URL(request.url).pathname.replace("/control-plane/v1", ""), body, resolve, reject }),
+      requests.push({
+        path: new URL(request.url).pathname.replace("/control-plane/v1", ""),
+        search: new URL(request.url).search,
+        body,
+        resolve,
+        reject,
+      }),
     );
   });
   store = makeStore();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
+  render();
+});
+function render() {
   act(() =>
     root.render(
       <Provider store={store}>
-        <OrganizationSupervisionAccessProvider>
-          <AccessProbe />
-          <OrganizationSupervisionPage />
-        </OrganizationSupervisionAccessProvider>
+        <MemoryRouter initialEntries={["/admin/supervision"]}>
+          <OrganizationSupervisionAccessProvider>
+            <AccessProbe />
+            <AdminNavbar />
+            <OrganizationSupervisionPage />
+          </OrganizationSupervisionAccessProvider>
+        </MemoryRouter>
       </Provider>,
     ),
   );
-});
+}
+function chooseOrganization(name: string) {
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!.click());
+  const item = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find((node) =>
+    node.textContent?.includes(name),
+  );
+  expect(item).toBeDefined();
+  act(() => item!.click());
+}
+async function decision(org: string, allowed = true) {
+  await waitFor(() =>
+    expect(requests.find((request) => request.path === "/authorize/space")?.body).toEqual({
+      space_id: org,
+      permission: "administer_organization",
+    }),
+  );
+  await reply("/authorize/space", { allowed });
+}
+
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
@@ -237,4 +300,155 @@ it.each([503, "network"])("keeps %s as a loading failure without revocation or z
   );
   expect(access.allowed).toBe(true);
   expect(container.textContent).not.toContain("rework.supervision.totals");
+});
+
+it("switches the header, rights and requests together, resets team/cursors and ignores late data", async () => {
+  await reply("/me/spaces", [
+    membership("Acme"),
+    membership("Globex", ["organization_admin"]),
+    membership("Hidden", ["member"]),
+  ]);
+  await decision("Acme");
+  await reply("/organizations/Acme/supervision", {
+    ...summary("Acme"),
+    teams: { ...summary("Acme").teams, next_cursor: "acme-next" },
+  });
+  await loaded("Acme");
+  expect(owner.organizationId).toBe("Acme");
+  expect(container.querySelector('a[href="/admin/features"]')).not.toBeNull();
+  click("Team Acme");
+  await waitFor(() => expect(requests.some((r) => r.path.endsWith("/teams/team"))).toBe(true));
+  click("dataTable.pagination.next");
+  await waitFor(() => expect(requests.some((r) => r.search.includes("acme-next"))).toBe(true));
+  const late = requests.splice(0);
+  chooseOrganization("Globex");
+  expect(container.querySelector('button[aria-haspopup="menu"]')?.textContent).toContain("Globex");
+  expect(owner.isOwner).toBe(false);
+  expect(owner.organizationId).toBeUndefined();
+  expect(container.querySelector('a[href="/admin/features"]')).toBeNull();
+  expect(container.textContent).not.toContain("Team Acme");
+  await decision("Globex");
+  await waitFor(() => expect(requests).toHaveLength(1));
+  expect(requests[0].path).toBe("/organizations/Globex/supervision");
+  expect(requests[0].search).toBe("");
+  await reply("/organizations/Globex/supervision", summary("Globex"));
+  await loaded("Globex");
+  await act(async () => {
+    for (const request of late)
+      request.resolve(
+        new Response(
+          JSON.stringify(
+            request.path.endsWith("/teams/team")
+              ? { ...summary("Acme"), team: summary("Acme").teams.items[0] }
+              : summary("Acme"),
+          ),
+        ),
+      );
+  });
+  await waitFor(() =>
+    expect(
+      api.endpoints.organizationSupervision.select({ organizationId: "Acme", after: "acme-next" })(store.getState())
+        .status,
+    ).toBe("fulfilled"),
+  );
+  expect(container.textContent).not.toContain("Team Acme");
+  expect(container.querySelector('aside[aria-hidden="false"]')).toBeNull();
+  expect(access.allowed).toBe(true);
+  // Switching back also discards pagination and rechecks permission before cached data can appear.
+  chooseOrganization("Acme");
+  expect(container.textContent).not.toContain("Team Acme");
+  await decision("Acme");
+  await waitFor(() => expect(requests).toHaveLength(1));
+  expect(requests[0].search).toBe("");
+});
+
+it("restores a selection on reload, revalidates it and falls back after revocation", async () => {
+  await reply("/me/spaces", [membership("Acme"), membership("Globex")]);
+  await decision("Acme");
+  await reply("/organizations/Acme/supervision", summary("Acme"));
+  await loaded("Acme");
+  chooseOrganization("Globex");
+  await decision("Globex");
+  await reply("/organizations/Globex/supervision", summary("Globex"));
+  await loaded("Globex");
+  expect(JSON.parse(localStorage.getItem(preferenceKey)!)).toBe("Globex");
+  act(() => root.render(null));
+  store.dispatch(api.util.resetApiState());
+  store = makeStore();
+  render();
+  expect(container.textContent).not.toContain("Team Globex");
+  await reply("/me/spaces", [membership("Acme"), membership("Globex")]);
+  await decision("Globex");
+  await reply("/organizations/Globex/supervision", summary("Globex"));
+  await loaded("Globex");
+  act(() => window.dispatchEvent(new Event("focus")));
+  await reply("/me/spaces", [membership("Acme"), membership("Globex", ["member"])]);
+  await decision("Acme");
+  await reply("/organizations/Acme/supervision", summary("Acme"));
+  await loaded("Acme");
+  expect(JSON.parse(localStorage.getItem(preferenceKey)!)).toBe("Acme");
+  expect(container.querySelector('button[aria-haspopup="menu"]')).toBeNull();
+  act(() => window.dispatchEvent(new Event("focus")));
+  await reply("/me/spaces", []);
+  await waitFor(() => expect(container.textContent).toContain("rework.supervision.contextUnavailable"));
+  expect(access.allowed).toBe(false);
+  expect(owner.isOwner).toBe(false);
+  expect(container.textContent).not.toContain("Team Acme");
+  expect(localStorage.getItem(preferenceKey)).toBeNull();
+  expect(requests).toHaveLength(0);
+});
+
+it("rejects a stored unauthorized context and never promotes child or member roles", async () => {
+  act(() => root.render(null));
+  localStorage.setItem(preferenceKey, JSON.stringify("Hidden"));
+  render();
+  await reply("/me/spaces", [
+    membership("Hidden", ["member"]),
+    { ...membership("team"), kind: "team" },
+    membership("Acme"),
+    membership("Globex", ["owner"]),
+  ]);
+  await decision("Acme");
+  await reply("/organizations/Acme/supervision", summary("Acme"));
+  await loaded("Acme");
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!.click());
+  const choices = [...container.querySelectorAll('[role="menuitemradio"]')];
+  expect(choices).toHaveLength(2);
+  expect(choices.map((node) => node.textContent).join()).not.toMatch(/Hidden|team|spaces.platform/);
+  act(() => (choices[1] as HTMLButtonElement).click());
+  await decision("Globex", false);
+  await denied();
+  expect(owner.isOwner).toBe(true);
+  expect(owner.organizationId).toBe("Globex");
+  expect(requests).toHaveLength(0);
+});
+
+it("ignores a late authorization decision from the previous selection", async () => {
+  await reply("/me/spaces", [membership("Acme"), membership("Globex")]);
+  await waitFor(() => expect(requests.some((r) => r.path === "/authorize/space")).toBe(true));
+  const late = requests.shift()!;
+  chooseOrganization("Globex");
+  await decision("Globex", false);
+  await act(async () => late.resolve(new Response(JSON.stringify({ allowed: true }))));
+  await denied();
+  expect(access.organizationId).toBe("Globex");
+  expect(requests).toHaveLength(0);
+});
+
+it("rechecks authorization when returning before the intervening organization's decision", async () => {
+  await reply("/me/spaces", [membership("Acme"), membership("Globex")]);
+  await decision("Acme");
+  await reply("/organizations/Acme/supervision", summary("Acme"));
+  await loaded("Acme");
+  chooseOrganization("Globex");
+  await waitFor(() => expect(requests.some((r) => r.path === "/authorize/space")).toBe(true));
+  const late = requests.shift()!;
+  chooseOrganization("Acme");
+  expect(access.allowed).toBe(false);
+  expect(container.textContent).not.toContain("Team Acme");
+  await decision("Acme", false);
+  await act(async () => late.resolve(new Response(JSON.stringify({ allowed: true }))));
+  await denied();
+  expect(access.organizationId).toBe("Acme");
+  expect(requests).toHaveLength(0);
 });

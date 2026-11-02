@@ -110,7 +110,7 @@ const ManagedChatPageRoute = () => {
 
 const OrganizationFeaturesRoute = () => {
   const { organizationId } = useOrganizationOwner();
-  return organizationId ? <FeaturesPage organizationId={organizationId} /> : null;
+  return organizationId ? <FeaturesPage key={organizationId} organizationId={organizationId} /> : null;
 };
 
 const AdminIndexRoute = () => {
