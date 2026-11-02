@@ -53,7 +53,7 @@ must stay disabled, disable `graph`; this also disables its diagram workflow.
 
 ## Upgrade
 
-1. Apply the linear control-plane migration `d7b24ef08361` after `f28c3e9ab641`.
+1. Apply the linear control-plane migration `d7b24ef08361` after `b5d2e8f7c031`.
    It creates a small global policy table; no existing data is rewritten.
 2. Deploy the new control plane before new runtimes, so direct runtime execution
    can read `/platform/skills/policy`. Deploy all configured runtime replicas,

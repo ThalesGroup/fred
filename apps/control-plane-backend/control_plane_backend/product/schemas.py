@@ -1170,3 +1170,5 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # `config/platform_prompt.json`; `""` is an admin deliberately suppressing
     # the block, and the two are NOT interchangeable.
     platform_prompt: str | None = None
+    # Admin-chosen chat profile for generated conversation titles.
+    title_model_profile_id: str | None = None

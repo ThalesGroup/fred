@@ -4920,6 +4920,7 @@ export type ManagedAgentRuntimeBinding = {
     [key: string]: string;
   };
   platform_prompt?: string | null;
+  title_model_profile_id?: string | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -5576,6 +5577,8 @@ export type CreationAssistantSettings = {
   missing_language_placeholder?: boolean;
   /** Chat profile the creation assistant uses; None = the pod default. */
   model_profile_id?: string | null;
+  /** Chat profile of generated conversation titles; None = the platform default. */
+  title_model_profile_id?: string | null;
   /** Reasoning of the assistant's own call. Any non-'off' value means on for an on/off profile; a level the profile does not offer is clamped by the pod to the nearest one. */
   reasoning_effort?: "off" | "low" | "medium" | "high";
   /** The pods' default chat profile, when every reachable pod names the same one; tells the UI which reasoning control the platform default offers. */
@@ -5590,6 +5593,8 @@ export type SetCreationAssistantSettingsRequest = {
   text?: string | null;
   /** One of `model_options`; None uses the pod default. */
   model_profile_id?: string | null;
+  /** One of `model_options`; None follows the platform default. */
+  title_model_profile_id?: string | null;
   /** Reasoning of the assistant's call; clamped to the model by the pod. */
   reasoning_effort?: "off" | "low" | "medium" | "high";
 };
