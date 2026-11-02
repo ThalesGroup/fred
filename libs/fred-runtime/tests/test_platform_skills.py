@@ -104,13 +104,11 @@ def test_package_discovery_and_read_only_reference() -> None:
     assert [entry.name for entry in catalog.catalog.skills] == [
         "analyze-data",
         "compare-options",
-        "data-visualization",
         "graph",
         "grill-me",
         "grounded-research",
         "meeting-minutes",
         "summarize-document",
-        "verify-answer",
     ]
     template = catalog.read("meeting-minutes", "references/meeting-minutes-template.md")
     assert "Not specified" in template
@@ -124,16 +122,20 @@ def test_package_discovery_and_read_only_reference() -> None:
     assert upload_results[0].error == "permission_denied"
 
 
-def test_graph_skill_is_one_complete_file_for_react_and_native_deep() -> None:
+def test_graph_core_and_reference_match_react_and_native_deep_resources() -> None:
     skills = PlatformSkills.from_directory("package")
     resource = files("fred_runtime.skills").joinpath("graph")
-    assert {entry.name for entry in resource.iterdir()} == {"SKILL.md"}
-    snapshot_content = skills.read("graph")
-    native_result = skills.filesystem_backend.download_files(["/graph/SKILL.md"])
-    assert len(native_result) == 1
-    assert native_result[0].error is None
-    assert native_result[0].content == snapshot_content.encode()
-    assert snapshot_content.strip()
+    assert {entry.name for entry in resource.iterdir()} == {"SKILL.md", "references"}
+    core = skills.read("graph")
+    assert "references/mermaid.md" in core
+    assert "flowchart TD" not in core
+    for path in ["SKILL.md", "references/mermaid.md"]:
+        snapshot_content = skills.read("graph", path)
+        native_result = skills.filesystem_backend.download_files([f"/graph/{path}"])
+        assert len(native_result) == 1
+        assert native_result[0].error is None
+        assert native_result[0].content == snapshot_content.encode()
+    assert "flowchart TD" in skills.read("graph", "references/mermaid.md")
 
 
 @pytest.mark.asyncio
@@ -181,7 +183,7 @@ async def test_deep_delegates_skills_discovery_to_native_constructor(
     }
     for messages in model.calls:
         prompt = str(messages[0].content)
-        assert "/skills/meeting-minutes/SKILL.md" in prompt
+        assert "/skills/graph/SKILL.md" in prompt
         assert prompt.count("## Skills") == 1
         assert "# Available platform skills" not in prompt
         assert "## Decisions" not in prompt
@@ -461,17 +463,17 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
     skills = PlatformSkills.from_directory("package")
     model = Model(
         script=[
-            load_call("meeting-minutes", "load", deep),
+            load_call("graph", "load", deep),
             call(
                 "read_file" if deep else "read_skill_file",
                 {
-                    "file_path": "/skills/meeting-minutes/references/meeting-minutes-template.md",
+                    "file_path": "/skills/graph/references/mermaid.md",
                     "limit": 1000,
                 }
                 if deep
                 else {
-                    "name": "meeting-minutes",
-                    "path": "references/meeting-minutes-template.md",
+                    "name": "graph",
+                    "path": "references/mermaid.md",
                 },
                 "reference",
             ),
@@ -495,7 +497,7 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
     ]
     assert len(loads) == 1
     assert loads[0].skill_load is not None and loads[0].skill_load.origin == "agent"
-    assert "Not specified" in str(model.calls[-1])
+    assert "flowchart TD" in str(model.calls[-1])
     assert any(
         isinstance(message, ToolMessage) and message.tool_call_id == "load"
         for message in model.calls[-1]
@@ -506,16 +508,14 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
         if isinstance(message, ToolMessage) and message.tool_call_id == "load"
     )
     if not deep:
-        assert "meeting-minutes is a skill name, not an executable tool" in str(
-            loaded.content
-        )
+        assert "graph is a skill name, not an executable tool" in str(loaded.content)
         assert "not a tool schema" in str(loaded.content)
     if not deep:
         assert "Never invent a tool call using a skill's catalog name" in str(
             model.calls[0][0].content
         )
     else:
-        assert "/skills/meeting-minutes/SKILL.md" in str(model.calls[0][0].content)
+        assert "/skills/graph/SKILL.md" in str(model.calls[0][0].content)
     if deep:
         assert "read_file" in model.bound_tool_names
         assert not {"load_skill", "read_skill_file"} & set(model.bound_tool_names)
@@ -530,7 +530,7 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
         {"messages": [HumanMessage(content="follow up")]},
         {"configurable": {"thread_id": "session"}},
     )
-    assert "Not specified" in str(model.calls[-1])
+    assert "flowchart TD" in str(model.calls[-1])
     counts = [
         c
         for c in metrics.count.call_args_list
@@ -892,10 +892,10 @@ async def test_native_child_load_has_attribution() -> None:
         script=[
             call(
                 "task",
-                {"description": "Write minutes", "subagent_type": "general-purpose"},
+                {"description": "Draw a workflow", "subagent_type": "general-purpose"},
                 "delegate",
             ),
-            load_call("meeting-minutes", "child-load", True),
+            load_call("graph", "child-load", True),
             AIMessage(content="child done"),
             AIMessage(content="done"),
         ]
@@ -1176,7 +1176,7 @@ async def test_manual_selection_is_not_preloaded_during_resume() -> None:
 async def test_skill_context_survives_hitl_without_duplicate_load(deep: bool) -> None:
     from langgraph.types import Command
 
-    bound = binding()
+    bound = binding("meeting-minutes")
     bound.runtime_context.ask_user = True
     model = Model(
         script=[
@@ -1469,7 +1469,7 @@ async def test_agent_only_skill_preview_retains_selection_and_access_rules(
     definition = _PingAgent()
     _, attribution = load_skill(
         snapshot,
-        "data-visualization",
+        "compare-options",
         origin="agent",
         load_id="agent-read",
         agent_id=definition.agent_id,
@@ -1490,7 +1490,7 @@ async def test_agent_only_skill_preview_retains_selection_and_access_rules(
             return_value=SimpleNamespace(
                 definition=definition,
                 team_id="team",
-                disabled_platform_skills=("data-visualization",) if disabled else (),
+                disabled_platform_skills=("compare-options",) if disabled else (),
             ),
         ),
     )
@@ -1509,20 +1509,20 @@ async def test_agent_only_skill_preview_retains_selection_and_access_rules(
         catalog = await api.get_instance_skills(
             "selected", "team", None, None, container, {}
         )
-        assert "data-visualization" not in {skill.name for skill in catalog.skills}
+        assert "compare-options" not in {skill.name for skill in catalog.skills}
     if preview_status is not None:
         with pytest.raises(HTTPException) as exc:
             await api.get_instance_skill_detail(
-                "data-visualization", "selected", "team", None, None, container, {}
+                "compare-options", "selected", "team", None, None, container, {}
             )
         assert exc.value.status_code == preview_status
     else:
         detail = await api.get_instance_skill_detail(
-            "data-visualization", "selected", "team", None, None, container, {}
+            "compare-options", "selected", "team", None, None, container, {}
         )
-        assert detail.skill.name == "data-visualization"
+        assert detail.skill.name == "compare-options"
         assert detail.skill.user_invocable is False
-        assert "# Clear data visualization" in detail.content
+        assert "# Evidence-based option comparison" in detail.content
 
 
 class RecordingSkillKPIStore(BaseKPIStore):
@@ -1753,20 +1753,20 @@ async def test_native_child_reads_share_mount_and_trusted_attribution() -> None:
             call(
                 "task",
                 {
-                    "description": "Use meeting-minutes",
+                    "description": "Use graph",
                     "subagent_type": "general-purpose",
                 },
                 "child",
             ),
             call(
                 "read_file",
-                {"file_path": "/skills/meeting-minutes/SKILL.md", "limit": 1000},
+                {"file_path": "/skills/graph/SKILL.md", "limit": 1000},
                 "child-load",
             ),
             call(
                 "read_file",
                 {
-                    "file_path": "/skills/meeting-minutes/references/meeting-minutes-template.md",
+                    "file_path": "/skills/graph/references/mermaid.md",
                     "limit": 1000,
                 },
                 "child-reference",
@@ -1794,7 +1794,7 @@ async def test_native_child_reads_share_mount_and_trusted_attribution() -> None:
     ]
     assert len(loads) == 1 and loads[0].child and loads[0].child_id
     assert loads[0].agent_id == "general-purpose" and loads[0].origin == "agent"
-    assert "Not specified" in str(model.calls[-2])
+    assert "flowchart TD" in str(model.calls[-2])
     assert (
         len(
             [
@@ -1817,7 +1817,7 @@ async def test_native_read_uses_existing_best_effort_kpi_writer(fail: bool) -> N
         script=[
             call(
                 "read_file",
-                {"file_path": "/skills/meeting-minutes/SKILL.md", "limit": 1000},
+                {"file_path": "/skills/graph/SKILL.md", "limit": 1000},
                 "native-load",
             ),
             AIMessage(content="done"),
@@ -1850,7 +1850,7 @@ async def test_native_read_uses_existing_best_effort_kpi_writer(fail: bool) -> N
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("selection", [None, "meeting-minutes", "missing"])
+@pytest.mark.parametrize("selection", [None, "graph", "missing"])
 @pytest.mark.parametrize("stream", [False, True])
 async def test_real_deep_runtime_exposes_only_native_skill_tools(
     tmp_path: Path, selection: str | None, stream: bool
@@ -1873,20 +1873,20 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
     skills = PlatformSkills.from_directory("package")
     model = Model(
         script=[
-            load_call("meeting-minutes", "parent-load", True),
+            load_call("graph", "parent-load", True),
             call(
                 "task",
                 {
-                    "description": "Read the minutes skill and template",
+                    "description": "Read the visualization skill and Mermaid reference",
                     "subagent_type": "general-purpose",
                 },
                 "delegate",
             ),
-            load_call("meeting-minutes", "child-load", True),
+            load_call("graph", "child-load", True),
             call(
                 "read_file",
                 {
-                    "file_path": "/skills/meeting-minutes/references/meeting-minutes-template.md",
+                    "file_path": "/skills/graph/references/mermaid.md",
                     "limit": 1000,
                 },
                 "reference",
@@ -1928,7 +1928,7 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
         and message.additional_kwargs.get("lc_source") != "pinned_skill"
     ] == [user_text]
     assert "Loaded platform skill:" not in str(first_messages)
-    assert skills.read("meeting-minutes") not in str(first_messages)
+    assert skills.read("graph") not in str(first_messages)
     assert bool(
         [
             m
@@ -1936,7 +1936,7 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
             if m.additional_kwargs.get("lc_source") == "pinned_skill"
         ]
     ) == bool(selection)
-    assert "/skills/meeting-minutes/SKILL.md" in str(first_messages[0].content)
+    assert "/skills/graph/SKILL.md" in str(first_messages[0].content)
     assert not {"load_skill", "read_skill_file"} & set(model.bound_tool_names)
     assert "read_file" in model.bound_tool_names
     assert all(
@@ -1944,7 +1944,7 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
         and "read_skill_file" not in str(messages[0].content)
         for messages in model.calls
     )
-    assert "Not specified" in str(model.calls[-2])
+    assert "flowchart TD" in str(model.calls[-2])
     loads = [
         event.skill_load
         for event in events

@@ -788,6 +788,14 @@ this request. Global policy applies to packaged provenance, never a custom
 directory with matching names. Metadata, reads, references and native searches
 use the same immutable per-execution view. Already-read context is retained.
 
+The packaged invocation matrix is maintained in
+`openspec/specs/platform-agent-skills/spec.md`. The unified `graph` procedure
+selects diagrams, numerical charts or tables; Mermaid syntax/examples are in
+its conditional `references/mermaid.md`. The summary procedure similarly keeps
+complex-source guidance in a conditional reference. Both use existing reference
+reads rather than injecting extra instructions into every request. Removed names
+follow normal unavailable-skill validation; stored history is not rewritten.
+
 ReAct and the web catalog, ReAct explicit preload and instruction previews retain
 the validated, bounded startup snapshot. ReAct uses
 `SnapshotSkillsMiddleware`, `load_skill(name)` and `read_skill_file(name, path)`.
@@ -7208,3 +7216,13 @@ the actual returned coverage and truncation envelope; SSE and persisted activity
 retain it for the translated partial-load label. It describes that read, without
 changing successful-read counts, native defaults or full pinning. The native
 parent/child prompt explicitly requests `limit=1000` and continuation.
+
+### 8.120 Consolidated packaged skill procedures (2026-11-02)
+
+The packaged catalog and invocation modes follow the current
+`platform-agent-skills` specification. Unified visualization retains `graph`
+identity and uses a conditional Mermaid reference. Retired commands and newly
+model-only procedures follow existing selection validation; stored identities
+and conversation context are retained. The existing migration note documents
+the broadened graph policy and all-replica rollout. SDK/API schemas and shared
+loading mechanisms are unchanged.

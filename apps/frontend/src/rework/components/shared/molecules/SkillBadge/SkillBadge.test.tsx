@@ -79,8 +79,8 @@ it("preserves authored custom skills and histories without packaged provenance",
 });
 
 it.each([
-  ["fr", "Graphiques"],
-  ["en", "Graphs"],
+  ["fr", "Visualisation"],
+  ["en", "Visualization"],
 ])("presents the graph skill in %s while keeping its engine out of the label", async (locale, title) => {
   await act(() => language.changeLanguage(locale));
   render(true, "graph");
@@ -93,6 +93,20 @@ it.each([
   const range = document.createRange();
   range.selectNodeContents(container.querySelector("[data-skill-message]")!);
   expect(selectedSkillText(range, container)).toBe("/graph");
+});
+
+it.each([
+  ["verify-answer", "Vérifier une réponse"],
+  ["data-visualization", "Visualiser des données"],
+])("keeps historical presentation and copy identity for retired skill %s", (name, title) => {
+  render(true, name);
+  const button = container.querySelector("button")!;
+  expect(button.textContent).toBe(title);
+  act(() => button.click());
+  expect(onOpen).toHaveBeenCalledWith(name);
+  const range = document.createRange();
+  range.selectNodeContents(container.querySelector("[data-skill-message]")!);
+  expect(selectedSkillText(range, container)).toBe(`/${name}`);
 });
 
 it("falls back to English, then authored metadata for an untranslated packaged skill", async () => {

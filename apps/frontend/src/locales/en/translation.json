@@ -684,8 +684,8 @@
           "description": "Check an answer against available evidence, correct unsupported claims and explain verification limits."
         },
         "graph": {
-          "title": "Graphs",
-          "description": "Create or repair diagrams and charts suited to the question, with a clear and reliable result."
+          "title": "Visualization",
+          "description": "Create diagrams, data charts or tables suited to the question using available rendering tools."
         },
         "grill-me": {
           "title": "Challenge my thinking",

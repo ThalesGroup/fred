@@ -2,21 +2,18 @@
 name: compare-options
 description: Compare alternatives for a decision using explicit criteria, supported evidence and visible trade-offs.
 argument-hint: "[options] [decision criteria]"
+user-invocable: false
 ---
 
 # Evidence-based option comparison
 
-1. Identify the alternatives and decision goal from the request or conversation.
-   Ask for missing alternatives or a constraint essential to the decision. When
-   preferences are unspecified, state provisional criteria instead of assigning
-   invented priorities to the user.
-2. Gather comparable evidence using available context and tools. Keep units,
-   time periods and assumptions consistent. Mark unavailable values as unknown;
-   a missing value is not evidence of poor performance.
-3. Compare alternatives in a table when useful. Attribute evidence and separate
-   confirmed characteristics from assumptions. Preserve trade-offs; create a
-   weighted score only when the user supplies or approves the weights.
-4. Recommend an option when the evidence and user priorities support it. State
-   the conditions that could change the recommendation. If evidence is too weak
-   to rank alternatives, give the supported comparison and identify the missing
-   information needed to decide. Do not claim measured benefits without data.
+1. Establish the alternatives, decision goal and essential constraints. Use
+   provisional criteria when priorities are unspecified; ask only for choices
+   that block a useful comparison.
+2. Compare evidence on consistent units, periods and assumptions. Attribute
+   sources, distinguish facts from assumptions, and keep missing values unknown.
+   Use weighted scores only with user-supplied or approved weights.
+3. Present the material trade-offs, using a table when helpful. Recommend an
+   option only when evidence and priorities support it; state what could change
+   the choice or what information is still needed. Claim measured benefits only
+   when supported by data.

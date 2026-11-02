@@ -45,7 +45,7 @@ Managed web chat SHALL retain and render all explicit platform skill invocations
 
 #### Scenario: Select two platform skills
 
-- **WHEN** a user completes `/meeting-minutes`, then `/analyze-data`, and submits the request
+- **WHEN** a user completes `/meeting-minutes`, then `/graph`, and submits the request
 - **THEN** both inline selections and surrounding text remain intact
 - **AND** both distinct names reach the same execution turn
 - **AND** ReAct receives both procedures before inference; Deep receives canonical user text and both native pins before inference
@@ -159,7 +159,7 @@ The packaged catalog SHALL publish the following canonical skills and invocation
 
 | Skill | User invocation | Model invocation |
 | --- | --- | --- |
-| analyze-data | Available | Available |
+| analyze-data | Unavailable | Available |
 | compare-options | Unavailable | Available |
 | graph | Available | Available |
 | grill-me | Available | Unavailable |
@@ -183,10 +183,10 @@ Original Fred procedures SHALL include their instructions in packaged resources 
 - **THEN** the procedure makes limits explicit and uses supported tools and representations
 - **AND** it never claims fabricated computations
 
-#### Scenario: Model-only comparison and summary
-- **WHEN** a user opens the command catalog or directly selects compare-options or summarize-document for execution
+#### Scenario: Model-only analysis, comparison and summary
+- **WHEN** a user opens the command catalog or directly selects analyze-data, compare-options or summarize-document for execution
 - **THEN** these skills are absent from user commands and the direct selections are rejected before inference
-- **AND** eligible ReAct and native Deep agents can discover and load both skills with agent-origin attribution
+- **AND** eligible ReAct and native Deep agents can discover and load all three skills with agent-origin attribution
 
 #### Scenario: Minutes require an explicit current selection for a new load
 - **WHEN** a request has no current explicit meeting-minutes selection
@@ -215,4 +215,3 @@ Original Fred procedures SHALL include their instructions in packaged resources 
 - **WHEN** a fresh request selects data-visualization or verify-answer on an updated packaged runtime
 - **THEN** normal unknown-skill validation rejects the selection without aliasing to another procedure
 - **AND** existing stored messages, skill activity and usage records remain readable without rewriting their canonical names
-

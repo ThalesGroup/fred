@@ -861,6 +861,26 @@ describe("platform skills", () => {
     expect(onSend).not.toHaveBeenCalled();
     expect(onSkillError).toHaveBeenCalledWith("unavailable");
   });
+  it.each(["analyze-data", "compare-options", "summarize-document", "data-visualization", "verify-answer"])(
+    "preserves a stale draft when %s becomes model-only or is retired",
+    (name) => {
+      activateSkills(true);
+      skillCatalog = {
+        supported: true,
+        skills: [...skillCatalog!.skills, { name, description: "Previous catalog entry" }],
+      };
+      act(() => root.render(<Host inlineEditor />));
+      const draft = `/${name} Notes`;
+      cmType(draft);
+      skillCatalog = { supported: true, skills: skillCatalog.skills.filter((skill) => skill.name !== name) };
+      act(() => root.render(<Host inlineEditor />));
+      act(() => renders[renders.length - 1]!.submit());
+      expect(onRunSkill).not.toHaveBeenCalled();
+      expect(onSend).not.toHaveBeenCalled();
+      expect(onSkillError).toHaveBeenCalledWith("unavailable");
+      expect(cm().state.doc.toString()).toBe(draft);
+    },
+  );
   it("resolves available inline prompt commands outside ReAct with surrounding text", async () => {
     activateSkills(true);
     cmType("Explain how /summary works");

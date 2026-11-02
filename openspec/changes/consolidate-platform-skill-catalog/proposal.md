@@ -4,7 +4,7 @@ The packaged catalog overlaps on visualization and repeats general model advice.
 
 ## What Changes
 
-- Make `compare-options` and `summarize-document` model-only. Condense comparison reminders; keep a minimal summary procedure with conditional guidance for complex or fidelity-sensitive documents.
+- Make `analyze-data`, `compare-options` and `summarize-document` model-only. Condense comparison reminders; keep a minimal summary procedure with conditional guidance for complex or fidelity-sensitive documents.
 - Make `meeting-minutes` user-only through the existing invocation controls.
 - Merge diagram and numerical visualization guidance under the existing `graph` identity, presented as Visualization/Visualisation and retaining user/model invocation. Move Mermaid syntax/examples into a packaged reference read only for Mermaid output.
 - **BREAKING** Remove the separate `data-visualization` and `verify-answer` catalog entries. Former direct selections of removed or newly user-ineligible names are rejected through existing validation.
@@ -28,4 +28,4 @@ Packaged resources remain immutable startup snapshots. Every runtime replica mus
 
 ## Non-goals
 
-No changes to `analyze-data`, `grounded-research` or `grill-me`; no skill aliases, automatic persisted-policy rewriting, instruction editor, new execution tools or renderer implementation. No answer-quality or latency improvement is claimed without measurement. Implementation awaits confirmation of this scope and its acceptance scenarios.
+No procedural changes to `analyze-data`, and no changes to `grounded-research` or `grill-me`; no skill aliases, automatic persisted-policy rewriting, instruction editor, new execution tools or renderer implementation. No answer-quality or latency improvement is claimed without measurement. The developer confirmed the scope on 2026-11-02 and explicitly added model-only `analyze-data` during implementation.

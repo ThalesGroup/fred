@@ -684,8 +684,8 @@
           "description": "Vérifier une réponse à partir des sources disponibles, corriger les affirmations non étayées et expliquer les limites de la vérification."
         },
         "graph": {
-          "title": "Graphiques",
-          "description": "Créer ou corriger des schémas et graphiques adaptés au besoin, avec un rendu clair et fiable."
+          "title": "Visualisation",
+          "description": "Créer des diagrammes, des graphiques de données ou des tableaux adaptés au besoin avec les outils de rendu disponibles."
         },
         "grill-me": {
           "title": "Mettre mon idée à l'épreuve",

@@ -1325,7 +1325,8 @@ See `RUNTIME-EXECUTION-CONTRACT.md §8.105`. Graph agents (mindmap,
 | `styles/spacings.css`, `typography.css`, `radius.css` | Prose/tokens |
 | `apps/fred-agents/fred_agents/general_assistant.py` | Reference agent system prompt |
 | `libs/fred-sdk/fred_sdk/resources/prompts.py` | Verbatim packaged Markdown loaders for agent authors |
-| `libs/fred-runtime/fred_runtime/skills/graph/SKILL.md` | Progressively loaded Mermaid diagram instructions |
+| `libs/fred-runtime/fred_runtime/skills/graph/SKILL.md` | Unified diagram/chart/table procedure |
+| `libs/fred-runtime/fred_runtime/skills/graph/references/mermaid.md` | Conditional Mermaid syntax and examples |
 | `libs/fred-runtime/fred_runtime/react/react_prompting.py` | `compose_system_prompt()` |
 
 ---

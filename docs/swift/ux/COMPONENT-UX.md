@@ -5490,8 +5490,10 @@ prompt title, its source worded like the menu's section heading (`Personal space
 selected for submission, including homonyms. Incomplete, removed or invalidated
 prompt selections receive no prompt visual.
 `/` lists the available skills directly alongside prompt
-commands without a standalone `/skill` dispatcher; `/comp` filters `compare-options`
-and `/meet` filters `meeting-minutes`. Choosing a skill completes the existing
+commands without a standalone `/skill` dispatcher; `/gra` filters `graph`
+and `/meet` filters the explicitly selected `meeting-minutes` workflow.
+`analyze-data`, `compare-options` and `summarize-document` are model-only and
+remain absent from user commands. Choosing a skill completes the existing
 canonical invocation and preserves the request, without sending a turn.
 Direct skill-name prefixes also work at the caret within existing text; only
 names from the current runtime catalog enable these inline suggestions.
