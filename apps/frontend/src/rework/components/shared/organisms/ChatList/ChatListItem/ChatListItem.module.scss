@@ -68,7 +68,23 @@
   }
 }
 
+/* The dots stay visible: only the title truncates. */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.awaitingInput {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--primary);
+  font-size: 1rem;
+}
+
 .title {
+  min-width: 0;
   overflow: hidden;
   color: var(--on-surface);
   font: var(--font-body-medium);

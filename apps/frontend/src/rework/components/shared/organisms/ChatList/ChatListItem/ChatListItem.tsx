@@ -13,6 +13,9 @@
 // limitations under the License.
 
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
+import { ThinkingDots } from "@shared/atoms/ThinkingDots/ThinkingDots";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { useTurnStatus } from "@core/hooks/backgroundTurns";
 import React, { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties";
@@ -48,6 +51,7 @@ export function ChatListItem({
   const fullAgentName = agentTooltipName ?? agentName;
   const location = useLocation();
   const isSelected = location.search.includes(`session=${sessionId}`);
+  const turnStatus = useTurnStatus(sessionId);
 
   const item = (
     <Link
@@ -57,7 +61,21 @@ export function ChatListItem({
       aria-describedby={agentDeleted ? statusId : undefined}
     >
       <div className={styles.chatDescription} data-read-only={agentDeleted}>
-        <div className={styles.title}>{label}</div>
+        <div className={styles.titleRow}>
+          <span className={styles.title}>{label}</span>
+          {turnStatus === "running" && (
+            <>
+              <ThinkingDots />
+              <span className={styles.accessibleStatus}>{t("rework.sidebar.chatList.answering")}</span>
+            </>
+          )}
+          {turnStatus === "awaiting_input" && (
+            <span className={styles.awaitingInput}>
+              <Icon category="outlined" type="front_hand" />
+              <span className={styles.accessibleStatus}>{t("rework.sidebar.chatList.awaitingInput")}</span>
+            </span>
+          )}
+        </div>
         {/* Only the agent name shrinks so the date stays readable. */}
         {(agentName || dateLabel) && (
           <div className={styles.meta}>

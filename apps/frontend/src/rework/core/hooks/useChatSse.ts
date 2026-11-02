@@ -680,6 +680,7 @@ export function useChatSse(
         }
 
         case "awaiting_human": {
+          turn.awaitingInput = true;
           if (
             event.token_usage ||
             event.sources?.length ||
@@ -767,6 +768,7 @@ export function useChatSse(
         }
 
         case "execution_interrupted": {
+          turn.awaitingInput = true;
           // Nothing ran: drop the optimistic message, give the draft back, and
           // offer the choice on the human-input card.
           writeTurnMessages(
