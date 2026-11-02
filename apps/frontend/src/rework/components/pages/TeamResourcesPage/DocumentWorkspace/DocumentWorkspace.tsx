@@ -2040,7 +2040,7 @@ function DocumentWorkspace({
     ? failedManagerRead.current
     : Boolean(currentTag && page && !page.loading && !page.loaded);
   const isEmpty = managerSpaceId
-    ? !managerQuery.isFetching && filteredRows.length === 0
+    ? !(managerQuery.isFetching && !directory) && filteredRows.length === 0
     : !tagsLoading &&
       childFolders.length === 0 &&
       (failedInitialLoad || (currentTag ? page?.loaded && page.docs.length === 0 : true));

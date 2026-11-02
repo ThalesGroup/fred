@@ -153,11 +153,11 @@ export default function TeamWikiPage() {
   const firstSlug = useMemo(() => buildWikiTree(pages)[0]?.page.slug ?? null, [pages]);
   const activeSlug = slug ?? firstSlug;
 
-  const { data: pageDetail, isFetching: pageLoading } = useWikiPageQuery(
+  const { currentData: pageDetail, isFetching: pageLoading } = useWikiPageQuery(
     { teamId, slug: activeSlug ?? "" },
     { skip: !teamId || !activeSlug || isRules, refetchOnMountOrArgChange: true },
   );
-  const { data: rulesDetail, isFetching: rulesLoading } = useWikiRulesQuery(
+  const { currentData: rulesDetail, isFetching: rulesLoading } = useWikiRulesQuery(
     { teamId },
     { skip: !teamId || !isRules, refetchOnMountOrArgChange: true },
   );
@@ -460,7 +460,7 @@ export default function TeamWikiPage() {
             message={t(canEdit ? "rework.wiki.empty.editor" : "rework.wiki.empty.member")}
             action={canEdit ? { label: t("rework.wiki.newPage"), onClick: () => openCreate(null) } : undefined}
           />
-        ) : pageLoading || rulesLoading ? (
+        ) : (pageLoading || rulesLoading) && !detail ? (
           <div className={styles.state}>
             <Spinner />
           </div>

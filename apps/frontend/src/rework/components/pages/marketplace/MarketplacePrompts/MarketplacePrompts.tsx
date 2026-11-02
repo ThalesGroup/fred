@@ -135,7 +135,7 @@ function OrganizationPrompts({ organizationId }: { organizationId: string }) {
           maxVisible={4}
           aria-label={t("rework.manager.kinds.team")}
         />
-        {catalog.isFetching ? (
+        {catalog.isFetching && !catalog.currentData ? (
           <Spinner size={20} />
         ) : filtered.length === 0 ? (
           <div className={styles.empty}>

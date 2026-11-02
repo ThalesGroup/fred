@@ -51,22 +51,16 @@ export default function MonitorPage() {
         subtitle={t("rework.monitor.description")}
         actions={
           access.isAdmin && (
-            <Button
-              color="primary"
-              variant="outlined"
-              size="medium"
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
-            >
+            <Button color="primary" variant="outlined" size="medium" onClick={() => void query.refetch()}>
               {t("rework.monitor.refresh")}
             </Button>
           )
         }
       />
       <p className={styles.secondary} role="status">
-        {access.isLoading || access.isFetching || query.isFetching
-          ? t("rework.monitor.refreshing")
-          : !access.isError && snapshot && t("rework.monitor.observed", { time: time(snapshot.observed_at) })}
+        {!access.isError && snapshot
+          ? t("rework.monitor.observed", { time: time(snapshot.observed_at) })
+          : (access.isFetching || query.isFetching) && t("rework.monitor.refreshing")}
       </p>
       {access.isLoading || (access.isFetching && !access.currentData) ? null : access.isError ? (
         <ServiceNotice
