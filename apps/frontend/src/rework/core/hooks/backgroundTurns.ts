@@ -17,6 +17,8 @@
 // turn whose stream closes), and the next view of that session adopts it back.
 // Module-level on purpose, like sessionHistoryCache: the page remounts per agent.
 
+import { useSyncExternalStore } from "react";
+
 import { forgetCachedSessionHistory } from "../../components/pages/ManagedChatPage/sessionHistoryCache";
 import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 import type { ChatSseCallbacks } from "./useChatSse";
@@ -45,16 +47,41 @@ export type LiveTurn = {
   /** Null while detached; `messages` is then the turn's own copy of the thread. */
   host: TurnHost | null;
   messages: ChatMessage[];
+  /** The turn ended on a question for the user (human input or interrupted run). */
+  awaitingInput?: boolean;
   /** Session-keyed side effects that stay meaningful with no view attached. */
   detachedCallbacks: Pick<ChatSseCallbacks, "onTurnPersisted" | "onSessionTitle" | "onBackgroundTurnSettled">;
 };
 
 const detached = new Map<string, LiveTurn>();
-// Every streaming turn, attached or not: what deletion cancels.
+// Every streaming turn, attached or not: what the sidebar shows and deletion cancels.
 const running = new Map<string, LiveTurn>();
+// Sessions whose last turn here stopped on a question; the next turn clears it.
+const awaitingInput = new Set<string>();
+const runningListeners = new Set<() => void>();
+
+function notifyRunning(): void {
+  for (const listener of runningListeners) listener();
+}
+
+function subscribeRunning(listener: () => void): () => void {
+  runningListeners.add(listener);
+  return () => runningListeners.delete(listener);
+}
 
 export function registerTurn(turn: LiveTurn): void {
   running.set(turn.sessionId, turn);
+  awaitingInput.delete(turn.sessionId);
+  notifyRunning();
+}
+
+export type TurnStatus = "running" | "awaiting_input" | null;
+
+/** Known only in this tab: the session list does not carry pending questions. */
+export function useTurnStatus(sessionId: string): TurnStatus {
+  return useSyncExternalStore(subscribeRunning, () =>
+    running.has(sessionId) ? "running" : awaitingInput.has(sessionId) ? "awaiting_input" : null,
+  );
 }
 
 /**
@@ -64,6 +91,7 @@ export function registerTurn(turn: LiveTurn): void {
 export function abortTurn(sessionId: string): void {
   running.get(sessionId)?.controller.abort();
   forgetCachedSessionHistory(sessionId);
+  if (awaitingInput.delete(sessionId)) notifyRunning();
 }
 
 export function readTurnMessages(turn: LiveTurn): ChatMessage[] {
@@ -99,7 +127,11 @@ export function takeDetachedTurn(sessionId: string): LiveTurn | undefined {
 /** Ends the turn on its view, or hands a detached turn's final thread to its owner. */
 export function settleTurn(turn: LiveTurn): void {
   // A replacement turn of the same session may already be registered.
-  if (running.get(turn.sessionId) === turn) running.delete(turn.sessionId);
+  if (running.get(turn.sessionId) === turn) {
+    running.delete(turn.sessionId);
+    if (turn.awaitingInput && !turn.controller.signal.aborted) awaitingInput.add(turn.sessionId);
+    notifyRunning();
+  }
   if (turn.host) {
     turn.host.finish(turn);
     return;

@@ -2734,6 +2734,8 @@
         "title": "Administration spaces"
       },
       "chatList": {
+        "answering": "Answer in progress",
+        "awaitingInput": "Waiting for your answer",
         "deleteDialog": {
           "title": "Delete this conversation?",
           "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",

@@ -115,7 +115,7 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 
 import { useChatSse } from "./useChatSse";
-import { abortTurn } from "./backgroundTurns";
+import { abortTurn, useTurnStatus, type TurnStatus } from "./backgroundTurns";
 import {
   clearSessionHistoryCache,
   getCachedSessionHistory,
@@ -1964,6 +1964,32 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       expect(latest.messages.map(text)).toEqual(["hello", "Hello world"]);
       expect(latest.waitResponse).toBe(false);
       expect(onBackgroundTurnSettledMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it("a turn that stops on a question leaves its session waiting for the user", async () => {
+      let status: TurnStatus = null;
+      function StatusProbe() {
+        status = useTurnStatus("session-1");
+        return null;
+      }
+      const probeRoot = createRoot(document.createElement("div"));
+      act(() => probeRoot.render(<StatusProbe />));
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      expect(status).toBe("running");
+      await act(async () => {
+        stream.push({
+          kind: "awaiting_human",
+          request: { stage: "agent_question", question: "Which year?", interrupt_id: "i-1", occurrence_id: "o-1" },
+        });
+        stream.close();
+        await sendPromise;
+      });
+      expect(status).toBe("awaiting_input");
+      act(() => abortTurn("session-1"));
+      expect(status).toBe(null);
+      act(() => probeRoot.unmount());
       fetchSpy.mockRestore();
     });
 

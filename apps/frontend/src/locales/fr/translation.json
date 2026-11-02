@@ -2734,6 +2734,8 @@
         "title": "Espace administration"
       },
       "chatList": {
+        "answering": "Réponse en cours",
+        "awaitingInput": "En attente de votre réponse",
         "deleteDialog": {
           "title": "Supprimer cette conversation ?",
           "message": "« {{name}} » sera définitivement supprimée. Cette action est irréversible.",
