@@ -15,7 +15,7 @@
  */
 
 /* Shell: rail and nav panel sit on the app background; the page lives in one rounded
- * surface card, the only part that scrolls. The mode follows the input device: a fine
+ * surface card, the only part that scrolls, unless it draws its own. The mode follows the input device: a fine
  * pointer keeps compact values, a coarse one gets touch margins; under 768px the card
  * goes edge to edge between the section panel and a bottom bar (Sidebar.module.scss). */
 .mainLayout {

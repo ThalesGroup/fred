@@ -163,6 +163,12 @@
   height: 56px;
 }
 
+@media (pointer: coarse) {
+  .resizeHandle {
+    width: var(--spacing-s);
+  }
+}
+
 /* Touch has no hover: the bar stays, or nothing would say the panel resizes. */
 @media (hover: hover) {
   .drawer:not([data-dragging="true"]) .resizeHandle:not(:hover)::before {
@@ -179,7 +185,7 @@
  * drawer's own content (e.g. ~169px on a 375px phone) — go full-width and
  * fixed instead, the same footprint as the overlay layout, so narrow
  * viewports get a usable panel rather than a squeezed sliver. */
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .drawer[data-layout="push"] {
     position: fixed;
     z-index: 10;

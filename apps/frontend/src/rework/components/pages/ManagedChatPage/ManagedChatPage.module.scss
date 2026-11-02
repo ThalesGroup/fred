@@ -41,8 +41,9 @@
 }
 
 /* ── Left stack — the chat card: header above, content below ──────────────── */
-/* Unclipped and above the panels, here and down to the main column: the composer's
-   menus must be able to open over the viewer card. */
+/* Unclipped and above the panels, here and down to the main column, so the
+   composer's menus open over the viewer card. The welcome composer sits in
+   .chatArea's scroller, which still clips its menus. */
 .leftStack {
   display: flex;
   position: relative;
@@ -80,6 +81,8 @@
   display: flex;
   flex: 1 1 0;
   flex-direction: row;
+  border-bottom-right-radius: inherit;
+  border-bottom-left-radius: inherit;
   min-height: 0;
 }
 
@@ -89,6 +92,9 @@
   position: relative;
   flex: 1 1 0;
   flex-direction: column;
+  /* The card does not clip: a theme background on [data-chat-main] needs the corners. */
+  border-bottom-right-radius: inherit;
+  border-bottom-left-radius: inherit;
   min-width: 0;
   height: 100%;
 }
@@ -214,22 +220,27 @@
   font-size: 1rem;
 }
 
+/* Shrinks with the card, the token total first: it must not spill over the viewer. */
 .topBarRight {
   display: flex;
-  flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 /* Conversation-wide billed total. Just the number: the per-message badges
    carry the in/out breakdown, and repeating it here made the header a second
    place to read the same decomposition (#2403). */
 .conversationTokens {
+  min-width: 0;
+  overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   user-select: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Conversation stage — positioning context for the outline rail ───────

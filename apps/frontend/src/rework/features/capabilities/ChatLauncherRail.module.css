@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-/* Outside the cards, on the app background. Launchers stack from the top, first-party ones above the capability-derived
-   ones. */
+/* Outside the cards, on the app background. Launchers stack from the top,
+   first-party ones above the capability-derived ones. */
 .rail {
   display: flex;
   flex-direction: column;
