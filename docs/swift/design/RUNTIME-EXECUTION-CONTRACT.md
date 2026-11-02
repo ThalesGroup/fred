@@ -7161,7 +7161,9 @@ and legacy HTTP peers to use the same catalog entries.
 Ordinary pending messages live in the current browser chat visit. Navigation,
 reload or stream interruption clears that list; there is no queue recovery API
 or delivery acknowledgement tied to history persistence. The existing SQL
-mailbox only coordinates temporary steering across replicas. Cancellation
+mailbox only coordinates temporary steering across replicas. Injected user
+messages are prefixed in model context to identify additional information to
+consider before continuing; the SSE delivery keeps the original text. Cancellation
 completes generator teardown and stops lease renewal; expired steering rows are
 reclaimed every minute in bounded batches. The
 [managed conversations specification](../../../openspec/specs/managed-conversations/spec.md)

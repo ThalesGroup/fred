@@ -84,7 +84,13 @@ async def test_human_pause_resumes_on_another_replica(monkeypatch, tmp_path) -> 
         )
         middleware = turn_steering.TurnSteeringMiddleware("s", "turn-2")
         update = await middleware.abefore_model({"messages": []}, Runtime(context=None))
-        assert update == {"messages": [HumanMessage(content="focus on Marseille")]}
+        assert update is not None
+        message = update["messages"][0]
+        assert isinstance(message, HumanMessage)
+        assert isinstance(message.content, str)
+        assert "additional information" in message.content
+        assert "before continuing" in message.content
+        assert message.content.endswith("\n\nfocus on Marseille")
         assert [(event.message_id, event.content) for event in events] == [
             ("message", "focus on Marseille")
         ]
@@ -296,7 +302,8 @@ async def test_steering_enters_after_completed_tool_pair(monkeypatch, tmp_path) 
             ToolMessage,
             HumanMessage,
         ]
-        assert merged[-1].content == "new direction"
+        assert isinstance(merged[-1].content, str)
+        assert merged[-1].content.endswith("\n\nnew direction")
         assert [(event.message_id, event.content) for event in events] == [
             ("m", "new direction")
         ]

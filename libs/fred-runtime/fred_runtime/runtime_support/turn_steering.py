@@ -322,4 +322,12 @@ class TurnSteeringMiddleware(AgentMiddleware):
         writer = get_stream_writer()
         for message_id, text in messages:
             writer(SteeredUserMessageRuntimeEvent(message_id=message_id, content=text))
-        return {"messages": [HumanMessage(content=text) for _, text in messages]}
+        return {
+            "messages": [
+                HumanMessage(
+                    content="The user has provided additional information. "
+                    f"Take it into account before continuing:\n\n{text}"
+                )
+                for _, text in messages
+            ]
+        }
