@@ -2287,6 +2287,41 @@ async def test_query_cannot_read_outside_its_local_dataset(tmp_path, monkeypatch
     assert response.rows == [{"city": "p_ris", "median_amount": 10.0}]
 
 
+@pytest.mark.asyncio
+async def test_query_cleans_audit_text_in_a_large_restricted_dataset(tmp_path, monkeypatch):
+    app_context = ApplicationContext.get_instance()
+    app_context.get_content_store().clear()
+    content = "id,Libelle Affaire,Numero Affaire\n" + "".join(f'{index}," {"à trouver" if index == 8073 else "Projet Alpha"} "," 40A123456 "\n' for index in range(1, 8074))
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=app_context.get_metadata_store(),
+        document_uid="doc-audit",
+        file_name="audit.csv",
+        content=content,
+    )
+    service = TabularService()
+    original_mount = service._mount_datasets
+
+    def inspect_mount(*, connection, datasets, handle):
+        original_mount(connection=connection, datasets=datasets, handle=handle)
+        assert connection.execute("SELECT current_setting('enable_external_access')").fetchone() == (False,)
+        with pytest.raises(duckdb.PermissionException):
+            connection.execute("SELECT * FROM read_parquet('/etc/passwd')")
+
+    monkeypatch.setattr(service, "_mount_datasets", inspect_mount)
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    query = f'SELECT id, TRIM("Libelle Affaire") AS label, SUBSTRING(TRIM("Numero Affaire") FROM 4) AS suffix FROM {alias} WHERE LOWER(TRIM("Libelle Affaire")) LIKE \'%à trouver%\''
+    response = await service.query_read(_user(), request=TabularQueryRequest(sql=query, dataset_uids=["doc-audit"]))
+    assert response.rows == [{"id": 8073, "label": "à trouver", "suffix": "123456"}]
+
+    bounded = await service.query_read(_user(), request=TabularQueryRequest(sql=f'SELECT id, main.trim("Libelle Affaire") AS label FROM {alias} ORDER BY id', dataset_uids=["doc-audit"], max_rows=2))
+    assert bounded.rows == [{"id": 1, "label": "Projet Alpha"}, {"id": 2, "label": "Projet Alpha"}]
+
+    for expression in ["main.current_setting('allowed_paths')", "pg_catalog.pg_get_viewdef(1)"]:
+        with pytest.raises(ValueError, match="restricted SQL function"):
+            await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT {expression} FROM {alias}", dataset_uids=["doc-audit"]))
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
