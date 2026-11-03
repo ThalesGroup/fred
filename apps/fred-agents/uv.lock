@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 
 [[package]]
@@ -1179,7 +1179,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/capabilities/fred-capability-writable-document" }
 dependencies = [
     { name = "fastapi" },
@@ -1228,7 +1228,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.10"
+version = "4.5.11"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -1374,7 +1374,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.5.10"
+version = "4.5.11"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1451,7 +1451,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.5.10"
+version = "4.5.11"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

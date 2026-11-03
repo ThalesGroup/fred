@@ -1,3 +1,42 @@
+**v3.10.0** - 2026-11-04
+
+- **Summary**
+
+  Keep working while agents answer, send follow-up instructions during a response, and bring email files into your libraries. Personal settings are saved across visits, and new conversations receive clear titles automatically.
+
+- **Features**
+
+  - Queue follow-up messages or send instructions to an agent while it is answering (#3284)
+  - Upload Outlook and email files to libraries or attach them to conversations (#3306)
+  - Keep your language, theme and display preferences across visits (#3282)
+  - Give new conversations a short automatic title, with an administrator-selected model (#3346)
+  - Discover available chat models from compatible gateways and manage their defaults (#3230)
+  - Use packaged skills for guided tasks, with platform-wide enablement controls (#3299)
+
+- **Improvements**
+
+  - Read speaker notes and chart values from PowerPoint attachments (#3318)
+  - Preview diagrams using your current theme (#3252)
+  - Find suggested team agents on the home page before your first conversation (#3340)
+  - Run grouped administration self-tests with broader platform coverage (#3210)
+
+- **Security**
+
+  - Require team membership before listing a team's conversations (#3209)
+  - Isolate document previews from the rest of the application (#3200)
+
+- **Bug Fixes**
+
+  - Answers keep running during in-app navigation, with completion and input requests announced on every page (#2603, #3427, #3428)
+  - Find documents in their current folders and honor disabled search visibility on supported stores (#3199, #3202, #3203)
+  - Read structured table results reliably and show their query details (#3325, #3365)
+  - Show a single card for each document or result in a message (#3353)
+  - Reject invalid Word uploads clearly and use your name as the author of exported documents (#3338, #3421)
+
+- **Deployment note**
+
+  Apply database migrations and follow the coordinated service rollout in the operator guide. Review skill defaults and custom email processor lists; pgvector deployments must reapply previously disabled search visibility. Model discovery is optional.
+
 **v3.9.2** - 2026-10-23
 
 - **Summary**
