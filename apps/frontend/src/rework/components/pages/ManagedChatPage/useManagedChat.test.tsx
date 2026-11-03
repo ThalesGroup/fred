@@ -127,6 +127,7 @@ let capturedOnError: ((msg: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 let capturedOnSteeredMessage: ((messageId: string, sessionId: string) => void) | undefined;
 let capturedOnStreamInterrupted: ((sessionId: string) => void) | undefined;
+let capturedOnSessionTitle: ((title: string, sessionId: string) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
     flushPendingWrites?: (sid: string | null) => Promise<boolean>;
@@ -137,6 +138,7 @@ vi.mock("@hooks/useChatSse", () => ({
     onAwaitingHuman?: (event: unknown) => void;
     onSteeredMessage?: (messageId: string, sessionId: string) => void;
     onStreamInterrupted?: (sessionId: string) => void;
+    onSessionTitle?: (title: string, sessionId: string) => void;
   }) => {
     capturedFlushPendingWrites = params.flushPendingWrites;
     capturedOnTurnStarted = params.onTurnStarted;
@@ -146,6 +148,7 @@ vi.mock("@hooks/useChatSse", () => ({
     capturedOnAwaitingHuman = params.onAwaitingHuman;
     capturedOnSteeredMessage = params.onSteeredMessage;
     capturedOnStreamInterrupted = params.onStreamInterrupted;
+    capturedOnSessionTitle = params.onSessionTitle;
     return {
       messages: chatSseMessages,
       waitResponse: chatSseWaitResponse,
@@ -3249,5 +3252,52 @@ describe("useManagedChat — session write reliability", () => {
     expect(prepareChatControlsMock).toHaveBeenCalledTimes(before);
     act(() => window.dispatchEvent(new Event("focus")));
     expect(refetchSessionMock).toHaveBeenCalled();
+  });
+
+  describe("automatic conversation title", () => {
+    const sendText = async (text: string) => {
+      act(() => latest.setInput(text));
+      await act(async () => {
+        await latest.handleSend();
+      });
+      return sendMock.mock.calls[sendMock.mock.calls.length - 1][2] as Record<string, unknown>;
+    };
+
+    it("asks for a title on the first exchange only", async () => {
+      mount();
+      expect((await sendText("first question")).auto_title).toBe(true);
+
+      act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
+      chatSseMessages = [
+        {
+          session_id: "saved",
+          exchange_id: "e1",
+          rank: 0,
+          timestamp: "2026-10-29T10:00:00Z",
+          role: "user",
+          channel: "final",
+          parts: [{ type: "text", text: "q1" }],
+        },
+      ];
+      rerender();
+      expect(await sendText("second question")).not.toHaveProperty("auto_title");
+    });
+
+    it("stores the generated title unless the user renamed the conversation first", async () => {
+      mount();
+      act(() => capturedSetSearchParams?.(new URLSearchParams("session=saved")));
+      act(() => capturedOnSessionTitle?.("Quarterly sales review", "saved"));
+      expect(latest.sessionTitle).toBe("Quarterly sales review");
+      expect(patchSessionCalls[patchSessionCalls.length - 1]).toMatchObject({
+        sessionId: "saved",
+        updateSessionRequest: { title: "Quarterly sales review" },
+      });
+
+      act(() => latest.commitTitle("My own name"));
+      const writes = patchSessionCalls.length;
+      act(() => capturedOnSessionTitle?.("Late summary", "saved"));
+      expect(latest.sessionTitle).toBe("My own name");
+      expect(patchSessionCalls).toHaveLength(writes);
+    });
   });
 });

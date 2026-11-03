@@ -201,6 +201,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     [replaceStagedHitlAnswers, selectedHitlKey],
   );
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  // Set by a manual rename, so a generated title still in flight never overwrites it.
+  const titleRenamedRef = useRef(false);
   // Ordered chat-context prompts attached to this session (PROMPT-05). Source of
   // truth is the control-plane session; hydrated from sessionData and persisted
   // via PATCH on every change.
@@ -302,6 +304,17 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         sessionId: sid,
         updateSessionRequest: { updated_at: new Date().toISOString() },
       }).catch(() => {});
+    },
+    [refreshSession, teamId],
+  );
+
+  const storeGeneratedTitle = useCallback(
+    (title: string, sid: string) => {
+      if (activeSessionIdRef.current === sid) {
+        if (titleRenamedRef.current) return;
+        setSessionTitle(title);
+      }
+      refreshSession({ teamId, sessionId: sid, updateSessionRequest: { title } }).catch(() => {});
     },
     [refreshSession, teamId],
   );
@@ -477,6 +490,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     flushPendingWrites: flushSessionWrites,
     onBindDraftAgentToSessionId: bindSessionId,
     onTurnPersisted: touchSessionActivity,
+    onSessionTitle: storeGeneratedTitle,
     onSteeredMessage: handleSteeredMessage,
     onStreamInterrupted: handleStreamInterrupted,
     onAwaitingHuman: handleAwaitingHuman,
@@ -575,6 +589,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     queuedStartRef.current = null;
     queueDrainRef.current = false;
     setSessionTitle(null);
+    titleRenamedRef.current = false;
     setContextPromptIds([]);
     // A genuine entry into a (new or different) session — normal
     // rehydration governs from here until the first local mutation.
@@ -872,7 +887,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
           // and not from the prompt body (which would give every run of one
           // command the same name). The prompt's name reads best; any text
           // typed after the command is what makes this conversation its own.
-          // Nothing retitles a session afterwards, so this is the only shot.
+          // The runtime replaces it once with a generated title (auto_title below).
           const titleSource = turnCommand
             ? [turnCommand.prompt_name || `/${turnCommand.command}`, turnCommand.appended_text]
                 .filter(Boolean)
@@ -905,6 +920,9 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         console.debug(`[useManagedChat] sendTurn() — calling send() with sid=${sid}`);
         const { runtimeContext, turnOptions } = buildTurnContext();
         if (queued) delete runtimeContext.attachments_markdown;
+        // Titled once, on the first exchange; renaming afterwards is the user's call.
+        const autoTitle =
+          !titleRenamedRef.current && !latestMessagesRef.current.some((message) => message.role === "user");
         touchSessionActivity(sid);
         // `send()` receives the trimmed wire value, but a backend rejection must
         // restore the complete editable draft, including surrounding whitespace —
@@ -923,6 +941,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
             ...runtimeContext,
             ...(turnCommand ? { command: turnCommand } : {}),
             ...(skills?.length ? { skills } : {}),
+            ...(autoTitle ? { auto_title: true } : {}),
           },
           turnOptions,
           interrupted,
@@ -1353,6 +1372,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     (title: string) => {
       if (!sessionId) return;
       setSessionTitle(title);
+      titleRenamedRef.current = true;
       refreshSession({ teamId, sessionId, updateSessionRequest: { title } }).catch(() => {});
     },
     [teamId, sessionId, refreshSession],

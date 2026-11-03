@@ -129,6 +129,7 @@ export default function CreationAssistantPane() {
         setCreationAssistantSettingsRequest: {
           text: sendsText ? draft : null,
           model_profile_id: modelDraft || null,
+          title_model_profile_id: data?.title_model_profile_id ?? null,
           reasoning_effort: reasoningShown,
         },
       }).unwrap();

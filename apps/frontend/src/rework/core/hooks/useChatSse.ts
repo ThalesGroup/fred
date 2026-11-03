@@ -34,6 +34,7 @@ import type {
   RuntimeErrorEvent,
   ExecutionInterruptedRuntimeEvent,
   RuntimeExecuteRequest,
+  SessionTitleRuntimeEvent,
   SteeredUserMessageRuntimeEvent,
   StatusRuntimeEvent,
   ThoughtDeltaEvent,
@@ -183,7 +184,8 @@ type AnyRuntimeEvent =
   | ({ kind: "tool_result" } & ToolResultRuntimeEvent)
   | ({ kind: "turn_persisted" } & TurnPersistedEvent)
   | ({ kind: "execution_error" } & RuntimeErrorEvent)
-  | ({ kind: "execution_interrupted" } & ExecutionInterruptedRuntimeEvent);
+  | ({ kind: "execution_interrupted" } & ExecutionInterruptedRuntimeEvent)
+  | ({ kind: "session_title" } & SessionTitleRuntimeEvent);
 
 /** The user's answer to an interrupted Graph run, sent with the next turn. */
 export type InterruptedRunChoice = {
@@ -255,6 +257,8 @@ export type RuntimeAwaitingHumanEvent = {
 export type ChatSseCallbacks = {
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
   onTurnPersisted?: (sessionId: string) => void;
+  /** The conversation title the runtime generated on the first turn, streamed once ready. */
+  onSessionTitle?: (title: string, sessionId: string) => void;
   onSteeredMessage?: (messageId: string, sessionId: string) => void;
   onStreamInterrupted?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
@@ -311,6 +315,7 @@ export function useChatSse(
     teamId,
     onBindDraftAgentToSessionId,
     onTurnPersisted,
+    onSessionTitle,
     onSteeredMessage,
     onStreamInterrupted,
     onAwaitingHuman,
@@ -717,6 +722,11 @@ export function useChatSse(
           break;
         }
 
+        case "session_title": {
+          onSessionTitle?.(event.title, sessionId);
+          break;
+        }
+
         case "turn_persisted": {
           onBindDraftAgentToSessionId?.(event.session_id);
           onTurnPersisted?.(event.session_id);
@@ -852,6 +862,7 @@ export function useChatSse(
       onAwaitingHuman,
       onBindDraftAgentToSessionId,
       onTurnPersisted,
+      onSessionTitle,
       onSteeredMessage,
       onTurnRejected,
       onError,
