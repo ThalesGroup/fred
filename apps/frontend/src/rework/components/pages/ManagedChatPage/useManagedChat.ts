@@ -38,7 +38,12 @@ import { offersReasoning } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
-import { markSessionRead, usePendingMessages, type PendingMessage } from "@core/hooks/backgroundTurns";
+import {
+  markSessionRead,
+  setSessionAwaitingInput,
+  usePendingMessages,
+  type PendingMessage,
+} from "@core/hooks/backgroundTurns";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -657,6 +662,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       setHitlFreeText("");
       setSelectedHitlKey(null);
       const pending = reconstructPendingHitls(msgs);
+      const sid = msgs[0]?.session_id;
+      if (sid && activeSessionIdRef.current === sid) setSessionAwaitingInput(sid, pending.length > 0);
       lastHitlExchangeRef.current = pending[0]?.exchange_id ?? null;
       replacePendingHitls(pending);
     },

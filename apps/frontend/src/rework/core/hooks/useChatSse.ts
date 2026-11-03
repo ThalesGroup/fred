@@ -589,6 +589,7 @@ export function useChatSse(
         }
 
         case "final": {
+          turn.completed = true;
           // `final` is the only reliable end-of-turn signal on this stream (see
           // agent_app.py's `execute_stream` docstring) — the contract's
           // `turn_persisted` event is defined but never actually emitted, so the
@@ -871,6 +872,8 @@ export function useChatSse(
         }
 
         case "execution_error": {
+          turn.completed = false;
+          turn.awaitingInput = false;
           updatePendingMessages(sessionId, (current) =>
             current.map((message) => (message.status === "offered" ? { ...message, status: "uncertain" } : message)),
           );

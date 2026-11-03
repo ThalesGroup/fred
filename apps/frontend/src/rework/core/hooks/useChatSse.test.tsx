@@ -116,6 +116,9 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 
 import { useChatSse } from "./useChatSse";
 import {
+  useSessionUnread,
+  markSessionRead,
+  subscribeBackgroundSettled,
   updatePendingMessages,
   usePendingMessages,
   abortTurn,
@@ -176,6 +179,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   };
 
   beforeEach(() => {
+    markSessionRead("session-1");
+    clearSessionHistoryCache();
     updatePendingMessages("session-1", []);
     updatePendingMessages("session-2", []);
     flushPendingWrites = undefined;
@@ -1990,6 +1995,35 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     };
 
     const text = (message: { parts: unknown[] }) => (message.parts[0] as { text?: string }).text;
+
+    it.each(["final", "execution_error", "EOF", "cancel", "cut_after_final", "error_after_final"])(
+      "marks only a completed background answer ready (%s)",
+      async (outcome) => {
+        let unread = false;
+        function UnreadProbe() {
+          unread = useSessionUnread("session-1");
+          return null;
+        }
+        const probeRoot = createRoot(document.createElement("div"));
+        act(() => probeRoot.render(<UnreadProbe />));
+        const settled = vi.fn();
+        const unsubscribe = subscribeBackgroundSettled(settled);
+        mount();
+        const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+        act(() => latest.reset());
+        await act(async () => {
+          if (outcome === "cancel") abortTurn("session-1");
+          else stream.push({ kind: outcome === "EOF" ? "status" : outcome, content: "finished", message: "failed" });
+          stream.close();
+          await sendPromise;
+        });
+        expect(unread).toBe(outcome === "final");
+        expect(settled).toHaveBeenCalledTimes(outcome === "final" ? 1 : 0);
+        act(() => probeRoot.unmount());
+        unsubscribe();
+        fetchSpy.mockRestore();
+      },
+    );
 
     it("keeps streaming after its view unmounts and hands the full thread back", async () => {
       mount();

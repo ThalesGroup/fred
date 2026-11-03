@@ -1066,7 +1066,6 @@ export default function ManagedChatPage() {
                                     color="secondary"
                                     variant="tonal"
                                     size="2xs"
-                                    icon={{ category: "outlined", type: "subdirectory_arrow_right" }}
                                     disabled
                                     aria-label={`${t("chatbot.pendingMessages.offered")}: ${message.text}`}
                                   >

@@ -302,7 +302,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 
 import { useManagedChat } from "./useManagedChat";
-import { updatePendingMessages, abortTurn } from "@core/hooks/backgroundTurns";
+import { useTurnStatus, type TurnStatus, updatePendingMessages, abortTurn } from "@core/hooks/backgroundTurns";
 import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHistoryCache";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
@@ -350,6 +350,7 @@ describe("useManagedChat — session write reliability", () => {
   };
 
   beforeEach(() => {
+    abortTurn("session-1");
     historyToLoad = undefined;
     sessionHistoryValue.isSettled = true;
     updatePendingMessages("session-1", []);
@@ -1787,6 +1788,59 @@ describe("useManagedChat — session write reliability", () => {
     bindSession("session-1");
     expect(latest.pendingMessages).toEqual([]);
     expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("restores the waiting status from loaded HITL history after reload, then clears it from answered history", () => {
+    let status: TurnStatus = null;
+    function Status() {
+      status = useTurnStatus("session-1");
+      return null;
+    }
+    const probeRoot = createRoot(document.createElement("div"));
+    act(() => probeRoot.render(<Status />));
+    expect(status).toBeNull();
+    const question: ChatMessage = {
+      session_id: "session-1",
+      exchange_id: "persisted-question",
+      rank: 0,
+      timestamp: "2026-11-03T10:00:00Z",
+      role: "assistant",
+      channel: "hitl_request",
+      parts: [
+        {
+          type: "hitl_request",
+          stage: "agent_question",
+          question: "Which year?",
+          choices: [],
+          interrupt_id: "question-1",
+          occurrence_id: "occ-1",
+        },
+      ],
+    };
+    historyToLoad = { sessionId: "session-1", messages: [question] };
+    mount();
+    bindSession("session-1");
+    expect(status).toBe("awaiting_input");
+    expect(latest.pendingHitl?.payload.question).toBe("Which year?");
+    bindSession("session-2");
+    expect(status).toBe("awaiting_input");
+    historyToLoad.messages = [
+      question,
+      {
+        session_id: "session-1",
+        exchange_id: "persisted-question",
+        rank: 1,
+        timestamp: "2026-11-03T10:01:00Z",
+        role: "user",
+        channel: "hitl_response",
+        parts: [{ type: "hitl_response", occurrence_id: "occ-1", text: "2026" }],
+      },
+    ];
+    bindSession("session-1");
+    expect(status).toBeNull();
+    expect(latest.pendingHitl).toBeNull();
+    expect(sendMock).not.toHaveBeenCalled();
+    act(() => probeRoot.unmount());
   });
 
   it.each([false, true])(

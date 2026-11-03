@@ -1,8 +1,8 @@
 ---
 schema: 1
-title: "Preserve pending chat messages across in-app navigation"
+title: "Preserve chat queues and clarify background conversation status"
 impact: none
-no_action_reason: "Only browser-tab queue ownership changes; deployment, runtime and database contracts are unchanged."
+no_action_reason: "Only browser-tab queue ownership and sidebar presentation change; deployment, runtime and database contracts are unchanged."
 configuration: none
 configuration_reason: "The existing background-turn registry holds the per-session queue without new settings or persistence."
 ---
@@ -25,6 +25,8 @@ Deploy the frontend normally. No Alembic migration, runtime upgrade procedure or
 ## Validation
 
 Queue text, navigate elsewhere while generation continues, then return before or after it finishes. The queue is retained and ordinary sends resume only in the open conversation after generation, history and human-input holds resolve. Delivered steering is removed even while detached. Stop, deletion and genuine stream interruption discard only the matching queue.
+
+A conversation waiting for user input displays a localized chip, restored from the existing history load when reopened after a reload. A normally completed background answer displays a plain blue unread dot; errors and interrupted streams do not signal an answer ready.
 
 ## Rollback
 

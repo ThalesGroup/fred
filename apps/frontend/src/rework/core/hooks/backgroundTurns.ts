@@ -51,6 +51,7 @@ export type LiveTurn = {
   messages: ChatMessage[];
   /** The turn ended on a question for the user (human input or interrupted run). */
   awaitingInput?: boolean;
+  completed?: boolean;
   interrupted?: boolean;
   /** Session-keyed side effects that stay meaningful with no view attached. */
   detachedCallbacks: Pick<ChatSseCallbacks, "onTurnPersisted" | "onSessionTitle" | "onBackgroundTurnSettled">;
@@ -97,6 +98,13 @@ export function usePendingMessages(sessionId: string | null) {
     [sessionId],
   );
   return [messages, setMessages] as const;
+}
+
+export function setSessionAwaitingInput(sessionId: string, waiting: boolean): void {
+  if (running.has(sessionId) || awaitingInput.has(sessionId) === waiting) return;
+  if (waiting) awaitingInput.add(sessionId);
+  else awaitingInput.delete(sessionId);
+  notifyRunning();
 }
 
 export function registerTurn(turn: LiveTurn): void {
@@ -188,6 +196,7 @@ export function settleTurn(turn: LiveTurn): void {
   // Only deletion aborts a detached turn: its thread must not be cached again.
   if (!turn.controller.signal.aborted) {
     turn.detachedCallbacks.onBackgroundTurnSettled?.(turn.sessionId, turn.messages);
+    if (!turn.awaitingInput && (!turn.completed || turn.interrupted)) return;
     unread.add(turn.sessionId);
     notifyRunning();
     for (const listener of settledListeners) listener(turn.sessionId, Boolean(turn.awaitingInput));
