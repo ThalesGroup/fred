@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import assert from "node:assert/strict";
+import { assertRepositoryNodeBaseline } from "./release-toolchain.mjs";
 import { createHash } from "node:crypto";
 import {
   copyFile,
@@ -550,6 +551,7 @@ async function createArchiveTransfer({
   },
 }) {
   validateReleaseContract(contract);
+  await assertRepositoryNodeBaseline(contract);
   const selectedIds = selectReleaseMembers(contract, selection);
   const profile = transferProfile(contract);
   assertReleaseToolchain(contract, producerToolchain);

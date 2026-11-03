@@ -61,6 +61,27 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Platform skills presentation and administration
+
+**Locations:** `src/rework/utils/skillPresentation.ts` and
+`src/rework/components/pages/admin/FeaturesPage/PlatformSkillsPanel.tsx`.
+**Status:** Functional; visual review pending.
+
+Packaged skills use French or English titles and descriptions in the command
+menu, composer, conversation history, previews and successful-load activity.
+Canonical commands and copied text stay stable; custom skills and old history
+without packaged provenance retain authored presentation. Administration >
+Features > Skills lists the global inventory, invocation modes and source
+diagnostics. Switches wait for the saved policy and refreshed inventory;
+unverified sources prevent new disables while absent disabled skills remain
+available for reactivation. Changes affect new loads from the next turn.
+
+Native Chromium checks cover cross-message copy in both selection directions
+with real block separators. The actual panel, Switch and CSS also preserve
+focus/scroll through save and refresh, prevent duplicate requests and retain
+the active input's accessible pending state (API boundary simulated). This is
+functional browser verification; product/design visual review remains pending.
+
 ### Admin self-test authorization controls
 
 **Location:** `src/rework/components/pages/admin/SelfTestPage/AuthorizationExtras.tsx`
@@ -865,6 +886,26 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   another conversation. Saved-session availability and deletion guards remain defined
   in `openspec/specs/managed-conversations/spec.md`.
 
+- **A streamed answer survives in-app navigation (2026-11-02)** - leaving a
+  conversation (another session, another agent, another page) detaches its running
+  turn instead of aborting it, because the runtime cancels a turn whose stream
+  closes. Returning while it runs re-attaches it live, Stop included; once it ends
+  its full thread lands in the session-history cache. Reload or tab close still
+  loses the turn.
+  Deleting a conversation (single or bulk) cancels its turn and drops its cached
+  thread first, so a finishing turn cannot write history back after the erasure.
+  While any turn of a conversation streams, its `ChatListItem` shows small
+  `--primary` `ThinkingDots` (`size="small"`) in a trailing status slot, with a
+  visually hidden "Answer in progress" status. A turn that stopped on a question
+  (human input or interrupted run) shows a solid `--primary` dot with a soft halo in
+  that slot instead, "Waiting for your answer". A turn that ends while no view shows
+  its conversation raises an info toast with the conversation title ("Answer ready"
+  or "Waiting for your answer", from `ChatList`) with an "Open" action to that
+  conversation, and bolds the title until the
+  conversation is opened or deleted. The waiting dot stays until the next
+  turn of that conversation starts. Both are known only in the tab that ran the turn.
+  Mechanism: `core/hooks/backgroundTurns.ts`.
+
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed
   heights — the theme open issue above) heavy for what's often a 3-line payload, and each
@@ -954,8 +995,9 @@ _(none — streaming indicator resolved 2026-05-18)_
 
 - **Pending block streaming preview (2026-05-28)** — when a reply opens a supported block fence
   during streaming, the assistant bubble now shows an immediate preview shell instead of a blank
-  bubble or transient renderer error: a streaming `CodeBlock` for backtick fences (including
-  ` ```mermaid `), `$$`, and `:::` directives. The final specialized renderer takes over once the
+  bubble or transient renderer error: a streaming `CodeBlock` for ordinary backtick fences,
+  `$$`, and `:::` directives. An open `mermaid` fence shows a localized diagram-generation status
+  without its source or technical language header. The final specialized renderer takes over once the
   closing delimiter arrives (`MermaidBlock` for finished Mermaid, final native renderers for the
   other block types).
 
@@ -986,10 +1028,11 @@ _(none — streaming indicator resolved 2026-05-18)_
 
 #### Resolved
 
-- **Streaming previews for open fences (2026-05-28)** — `CodeBlock` now has a streaming mode used
-  while any supported fence is still open, including Mermaid. The user sees the language header,
-  copy action, and raw source text immediately during streaming, then the block switches to syntax
-  highlighting / Mermaid / KaTeX / directive rendering once complete.
+- **Streaming previews for open fences (2026-05-28)** - `CodeBlock` has a streaming mode used
+  while ordinary code, math and directive fences are still open. The user sees the language header,
+  copy action and source text, then the block switches to its final renderer once complete.
+  Mermaid fences instead show a localized diagram-generation status until their closing delimiter,
+  then render the diagram without an intermediate source-code view.
 
 ---
 
@@ -3037,6 +3080,9 @@ high-information-density, zero decoration, color used only as a semantic signal 
 | `error`   | `--error`     | Manual only — errors persist until explicitly closed |
 
 Error toasts additionally expose a copy-to-clipboard icon button (`content_copy`) for developer convenience.
+
+A toast may offer one `action` (`{ label, onClick }`): a `--primary` text button under the detail that
+runs it and closes the toast, e.g. "Open" on a conversation whose answer ended out of sight.
 
 Team model routing shows a success toast after the save succeeds, or an error
 toast when it fails, keeping the server's error detail inline in the form.
@@ -5476,8 +5522,10 @@ prompt title, its source worded like the menu's section heading (`Personal space
 selected for submission, including homonyms. Incomplete, removed or invalidated
 prompt selections receive no prompt visual.
 `/` lists the available skills directly alongside prompt
-commands without a standalone `/skill` dispatcher; `/comp` filters `compare-options`
-and `/meet` filters `meeting-minutes`. Choosing a skill completes the existing
+commands without a standalone `/skill` dispatcher; `/gra` filters `graph`
+and `/meet` filters the explicitly selected `meeting-minutes` workflow.
+`analyze-data`, `compare-options` and `summarize-document` are model-only and
+remain absent from user commands. Choosing a skill completes the existing
 canonical invocation and preserves the request, without sending a turn.
 Direct skill-name prefixes also work at the caret within existing text; only
 names from the current runtime catalog enable these inline suggestions.
@@ -5490,8 +5538,10 @@ It is anchored above the composer field rather than floating free. Keyboard
 focus and hover share that one highlight, so a pointer never leaves two rows
 looking active.
 
-Prompt and skill rows share the same two-line layout: command or skill name
-(always with its leading slash, `/summary` or `/review`, never `/skill review`) above, description in italics directly below, with no gap
+Prompt and skill rows share the same two-line layout. Prompt commands retain
+their leading slash. Skills show their localized title and, when different,
+the canonical English name in parentheses without a slash. The description
+appears in italics directly below, with no gap
 between the two. The description stays on one line and is cut with an ellipsis.
 Prompts and skills share one tile, `--secondary-container` with an
 `--on-secondary-container` glyph; only the icon tells them apart (the prompt
@@ -5499,12 +5549,13 @@ icon, the platform pictogram). The arrow keys stop at the first and last row,
 they do not wrap. Focusing the first row of a section brings its
 heading into view with it, and the very first row scrolls the list to its top. A skill's argument hint is not shown in the menu: it only
 appears in the composer once the skill is selected. The list scrolls within
-its existing limit. A row's native tooltip gives its full description (the
-name when there is none): the section heading already says where it comes from.
-Platform skills use a dedicated hexagon/book pictogram. Composer and
-sent-message badges reuse that pictogram with a localized platform-origin hint; their native
-tooltip includes the current runtime catalog description when available. Missing
-catalog entries retain the name, origin and preview action without a new fetch.
+its existing limit. A prompt row's native tooltip gives its full description
+(the name when there is none). Skills use a dedicated hexagon/book pictogram.
+Menu rows, composer tokens and sent-message badges share a native tooltip
+formatted as localized title, colon and description, or just the title when
+no description is available. It contains no origin label or slash command.
+Missing catalog entries retain the canonical name and preview action without
+a new fetch.
 
 The focused entry's prompt detail is prefetched as the focus moves, which
 warms the connection and the preview. It is not what gets sent: submit reads
@@ -5534,7 +5585,7 @@ typed token still submits as ordinary text and `Tab` still moves focus.
 
 ### Inline skill invocation
 
-A completed `/<name>` stays at its invocation position within the editable text. The full name with its leading slash (`/name`, for prompts and platform skills alike, in the menu, the composer and sent messages) and its icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A `/name` is a token only while whitespace or a text boundary delimits it on both sides: a character typed right before or right after it turns it back into plain text for good, which then reads like any name typed by hand (removing the character does not bring back the prompt or skill that had been picked). Tokens follow the edit the editor made, not a comparison of the text before and after, so removing one of two tokens that read the same leaves the other with its own prompt. A message can hold several prompt tokens, up to 16, the same command more than once included; each is its own block with its own source hint, and removing or editing one leaves the other prompt and skill tokens recognised. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
+A completed `/<name>` stays at its invocation position within the editable text. Prompt commands display `/name`; skills display their localized title or canonical name without a slash. The displayed label and icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A `/name` is a token only while whitespace or a text boundary delimits it on both sides: a character typed right before or right after it turns it back into plain text for good, which then reads like any name typed by hand (removing the character does not bring back the prompt or skill that had been picked). Tokens follow the edit the editor made, not a comparison of the text before and after, so removing one of two tokens that read the same leaves the other with its own prompt. A message can hold several prompt tokens, up to 16, the same command more than once included; each is its own block with its own source hint, and removing or editing one leaves the other prompt and skill tokens recognised. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
 
 Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family, and the menu keeps offering them, from the team and from the personal space, when the message already holds one or more prompt commands. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
 
@@ -5544,9 +5595,9 @@ message. The inline icon/name is a keyboard-accessible button that opens the
 existing exclusive right-hand chat panel; activating the same skill again closes
 it, while activating another skill replaces the preview. The header reads
 `Skill: <name>` with the large title token and normal text color, without an icon.
-When supplied, `Arguments:` and the argument hint appear first, followed by
-`Description:` and its text, a divider and sanitized Markdown instructions without a redundant
-content heading. YAML metadata is presented separately. Technical runtime-version
+`Description:` and its localized text appear first, followed by the optional
+`Arguments:` hint, a divider and sanitized authored Markdown instructions without
+a redundant content heading. YAML metadata is presented separately. Technical runtime-version
 labels are omitted. Loading, unavailable and retry states never display another
 skill’s cached content. Opening and closing preserve
 the draft and invoke no agent tool.
@@ -5571,20 +5622,30 @@ personal skill counts; team aggregates retain elevated-role gating.
 
 Deep skill selections retain their inline badge and preview after reopening through
 name-only user-message `metadata.extras.skill_invocations` (legacy singular metadata remains readable). This metadata records
-the user's selection, not a skill load. DeepAgents loads instructions through
-native model-driven filesystem reads. An actual instruction read matching the
-any current selected name displays user origin, including child reads; other skill
+the user's selection, not a skill load. DeepAgents loads explicit selections
+through native pins before inference; model-selected skills use native filesystem
+reads. A successful pin or an actual instruction read matching a current selected
+name displays user origin, including child reads; other skill
 reads display model origin. Legacy ReAct attribution remains supported for
 existing history.
 
 The interaction contract is in the platform-agent-skills OpenSpec change.
 
-In the expanded reasoning trace, successful skill loads share the tools’ compact
+Initial user-requested parent skill loads appear before the reasoning toggle,
+including while the turn is streaming and when its reasoning is collapsed.
+Later loads, autonomous loads and child loads remain in chronological order
+inside the reasoning trace. Successful skill loads share the tools' compact
 step-number marker and chronological numbering. A load followed by two tools is
 numbered 1, 2, 3; reasoning and ordinary notes remain unnumbered. Attribution and
 the header’s tool-execution count retain their existing meaning. Each skill-load
 row is a native button that opens the same skill preview, including agent and
 child loads, and toggles it closed on a second activation.
+
+A native instruction read with incomplete or unproven full-file coverage is
+labeled "Skill partiellement chargé" / "Skill partially loaded", including its
+accessible name and trace label. The disclosure survives history reload and
+describes that read; it does not track cumulative coverage across later pages.
+Complete loads and older history retain the existing skill-loaded label.
 
 ### Running a command, and the turn it leaves
 

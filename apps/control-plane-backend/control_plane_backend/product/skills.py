@@ -49,7 +49,11 @@ async def _get_instance_skill_response(
     try:
         response = await deps.get_runtime_http_client().get(
             f"{source.base_url.rstrip('/')}/agents/skills{suffix}",
-            params={"agent_instance_id": agent_instance_id, "team_id": str(team_id)},
+            params={
+                "agent_instance_id": agent_instance_id,
+                "team_id": str(team_id),
+                "metadata_version": "1",
+            },
             headers={"Authorization": authorization} if authorization else None,
             timeout=10.0,
         )

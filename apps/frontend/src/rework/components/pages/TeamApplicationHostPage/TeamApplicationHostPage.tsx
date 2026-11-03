@@ -22,6 +22,7 @@ import {
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import { ApplicationErrorBoundary } from "@rework/features/applications/ApplicationErrorBoundary.tsx";
 import {
@@ -54,12 +55,13 @@ export const MAX_IN_FLIGHT_APPLICATION_REQUESTS = 16;
 
 function ApplicationHostState({ state }: { state: HostState }) {
   const { t } = useTranslation();
+  const { siteDisplayName } = useFrontendProperties();
   const loading = state === "catalog-loading" || state === "connecting";
   return (
     <div className={styles.state} role={loading ? "status" : "alert"}>
       <PageEmptyState
         icon={loading ? "sync" : "widgets"}
-        message={t(`teamAppsPage.host.${state}`, { defaultValue: t("teamAppsPage.host.unavailable") })}
+        message={t(`teamAppsPage.host.${state}`, { siteDisplayName, defaultValue: t("teamAppsPage.host.unavailable") })}
       />
     </div>
   );

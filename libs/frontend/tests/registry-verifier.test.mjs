@@ -132,7 +132,7 @@ const gates = {
 const applicationToolchain = {
   source: "fixture",
   isolation: "application-owned",
-  node: "24.21.0",
+  node: "24.22.2",
   npm: "11.19.0",
 };
 

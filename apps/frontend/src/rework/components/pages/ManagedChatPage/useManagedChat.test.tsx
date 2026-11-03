@@ -113,6 +113,8 @@ const chatSseResetMock = vi.fn();
 const sendHitlResumeMock = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
 const abortMock = vi.fn();
 const replaceAllMessagesMock = vi.fn();
+const adoptBackgroundTurnMock = vi.fn((_sessionId: string) => false);
+let capturedOnBackgroundTurnSettled: ((sessionId: string, messages: unknown[]) => void) | undefined;
 // Mutable so the #2239 departure-snapshot test below can put a displayed
 // thread on screen; reset to [] in beforeEach.
 let chatSseMessages: unknown[] = [];
@@ -139,7 +141,9 @@ vi.mock("@hooks/useChatSse", () => ({
     onSteeredMessage?: (messageId: string, sessionId: string) => void;
     onStreamInterrupted?: (sessionId: string) => void;
     onSessionTitle?: (title: string, sessionId: string) => void;
+    onBackgroundTurnSettled?: (sessionId: string, messages: unknown[]) => void;
   }) => {
+    capturedOnBackgroundTurnSettled = params.onBackgroundTurnSettled;
     capturedFlushPendingWrites = params.flushPendingWrites;
     capturedOnTurnStarted = params.onTurnStarted;
     capturedOnTurnRejected = params.onTurnRejected;
@@ -160,6 +164,7 @@ vi.mock("@hooks/useChatSse", () => ({
       sendHitlResume: sendHitlResumeMock,
       abort: abortMock,
       reset: chatSseResetMock,
+      adoptBackgroundTurn: adoptBackgroundTurnMock,
       replaceAllMessages: replaceAllMessagesMock,
     };
   },
@@ -1596,6 +1601,20 @@ describe("useManagedChat — session write reliability", () => {
 
     // The exact displayed array was snapshotted under A's session id.
     expect(getCachedSessionHistory(sidA!)).toBe(displayed);
+  });
+
+  it("re-attaches the session's background turn when entering it", () => {
+    mount();
+    adoptBackgroundTurnMock.mockClear();
+    bindSession("session-1");
+    expect(adoptBackgroundTurnMock).toHaveBeenCalledWith("session-1");
+  });
+
+  it("caches the full thread of a background turn that ended", () => {
+    mount();
+    const finished = [{ id: "done" }];
+    capturedOnBackgroundTurnSettled?.("session-9", finished);
+    expect(getCachedSessionHistory("session-9")).toBe(finished);
   });
 
   // handleHitlAnswer clears pendingHitl BEFORE awaiting the resume, so the

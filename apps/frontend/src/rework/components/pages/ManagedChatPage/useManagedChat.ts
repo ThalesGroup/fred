@@ -38,6 +38,7 @@ import { offersReasoning } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
+import { markSessionRead } from "@core/hooks/backgroundTurns";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -483,6 +484,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     sendHitlResume,
     abort,
     reset,
+    adoptBackgroundTurn,
     replaceAllMessages,
   } = useChatSse({
     agentInstanceId,
@@ -490,6 +492,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     flushPendingWrites: flushSessionWrites,
     onBindDraftAgentToSessionId: bindSessionId,
     onTurnPersisted: touchSessionActivity,
+    onBackgroundTurnSettled: setCachedSessionHistory,
     onSessionTitle: storeGeneratedTitle,
     onSteeredMessage: handleSteeredMessage,
     onStreamInterrupted: handleStreamInterrupted,
@@ -567,11 +570,12 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     }
     console.debug(`[useManagedChat] sessionId changed → reset() — sessionId=${sessionId ?? "null"}`);
     reset();
-    // reset() aborts any in-flight turn synchronously, but the waitResponse
-    // STATE only flips false on the next render — too late for the history
-    // effect running later in this same commit, whose isTurnActive() must
-    // already see "no live turn" or a cached thread would refuse to render.
-    waitResponseRef.current = false;
+    // reset() detaches any in-flight turn synchronously, but the waitResponse
+    // STATE only flips on the next render — too late for the history effect
+    // running later in this same commit, whose isTurnActive() must already see
+    // whether this session has a live turn, or it would render over it.
+    waitResponseRef.current = sessionId ? adoptBackgroundTurn(sessionId) : false;
+    if (sessionId) markSessionRead(sessionId);
     replacePendingHitls([]);
     hitlResumeOwnerRef.current = null;
     hitlResumePreparingRef.current = null;
@@ -595,7 +599,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     // rehydration governs from here until the first local mutation.
     hasLocalMutationForActiveSessionRef.current = false;
     composer.reset(sessionId, chatControlsRef.current);
-  }, [sessionId, reset, composer.reset, replacePendingHitls, replaceStagedHitlAnswers]);
+  }, [sessionId, reset, adoptBackgroundTurn, composer.reset, replacePendingHitls, replaceStagedHitlAnswers]);
 
   useEffect(() => {
     if (executionDisabled) return;

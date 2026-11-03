@@ -167,7 +167,7 @@ function response(status, body, options = {}) {
 function releaseContract(packages = {}) {
   return {
     packages,
-    releaseToolchain: { node: "24.21.0", npm: "11.19.0" },
+    releaseToolchain: { node: "24.22.2", npm: "11.19.0" },
   };
 }
 
@@ -329,7 +329,7 @@ test("preparation derives identity, runs selected checks, and writes exact metad
     environment: {},
     hashArchive: async () => integrityA,
     loadContract: async () => releaseContract(),
-    nodeVersion: "24.21.0",
+    nodeVersion: "24.22.2",
     pack: async ({ validate }) => {
       calls.push(["pack", validate]);
       return { archivePath };
@@ -387,7 +387,7 @@ test("preparation dispatches independently for all three packages", async () => 
         releaseContract({
           designTokens: { name: "@fred-oss/design-tokens" },
         }),
-      nodeVersion: "24.21.0",
+      nodeVersion: "24.22.2",
       fetchImpl: async (endpoint) =>
         endpoint.pathname.endsWith(".tgz")
           ? response(200, undefined, {
@@ -442,7 +442,7 @@ test("preparation rejects dirty source before packing", async () => {
       releaseDirectory: path.join(root, "portable"),
       root,
       loadContract: async () => releaseContract(),
-      nodeVersion: "24.21.0",
+      nodeVersion: "24.22.2",
       pack: async () => {
         packed = true;
         return {};
@@ -464,7 +464,7 @@ test("preparation rejects dirty source before packing", async () => {
 test("preparation enforces the actual release toolchain before registry, pack, or checks", async () => {
   for (const mismatch of [
     { nodeVersion: "24.21.1", npmVersion: "11.19.0\n" },
-    { nodeVersion: "24.21.0", npmVersion: "11.19.1\n" },
+    { nodeVersion: "24.22.2", npmVersion: "11.19.1\n" },
   ]) {
     const root = await fixtureRoot();
     let laterWork = 0;
@@ -505,7 +505,7 @@ test("preparation enforces the actual release toolchain before registry, pack, o
       packageName: "ui",
       root,
       loadContract: async () => releaseContract(),
-      nodeVersion: "24.21.0",
+      nodeVersion: "24.22.2",
       fetchImpl: async () => {
         laterWork += 1;
         return response(404);
@@ -536,7 +536,7 @@ test("preparation checks the toolchain before reading package or full-contract d
       packageName: "ui",
       root,
       nodeVersion: "24.21.1",
-      loadToolchain: async () => ({ node: "24.21.0", npm: "11.19.0" }),
+      loadToolchain: async () => ({ node: "24.22.2", npm: "11.19.0" }),
       loadContract: async () => {
         contractReads += 1;
         throw new Error("full contract must not be read");
@@ -563,7 +563,7 @@ test("preparation rejects source changes made while checks run", async () => {
       root,
       hashArchive: async () => integrityA,
       loadContract: async () => releaseContract(),
-      nodeVersion: "24.21.0",
+      nodeVersion: "24.22.2",
       pack: async () => ({ archivePath }),
       runChecks: async () => {},
       runCommand: async (command, arguments_) => {

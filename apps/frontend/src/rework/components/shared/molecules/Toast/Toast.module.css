@@ -121,6 +121,26 @@
   color: var(--primary);
 }
 
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--spacing-xs) var(--spacing-xs);
+}
+
+.textAction {
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--primary);
+  font: var(--font-label-large);
+}
+
+.textAction:hover {
+  background: var(--state-on-surface-hover);
+}
+
 /* ── Animations: fade + 4 px lift only ───────────────────────────────────── */
 
 .toastEntering {

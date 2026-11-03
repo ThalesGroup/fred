@@ -21,6 +21,7 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { IconType } from "@shared/utils/Type.ts";
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
+import { abortTurn } from "@core/hooks/backgroundTurns";
 import {
   useBulkDeleteMySessionsMutation,
   useMyInactiveSessionsQuery,
@@ -153,6 +154,7 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
     const sessions = ids
       .map((id) => ({ session_id: id, team_id: teamIdBySession.get(id) }))
       .filter((ref): ref is { session_id: string; team_id: string } => Boolean(ref.team_id));
+    sessions.forEach(({ session_id }) => abortTurn(session_id));
     try {
       const res = await bulkDeleteSessions({ bulkDeleteSessionsRequest: { sessions } }).unwrap();
       showSuccess({ summary: t("rework.home.responsible.cleanupTool.toast", { count: res.deleted.length }) });

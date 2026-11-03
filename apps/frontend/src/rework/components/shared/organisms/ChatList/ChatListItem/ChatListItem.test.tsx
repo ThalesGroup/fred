@@ -21,6 +21,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatListItem } from "./ChatListItem";
+import {
+  abortTurn,
+  markSessionRead,
+  registerTurn,
+  settleTurn,
+  subscribeBackgroundSettled,
+  type LiveTurn,
+} from "@core/hooks/backgroundTurns";
 
 const labels = createInstance();
 const branding = vi.hoisted(() => ({ agentsNicknameSingular: "Agent" }));
@@ -44,6 +52,7 @@ describe("ChatListItem deleted agent presentation", () => {
     root = createRoot(container);
   });
   afterEach(() => {
+    act(() => abortTurn("saved"));
     act(() => root.unmount());
     container.remove();
   });
@@ -65,6 +74,74 @@ describe("ChatListItem deleted agent presentation", () => {
       ),
     );
   }
+  it("shows animated dots and announces the answer while its turn streams, until it ends", () => {
+    show(false);
+    expect(container.textContent).not.toContain("Answer in progress");
+    const turn: LiveTurn = {
+      sessionId: "saved",
+      controller: new AbortController(),
+      steeringTurnId: "steering",
+      thoughts: new Map(),
+      host: null,
+      messages: [],
+      detachedCallbacks: {},
+    };
+    act(() => registerTurn(turn));
+    expect(container.querySelector("a")!.textContent).toContain("Answer in progress");
+    act(() => settleTurn(turn));
+    expect(container.textContent).not.toContain("Answer in progress");
+  });
+  it("shows the waiting dot after a turn stops on a question, until the next turn or deletion", () => {
+    show(false);
+    const turnOn = (awaitingInput: boolean): LiveTurn => ({
+      sessionId: "saved",
+      controller: new AbortController(),
+      steeringTurnId: "steering",
+      thoughts: new Map(),
+      host: null,
+      messages: [],
+      detachedCallbacks: {},
+      awaitingInput,
+    });
+    const question = turnOn(true);
+    act(() => registerTurn(question));
+    act(() => settleTurn(question));
+    expect(container.textContent).toContain("Waiting for your answer");
+    expect(container.textContent).not.toContain("Answer in progress");
+
+    const answer = turnOn(false);
+    act(() => registerTurn(answer));
+    expect(container.textContent).toContain("Answer in progress");
+    expect(container.textContent).not.toContain("Waiting for your answer");
+    act(() => settleTurn(answer));
+
+    const again = turnOn(true);
+    act(() => registerTurn(again));
+    act(() => settleTurn(again));
+    act(() => abortTurn("saved"));
+    expect(container.textContent).not.toContain("Waiting for your answer");
+  });
+  it("marks a conversation unread when its turn ends out of sight, until it is opened", () => {
+    show(false);
+    const settled = vi.fn();
+    const unsubscribe = subscribeBackgroundSettled(settled);
+    const turn: LiveTurn = {
+      sessionId: "saved",
+      controller: new AbortController(),
+      steeringTurnId: "steering",
+      thoughts: new Map(),
+      host: null,
+      messages: [],
+      detachedCallbacks: {},
+    };
+    act(() => registerTurn(turn));
+    act(() => settleTurn(turn));
+    unsubscribe();
+    expect(settled).toHaveBeenCalledWith("saved", false);
+    expect(container.querySelector('[data-unread="true"]')!.textContent).toContain("Unread");
+    act(() => markSessionRead("saved"));
+    expect(container.querySelector('[data-unread="true"]')).toBeNull();
+  });
   it("labels the preserved agent name and announces the status without changing navigation", () => {
     show(true);
     const link = container.querySelector("a")!;

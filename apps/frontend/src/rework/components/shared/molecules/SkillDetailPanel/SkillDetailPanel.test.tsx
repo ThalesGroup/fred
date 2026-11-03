@@ -58,8 +58,8 @@ describe("skill preview content and request states", () => {
     render();
     expect(container.querySelector("h2")?.textContent).toBe("Skill: minutes");
     const paragraphs = container.querySelectorAll("p");
-    expect(paragraphs[0]?.textContent).toBe("chatbot.skills.arguments [notes]");
-    expect(paragraphs[1]?.textContent).toBe("chatbot.skills.description Prepare meeting minutes");
+    expect(paragraphs[0]?.textContent).toBe("chatbot.skills.description Prepare meeting minutes");
+    expect(paragraphs[1]?.textContent).toBe("chatbot.skills.arguments [notes]");
     expect(container.querySelector("h3")).toBeNull();
     expect(container.querySelector("strong")?.textContent).toBe("the notes");
     expect(container.textContent).toContain("[notes]");
