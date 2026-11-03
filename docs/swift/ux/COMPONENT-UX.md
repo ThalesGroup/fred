@@ -906,8 +906,12 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   no shadow and a bold title until opening. Errors, cancellation and premature
   EOF do not imply a ready answer. Completed answers and pending questions still
   raise the existing localized info toast with the title and "Open" action.
-  These indicators are local to the tab. Loading an open conversation's history
-  restores its pending-input chip after reload without fetching other sessions.
+  Waiting and unread indicators survive refresh in the same tab through a
+  best-effort `sessionStorage` mirror, bounded to 100 ids per indicator. Restoring
+  does not emit toasts or resume live turns/queues. The existing history load
+  reconciles pending input; opening clears unread, a new turn clears waiting,
+  and Stop/deletion clears both. Storage failure falls back to memory. Other
+  tabs/devices remain independent; no extra history requests are added.
   Mechanism: `core/hooks/backgroundTurns.ts`.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI

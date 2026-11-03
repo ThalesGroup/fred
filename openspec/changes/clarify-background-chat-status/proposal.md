@@ -7,7 +7,7 @@ The sidebar currently represents a pending user question with a dot and halo, wh
 - Display a compact, contrasted "Awaiting reply" / "Réponse attendue" chip below the sidebar title and metadata when the conversation needs user input.
 - Keep animated dots for running generations. Show a plain blue dot, without shadow, for a successfully completed background answer until the conversation is opened.
 - Do not signal errors, cancelled turns or premature stream endings as answers ready to read.
-- Restore the open conversation's pending-input chip from its already loaded history after reload; other sessions remain unknown until opened.
+- Retain known waiting and unread indicators across refresh in the same tab using bounded best-effort sessionStorage. Reconcile waiting with the existing history load; opening clears unread. Running turns and queues are not restored.
 
 ## Capabilities
 
