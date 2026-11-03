@@ -106,7 +106,7 @@ helm-package: ## Package the frontend Helm chart into a .tgz archive
 
 .PHONY: docker-build
 docker-build: ## Build the production frontend Docker image (nginx serving the built dist/)
-	docker build \
+	docker build --build-arg NODE_VERSION=$(NODE_VERSION) \
 		-f $(DOCKERFILE_PATH) \
 		-t $(IMAGE_FULL) \
 		$(DOCKER_CONTEXT)

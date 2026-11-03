@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import assert from "node:assert/strict";
+import { assertRepositoryNodeBaseline } from "./release-toolchain.mjs";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -106,6 +107,7 @@ export async function createCandidateEvidence({
   createdAt = new Date().toISOString(),
 }) {
   validateReleaseContract(contract);
+  await assertRepositoryNodeBaseline(contract);
   assertApplicationToolchain(applicationToolchain);
   if (approved) {
     assert.equal(

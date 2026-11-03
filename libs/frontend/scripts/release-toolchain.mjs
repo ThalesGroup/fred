@@ -37,7 +37,25 @@ export async function loadReleaseToolchain(contractPath = defaultContractPath) {
   );
   for (const [name, version] of Object.entries(toolchain))
     assert.match(version, exactToolVersionPattern, `${name} must be exact`);
+  await assertRepositoryNodeBaseline(contract);
   return toolchain;
+}
+
+// Apply the current pin when creating evidence; historical validators use recorded versions.
+export async function assertRepositoryNodeBaseline(contract) {
+  const nodeVersion = (
+    await readFile(path.resolve(workspaceRoot, "../../.nvmrc"), "utf8")
+  ).trim();
+  assert.match(nodeVersion, exactToolVersionPattern, ".nvmrc must be exact");
+  for (const selected of [
+    contract.releaseToolchain,
+    contract.applicationToolchain,
+  ])
+    assert.equal(
+      selected.node,
+      nodeVersion,
+      "release Node differs from .nvmrc",
+    );
 }
 
 export function assertReleaseToolchain(expected, actual = process.versions) {

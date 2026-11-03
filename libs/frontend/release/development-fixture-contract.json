@@ -8,8 +8,8 @@
   "workflowFilename": "publish.yml",
   "publishingEnvironment": "fixture",
   "approvedBaselineDigest": "2cde70b055c308e69f371c5fe96c62a606c71bd5f8465a9f53b33be80348b263",
-  "releaseToolchain": { "node": "24.21.0", "npm": "11.19.0" },
-  "applicationToolchain": { "node": "24.21.0", "npm": "11.19.0" },
+  "releaseToolchain": { "node": "24.22.2", "npm": "11.19.0" },
+  "applicationToolchain": { "node": "24.22.2", "npm": "11.19.0" },
   "maintainerApproval": {
     "scopeOwner": "fixture:organization",
     "owners": {

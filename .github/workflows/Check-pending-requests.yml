@@ -39,6 +39,7 @@ jobs:
           filters: |
             frontend:
               - 'apps/frontend/**'
+              - '.nvmrc'
               - 'scripts/makefiles/node.mk'
               - '.github/workflows/Check-pending-requests.yml'
             frontend-packages:
@@ -141,6 +142,7 @@ jobs:
               - 'apps/frontend/src/i18n.ts'
               - 'LICENSE'
               - 'Makefile'
+              - '.nvmrc'
               - 'scripts/makefiles/node.mk'
               - '.github/workflows/Check-pending-requests.yml'
               - '.github/workflows/Publish-frontend-packages.yml'
@@ -389,7 +391,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
 
       - name: Pin npm
         run: npm install --global npm@11.19.0
@@ -450,7 +452,7 @@ jobs:
       - name: Setup release Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
 
       - name: Pin release npm
         run: npm install --global npm@11.19.0
@@ -513,7 +515,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
 
       - name: Pin npm
         run: npm install --global npm@11.19.0
@@ -538,7 +540,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
 
       - name: Pin npm
         run: npm install --global npm@11.19.0
@@ -721,7 +723,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
 
       - name: Pin npm
         run: npm install --global npm@11.19.0

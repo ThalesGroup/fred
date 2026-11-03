@@ -30,7 +30,7 @@ authorization, routing, and authentication code is not package input.
 
 ## Provisioning
 
-Use the repository Node `24.21.0` and npm `11.19.0` baseline. Only Node
+Use the Node version in the repository root `.nvmrc` and npm `11.19.0`. Only Node
 `>=24.21.0 <25` is supported for the application, producer and package consumers:
 
 ```sh
@@ -124,7 +124,7 @@ Release checks, the portable release-directory contract, explicit authentication
 the publication dry run, and the thin CI adapter are documented in [RELEASE.md](RELEASE.md).
 The package inventory continues to register specialized build and validation profiles,
 while member manifests remain authoritative for names, independent versions, dependencies,
-and exports. Run `make release-check` and `make release-test` under Node 24.21.0/npm
+and exports. Run `make release-check` and `make release-test` under the repository `.nvmrc` Node version and npm
 11.19.0. Use `make prepare-release PACKAGE=<design-tokens|ui|iframe-sdk>` only from a clean
 committed checkout; it builds the selected package rather than all members and generates
 the metadata operators and CI consume.

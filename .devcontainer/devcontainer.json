@@ -1,7 +1,7 @@
 {
   "name": "Fred container",
   "build": {
-    "dockerfile": "Dockerfile-devcontainer",
+    "dockerfile": "target/Dockerfile-devcontainer",
     "context": "..",
     "args": {
       "USERNAME": "vscode",
@@ -11,7 +11,10 @@
   },
   "workspaceFolder": "/workspaces/fred",
   "runArgs": ["--init"],
-  "initializeCommand": "mkdir -p ${localEnv:HOME}/.fred",
+  "initializeCommand": [
+    "bash",
+    "${localWorkspaceFolder}/.devcontainer/scripts/prepare-build.sh"
+  ],
   "mounts": [
     // Fred config directory from host
     "source=${localEnv:HOME}/.fred,target=/home/vscode/.fred,type=bind,consistency=cached",
