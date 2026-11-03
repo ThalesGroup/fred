@@ -1,13 +1,13 @@
 # The checkout owns its topology; the factory owns infrastructure and browser URLs.
-{{- if and (ne (env "ENV") "secondary") (ne (env "INSTANCE") "weaver") }}
-{{- fail "Use INSTANCE=weaver for coexistence, or ENV=secondary for the standalone cluster" }}
+{{- if or (ne (env "KUBE_CONTEXT") "k3d-fred") (ne (env "K3D_NAMESPACE") "fred-weaver") }}
+{{- fail "Run make k3d-up-weaver or make k3d-up-migration from fred-deployment-factory" }}
 {{- end }}
 releases:
   - name: fred-app
     chart: ../charts/fred
     values:
       - base-values.yaml.gotmpl
-      - secondary-values.yaml.gotmpl
+      - browser-values.yaml.gotmpl
       - values.yaml.gotmpl
       - instance-values.yaml.gotmpl
       {{- with env "K3D_IMAGE_VALUES" }}

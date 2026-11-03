@@ -22,6 +22,7 @@ interface UseSessionHistoryArgs {
   sessionId: string | null;
   spaceId?: string;
   messagesUrl: string | null | undefined;
+  historySupported?: boolean;
   revision?: number;
   onLoaded: (messages: ChatMessage[]) => void;
   isTurnActive: () => boolean;
@@ -32,6 +33,7 @@ export function useSessionHistory({
   sessionId,
   spaceId = "",
   messagesUrl,
+  historySupported = true,
   revision,
   onLoaded,
   isTurnActive,
@@ -63,6 +65,17 @@ export function useSessionHistory({
     };
     // Local content is never evidence of current history access.
     if (messagesUrl === null) {
+      if (!historySupported) {
+        // Admission explicitly declared a runtime without history. Keep only
+        // this visit's live messages; never restore a browser cache as history.
+        deleteCachedSessionHistory(key);
+        if (!isTurnActive() && getCurrentMessages?.().some((message) => message.session_id !== sessionId)) {
+          onLoaded([]);
+        }
+        loadedKey.current = null;
+        setResult({ key, status: "ready" });
+        return;
+      }
       unavailable();
       return;
     }
@@ -111,7 +124,7 @@ export function useSessionHistory({
     };
     void load();
     return () => controller.abort();
-  }, [actor, key, sessionId, messagesUrl, revision, onLoaded, isTurnActive, getCurrentMessages]);
+  }, [actor, key, sessionId, messagesUrl, historySupported, revision, onLoaded, isTurnActive, getCurrentMessages]);
 
   const status = result.key === key ? result.status : "loading";
   return {

@@ -352,11 +352,16 @@ function ManagedChatContent({
     !chat.executionDisabled &&
     !chat.historyUnavailable;
 
-  const conversationNotice = (chat.historyUnavailable || chat.sessionUnavailable || chat.preparationUnavailable) && (
+  const conversationNotice = (chat.historyUnavailable ||
+    chat.sessionUnavailable ||
+    chat.preparationUnavailable ||
+    chat.historyUnsupported) && (
     <p className={styles.conversationNotice} role="status">
       {chat.historyUnavailable || chat.sessionUnavailable
         ? t(chat.historyErrorKey ?? "chatbot.historyUnavailable")
-        : chat.preparationErrorDetail || t("chatbot.preparationUnavailable")}
+        : chat.preparationUnavailable
+          ? chat.preparationErrorDetail || t("chatbot.preparationUnavailable")
+          : t("chatbot.historyUnsupported")}
     </p>
   );
 

@@ -4557,6 +4557,9 @@ async fn personal_space_identity_is_constrained_and_immutable() {
     );
 }
 
+#[path = "support/usage.rs"]
+mod usage;
+
 #[path = "support/agent_instances.rs"]
 mod agent_instances;
 

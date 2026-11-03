@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Embedded hello-world runtime. The host owns HTTP, identity and admission.
+//! Embedded Ralph runtime. The host owns HTTP, identity and admission.
 
 use std::{collections::BTreeMap, time::Duration};
 
@@ -25,10 +25,10 @@ pub struct AgentDefinition {
 
 pub const DEFINITION: AgentDefinition = AgentDefinition {
     id: AGENT_ID,
-    title: AGENT_ID,
+    title: "Ralph",
     version: env!("CARGO_PKG_VERSION"),
     provider: "control-plane",
-    description: "Demonstration agent replying Hello world! without an LLM or data access.",
+    description: "Rust chat agent. Each message is independent; no tools or saved history.",
 };
 
 // Fixed-response subset of fred-sdk/contracts/execution.py::RuntimeExecuteRequest.
@@ -92,11 +92,18 @@ impl ExecuteRequest {
                 }
                 "turn_options" => value.as_object().is_some_and(|v| v.is_empty()),
                 "invocation_turns" => value.as_array().is_some_and(|v| v.is_empty()),
+                // Browser correlation only; no steering or resume is implemented.
+                "steering_turn_id" => {
+                    value.is_null()
+                        || value
+                            .as_str()
+                            .is_some_and(|id| !id.is_empty() && id.len() <= 128)
+                }
                 _ => false,
             };
             if !supported_default {
                 return Err(ExecuteError::Invalid(
-                    "Unsupported execution option for the hello-world agent.",
+                    "Unsupported execution option for Ralph.",
                 ));
             }
         }
@@ -111,13 +118,21 @@ impl ExecuteRequest {
                 .ok_or(ExecuteError::Invalid(
                     "runtime_context.space_id must be a non-blank string.",
                 ))?;
-            if context
-                .keys()
-                .any(|key| !matches!(key.as_str(), "space_id" | "model_choice" | "reasoning"))
-            {
+            if context.keys().any(|key| {
+                !matches!(
+                    key.as_str(),
+                    "space_id" | "model_choice" | "reasoning" | "language"
+                )
+            }) {
                 return Err(ExecuteError::Invalid(
                     "Unsupported runtime context for embedded execution.",
                 ));
+            }
+            // Display metadata sent by the existing chat, never execution authority.
+            if context.get("language").is_some_and(|value| {
+                !value.is_null() && !value.as_str().is_some_and(|language| language.len() <= 64)
+            }) {
+                return Err(ExecuteError::Invalid("Invalid language."));
             }
             let choice = context
                 .get("model_choice")
@@ -195,4 +210,38 @@ pub fn execute() -> impl Stream<Item = RuntimeEvent> {
         }
         event
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn browser_envelope_accepts_metadata_without_enabling_extra_execution_features() {
+        let body = json!({
+            "agent_instance_id":"instance", "input":"Bonjour", "session_id":"session",
+            "steering_turn_id":"turn", "runtime_context":{"space_id":"space","language":"fr"}
+        });
+        let request: ExecuteRequest = serde_json::from_value(body.clone()).unwrap();
+        assert!(matches!(
+            request.validate(),
+            Ok(RequestedTarget::Managed { .. })
+        ));
+        for (key, value) in [
+            ("resume_payload", json!({"answer":"yes"})),
+            ("turn_options", json!({"document_selection":{}})),
+            ("invocation_turns", json!([{"input":"previous"}])),
+            ("steering_turn_id", json!({"invalid":true})),
+        ] {
+            let mut unsupported = body.clone();
+            unsupported[key] = value;
+            let request: ExecuteRequest = serde_json::from_value(unsupported).unwrap();
+            assert!(request.validate().is_err(), "{key}");
+        }
+        let mut unsupported = body;
+        unsupported["runtime_context"]["document_scope"] = json!({});
+        let request: ExecuteRequest = serde_json::from_value(unsupported).unwrap();
+        assert!(request.validate().is_err());
+    }
 }

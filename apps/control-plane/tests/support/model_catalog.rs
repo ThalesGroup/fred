@@ -684,7 +684,6 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         lifecycle: Default::default(),
     };
     let app = routes(state.clone());
-    let instance = Uuid::new_v4();
     let native = template_id(org.id, "control-plane", fred_rust_agent::AGENT_ID);
     control_plane::authorization::set_agent_default_on(
         &mut e.pool.acquire().await.unwrap(),
@@ -694,25 +693,64 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     )
     .await
     .unwrap();
-    storage::create(
-        &e.pool,
-        &storage::NewAgentInstance {
-            agent_instance_id: instance,
-            space_id: team.id,
-            template_id: native,
-            source_runtime_id: "control-plane".into(),
-            source_agent_id: fred_rust_agent::AGENT_ID.into(),
-            logical_name: Some("managed-inference".into()),
-            display_name: "Managed inference fixture".into(),
-            description: None,
-            enabled: true,
-            created_by: "alice".into(),
-            tuning: json!({"selected_capability_ids":[],"recommended_model":key("a"),
-            "model_options":{"temperature":0.2,"top_p":0.8,"max_tokens":50}}),
-        },
+    // Use the same enrollment, conversation and preparation path as the browser.
+    let mut body = creation(native, "Ralph");
+    body["recommended_model"] = key("a");
+    body["model_options"] = json!({"temperature":0.2,"top_p":0.8,"max_tokens":50});
+    let created = create(&app, &identity, team.id, body).await;
+    let instance = Uuid::parse_str(created["agent_instance_id"].as_str().unwrap()).unwrap();
+    let session = Uuid::new_v4();
+    let (status, registered) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &format!("/spaces/{}/sessions", team.id),
+        json!({"session_id":session,"agent_instance_id":instance,"agent_configuration_revision":1}),
     )
-    .await
-    .unwrap();
+    .await;
+    assert_eq!(status, 201, "{registered}");
+    assert!(registered["messages_url"].is_null());
+    let nested = Router::new().nest("/custom/control-plane", app.clone());
+    let preparation_path = format!(
+        "/custom/control-plane{}/prepare-execution?session_id={session}",
+        item(team.id, &created)
+    );
+    let (status, prepared) = request(
+        &nested,
+        &identity,
+        Some("alice"),
+        "POST",
+        &preparation_path,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{prepared}");
+    assert_eq!(
+        prepared["execute_stream_url"],
+        "/custom/control-plane/agents/execute/stream"
+    );
+    assert!(prepared["execute_url"].is_null());
+    assert!(prepared["messages_url_template"].is_null());
+    assert_eq!(prepared["supports_ui_parts"], false);
+    assert_eq!(prepared["supports_hitl"], false);
+    assert_eq!(
+        prepared["chat_controls"],
+        json!([{"capability_id":"platform","widget":"reasoning_toggle","params":{"default":false}}])
+    );
+    assert_ne!(
+        request(
+            &nested,
+            &identity,
+            Some("bob"),
+            "POST",
+            &preparation_path,
+            Value::Null
+        )
+        .await
+        .0,
+        200
+    );
     let runtime_path = format!("/spaces/{}/agent-instances/{instance}/runtime", team.id);
     let (status, public) = request(
         &app,
@@ -784,7 +822,8 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
             && !prepared.to_string().contains(&provider.url)
     );
     let execute = json!({"agent_instance_id":instance,"input":"fixture question",
-        "runtime_context":{"space_id":team.id,"reasoning":true}});
+        "session_id":session,"steering_turn_id":Uuid::new_v4(),
+        "runtime_context":{"space_id":team.id,"reasoning":true,"language":"fr"}});
     let send = |app: Router, body: Value| {
         app.oneshot(
             Request::builder()

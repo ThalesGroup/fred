@@ -139,3 +139,13 @@ No cache location or invalidation protocol is selected here.
   [capability evaluation](../../libs/fred-runtime/fred_runtime/capabilities/assembly.py): `evaluate_chat_controls_batch`.
 - Swift branch reference: `apps/control-plane-backend/control_plane_backend/product/service.py`,
   `_chat_controls_cache`, `_resolve_chat_controls` (historical comparison only).
+
+## OI-3. Runtime identity on consumption writes
+
+Control Plane verifies the caller is a trusted runtime workload but does not yet
+bind its OAuth identity to `session_metadata.runtime_id`. Such a workload can
+therefore report consumption for any session. A compromised or misconfigured
+runtime could attribute false consumption to the session owner, including for
+sessions handled by another runtime. The mitigation to evaluate is binding the
+runtime's OAuth identity to its catalogue `runtime_id` and checking that binding
+against `session_metadata.runtime_id` on usage writes.

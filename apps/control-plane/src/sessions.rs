@@ -6,6 +6,7 @@
 //! A deleted session is retired at once and absent from every read below.
 
 mod attachments;
+mod usage;
 
 use axum::{
     Json,
@@ -223,6 +224,7 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(update_session))
         .routes(utoipa_axum::routes!(delete_session))
         .merge(attachments::routes())
+        .merge(usage::routes())
 }
 
 #[utoipa::path(post, path = "/spaces/{space_id}/sessions",

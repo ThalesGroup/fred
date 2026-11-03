@@ -51,6 +51,9 @@ const historyKey = (sid: string) => JSON.stringify(["alice-session", "space-1", 
 const msg = (id: string): ChatMessage => ({ id }) as unknown as ChatMessage;
 
 // Per-test fetch behavior, keyed on the session id present in the URL.
+let historySupported = true;
+let currentMessages: ChatMessage[] = [];
+const getCurrentMessages = () => currentMessages;
 let routeOverride: string | null | undefined = "default";
 let fetchImpl: (url: string) => Promise<{ ok: boolean; status?: number; json: () => Promise<ChatMessage[]> }>;
 const okResponse = (msgs: ChatMessage[]) => ({ ok: true, json: async () => msgs });
@@ -77,6 +80,8 @@ function TestHost({
   const hook = useSessionHistory({
     sessionId,
     spaceId: "space-1",
+    historySupported,
+    getCurrentMessages,
     messagesUrl: routeOverride === "default" ? `/runtime/sessions/${sessionId}/messages` : routeOverride,
     onLoaded,
     isTurnActive,
@@ -124,6 +129,8 @@ describe("useSessionHistory authorized reads", () => {
     clearSessionHistoryCache();
     onLoaded.mockClear();
     routeOverride = "default";
+    historySupported = true;
+    currentMessages = [];
     turnActive = false;
     fetchImpl = async () => okResponse([]);
     vi.stubGlobal(
@@ -138,6 +145,36 @@ describe("useSessionHistory authorized reads", () => {
     });
     container.remove();
     vi.unstubAllGlobals();
+  });
+
+  it("keeps this visit's completed response when the admitted runtime has no history", async () => {
+    routeOverride = null;
+    historySupported = false;
+    currentMessages = [{ ...msg("live"), session_id: "session-a" }];
+    setCachedSessionHistory(historyKey("session-a"), [msg("old")]);
+    mount("session-a");
+    await settle();
+    expect(latest.isSettled).toBe(true);
+    expect(latest.isUnavailable).toBe(false);
+    expect(onLoaded).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(getCachedSessionHistory(historyKey("session-a"))).toBeUndefined();
+    render("session-b");
+    await settle();
+    expect(onLoaded).toHaveBeenLastCalledWith([]);
+  });
+
+  it("does not preserve live messages after admission stops declaring history unsupported", async () => {
+    routeOverride = null;
+    historySupported = false;
+    currentMessages = [{ ...msg("live"), session_id: "session-a" }];
+    mount("session-a");
+    await settle();
+    historySupported = true;
+    render("session-a");
+    await settle();
+    expect(latest.isUnavailable).toBe(true);
+    expect(onLoaded).toHaveBeenLastCalledWith([]);
   });
 
   it("cache miss: shows the loading state, applies the fetched history, and populates the cache", async () => {

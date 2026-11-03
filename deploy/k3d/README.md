@@ -1,19 +1,23 @@
 # Weaver: local ingestion and Python agent catalog deployment
 
-## Alongside Swift on existing infrastructure
+## Local installation
 
-The factory's Weaver branch supports `INSTANCE=weaver ENV=swift`: namespace
-`fred-weaver`, database `fred_weaver`, Temporal namespace `fred-weaver`, and
-`http://weaver.localhost:8088`. Swift retains its existing namespace and database.
-Both use the same realm and S3 document bucket; the OpenSearch corpus indexes
-remain separate. No users, grants, documents or conversations are migrated.
+Use the factory's single command interface: `make k3d-up-weaver` for Weaver alone,
+`make k3d-up-migration` for Swift and Weaver together. The factory's
+`local-checkouts.json` holds the two source paths; the factory never changes Git
+branches. Do not pass ENV, INSTANCE, DIR or a second profile selector.
 
-From the factory, run `make k3d-instance INSTANCE=weaver`, supply the model Secret
-in `fred-weaver`, then `make k3d-app INSTANCE=weaver APP=fred DIR=/path/to/this/fred`.
-Use `k3d-app-validate` with the same arguments to render first. The factory's local
-development guide contains the operator credential-copy command and boundaries.
-The infrastructure namespace is explicit for PostgreSQL and S3 preparation.
-The original standalone `ENV=secondary` profile remains available below.
+Weaver always uses context `k3d-fred`, namespace `fred-weaver`, database
+`fred_weaver`, Temporal namespace `fred-weaver`, and <http://weaver.localhost:8088>.
+Infrastructure is in namespace `fred`. Swift, when selected, keeps its own namespace,
+database and corpus index. Login accounts and the S3 document bucket are shared;
+no users, grants, documents or conversations are migrated by deployment.
+
+The factory and these hooks must be updated together. `make k3d-validate-weaver`
+renders first without building or changing the cluster. `make k3d-up-weaver` prepares
+infrastructure and reports any missing operator-owned model Secret before building.
+Supply that Secret and repeat the same command. Use the corresponding migration
+commands when both applications are selected.
 
 On `weaver`, `deploy/k3d/build` builds `apps/control-plane` as the
 `control-plane-backend` image. The ingestion profile runs it as `control-plane serve`:
@@ -28,12 +32,11 @@ Its purge retention is one minute (`PT1M`); physical cleanup follows worker exec
 This checkout owns the complete profile in `deploy/k3d/helmfile.yaml.gotmpl`,
 `values.yaml.gotmpl` and its `prepare` hook. `base-values.yaml.gotmpl` imports
 the shared factory values while removing the worker's legacy MinIO storage
-blocks before Helm merges the local worker configuration. `secondary-values.yaml.gotmpl`
-renders the factory's secondary URLs. Both drop any factory control-plane
+blocks before Helm merges the local worker configuration. `browser-values.yaml.gotmpl`
+renders the factory's derived browser URLs. Both drop any factory control-plane
 configuration: the control-plane gets the chart defaults plus the k3d addresses in
 `values.yaml.gotmpl`. The factory supplies infrastructure,
-URLs, its shared base values and the generic build/import/sync sequence. Its
-`APP=fred DIR=...` command selects the checkout's Helmfile when present.
+URLs, its shared base values and the generic build/import/sync sequence. Its internal application engine selects the checkout's Helmfile when present.
 No Rust-specific profile is added to the factory.
 
 ## Technical monitor
@@ -46,20 +49,12 @@ The hook retains four passwords in `fred-secrets`: `POSTGRES_CP_PASSWORD`,
 It also stores the derived `POSTGRES_MONITOR_DATABASE_URL`. No password is printed
 or passed in argv. `finish` no longer grants tables; SQLx owns all `cp_read` grants.
 
-The factory's secondary infrastructure leaves the vector extension to the checkout
-bootstrap. Swift and the independent tabular database retain their existing setup.
-The first Weaver installation with this SQL boundary requires a reset of the
-secondary PostgreSQL volume, even if B1 was already deployed. An ordinary upgrade
-cannot move the former public tables or extension. For a disposable secondary
-cluster, these operator-run commands recreate its volumes and deploy everything:
-
-```sh
-cd ~/Rebac/fred-deployment-factory
-make k3d-wipe ENV=secondary
-make k3d-up ENV=secondary
-# Recreate the operator-owned fred-model-credentials Secret from your secret source.
-make k3d-app ENV=secondary APP=fred DIR=../fred
-```
+The application bootstrap installs vector in Weaver's knowledge schema, inside
+`fred_weaver`. Swift's separate database keeps its infrastructure initialization.
+A deployment does not convert old incompatible schemas or reset data. For a
+separately authorized disposable reset, use `make k3d-wipe` from the factory; this
+removes the entire cluster and every application's data. Then use the chosen k3d-up-*
+command and recreate the operator-owned Secrets.
 
 Never reset a database containing data to keep. See the
 [DBA procedure](../postgres/README.md) for managed installations and role cleanup.
@@ -72,25 +67,24 @@ Compose setup does not support it yet.
 
 **Prerequisites.** Sibling checkouts of `fred` (branch `weaver`) and
 `fred-deployment-factory`, the tools listed in the factory README, the line
-`127.0.0.1 keycloak-secondary secondary.localhost` in `/etc/hosts`, and a Mistral
+`127.0.0.1 keycloak weaver.localhost` in `/etc/hosts`, and a Mistral
 API key.
 
 **1. Cluster and Fred.** From the factory checkout:
 
 ```sh
-export ENV=secondary
-make k3d-up
-kubectl --context k3d-fred-secondary -n fred create secret generic fred-model-credentials \
-  --from-literal=OPENAI_API_KEY=<mistral key>   # once per cluster
-make k3d-app APP=fred DIR=../fred              # rerun after every code change
-kubectl --context k3d-fred-secondary -n fred get deploy
+make k3d-up-weaver  # on first start, prepares the namespace and reports the missing Secret
+kubectl --context k3d-fred -n fred-weaver create secret generic fred-model-credentials \
+  --from-file=OPENAI_API_KEY=/absolute/path/to/mistral-key
+make k3d-up-weaver
+kubectl --context k3d-fred -n fred-weaver get deploy
 ```
 
 `control-plane-backend`, `knowledge-flow-backend`, `knowledge-flow-worker`,
-`fred-agents` and `frontend` must be `1/1`. `make k3d-app` ends by printing the
+`fred-agents` and `frontend` must be `1/1`. `make k3d-up-weaver` ends by printing the
 command that reads the bootstrap token.
 
-**2. Platform admin.** Open <http://secondary.localhost:18088>, sign in with the intended
+**2. Platform admin.** Open <http://weaver.localhost:8088>, sign in with the intended
 admin identity (register only if needed), activate platform administration with the
 bootstrap token, then accept the terms of use ([journey](../../docs/architecture/02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user)).
 
@@ -125,11 +119,11 @@ states the current and target state of each component.
 
 **Day to day.** `make k3d-app-validate APP=fred DIR=../fred` renders and lints
 without building. Read a component's logs with
-`kubectl --context k3d-fred-secondary -n fred logs deploy/<name>`. The root
+`kubectl --context k3d-fred -n fred-weaver logs deploy/<name>`. The root
 `make test` needs network access: it installs each component's dependencies and
 the frontend packages' consumer caches before running offline tests.
 
-## Python agent catalog on secondary
+## Python agent catalog on k3d
 
 The profile enables the real `fred-agents` Python deployment and its runtime /
 installed-capability migration job. `deploy/k3d/build` already builds that image
@@ -142,7 +136,7 @@ The Control Plane is configured with runtime ID `fred-agents` and base URL
 `GET /agents/templates` response, including `fred.github.assistant` and its full
 tuning metadata. There is no runtime registration callback or new announcement
 protocol. Service `fred-agents` maps port 80 to container port 8000; the ingress
-also routes `/fred/agents/v2` to this service on the secondary host. This same
+also routes `/fred/agents/v2` to this service on the Weaver host. This same
 path is declared as `public_base_url`, used by execution preparation and session
 history to give the browser approved runtime URLs.
 
@@ -182,7 +176,7 @@ default when no model is chosen in the chat. Validate a normal text exchange,
 a second turn and history after reload before testing reasoning or capabilities.
 These are deployment prerequisites, not evidence of a working end-to-end chat.
 
-## Corpus search configuration on secondary
+## Corpus search configuration on k3d
 
 Agent pods search the corpus through Knowledge Flow API, enabled here as the
 capability backend. It searches `document-vectors`, the index the worker writes;
@@ -195,34 +189,19 @@ can read the corpus, its mapping and the hybrid pipeline, but cannot modify corp
 data, mappings or pipelines; its separate logs/KPI permissions keep writes there. Preparation rejects
 an observability index equal to the corpus index.
 
-PostgreSQL remains `postgres:5432/fred`, with login `fred_kf` and schema `knowledge`. The API reads publication and lifecycle facts through `cp_read`; it runs no KF migration. The role writes only knowledge tables and reads publication facts through SELECT-only `cp_read` views.
+PostgreSQL remains `postgres:5432/fred_weaver`, with login `fred_kf` and schema `knowledge`. The API reads publication and lifecycle facts through `cp_read`; it runs no KF migration. The role writes only knowledge tables and reads publication facts through SELECT-only `cp_read` views.
 
 ## Prepare and deploy
 
-Use the updated factory script that recognizes a checkout-owned Helmfile and
-exports `K3D_FACTORY_ROOT`. Run these commands yourself from the factory checkout:
+From the factory, use `make k3d-validate-weaver` to render or `make k3d-up-weaver` to
+build and deploy. Use the migration counterpart when Swift is also installed.
+The factory exports the fixed placement and `K3D_FACTORY_ROOT` to the hooks;
+there is no secondary environment. The model key must already exist in the
+`fred-weaver` namespace's `fred-model-credentials/OPENAI_API_KEY`. The hook never
+copies it from a checkout. Host Python needs PyYAML.
 
-```sh
-cd ~/Rebac/fred-deployment-factory
-export ENV=secondary
-# Infrastructure must be running; omit if already done.
-make k3d-up
-# Validate/render only, without building or provisioning.
-make k3d-app-validate APP=fred DIR=../fred
-# Build, import images, prepare the ingestion dependencies, then deploy.
-make k3d-app ENV=secondary APP=fred DIR=../fred
-```
-
-`ENV` selects the cluster, not the branch or directory. This experimental profile
-requires `ENV=secondary` so it cannot replace the default Swift installation.
-The factory's usual `APP=fred` behavior is retained for checkouts without their
-own Helmfile. The model key must already exist in the secondary cluster's
-`fred-model-credentials/OPENAI_API_KEY`; the hook checks it and never copies a
-key from another checkout or cluster. Host Python needs PyYAML, as do the
-factory's identity helpers.
-
-The five application deployments are `control-plane-backend`, `knowledge-flow-backend`,
-`knowledge-flow-worker`, `frontend` and `fred-agents`. The manager image occupies the
+The six application deployments are `control-plane-backend`, `knowledge-flow-backend`,
+`knowledge-flow-worker`, `frontend`, `fred-agents` and `monitor`. The manager image occupies the
 chart's `control-plane-backend` key and runs `control-plane serve`; the separate
 control-plane worker and the KF SQL migration remain disabled. Manager schema initialization
 and Python runtime migrations are enabled. Manager and the Python agent runtime access
@@ -255,7 +234,7 @@ credentials. The frontend receives no infrastructure credentials.
 
 This profile does not migrate existing persisted resources. Application data reset
 is unsupported for the Rust ingestion profile and is refused before mutation.
-Recreating a disposable secondary installation is a separate operator action.
+Recreating a disposable local installation is a separate operator action.
 
 The vector index is configured in `manager_processing.vector_store.index`.
 Preparation reads that same rendered value to grant index permissions. It also

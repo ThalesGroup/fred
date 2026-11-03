@@ -659,6 +659,7 @@
     "deletedAgentSuffix": "(deleted)",
     "modelPreparationErrorTitle": "Sending unavailable",
     "historyUnavailable": "Conversation history is unavailable. Please try again later.",
+    "historyUnsupported": "This agent answers each message independently. Messages are not saved and will disappear when you leave this chat.",
     "preparationUnavailable": "The conversation could not be prepared. Check your connection and try again.",
     "savedModelChoiceInvalid": "The saved model choice must be selected again in the Models menu.",
     "skipAllHitlQuestions": "Skip all",

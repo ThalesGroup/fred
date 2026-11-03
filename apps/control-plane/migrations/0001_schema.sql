@@ -523,6 +523,31 @@ create table session_metadata (
 create index session_metadata_owner_activity
     on session_metadata (space_id, user_id, updated_at desc, session_id);
 
+-- No foreign keys: consumption provenance survives session, agent and space purge.
+create table model_usage (
+    report_id uuid not null,
+    session_id uuid not null,
+    exchange_id text not null check (char_length(exchange_id) between 1 and 256
+        and exchange_id = btrim(exchange_id) and exchange_id !~ '[[:cntrl:]]'),
+    occurred_at timestamptz not null,
+    space_id uuid not null,
+    user_id text not null,
+    agent_instance_id uuid not null,
+    model_source_id text collate "C" not null
+        check (model_source_id ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'),
+    upstream_model_id text collate "C" not null
+        check (octet_length(upstream_model_id) between 1 and 256
+               and upstream_model_id = btrim(upstream_model_id)),
+    input_tokens bigint not null check (input_tokens >= 0),
+    output_tokens bigint not null check (output_tokens >= 0),
+    cache_read_tokens bigint not null check (cache_read_tokens >= 0),
+    cache_creation_tokens bigint not null check (cache_creation_tokens >= 0),
+    primary key (report_id, model_source_id, upstream_model_id)
+);
+create index model_usage_space_occurred_at on model_usage (space_id, occurred_at);
+comment on table model_usage is
+    'Consumption fact per offer in a report (one run); reports are atomic and idempotent by report_id (Idempotency-Key). A turn consumes the sum of its reports. Future aggregates derive from this table.';
+
 -- An attachment lives in its conversation's space.
 alter table session_metadata add unique (session_id, space_id);
 alter table document add foreign key (session_id, space_id)

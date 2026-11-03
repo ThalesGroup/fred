@@ -651,6 +651,12 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     spaceId,
     revision: historyRevision,
     messagesUrl: sessionData ? (sessionData.messages_url ?? null) : sessionUnavailable ? null : undefined,
+    historySupported: !(
+      sessionData &&
+      !sessionUnavailable &&
+      !preparationUnavailable &&
+      preparation?.messages_url_template === null
+    ),
     onLoaded: handleHistoryLoaded,
     isTurnActive,
     getCurrentMessages,
@@ -1481,6 +1487,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     modelPreparationPending,
     historyErrorKey: sessionErrorKey ?? historyErrorKey,
     historyUnavailable,
+    historyUnsupported: preparation?.messages_url_template === null,
     agentInstance,
     capabilityIds,
     chatControls,

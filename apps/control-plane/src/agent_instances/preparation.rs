@@ -6,7 +6,7 @@
 
 use axum::{
     Json,
-    extract::State,
+    extract::{NestedPath, State},
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
@@ -132,10 +132,12 @@ pub struct ExecutionPreparation {
     pub space_id: Uuid,
     pub runtime_id: String,
     pub execution_transport: ExecutionTransport,
-    pub execute_url: String,
+    #[schema(required = true)]
+    pub execute_url: Option<String>,
     pub execute_stream_url: String,
-    /// RFC 6570 Level 1 template. Substitute the registered session ID.
-    pub messages_url_template: String,
+    /// RFC 6570 Level 1 template; null when this runtime has no durable history.
+    #[schema(required = true)]
+    pub messages_url_template: Option<String>,
     pub supports_streaming: bool,
     /// False until the managed Weaver HITL journey is connected.
     pub supports_hitl: bool,
@@ -221,6 +223,7 @@ async fn prepare_execution(
     ApiPath((space_id, instance_id)): ApiPath<(Uuid, Uuid)>,
     ApiQuery(query): ApiQuery<PreparationQuery>,
     headers: HeaderMap,
+    nesting: Result<NestedPath, axum::extract::rejection::NestedPathRejection>,
 ) -> AppResult<impl IntoResponse> {
     let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     super::http::require_instance_space(space.kind)?;
@@ -230,7 +233,16 @@ async fn prepare_execution(
     if !authorization::can_use_agent(&s.pool, initial.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    let base = public_base(&s.agent_catalog, &initial.source_runtime_id).ok_or_else(|| {
+    let embedded = initial.source_runtime_id == fred_rust_agent::DEFINITION.provider
+        && initial.source_agent_id == fred_rust_agent::AGENT_ID;
+    // The embedded executor uses this router's configured mount, never a browser
+    // authority or a new catalog-source/deployment setting. Unnested tests use "".
+    let base = if embedded {
+        Some(nesting.as_ref().map_or("", |path| path.as_str()))
+    } else {
+        public_base(&s.agent_catalog, &initial.source_runtime_id)
+    }
+    .ok_or_else(|| {
         AppError::problem(
             StatusCode::CONFLICT,
             "agent_public_route_unavailable",
@@ -253,7 +265,7 @@ async fn prepare_execution(
             "The configured runtime no longer advertises this template.",
         )
     })?;
-    if !matches!(template.category.as_str(), "react" | "graph") {
+    if !embedded && !matches!(template.category.as_str(), "react" | "graph") {
         return Err(AppError::problem(
             StatusCode::CONFLICT,
             "agent_execution_not_connected",
@@ -312,12 +324,13 @@ async fn prepare_execution(
         space_id,
         runtime_id: current.source_runtime_id,
         execution_transport: ExecutionTransport::Sse,
-        execute_url: format!("{base}/agents/execute"),
+        execute_url: (!embedded).then(|| format!("{base}/agents/execute")),
         execute_stream_url: format!("{base}/agents/execute/stream"),
-        messages_url_template: format!("{base}/agents/sessions/{{session_id}}/messages"),
+        messages_url_template: (!embedded)
+            .then(|| format!("{base}/agents/sessions/{{session_id}}/messages")),
         supports_streaming: true,
         supports_hitl: false,
-        supports_ui_parts: true,
+        supports_ui_parts: !embedded,
         max_chat_input_chars: template.max_chat_input_chars,
         chat_controls,
         models,

@@ -29,8 +29,12 @@ def run(command: list[str], *, body: str | None = None, step: str | None = None)
 
 
 def prepare() -> None:
-    if os.environ.get("ENV") != "secondary" and os.environ.get("INSTANCE") != "weaver":
-        raise RuntimeError("Use INSTANCE=weaver or ENV=secondary")
+    if (
+        os.environ.get("KUBE_CONTEXT") != "k3d-fred"
+        or os.environ.get("K3D_NAMESPACE") != "fred-weaver"
+        or os.environ.get("K3D_DATABASE") != "fred_weaver"
+    ):
+        raise RuntimeError("Run make k3d-up-weaver or make k3d-up-migration from the factory")
     here = Path(__file__).resolve().parent
     output = Path(os.environ["K3D_APP_OUT"])
     namespace = os.environ.get("K3D_NAMESPACE", "fred")
@@ -60,21 +64,20 @@ def prepare() -> None:
     api_config = yaml.safe_load(
         configs["knowledge-flow-backend-back"]["data"]["configuration.yaml"]
     )
-    if os.environ.get("INSTANCE") == "weaver":
-        expected_database = os.environ["K3D_DATABASE"]
-        for name in (
-            "control-plane-backend",
-            "fred-agents",
-            "knowledge-flow-backend",
-            "knowledge-flow-worker",
-        ):
-            configuration = yaml.safe_load(
-                configs[name + "-back"]["data"]["configuration.yaml"]
+    expected_database = os.environ["K3D_DATABASE"]
+    for name in (
+        "control-plane-backend",
+        "fred-agents",
+        "knowledge-flow-backend",
+        "knowledge-flow-worker",
+    ):
+        configuration = yaml.safe_load(
+            configs[name + "-back"]["data"]["configuration.yaml"]
+        )
+        if configuration["storage"]["postgres"]["database"] != expected_database:
+            raise RuntimeError(
+                "Every Weaver component must use the isolated application database"
             )
-            if configuration["storage"]["postgres"]["database"] != expected_database:
-                raise RuntimeError(
-                    "Every Weaver component must use the isolated application database"
-                )
     generated = output / "manager-ingestion.generated.yaml"
     if not worker_config.get("manager_processing"):
         raise RuntimeError(

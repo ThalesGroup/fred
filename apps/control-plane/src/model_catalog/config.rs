@@ -78,6 +78,14 @@ pub(super) fn bounded_text(value: &str, max_bytes: usize) -> bool {
         && !value.chars().any(char::is_control)
 }
 
+pub(crate) fn valid_source_id(value: &str) -> bool {
+    bounded_text(value, 64)
+        && value.starts_with(|c: char| c.is_ascii_alphanumeric())
+        && value
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+}
+
 fn approved_url(value: &str, allow_http: bool) -> bool {
     bounded_text(value, 2048)
         && reqwest::Url::parse(value).is_ok_and(|url| {
@@ -101,17 +109,7 @@ pub fn validate_sources(sources: &[ModelSource]) -> Result<()> {
 
 impl ModelSource {
     pub fn validate(&self) -> Result<()> {
-        ensure!(
-            bounded_text(&self.source_id, 64)
-                && self
-                    .source_id
-                    .starts_with(|c: char| c.is_ascii_alphanumeric())
-                && self
-                    .source_id
-                    .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c)),
-            "invalid model source_id"
-        );
+        ensure!(valid_source_id(&self.source_id), "invalid model source_id");
         ensure!(self.revision > 0, "model source revision must be positive");
         ensure!(
             approved_url(&self.discovery_url, self.allow_insecure_http)

@@ -64,6 +64,28 @@ helper rejects this configuration before mutation; its Swift erasure contract
 must not be widened to include Rust document resources. Recreating a disposable
 secondary installation is a separate, explicit operator action.
 
+## Consumption, observation and technical health
+
+Each figure has one authoritative source. The registry in Control Plane's
+PostgreSQL records exactly and idempotently how much was consumed or owned,
+by whom and for which resource. Tokens belong to this registry. If a figure will
+ever be compared with a limit, a bill or a quota, it belongs in the registry.
+OpenSearch serves agent-behavior observation, where occasional loss is acceptable.
+Prometheus and OpenTelemetry serve technical health and operations.
+
+The runtime reports consumption in its own name, using its workload identity.
+Control Plane derives the person, space and agent from the session metadata.
+The consumption journal records one row per offer consumed in a report. An entire
+report is written atomically; the report (one run), identified by `Idempotency-Key`,
+is the unit of idempotency. Replaying the same report does not count twice; any
+change to its session, exchange, occurrence time, offers or counters conflicts.
+A turn interrupted for human validation produces several reports, and its
+consumption is the sum of those reports. Provenance survives retirement or purge.
+This increment provides only the journal and its Control Plane write API; runtime reporting is not yet
+connected. Daily aggregation, partitioning and retention, an outbox, monthly
+closure and pseudonymization are deliberately deferred. Any future consumption
+aggregate must derive from the journal.
+
 ## Logs and lifecycle
 
 Lifecycle and ingestion use SQL receipts and bounded cleanup/reconciliation.

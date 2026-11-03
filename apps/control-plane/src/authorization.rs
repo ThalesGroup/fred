@@ -375,7 +375,7 @@ pub async fn set_agent_default_on(
         > 0)
 }
 
-/// Only decision endpoints admit a workload assertion; ordinary user APIs retain their extractor.
+/// Decision endpoints admit a workload assertion; ordinary user APIs retain their extractor.
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Delegation {
@@ -438,6 +438,24 @@ impl Delegation {
         }
     }
 }
+/// Preserve the verified workload identity separately from its asserted person.
+pub(crate) struct RuntimeCaller(pub crate::auth::CurrentUser);
+impl axum::extract::FromRequestParts<crate::api::AppState> for RuntimeCaller {
+    type Rejection = axum::response::Response;
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &crate::api::AppState,
+    ) -> Result<Self, Self::Rejection> {
+        use axum::response::IntoResponse;
+        state
+            .auth
+            .authenticate_runtime(crate::auth::bearer(parts))
+            .await
+            .map(Self)
+            .map_err(IntoResponse::into_response)
+    }
+}
+
 pub(crate) struct DecisionUser(pub String);
 impl axum::extract::FromRequestParts<crate::api::AppState> for DecisionUser {
     type Rejection = axum::response::Response;
@@ -446,11 +464,7 @@ impl axum::extract::FromRequestParts<crate::api::AppState> for DecisionUser {
         state: &crate::api::AppState,
     ) -> Result<Self, Self::Rejection> {
         use axum::response::IntoResponse;
-        let caller = state
-            .auth
-            .authenticate_runtime(crate::auth::bearer(parts))
-            .await
-            .map_err(IntoResponse::into_response)?;
+        let RuntimeCaller(caller) = RuntimeCaller::from_request_parts(parts, state).await?;
         let crate::extract::ApiQuery(query) =
             crate::extract::ApiQuery::<Delegation>::from_request_parts(parts, state)
                 .await

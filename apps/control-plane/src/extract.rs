@@ -8,11 +8,12 @@
 use axum::{
     Json,
     extract::{FromRequest, FromRequestParts, Path, Query, Request, rejection::JsonRejection},
-    http::{StatusCode, request::Parts},
+    http::{HeaderMap, StatusCode, request::Parts},
 };
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 
-use crate::error::AppError;
+use crate::error::{AppError, AppResult};
+use uuid::Uuid;
 
 /// With `serde(default)`, omitted keys stay None and explicit null is Some(None).
 pub(crate) fn present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
@@ -29,6 +30,27 @@ fn invalid_fields() -> AppError {
         "invalid_fields",
         "Invalid request fields",
     )
+}
+
+/// Exactly one caller-chosen UUID; retain the document API's error contract.
+pub(crate) fn idempotency_key(headers: &HeaderMap) -> AppResult<Uuid> {
+    let invalid = || {
+        AppError::problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_fields",
+            "Idempotency-Key must be one UUID",
+        )
+    };
+    let mut values = headers.get_all("idempotency-key").iter();
+    let key = values
+        .next()
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .ok_or_else(invalid)?;
+    if values.next().is_some() {
+        return Err(invalid());
+    }
+    Ok(key)
 }
 
 pub struct ApiPath<T>(pub T);

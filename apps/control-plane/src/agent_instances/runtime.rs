@@ -7,9 +7,9 @@
 use anyhow::Context;
 use axum::{
     Json,
-    extract::{FromRequestParts, State},
-    http::{StatusCode, header, request::Parts},
-    response::{IntoResponse, Response},
+    extract::State,
+    http::{StatusCode, header},
+    response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -19,31 +19,14 @@ use uuid::Uuid;
 use crate::{
     agents::{self, enablement},
     api::AppState,
-    auth::{CurrentUser, bearer},
-    authorization,
+    auth::CurrentUser,
+    authorization::{self, RuntimeCaller},
     domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
     extract::{ApiPath, ApiQuery},
     model_catalog::instance::{self as models, RuntimeModels},
     onboarding,
 };
-
-/// Keep the authenticated caller intact; an asserted person never becomes a
-/// CurrentUser carrying the workload's roles. Only this extractor widens audience.
-struct RuntimeCaller(CurrentUser);
-
-impl FromRequestParts<AppState> for RuntimeCaller {
-    type Rejection = Response;
-
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Response> {
-        state
-            .auth
-            .authenticate_runtime(bearer(parts))
-            .await
-            .map(Self)
-            .map_err(IntoResponse::into_response)
-    }
-}
 
 /// Exact query parameters emitted by the Python OutboundCredentialProvider.
 /// Unknown/duplicate parameters are rejected; no placement or configuration input.

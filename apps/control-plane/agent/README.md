@@ -13,8 +13,19 @@ listener, deployment, Ralph configuration, tools or memory is introduced.
 `space_id`, optional `model_choice: {source_id, upstream_model_id}` and `reasoning`.
 The authenticated host resolves current identity and instance authority in process.
 It checks the instance's runtime/template, then passes the private admitted decision
-to the library. This does not make Ralph available in the UI selector: its existing
-catalog classification and creation/public-routing limitations remain unchanged.
+to the library. Ralph is an instantiable, fixed template with no capabilities or
+tuning fields. Organization enablement and space permissions use the existing
+catalog and instance routes. Preparation routes SSE to the Control Plane's own
+configured HTTP mount, without an external runtime source entry. The existing
+chat's `steering_turn_id` and `language` are accepted as inert metadata; they do
+not enable steering or change the inference prompt.
+
+This first chat increment has no memory: every message is an independent model
+call. Preparation returns null synchronous-execution and history URLs, and false
+HITL/UI-parts support. The existing chat displays a notice and keeps only this
+visit's live messages; leaving/reloading does not restore them. Session metadata
+still uses the common ownership and instance-association checks. The browser
+input limit is 16,384 Unicode scalars, fitting the 65,536-byte runtime ceiling.
 
 The library checks `platform.inference_credentials` against the admitted source,
 source revision, destination and credential binding before reading the named local
@@ -53,7 +64,8 @@ accepted; nondefault capabilities, HITL and history options return 422.
 loopback provider: destination, model, options, fictitious credential, repeated
 calls, missing/mismatched provisioning, errors, deadlines and stream cancellation.
 Control Plane's `agent_instances::model_catalog` integration tests additionally
-exercise authenticated managed execution, delegated admission, browser projection,
+cover HTTP instance/session creation, preparation under a custom router mount,
+the browser execution envelope, delegated admission, browser projection,
 source removal and revocation against disposable PostgreSQL. No real provider or
 k3d validation is implied. Workspace Cargo.lock and the existing Docker build own
 the library dependency.

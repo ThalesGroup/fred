@@ -1,11 +1,11 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{Storage, invalid, models::*, unavailable};
+use super::{Storage, models::*, unavailable};
 use crate::{
     api::AppState,
     error::{AppError, AppResult},
-    extract::{ApiJson, ApiPath, ApiQuery},
+    extract::{ApiJson, ApiPath, ApiQuery, idempotency_key},
     onboarding::AdmittedUser,
 };
 use axum::{
@@ -80,15 +80,7 @@ pub(crate) async fn upload_response(
     multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
     to_root: &str,
 ) -> AppResult<Response> {
-    let mut values = headers.get_all("idempotency-key").iter();
-    let key = values
-        .next()
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| Uuid::parse_str(s).ok())
-        .ok_or_else(|| invalid("Idempotency-Key must be one UUID"))?;
-    if values.next().is_some() {
-        return Err(invalid("Idempotency-Key must be one UUID"));
-    }
+    let key = idempotency_key(headers)?;
     let outcome = storage(s)?
         .upload(
             user,

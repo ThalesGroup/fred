@@ -964,6 +964,7 @@ Operation `team_supervision`.
 | GET | [/spaces/{space_id}/sessions/{session_id}/attachments](#get-spacesspace_idsessionssession_idattachments) | The live attachments of the caller's conversation, oldest first, with their latest processing |
 | POST | [/spaces/{space_id}/sessions/{session_id}/attachments](#post-spacesspace_idsessionssession_idattachments) | Attach one file to the caller's conversation and request its `fast` processing atomically |
 | DELETE | [/spaces/{space_id}/sessions/{session_id}/attachments/{document_id}](#delete-spacesspace_idsessionssession_idattachmentsdocument_id) | Delete one attachment of the caller's conversation, as `DELETE /documents/{id}` does |
+| POST | [/spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage](#post-spacesspace_idsessionssession_idexchangesexchange_idusage) | Atomically record consumption reported by a trusted runtime workload in its own name |
 
 ### POST /spaces
 
@@ -1478,6 +1479,27 @@ Operation `delete_attachment`.
 - 200, 202: [`Receipt`](#receipt)
 - 401, 403, 404, 422, 503: [`ErrorBody`](#errorbody)
 - 409: [`ErrorBody`](#errorbody) — `processing_active` while the attachment is processing
+
+### POST /spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage
+
+Atomically record consumption reported by a trusted runtime workload in its own name. Session provenance supplies the space, person and agent, including after retirement. Idempotency-Key identifies the report: identical replays return 204; any difference returns idempotency_conflict. Different keys may report consumption for the same exchange, including after a human-validation resume. This records an admitted turn without renewing its admission or requiring a live agent.
+
+Operation `record_usage`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `Idempotency-Key` | header | string (uuid) | yes | Caller-chosen consumption report UUID; required and unique per run |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes |  |
+| `exchange_id` | path | string, min length 1, max length 256 | yes | Turn identifier, without surrounding whitespace or control characters |
+
+Request: [`UsageReport`](#usagereport).
+
+- 204: no body — Recorded or identical replay
+- 400, 401, 422, 500, 503: [`ErrorBody`](#errorbody)
+- 403: [`ErrorBody`](#errorbody) — A trusted runtime workload is required
+- 404: [`ErrorBody`](#errorbody) — Session not found in this space
+- 409: [`ErrorBody`](#errorbody) — idempotency_conflict: the report key already identifies a different consumption report
 
 ## /users routes
 
@@ -2214,6 +2236,17 @@ One of: `selection_missing`, `reselection_required`, `offer_unknown`, `offer_for
 
 One of: `user_choice`, `instance_recommendation`, `default`, `withdrawal_fallback`.
 
+### ModelUsage
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cache_creation_tokens` | integer (int64), >= 0 | yes |  |
+| `cache_read_tokens` | integer (int64), >= 0 | yes |  |
+| `input_tokens` | integer (int64), >= 0 | yes |  |
+| `model_source_id` | string, min length 1, max length 64 | yes | Source identifier of the Weaver catalogue offer; retained after its removal. |
+| `output_tokens` | integer (int64), >= 0 | yes |  |
+| `upstream_model_id` | string, min length 1, max length 256 | yes | Upstream model identifier, 1 to 256 UTF-8 bytes, without surrounding whitespace. |
+
 ### MySpace
 
 Extends [`Space`](#space) with:
@@ -2228,6 +2261,7 @@ Extends [`Space`](#space) with:
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `acceptance` | [`Acceptance`](#acceptance) or null |  |  |
+| `admitted` | boolean | yes |  |
 | `gcu_version` | string or null |  |  |
 | `root_bootstrap_required` | boolean | yes |  |
 | `user_id` | string | yes |  |
@@ -3060,6 +3094,13 @@ Durable outcome of one upload request, readable by its request key.
 `pending` while the file is transferred and verified, then `stored` once published, or `failed` with an `error_code`.
 
 One of: `pending`, `stored`, `failed`.
+
+### UsageReport
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `models` | array of [`ModelUsage`](#modelusage), min items 1, max items 8 | yes | Complete set of distinct offers consumed during this report (one run); order is irrelevant. |
+| `occurred_at` | string (date-time) | yes | Time of consumption; at most five minutes ahead of server time. |
 
 ### UserPreferences
 

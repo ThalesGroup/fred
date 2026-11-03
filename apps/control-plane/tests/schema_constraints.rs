@@ -559,3 +559,225 @@ async fn document_tree_upgrade_preserves_data_history_and_reader_grants() {
     .unwrap();
     assert!(!forbidden);
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn model_usage_constrains_facts_without_foreign_keys() {
+    async fn insert(
+        pool: &PgPool,
+        report: Uuid,
+        session: Uuid,
+        exchange: &str,
+        offer: (&str, &str),
+        tokens: [i64; 4],
+    ) -> Result<sqlx::postgres::PgQueryResult, sqlx::Error> {
+        sqlx::query("insert into model_usage(session_id,exchange_id,occurred_at,space_id,user_id,agent_instance_id,model_source_id,upstream_model_id,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,report_id) values($1,$2,now(),$3,'alice',$4,$5,$6,$7,$8,$9,$10,$11)")
+            .bind(session).bind(exchange).bind(Uuid::new_v4()).bind(Uuid::new_v4())
+            .bind(offer.0).bind(offer.1).bind(tokens[0]).bind(tokens[1]).bind(tokens[2]).bind(tokens[3]).bind(report).execute(pool).await
+    }
+    let pool = database().await;
+    let session = Uuid::new_v4();
+    let report = Uuid::new_v4();
+    // No referenced session, space, person, agent or catalogue offer is required.
+    insert(
+        &pool,
+        report,
+        session,
+        "turn",
+        ("source", "model"),
+        [0, 0, 0, 0],
+    )
+    .await
+    .unwrap();
+    violation(
+        insert(
+            &pool,
+            report,
+            session,
+            "turn",
+            ("source", "model"),
+            [0, 0, 0, 0],
+        )
+        .await
+        .unwrap_err(),
+        "23505",
+    );
+    // Each component of the offer identity participates in the primary key.
+    for offer in [("other-source", "model"), ("source", "other-model")] {
+        insert(&pool, report, session, "turn", offer, [0, 0, 0, 0])
+            .await
+            .unwrap();
+    }
+    for source in [
+        "".into(),
+        " leading".into(),
+        "trailing ".into(),
+        "-source".into(),
+        "_source".into(),
+        ".source".into(),
+        "source/name".into(),
+        "é".into(),
+        "s".repeat(65),
+    ] {
+        check_violation(
+            insert(
+                &pool,
+                report,
+                session,
+                "invalid",
+                (&source, "model"),
+                [0, 0, 0, 0],
+            )
+            .await
+            .unwrap_err(),
+        );
+    }
+    insert(
+        &pool,
+        report,
+        session,
+        "source-boundary",
+        (&format!("A{}", "._-".repeat(21)), "model"),
+        [0, 0, 0, 0],
+    )
+    .await
+    .unwrap();
+    for exchange in [
+        "".into(),
+        " leading".into(),
+        "trailing ".into(),
+        "control\ninside".into(),
+        "control\u{7f}".into(),
+        "x".repeat(257),
+    ] {
+        check_violation(
+            insert(
+                &pool,
+                report,
+                session,
+                &exchange,
+                ("source", "model"),
+                [0, 0, 0, 0],
+            )
+            .await
+            .unwrap_err(),
+        );
+    }
+    for model in [
+        "".into(),
+        " leading".into(),
+        "trailing ".into(),
+        "x".repeat(257),
+        "é".repeat(129),
+    ] {
+        check_violation(
+            insert(
+                &pool,
+                report,
+                session,
+                "invalid",
+                ("source", &model),
+                [0, 0, 0, 0],
+            )
+            .await
+            .unwrap_err(),
+        );
+    }
+    for tokens in [[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, -1]] {
+        check_violation(
+            insert(
+                &pool,
+                report,
+                session,
+                "invalid",
+                ("source", "model"),
+                tokens,
+            )
+            .await
+            .unwrap_err(),
+        );
+    }
+    for column in [
+        "report_id",
+        "session_id",
+        "exchange_id",
+        "occurred_at",
+        "space_id",
+        "user_id",
+        "agent_instance_id",
+        "model_source_id",
+        "upstream_model_id",
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_creation_tokens",
+    ] {
+        violation(
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "update model_usage set {column}=null"
+            )))
+            .execute(&pool)
+            .await
+            .unwrap_err(),
+            "23502",
+        );
+    }
+    insert(
+        &pool,
+        report,
+        session,
+        &"é".repeat(256),
+        ("source", &"é".repeat(128)),
+        [i64::MAX; 4],
+    )
+    .await
+    .unwrap();
+    // Changing session/exchange cannot reuse a report's offer key.
+    violation(
+        insert(
+            &pool,
+            report,
+            Uuid::new_v4(),
+            "different",
+            ("source", "model"),
+            [0; 4],
+        )
+        .await
+        .unwrap_err(),
+        "23505",
+    );
+    // A new report may consume the same offer for the same session and exchange.
+    insert(
+        &pool,
+        Uuid::new_v4(),
+        session,
+        "turn",
+        ("source", "model"),
+        [0; 4],
+    )
+    .await
+    .unwrap();
+    let collations: Vec<(String, String)> = sqlx::query_as(
+        "select attname::text, collname::text from pg_attribute a
+         join pg_collation c on c.oid=a.attcollation
+         where a.attrelid='model_usage'::regclass
+           and a.attname in ('model_source_id','upstream_model_id') order by attname",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        collations,
+        vec![
+            ("model_source_id".into(), "C".into()),
+            ("upstream_model_id".into(), "C".into()),
+        ]
+    );
+    let foreign_keys: i64 = sqlx::query_scalar(
+        "select count(*) from pg_constraint where conrelid='model_usage'::regclass and contype='f'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(foreign_keys, 0);
+}

@@ -659,6 +659,7 @@
     "deletedAgentSuffix": "(supprimé)",
     "modelPreparationErrorTitle": "Envoi indisponible",
     "historyUnavailable": "L'historique de la conversation est indisponible. Réessayez plus tard.",
+    "historyUnsupported": "Cet agent répond à chaque message indépendamment. Les messages ne sont pas sauvegardés et disparaîtront en quittant ce chat.",
     "preparationUnavailable": "Impossible de préparer la conversation. Vérifiez votre connexion puis réessayez.",
     "savedModelChoiceInvalid": "Le modèle enregistré doit être sélectionné à nouveau dans le menu Modèles.",
     "skipAllHitlQuestions": "Tout passer",

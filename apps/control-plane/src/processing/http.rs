@@ -4,7 +4,7 @@ use super::{Processing, models::*, store};
 use crate::{
     api::AppState,
     error::{AppError, AppResult},
-    extract::{ApiJson, ApiPath, ApiQuery},
+    extract::{ApiJson, ApiPath, ApiQuery, idempotency_key},
     onboarding::AdmittedUser,
 };
 use axum::{
@@ -53,18 +53,6 @@ impl FromRequestParts<AppState> for Worker {
         Ok(Self)
     }
 }
-fn key(headers: &HeaderMap) -> AppResult<Uuid> {
-    let mut h = headers.get_all("idempotency-key").iter();
-    let key = h
-        .next()
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| Uuid::parse_str(v).ok())
-        .ok_or_else(invalid)?;
-    if h.next().is_some() {
-        return Err(invalid());
-    }
-    Ok(key)
-}
 /// Process a stored document for the first time, or retry its failed attempt.
 /// A document has at most one active or succeeded attempt; replaying `Idempotency-Key` returns it.
 #[utoipa::path(post,path="/documents/{id}/processing",params(("id"=Uuid,Path,description="Stored document"),("Idempotency-Key"=Uuid,Header,description="Caller-chosen request UUID; replaying it is safe")),request_body=Start,responses((status=200,body=Summary),(status=409,description="`processing_exists` (active or succeeded attempt), `retry_required` (set `retry_of`), `invalid_retry`, `retry_superseded` or `idempotency_conflict`",body=crate::error::ErrorBody),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=503,description="`processing_unavailable`",body=crate::error::ErrorBody),(status=429,description="`processing_capacity`: too many pending attempts; honour `Retry-After`",body=crate::error::ErrorBody),(status=400,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
@@ -77,7 +65,12 @@ async fn start(
 ) -> AppResult<Json<Summary>> {
     Ok(Json(
         service(&s)?
-            .start(&user.uid, key(&headers)?, id, input)
+            .start(
+                &user.uid,
+                idempotency_key(&headers).map_err(|_| invalid())?,
+                id,
+                input,
+            )
             .await?,
     ))
 }

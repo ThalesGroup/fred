@@ -148,9 +148,11 @@ fn native_catalog() -> RuntimeCatalog {
             // Fixed response, with no ReAct loop or graph execution engine.
             kind: "static".into(),
             public_version: Some(definition.version.into()),
-            // The native template is not exposed for catalog-based instantiation.
             metadata: BTreeMap::from([
-                ("team_instantiable".into(), serde_json::Value::Bool(false)),
+                ("team_instantiable".into(), serde_json::Value::Bool(true)),
+                ("default_tuning".into(), serde_json::json!({"fields": []})),
+                // Four UTF-8 bytes per scalar fit the embedded byte limit.
+                ("max_chat_input_chars".into(), serde_json::json!(16_384)),
                 (
                     "supports_capabilities".into(),
                     serde_json::Value::Bool(false),

@@ -205,6 +205,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /spaces/{space_id}/sessions/{session_id}",
         "patch /spaces/{space_id}/sessions/{session_id}",
         "delete /spaces/{space_id}/sessions/{session_id}",
+        "post /spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage",
         "post /spaces/{space_id}/sessions/{session_id}/attachments",
         "get /spaces/{space_id}/sessions/{session_id}/attachments",
         "delete /spaces/{space_id}/sessions/{session_id}/attachments/{document_id}",
@@ -890,4 +891,71 @@ fn prompt_publication_contract_has_no_snapshot_import_or_usage_fields() {
             .keys()
             .any(|path| path.contains("/marketplace/prompts"))
     );
+}
+
+#[test]
+fn usage_report_identifies_a_bounded_set_of_catalogue_offers() {
+    let api = schema();
+    let usage = &api["components"]["schemas"]["UsageReport"];
+    let required = usage["required"].as_array().unwrap();
+    for field in ["occurred_at", "models"] {
+        assert!(required.contains(&json!(field)), "{field}");
+    }
+    assert_eq!(usage["additionalProperties"], false);
+    assert_eq!(usage["properties"]["models"]["minItems"], 1);
+    assert_eq!(usage["properties"]["models"]["maxItems"], 8);
+    assert_eq!(
+        usage["properties"]["models"]["items"]["$ref"],
+        "#/components/schemas/ModelUsage"
+    );
+    let model = &api["components"]["schemas"]["ModelUsage"];
+    let required = model["required"].as_array().unwrap();
+    assert_eq!(model["additionalProperties"], false);
+    for field in ["model_source_id", "upstream_model_id"] {
+        assert!(required.contains(&json!(field)), "{field}");
+        assert_eq!(model["properties"][field]["type"], "string");
+        assert!(usage["properties"].get(field).is_none());
+    }
+    assert!(usage["properties"].get("model").is_none());
+    assert_eq!(
+        model["properties"]["model_source_id"]["pattern"],
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    );
+    assert_eq!(model["properties"]["upstream_model_id"]["minLength"], 1);
+    assert_eq!(model["properties"]["upstream_model_id"]["maxLength"], 256);
+    for field in [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_creation_tokens",
+    ] {
+        assert!(required.contains(&json!(field)), "{field}");
+        assert_eq!(model["properties"][field]["minimum"], 0);
+        assert!(usage["properties"].get(field).is_none());
+    }
+    let operation = &api["paths"]["/control-plane/v1/spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage"]
+        ["post"];
+    assert_eq!(
+        operation["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/UsageReport"
+    );
+    assert!(
+        operation["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|parameter| parameter["in"] != "query")
+    );
+    let key = operation["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|parameter| parameter["name"] == "Idempotency-Key")
+        .unwrap();
+    assert_eq!(key["in"], "header");
+    assert_eq!(key["required"], true);
+    assert_eq!(key["schema"]["format"], "uuid");
+    for status in ["204", "409", "422"] {
+        assert!(operation["responses"].get(status).is_some(), "{status}");
+    }
 }
