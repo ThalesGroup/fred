@@ -105,6 +105,8 @@ def _describe_document_responses(operation: dict) -> None:
     }
     if operation_id in {"get_document_markdown", "summarize_document", "extract_document"}:
         descriptions["404"] += " Document not visible, unpublished, retired, or published markdown unavailable (document_not_found); not a document-existence oracle."
+    if operation_id == "list_document_tree":
+        descriptions["404"] += " Folder unavailable or outside the authorized selection (folder_not_found); not an existence oracle."
     if operation_id in {"search_documents", "get_document_chunks"}:
         descriptions["503"] += " The document index may also be unavailable (corpus_not_ready)."
     if tabular:

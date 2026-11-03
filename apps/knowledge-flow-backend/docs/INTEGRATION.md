@@ -78,6 +78,7 @@ the following other document calls use the same headers and grant query:
 
 | Method and path, relative to `KF_BASE_URL` | Additional query or body |
 | --- | --- |
+| GET `/documents/tree` | Query `folder_id=<UUID>` (optional), `limit=1000` (1 to 5000); corpus only |
 | GET `/documents/{document_uid}/chunks` | Query `limit=200` (1 to 1000) |
 | GET `/documents/{document_uid}/markdown` | No body; response JSON has `content` |
 | POST `/documents/{document_uid}/summarize` | `{"instruction":"Summarize deadlines","max_chars":2000}` |
@@ -169,6 +170,7 @@ Schema limits appear in the reference; additional service behavior matters:
 | --- | --- |
 | Context header | No Fred-specific cap/truncation. 1000 explicit document UUIDs in one compact selection take 39,120 ASCII bytes. h11 defaults to a 16 KiB incomplete-header-event limit; fragmented large headers may fail before KF. Uvicorn auto selects httptools when installed, otherwise h11. Proxy and deployed-server bounds remain to be verified; no universal accepted size is claimed |
 | Search | `top_k` defaults to 10, maximum 100. Fewer hits or `[]` is valid; no pagination or exhaustive-coverage guarantee |
+| Document tree | At most `limit` folder and document records combined (default 1000, maximum 5000), plus their space labels. `truncated=true` means records were omitted; no continuation token or completeness claim. Selection uses direct folder contents; `folder_id` only narrows navigation to a subtree. Unavailable or out-of-scope folders return 404 `folder_not_found`; attachments are excluded |
 | Chunks | At most `limit` ordered chunks; no continuation or truncation flag. `[]` may mean no visible chunks or unsupported direct fetching, not proof of document absence |
 | Markdown | Full published markdown, no API size cap or pagination. Budget client memory accordingly |
 | Summary | `max_chars` is a target (200 to 20000), not a hard output bound; corrective rewriting can fail or still exceed it |

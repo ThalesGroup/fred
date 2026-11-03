@@ -7,7 +7,7 @@ create view cp_read.document_visibility as
 select d.id as document_id, d.space_id, d.folder_id,
        d.session_id as conversation_id, sm.user_id as conversation_owner,
        g.id as generation_id, g.vector_ordinals,
-       d.name, d.sha256 as source_revision,
+       d.name, d.mime, d.created_at, d.sha256 as source_revision,
        cardinality(f.rejection_reasons) = 0 as visible,
        f.rejection_reasons
 from document d
@@ -27,6 +27,7 @@ cross join lateral (
 ) f;
 -- document_id identifies candidates; space/folder/conversation facts constrain the request.
 -- conversation_owner binds attachments to the person; generation_id/vector_ordinals fence chunks.
+-- mime/created_at supply document-tree media type and arrival time without artifact reads.
 -- name/source_revision are the existing tabular result fields. visible is the sole lifecycle
 -- and publication predicate. rejection_reasons preserves aggregate diagnostics without Python policy.
 
@@ -38,10 +39,11 @@ join artifact a on a.generation_id = g.id;
 -- document_id/path select the requested published artifact; prefix locates it, size/sha256 verify it.
 
 create view cp_read.space_state as
-select id, deletion_id is not null as retired from space;
--- id resolves the anchor; retired preserves the distinct missing/pending-deletion API errors.
+select id, name, deletion_id is not null as retired from space;
+-- name labels document-tree spaces. id resolves the anchor; retired preserves the distinct missing/pending-deletion API errors.
 create view cp_read.folder_path as
-select id, space_id, path from folder where deletion_id is null;
+select id, space_id, path, name from folder where deletion_id is null;
+-- name labels document-tree folders; path also supplies their parent IDs.
 -- id/space_id enforce folder selection within the authorized corpus; path prefilters vector hits.
 create view cp_read.conversation as
 select session_id as conversation_id, space_id, user_id as owner

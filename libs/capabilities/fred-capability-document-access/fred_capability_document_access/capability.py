@@ -25,7 +25,7 @@ What this capability ships (and deliberately does NOT):
 - `search_documents`, the vector-search tool, wired live
   through `ctx.services.document_search`
 - `list_document_tree`: exposed only when `ctx.services.document_tree` exists.
-  The Weaver pod does not supply it yet. Failures surface as
+  The Weaver pod supplies this corpus-only port. Failures surface as
   `is_error` tool results with actionable detail (timeout/HTTP status), never
   raised exceptions.
 - NOT `summarize_document` — that tool is its own capability,
@@ -48,8 +48,8 @@ Doctrine (RFC §3.5, §3.8, §10):
 - the capability reaches the platform ONLY through typed optional ports on
   `RuntimeServices`; the per-turn binding and the raw access token NEVER enter
   `CapabilityContext`
-- the tool signature exposes ONLY LLM arguments (`question`, `top_k`); scope and
-  identity reach the tool through the middleware closure, never the tool schema
+- tool signatures expose only model search/navigation arguments; scope and
+  identity reach the tools through the middleware closure, never the tool schema
 
 Scoping precedence (`turn_option ⊆ capability_config ⊆ session_binding`):
 - HERE both tools narrow their stored-config scope (`config.library_tag_ids` /
@@ -108,6 +108,8 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_validator
+
+from fred_capability_document_access.tree_builder import build_tree, render_tree
 
 # The tool-result `tool_ref` this capability stamps on its artifact — distinct
 # from the builtin `knowledge.search` ref so the two paths stay traceable apart.
@@ -407,7 +409,7 @@ class DocumentAccessCapability(
         id="document_access",
         # Bump on every config-surface change: the version keys the stored-slice
         # schema_version and the control-plane chat-controls cache.
-        version="0.3.0",
+        version="0.4.0",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
@@ -605,7 +607,7 @@ class DocumentAccessCapability(
         ctx: CapabilityContext[DocumentAccessConfig, DocumentAccessTurnOptions],
     ) -> Sequence[BaseTool]:
         """
-        Build the single vector-search tool, bound to the turn's typed
+        Build vector-search and corpus-tree tools, bound to the turn's typed
         context (RFC §3.2, §5). This is the ONLY runtime contribution of this
         capability — `AgentCapability.middleware()`'s default wraps this for
         `create_agent()`; no ReAct-loop-specific hook is needed.
@@ -741,21 +743,15 @@ class DocumentAccessCapability(
 
         @tool("list_document_tree", response_format="content_and_artifact")
         async def list_document_tree(
-            working_directory: str | None = None,
+            folder_id: str | None = None,
             max_chars: int = 20_000,
         ) -> tuple[str, ToolInvocationResult]:
             """List the folders and documents in the user's document scope as a tree.
 
             Call this to browse folders and document metadata before reading
             or summarizing a document. Each document leaf is a JSON record
-            with uid, name, added_to_kb, created and modified. Available title,
-            format/MIME, language, page/row counts, labels and source are included.
-
-            For the latest document added to Fred, compare added_to_kb timestamps.
-            created is file creation metadata; modified can include Fred metadata
-            edits. Neither is an arrival date. Arrival is not ingestion completion.
-            Dates retain time and timezone; null means unknown. Never infer an
-            unknown date from another field.
+            with uid, name, mime and added_to_kb (the document arrival time).
+            Dates retain time and timezone. Arrival is not ingestion completion.
 
             Use uid as the document_uid argument to reading/summarizing tools.
             Folder records use folder and optional folder_id, never uid:
@@ -763,8 +759,8 @@ class DocumentAccessCapability(
             for YOUR tool calls only. NEVER repeat them in your answer to the
             user; refer to documents by display name.
 
-            working_directory narrows the listing to a folder such as Sales/HR.
-            Omit it to start at the root. Documents can appear in multiple folders.
+            folder_id narrows the listing to that folder and its descendants.
+            Omit it to start at the root. Each document belongs to at most one folder.
             A large result is pruned to the character budget. An incomplete tree
             cannot establish the latest document across the entire requested scope;
             narrow the folder and state the limit instead of claiming exhaustiveness.
@@ -781,9 +777,9 @@ class DocumentAccessCapability(
             started = time.monotonic()
             try:
                 result: DocumentTreeResult = await port.tree(
-                    working_directory=working_directory,
+                    folder_id=folder_id,
                     document_scope=document_scope,
-                    max_chars=effective_max_chars,
+                    limit=1000,
                 )
             except Exception as exc:
                 run_stop = unwrap_run_stop_error(exc)
@@ -795,11 +791,15 @@ class DocumentAccessCapability(
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
-            text = result.tree
-            if result.truncated:
-                text = (
-                    "Listing incomplete: omitted documents may be more recent.\n" + text
+            notice = "Listing incomplete: omitted documents may be more recent.\n"
+            text, pruned = render_tree(
+                build_tree(result), max_chars=effective_max_chars
+            )
+            if result.truncated or pruned:
+                text, _ = render_tree(
+                    build_tree(result), max_chars=effective_max_chars - len(notice)
                 )
+                text = notice + text
             artifact = ToolInvocationResult(
                 tool_ref="list_document_tree",
                 blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),

@@ -152,6 +152,7 @@ def test_corpus_filter_preserves_the_empty_session_term_inside_knn():
 
 
 OPERATIONS = [
+    ("GET", "/documents/tree", None, None),
     ("POST", "/documents/search", {"question": "q"}, None),
     ("GET", f"/documents/{DOC}/chunks", None, None),
     ("GET", f"/documents/{DOC}/markdown", None, None),
@@ -167,6 +168,7 @@ OPERATIONS = [
 @pytest.fixture
 def document_app(monkeypatch):
     from knowledge_flow_backend.features.document_scope import declare_document_context_openapi
+    from knowledge_flow_backend.features.document_tree.controller import DocumentTreeController
     from knowledge_flow_backend.features.extract.controller import ExtractController
     from knowledge_flow_backend.features.summarize.controller import SummarizeController
     from knowledge_flow_backend.features.tabular.controller import TabularController
@@ -176,7 +178,7 @@ def document_app(monkeypatch):
     monkeypatch.setattr(vector_controller, "get_kpi_writer", MagicMock)
     monkeypatch.setattr(summarize_module.SummarizeService, "__init__", lambda self: None)
     app, router = FastAPI(), APIRouter(prefix="/custom/kf")
-    for controller in (vector_controller.VectorSearchController, markdown_module.MarkdownController, SummarizeController, ExtractController, TabularController):
+    for controller in (DocumentTreeController, vector_controller.VectorSearchController, markdown_module.MarkdownController, SummarizeController, ExtractController, TabularController):
         controller(router)
     app.include_router(router)
     app.dependency_overrides[delegated_person] = lambda: object()
@@ -208,10 +210,10 @@ def test_all_operations_require_the_same_context(document_app, method, path, bod
     assert response.json() == {"detail": detail}
 
 
-def test_document_context_is_documented_on_exactly_nine_operations(document_app):
+def test_document_context_is_documented_on_exactly_ten_operations(document_app):
     schema = document_app.openapi()
     operations = [operation for path in schema["paths"].values() for operation in path.values()]
-    assert len(operations) == 9
+    assert len(operations) == 10
     for operation in operations:
         headers = [p for p in operation["parameters"] if p["name"] == DOCUMENT_CONTEXT_HEADER]
         assert len(headers) == 1

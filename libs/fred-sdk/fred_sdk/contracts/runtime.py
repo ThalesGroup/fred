@@ -44,6 +44,7 @@ from typing import (
 )
 
 from fred_core.documents.selection import DocumentScope
+from fred_core.documents.tree import DocumentTreeResult as DocumentTreeResult
 from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
@@ -1023,13 +1024,6 @@ class DocumentFolderPort(ABC):
         """List the documents carried by one folder tag (uid + display name)."""
 
 
-class DocumentTreeResult(FrozenModel):
-    """Typed result of one capability-scoped document tree listing."""
-
-    tree: str = ""
-    truncated: bool = False
-
-
 class DocumentSummaryResult(FrozenModel):
     """Typed result of one on-demand document summarization."""
 
@@ -1101,32 +1095,15 @@ class DocumentTreePort(ABC):
     async def tree(
         self,
         *,
-        working_directory: str | None = None,
+        folder_id: str | None = None,
         document_scope: DocumentScope | None = None,
-        library_tag_ids: Sequence[str] | None = None,
-        document_uids: Sequence[str] | None = None,
-        max_chars: int = 20_000,
+        limit: int = 1000,
     ) -> DocumentTreeResult:
-        """
-        Return the caller's authorized folder/document tree as rendered text.
+        """Return structured corpus entries, bounded by limit; never attachments.
 
-        `document_scope` is an intersection of Weaver selections, evaluated by
-        document coverage downstream. Legacy parameter names `library_tag_ids`
-        (Weaver folder UUIDs, direct contents) / `document_uids` form one union,
-        additionally intersected with `document_scope` and the private agent/turn
-        ceiling. Both None means no restriction; any present empty selection
-        means no documents. These parameters carry the capability's already-narrowed
-        scope (None = "no capability-side narrowing at that level", an empty list
-        = nothing in scope); the adapter further bounds them by the session
-        binding before calling Knowledge Flow, completing
-        `turn_option ⊆ capability_config ⊆ session_binding`. Libraries and
-        documents union, so the listing is empty only when neither selects
-        anything. A
-        document scope prunes the listing to those leaves and drops the folders
-        left empty, so a one-document selection renders one document. Raises
-        `DocumentPortCallError` on transport failure.
-
-        Render every folder in scope, bounded by `max_chars` to fit one response.
+        The adapter intersects document_scope with the private turn ceiling.
+        folder_id narrows navigation, never authority. Rendering belongs to the
+        capability. An incomplete result establishes nothing about omitted items.
         """
 
 

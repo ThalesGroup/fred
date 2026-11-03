@@ -225,3 +225,68 @@ async def test_ordinary_search_does_not_opt_into_similarity_transport(
     assert calls[0]["json"] == {"question": "q", "top_k": 10}
     assert calls[0]["read_timeout"] is None
     assert calls[0]["phase_name"] == "kf_vector_search"
+
+
+@pytest.mark.parametrize(
+    "exc,failures,expected_calls",
+    [
+        (httpx.ConnectError("dropped"), 1, 2),
+        (_http_error(503), 1, 2),
+        (_http_error(502), 99, 3),
+        (httpx.ReadTimeout("slow"), 99, 1),
+        (httpx.WriteTimeout("slow"), 99, 1),
+        (_http_error(403), 99, 1),
+        (_http_error(500), 99, 1),
+    ],
+)
+async def test_tree_get_wire_context_and_transient_policy(
+    monkeypatch, exc, failures, expected_calls
+):
+    from types import SimpleNamespace
+
+    from fred_runtime.common import kf_document_client as module
+    from fred_sdk.contracts.runtime import DocumentTreeResult
+
+    client = object.__new__(module.KfDocumentClient)
+    monkeypatch.setattr(
+        module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(timeouts=SimpleNamespace(similarity_read=37.0))
+        ),
+    )
+    context = DocumentAccessContext(
+        space_id=UUID(int=1), document_scope=DocumentScope.from_ids([str(UUID(int=2))])
+    )
+    calls = []
+
+    async def request(**kwargs):
+        calls.append(kwargs)
+        if len(calls) <= failures:
+            raise exc
+        return httpx.Response(
+            200,
+            json={"spaces": [], "folders": [], "documents": [], "truncated": False},
+            request=httpx.Request("GET", "http://kf/documents/tree"),
+        )
+
+    monkeypatch.setattr(client, "_request_with_token_refresh", request)
+    call = client.tree(document_context=context, folder_id=str(UUID(int=2)), limit=42)
+    if failures == 99:
+        with pytest.raises(type(exc)):
+            await call
+    else:
+        assert await call == DocumentTreeResult()
+    assert len(calls) == expected_calls
+    assert all(
+        attempt
+        == {
+            "method": "GET",
+            "path": "/documents/tree",
+            "phase_name": "kf_document_tree",
+            "headers": {DOCUMENT_CONTEXT_HEADER: context.model_dump_json()},
+            "params": {"folder_id": str(UUID(int=2)), "limit": 42},
+            "read_timeout": 37.0,
+        }
+        for attempt in calls
+    )

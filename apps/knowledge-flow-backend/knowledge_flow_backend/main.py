@@ -43,6 +43,7 @@ from knowledge_flow_backend.common.structures import Configuration
 from knowledge_flow_backend.core.monitoring.monitoring_controller import MonitoringController
 from knowledge_flow_backend.features.content.published_markdown import MarkdownController
 from knowledge_flow_backend.features.document_scope import declare_document_context_openapi
+from knowledge_flow_backend.features.document_tree.controller import DocumentTreeController
 from knowledge_flow_backend.features.extract.controller import ExtractController
 from knowledge_flow_backend.features.summarize.controller import SummarizeController
 from knowledge_flow_backend.features.tabular.controller import TabularController
@@ -142,6 +143,7 @@ def create_app() -> FastAPI:
         dependencies=[Depends(declare_delegation_parameters)],
     )
     MonitoringController(monitoring_router, application_context)
+    DocumentTreeController(router)
     VectorSearchController(router)
     MarkdownController(router)
     SummarizeController(router)

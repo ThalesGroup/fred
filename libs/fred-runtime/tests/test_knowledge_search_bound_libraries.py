@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Library binding resolution and the legacy tree port's "empty scope finds nothing" rule.
+Library binding resolution for stored capability configuration.
 
 The builtin `knowledge.search` carries Weaver folder/document selections;
 its corpus search is covered by test_document_search_source_ceilings.py.
@@ -20,12 +20,9 @@ its corpus search is covered by test_document_search_source_ceilings.py.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any
+from collections.abc import Mapping
 
-import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import pytest
-from fred_core.store.vector_search import VectorSearchHit
 from fred_runtime.app.agent_app import _instance_bound_library_ids
 from fred_runtime.capabilities import CapabilityRegistry, resolve_bound_library_ids
 from fred_runtime.runtime_context import (
@@ -43,9 +40,6 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
-    PortableContext,
-    PortableEnvironment,
-    RuntimeContext,
 )
 from fred_sdk.contracts.models import (
     AgentTuning,
@@ -55,136 +49,7 @@ from fred_sdk.contracts.models import (
     GraphNodeDefinition,
     MCPServerRef,
 )
-from fred_sdk.contracts.runtime import DocumentTreeResult
 from pydantic import BaseModel
-
-
-class _FakeSettings:
-    id: str = "agent-1"
-    team_id: str | None = "team-1"
-    tuning: AgentTuning | None = None
-    active_mcp_servers: Sequence[MCPServerRef] = ()
-
-
-class _RecordingSearchClient:
-    """Stand-in for VectorSearchClient that records every search call."""
-
-    calls: list[dict[str, Any]] = []
-
-    def __init__(self, agent: object) -> None:
-        del agent
-
-    async def search(self, **kwargs: Any) -> list[VectorSearchHit]:
-        type(self).calls.append(kwargs)
-        return [
-            VectorSearchHit(
-                uid="d1", title="Doc 1", content="alpha", score=0.9, type="document"
-            )
-        ]
-
-    async def get_document_chunks(self, **_kwargs: object) -> list[VectorSearchHit]:
-        return []
-
-
-def _binding(
-    selected_libraries: list[str] | None = None,
-    selected_documents: list[str] | None = None,
-) -> BoundRuntimeContext:
-    return BoundRuntimeContext(
-        runtime_context=RuntimeContext(
-            session_id="s-1",
-            team_id="team-1",
-            selected_document_libraries_ids=selected_libraries,
-            selected_document_uids=selected_documents,
-        ),
-        portable_context=PortableContext(
-            request_id="request-1",
-            correlation_id="correlation-1",
-            actor="u-1",
-            tenant="team-1",
-            environment=PortableEnvironment.DEV,
-        ),
-    )
-
-
-class _RecordingTreeClient:
-    """Stand-in for KfDocumentClient's tree call."""
-
-    calls: list[dict[str, Any]] = []
-
-    def __init__(self, agent: object) -> None:
-        del agent
-
-    async def tree(self, **kwargs: Any) -> DocumentTreeResult:
-        type(self).calls.append(kwargs)
-        return DocumentTreeResult(tree="Sales/", truncated=False)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "session_libraries,capability_libraries",
-    [
-        # The capability's bound libraries miss everything the client selected.
-        (["lib-x"], ["lib-a"]),
-        # The capability's own turn-option narrowing already came out empty.
-        (None, []),
-    ],
-)
-async def test_legacy_tree_finds_nothing_for_an_empty_scope(
-    monkeypatch: pytest.MonkeyPatch,
-    session_libraries: list[str] | None,
-    capability_libraries: list[str],
-) -> None:
-    _RecordingSearchClient.calls = []
-    _RecordingTreeClient.calls = []
-    monkeypatch.setattr(adapters_module, "VectorSearchClient", _RecordingSearchClient)
-    monkeypatch.setattr(adapters_module, "KfDocumentClient", _RecordingTreeClient)
-    binding = _binding(session_libraries)
-    tree = adapters_module.DocumentTreeAdapter(
-        binding=binding, settings=_FakeSettings()
-    )
-
-    listing = await tree.tree(library_tag_ids=capability_libraries)
-
-    # An empty filter would reach Knowledge Flow as no filter at all.
-    assert _RecordingSearchClient.calls == []
-    assert _RecordingTreeClient.calls == []
-    assert listing.tree == ""
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "session_libraries,capability_libraries",
-    [
-        # The capability's bound libraries miss everything the client selected.
-        (["lib-x"], ["lib-a"]),
-        # The capability's own narrowing came out empty: the session's
-        # libraries must not come back in.
-        (["lib-x"], []),
-    ],
-)
-async def test_legacy_tree_keeps_picked_documents_for_an_empty_library_scope(
-    monkeypatch: pytest.MonkeyPatch,
-    session_libraries: list[str],
-    capability_libraries: list[str],
-) -> None:
-    _RecordingSearchClient.calls = []
-    _RecordingTreeClient.calls = []
-    monkeypatch.setattr(adapters_module, "VectorSearchClient", _RecordingSearchClient)
-    monkeypatch.setattr(adapters_module, "KfDocumentClient", _RecordingTreeClient)
-    binding = _binding(session_libraries, ["doc-d"])
-    tree = adapters_module.DocumentTreeAdapter(
-        binding=binding, settings=_FakeSettings()
-    )
-
-    await tree.tree(library_tag_ids=capability_libraries)
-
-    # Libraries and documents union in Knowledge Flow: the picked document
-    # is still searched and listed, and no library is.
-    assert _RecordingSearchClient.calls == []
-    assert [
-        (call["tag_ids"], call["document_uids"]) for call in _RecordingTreeClient.calls
-    ] == [([], ["doc-d"])]
 
 
 class _ScopeConfig(BaseModel):

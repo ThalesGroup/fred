@@ -20,10 +20,8 @@ Covers the document surface beyond vector search:
   PPT-filler image support embeds a picked image into the deck
 - on-demand summarization and the recursive folder/document tree (#1906)
 
-Search and rerank stay on their existing Swift clients; do not grow this one
-beyond these surfaces without checking there first. Scope resolution (library
-binding, session narrowing) is NOT done here — the v2 adapters own it; this
-client is wire-format only.
+Search and rerank stay on their dedicated clients. The v2 adapters build the
+admitted document context; this client owns only the HTTP wire format.
 """
 
 from __future__ import annotations
@@ -31,10 +29,10 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional
 
-from fred_core.common import OwnerFilter
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
+from fred_core.documents.tree import DocumentTreeResult
 from pydantic import BaseModel
 
 from fred_runtime.common.kf_base_client import (
@@ -42,6 +40,7 @@ from fred_runtime.common.kf_base_client import (
     KnowledgeFlowAgentContext,
     TokenRefreshCallback,
 )
+from fred_runtime.common.kf_vectorsearch_client import _with_transient_retry
 from fred_runtime.runtime_context import get_runtime_context
 
 logger = logging.getLogger(__name__)
@@ -76,11 +75,6 @@ class SummarizeDocumentResult(BaseModel):
     summary: str
     shrunk_for_budget: bool
     keywords: list[str] = []
-
-
-class DocumentTreeResult(BaseModel):
-    tree: str
-    truncated: bool
 
 
 class ExtractDocumentResult(BaseModel):
@@ -189,45 +183,30 @@ class KfDocumentClient(KfBaseClient):
     async def tree(
         self,
         *,
-        working_directory: Optional[str] = None,
-        tag_ids: Optional[Sequence[str]] = None,
-        document_uids: Optional[Sequence[str]] = None,
-        max_chars: int = 20_000,
-        owner_filter: Optional[OwnerFilter] = None,
-        team_id: Optional[str] = None,
+        folder_id: str | None = None,
+        document_context: DocumentAccessContext,
+        limit: int = 1000,
     ) -> DocumentTreeResult:
-        """
-        Wire format (matches controller):
-          POST /documents/tree
-          {
-            "working_directory": str?,
-            "tag_ids": [str]?,
-            "document_uids": [str]?,
-            "max_chars": int,
-            "owner_filter": str?,
-            "team_id": str?
-          }
-        """
-        payload: Dict[str, Any] = {"max_chars": max_chars}
-        if working_directory:
-            payload["working_directory"] = working_directory
-        if tag_ids:
-            payload["tag_ids"] = list(tag_ids)
-        if document_uids:
-            payload["document_uids"] = list(document_uids)
-        if owner_filter:
-            payload["owner_filter"] = owner_filter.value
-        if team_id:
-            payload["team_id"] = team_id
+        """GET /documents/tree; authority travels only in the admitted context."""
+        params: Dict[str, Any] = {"limit": limit}
+        if folder_id is not None:
+            params["folder_id"] = folder_id
 
-        r = await self._request_with_token_refresh(
-            method="POST",
-            path="/documents/tree",
-            phase_name="kf_document_tree",
-            json=payload,
-        )
-        r.raise_for_status()
-        return DocumentTreeResult.model_validate(r.json())
+        async def request():
+            return await self._request_with_token_refresh(
+                method="GET",
+                path="/documents/tree",
+                phase_name="kf_document_tree",
+                headers={DOCUMENT_CONTEXT_HEADER: document_context.model_dump_json()},
+                params=params,
+                read_timeout=float(
+                    get_runtime_context().config.timeouts.similarity_read
+                ),
+            )
+
+        response = await _with_transient_retry(request)
+        response.raise_for_status()
+        return DocumentTreeResult.model_validate(response.json())
 
     async def summarize(
         self,

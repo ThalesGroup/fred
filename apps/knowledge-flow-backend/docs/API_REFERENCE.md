@@ -1,6 +1,6 @@
 # Knowledge Flow document API reference
 
-This reference describes the nine mounted document and tabular REST operations
+This reference describes the ten mounted document and tabular REST operations
 from the generated OpenAPI contract. **Static generation is not functional
 validation.** These operations and the examples have not been validated end to
 end by this documentation increment. This technical reference is outside the
@@ -38,6 +38,7 @@ Operations: [`/documents`](#documents-routes) · [`/tabular`](#tabular-routes). 
 | Method | Path | Summary |
 | --- | --- | --- |
 | POST | [/documents/search](#post-documentssearch) | Search documents using vectorization |
+| GET | [/documents/tree](#get-documentstree) | List visible corpus folders and documents |
 | GET | [/documents/{document_uid}/chunks](#get-documentsdocument_uidchunks) | Fetch a document's published chunks in index order |
 | POST | [/documents/{document_uid}/extract](#post-documentsdocument_uidextract) | Extract information from a document |
 | GET | [/documents/{document_uid}/markdown](#get-documentsdocument_uidmarkdown) | Read a document's full published markdown |
@@ -45,7 +46,7 @@ Operations: [`/documents`](#documents-routes) · [`/tabular`](#tabular-routes). 
 
 ### POST /documents/search
 
-Search documents using vectorization. Returns up to top_k ranked published chunks from the context space and its ancestors, intersected with the document selection. Fewer hits, including an empty array, are valid. No offset or pagination token. Scores depend on the search policy and are not probabilities. A hit is rechecked against publication and lifecycle facts.
+Search documents using vectorization. Returns up to top_k ranked published chunks from the selected corpus (context space and ancestors) and explicitly listed attachments in the exact owned conversation. Two active sources use reciprocal-rank fusion with chunk deduplication; a single source preserves its ranking and scores. Fewer hits, including an empty array, are valid. No offset or pagination token. Scores depend on the search policy and are not probabilities. A hit is rechecked against publication and lifecycle facts.
 
 Operation `search_documents`.
 
@@ -54,7 +55,7 @@ Operation `search_documents`.
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
-| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no documents. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
 
 Request: [`SearchRequest`](#searchrequest).
 
@@ -88,9 +89,54 @@ Response 403 example `missing_context` (`application/json`):
 
 Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present for authorization/account errors only. Not emitted by every response with this status.
 
+### GET /documents/tree
+
+List visible corpus folders and documents. Returns structured spaces, folders and visible published documents in the authorized context space and ancestors, intersected with the context selection. Conversation attachments are excluded. folder_id starts at an in-scope folder; absent means root. Folder and document records together are capped by limit (default 1000, maximum 5000), ordered by space, folder ID path and name, with IDs breaking ties. Ancestor folders provide structure only, never permission to read their other contents. An empty result means no visible entries in this selection. truncated=true reports omitted records and does not establish completeness; there is no continuation token. This is not an existence oracle: an unavailable or out-of-scope folder returns the same 404 folder_not_found.
+
+Operation `list_document_tree`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `folder_id` | query | string (uuid) or null |  |  |
+| `limit` | query | integer, >= 1, <= 5000 |  | Default: `1000`. |
+| `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
+| `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
+| `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+
+- 200: [`DocumentTreeResponse`](#documenttreeresponse) — Successful Response
+- 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context).
+- 401: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing, invalid or expired bearer credentials. The caller must satisfy the existing workload delegation policy.
+- 403: [`KnowledgeFlowError`](#knowledgeflowerror) — Missing document context (document_context_required), rejected delegation, account restriction, or represented person denied access to the space.
+- 404: [`KnowledgeFlowError`](#knowledgeflowerror) — Space not found (space_not_found). Folder unavailable or outside the authorized selection (folder_not_found); not an existence oracle.
+- 409: [`KnowledgeFlowError`](#knowledgeflowerror) — Space pending deletion (space_pending_deletion).
+- 422: [`HTTPValidationError`](#httpvalidationerror) — Business body, query or path validation failed; detail is an array of validation errors. Context-header validation uses 400/403 instead.
+- 500: [`KnowledgeFlowError`](#knowledgeflowerror) — Unexpected server failure; detail is Internal server error. No internal credentials or exception trace are returned.
+- 503: [`KnowledgeFlowError`](#knowledgeflowerror) — Account status could not be checked. This is an unavailable decision, not a permission grant.
+
+Response 400 example `invalid_context` (`application/json`):
+
+```json
+{
+  "detail": "invalid_document_context"
+}
+```
+
+Response 403 header `X-Fred-Denial-Cause`: `permission_refused`, `account_suspended`. Present for authorization/account errors only. Not emitted by every response with this status.
+
+Response 403 example `missing_context` (`application/json`):
+
+```json
+{
+  "detail": "document_context_required"
+}
+```
+
+Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present for authorization/account errors only. Not emitted by every response with this status.
+
 ### GET /documents/{document_uid}/chunks
 
-Fetch a document's published chunks in index order. Returns visible published chunks in chunk_index order, capped by limit (default 200, maximum 1000). No continuation token or truncation flag: reaching the limit does not establish completeness. An empty array also covers no visible chunks or a vector store without direct chunk-read support. This is not an existence check or a whole-document guarantee.
+Fetch a document's published chunks in index order. Returns chunks from the published generation of a visible corpus document or explicitly authorized conversation attachment, in chunk_index order, capped by limit (default 200, maximum 1000). No continuation token or truncation flag: reaching the limit does not establish completeness. An empty array also covers no visible chunks or a vector store without direct chunk-read support. This is not an existence check or a whole-document guarantee.
 
 Operation `get_document_chunks`.
 
@@ -101,7 +147,7 @@ Operation `get_document_chunks`.
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
-| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no documents. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
 
 - 200: array of [`VectorSearchHit`](#vectorsearchhit) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context).
@@ -145,7 +191,7 @@ Operation `extract_document`.
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
-| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no documents. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
 
 Request: [`ExtractDocumentRequest`](#extractdocumentrequest).
 
@@ -181,7 +227,7 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### GET /documents/{document_uid}/markdown
 
-Read a document's full published markdown. Returns the published output.md text after space, selection and lifecycle checks. Not an original binary download. Missing or non-visible documents return 404. No pagination; clients must budget for the whole response.
+Read a document's full published markdown. Returns the published output.md text after shared space, corpus selection or explicit conversation attachment, ownership and lifecycle checks. Not an original binary download. Missing or non-visible documents return 404. No pagination; clients must budget for the whole response.
 
 Operation `get_document_markdown`.
 
@@ -191,7 +237,7 @@ Operation `get_document_markdown`.
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
-| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no documents. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
 
 - 200: [`MarkdownResponse`](#markdownresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context).
@@ -235,7 +281,7 @@ Operation `summarize_document`.
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
-| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no documents. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
 
 Request: [`SummarizeDocumentRequest`](#summarizedocumentrequest).
 
@@ -280,7 +326,7 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### GET /tabular/documents
 
-List published tabular documents in the active document selection. Lists authorized published CSV/Excel documents. Empty selection returns an empty array. No pagination parameter or fixed response-count cap. Excel includes table identities; CSV omits tables in this compact listing. Use describe_tabular_documents to obtain exact SQL aliases and columns.
+List published tabular documents in the active document selection. Lists authorized published CSV/Excel documents. Empty selection returns an empty array. No pagination parameter or fixed response-count cap. Excel includes table identities; CSV omits tables in this compact listing. Use describe_tabular_documents to obtain exact SQL aliases and columns. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
 
 Operation `list_tabular_documents`.
 
@@ -289,7 +335,7 @@ Operation `list_tabular_documents`.
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
-| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no documents. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
 
 - 200: array of [`TabularDocumentListResponse`](#tabulardocumentlistresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context). Invalid tabular input, SQL, keyword, publication metadata, empty query/search selection, or configured dataset limit exceeded; detail explains the failure.
@@ -323,7 +369,7 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### GET /tabular/documents/schemas
 
-Read extraction catalogs and typed tables of selected documents. Use document UIDs from list_tabular_documents. Returns exact SQL aliases, column types, categorical values and numeric ranges; Excel includes its catalog. Every requested document must belong to the active document selection. The configured max_selected_datasets also bounds the total tables described; a workbook may contain multiple tables. CSV markdown is null; Excel returns its published extraction catalog. Category/range analysis is subject to the same tabular execution budgets.
+Read extraction catalogs and typed tables of selected documents. Use document UIDs from list_tabular_documents. Returns exact SQL aliases, column types, categorical values and numeric ranges; Excel includes its catalog. Every requested document must belong to the active document selection. The configured max_selected_datasets also bounds the total tables described; a workbook may contain multiple tables. CSV markdown is null; Excel returns its published extraction catalog. Category/range analysis is subject to the same tabular execution budgets. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
 
 Operation `describe_tabular_documents`.
 
@@ -333,7 +379,7 @@ Operation `describe_tabular_documents`.
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
-| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no documents. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
 
 - 200: array of [`TabularDocumentDescriptionResponse`](#tabulardocumentdescriptionresponse) — Successful Response
 - 400: [`KnowledgeFlowError`](#knowledgeflowerror) — Invalid JSON document context (invalid_document_context). Invalid tabular input, SQL, keyword, publication metadata, empty query/search selection, or configured dataset limit exceeded; detail explains the failure.
@@ -368,7 +414,7 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### POST /tabular/query
 
-Execute one read-only SELECT on authorized published datasets. Use exact aliases from describe_tabular_documents. dataset_uids narrows the active selection; a workbook UID includes all its tables. SQL must reference at least one dataset. Execution, memory, row and dataset limits apply. Results are row-limited without a truncation flag or pagination token; reaching the row limit does not prove completeness. Dataset, memory, concurrency and timeout ceilings come from storage.tabular_store.query. Retry capacity 503 with bounded backoff; for 504 narrow the query.
+Execute one read-only SELECT on authorized published datasets. Use exact aliases from describe_tabular_documents. dataset_uids narrows the active selection; a workbook UID includes all its tables. SQL must reference at least one dataset. Execution, memory, row and dataset limits apply. Results are row-limited without a truncation flag or pagination token; reaching the row limit does not prove completeness. Dataset, memory, concurrency and timeout ceilings come from storage.tabular_store.query. Retry capacity 503 with bounded backoff; for 504 narrow the query. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
 
 Operation `query_tabular_documents`.
 
@@ -377,7 +423,7 @@ Operation `query_tabular_documents`.
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
-| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no documents. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
 
 Request: [`TabularQueryRequest`](#tabularqueryrequest).
 
@@ -414,7 +460,7 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### POST /tabular/search
 
-Locate a precise value in authorized published datasets. Case/accent/whitespace-insensitive search, including numeric columns. Use dataset_uids to narrow the search. The stripped keyword must have at least two characters and must remain nonempty after normalization. Up to 5 rows per table and 30 matching tables; callers may lower these caps. The configured dataset scan ceiling can further restrict work. Inspect tables_truncated and each match's rows_truncated; an empty matches list with truncation is not proof the value is absent.
+Locate a precise value in authorized published datasets. Case/accent/whitespace-insensitive search, including numeric columns. Use dataset_uids to narrow the search. The stripped keyword must have at least two characters and must remain nonempty after normalization. Up to 5 rows per table and 30 matching tables; callers may lower these caps. The configured dataset scan ceiling can further restrict work. Inspect tables_truncated and each match's rows_truncated; an empty matches list with truncation is not proof the value is absent. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
 
 Operation `search_tabular_values`.
 
@@ -423,7 +469,7 @@ Operation `search_tabular_values`.
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
-| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no documents. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
+| `x-fred-document-context` | header | [`DocumentAccessContext`](#documentaccesscontext) (`application/json`) | yes | One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. |
 
 Request: [`TabularSearchRequest`](#tabularsearchrequest).
 
@@ -462,11 +508,13 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### DocumentAccessContext
 
-Server-bound space and document selection, accepted only from an authenticated delegated caller. Never inferred from model arguments. Additional fields are rejected.
+Server-bound space, corpus selection and explicit conversation attachments, accepted only from an authenticated delegated caller. Never inferred from model arguments. Additional fields are rejected.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `document_scope` | [`DocumentScope`](#documentscope) | yes | Intersection of selection clauses. Zero clauses add no filter; one empty clause selects nothing. |
+| `attachment_ids` | array of string (uuid) |  | Explicit attachment UUIDs, independently of corpus selection. Empty grants no attachment access; requires conversation_id. SQL verifies every document. Default: `[]`. |
+| `conversation_id` | string (uuid) or null |  | Server-bound conversation UUID; SQL verifies its owner, exact space and live state. Default: `null`. |
+| `document_scope` | [`DocumentScope`](#documentscope) | yes | Corpus-only intersection of selection clauses. Zero clauses add no filter; one empty clause selects no corpus documents. Attachments are selected separately. |
 | `space_id` | string (uuid) | yes | Admitted turn's space UUID; KF checks the represented person's read permission. |
 
 ### DocumentScope
@@ -485,6 +533,50 @@ Union of direct folder contents and explicit documents, using Weaver IDs. No rec
 | --- | --- | --- | --- |
 | `document_ids` | array of string (uuid) |  | Explicit document UUIDs, unioned with this clause's folder contents. Omitted means no explicit documents. A clause with neither selects nothing. Default: `[]`. |
 | `folder_ids` | array of string (uuid) |  | Union of direct folder contents; not recursive. Omitted means no folders in this clause. Default: `[]`. |
+
+### DocumentTreeDocument
+
+Additional fields are rejected.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `added_at` | string (date-time) | yes |  |
+| `document_uid` | string (uuid) | yes |  |
+| `folder_id` | string (uuid) or null | yes |  |
+| `mime` | string | yes |  |
+| `name` | string | yes |  |
+| `space_id` | string (uuid) | yes |  |
+
+### DocumentTreeFolder
+
+Additional fields are rejected.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `folder_id` | string (uuid) | yes |  |
+| `name` | string | yes |  |
+| `parent_id` | string (uuid) or null | yes |  |
+| `space_id` | string (uuid) | yes |  |
+
+### DocumentTreeResponse
+
+Bounded corpus navigation; folder/document records count towards limit. Additional fields are rejected.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `documents` | array of [`DocumentTreeDocument`](#documenttreedocument) |  | Default: `[]`. |
+| `folders` | array of [`DocumentTreeFolder`](#documenttreefolder) |  | Default: `[]`. |
+| `spaces` | array of [`DocumentTreeSpace`](#documenttreespace) |  | Default: `[]`. |
+| `truncated` | boolean |  | Default: `false`. |
+
+### DocumentTreeSpace
+
+Additional fields are rejected.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | yes |  |
+| `space_id` | string (uuid) | yes |  |
 
 ### ExtractDocumentRequest
 
@@ -544,7 +636,9 @@ Search arguments; document authority comes from the authenticated header. Additi
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `min_score` | number or null |  | Keep hits whose original retrieval score (or 0.0 when absent) is at least this value, after optional reranking and its top_k limit. |
 | `question` | string | yes | Natural-language search query. This operation returns chunks, not a generated answer. |
+| `rerank` | boolean |  | Retrieve up to min(top_k * 5, 100) candidates and rerank visible, in-scope hits with the cross-encoder, keeping top_k. Retrieval scores are unchanged. Default: `false`. |
 | `search_policy` | [`SearchPolicyName`](#searchpolicyname) or null |  | Optional search policy preset. If omitted, defaults to 'hybrid'. |
 | `top_k` | integer, >= 1.0, <= 100.0 |  | Number of results to return. Default: `10`. |
 

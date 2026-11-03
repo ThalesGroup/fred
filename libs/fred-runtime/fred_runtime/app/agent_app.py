@@ -264,6 +264,7 @@ from ..integrations.v2_runtime.adapters import (
     DocumentSearchAdapter,
     DocumentSimilarityAdapter,
     DocumentSummarizeAdapter,
+    DocumentTreeAdapter,
     FredKnowledgeSearchToolInvoker,
     FredMcpToolProvider,
     FredWorkspaceFs,
@@ -1115,7 +1116,9 @@ def _build_runtime_services(
         document_folders=DocumentFolderAdapter(
             binding=binding, settings=settings, credentials=credential_provider
         ),
-        document_tree=None,
+        document_tree=DocumentTreeAdapter(
+            binding=binding, settings=settings, credentials=credential_provider
+        ),
         document_summarize=document_summarize,
         document_markdown=document_markdown,
         document_extraction=document_extraction,

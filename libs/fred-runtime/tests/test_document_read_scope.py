@@ -40,7 +40,7 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
-from fred_sdk.contracts.runtime import DocumentScopeRefusedError
+from fred_sdk.contracts.runtime import DocumentScopeRefusedError, DocumentTreeResult
 from weaver_fixtures import INSTANCE_ID, SPACE_ID, turn_binding
 
 IN_SCOPE = str(UUID(int=101))
@@ -79,7 +79,7 @@ class _RecordingKfClient:
 
     async def tree(self, **kwargs: Any):
         type(self).calls.append(("tree", kwargs))
-        return _Tree()
+        return DocumentTreeResult()
 
 
 class _Summary:
@@ -94,11 +94,6 @@ class _Extraction:
     extraction = "- one item"
     item_count = 1
     chunks_processed = 1
-    truncated = False
-
-
-class _Tree:
-    tree = "Sales/"
     truncated = False
 
 
@@ -275,28 +270,50 @@ async def test_extract_refuses_a_uid_outside_the_selection() -> None:
     assert _RecordingKfClient.calls == []
 
 
-async def test_tree_carries_the_selection_down_the_wire() -> None:
+@pytest.mark.parametrize(
+    "ceiling",
+    [
+        DocumentScope(),
+        DocumentScope.from_ids([], []),
+        DocumentScope.from_ids([FOLDER]),
+        DocumentScope.from_ids(document_ids=[OTHER]),
+    ],
+)
+async def test_tree_intersects_explicit_selection_with_turn_and_excludes_attachments(
+    ceiling,
+) -> None:
     adapter = adapters_module.DocumentTreeAdapter(
-        binding=_binding(selected_document_uids=["a", "b"]),
-        settings=_FakeSettings(),
+        binding=_binding(selected_document_uids=[IN_SCOPE]), settings=_FakeSettings()
     )
-
-    await adapter.tree(document_uids=["b", "c"])
-
+    await adapter.tree(folder_id=FOLDER, document_scope=ceiling, limit=42)
     name, kwargs = _RecordingKfClient.calls[0]
     assert name == "tree"
-    # `params ⊆ session_binding`: "c" was never in the conversation's selection.
-    assert kwargs["document_uids"] == ["b"]
+    context = kwargs["document_context"]
+    assert context.document_scope == ceiling.intersect(
+        DocumentScope.from_ids(document_ids=[IN_SCOPE])
+    )
+    assert context.attachment_ids == ()
+    assert kwargs["folder_id"] == FOLDER
+    assert kwargs["limit"] == 42
 
 
-async def test_tree_without_a_selection_sends_no_document_filter() -> None:
+async def test_tree_without_selection_sends_unfiltered_corpus_context() -> None:
     adapter = adapters_module.DocumentTreeAdapter(
         binding=_binding(), settings=_FakeSettings()
     )
-
     await adapter.tree()
+    assert (
+        _RecordingKfClient.calls[0][1]["document_context"].document_scope
+        == DocumentScope()
+    )
 
-    assert _RecordingKfClient.calls[0][1]["document_uids"] is None
+
+async def test_tree_general_only_never_calls_kf() -> None:
+    adapter = adapters_module.DocumentTreeAdapter(
+        binding=_binding(search_rag_scope="general_only"), settings=_FakeSettings()
+    )
+    assert await adapter.tree() == DocumentTreeResult()
+    assert _RecordingKfClient.calls == []
 
 
 @pytest.mark.parametrize("operation", ["read", "summarize", "extract"])
@@ -369,3 +386,28 @@ async def test_cached_page_remains_subject_to_terminal_turn_authority() -> None:
     with pytest.raises(AuthorityLostError):
         await adapter.fetch_markdown(IN_SCOPE)
     assert len(_RecordingKfClient.calls) == 1
+
+
+async def test_tree_maps_transport_errors_and_preserves_authority_loss(
+    monkeypatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    import httpx
+    from fred_runtime.runtime_support.authority import AuthorityLostError
+    from fred_sdk.contracts.runtime import DocumentPortCallError
+
+    adapter = adapters_module.DocumentTreeAdapter(
+        binding=_binding(), settings=_FakeSettings()
+    )
+    monkeypatch.setattr(
+        adapter._client, "tree", AsyncMock(side_effect=httpx.ReadTimeout("slow"))
+    )
+    with pytest.raises(DocumentPortCallError) as error:
+        await adapter.tree()
+    assert error.value.timed_out
+    monkeypatch.setattr(
+        adapter._client, "tree", AsyncMock(side_effect=AuthorityLostError())
+    )
+    with pytest.raises(AuthorityLostError):
+        await adapter.tree()

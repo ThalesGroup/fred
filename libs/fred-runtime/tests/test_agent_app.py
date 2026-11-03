@@ -2658,6 +2658,8 @@ async def test_build_runtime_services_uses_persisted_document_source_settings(
             capability_registry=cast(Any, Registry()),
         )
 
+        assert isinstance(services.document_tree, agent_app_module.DocumentTreeAdapter)
+        assert services.document_tree._binding is binding
         expected = (UUID(int=401),) if enabled else ()
         assert (
             authority.document_context(binding.runtime_context).attachment_ids

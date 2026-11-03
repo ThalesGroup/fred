@@ -135,7 +135,6 @@ from fred_runtime.model_routing.turn import current_turn
 from fred_runtime.react.react_tracing import RUNTIME_TOOL_SPAN_NAME
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support import (
-    get_document_library_tags_ids,
     get_document_uids,
     get_rag_knowledge_scope,
     get_search_policy,
@@ -1324,30 +1323,6 @@ def _narrow_scope_ids(
     return [value for value in inner if value in allowed]
 
 
-def _narrow_port_scope_ids(
-    outer: Sequence[str] | None, inner: Sequence[str] | None
-) -> list[str] | None:
-    """`_narrow_scope_ids` for a port parameter, where an empty `inner` means
-    nothing in scope (the port contract), not "no bound at this level"."""
-
-    if inner is not None and not inner:
-        return []
-    return _narrow_scope_ids(outer, inner)
-
-
-def _matches_nothing(
-    library_ids: Sequence[str] | None, document_uids: Sequence[str] | None
-) -> bool:
-    """Knowledge Flow unions the library and document scopes and reads an empty
-    filter as no filter at all. The scope finds nothing only when neither selects
-    anything and one of them was narrowed to nothing (both None is no narrowing);
-    the caller must then stop instead of sending it."""
-
-    if library_ids or document_uids:
-        return False
-    return library_ids is not None or document_uids is not None
-
-
 def _ensure_uid_in_turn_scope(
     runtime_context: RuntimeContext | None,
     document_uid: str,
@@ -1773,18 +1748,7 @@ def _wrap_document_port_error(exc: Exception) -> DocumentPortCallError:
 
 
 class DocumentTreeAdapter(DocumentTreePort):
-    """
-    Runtime adapter behind `RuntimeServices.document_tree`.
-
-    Same shape as `DocumentSearchAdapter`: the per-turn binding is captured
-    PRIVATELY (through `_VectorSearchAgentShim` + `KfDocumentClient`, which own
-    the access token and its refresh) and only the capability-safe `tree(...)`
-    surface is exposed. The caller-supplied `library_tag_ids` / `document_uids`
-    are the capability's already-narrowed scope; this adapter intersects them
-    with the session binding's own scope and stamps the owner_filter/team_id
-    seam, so the Knowledge Flow listing can never leak folders across team
-    boundaries.
-    """
+    """Corpus-only tree with the same private turn authority as document search."""
 
     def __init__(
         self,
@@ -1810,39 +1774,27 @@ class DocumentTreeAdapter(DocumentTreePort):
     async def tree(
         self,
         *,
-        working_directory: str | None = None,
+        folder_id: str | None = None,
         document_scope: DocumentScope | None = None,
-        library_tag_ids: Sequence[str] | None = None,
-        document_uids: Sequence[str] | None = None,
-        max_chars: int = 20_000,
+        limit: int = 1000,
     ) -> DocumentTreeResult:
-        if document_scope is not None and document_scope.selections:
-            raise DocumentScopeRefusedError(
-                "Scoped document tree is not available on Weaver"
-            )
         runtime_context = self._binding.runtime_context
-        effective_libs = _narrow_port_scope_ids(
-            get_document_library_tags_ids(runtime_context), library_tag_ids
+        if get_rag_knowledge_scope(runtime_context) == "general_only":
+            return DocumentTreeResult()
+        document_context = current_turn().document_context(
+            runtime_context,
+            document_scope or DocumentScope(),
+            include_attachments=False,
+            include_corpus=True,
         )
-        effective_uids = _narrow_port_scope_ids(
-            get_document_uids(runtime_context), document_uids
-        )
-        if _matches_nothing(effective_libs, effective_uids):
-            return DocumentTreeResult(tree="", truncated=False)
-        team_id = self._settings.team_id
-        scoped_team = bool(team_id) and not is_personal_team_id(team_id)
         try:
-            result = await self._client.tree(
-                working_directory=working_directory,
-                tag_ids=effective_libs,
-                document_uids=effective_uids,
-                max_chars=max_chars,
-                owner_filter=OwnerFilter.TEAM if scoped_team else OwnerFilter.PERSONAL,
-                team_id=team_id if scoped_team else None,
+            return await self._client.tree(
+                folder_id=folder_id,
+                document_context=document_context,
+                limit=limit,
             )
-        except httpx.HTTPError as exc:
+        except Exception as exc:
             raise _wrap_document_port_error(exc) from exc
-        return DocumentTreeResult(tree=result.tree, truncated=result.truncated)
 
 
 class DocumentSummarizeAdapter(DocumentSummarizePort):

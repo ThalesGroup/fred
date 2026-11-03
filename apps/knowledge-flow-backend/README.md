@@ -47,3 +47,6 @@ Developer validation targets: `make code-quality`, `make test`, `make generate-c
 The separation has not yet been validated through isolated installation, image builds or the end-to-end ingestion/search journey. The [k3d guide](../../deploy/k3d/README.md) describes the deployment prerequisites.
 
 Apache 2.0 - Copyright Thales.
+
+`GET /documents/tree` lists the bounded visible corpus using the same delegated context as search; attachments are excluded and truncation is explicit.
+Tree SQL cases run with `make test-one TEST=tests/features/test_document_tree.py` and `KF_TREE_TEST_POSTGRES` pointing to an empty disposable database (async SQLAlchemy PostgreSQL URL); fixtures roll back all writes.

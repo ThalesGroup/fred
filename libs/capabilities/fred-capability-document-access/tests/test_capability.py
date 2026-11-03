@@ -174,25 +174,21 @@ class _FakeTreePort(DocumentTreePort):
         error: Exception | None = None,
     ) -> None:
         self.calls: list[dict[str, Any]] = []
-        self._result = result or DocumentTreeResult(tree="Sales/\n  doc-a [u1]")
+        self._result = result or DocumentTreeResult()
         self._error = error
 
     async def tree(
         self,
         *,
-        working_directory: str | None = None,
+        folder_id: str | None = None,
         document_scope=None,
-        library_tag_ids=None,
-        document_uids=None,
-        max_chars: int = 20_000,
+        limit: int = 1000,
     ) -> DocumentTreeResult:
         self.calls.append(
             {
-                "working_directory": working_directory,
+                "folder_id": folder_id,
                 "document_scope": document_scope,
-                "library_tag_ids": library_tag_ids,
-                "document_uids": document_uids,
-                "max_chars": max_chars,
+                "limit": limit,
             }
         )
         if self._error is not None:
@@ -965,39 +961,52 @@ async def test_tree_tool_scopes_by_bound_libraries_and_clamps_budget() -> None:
         cap,
         ctx,
         "list_document_tree",
-        {"working_directory": "Sales", "max_chars": 50},
+        {"folder_id": "00000000-0000-0000-0000-00000000012d", "max_chars": 50},
     )
 
     call = tree_port.calls[0]
-    assert call["working_directory"] == "Sales"
+    assert call["folder_id"] == "00000000-0000-0000-0000-00000000012d"
     # Hard binding flows to the port as the capability-side scope.
     assert call["document_scope"] == DocumentScope.from_ids(
         ["00000000-0000-0000-0000-00000000012d", "00000000-0000-0000-0000-00000000012e"]
     )
-    # No document narrowing configured or ticked: the tree stays library-scoped.
-    assert call["document_uids"] is None
-    # 50 is under the endpoint's floor — clamped, not 422ed.
-    assert call["max_chars"] == 500
-    assert message.content == "Sales/\n  doc-a [u1]"
+    assert call["limit"] == 1000
+    assert message.content == "(empty)"
     assert message.artifact.tool_ref == "list_document_tree"
     assert message.artifact.is_error is False
     # CAPAB-02: the tree text must also live in `blocks` — a Graph agent's
     # plain-dict invocation keeps only the artifact half of a
     # `content_and_artifact` return (`_adapt_capability_tool_for_graph`), so an
     # artifact with no payload would silently lose the tree for a Graph node.
-    assert message.artifact.blocks[0].text == "Sales/\n  doc-a [u1]"
+    assert message.artifact.blocks[0].text == message.content
 
 
 @pytest.mark.asyncio
 async def test_tree_metadata_and_incomplete_notice_reach_both_carriers() -> None:
-    tree = 'Docs/\n  {"uid":"doc","name":"Report.pdf","added_to_kb":"2026-10-12T09:00:00+00:00","created":null,"modified":null,"labels":["Finance"]}'
+    result = DocumentTreeResult.model_validate(
+        {
+            "spaces": [
+                {"space_id": "00000000-0000-0000-0000-000000000001", "name": "Docs"}
+            ],
+            "documents": [
+                {
+                    "space_id": "00000000-0000-0000-0000-000000000001",
+                    "document_uid": "00000000-0000-0000-0000-000000000002",
+                    "folder_id": None,
+                    "name": "Report.pdf",
+                    "mime": "application/pdf",
+                    "added_at": "2026-10-12T09:00:00+00:00",
+                }
+            ],
+            "truncated": True,
+        }
+    )
+    tree = '{"folder":"Docs"}\n  {"uid":"00000000-0000-0000-0000-000000000002","name":"Report.pdf","mime":"application/pdf","added_to_kb":"2026-10-12T09:00:00+00:00"}'
     cap = DocumentAccessCapability()
     ctx = build_capability_context(
         cap,
         identity=_identity(),
-        services=_full_services(
-            tree=_FakeTreePort(result=DocumentTreeResult(tree=tree, truncated=True))
-        ),
+        services=_full_services(tree=_FakeTreePort(result=result)),
         config={},
     )
     message = await _invoke_named_tool(cap, ctx, "list_document_tree", {})
@@ -1010,16 +1019,42 @@ async def test_tree_metadata_and_incomplete_notice_reach_both_carriers() -> None
 
 
 @pytest.mark.asyncio
-async def test_tree_tool_uses_raised_default_and_clamps_explicit_upper_budget() -> None:
-    port = _FakeTreePort()
+@pytest.mark.parametrize(
+    "requested,expected", [(None, 20_000), (50, 500), (999_999, 60_000)]
+)
+async def test_tree_tool_clamps_render_budget_locally(
+    monkeypatch, requested, expected
+) -> None:
+    from fred_capability_document_access import capability as module
+
+    budgets = []
+
+    def render(root, *, max_chars):
+        budgets.append(max_chars)
+        return "(empty)", False
+
+    monkeypatch.setattr(module, "render_tree", render)
     cap = DocumentAccessCapability()
     ctx = build_capability_context(
-        cap, identity=_identity(), services=_full_services(tree=port), config={}
+        cap, identity=_identity(), services=_full_services(), config={}
     )
-    await _invoke_named_tool(cap, ctx, "list_document_tree", {})
-    assert port.calls[0]["max_chars"] == 20_000
-    await _invoke_named_tool(cap, ctx, "list_document_tree", {"max_chars": 999_999})
-    assert port.calls[1]["max_chars"] == 60_000
+    await _invoke_named_tool(
+        cap,
+        ctx,
+        "list_document_tree",
+        {} if requested is None else {"max_chars": requested},
+    )
+    assert budgets == [expected]
+
+
+def test_tree_manifest_and_model_schema_expose_only_navigation() -> None:
+    cap = DocumentAccessCapability()
+    assert cap.manifest.version == "0.4.0"
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_full_services(), config={}
+    )
+    tool = _capability_tools(cap, ctx)["list_document_tree"]
+    assert set(tool.args) == {"folder_id", "max_chars"}
 
 
 @pytest.mark.asyncio
@@ -1096,55 +1131,6 @@ async def test_search_authority_loss_escapes_instead_of_becoming_an_artifact(
 
     with pytest.raises(AuthorityLostError):
         await _invoke_named_tool(cap, ctx, "search_documents", {"question": "q"})
-
-
-@pytest.mark.asyncio
-async def test_tree_adapter_narrows_by_session_binding_and_team_seam(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The REAL `DocumentTreeAdapter`: capability params are intersected with
-    the session binding's library scope, and the owner_filter/team_id seam is
-    stamped from the agent settings — the team-leak guard (#1899)."""
-
-    class _FakeDocumentClient:
-        def __init__(self, *, agent: Any) -> None:
-            self.agent = agent
-            self.calls: list[dict[str, Any]] = []
-            captured["client"] = self
-
-        async def tree(self, **kwargs: Any):
-            self.calls.append(kwargs)
-            return SimpleNamespace(tree="(empty)", truncated=False)
-
-    captured: dict[str, Any] = {}
-    monkeypatch.setattr(adapters_module, "KfDocumentClient", _FakeDocumentClient)
-
-    binding = _binding(
-        session_id="s-1",
-        selected_document_libraries_ids=[
-            "00000000-0000-0000-0000-00000000012d",
-            "00000000-0000-0000-0000-00000000012e",
-        ],
-    )
-    adapter = adapters_module.DocumentTreeAdapter(
-        binding=binding, settings=_settings(team_id="team-9")
-    )
-
-    result = await adapter.tree(
-        library_tag_ids=[
-            "00000000-0000-0000-0000-00000000012e",
-            "00000000-0000-0000-0000-000000000130",
-        ],
-        max_chars=900,
-    )
-
-    call = captured["client"].calls[0]
-    # capability ∩ session binding: X dropped.
-    assert call["tag_ids"] == ["00000000-0000-0000-0000-00000000012e"]
-    assert call["max_chars"] == 900
-    assert call["owner_filter"].value == "team"
-    assert call["team_id"] == "team-9"
-    assert result.tree == "(empty)"
 
 
 # ---------------------------------------------------------------------------
@@ -1252,3 +1238,26 @@ def test_invalid_weaver_identifiers_are_rejected() -> None:
         DocumentAccessConfig(document_uids=["not-a-weaver-id"])
     with pytest.raises(ValueError):
         DocumentAccessTurnOptions(library_tag_ids=["old-tag"])
+
+
+@pytest.mark.asyncio
+async def test_tree_truncation_notice_fits_inside_clamped_budget() -> None:
+    from fred_core.documents.tree import DocumentTreeSpace
+
+    result = DocumentTreeResult(
+        spaces=(DocumentTreeSpace(space_id=UUID(int=1), name="long" * 200),)
+    )
+    cap = DocumentAccessCapability()
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=_full_services(tree=_FakeTreePort(result=result)),
+        config={},
+    )
+    message = await _invoke_named_tool(
+        cap, ctx, "list_document_tree", {"max_chars": 50}
+    )
+    assert len(message.content) <= 500
+    assert message.content.startswith("Listing incomplete:")
+    assert "more item(s)" in message.content
+    assert message.artifact.blocks[0].text == message.content
