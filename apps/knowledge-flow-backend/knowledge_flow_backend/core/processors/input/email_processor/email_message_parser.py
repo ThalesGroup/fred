@@ -21,8 +21,6 @@ by SHA-256); Bcc and remote resources never are. Full rationale: openspec spec e
 
 from __future__ import annotations
 
-import email
-import email.utils
 import hashlib
 import logging
 import re
@@ -32,8 +30,9 @@ import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
-from email import policy
+from email import message_from_bytes, policy
 from email.message import EmailMessage, Message, MIMEPart
+from email.utils import getaddresses, parsedate_to_datetime
 from functools import partial
 from pathlib import Path
 
@@ -105,7 +104,7 @@ _EMBEDDED_MSG_HDR_OFFSET = 24  # [MS-OXMSG] 2.4.1.2: an embedded message's heade
 
 
 class EncryptedEmailError(InputValidationError):
-    """An encrypted or rights-protected message: retrying cannot help."""
+    """An encrypted, rights-protected or unsupported opaque-signed message."""
 
 
 @dataclass(frozen=True)
@@ -163,7 +162,9 @@ def render_email_markdown(parsed: ParsedEmail, *, max_body_chars: int | None = N
     `max_body_chars` is shared by every body and attachment text of the file, in rendering order.
     """
     if parsed.encrypted:
-        raise EncryptedEmailError("This mail is encrypted or rights-protected (S/MIME or IRM), so its content cannot be read. Send an unencrypted copy instead.")
+        raise EncryptedEmailError(
+            "This mail uses encrypted, rights-protected or unsupported opaque-signed content (S/MIME or IRM), so it cannot be read. Export an unencrypted copy with a detached signature or no signature instead."
+        )
     budget, texts = _BodyBudget(max_body_chars), _AttachmentTexts()
     parts = _render_message(parsed, budget, texts, 2) + _render_attached(parsed.attached_messages, "", budget, texts)
     return "\n\n".join(p for p in parts if p) + "\n"
@@ -345,7 +346,7 @@ def _format_address(name: str | None, address: str | None) -> str | None:
 def _addresses(header_value: str | None) -> list[str]:
     if not header_value:
         return []
-    return [a for a in (_format_address(n, addr) for n, addr in email.utils.getaddresses([str(header_value)])) if a]
+    return [a for a in (_format_address(n, addr) for n, addr in getaddresses([str(header_value)])) if a]
 
 
 def _clean(value: object) -> str | None:
@@ -369,7 +370,7 @@ def _attached_message(name: str, depth: int, budget: _AttachedBudget, parse: Cal
 
 
 def _parse_eml(raw: bytes, depth: int, budget: _AttachedBudget) -> ParsedEmail:
-    return _parse_eml_message(email.message_from_bytes(raw, policy=policy.default), depth, budget)
+    return _parse_eml_message(message_from_bytes(raw, policy=policy.default), depth, budget)
 
 
 def _parse_eml_message(msg: Message, depth: int, budget: _AttachedBudget) -> ParsedEmail:
@@ -398,7 +399,7 @@ def _eml_date(msg: Message) -> datetime | None:
     if not raw:
         return None
     try:
-        return email.utils.parsedate_to_datetime(str(raw))
+        return parsedate_to_datetime(str(raw))
     except (TypeError, ValueError):
         return None
 
@@ -527,7 +528,7 @@ def _parse_outlook(msg: OutlookMessage, depth: int, budget: _AttachedBudget) -> 
             # Outlook keeps a signed message's MIME (body and files) in one smime.p7m attachment.
             inner = next((a for a in attachments if a.file_bytes and (a.file_name or "").lower().endswith(".p7m")), None)
             if inner is not None and inner.file_bytes:
-                inner_msg = email.message_from_bytes(inner.file_bytes, policy=policy.default)
+                inner_msg = message_from_bytes(inner.file_bytes, policy=policy.default)
                 signed_mime = inner_msg if isinstance(inner_msg, EmailMessage) else None
         if signed_mime is not None:
             body_markdown, listed, attached = _eml_body_and_attachments(signed_mime, depth, budget)

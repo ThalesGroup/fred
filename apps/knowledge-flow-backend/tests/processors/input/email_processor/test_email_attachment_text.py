@@ -17,19 +17,24 @@
 import importlib.util
 import io
 import time
+from collections.abc import Sequence
 from email.message import EmailMessage
 from pathlib import Path
+from typing import cast
 
+import pytest
 from docx import Document
 from pptx import Presentation
+from pptx.shapes.placeholder import SlidePlaceholder
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 
 from knowledge_flow_backend.core.processors.input.email_processor import email_message_parser
 from knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor import EmailMarkdownProcessor
-from knowledge_flow_backend.core.processors.input.email_processor.email_message_parser import ATTACHMENT_NOT_EXTRACTABLE
+from knowledge_flow_backend.core.processors.input.email_processor.email_message_parser import ATTACHMENT_NOT_EXTRACTABLE, EncryptedEmailError
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import FastTextOptions
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_email_processor import FastEmailProcessor
+from knowledge_flow_backend.features.scheduler.extraction_process import _is_permanent
 
 _BUILDER_PATH = Path(__file__).parent / "fixtures" / "build_msg_fixtures.py"
 _spec = importlib.util.spec_from_file_location("build_msg_fixtures", _BUILDER_PATH)
@@ -64,8 +69,10 @@ def docx_bytes(text: str) -> bytes:
 def pptx_bytes(text: str) -> bytes:
     deck = Presentation()
     slide = deck.slides.add_slide(deck.slide_layouts[1])
-    slide.shapes.title.text = "Planning"
-    slide.placeholders[1].text = text
+    title = slide.shapes.title
+    assert title is not None
+    title.text = "Planning"
+    cast(SlidePlaceholder, slide.placeholders[1]).text = text
     buffer = io.BytesIO()
     deck.save(buffer)
     return buffer.getvalue()
@@ -74,7 +81,7 @@ def pptx_bytes(text: str) -> bytes:
 _MIME = {".pdf": ("application", "pdf"), ".docx": ("application", "vnd.openxmlformats-officedocument.wordprocessingml.document"), ".txt": ("text", "plain")}
 
 
-def mail(subject: str, body: str, files: list[tuple[str, bytes]] = (), attached: list[EmailMessage] = ()) -> EmailMessage:
+def mail(subject: str, body: str, files: Sequence[tuple[str, bytes]] = (), attached: Sequence[EmailMessage] = ()) -> EmailMessage:
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Subject"] = "a@example.com", "b@example.com", subject
     msg.set_content(body)
@@ -229,3 +236,39 @@ def test_chat_path_keeps_its_cap_over_attachment_texts(tmp_path):
     capped = FastEmailProcessor().extract(file_path, FastTextOptions(max_chars=400))
     assert capped.truncated is True and len(capped.text) <= 402
     assert "alpha" in capped.text and "bravo text" not in capped.text
+
+
+@pytest.mark.parametrize("max_chars", [None, 0, -1])
+def test_chat_path_unlimited_options_keep_body_and_attachment_text(tmp_path: Path, max_chars: int | None) -> None:
+    file_path, markdown = library_markdown(tmp_path, mail("Top", "parent body stays readable", [("note.txt", b"attachment text stays readable")]))
+
+    result = FastEmailProcessor().extract(file_path, FastTextOptions(max_chars=max_chars))
+
+    assert result.text.strip() == markdown.strip()
+    assert "parent body stays readable" in result.text
+    assert "attachment text stays readable" in result.text
+    assert result.truncated is False
+
+
+@pytest.mark.parametrize("suffix", [".eml", ".msg"])
+def test_opaque_signed_mail_reports_unsupported_protection(tmp_path: Path, suffix: str) -> None:
+    file_path = tmp_path / f"opaque{suffix}"
+    if suffix == ".eml":
+        msg = EmailMessage()
+        msg["Subject"] = "Opaque signature"
+        msg.set_content(b"opaque signed data", maintype="application", subtype="pkcs7-mime", params={"smime-type": "signed-data"})
+        file_path.write_bytes(msg.as_bytes())
+    else:
+        msg_builder.write_cfb(
+            file_path,
+            msg_builder.message(
+                [(0x001A, msg_builder.PT_STRING, "IPM.Note.SMIME"), (0x0037, msg_builder.PT_STRING, "Opaque signature")],
+                attachments=[("smime.p7m", b"opaque signed data")],
+            ),
+        )
+
+    with pytest.raises(EncryptedEmailError, match="unsupported opaque-signed") as error:
+        EmailMarkdownProcessor().convert_file_to_markdown(file_path, tmp_path / "out", None)
+    assert _is_permanent(error.value)
+    with pytest.raises(EncryptedEmailError, match="detached signature"):
+        FastEmailProcessor().extract(file_path)

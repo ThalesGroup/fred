@@ -10,5 +10,6 @@
 - [x] 2.1 `pytest tests/processors/input/email_processor`, `make code-quality` and `make test` in knowledge-flow-backend and the frontend.
 - [x] 2.2 Owner test on a local stack: `.msg` and `.eml` in a library and as chat attachments, attached mails, attachment text, a rich PPTX attachment.
 - [x] 2.3 `openspec validate ingest-email-files --strict`.
+- [x] 2.4 PR review corrections: consistent imports, fixture typing, unlimited fast-text options, and the owner-confirmed opaque S/MIME limitation. 40 mail tests pass (5 added); targeted basedpyright reports no errors; full backend suite: 1733 passed, 2 skipped, 47 deselected. Root `make code-quality` passes all 17 modules. Independent branch and performance reviews completed; no load campaign.
 
 `.msg` fixtures are synthetic (`fixtures/build_msg_fixtures.py`): no permissively licensed Outlook samples exist.

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
@@ -215,7 +216,7 @@ def test_default_attachment_registry_routes_mail_suffixes():
     assert registry[".eml"] is FastEmailProcessor
 
 
-def _mail(subject: str, body: str, attached: list[EmailMessage] = ()) -> EmailMessage:
+def _mail(subject: str, body: str, attached: Sequence[EmailMessage] = ()) -> EmailMessage:
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Subject"] = "a@example.com", "b@example.com", subject
     msg.set_content(body)

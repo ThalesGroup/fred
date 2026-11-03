@@ -33,7 +33,8 @@ class FastEmailProcessor(BaseFastTextProcessor):
     def extract(self, file_path: Path, options: FastTextOptions | None = None) -> FastTextResult:
         opts = options or FastTextOptions()
         # The cap doubles as the body budget so attachment extraction stops once it is spent.
-        text = render_email_markdown(parse_email_file(file_path), max_body_chars=opts.max_chars)
+        body_limit = opts.max_chars if opts.max_chars is not None and opts.max_chars > 0 else None
+        text = render_email_markdown(parse_email_file(file_path), max_body_chars=body_limit)
         if opts.normalize_whitespace:
             text = collapse_whitespace(text)
         if opts.trim_empty_lines:

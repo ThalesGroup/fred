@@ -47,9 +47,11 @@ Un mail transféré en pièce jointe est lu aussi : son texte suit celui du mail
 > **Un mail déposé est visible par toute l'équipe**, avec les noms et adresses
 > qu'il contient. Vérifiez qu'il peut être partagé avant de le déposer.
 
-Un mail chiffré ne peut pas être lu et sera refusé ; un mail seulement signé
-passe sans souci. Un mail dépassant 25 Mo est refusé : retirez ses pièces
-jointes les plus lourdes et enregistrez-le à nouveau.
+Un mail chiffré ne peut pas être lu et sera refusé. Les signatures séparées
+(`multipart/signed`) sont prises en charge ; les signatures S/MIME opaques
+(`signed-data`, dont `.p7m`) ne le sont pas. Exportez une copie non chiffrée avec
+une signature séparée ou sans signature. Un mail dépassant 25 Mo est refusé :
+retirez ses pièces jointes les plus lourdes et enregistrez-le à nouveau.
 
 ## Un document du même nom existe déjà
 

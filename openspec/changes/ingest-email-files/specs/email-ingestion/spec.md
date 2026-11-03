@@ -33,9 +33,14 @@ Knowledge Flow SHALL sanitise HTML bodies, MUST NOT make any network request whi
 - **THEN** the markdown keeps the readable text and none of the four
 
 ### Requirement: Encrypted mails fail permanently
-Knowledge Flow SHALL fail an encrypted mail with an explicit error that the ingestion workflow does not retry, and SHALL ingest a signed-only mail normally.
+Knowledge Flow SHALL fail an encrypted mail with an explicit error that the ingestion workflow does not retry, and SHALL ingest a mail with a detached signature (`multipart/signed`) normally. Opaque S/MIME signatures (`signed-data`) are unsupported and SHALL fail permanently with an explicit message that also identifies this limitation.
 
 #### Scenario: S/MIME encrypted mail
 - **GIVEN** an S/MIME encrypted mail
 - **WHEN** it is imported into a team library
 - **THEN** the document fails once with a message stating it is encrypted
+
+#### Scenario: Opaque signed mail
+- **GIVEN** a mail with opaque S/MIME signed-data content
+- **WHEN** it is imported into a team library or attached to a conversation
+- **THEN** processing fails permanently with a message identifying opaque signatures as unsupported

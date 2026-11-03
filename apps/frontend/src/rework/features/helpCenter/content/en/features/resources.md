@@ -45,9 +45,11 @@ An email forwarded as an attachment is read too: its text follows the email's.
 > **An uploaded email is visible to the whole team**, along with the names and
 > addresses it contains. Check that it can be shared before uploading it.
 
-An encrypted email cannot be read and is refused; an email that is only signed
-goes through fine. An email over 25 MB is refused: remove its heaviest
-attachments and save it again.
+An encrypted email cannot be read and is refused. Emails with detached signatures
+(`multipart/signed`) are supported; opaque S/MIME signatures (`signed-data`,
+including `.p7m`) are not supported. Export an unencrypted copy with a detached
+signature or no signature instead. An email over 25 MB is refused: remove its
+heaviest attachments and save it again.
 
 ## A document of the same name already exists
 
