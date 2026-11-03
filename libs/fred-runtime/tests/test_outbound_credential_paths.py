@@ -83,7 +83,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pydantic import BaseModel
-from weaver_fixtures import INSTANCE_ID, SPACE_ID
+from weaver_fixtures import INSTANCE_ID, SPACE_ID, active_turn, local_binding
 
 # The body a refused receiver answers with. It must reach nothing the platform
 # owns: not an exception message, not an event, not the transcript.
@@ -518,8 +518,14 @@ async def test_document_similarity_403_stops_the_run_without_retry(monkeypatch):
         seen.append(request)
         return httpx.Response(403, text=UPSTREAM_MARKER)
 
+    bound = binding()
+    bound = local_binding(
+        "agent-a",
+        runtime_context=bound.runtime_context,
+        portable_context=bound.portable_context,
+    )
     adapter = DocumentSimilarityAdapter(
-        binding=binding(),
+        binding=bound,
         settings=FakeAgentSettings(),
         credentials=admitted_provider(identity.provider),
     )
@@ -527,8 +533,10 @@ async def test_document_similarity_403_stops_the_run_without_retry(monkeypatch):
         transport=httpx.MockTransport(_refuse)
     )
 
-    with pytest.raises(AuthorityLostError) as raised:
-        await adapter.find_similar("synthetic", document_uids=["doc-a"])
+    with active_turn(bound), pytest.raises(AuthorityLostError) as raised:
+        await adapter.find_similar(
+            "synthetic", document_uids=["00000000-0000-0000-0000-000000000101"]
+        )
 
     assert len(seen) == 1
     assert identity.acquisitions == 1
@@ -552,13 +560,19 @@ async def test_builtin_similarity_keeps_delegated_credentials_after_rebind(
         return httpx.Response(200, json=[])
 
     for current_binding in (binding(), binding(token=None)):
+        current_binding = local_binding(
+            "agent-a",
+            runtime_context=current_binding.runtime_context,
+            portable_context=current_binding.portable_context,
+        )
         invoker.rebind(current_binding)
         invoker._similarity_port._search_client.client = httpx.AsyncClient(  # type: ignore[attr-defined]
             transport=httpx.MockTransport(_empty)
         )
-        await invoker._similarity_port.find_similar(  # type: ignore[attr-defined]
-            "synthetic", document_uids=["doc-a"]
-        )
+        with active_turn(current_binding):
+            await invoker._similarity_port.find_similar(  # type: ignore[attr-defined]
+                "synthetic", document_uids=["00000000-0000-0000-0000-000000000101"]
+            )
 
     assert identity.acquisitions == 2
     assert bearers(seen) == ["Bearer workload-token-1"] * 2

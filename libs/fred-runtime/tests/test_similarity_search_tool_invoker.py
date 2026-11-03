@@ -24,9 +24,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any, cast
+from uuid import UUID
 
 import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import pytest
+import pytest_asyncio
 from fred_core.store.vector_search import VectorSearchHit
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -37,6 +39,13 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.support.builtins.catalog import TOOL_REF_SIMILARITY_SEARCH
+from weaver_fixtures import active_turn, local_binding
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def admitted_turn(empty_runtime_context):
+    with active_turn("agent-1", session="s-1"):
+        yield
 
 
 class _FakeSettings:
@@ -53,7 +62,7 @@ class _FakeSimilarityClient:
     def __init__(self, agent: object) -> None:
         self._agent = agent
 
-    async def similarity_search(self, **kwargs: Any) -> list[VectorSearchHit]:
+    async def search(self, **kwargs: Any) -> list[VectorSearchHit]:
         return [
             VectorSearchHit(
                 uid="d1", title="Doc 1", content="alpha", score=0.5, type="document"
@@ -65,7 +74,8 @@ class _FakeSimilarityClient:
 
 
 def _binding(selected_document_uids: list[str] | None = None) -> BoundRuntimeContext:
-    return BoundRuntimeContext(
+    return local_binding(
+        "agent-1",
         runtime_context=RuntimeContext(
             session_id="s-1",
             team_id="team-1",
@@ -93,7 +103,10 @@ async def test_similarity_search_keeps_both_hits_unfiltered_by_score(
     result = await invoker.invoke(
         ToolInvocationRequest(
             tool_ref=TOOL_REF_SIMILARITY_SEARCH,
-            payload={"anchor": "alpha passage", "document_uids": ["d1", "d2"]},
+            payload={
+                "anchor": "alpha passage",
+                "document_uids": [str(UUID(int=101)), str(UUID(int=102))],
+            },
             context=_binding().portable_context,
         )
     )
@@ -112,7 +125,7 @@ async def test_similarity_search_refuses_document_uids_outside_conversation_scop
 ) -> None:
     monkeypatch.setattr(adapters_module, "VectorSearchClient", _FakeSimilarityClient)
     invoker = adapters_module.FredKnowledgeSearchToolInvoker(
-        binding=_binding(selected_document_uids=["only-this-doc"]),
+        binding=_binding(selected_document_uids=[str(UUID(int=999))]),
         settings=_FakeSettings(),
     )
 
@@ -122,7 +135,40 @@ async def test_similarity_search_refuses_document_uids_outside_conversation_scop
         await invoker.invoke(
             ToolInvocationRequest(
                 tool_ref=TOOL_REF_SIMILARITY_SEARCH,
-                payload={"anchor": "alpha passage", "document_uids": ["d1"]},
+                payload={
+                    "anchor": "alpha passage",
+                    "document_uids": [str(UUID(int=101))],
+                },
                 context=_binding().portable_context,
             )
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"anchor": "alpha", "document_uids": []},
+        {"anchor": "", "document_uids": [str(UUID(int=101))]},
+    ],
+)
+async def test_similarity_requires_anchor_and_target_before_transport(
+    monkeypatch, payload
+):
+    from unittest.mock import AsyncMock
+
+    search = AsyncMock()
+    monkeypatch.setattr(_FakeSimilarityClient, "search", search)
+    monkeypatch.setattr(adapters_module, "VectorSearchClient", _FakeSimilarityClient)
+    invoker = adapters_module.FredKnowledgeSearchToolInvoker(
+        binding=_binding(), settings=_FakeSettings()
+    )
+    with pytest.raises(RuntimeError, match="requires a non-empty"):
+        await invoker.invoke(
+            ToolInvocationRequest(
+                tool_ref=TOOL_REF_SIMILARITY_SEARCH,
+                payload=payload,
+                context=_binding().portable_context,
+            )
+        )
+    search.assert_not_awaited()

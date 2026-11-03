@@ -26,14 +26,24 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
+from unittest.mock import MagicMock
+from uuid import UUID
 
 import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import httpx
 import pytest
+import pytest_asyncio
+from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.store.vector_search import VectorSearchHit
+from fred_runtime.runtime_context import (
+    RuntimeConfig,
+    RuntimeTimeouts,
+    set_runtime_context,
+)
+from fred_runtime.runtime_context import RuntimeContext as PodRuntimeContext
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.context import (
-    BoundRuntimeContext,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -43,8 +53,24 @@ from fred_sdk.contracts.runtime import (
     DocumentPortCallError,
     DocumentScopeRefusedError,
 )
+from weaver_fixtures import SPACE_ID, active_turn, local_binding
 
 pytestmark = pytest.mark.asyncio
+DOC_A, DOC_ELSEWHERE = [str(UUID(int=i)) for i in (101, 999)]
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def admitted_turn(empty_runtime_context):
+    set_runtime_context(
+        PodRuntimeContext(
+            RuntimeConfig(
+                knowledge_flow_url="http://kf.invalid",
+                timeouts=RuntimeTimeouts(similarity_read=37.0),
+            )
+        )
+    )
+    with active_turn("agent-1", session="s-1"):
+        yield
 
 
 class _FakeSettings:
@@ -63,7 +89,7 @@ class _RecordingClient:
     def __init__(self, agent: object) -> None:
         self._agent = agent
 
-    async def similarity_search(self, **kwargs: Any) -> list[VectorSearchHit]:
+    async def search(self, **kwargs: Any) -> list[VectorSearchHit]:
         type(self).last_call = kwargs
         error = type(self).error
         if error is not None:
@@ -79,7 +105,8 @@ def _adapter(monkeypatch: pytest.MonkeyPatch, **runtime_kwargs: Any):
     monkeypatch.setattr(adapters_module, "VectorSearchClient", _RecordingClient)
     _RecordingClient.last_call = None
     _RecordingClient.error = None
-    binding = BoundRuntimeContext(
+    binding = local_binding(
+        "agent-1",
         runtime_context=RuntimeContext(
             session_id="s-1", team_id="team-1", **runtime_kwargs
         ),
@@ -102,15 +129,20 @@ async def test_forwards_a_targeted_call_and_returns_typed_hits(
     adapter = _adapter(monkeypatch)
 
     result = await adapter.find_similar(
-        "anchor text", document_uids=["doc-a"], top_k=5, rerank=False, min_score=0.2
+        "anchor text", document_uids=[DOC_A], top_k=5, rerank=False, min_score=0.2
     )
 
     assert _RecordingClient.last_call == {
-        "anchor": "anchor text",
-        "document_uids": ["doc-a"],
+        "question": "anchor text",
+        "document_context": DocumentAccessContext(
+            space_id=UUID(SPACE_ID),
+            document_scope=DocumentScope.from_ids(document_ids=[DOC_A]),
+        ),
         "top_k": 5,
         "rerank": False,
         "min_score": 0.2,
+        "read_timeout": 37.0,
+        "transient_retry": True,
     }
     assert [hit.uid for hit in result.hits] == ["d1"]
 
@@ -119,12 +151,14 @@ async def test_bounds_model_named_uids_by_the_session_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The model asked for two documents; only one is in this conversation."""
-    adapter = _adapter(monkeypatch, selected_document_uids=["doc-a"])
+    adapter = _adapter(monkeypatch, selected_document_uids=[DOC_A])
 
-    await adapter.find_similar("x", document_uids=["doc-a", "doc-elsewhere"])
+    await adapter.find_similar("x", document_uids=[DOC_A, DOC_ELSEWHERE])
 
     assert _RecordingClient.last_call is not None
-    assert _RecordingClient.last_call["document_uids"] == ["doc-a"]
+    assert _RecordingClient.last_call[
+        "document_context"
+    ].document_scope == DocumentScope.from_ids(document_ids=[DOC_A])
 
 
 async def test_every_named_uid_outside_the_session_scope_is_refused_not_emptied(
@@ -134,12 +168,12 @@ async def test_every_named_uid_outside_the_session_scope_is_refused_not_emptied(
     Knowledge Flow with an empty target list (which reads downstream as 'no
     targeting'), and returning no hits (which the model cannot tell apart from
     a genuine no-match, and would report as 'nothing resembles this')."""
-    adapter = _adapter(monkeypatch, selected_document_uids=["doc-a"])
+    adapter = _adapter(monkeypatch, selected_document_uids=[DOC_A])
 
     with pytest.raises(DocumentScopeRefusedError) as excinfo:
-        await adapter.find_similar("x", document_uids=["doc-elsewhere"])
+        await adapter.find_similar("x", document_uids=[DOC_ELSEWHERE])
 
-    assert excinfo.value.requested_uids == ("doc-elsewhere",)
+    assert excinfo.value.requested_uids == (DOC_ELSEWHERE,)
     assert _RecordingClient.last_call is None
 
 
@@ -161,7 +195,7 @@ async def test_general_only_mode_skips_the_corpus(
     naming target uids does not opt back in."""
     adapter = _adapter(monkeypatch, search_rag_scope="general_only")
 
-    result = await adapter.find_similar("x", document_uids=["doc-a"])
+    result = await adapter.find_similar("x", document_uids=[DOC_A])
 
     assert result.hits == ()
     assert _RecordingClient.last_call is None
@@ -175,7 +209,7 @@ async def test_transport_failure_is_mapped_to_the_sdk_typed_error(
     _RecordingClient.error = httpx.ConnectError("dropped")
 
     with pytest.raises(DocumentPortCallError):
-        await adapter.find_similar("x", document_uids=["doc-a"])
+        await adapter.find_similar("x", document_uids=[DOC_A])
 
 
 async def test_wrapped_authority_loss_is_not_mapped_to_a_document_error(
@@ -192,6 +226,51 @@ async def test_wrapped_authority_loss_is_not_mapped_to_a_document_error(
             _RecordingClient.error = wrapper
 
     with pytest.raises(AuthorityLostError) as raised:
-        await adapter.find_similar("x", document_uids=["doc-a"])
+        await adapter.find_similar("x", document_uids=[DOC_A])
 
     assert raised.value is stop
+
+
+@pytest.mark.parametrize("selected", [None, [DOC_A]])
+async def test_invalid_identifier_does_not_discard_valid_targets(monkeypatch, selected):
+    adapter = _adapter(monkeypatch, selected_document_uids=selected)
+    debug = MagicMock()
+    monkeypatch.setattr(adapters_module.logger, "debug", debug)
+
+    result = await adapter.find_similar(
+        "private anchor", document_uids=["not-a-uuid", DOC_A]
+    )
+
+    assert [hit.uid for hit in result.hits] == ["d1"]
+    assert _RecordingClient.last_call is not None
+    assert _RecordingClient.last_call[
+        "document_context"
+    ].document_scope == DocumentScope.from_ids(document_ids=[DOC_A])
+    debug.assert_called_once_with(
+        "Ignoring invalid document similarity identifier: %r", "not-a-uuid"
+    )
+
+
+@pytest.mark.parametrize("selected", [None, [DOC_A]])
+async def test_only_invalid_identifiers_never_reach_knowledge_flow(
+    monkeypatch, selected
+):
+    adapter = _adapter(monkeypatch, selected_document_uids=selected)
+
+    result = await adapter.find_similar(
+        "private anchor", document_uids=["not-a-uuid", ""]
+    )
+
+    assert result.hits == ()
+    assert _RecordingClient.last_call is None
+
+
+async def test_invalid_identifier_does_not_hide_valid_scope_refusal(monkeypatch):
+    adapter = _adapter(monkeypatch, selected_document_uids=[DOC_A])
+
+    with pytest.raises(DocumentScopeRefusedError):
+        await adapter.find_similar(
+            "private anchor", document_uids=["not-a-uuid", DOC_ELSEWHERE]
+        )
+
+    assert _RecordingClient.last_call is None

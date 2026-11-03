@@ -11,6 +11,7 @@ import ssl
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
@@ -28,8 +29,8 @@ def run(command: list[str], *, body: str | None = None, step: str | None = None)
 
 
 def prepare() -> None:
-    if os.environ.get("ENV") != "secondary":
-        raise RuntimeError("Manager ingestion preparation requires ENV=secondary")
+    if os.environ.get("ENV") != "secondary" and os.environ.get("INSTANCE") != "weaver":
+        raise RuntimeError("Use INSTANCE=weaver or ENV=secondary")
     here = Path(__file__).resolve().parent
     output = Path(os.environ["K3D_APP_OUT"])
     namespace = os.environ.get("K3D_NAMESPACE", "fred")
@@ -59,6 +60,21 @@ def prepare() -> None:
     api_config = yaml.safe_load(
         configs["knowledge-flow-backend-back"]["data"]["configuration.yaml"]
     )
+    if os.environ.get("INSTANCE") == "weaver":
+        expected_database = os.environ["K3D_DATABASE"]
+        for name in (
+            "control-plane-backend",
+            "fred-agents",
+            "knowledge-flow-backend",
+            "knowledge-flow-worker",
+        ):
+            configuration = yaml.safe_load(
+                configs[name + "-back"]["data"]["configuration.yaml"]
+            )
+            if configuration["storage"]["postgres"]["database"] != expected_database:
+                raise RuntimeError(
+                    "Every Weaver component must use the isolated application database"
+                )
     generated = output / "manager-ingestion.generated.yaml"
     if not worker_config.get("manager_processing"):
         raise RuntimeError(
@@ -309,6 +325,22 @@ def provision_search(
         ]
     ]
     for url, payload in resources:
+        if "/_search/pipeline/" in url:
+            try:
+                with urlopen(
+                    Request(url, headers={"Authorization": authorization}),
+                    context=ssl._create_unverified_context(),
+                    timeout=30,
+                ) as response:
+                    existing = json.load(response)[pipeline["name"]]
+                if existing != payload:
+                    raise RuntimeError(
+                        "Existing shared search pipeline differs; resolve compatibility before deployment"
+                    )
+                continue
+            except HTTPError as error:
+                if error.code != 404:
+                    raise
         request = Request(
             url,
             data=json.dumps(payload).encode(),
@@ -362,10 +394,31 @@ def provision_storage(
     )
 
     # Preserve the factory's identities. Add the profile's scoped S3 identities.
-    base = json.loads(
-        run([*kube, "get", "configmap", "fred-seaweedfs-config", "-o", "json"])
+    infra = [
+        "kubectl",
+        "--context",
+        os.environ["KUBE_CONTEXT"],
+        "-n",
+        os.environ.get("K3D_INFRA_NAMESPACE", os.environ.get("K3D_NAMESPACE", "fred")),
+    ]
+    current = run(
+        [
+            *infra,
+            "get",
+            "secret",
+            "control-plane-s3-config",
+            "--ignore-not-found",
+            "-o",
+            "json",
+        ]
     )
-    config = json.loads(base["data"]["s3.json"])
+    if current.strip():
+        config = json.loads(base64.b64decode(json.loads(current)["data"]["s3.json"]))
+    else:
+        base = json.loads(
+            run([*infra, "get", "configmap", "fred-seaweedfs-config", "-o", "json"])
+        )
+        config = json.loads(base["data"]["s3.json"])
     names = {"fred-document-manager", "fred-document-processor", "fred-document-reader"}
     config["identities"] = [
         item for item in config["identities"] if item["name"] not in names
@@ -395,11 +448,11 @@ def provision_storage(
     ]
     encoded = json.dumps(config, sort_keys=True)
     apply(
-        kube,
+        infra,
         {
             "apiVersion": "v1",
             "kind": "Secret",
-            "metadata": {"name": "control-plane-s3-config"},
+            "metadata": {"name": "control-plane-s3-config", "namespace": infra[-1]},
             "type": "Opaque",
             "stringData": {"s3.json": encoded},
         },
@@ -429,7 +482,7 @@ def provision_storage(
     }
     run(
         [
-            *kube,
+            *infra,
             "patch",
             "deployment",
             "seaweedfs",
@@ -440,7 +493,7 @@ def provision_storage(
         ],
         body=json.dumps(patch),
     )
-    run([*kube, "rollout", "status", "deployment/seaweedfs", "--timeout=180s"])
+    run([*infra, "rollout", "status", "deployment/seaweedfs", "--timeout=180s"])
     # Use the worker's existing MinIO client, with credentials only on stdin.
     bucket_script = """import json, sys
 from urllib.parse import urlsplit

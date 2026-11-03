@@ -49,4 +49,14 @@ The factory also serves released charts with a different configuration contract.
     {{- end -}}
   {{- end -}}
 {{- end -}}
+{{- range $app := $base.applications -}}
+  {{- $env := list -}}
+  {{- range index $app "extraEnvVars" | default list -}}
+    {{- if ne .name "OPENFGA_API_TOKEN" -}}{{- $env = append $env . -}}{{- end -}}
+  {{- end -}}
+  {{- $_ := set $app "extraEnvVars" $env -}}
+  {{- with (index $app "configuration") -}}
+    {{- with (index . "security") -}}{{- $_ := unset . "rebac" -}}{{- end -}}
+  {{- end -}}
+{{- end -}}
 {{ pick $base "applications" | toYaml }}

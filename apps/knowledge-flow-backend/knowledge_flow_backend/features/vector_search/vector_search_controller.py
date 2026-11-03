@@ -58,6 +58,8 @@ class VectorSearchController:
                         question=request.question,
                         user=person,
                         top_k=request.top_k,
+                        rerank=request.rerank,
+                        min_score=request.min_score,
                         policy_name=request.search_policy,
                         context=context,
                         authorized_space_ids=authorized_space_ids,

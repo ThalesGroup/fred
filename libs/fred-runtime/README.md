@@ -165,6 +165,14 @@ HTTP clients that connect agent tools to the Fred platform services:
 Small adapters that bridge the platform-agnostic `fred-sdk` contracts to real
 services available at runtime (chat model factory, checkpointer wiring, MCP discovery).
 
+`DocumentSimilarityAdapter` uses `/documents/search` with the anchor as `question`.
+It narrows model-named document IDs through the turn's selection and builds the
+same `TurnAuthority` document context as document search, with corpus enabled
+and attachments excluded. Knowledge Flow uses its default search policy and
+optionally reranks before filtering original scores. Only similarity opts into
+bounded transient retries and `timeouts.similarity_read`; ordinary search keeps
+its existing transport settings.
+
 ---
 
 ### `fred_runtime.client` — Developer CLI (`fred-agents-cli`)

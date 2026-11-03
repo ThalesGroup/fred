@@ -28,6 +28,25 @@ def deployments(docs):
 
 
 class ManagerChartTests(unittest.TestCase):
+    def test_cluster_rbac_is_disjoint_between_application_namespaces(self):
+        resources = []
+        for namespace in ("fred", "fred-weaver"):
+            docs = render("applications.fred-agents.enabled=true", namespace=namespace)
+            roles = {d["metadata"]["name"] for d in docs if d["kind"] == "ClusterRole"}
+            bindings = [d for d in docs if d["kind"] == "ClusterRoleBinding"]
+            self.assertTrue(roles)
+            for binding in bindings:
+                self.assertIn(binding["roleRef"]["name"], roles)
+                self.assertEqual(binding["subjects"][0]["namespace"], namespace)
+            resources.append(
+                {
+                    (d["kind"], d["metadata"]["name"])
+                    for d in docs
+                    if d["kind"] in {"ClusterRole", "ClusterRoleBinding"}
+                }
+            )
+        self.assertFalse(resources[0] & resources[1])
+
     def test_schema_initialization_hook_keeps_its_password_secret_reference(self):
         docs = render(
             "applications.control-plane-backend.migration.enabled=true",
@@ -278,6 +297,7 @@ class ManagerChartTests(unittest.TestCase):
                 "K3D_FACTORY_ROOT": str(factory),
                 "K3D_APP_OUT": out,
                 "K3D_NAMESPACE": "fred",
+                "K3D_APP_HOST": "fred.local",
                 "K3D_REALM_URL": "http://keycloak:8080/realms/app",
                 "K3D_PUBLIC_URL": "http://fred.local",
                 "K3D_WEBSOCKET_URL": "ws://fred.local",

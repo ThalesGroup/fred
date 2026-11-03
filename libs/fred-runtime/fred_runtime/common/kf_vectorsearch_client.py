@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 import httpx
 from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
@@ -25,7 +25,6 @@ from fred_core.store.vector_search import VectorSearchHit
 from pydantic import TypeAdapter
 
 from fred_runtime.common.kf_base_client import KfBaseClient, KnowledgeFlowAgentContext
-from fred_runtime.runtime_context import get_runtime_context
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ _HITS = TypeAdapter(List[VectorSearchHit])
 
 #: Bounded retry for the similarity-search path only: nothing above it retries,
 #: so one dropped connection failed a whole comparison run. Scoped here so
-#: `search`/`rerank` keep their behaviour (RUNTIME-EXECUTION-CONTRACT.md §8.60).
+#: ordinary searches keep their behaviour.
 _TRANSIENT_RETRIES = 2
 _RETRY_BASE_DELAY_S = 0.5
 
@@ -99,18 +98,27 @@ class VectorSearchClient(KfBaseClient):
         document_context: DocumentAccessContext,
         top_k: int = 10,
         search_policy: Optional[str] = None,
+        rerank: bool = False,
+        min_score: float | None = None,
+        read_timeout: float | None = None,
+        transient_retry: bool = False,
     ) -> List[VectorSearchHit]:
         """Corpus search in the turn's Weaver space and its ancestors.
 
         Wire format (matches controller): POST /documents/search with
-        {"question", "top_k", "search_policy"?} and the JSON document-context header.
+        {"question", "top_k", "search_policy"?, "rerank"?, "min_score"?} and the JSON document-context header.
         The scope is an intersection of unions, resolved against Weaver placement
         by Knowledge Flow; attachment IDs are an independent server-bound source.
         """
+        # Similarity opts into its own timeout/retry policy; ordinary search does not.
         payload: Dict[str, Any] = {
             "question": question,
             "top_k": top_k,
         }
+        if rerank:
+            payload["rerank"] = rerank
+        if min_score is not None:
+            payload["min_score"] = min_score
         if search_policy:
             payload["search_policy"] = search_policy
         logger.info(
@@ -120,16 +128,22 @@ class VectorSearchClient(KfBaseClient):
             search_policy,
         )
 
-        # Use the base class's request method, passing the required access_token.
-        # This will handle token refresh if needed. The required refresh token
-        # is obtained via the refresh_callback provided at initialization. And the actual
-        # token used is part of the runtime configuration passed to the agent.
-        r = await self._request_with_token_refresh(
-            method="POST",
-            path="/documents/search",
-            phase_name="kf_vector_search",
-            headers={DOCUMENT_CONTEXT_HEADER: document_context.model_dump_json()},
-            json=payload,
+        async def _do_request() -> httpx.Response:
+            return await self._request_with_token_refresh(
+                method="POST",
+                path="/documents/search",
+                phase_name="kf_vector_similarity_search"
+                if transient_retry
+                else "kf_vector_search",
+                headers={DOCUMENT_CONTEXT_HEADER: document_context.model_dump_json()},
+                json=payload,
+                read_timeout=read_timeout,
+            )
+
+        r = (
+            await _with_transient_retry(_do_request)
+            if transient_retry
+            else await _do_request()
         )
         r.raise_for_status()
 
@@ -165,103 +179,5 @@ class VectorSearchClient(KfBaseClient):
         raw = r.json()
         if not isinstance(raw, list):
             logger.warning("Unexpected document-chunks payload type: %s", type(raw))
-            return []
-        return _HITS.validate_python(raw)
-
-    async def similarity_search(
-        self,
-        *,
-        anchor: str,
-        document_uids: Sequence[str],
-        top_k: int = 10,
-        rerank: bool = True,
-        min_score: Optional[float] = None,
-    ) -> List[VectorSearchHit]:
-        """
-        Targeted document-to-document comparison search.
-
-        Unlike `search`, targeting is required: this ranks the passages most
-        similar to `anchor`, restricted to `document_uids`. Retries transient
-        connection/5xx failures (bounded, jittered) - this path has no upstream
-        retry otherwise.
-
-        Wire format (matches controller):
-          POST /vector/similarity-search
-          {
-            "anchor": str,
-            "document_uids": [str],
-            "top_k": int,
-            "rerank": bool,
-            "min_score": float?
-          }
-        """
-        if not document_uids:
-            raise ValueError("similarity_search requires at least one document uid")
-
-        payload: Dict[str, Any] = {
-            "anchor": anchor,
-            "document_uids": list(document_uids),
-            "top_k": top_k,
-            "rerank": rerank,
-        }
-        if min_score is not None:
-            payload["min_score"] = min_score
-
-        read_timeout = float(get_runtime_context().config.timeouts.similarity_read)
-
-        async def _do_request() -> httpx.Response:
-            return await self._request_with_token_refresh(
-                method="POST",
-                path="/vector/similarity-search",
-                phase_name="kf_vector_similarity_search",
-                json=payload,
-                read_timeout=read_timeout,
-            )
-
-        r = await _with_transient_retry(_do_request)
-        r.raise_for_status()
-
-        raw = r.json()
-        if not isinstance(raw, list):
-            logger.warning("Unexpected similarity search payload type: %s", type(raw))
-            return []
-        return _HITS.validate_python(raw)
-
-    async def rerank(
-        self,
-        *,
-        question: str,
-        documents: Sequence[VectorSearchHit],
-        top_r: int = 6,
-    ) -> List[VectorSearchHit]:
-        """
-        Rerank an existing list of VectorSearchHit items using the cross-encoder.
-        Wire format (matches controller):
-          POST /vector/rerank
-          {
-            "question": str,
-            "top_r": int,
-            "documents": [VectorSearchHit]
-          }
-        """
-        payload: Dict[str, Any] = {
-            "question": question,
-            "top_r": top_r,
-            "documents": [
-                d.model_dump() if hasattr(d, "model_dump") else d for d in documents
-            ],
-        }
-
-        r = await self._request_with_token_refresh(
-            method="POST",
-            path="/vector/rerank",
-            phase_name="kf_vector_rerank",
-            json=payload,
-        )
-        r.raise_for_status()
-
-        raw = r.json()
-        if not isinstance(raw, list):
-            logger.warning("Unexpected vector rerank payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)

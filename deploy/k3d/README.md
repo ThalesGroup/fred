@@ -1,5 +1,20 @@
 # Weaver: local ingestion and Python agent catalog deployment
 
+## Alongside Swift on existing infrastructure
+
+The factory's Weaver branch supports `INSTANCE=weaver ENV=swift`: namespace
+`fred-weaver`, database `fred_weaver`, Temporal namespace `fred-weaver`, and
+`http://weaver.localhost:8088`. Swift retains its existing namespace and database.
+Both use the same realm and S3 document bucket; the OpenSearch corpus indexes
+remain separate. No users, grants, documents or conversations are migrated.
+
+From the factory, run `make k3d-instance INSTANCE=weaver`, supply the model Secret
+in `fred-weaver`, then `make k3d-app INSTANCE=weaver APP=fred DIR=/path/to/this/fred`.
+Use `k3d-app-validate` with the same arguments to render first. The factory's local
+development guide contains the operator credential-copy command and boundaries.
+The infrastructure namespace is explicit for PostgreSQL and S3 preparation.
+The original standalone `ENV=secondary` profile remains available below.
+
 On `weaver`, `deploy/k3d/build` builds `apps/control-plane` as the
 `control-plane-backend` image. The ingestion profile runs it as `control-plane serve`:
 HTTP, durable Temporal submission and lifecycle work share one process. Knowledge

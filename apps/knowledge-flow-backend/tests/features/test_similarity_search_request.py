@@ -12,45 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for the SimilaritySearchRequest contract (KF-SIMILARITY-SEARCH).
-
-Covers the stable request interface: targeting is required, the anchor is
-required, and the search defaults (rerank on, top_k bounds). The service
-orchestration depends on the vector store + ApplicationContext and is
-integration-level, not unit-tested here.
-"""
+"""The unified search request keeps ordinary defaults and optional similarity controls."""
 
 import pytest
 from pydantic import ValidationError
 
-from knowledge_flow_backend.features.vector_search.vector_search_structures import (
-    SimilaritySearchRequest,
-)
+from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchRequest
 
 
-def test_accepts_document_uid_target() -> None:
-    req = SimilaritySearchRequest(anchor="some passage", document_uids=["doc-1"])
-    assert req.document_uids == ["doc-1"]
-    # defaults: rerank on, top_k 10
-    assert req.rerank is True
+def test_search_defaults_preserve_ordinary_retrieval() -> None:
+    req = SearchRequest(question="some passage")
+    assert req.rerank is False
+    assert req.min_score is None
     assert req.top_k == 10
+    assert req.search_policy is None
 
 
-def test_accepts_library_folder_target() -> None:
-    req = SimilaritySearchRequest(anchor="x", document_library_tags_ids=["lib-1"])
-    assert req.document_library_tags_ids == ["lib-1"]
+def test_similarity_controls_are_optional_and_documented() -> None:
+    req = SearchRequest(question="anchor", rerank=True, min_score=0.2)
+    assert req.rerank is True
+    assert req.min_score == 0.2
+    schema = SearchRequest.model_json_schema()
+    for field in ("rerank", "min_score"):
+        assert field not in schema["required"]
+        assert schema["properties"][field]["description"]
 
 
-def test_targeting_is_required() -> None:
+@pytest.mark.parametrize("top_k", [0, 101, 200])
+def test_top_k_is_bounded(top_k: int) -> None:
     with pytest.raises(ValidationError):
-        SimilaritySearchRequest(anchor="x")  # no document_uids and no tags
+        SearchRequest(question="x", top_k=top_k)
 
 
-def test_anchor_is_required() -> None:
+@pytest.mark.parametrize("field", ["document_uids", "document_library_tags_ids", "attachment_ids"])
+def test_targets_cannot_be_supplied_in_the_search_body(field: str) -> None:
     with pytest.raises(ValidationError):
-        SimilaritySearchRequest(anchor="", document_uids=["doc-1"])
-
-
-def test_top_k_is_bounded() -> None:
-    with pytest.raises(ValidationError):
-        SimilaritySearchRequest(anchor="x", document_uids=["doc-1"], top_k=200)
+        SearchRequest.model_validate({"question": "x", field: ["doc-1"]})
