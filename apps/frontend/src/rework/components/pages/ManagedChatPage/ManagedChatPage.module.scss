@@ -412,11 +412,6 @@
   cursor: default;
 }
 
-.pendingStatus {
-  color: var(--on-surface-muted);
-  white-space: nowrap;
-}
-
 .todoPanelSlot {
   flex-shrink: 0;
   margin-bottom: var(--spacing-xs);

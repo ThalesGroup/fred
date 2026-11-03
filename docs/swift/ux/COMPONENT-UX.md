@@ -5836,3 +5836,7 @@ local queue; a normal human-input pause holds it until the user responds.
 Other uncertain outcomes offer text-only Send again / Renvoyer and Remove /
 Supprimer, without a delivery-status label or an additional delivery-check toast.
 The retry tooltip retains its duplicate-message guidance.
+
+The immediate Send / Envoyer action uses the small secondary tonal button with a
+bent right-arrow icon. Sending / Envoi uses the same button and icon, disabled;
+the action menu is hidden until the delivery outcome is known.

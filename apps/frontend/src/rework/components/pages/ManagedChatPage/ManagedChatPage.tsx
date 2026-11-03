@@ -1056,7 +1056,17 @@ export default function ManagedChatPage() {
                                   {message.text}
                                 </span>
                                 {message.status === "offered" ? (
-                                  <span className={styles.pendingStatus}>{t("chatbot.pendingMessages.offered")}</span>
+                                  <Button
+                                    type="button"
+                                    color="secondary"
+                                    variant="tonal"
+                                    size="2xs"
+                                    icon={{ category: "outlined", type: "subdirectory_arrow_right" }}
+                                    disabled
+                                    aria-label={`${t("chatbot.pendingMessages.offered")}: ${message.text}`}
+                                  >
+                                    {t("chatbot.pendingMessages.offered")}
+                                  </Button>
                                 ) : message.status === "uncertain" ? (
                                   <>
                                     <button
@@ -1086,6 +1096,7 @@ export default function ManagedChatPage() {
                                         color="secondary"
                                         variant="tonal"
                                         size="2xs"
+                                        icon={{ category: "outlined", type: "subdirectory_arrow_right" }}
                                         aria-label={`${t("chatbot.pendingMessages.send")}: ${message.text}`}
                                         onClick={() => void chat.forcePendingMessage(message.id)}
                                       >
