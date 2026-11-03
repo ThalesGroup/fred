@@ -64,7 +64,7 @@ const execution = fixtureExecution({
 const applicationToolchain = {
   source: "apps/frontend/package-lock.json",
   isolation: "application-owned",
-  node: "24.21.0",
+  node: "24.22.2",
   npm: "11.19.0",
 };
 const successfulGates = {
@@ -91,6 +91,19 @@ async function roots(context) {
     stage: path.join(root, "staged"),
   };
 }
+
+test("a stale contract cannot produce a fixture transfer", async () => {
+  const contract = await loadReleaseContract();
+  contract.releaseToolchain.node = "24.21.0";
+  contract.applicationToolchain.node = "24.21.0";
+  await assert.rejects(
+    createFixtureTransfer({
+      contract,
+      producerToolchain: contract.releaseToolchain,
+    }),
+    /differs from .nvmrc/,
+  );
+});
 
 test("a failed second final rename removes a complete record and both temporary files", async (context) => {
   const { root } = await roots(context);
