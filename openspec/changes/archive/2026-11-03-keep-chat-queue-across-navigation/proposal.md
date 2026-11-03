@@ -1,6 +1,6 @@
 ## Why
 
-PR #3418 lets a streamed answer survive navigation, but its waiting messages are still discarded. The user approved retaining them in this browser tab and resuming their ordinary sends only after returning to the conversation (issue #3427).
+Merged PR #3418 lets a streamed answer survive navigation, but its waiting messages are still discarded. The user approved retaining them in this browser tab and resuming their ordinary sends only after returning to the conversation (issue #3427).
 
 ## What Changes
 
