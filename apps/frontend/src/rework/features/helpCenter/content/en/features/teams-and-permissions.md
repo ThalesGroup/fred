@@ -10,16 +10,18 @@ icon: groups
 Every piece of content belongs to a team and is visible only to its members.
 What you may do depends on your **role** in that team.
 
+Your conversations are private: only you can read them, in every space.
+
 ## The four team roles
 
 They **stack**: one person can hold several, each granted separately.
 
-| Role        | Can                                                                     | Cannot, without another role                      |
-| ----------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
-| **Member**  | Use the agents, read the team's conversations and files, leave the team | Change anything shared                            |
-| **Editor**  | Create and edit agents, prompts and resources                           | Manage members or team settings                   |
-| **Admin**   | Manage members and their roles, the team's settings and policy          | **Create or edit an agent, a prompt, a document** |
-| **Analyst** | Create and run evaluation campaigns, manage evaluation corpora          | Touch the general corpus, members or settings     |
+| Role        | Can                                                                                                        | Cannot, without another role                      |
+| ----------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **Member**  | Use the agents, read the team's files, hold their own conversations (visible only to them), leave the team | Change anything shared                            |
+| **Editor**  | Create and edit agents, prompts and resources                                                              | Manage members or team settings                   |
+| **Admin**   | Manage members and their roles, the team's settings and policy                                             | **Create or edit an agent, a prompt, a document** |
+| **Analyst** | Create and run evaluation campaigns, manage evaluation corpora                                             | Touch the general corpus, members or settings     |
 
 > **Admin and Editor are two distinct permissions, not two rungs.** This point
 > is frequently misunderstood: an Admin governs the team and holds no rights
@@ -133,8 +135,8 @@ Five roles exist outside teams. They carry cross-cutting responsibilities and
 | **Platform observer**      | Reading platform-wide usage indicators                                                         |
 
 > **A platform role never replaces a team role.** A platform admin with no role
-> in your team can neither touch its agents nor read its conversations. And
-> nobody, them included, reaches your personal space.
+> in your team cannot touch its agents. And nobody, whatever their role, reads
+> your conversations or reaches your personal space.
 
 ## How it is enforced
 
