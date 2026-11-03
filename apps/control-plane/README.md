@@ -713,10 +713,12 @@ imports a variant with a project.
 For the separate Swift/Weaver exercise, run `make bundle-migration` from the
 repository root or this directory. It generates
 `apps/control-plane/target/nova-migration-bundle.zip` (path from the repository root)
-without contacting any service. It contains only Nova, its Pilote team and two
+without contacting any service. It contains only Nova, its Pilote team and three
 accounts, with no project or platform grant. `nova.admin` is Nova's technical
 administrator; `nova.responsable` owns Nova and Pilote and explicitly holds
-`member` on Nova, as required for a team role.
+`member` on Nova, as required for a team role. `nova.editeur` holds `member` on
+Nova and `editor` on Pilote, allowing the document exercise while the responsible
+person retains governance only on Pilote.
 
 Follow the [Nova fixture and Chrome walkthrough](tests/fixtures/import_export/nova_migration/README.md)
 for credentials, shared-SSO collision checks and the manual import steps. This

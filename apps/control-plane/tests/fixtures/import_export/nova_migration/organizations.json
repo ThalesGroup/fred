@@ -9,6 +9,9 @@
       "nova.responsable": [
         "owner",
         "member"
+      ],
+      "nova.editeur": [
+        "member"
       ]
     }
   }

@@ -14,5 +14,13 @@
     "last_name": "Nova",
     "password": "Azerty123_",
     "platform_roles": []
+  },
+  {
+    "username": "nova.editeur",
+    "email": "nova.editeur@nova.example",
+    "first_name": "Éditeur",
+    "last_name": "Nova",
+    "password": "Azerty123_",
+    "platform_roles": []
   }
 ]

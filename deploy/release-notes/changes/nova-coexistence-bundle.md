@@ -29,7 +29,7 @@ bundle commands are available at the repository root and in `apps/control-plane`
 
 ## Validation
 
-The generated ZIP contains two users, Nova, Pilote and an empty project list.
+The generated ZIP contains three users, Nova, Pilote and an empty project list.
 Confirm the declared roles manually in Weaver after an explicit import.
 The Home team list and team sidebar share role-label formatting, including Weaver
 owners and combined elevated roles. This display fix changes no access rights;

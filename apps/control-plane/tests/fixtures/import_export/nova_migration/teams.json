@@ -6,6 +6,9 @@
     "roles": {
       "nova.responsable": [
         "owner"
+      ],
+      "nova.editeur": [
+        "editor"
       ]
     }
   }

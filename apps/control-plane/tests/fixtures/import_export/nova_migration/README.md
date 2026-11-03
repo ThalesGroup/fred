@@ -8,18 +8,21 @@ provisioning importer, independently of the Acme/Globex demo.
 | --- | --- | --- |
 | `nova.admin` | `organization_admin` (technical administration) | No role |
 | `nova.responsable` | `owner`, `member` (responsibility and parent content membership) | `owner` |
+| `nova.editeur` | `member` (parent content membership) | `editor` (content read/write, no governance) |
 
-Every new organization needs both an admin and an owner. Reusing the responsible
-person at both levels keeps this fixture at two accounts. The explicit organization
-`member` role satisfies the team's direct parent content-membership requirement.
+Every new organization needs both an admin and an owner. The responsible person
+holds ownership at both levels; a third, distinct editor prepares the document
+ingestion exercise without giving the responsible person access to Pilote content.
+The explicit organization `member` roles satisfy the team's direct parent
+content-membership requirement.
 `owner` alone is governance only and does not grant content access, on either Nova
 or Pilote.
-Neither account has a platform role. Your separately bootstrapped platform admin
+None of the accounts has a platform role. Your separately bootstrapped platform admin
 imports the bundle and receives no Nova role from it.
 
 There is exactly one organization (Nova), one team (Pilote) and no project.
 The bundle includes no personal spaces, agents, models, documents or conversations.
-Both accounts have the **local test password** `Azerty123_` and distinct
+All three accounts have the **local test password** `Azerty123_` and distinct
 `nova.<role>@nova.example` email addresses. These credentials are for the local
 exercise only.
 
@@ -41,9 +44,29 @@ The five JSON files follow the existing version-2 contract. Its required manifes
 value `source_platform: "swift"` identifies the accepted wire format, not the origin
 of these synthetic accounts.
 
+## Add the editor to an existing Nova installation
+
+Regenerate with `make bundle-migration`. Before replay, check that the shared SSO
+has no unrelated identity using `nova.editeur` or `nova.editeur@nova.example`.
+With the existing Weaver platform admin, import the updated ZIP through
+**Administration > Provisioning**. Replay resolves Nova and Pilote through the
+existing importer; do not delete or recreate them. It preserves existing passwords
+and grants, adding the editor identity and its declared roles. If the username
+already exists, its password is preserved rather than replaced by the fixture.
+
+Then use a separate Chrome profile or fresh private session to sign in as
+`nova.editeur`, accept the terms, and verify the profile: Member on Nova, Editor on
+Pilote, no platform role and no Owner role. Existing owner/admin grants stay as
+shown in the table above unless separately changed by an operator. In particular,
+`nova.responsable` must remain Owner only on Pilote.
+
+Stop before uploading a document: first capture the S3, search and SQL baseline
+for the coexistence audit. Generating this updated fixture changes no live account;
+reimporting needs no application rebuild or deployment.
+
 ## First manual exercise in Chrome
 
-1. Before the first import, check the shared SSO directory for both usernames and
+1. Before the first import, check the shared SSO directory for all three usernames and
    email addresses, and Weaver for an existing Nova organization. Start with absent
    identities and organization to demonstrate fresh provisioning. The importer
    reuses existing usernames and preserves their passwords; generation does not

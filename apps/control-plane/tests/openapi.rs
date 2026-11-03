@@ -123,6 +123,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /spaces",
         "delete /spaces/{id}",
         "get /deletions/{operation_id}",
+        "get /spaces/{id}/members",
+        "get /spaces/{id}/member-candidates",
         "put /spaces/{id}/roles/{role}/{user}",
         "delete /spaces/{id}/roles/{role}/{user}",
         "post /folders",

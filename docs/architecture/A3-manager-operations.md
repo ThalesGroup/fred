@@ -382,10 +382,12 @@ version-2 import format.
 
 For an isolated coexistence exercise, `make bundle-migration` packages the separate
 [Nova fixture](../../apps/control-plane/tests/fixtures/import_export/nova_migration/README.md)
-through the same atomic ZIP builder. It declares two accounts, one organization,
+through the same atomic ZIP builder. It declares three accounts, one organization,
 one team and no project or platform grant. This is synthetic provisioning input,
-not a Swift data migration; shared-SSO precautions and the manual validation steps
-are kept with the fixture.
+not a Swift data migration. The separate `nova.editeur` account holds Member on
+Nova and Editor on Pilote, without changing the responsible person's Owner-only
+team role. Shared-SSO precautions and the additive reimport procedure for an
+existing Nova installation are kept with the fixture.
 
 HTTP clients submit the same ZIP as multipart `file` to
 `/control-plane/v1/import-export/import` on the running server. Replay is additive:
