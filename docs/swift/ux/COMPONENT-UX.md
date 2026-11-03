@@ -900,7 +900,8 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   (human input or interrupted run) shows a solid `--primary` dot with a soft halo in
   that slot instead, "Waiting for your answer". A turn that ends while no view shows
   its conversation raises an info toast with the conversation title ("Answer ready"
-  or "Waiting for your answer", from `ChatList`) with an "Open" action to that
+  or "Waiting for your answer", from `useBackgroundTurnNotifications` in `MainLayout`,
+  so on every page) with an "Open" action to that
   conversation, and bolds the title until the
   conversation is opened or deleted. The waiting dot stays until the next
   turn of that conversation starts. Both are known only in the tab that ran the turn.
