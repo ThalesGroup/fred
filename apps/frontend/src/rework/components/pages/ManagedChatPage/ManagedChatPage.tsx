@@ -1056,7 +1056,7 @@ export default function ManagedChatPage() {
                         {pendingExpanded && (
                           <ul id={pendingListId} className={styles.pendingList}>
                             {chat.pendingMessages?.map((message) => (
-                              <li className={styles.pendingMessage} key={message.id}>
+                              <li className={styles.pendingMessage} data-status={message.status} key={message.id}>
                                 <span className={styles.pendingMessageText} title={message.text}>
                                   {message.text}
                                 </span>
