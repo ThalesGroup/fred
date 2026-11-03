@@ -1811,7 +1811,13 @@ describe("useManagedChat — session write reliability", () => {
               role: "assistant",
               channel: "hitl_request",
               parts: [
-                { type: "hitl_request", stage: "agent_question", question: "Which year?", interrupt_id: "question-1" },
+                {
+                  type: "hitl_request",
+                  stage: "agent_question",
+                  question: "Which year?",
+                  choices: [],
+                  interrupt_id: "question-1",
+                },
               ],
             },
           ],
