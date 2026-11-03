@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx2
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.routing import APIRoute
 from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.server.providers.openapi import MCPType, RouteMap
@@ -30,14 +31,25 @@ logger = logging.getLogger(__name__)
 _REFERENCE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 
 
-async def _log_inner_failure(response: httpx2.Response) -> None:
+async def _log_inner_failure(response: httpx2.Response, app: FastAPI) -> None:
     if response.status_code < 400:
         return
     fields: dict[str, object] = {
         "method": response.request.method,
-        "upstream_route": response.request.url.path,
         "upstream_http_status": response.status_code,
     }
+    route = next(
+        (
+            route
+            for route in app.routes
+            if isinstance(route, APIRoute)
+            and response.request.method in route.methods
+            and route.path_regex.match(response.request.url.path)
+        ),
+        None,
+    )
+    if route is not None:
+        fields["upstream_route"] = route.path
     for name in ("request", "correlation"):
         value = response.headers.get(f"X-{name}-ID", "")
         if _REFERENCE.fullmatch(value):
@@ -152,6 +164,9 @@ def mount_fastapi_tools(
 ) -> FastMCP:
     """Project selected routes using FastMCP's maintained FastAPI integration."""
 
+    async def log_inner_failure(response: httpx2.Response) -> None:
+        await _log_inner_failure(response, app)
+
     mcp = FastMCP.from_fastapi(
         app,
         name=name,
@@ -165,7 +180,7 @@ def mount_fastapi_tools(
         cache_scope="private",
         httpx_client_kwargs={
             "follow_redirects": False,
-            "event_hooks": {"request": [_forward_verified_identity], "response": [_log_inner_failure]},
+            "event_hooks": {"request": [_forward_verified_identity], "response": [log_inner_failure]},
         },
         mask_error_details=True,
     )
