@@ -10,6 +10,7 @@ from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.delegation import AssertedUser
 
 from knowledge_flow_backend.features.document_scope import document_access_context
+from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound, log_description_failure
 from knowledge_flow_backend.features.tabular.service import TabularService
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
@@ -33,6 +34,9 @@ def tabular_errors():
         yield
     except PermissionError:
         raise HTTPException(status_code=403, detail="Dataset access refused; call list_tabular_documents for available documents.") from None
+    except TabularDescriptionNotFound as exc:
+        log_description_failure(exc)
+        raise HTTPException(status_code=404, detail="dataset_not_found") from None
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="dataset_not_found") from None
     except ValueError as exc:

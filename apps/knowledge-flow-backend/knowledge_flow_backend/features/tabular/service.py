@@ -37,6 +37,7 @@ from fred_knowledge.artifacts.reader import safe_path
 from fred_knowledge.tabular.artifacts import TabularArtifactV1, TabularTableArtifactV1, build_default_query_alias, describe_numeric_column, read_tabular_artifact, read_tabular_multi_artifact
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.features.tabular.diagnostics import ResolutionSummary, TabularDescriptionNotFound
 from knowledge_flow_backend.features.tabular.execution import DuckDBAbortHandle, close_duckdb_connection, open_duckdb_connection, run_duckdb_job
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
@@ -261,9 +262,10 @@ class TabularService:
         - The service requires the server-bound space and document scope.
         """
 
-        datasets = await self._resolve_authorized_datasets(
-            user,
-        )
+        summary = ResolutionSummary()
+        datasets = await self._resolve_authorized_datasets(user, summary=summary)
+        if not datasets:
+            summary.log_empty()
         return [self._dataset_to_response(dataset) for dataset in datasets]
 
     async def list_documents(
@@ -340,7 +342,7 @@ class TabularService:
         async def read_catalog(document_uid: str) -> tuple[str, str]:
             catalog = datasets_by_uid[document_uid][0].catalog
             if catalog is None:
-                raise FileNotFoundError("Published spreadsheet catalog is missing")
+                raise TabularDescriptionNotFound("Published spreadsheet catalog is missing", reason="preview_artifact_unavailable")
             async with read_limit:
                 content = await asyncio.to_thread(self.artifact_reader.read_bytes, catalog.prefix, Artifact(path="output.md", size=catalog.size, sha256=catalog.sha256))
             return document_uid, content.decode("utf-8")
@@ -794,6 +796,7 @@ class TabularService:
         user: AssertedUser,
         *,
         document_uids: list[str] | None = None,
+        summary: ResolutionSummary | None = None,
     ) -> list[ResolvedDataset]:
         authorized_space_ids = await require_space_read(user, self.context.space_id)
         try:
@@ -809,12 +812,17 @@ class TabularService:
                 # Release SQL connections before object-store I/O. No permission cache.
                 async with self.engine.connect() as conn:
                     documents, next_cursor = await published_tabular_documents(conn, scope, after=cursor, document_ids=ids)
+                if summary is not None:
+                    summary.readable_metadata_count += len(documents)
+                    summary.scoped_metadata_count += len(documents)
                 for start in range(0, len(documents), 8):
                     batches = await asyncio.gather(*(asyncio.to_thread(self._read_published_datasets, doc) for doc in documents[start : start + 8]))
                     resolved.extend(dataset for batch in batches for dataset in batch)
                 if next_cursor is None:
                     break
                 cursor = next_cursor
+            if summary is not None:
+                summary.resolved_table_count = len(resolved)
             aliases = set()
             for dataset in resolved:
                 if dataset.query_alias in aliases:

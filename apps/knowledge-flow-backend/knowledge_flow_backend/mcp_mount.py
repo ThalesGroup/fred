@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
+from contextlib import suppress
 from typing import Any
 
 import httpx2
@@ -22,6 +25,25 @@ from fred_core.security.mcp_delegation import mcp_mount_auth, verified_grant
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+logger = logging.getLogger(__name__)
+_REFERENCE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+
+
+async def _log_inner_failure(response: httpx2.Response) -> None:
+    if response.status_code < 400:
+        return
+    fields: dict[str, object] = {
+        "method": response.request.method,
+        "upstream_route": response.request.url.path,
+        "upstream_http_status": response.status_code,
+    }
+    for name in ("request", "correlation"):
+        value = response.headers.get(f"X-{name}-ID", "")
+        if _REFERENCE.fullmatch(value):
+            fields[f"upstream_{name}_id"] = value
+    with suppress(Exception):
+        logger.log(logging.ERROR if response.status_code >= 500 else logging.WARNING, "mcp.inner_http_failure", extra=fields)
 
 
 class _MountAuthentication:
@@ -143,7 +165,7 @@ def mount_fastapi_tools(
         cache_scope="private",
         httpx_client_kwargs={
             "follow_redirects": False,
-            "event_hooks": {"request": [_forward_verified_identity]},
+            "event_hooks": {"request": [_forward_verified_identity], "response": [_log_inner_failure]},
         },
         mask_error_details=True,
     )
