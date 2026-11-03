@@ -197,7 +197,9 @@ def build_router() -> APIRouter:
             data = record.content_md.encode("utf-8")
             media_type = _MARKDOWN_MIME
         else:
-            data = markdown_to_docx_bytes(record.content_md, title=record.title)
+            data = markdown_to_docx_bytes(
+                record.content_md, title=record.title, author=user.username
+            )
             media_type = _DOCX_MIME
 
         filename = f"{_sanitize_filename(record.title)}.{format.value}"

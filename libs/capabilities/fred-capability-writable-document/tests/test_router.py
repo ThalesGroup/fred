@@ -21,9 +21,11 @@ The auth dependency and the store are both overridden so the routes run offline:
 from __future__ import annotations
 
 import asyncio
+import io
 from datetime import datetime, timezone
 
 import pytest
+from docx import Document
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_capability_writable_document import store as store_module
@@ -141,8 +143,12 @@ def test_put_foreign_user_is_403(app_client):
     assert resp.status_code == 403
 
 
-def test_export_docx(app_client):
-    client, fake, _app = app_client
+@pytest.mark.parametrize("username", ["simon", "élodie<&", "a" * 255, "a" * 256])
+def test_export_docx(app_client, username: str):
+    client, fake, app = app_client
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="u-1", username=username, roles=[]
+    )
     _seed(fake, content_md="# Title\n\nBody", title="My Doc")
     resp = client.get(
         f"{_PREFIX}/sessions/s-1/documents/doc-1/export", params={"format": "docx"}
@@ -154,6 +160,9 @@ def test_export_docx(app_client):
     )
     assert "My_Doc.docx" in resp.headers["content-disposition"]
     assert resp.content[:2] == b"PK"  # docx is a zip
+    doc = Document(io.BytesIO(resp.content))
+    assert doc.core_properties.author == username[:255]
+    assert doc.core_properties.last_modified_by == username[:255]
 
 
 def test_export_md_passthrough(app_client):

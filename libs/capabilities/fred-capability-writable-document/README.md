@@ -9,6 +9,9 @@ export it to Word (`.docx`) or Markdown. Documents are scoped to one chat
 session and co-authored over time by the agent and the user; only the last
 author is tracked.
 
+Word exports set the author and last-modified-by metadata to the authenticated
+user's username, up to Word's 255-character property limit.
+
 This package is a Swift port of Kea's "Writable Document" feature (GitHub issue
 #1905): the editor feature is one `AgentCapability` — the `write_document`
 middleware (static tool + user-edit notification + open-documents catalog
