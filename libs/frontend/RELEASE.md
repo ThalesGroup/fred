@@ -63,7 +63,7 @@ make prepare-release PACKAGE=iframe-sdk
 
 UI preparation stops with `publish design-tokens first` only when no exact published token version satisfies the peer range in `ui/package.json`. It downloads the selected registry metadata's exact approved token tarball once, verifies those bytes, and feeds that local immutable archive to cache population and offline consumer validation without resolving the coordinate again. iframe-sdk never requires UI or tokens.
 
-Release preparation does not install or invoke `apps/frontend`. Pull-request fixture-transfer validation remains responsible for exercising the packed SDK against the production host under the application's exact Node `22.13.0` and npm `10.9.2` toolchain.
+Release preparation does not install or invoke `apps/frontend`. Pull-request fixture-transfer validation remains responsible for exercising the packed SDK against the production host under the application's exact Node `24.21.0` and npm `11.19.0` toolchain.
 
 ## Publication dry run
 
