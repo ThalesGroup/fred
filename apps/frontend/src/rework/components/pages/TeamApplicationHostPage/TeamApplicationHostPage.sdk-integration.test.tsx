@@ -1,4 +1,4 @@
-// @vitest-environment happy-dom
+// @vitest-environment jsdom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Blob as NodeBlob } from "node:buffer";
 import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 
 declare global {
@@ -123,17 +124,13 @@ let root: Root | undefined;
 let client: PackedClient | undefined;
 
 beforeAll(async () => {
+  // Node Fetch responses carry Node Blobs, so the simulated channel must use that same realm.
+  vi.stubGlobal("Blob", NodeBlob);
   if (!sdkEntry) return;
   sdk = (await import(/* @vite-ignore */ sdkEntry)) as PackedSdkModule;
-  const settings = (globalThis as unknown as { happyDOM?: { settings?: { fetch?: Record<string, unknown> } } }).happyDOM
-    ?.settings;
-  if (settings?.fetch) {
-    settings.fetch.interceptor = {
-      beforeAsyncRequest: async () =>
-        new Response("<!doctype html><title>app</title>", { headers: { "content-type": "text/html" } }),
-    };
-  }
 });
+
+afterAll(() => vi.unstubAllGlobals());
 
 async function rerender() {
   await act(async () => {
@@ -175,7 +172,8 @@ function frameWindow(): Window {
 function createPackedClient(child: Window): PackedClient {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   if (!descriptor) throw new Error("integration setup: global window descriptor is unavailable");
-  Object.defineProperty(globalThis, "window", { ...descriptor, value: child });
+  // jsdom exposes window through an accessor; replace it temporarily for the SDK factory.
+  Object.defineProperty(globalThis, "window", { configurable: true, value: child });
   try {
     return sdk.createFredApplicationClient({
       hostOrigin: FRED_ORIGIN,
