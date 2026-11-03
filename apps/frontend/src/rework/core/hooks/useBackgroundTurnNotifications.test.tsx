@@ -22,10 +22,12 @@ const navigate = vi.hoisted(() => vi.fn());
 const sessionList = vi.hoisted(() => ({ data: [{ session_id: "saved", title: "Quarterly report" }] as unknown }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
-vi.mock("react-redux", () => ({ useDispatch: () => async () => sessionList }));
+vi.mock("react-redux", () => ({ useStore: () => ({ getState: () => ({}) }) }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showInfo }) }));
 vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  controlPlaneApi: { endpoints: { getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: { initiate: vi.fn() } } },
+  controlPlaneApi: {
+    endpoints: { getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: { select: () => () => sessionList } },
+  },
 }));
 
 import { abortTurn, registerTurn, settleTurn, type LiveTurn } from "./backgroundTurns";
@@ -38,7 +40,7 @@ function Notifier() {
   return null;
 }
 
-function endOutOfSight(awaitingInput: boolean): void {
+function endOutOfSight(awaitingInput: boolean, flags: Partial<LiveTurn> = {}): void {
   const turn: LiveTurn = {
     sessionId: "saved",
     teamId: "team-1",
@@ -50,6 +52,8 @@ function endOutOfSight(awaitingInput: boolean): void {
     messages: [],
     detachedCallbacks: {},
     awaitingInput,
+    completed: !awaitingInput,
+    ...flags,
   };
   registerTurn(turn);
   settleTurn(turn);
@@ -81,4 +85,24 @@ it("still announces the turn when its title cannot be read", async () => {
   await act(async () => endOutOfSight(false));
   expect(showInfo).toHaveBeenCalledOnce();
   expect(showInfo.mock.calls[0][0].detail).toBeUndefined();
+});
+
+it.each(["incomplete", "interrupted", "cancelled"])("does not announce a %s background turn", async (outcome) => {
+  const controller = new AbortController();
+  if (outcome === "cancelled") controller.abort();
+  act(() => root.render(<Notifier />));
+  await act(async () =>
+    endOutOfSight(false, {
+      controller,
+      completed: outcome !== "incomplete",
+      interrupted: outcome === "interrupted",
+    }),
+  );
+  expect(showInfo).not.toHaveBeenCalled();
+});
+
+it("does not announce an interrupted question after the stream fails", async () => {
+  act(() => root.render(<Notifier />));
+  await act(async () => endOutOfSight(true, { interrupted: true }));
+  expect(showInfo).not.toHaveBeenCalled();
 });

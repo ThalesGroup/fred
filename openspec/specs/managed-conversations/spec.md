@@ -144,7 +144,7 @@ Conversations whose agents still exist SHALL retain their existing message submi
 
 ### Requirement: Plain text can wait while a managed agent works
 
-During an active managed ReAct or Deep turn, the composer SHALL accept additional plain-text messages into a conversation-scoped ordered list. The list SHALL appear in a compact disclosure panel above the composer, with each message on one ellipsized line. Each waiting message SHALL be editable or removable through a menu with icons until immediate delivery is requested. A message awaiting immediate delivery SHALL remain visible but locked until its outcome is known. The list SHALL submit its next message as an ordinary turn only after the active turn ends and the conversation is available for another user turn. The ordinary pending list SHALL live only in the current browser chat visit. Navigation, reload or an interrupted stream SHALL clear it without restoration or automatic replay. Late callbacks SHALL NOT restore a cleared list or modify another visit.
+During an active managed ReAct or Deep turn, the composer SHALL accept additional plain-text messages into a conversation-scoped ordered list. The list SHALL appear in a compact disclosure panel above the composer, with each message on one ellipsized line. Each waiting message SHALL be editable or removable through a menu with icons until immediate delivery is requested. A message awaiting immediate delivery SHALL remain visible but locked until its outcome is known. The list SHALL submit its next message as an ordinary turn only after the active turn ends and the conversation is available for another user turn. The ordinary pending list SHALL live in browser-tab memory per conversation and survive in-app navigation while its turn continues or finishes in the background. Queued ordinary turns SHALL start only while that conversation is open. Stop, deletion, reload, tab close or a genuinely interrupted stream SHALL clear the matching queue without restoration or replay. Delivery acknowledgements SHALL remove consumed steering messages even while detached. Late callbacks SHALL NOT restore a discarded queue or modify another conversation.
 
 #### Scenario: Queue and edit a message
 
@@ -167,9 +167,17 @@ During an active managed ReAct or Deep turn, the composer SHALL accept additiona
 #### Scenario: Leave or interrupt the chat
 
 - **GIVEN** messages waiting during an active turn
-- **WHEN** the user changes conversation, leaves the page, reloads or interrupts the stream
-- **THEN** the local pending list is cleared and is not restored on return
-- **AND** late responses do not requeue those messages or affect a new conversation
+- **WHEN** the user leaves the conversation within Fred
+- **THEN** its queue remains in tab memory and sends no ordinary turn in the background
+- **AND** reopening the conversation restores it and resumes FIFO after generation and human-input holds end
+- **WHEN** its stream is genuinely interrupted, or the user stops or deletes it, reloads or closes the tab
+- **THEN** its queue is discarded without affecting another conversation or allowing late events to restore it
+
+#### Scenario: Delivery while detached
+
+- **GIVEN** a queued message offered to an agent before navigating elsewhere
+- **WHEN** the runtime acknowledges delivery while the conversation is detached
+- **THEN** that message is absent from the queue on return and is not sent again
 
 ### Requirement: A pending message can steer the active turn
 
@@ -241,3 +249,50 @@ The runtime SHALL complete turn cleanup despite request cancellation, stop lease
 - **WHEN** a runtime stops before cleanup and its lease expires
 - **THEN** a healthy runtime reclaims the expired row without reopening the conversation
 - **AND** a late heartbeat does not revive it
+
+### Requirement: Background conversation states are visually distinct
+
+The sidebar SHALL distinguish running turns, pending user input and completed unread answers known to the current browser tab, retaining waiting and unread indicators across refresh in that tab. Pending input SHALL use a readable localized noninteractive chip. Completed unread answers SHALL use a plain blue dot without shadow, cleared on opening. Errors, cancellation and premature EOF SHALL NOT imply that an answer is ready.
+
+#### Scenario: Running generation
+
+- **WHEN** a conversation has a running turn
+- **THEN** its sidebar row displays animated thinking dots
+- **AND** it does not display a completed-answer dot
+
+#### Scenario: User reply is required
+
+- **WHEN** a live-agent conversation pauses for user input or an execution decision
+- **THEN** its row displays the localized waiting chip below its metadata
+- **AND** opening the conversation preserves that chip until the next turn or deletion
+- **AND** read-only deleted-agent rows do not solicit a reply
+
+#### Scenario: Reload while user input is pending
+
+- **WHEN** reloading the open conversation and its existing history load reconstructs an unanswered HITL request
+- **THEN** its waiting chip is restored without extra requests
+- **AND** history loading does not overwrite a running turn's status
+
+#### Scenario: Completed background answer
+
+- **WHEN** a detached turn receives its final answer and ends normally
+- **THEN** its sidebar row displays one plain blue unread dot without shadow
+- **AND** opening the conversation clears that dot
+
+#### Scenario: Incomplete background turn
+
+- **WHEN** a detached turn fails, is cancelled or ends before a terminal event
+- **THEN** it does not display a completed-answer dot or send an answer-ready notification
+
+#### Scenario: Refresh restores known indicators
+
+- **WHEN** the page reloads in the same tab after a known pending-input pause or completed unread answer
+- **THEN** the sidebar restores the waiting chip or unread dot without extra requests or notifications
+- **AND** opening clears unread, history reconciles waiting, a new turn clears waiting, and Stop or deletion clears both
+- **AND** running turns and pending-message queues are not restored
+
+#### Scenario: Local indicator storage is unavailable
+
+- **WHEN** local indicator data is malformed or browser storage cannot be read or written
+- **THEN** indicator behavior remains functional in memory without crashing the chat
+- **AND** stored indicator ids are bounded to the latest 100 per indicator

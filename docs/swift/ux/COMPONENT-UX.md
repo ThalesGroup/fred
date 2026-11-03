@@ -896,15 +896,24 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   thread first, so a finishing turn cannot write history back after the erasure.
   While any turn of a conversation streams, its `ChatListItem` shows small
   `--primary` `ThinkingDots` (`size="small"`) in a trailing status slot, with a
-  visually hidden "Answer in progress" status. A turn that stopped on a question
-  (human input or interrupted run) shows a solid `--primary` dot with a soft halo in
-  that slot instead, "Waiting for your answer". A turn that ends while no view shows
-  its conversation raises an info toast with the conversation title ("Answer ready"
-  or "Waiting for your answer", from `useBackgroundTurnNotifications` in `MainLayout`,
-  so on every page) with an "Open" action to that
-  conversation, and bolds the title until the
-  conversation is opened or deleted. The waiting dot stays until the next
-  turn of that conversation starts. Both are known only in the tab that ran the turn.
+  visually hidden "Answer in progress" status. A live-agent conversation waiting
+  for human input or an execution decision shows a compact "Awaiting reply" /
+  "Réponse attendue" chip below metadata. Its info-container background and
+  on-info-container label remain readable in narrow rows without adding a control
+  inside the conversation link. The chip stays after opening until the next turn
+  or deletion; read-only deleted-agent rows do not solicit a reply.
+  A normally completed background answer shows a plain info-blue unread dot with
+  no shadow and a bold title until opening. Errors, cancellation and premature
+  EOF do not imply a ready answer. Completed answers and pending questions still
+  raise the existing localized info toast with the cached title when available
+  and an "Open" action from `useBackgroundTurnNotifications` in `MainLayout`,
+  on every page including those without the chat list.
+  Waiting and unread indicators survive refresh in the same tab through a
+  best-effort `sessionStorage` mirror, bounded to 100 ids per indicator. Restoring
+  does not emit toasts or resume live turns/queues. The existing history load
+  reconciles pending input; opening clears unread, a new turn clears waiting,
+  and Stop/deletion clears both. Storage failure falls back to memory. Other
+  tabs/devices remain independent; no extra history requests are added.
   Mechanism: `core/hooks/backgroundTurns.ts`.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
@@ -5896,14 +5905,19 @@ Invitation history filtering and cleanup (2026-10-09): the shared Select filters
 
 ### Pending chat messages (2026-11-02)
 
-The pending list belongs to the current chat visit, like the live generation.
-Changing conversation, leaving the page, reloading or interrupting its stream
-clears the list without restoring or replaying it. Normal completion drains the
-local queue; a normal human-input pause holds it until the user responds.
+The pending list belongs to its conversation in browser-tab memory. Changing
+conversation or leaving the page preserves it alongside a background generation,
+including when that generation finishes before return. Ordinary queued turns send
+only while the conversation is open, after history and human-input holds are
+resolved. Steering deliveries received while detached remove their queued entries.
+Stop, deletion, reload, tab close or genuine stream interruption discards that
+conversation's queue. A normal human-input pause holds it until the user responds.
 Other uncertain outcomes offer text-only Send again / Renvoyer and Remove /
 Supprimer, without a delivery-status label or an additional delivery-check toast.
 The retry tooltip retains its duplicate-message guidance.
 
 The immediate Send / Envoyer action uses the small secondary tonal button with a
-bent right-arrow icon. Sending / Envoi uses the same button and icon, disabled;
-the action menu is hidden until the delivery outcome is known.
+bent right-arrow icon. Sending / Envoi uses the same button, disabled and without
+an icon to keep it compact. The action menu is hidden until the delivery outcome
+is known. Send and Sending keep their natural widths and align by their right
+edges, reserving the hidden menu slot while delivery is pending.

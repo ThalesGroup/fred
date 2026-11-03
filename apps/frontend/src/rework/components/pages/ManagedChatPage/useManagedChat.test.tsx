@@ -32,10 +32,11 @@
 //   actually clears composer input/attachments, so a later prepare-execution
 //   failure can never wipe text/attachments the user still needs to retry.
 
-import { act, useState } from "react";
+import { act, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assemblePromptTurn } from "@rework/utils/skillInvocation";
+import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import type { EffectiveChatModel } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
@@ -198,9 +199,15 @@ vi.mock("./useComposerSettings", () => ({
   },
 }));
 
-const sessionHistoryValue = { isLoading: false };
+const sessionHistoryValue = { isLoading: false, isSettled: true };
+let historyToLoad: { sessionId: string; messages: ChatMessage[] } | undefined;
 vi.mock("./useSessionHistory", () => ({
-  useSessionHistory: () => sessionHistoryValue,
+  useSessionHistory: ({ sessionId, onLoaded }: { sessionId: string; onLoaded: (messages: ChatMessage[]) => void }) => {
+    useEffect(() => {
+      if (historyToLoad?.sessionId === sessionId) onLoaded(historyToLoad.messages);
+    }, [sessionId, onLoaded]);
+    return sessionHistoryValue;
+  },
 }));
 
 const chatAttachmentsValue = {
@@ -295,6 +302,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 
 import { useManagedChat } from "./useManagedChat";
+import { useTurnStatus, type TurnStatus, updatePendingMessages, abortTurn } from "@core/hooks/backgroundTurns";
 import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHistoryCache";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
@@ -342,6 +350,12 @@ describe("useManagedChat — session write reliability", () => {
   };
 
   beforeEach(() => {
+    abortTurn("session-1");
+    historyToLoad = undefined;
+    sessionHistoryValue.isSettled = true;
+    updatePendingMessages("session-1", []);
+    updatePendingMessages("session-2", []);
+    adoptBackgroundTurnMock.mockReset();
     postponeNavigation = false;
     commitNavigation = undefined;
     localStorage.clear();
@@ -1710,20 +1724,206 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it("forgets the queue on navigation without sending it into the next conversation", async () => {
+  it("retains each conversation's queue without sending into the next conversation", async () => {
     chatSseWaitResponse = true;
     mount();
     bindSession("session-1");
-    act(() => latest.setInput("do not restore"));
+    act(() => latest.setInput("keep for the first conversation"));
+    await act(async () => latest.handleSend());
+    bindSession("session-2");
+    expect(latest.pendingMessages).toEqual([]);
+    act(() => latest.setInput("keep for the second conversation"));
+    await act(async () => latest.handleSend());
+    bindSession("session-1");
+    expect(latest.pendingMessages.map((message) => message.text)).toEqual(["keep for the first conversation"]);
+    expect(sendMock).not.toHaveBeenCalled();
+    bindSession("session-2");
+    expect(latest.pendingMessages.map((message) => message.text)).toEqual(["keep for the second conversation"]);
+  });
+
+  it("waits for return before draining a queue whose turn finished in the background", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("resume on return"));
     await act(async () => latest.handleSend());
     chatSseWaitResponse = false;
     bindSession("session-2");
     await tick();
-    expect(latest.pendingMessages).toEqual([]);
     expect(sendMock).not.toHaveBeenCalled();
-    act(() => capturedOnStreamInterrupted?.("session-1"));
     bindSession("session-1");
     await tick();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0]?.slice(0, 2)).toEqual(["resume on return", "session-1"]);
+  });
+
+  it("does not drain during the render that reattaches a still-running turn", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("wait for generation"));
+    await act(async () => latest.handleSend());
+    bindSession("session-2");
+    chatSseWaitResponse = false;
+    adoptBackgroundTurnMock.mockReturnValueOnce(true);
+    bindSession("session-1");
+    expect(latest.pendingMessages[0]?.text).toBe("wait for generation");
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("retains the queue across a page unmount and stops it without restoration", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("keep across pages"));
+    await act(async () => latest.handleSend());
+    act(() => root.unmount());
+    container.remove();
+    mount();
+    bindSession("session-1");
+    expect(latest.pendingMessages[0]?.text).toBe("keep across pages");
+    act(() => latest.handleAbort());
+    expect(latest.pendingMessages).toEqual([]);
+    bindSession("session-2");
+    bindSession("session-1");
+    expect(latest.pendingMessages).toEqual([]);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("restores the waiting status from loaded HITL history after reload, then clears it from answered history", () => {
+    let status: TurnStatus = null;
+    function Status() {
+      status = useTurnStatus("session-1");
+      return null;
+    }
+    const probeRoot = createRoot(document.createElement("div"));
+    act(() => probeRoot.render(<Status />));
+    expect(status).toBeNull();
+    const question: ChatMessage = {
+      session_id: "session-1",
+      exchange_id: "persisted-question",
+      rank: 0,
+      timestamp: "2026-11-03T10:00:00Z",
+      role: "assistant",
+      channel: "hitl_request",
+      parts: [
+        {
+          type: "hitl_request",
+          stage: "agent_question",
+          question: "Which year?",
+          choices: [],
+          interrupt_id: "question-1",
+          occurrence_id: "occ-1",
+        },
+      ],
+    };
+    historyToLoad = { sessionId: "session-1", messages: [question] };
+    mount();
+    bindSession("session-1");
+    expect(status).toBe("awaiting_input");
+    expect(latest.pendingHitl?.payload.question).toBe("Which year?");
+    bindSession("session-2");
+    expect(status).toBe("awaiting_input");
+    historyToLoad.messages = [
+      question,
+      {
+        session_id: "session-1",
+        exchange_id: "persisted-question",
+        rank: 1,
+        timestamp: "2026-11-03T10:01:00Z",
+        role: "user",
+        channel: "hitl_response",
+        parts: [{ type: "hitl_response", occurrence_id: "occ-1", text: "2026" }],
+      },
+    ];
+    bindSession("session-1");
+    expect(status).toBeNull();
+    expect(latest.pendingHitl).toBeNull();
+    expect(sendMock).not.toHaveBeenCalled();
+    act(() => probeRoot.unmount());
+  });
+
+  it.each([false, true])(
+    "holds a restored queue until history settles or its question is answered (question=%s)",
+    async (question) => {
+      chatSseWaitResponse = true;
+      mount();
+      bindSession("session-1");
+      act(() => latest.setInput("do not bypass the question"));
+      await act(async () => latest.handleSend());
+      bindSession("session-2");
+      chatSseWaitResponse = false;
+      if (question) {
+        historyToLoad = {
+          sessionId: "session-1",
+          messages: [
+            {
+              session_id: "session-1",
+              exchange_id: "question-exchange",
+              rank: 0,
+              timestamp: "2026-11-03T10:00:00Z",
+              role: "assistant",
+              channel: "hitl_request",
+              parts: [
+                {
+                  type: "hitl_request",
+                  stage: "agent_question",
+                  question: "Which year?",
+                  choices: [],
+                  interrupt_id: "question-1",
+                },
+              ],
+            },
+          ],
+        };
+      } else sessionHistoryValue.isSettled = false;
+      bindSession("session-1");
+      await tick();
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(latest.pendingMessages[0]?.text).toBe("do not bypass the question");
+      if (question) expect(latest.pendingHitl?.payload.question).toBe("Which year?");
+      else {
+        sessionHistoryValue.isSettled = true;
+        rerender();
+        await tick();
+        expect(sendMock).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it("retains a late uncertain steering outcome while another conversation is shown", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("check before retrying"));
+    await act(async () => latest.handleSend());
+    let finish!: (result: string) => void;
+    steerActiveTurnMock.mockImplementationOnce(() => new Promise<string>((resolve) => (finish = resolve)));
+    let delivery!: Promise<void>;
+    act(() => {
+      delivery = latest.forcePendingMessage(latest.pendingMessages[0].id);
+    });
+    bindSession("session-2");
+    await act(async () => {
+      finish("uncertain");
+      await delivery;
+    });
+    expect(latest.pendingMessages).toEqual([]);
+    chatSseWaitResponse = false;
+    bindSession("session-1");
+    expect(latest.pendingMessages[0]).toMatchObject({ text: "check before retrying", status: "uncertain" });
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("deleting a background conversation forgets its queue", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("discard on deletion"));
+    await act(async () => latest.handleSend());
+    bindSession("session-2");
+    act(() => abortTurn("session-1"));
+    bindSession("session-1");
     expect(latest.pendingMessages).toEqual([]);
   });
 

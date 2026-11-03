@@ -115,7 +115,16 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 
 import { useChatSse } from "./useChatSse";
-import { abortTurn, useTurnStatus, type TurnStatus } from "./backgroundTurns";
+import {
+  useSessionUnread,
+  markSessionRead,
+  subscribeBackgroundSettled,
+  updatePendingMessages,
+  usePendingMessages,
+  abortTurn,
+  useTurnStatus,
+  type TurnStatus,
+} from "./backgroundTurns";
 import {
   clearSessionHistoryCache,
   getCachedSessionHistory,
@@ -170,6 +179,10 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   };
 
   beforeEach(() => {
+    markSessionRead("session-1");
+    clearSessionHistoryCache();
+    updatePendingMessages("session-1", []);
+    updatePendingMessages("session-2", []);
     flushPendingWrites = undefined;
     isTurnCurrent = undefined;
     isExecutionAllowed = undefined;
@@ -1960,6 +1973,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         push: (event: Record<string, unknown>) =>
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)),
         close: () => controller.close(),
+        fail: () => controller.error(new Error("network disconnected")),
       };
     };
 
@@ -1981,6 +1995,35 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     };
 
     const text = (message: { parts: unknown[] }) => (message.parts[0] as { text?: string }).text;
+
+    it.each(["final", "execution_error", "EOF", "cancel", "cut_after_final", "error_after_final"])(
+      "marks only a completed background answer ready (%s)",
+      async (outcome) => {
+        let unread = false;
+        function UnreadProbe() {
+          unread = useSessionUnread("session-1");
+          return null;
+        }
+        const probeRoot = createRoot(document.createElement("div"));
+        act(() => probeRoot.render(<UnreadProbe />));
+        const settled = vi.fn();
+        const unsubscribe = subscribeBackgroundSettled(settled);
+        mount();
+        const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+        act(() => latest.reset());
+        await act(async () => {
+          if (outcome === "cancel") abortTurn("session-1");
+          else stream.push({ kind: outcome === "EOF" ? "status" : outcome, content: "finished", message: "failed" });
+          stream.close();
+          await sendPromise;
+        });
+        expect(unread).toBe(outcome === "final");
+        expect(settled).toHaveBeenCalledTimes(outcome === "final" ? 1 : 0);
+        act(() => probeRoot.unmount());
+        unsubscribe();
+        fetchSpy.mockRestore();
+      },
+    );
 
     it("keeps streaming after its view unmounts and hands the full thread back", async () => {
       mount();
@@ -2022,6 +2065,142 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       expect(latest.messages.map(text)).toEqual(["hello", "Hello world"]);
       expect(latest.waitResponse).toBe(false);
       expect(onBackgroundTurnSettledMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it("Stop during another conversation's preflight preserves the detached queue", async () => {
+      let queue: ReturnType<typeof usePendingMessages>[0] = [];
+      function Queue() {
+        [queue] = usePendingMessages("session-1");
+        return null;
+      }
+      const probeRoot = createRoot(document.createElement("div"));
+      act(() => probeRoot.render(<Queue />));
+      mount();
+      const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
+      act(() => {
+        updatePendingMessages("session-1", [{ id: "a", text: "keep", status: "waiting" }]);
+        latest.reset();
+      });
+      const prepare = prepareExecutionImpl;
+      let release!: () => void;
+      prepareExecutionImpl = async (args) => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return prepare(args);
+      };
+      let sendingB!: Promise<boolean>;
+      await act(async () => {
+        sendingB = latest.send("other conversation", "session-2");
+        await vi.waitFor(() => expect(release).toBeDefined());
+        latest.abort();
+        release();
+        await sendingB;
+      });
+      expect(signal.aborted).toBe(false);
+      expect(queue.map((message) => message.id)).toEqual(["a"]);
+      await act(async () => {
+        stream.push({ kind: "final", content: "complete" });
+        stream.close();
+        await sendPromise;
+      });
+      act(() => probeRoot.unmount());
+      fetchSpy.mockRestore();
+    });
+
+    it("discards a detached queue when the stream connection fails before a response", async () => {
+      let queue: ReturnType<typeof usePendingMessages>[0] = [];
+      function Queue() {
+        [queue] = usePendingMessages("session-1");
+        return null;
+      }
+      const probeRoot = createRoot(document.createElement("div"));
+      act(() => probeRoot.render(<Queue />));
+      let rejectFetch!: (reason: Error) => void;
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementationOnce(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            rejectFetch = reject;
+          }),
+      );
+      mount();
+      let sendPromise!: Promise<boolean>;
+      await act(async () => {
+        sendPromise = latest.send("hello", "session-1");
+        await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      });
+      act(() => {
+        updatePendingMessages("session-1", [{ id: "queued", text: "discard", status: "waiting" }]);
+        latest.reset();
+      });
+      await act(async () => {
+        rejectFetch(new Error("no connection"));
+        await sendPromise;
+      });
+      expect(queue).toEqual([]);
+      act(() => probeRoot.unmount());
+      fetchSpy.mockRestore();
+    });
+
+    it.each([false, true])("clears only the disconnected turn's queue after adoption=%s", async (adopt) => {
+      let queueA: ReturnType<typeof usePendingMessages>[0] = [];
+      let queueB: ReturnType<typeof usePendingMessages>[0] = [];
+      function Queues() {
+        [queueA] = usePendingMessages("session-1");
+        [queueB] = usePendingMessages("session-2");
+        return null;
+      }
+      const probeRoot = createRoot(document.createElement("div"));
+      act(() => probeRoot.render(<Queues />));
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      act(() => {
+        updatePendingMessages("session-1", [{ id: "a", text: "discard", status: "waiting" }]);
+        latest.reset();
+        updatePendingMessages("session-2", [{ id: "b", text: "keep", status: "waiting" }]);
+        if (adopt) latest.adoptBackgroundTurn("session-1");
+      });
+      await act(async () => {
+        stream.fail();
+        await sendPromise;
+      });
+      expect(queueA).toEqual([]);
+      expect(queueB.map((message) => message.id)).toEqual(["b"]);
+      if (adopt) expect(onStreamInterruptedMock).toHaveBeenCalledWith("session-1");
+      else expect(onStreamInterruptedMock).not.toHaveBeenCalled();
+      act(() => probeRoot.unmount());
+      fetchSpy.mockRestore();
+    });
+
+    it.each(["final", "execution_error"])("updates detached queue delivery and status on %s", async (terminal) => {
+      let queue: ReturnType<typeof usePendingMessages>[0] = [];
+      function Queue() {
+        [queue] = usePendingMessages("session-1");
+        return null;
+      }
+      const probeRoot = createRoot(document.createElement("div"));
+      act(() => probeRoot.render(<Queue />));
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      act(() => {
+        updatePendingMessages("session-1", [
+          { id: "offered", text: "already offered", status: "offered" },
+          { id: "unconsumed", text: "not consumed", status: "offered" },
+          { id: "waiting", text: "send on return", status: "waiting" },
+        ]);
+        latest.reset();
+      });
+      await act(async () => {
+        stream.push({ kind: "steered_user_message", message_id: "offered", content: "already offered" });
+        stream.push({ kind: terminal, content: "finished", message: "failed" });
+        stream.close();
+        await sendPromise;
+      });
+      expect(queue.map((message) => message.id)).toEqual(["unconsumed", "waiting"]);
+      expect(queue[0].status).toBe(terminal === "final" ? "offered" : "uncertain");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      act(() => probeRoot.unmount());
       fetchSpy.mockRestore();
     });
 

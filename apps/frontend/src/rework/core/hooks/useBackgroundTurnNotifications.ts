@@ -15,29 +15,24 @@
 // Announces a turn that ended while its conversation was not shown. Mounted in
 // MainLayout so it runs on every page, including those without the chat list.
 
-import type { ThunkDispatch, UnknownAction } from "@reduxjs/toolkit";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useDispatch } from "react-redux";
+import { useStore } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { controlPlaneApi } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AppState } from "../../../common/store";
 import { subscribeBackgroundSettled } from "./backgroundTurns";
-
-type AppDispatch = ThunkDispatch<unknown, unknown, UnknownAction>;
 
 export function conversationHref(teamId: string | undefined, agentInstanceId: string, sessionId: string): string {
   return `/team/${teamId}/managed-chat/${agentInstanceId}?session=${sessionId}`;
 }
 
-// Served from the sidebar's cached list when there is one; left out on failure.
-async function sessionTitle(dispatch: AppDispatch, teamId: string, sessionId: string): Promise<string | undefined> {
-  const { data } = await dispatch(
-    controlPlaneApi.endpoints.getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet.initiate(
-      { teamId },
-      { subscribe: false },
-    ),
+// Read the list already cached by the sidebar without delaying the toast on a network request.
+function sessionTitle(state: AppState, teamId: string, sessionId: string): string | undefined {
+  const { data } = controlPlaneApi.endpoints.getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet.select({ teamId })(
+    state,
   );
   return data?.find((session) => session.session_id === sessionId)?.title || undefined;
 }
@@ -46,12 +41,12 @@ export function useBackgroundTurnNotifications(): void {
   const { t } = useTranslation();
   const { showInfo } = useToast();
   const navigate = useNavigate();
-  const dispatch = useDispatch<AppDispatch>();
+  const store = useStore<AppState>();
 
   useEffect(
     () =>
-      subscribeBackgroundSettled(async (turn) => {
-        const title = await sessionTitle(dispatch, turn.teamId, turn.sessionId);
+      subscribeBackgroundSettled((turn) => {
+        const title = sessionTitle(store.getState(), turn.teamId, turn.sessionId);
         showInfo({
           summary: t(
             turn.awaitingInput ? "rework.sidebar.chatList.awaitingInput" : "rework.sidebar.chatList.answerReady",
@@ -63,6 +58,6 @@ export function useBackgroundTurnNotifications(): void {
           },
         });
       }),
-    [dispatch, navigate, showInfo, t],
+    [store, navigate, showInfo, t],
   );
 }

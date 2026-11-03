@@ -47,6 +47,7 @@ import type {
 import { toolResultCallId, upsertOne } from "./chatSseUtils";
 import {
   detachTurn,
+  updatePendingMessages,
   readTurnMessages,
   registerTurn,
   settleTurn,
@@ -400,6 +401,7 @@ export function useChatSse(
   const releaseCurrentTurn = useCallback(() => {
     const turn = liveTurnRef.current;
     liveTurnRef.current = null;
+    turnSessionRef.current = null;
     if (turn && turn.host === host && abortRef.current === turn.controller && turn.sessionId !== "draft") {
       detachTurn(turn);
     } else {
@@ -507,7 +509,10 @@ export function useChatSse(
     // forever, blocking every subsequent Send. Unconditional for the same
     // reason as in reset() above.
     preflightOwnerRef.current = null;
-    if (turnSessionRef.current) stoppedSessionsRef.current.add(turnSessionRef.current);
+    if (turnSessionRef.current) {
+      stoppedSessionsRef.current.add(turnSessionRef.current);
+      updatePendingMessages(turnSessionRef.current, []);
+    }
     setWaitResponse(false);
   }, []);
 
@@ -554,6 +559,7 @@ export function useChatSse(
 
       switch (event.kind) {
         case "steered_user_message": {
+          updatePendingMessages(sessionId, (current) => current.filter((message) => message.id !== event.message_id));
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
@@ -585,6 +591,7 @@ export function useChatSse(
         }
 
         case "final": {
+          turn.completed = true;
           // `final` is the only reliable end-of-turn signal on this stream (see
           // agent_app.py's `execute_stream` docstring) — the contract's
           // `turn_persisted` event is defined but never actually emitted, so the
@@ -867,6 +874,11 @@ export function useChatSse(
         }
 
         case "execution_error": {
+          turn.completed = false;
+          turn.awaitingInput = false;
+          updatePendingMessages(sessionId, (current) =>
+            current.map((message) => (message.status === "offered" ? { ...message, status: "uncertain" } : message)),
+          );
           console.error(`[useChatSse] execution_error received — ${event.message ?? "unknown error"}`);
           // Close any thoughts that are still open so they don't blink forever.
           for (const [thoughtId, buf] of thoughts.entries()) {
@@ -988,8 +1000,11 @@ export function useChatSse(
         }
         ended = true;
       } finally {
-        if ((!ended || !terminal) && (!abortRef.current || abortRef.current.signal === signal)) {
-          turnCallbacks(turn).onStreamInterrupted?.(turn.sessionId);
+        if (!ended || !terminal) {
+          turn.interrupted = true;
+          if (!abortRef.current || abortRef.current.signal === signal) {
+            turnCallbacks(turn).onStreamInterrupted?.(turn.sessionId);
+          }
         }
       }
     },
@@ -1274,6 +1289,7 @@ export function useChatSse(
         );
         console.debug(`[useChatSse][${sendId}] streamToMessages completed normally`);
       } catch (err) {
+        turn.interrupted = true;
         const name = (err as Error)?.name;
         const msg = (err as Error)?.message ?? String(err);
         if (ac.signal.aborted || abortRef.current !== ac || isTurnCurrent?.(effectiveSessionId) === false) {

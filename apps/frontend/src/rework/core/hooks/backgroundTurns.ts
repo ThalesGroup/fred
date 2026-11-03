@@ -17,11 +17,13 @@
 // turn whose stream closes), and the next view of that session adopts it back.
 // Module-level on purpose, like sessionHistoryCache: the page remounts per agent.
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore, type SetStateAction } from "react";
 
 import { forgetCachedSessionHistory } from "../../components/pages/ManagedChatPage/sessionHistoryCache";
 import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 import type { ChatSseCallbacks } from "./useChatSse";
+
+export type PendingMessage = { id: string; text: string; status: "waiting" | "offered" | "uncertain" };
 
 export type ThoughtBuffer = {
   rank: number;
@@ -52,17 +54,35 @@ export type LiveTurn = {
   messages: ChatMessage[];
   /** The turn ended on a question for the user (human input or interrupted run). */
   awaitingInput?: boolean;
+  completed?: boolean;
+  interrupted?: boolean;
   /** Session-keyed side effects that stay meaningful with no view attached. */
   detachedCallbacks: Pick<ChatSseCallbacks, "onTurnPersisted" | "onSessionTitle" | "onBackgroundTurnSettled">;
 };
 
+const INDICATOR_STORAGE_KEY = "chat.background-indicators";
+const MAX_STORED_INDICATORS = 100;
+
+function restoreIndicator(name: "awaitingInput" | "unread"): Set<string> {
+  try {
+    const ids: unknown = JSON.parse(sessionStorage.getItem(INDICATOR_STORAGE_KEY) ?? "null")?.[name];
+    return new Set(
+      Array.isArray(ids) ? ids.slice(-MAX_STORED_INDICATORS).filter((id): id is string => typeof id === "string") : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+const emptyQueue: PendingMessage[] = [];
+const pendingQueues = new Map<string, PendingMessage[]>();
 const detached = new Map<string, LiveTurn>();
 // Every streaming turn, attached or not: what the sidebar shows and deletion cancels.
 const running = new Map<string, LiveTurn>();
 // Sessions whose last turn here stopped on a question; the next turn clears it.
-const awaitingInput = new Set<string>();
+const awaitingInput = restoreIndicator("awaitingInput");
 // Sessions whose turn ended while no view showed it; opening one marks it read.
-const unread = new Set<string>();
+const unread = restoreIndicator("unread");
 const runningListeners = new Set<() => void>();
 const settledListeners = new Set<(turn: LiveTurn) => void>();
 
@@ -70,15 +90,61 @@ function notifyRunning(): void {
   for (const listener of runningListeners) listener();
 }
 
+function notifyIndicatorsChanged(): void {
+  try {
+    if (awaitingInput.size || unread.size) {
+      sessionStorage.setItem(
+        INDICATOR_STORAGE_KEY,
+        JSON.stringify({
+          awaitingInput: [...awaitingInput].slice(-MAX_STORED_INDICATORS),
+          unread: [...unread].slice(-MAX_STORED_INDICATORS),
+        }),
+      );
+    } else sessionStorage.removeItem(INDICATOR_STORAGE_KEY);
+  } catch {
+    // Storage may be blocked or full; the in-memory indicators still work.
+  }
+  notifyRunning();
+}
+
 function subscribeRunning(listener: () => void): () => void {
   runningListeners.add(listener);
   return () => runningListeners.delete(listener);
 }
 
+export function updatePendingMessages(sessionId: string, update: SetStateAction<PendingMessage[]>): void {
+  const current = pendingQueues.get(sessionId) ?? emptyQueue;
+  const next = typeof update === "function" ? update(current) : update;
+  if (next === current) return;
+  if (next.length) pendingQueues.set(sessionId, next);
+  else pendingQueues.delete(sessionId);
+  notifyRunning();
+}
+
+export function usePendingMessages(sessionId: string | null) {
+  const messages = useSyncExternalStore(subscribeRunning, () =>
+    sessionId ? (pendingQueues.get(sessionId) ?? emptyQueue) : emptyQueue,
+  );
+  const setMessages = useCallback(
+    (update: SetStateAction<PendingMessage[]>) => {
+      if (sessionId) updatePendingMessages(sessionId, update);
+    },
+    [sessionId],
+  );
+  return [messages, setMessages] as const;
+}
+
+export function setSessionAwaitingInput(sessionId: string, waiting: boolean): void {
+  if (running.has(sessionId) || awaitingInput.has(sessionId) === waiting) return;
+  if (waiting) awaitingInput.add(sessionId);
+  else awaitingInput.delete(sessionId);
+  notifyIndicatorsChanged();
+}
+
 export function registerTurn(turn: LiveTurn): void {
   running.set(turn.sessionId, turn);
   awaitingInput.delete(turn.sessionId);
-  notifyRunning();
+  notifyIndicatorsChanged();
 }
 
 export type TurnStatus = "running" | "awaiting_input" | null;
@@ -96,7 +162,7 @@ export function useSessionUnread(sessionId: string): boolean {
 }
 
 export function markSessionRead(sessionId: string): void {
-  if (unread.delete(sessionId)) notifyRunning();
+  if (unread.delete(sessionId)) notifyIndicatorsChanged();
 }
 
 /** Notified when a turn ends while no view shows its conversation. */
@@ -110,10 +176,11 @@ export function subscribeBackgroundSettled(listener: (turn: LiveTurn) => void): 
  * before erasing a conversation: a running turn would write its history back.
  */
 export function abortTurn(sessionId: string): void {
+  updatePendingMessages(sessionId, []);
   running.get(sessionId)?.controller.abort();
   forgetCachedSessionHistory(sessionId);
   const cleared = awaitingInput.delete(sessionId);
-  if (unread.delete(sessionId) || cleared) notifyRunning();
+  if (unread.delete(sessionId) || cleared) notifyIndicatorsChanged();
 }
 
 export function readTurnMessages(turn: LiveTurn): ChatMessage[] {
@@ -150,9 +217,10 @@ export function takeDetachedTurn(sessionId: string): LiveTurn | undefined {
 export function settleTurn(turn: LiveTurn): void {
   // A replacement turn of the same session may already be registered.
   if (running.get(turn.sessionId) === turn) {
+    if (turn.interrupted || turn.controller.signal.aborted) updatePendingMessages(turn.sessionId, []);
     running.delete(turn.sessionId);
-    if (turn.awaitingInput && !turn.controller.signal.aborted) awaitingInput.add(turn.sessionId);
-    notifyRunning();
+    if (turn.awaitingInput && !turn.interrupted && !turn.controller.signal.aborted) awaitingInput.add(turn.sessionId);
+    notifyIndicatorsChanged();
   }
   if (turn.host) {
     turn.host.finish(turn);
@@ -162,8 +230,9 @@ export function settleTurn(turn: LiveTurn): void {
   // Only deletion aborts a detached turn: its thread must not be cached again.
   if (!turn.controller.signal.aborted) {
     turn.detachedCallbacks.onBackgroundTurnSettled?.(turn.sessionId, turn.messages);
+    if (turn.interrupted || (!turn.awaitingInput && !turn.completed)) return;
     unread.add(turn.sessionId);
-    notifyRunning();
+    notifyIndicatorsChanged();
     for (const listener of settledListeners) listener(turn);
   }
 }
