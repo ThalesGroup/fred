@@ -143,11 +143,38 @@ def test_put_foreign_user_is_403(app_client):
     assert resp.status_code == 403
 
 
-@pytest.mark.parametrize("username", ["simon", "élodie<&", "a" * 255, "a" * 256])
-def test_export_docx(app_client, username: str):
+@pytest.mark.parametrize(
+    ("first_name", "last_name", "username", "expected_author"),
+    [
+        ("Simon", "Dupont", "simon", "Simon Dupont"),
+        (" Élodie ", " D<& ", "elodie", "Élodie D<&"),
+        (None, None, "simon", "simon"),
+        ("Simon", None, "simon", "simon"),
+        (None, "Dupont", "simon", "simon"),
+        ("", "Dupont", "simon", "simon"),
+        ("Simon", "", "simon", "simon"),
+        ("   ", "Dupont", "simon", "simon"),
+        ("Simon", " \t", "simon", "simon"),
+        (None, None, "élodie<&", "élodie<&"),
+        (None, None, "a" * 255, "a" * 255),
+        (None, None, "a" * 256, "a" * 255),
+        ("a" * 250, "Dupont", "simon", "a" * 250 + " Dupo"),
+    ],
+)
+def test_export_docx(
+    app_client,
+    first_name: str | None,
+    last_name: str | None,
+    username: str,
+    expected_author: str,
+):
     client, fake, app = app_client
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
-        uid="u-1", username=username, roles=[]
+        uid="u-1",
+        username=username,
+        first_name=first_name,
+        last_name=last_name,
+        roles=[],
     )
     _seed(fake, content_md="# Title\n\nBody", title="My Doc")
     resp = client.get(
@@ -161,8 +188,8 @@ def test_export_docx(app_client, username: str):
     assert "My_Doc.docx" in resp.headers["content-disposition"]
     assert resp.content[:2] == b"PK"  # docx is a zip
     doc = Document(io.BytesIO(resp.content))
-    assert doc.core_properties.author == username[:255]
-    assert doc.core_properties.last_modified_by == username[:255]
+    assert doc.core_properties.author == expected_author
+    assert doc.core_properties.last_modified_by == expected_author
 
 
 def test_export_md_passthrough(app_client):
