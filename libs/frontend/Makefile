@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := help
 
+include ../../scripts/makefiles/node.mk
+
 FIXTURE_TRANSFER_ROOT ?= target/fixture-transfer
 FIXTURE_VALIDATION_ROOT ?= target/fixture-validation
 RELEASE_SELECTION ?=
@@ -35,18 +37,19 @@ RELEASE_TARGETS := prepare-release publish verify-release promote
 
 .PHONY: help install code-quality code-quality-fix clean $(NPM_TARGETS) $(RELEASE_TARGETS)
 
-$(NPM_TARGETS): node_modules
+$(NPM_TARGETS): check-node node_modules
+$(RELEASE_TARGETS): check-node
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # Real file target, not .PHONY: make reruns `npm ci` only when the manifests are
 # newer than the tree, so the install is automatic once and a no-op afterwards.
-node_modules: package.json package-lock.json
+node_modules: package.json package-lock.json | check-node
 	npm ci
 	@touch node_modules
 
-install: ## Reinstall the lockfile-pinned producer dependencies from scratch
+install: check-node ## Reinstall the lockfile-pinned producer dependencies from scratch
 	npm ci
 	@touch node_modules
 

@@ -64,8 +64,8 @@ const execution = fixtureExecution({
 const applicationToolchain = {
   source: "apps/frontend/package-lock.json",
   isolation: "application-owned",
-  node: "22.13.0",
-  npm: "10.9.2",
+  node: "24.21.0",
+  npm: "11.19.0",
 };
 const successfulGates = {
   archives: { validated: true, reusedPackedBytes: true },
