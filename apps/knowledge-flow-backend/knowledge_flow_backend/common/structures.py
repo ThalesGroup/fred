@@ -616,6 +616,15 @@ class MCPConfig(BaseModel):
         default=True,
         description="Expose the Text MCP server for semantic vector search.",
     )
+    similarity_enabled: bool = Field(
+        default=True,
+        description="Expose the Similarity MCP server (find_similar_passages within named documents or folders).",
+    )
+    similarity_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        description="Time limit, in seconds, for one Similarity MCP tool call, reranking included. The agent runtime stops waiting after 30 seconds.",
+    )
     templates_enabled: bool = Field(
         default=True,
         description="Expose the Template MCP server for prompts/templates.",

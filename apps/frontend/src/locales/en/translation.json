@@ -980,6 +980,10 @@
         "description": "Allow your agent to search in opensearch indices",
         "name": "Search in opensearch"
       },
+      "similarity": {
+        "description": "Find the passages most similar to a given text in chosen documents or folders.",
+        "name": "Compare with documents"
+      },
       "tabular": {
         "description": "Ability to use data from tabular files present in the resources (CSV, Excel...).",
         "name": "Use tabular files"

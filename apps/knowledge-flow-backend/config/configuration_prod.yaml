@@ -517,6 +517,8 @@ mcp:
   reports_enabled: true
   tabular_enabled: true
   text_enabled: true
+  similarity_enabled: true
+  similarity_timeout_seconds: 30
   templates_enabled: true
   resources_enabled: true
   opensearch_ops_enabled: true
