@@ -208,7 +208,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:5173 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run"
+        "set -m; export NVM_DIR=\"${NVM_DIR:-$HOME/.nvm}\"; if [ -s \"$NVM_DIR/nvm.sh\" ]; then . \"$NVM_DIR/nvm.sh\" --no-use && nvm use 24 || exit $?; fi; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:5173 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run"
       ],
       "options": {
         "cwd": "${workspaceFolder}/apps/frontend"
