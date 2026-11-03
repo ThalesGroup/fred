@@ -1441,6 +1441,13 @@ async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("name", "heading"),
+    [
+        ("compare-options", "# Evidence-based option comparison"),
+        ("grounded-research", "# Grounded research"),
+    ],
+)
+@pytest.mark.parametrize(
     ("disabled", "denied", "source_status", "preview_status"),
     [
         pytest.param(False, False, None, None, id="available-agent-only"),
@@ -1452,6 +1459,8 @@ async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
 )
 async def test_agent_only_skill_preview_retains_selection_and_access_rules(
     monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    heading: str,
     disabled: bool,
     denied: bool,
     source_status: int | None,
@@ -1469,7 +1478,7 @@ async def test_agent_only_skill_preview_retains_selection_and_access_rules(
     definition = _PingAgent()
     _, attribution = load_skill(
         snapshot,
-        "compare-options",
+        name,
         origin="agent",
         load_id="agent-read",
         agent_id=definition.agent_id,
@@ -1490,7 +1499,7 @@ async def test_agent_only_skill_preview_retains_selection_and_access_rules(
             return_value=SimpleNamespace(
                 definition=definition,
                 team_id="team",
-                disabled_platform_skills=("compare-options",) if disabled else (),
+                disabled_platform_skills=(name,) if disabled else (),
             ),
         ),
     )
@@ -1509,20 +1518,20 @@ async def test_agent_only_skill_preview_retains_selection_and_access_rules(
         catalog = await api.get_instance_skills(
             "selected", "team", None, None, container, {}
         )
-        assert "compare-options" not in {skill.name for skill in catalog.skills}
+        assert name not in {skill.name for skill in catalog.skills}
     if preview_status is not None:
         with pytest.raises(HTTPException) as exc:
             await api.get_instance_skill_detail(
-                "compare-options", "selected", "team", None, None, container, {}
+                name, "selected", "team", None, None, container, {}
             )
         assert exc.value.status_code == preview_status
     else:
         detail = await api.get_instance_skill_detail(
-            "compare-options", "selected", "team", None, None, container, {}
+            name, "selected", "team", None, None, container, {}
         )
-        assert detail.skill.name == "compare-options"
+        assert detail.skill.name == name
         assert detail.skill.user_invocable is False
-        assert "# Evidence-based option comparison" in detail.content
+        assert heading in detail.content
 
 
 class RecordingSkillKPIStore(BaseKPIStore):

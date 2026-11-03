@@ -34,12 +34,12 @@ disabled `mermaid` policy, review the retired entry and disable `graph` after
 the runtime rollout if that opt-out is still intended. Custom skill names are
 unchanged.
 
-The packaged catalog has seven skills. `analyze-data`, `compare-options` and
-`summarize-document` are model-only: direct user selections are rejected, but
-agents can load them for natural-language requests. `meeting-minutes` and
-`grill-me` require explicit user selection for a new load. `graph` and
-`grounded-research` retain both invocation routes. Summary guidance has a short
-core and a conditional complex-summary reference.
+The packaged catalog has seven skills. `analyze-data`, `compare-options`,
+`grounded-research` and `summarize-document` are model-only: direct user
+selections are rejected, but agents can load them for natural-language requests.
+`meeting-minutes` and `grill-me` require explicit user selection for a new load.
+`graph` retains both invocation routes. Summary guidance has a short core and a
+conditional complex-summary reference.
 
 The separate `data-visualization` and `verify-answer` skills are retired without
 aliases. Remove retired or newly user-ineligible commands from drafts and
@@ -78,10 +78,10 @@ conversation and on another replica, and verify discovery and new loads reject
 it. Re-enable it and verify the next turn can load it again. Custom directories
 are outside this global policy.
 
-Check `/graph` and `/meeting-minutes` remain selectable while the three
-model-only skills stay absent from the menu. Submit natural analysis, comparison
-and summary requests and inspect actual load activity. Mermaid output should
-read the graph reference; other visualization formats use their tool contract.
+Check `/graph` and `/meeting-minutes` remain selectable while the four
+model-only skills stay absent from the menu. Submit natural analysis, comparison,
+research and summary requests and inspect actual load activity. Mermaid output
+should read the graph reference; other visualization formats use their tool contract.
 Verify a historical retired-skill event stays readable and stale drafts keep
 their text when a command is rejected.
 

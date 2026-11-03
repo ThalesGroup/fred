@@ -27,8 +27,9 @@ loading and agent-origin attribution in focused verification. Reuse the existing
 catalog and eligibility suites to check user command exclusion and explicit
 selection rejection.
 
-Update the existing migration note and invocation matrix during implementation
-and close-out. No new schema or generated API field is required.
+Update the existing migration guidance and invocation matrix during implementation
+and close-out. Include this follow-up PR's own migration declaration as required
+by the migration policy. No new schema or generated API field is required.
 
 ## Risks / Trade-offs
 

@@ -47,7 +47,8 @@ def test_packaged_interview_preserves_explicit_invocation_and_mit_provenance() -
 
 
 @pytest.mark.parametrize(
-    "name", ["analyze-data", "compare-options", "summarize-document"]
+    "name",
+    ["analyze-data", "compare-options", "grounded-research", "summarize-document"],
 )
 def test_packaged_model_only_skills_obey_user_and_global_eligibility(name: str) -> None:
     """Model-only procedures remain readable while user bypasses are rejected."""
@@ -143,33 +144,61 @@ async def test_representative_requests_receive_selected_instructions_without_inp
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("deep", [False, True])
-@pytest.mark.parametrize("name", ["analyze-data", "compare-options", "graph"])
+@pytest.mark.parametrize(
+    ("deep", "child"), [(False, False), (True, False), (True, True)]
+)
+@pytest.mark.parametrize(
+    "name", ["analyze-data", "compare-options", "graph", "grounded-research"]
+)
 async def test_agent_can_load_packaged_workflows_without_user_selection(
     name: str,
     deep: bool,
+    child: bool,
 ) -> None:
     """Natural requests can load procedures without exposing extra tools."""
     skills = PlatformSkills.from_directory("package").for_execution()
-    model = Model(
-        script=[
-            load_call(name, "procedure", deep),
-            AIMessage(content="comparison probe"),
+    script = [load_call(name, "procedure", deep), AIMessage(content="workflow probe")]
+    if child:
+        script = [
+            call(
+                "task",
+                {
+                    "description": "Read the relevant procedure",
+                    "subagent_type": "general-purpose",
+                },
+                "child",
+            ),
+            *script,
+            AIMessage(content="parent done"),
         ]
-    )
+    model = Model(script=script)
     agent = compiled(model, skills, binding(), deep)
-    await agent.ainvoke(
-        {"messages": [{"role": "user", "content": "Show A=10 and B=20 clearly."}]},
-        {"configurable": {"thread_id": "visualization"}},
-    )
-    loaded = [
-        message
-        for message in model.calls[-1]
-        if isinstance(message, ToolMessage) and message.tool_call_id == "procedure"
+    events = [
+        event
+        async for event in agent.astream(
+            {"messages": [{"role": "user", "content": "Use the relevant method."}]},
+            {"configurable": {"thread_id": "workflow"}},
+            stream_mode=["updates", "custom"],
+            subgraphs=True,
+        )
     ]
-    assert len(loaded) == 1
+    loads = [
+        payload.skill_load
+        for _, mode, payload in events
+        if mode == "custom"
+        and isinstance(payload, StatusRuntimeEvent)
+        and payload.skill_load
+    ]
+    assert len(loads) == 1
+    assert loads[0].name == name and loads[0].origin == "agent"
+    loaded = next(
+        message
+        for messages in model.calls
+        for message in messages
+        if isinstance(message, ToolMessage) and message.tool_call_id == "procedure"
+    )
     assert all(
-        line in str(loaded[0].content)
+        line in str(loaded.content)
         for line in skills.read(name).splitlines()
         if line.strip()
     )
