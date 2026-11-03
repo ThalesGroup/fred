@@ -14,7 +14,7 @@ the chosen environment before running it.
 
 It reads the user/role/team matrix straight from that fixture, so there is **no
 drift**: change the users there and the assertions follow. That same fixture is
-also the checked-in source for `make build-demo-bundle` (in
+also the checked-in source for `make bundle-demo` (in
 `apps/control-plane`), the zip an operator uploads via Admin > Migration
 to actually provision the users/teams/roles this suite expects to find.
 
@@ -22,7 +22,7 @@ On a fresh Swift stack, the suite **verifies** (never provisions) the
 collaborative teams and roles before running assertions: it reads each team
 through the real Control Plane APIs (as the configured `platform_admin` and, per
 team, the configured `team_admin`) and fails fast with an actionable message -
-pointing at `make build-demo-bundle` + the Admin > Migration upload - if anything
+pointing at `make bundle-demo` + the Admin > Migration upload - if anything
 expected is missing. Team **and identity** provisioning is owned by
 control-plane's platform-import feature (see `CONTROL-PLANE-PRODUCT-CONTRACT.md §27`),
 not by this suite; `make docker-up` only prepares empty Keycloak/OpenFGA infra.
@@ -117,7 +117,7 @@ remains future work.
 
 1. **Running backing services and Fred apps** according to one of the modes above.
    Keycloak and the control-plane database must be seeded with the
-   `demo_provisioning` fixture's users/teams/roles (`make build-demo-bundle` +
+   `demo_provisioning` fixture's users/teams/roles (`make bundle-demo` +
    Admin > Migration upload - see the intro above).
 2. **Password-grant login on the local test client.** The harness logs in as
    each demo user without a browser. This requires **Direct access grants** on

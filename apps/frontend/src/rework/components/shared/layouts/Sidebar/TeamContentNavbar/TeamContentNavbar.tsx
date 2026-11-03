@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import { useEffect } from "react";
 import {
@@ -21,6 +22,7 @@ import {
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
+import { teamRoleLabel } from "@shared/utils/teamRoleLabel";
 import { recordTeamVisit } from "@shared/utils/teamRecency.ts";
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
@@ -37,7 +39,6 @@ import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
-import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
@@ -50,8 +51,8 @@ import { useWikiAvailabilityQuery } from "../../../../../../slices/legacyControl
  * both normal browsing and team settings. In settings mode the lower menu swaps
  * from the team navigation (agents/resources/prompts + chats) to the settings
  * sections; the banner never disappears, so the user always sees which team
- * they are configuring. Team/banner state comes from `useSelectedTeam`, shared
- * with the routed `TeamSettingsPage`.
+ * they are configuring. Weaver identity and roles come from `/me/spaces`;
+ * legacy summaries remain a fallback for content areas not yet ported.
  *
  * Mount inside the main sidebar layout for routes under `/team/:teamId/...`
  */
@@ -63,12 +64,7 @@ export default function TeamContentNavbar() {
   const agentManagement = isWeaverContentRoute(pathname);
   const navigate = useNavigate();
 
-  const {
-    teamId,
-    isPersonalTeam: legacyPersonalTeam,
-    selectedTeam,
-    canOpenTeamSettings,
-  } = useSelectedTeam(agentManagement);
+  const { teamId, isPersonalTeam: legacyPersonalTeam, selectedTeam } = useSelectedTeam(agentManagement);
   const memberships = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: 60 });
   const space = !memberships.isError
     ? memberships.currentData?.find((item) =>
@@ -86,6 +82,11 @@ export default function TeamContentNavbar() {
     ? publicationTeams.currentData?.items.find((team) => team.id === teamId)
     : undefined;
   const isPersonalTeam = space ? space.kind === "personal" : legacyPersonalTeam;
+  const manage = useSpaceAccess(space?.id, "manage");
+  const content = useSpaceAccess(space?.id, "read");
+  const canOpenTeamSettings = manage.allowed;
+  const canReadContent = content.allowed;
+
   const { bootstrap } = useFrontendBootstrap(agentManagement);
 
   // Record every entry into a team so the Home nav-panel switcher can offer a
@@ -94,17 +95,12 @@ export default function TeamContentNavbar() {
     if (teamId) recordTeamVisit(teamId);
   }, [teamId]);
 
-  // "Back" from a focused view (settings / usage) always returns to the team's
-  // main content view — a fixed, predictable destination. `navigate(-1)` was
-  // tried first but reads as arbitrary: from settings it pops one entry off
-  // the raw browser history stack, which is very often another settings tab
-  // (e.g. Members -> Parameters -> Back lands back on Members), not a place a
-  // "Back" affordance should land on.
+  // Return content readers to agents; owner-only users return to Home rather
+  // than looping through the neutral landing back to this management page.
   const handleBack = () => {
-    navigate(`/team/${teamId}/agents`);
+    navigate(canReadContent ? `/team/${teamId}/agents` : "/home");
   };
   const capabilities = useTeamCapabilities(selectedTeam);
-  const { canUpdateInfo } = capabilities;
 
   const settingsBase = `/team/${teamId}/settings`;
   const inSettings = !!teamId && pathname.startsWith(settingsBase);
@@ -119,13 +115,17 @@ export default function TeamContentNavbar() {
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications", agentManagement);
   const { data: teamApplications, isError: applicationsError } = useTeamApplications(
     teamId,
-    agentManagement || isPersonalTeam || inSettings || inUsage,
+    agentManagement || !canReadContent || isPersonalTeam || inSettings || inUsage,
   );
   // Every entry the Control Plane returns is already registered and authorized
   // for this team; Fred no longer compiles application code, so there is no
   // second, build-time compatibility question to ask here.
   const showApplications =
-    applicationsEnabled && !isPersonalTeam && !applicationsError && (teamApplications?.items?.length ?? 0) > 0;
+    canReadContent &&
+    applicationsEnabled &&
+    !isPersonalTeam &&
+    !applicationsError &&
+    (teamApplications?.items?.length ?? 0) > 0;
 
   // A team has a wiki when an admin has enabled the `team_wiki` agent
   // capability for it (WIKI-03) — one decision covering the team's agents and
@@ -135,39 +135,16 @@ export default function TeamContentNavbar() {
   // refuses the wiki routes anyway.
   const { data: wikiAvailability } = useWikiAvailabilityQuery(
     { teamId: teamId ?? "" },
-    { skip: agentManagement || !teamId },
+    { skip: agentManagement || !canReadContent || !teamId },
   );
-  const showWiki = wikiAvailability?.enabled === true;
+  const showWiki = canReadContent && wikiAvailability?.enabled === true;
   // Porting entry only: it does not depend on the removed Swift catalog.
-  const showKnowledgeBases = !!space || capabilities.canUseTeamKnowledgeBases;
+  const showKnowledgeBases = canReadContent && (!!space || capabilities.canUseTeamKnowledgeBases);
 
-  // #2100: which roles the current user holds on this team, "Admin · Analyst"
-  // style — `permissions` alone cannot answer this (can_run_evaluations/
-  // can_manage_evaluation_corpus are granted to team_analyst AND team_admin,
-  // so it can't tell a plain admin from an admin who is also analyst), hence
-  // the dedicated `my_relations` field. Not shown for the personal space (not
-  // a team with "roles" in this sense) or for a non-member merely browsing a
-  // public/marketplace team pre-join.
-  //
-  // `selectedTeam` can transiently be the bootstrap-cached summary (plain
-  // `Team`, no `my_relations` key at all) before the dedicated per-team fetch
-  // resolves — same gap `TeamSettingsPage` already guards against for
-  // `permissions`. Without this check the banner renders with the incomplete
-  // summary (it mounts earlier than the settings page) and shows the "no
-  // elevated role" fallback for every user until the real fetch lands.
+  // Display cumulative Weaver roles consistently with Home; legacy summaries
+  // remain a fallback only after their relations have actually loaded.
   const relationsLoaded = !!space || (!!selectedTeam && "my_relations" in selectedTeam);
-  // Plain "Admin · Analyste"-style text, priority-sorted (admin > editor >
-  // analyst); no shield glyph — the team panel header keeps the roles line
-  // typographic only, matching the Home team list item (#2298).
-  const roleLabel = (() => {
-    const priority: Record<string, number> = { team_admin: 0, pending_team_admin: 0, team_editor: 1, team_analyst: 2 };
-    const heldRoles = (space ? space.roles.map((role) => `team_${role}`) : (selectedTeam?.my_relations ?? []))
-      .filter((relation) => relation in priority)
-      .slice()
-      .sort((a, b) => priority[a] - priority[b]);
-    if (heldRoles.length === 0) return t("rework.teamRoles.team_member");
-    return heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
-  })();
+  const roleLabel = teamRoleLabel(space?.roles ?? selectedTeam?.my_relations ?? [], t);
   const showRoleLabel = !isPersonalTeam && (!!space || !!selectedTeam?.is_member) && relationsLoaded;
 
   // Team avatar (28×28, 4px): the team's own image, else the deployment default,
@@ -214,26 +191,28 @@ export default function TeamContentNavbar() {
     />
   );
 
-  const navigationItems: NavigationMenuItemProps[] = [
-    {
-      type: "link",
-      label: (agentsNicknamePlural ?? "").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
-      icon: { category: "outlined", type: agentIconName as IconType, filled: true },
-      linkProps: { to: `/team/${teamId}/agents` },
-    },
-    {
-      type: "link",
-      label: t("rework.sidebar.team.menu.resources"),
-      icon: { category: "outlined", type: "folder", filled: true },
-      linkProps: { to: `/team/${teamId}/resources` },
-    },
-    {
-      type: "link",
-      label: "Prompts",
-      icon: { category: "outlined", type: "edit_note", filled: true },
-      linkProps: { to: `/team/${teamId}/prompts` },
-    },
-  ];
+  const navigationItems: NavigationMenuItemProps[] = canReadContent
+    ? [
+        {
+          type: "link",
+          label: (agentsNicknamePlural ?? "").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
+          icon: { category: "outlined", type: agentIconName as IconType, filled: true },
+          linkProps: { to: `/team/${teamId}/agents` },
+        },
+        {
+          type: "link",
+          label: t("rework.sidebar.team.menu.resources"),
+          icon: { category: "outlined", type: "folder", filled: true },
+          linkProps: { to: `/team/${teamId}/resources` },
+        },
+        {
+          type: "link",
+          label: "Prompts",
+          icon: { category: "outlined", type: "edit_note", filled: true },
+          linkProps: { to: `/team/${teamId}/prompts` },
+        },
+      ]
+    : [];
   navigationItems.push({
     type: "link",
     label: t("rework.weaver.title"),
@@ -267,13 +246,7 @@ export default function TeamContentNavbar() {
     });
   }
 
-  // AUTHZ-09: the settings entry point is now open to every team member
-  // (`canOpenTeamSettings` = `canReadMembers`), so Activity — meant only for
-  // elevated roles, not the baseline member surface — needs its own gate
-  // instead of reusing the membership-level check the backend's GET /tasks
-  // happens to accept.
-  const canSeeActivity = hasElevatedTeamRole(capabilities);
-
+  // Membership management is the Weaver Manage surface, independent of Read.
   const settingsItems: NavigationMenuItemProps[] = [
     {
       type: "link",
@@ -282,62 +255,6 @@ export default function TeamContentNavbar() {
       linkProps: { to: `${settingsBase}/members` },
     },
   ];
-  if (canUpdateInfo) {
-    settingsItems.push({
-      type: "link",
-      label: t("rework.teamSettings.navigation.settings"),
-      icon: { category: "outlined", type: "settings", filled: true },
-      linkProps: { to: `${settingsBase}/parameters` },
-    });
-  }
-  // From the relations, not the permissions: a pending admin accepts the charter
-  // here, before holding any admin permission.
-  if (
-    bootstrap?.team_admin_charter_enabled === true &&
-    (selectedTeam?.my_relations ?? []).some(
-      (relation) => relation === "team_admin" || relation === "pending_team_admin",
-    )
-  ) {
-    settingsItems.push({
-      type: "link",
-      label: t("rework.teamSettings.navigation.responsibilities"),
-      icon: { category: "outlined", type: "admin_panel_settings", filled: false },
-      linkProps: { to: `${settingsBase}/responsibilities` },
-    });
-  }
-  if (canSeeActivity) {
-    // Same "build" icon as the platform admin Tasks entry — one shared surface,
-    // identical ergonomy at both levels (OPS-04 §3.4).
-    settingsItems.push({
-      type: "link",
-      label: t("rework.teamSettings.navigation.activity"),
-      icon: { category: "outlined", type: "build", filled: false },
-      linkProps: { to: `${settingsBase}/activity` },
-    });
-  }
-  if (canSeeActivity) {
-    // Same elevated-role gate as Activity: the team usage dashboard
-    // (OBSERV-02 v3) has been reachable by direct URL only — this is its
-    // first in-app entry point for a real (non-personal) team.
-    settingsItems.push({
-      type: "link",
-      label: t("rework.teamSettings.navigation.usage"),
-      icon: { category: "outlined", type: "analytics", filled: false },
-      linkProps: { to: usageBase },
-    });
-  }
-  if (canSeeActivity) {
-    // TEAM-05, #2118: same elevated-role gate as Activity/Usage for
-    // visibility (team_admin/team_editor/team_analyst all may read) — the
-    // page itself renders read-only for anyone without canUpdateResources
-    // (team_editor), same read/write split TeamSettingsPage already applies.
-    settingsItems.push({
-      type: "link",
-      label: t("rework.teamSettings.navigation.routing"),
-      icon: { category: "outlined", type: "hub", filled: false },
-      linkProps: { to: `${settingsBase}/routing` },
-    });
-  }
 
   const backButton = (
     <span className={styles["settings-back-container"]}>
@@ -401,9 +318,6 @@ export default function TeamContentNavbar() {
         {inSettings || (inUsage && !isPersonalTeam) ? (
           <>
             {backButton}
-            {/* Usage is one of `settingsItems` (line ~186) — being on it highlights
-                that entry via NavLink's own active-route match, so this doubles as
-                "which tab am I on" instead of a bare, contextless Back. */}
             <NavigationMenu items={settingsItems} />
           </>
         ) : inUsage ? (
@@ -415,7 +329,7 @@ export default function TeamContentNavbar() {
           <>
             <NavigationMenu items={navigationItems} />
             <Separator margin={"var(--spacing-m)"} />
-            <ChatList teamId={teamId} spaceId={space?.id} />
+            {canReadContent && <ChatList teamId={teamId} spaceId={space?.id} />}
           </>
         )}
       </div>

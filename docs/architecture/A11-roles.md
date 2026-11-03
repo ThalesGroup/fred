@@ -3,7 +3,9 @@
 This is the role reference for architecture and security reviews (SSI). It separates
 **agreed responsibilities** from **current Control Plane permissions**. A responsibility
 is not proof of an implemented control. Current permissions below come from source
-inspection; this documentation change includes no live authorization tests.
+inspection. Focused integration-test evidence for owner-only management is recorded
+in [A8](A8-organizations.md#owner-only-team-management); deployed browser validation
+remains a separate operator exercise.
 
 Read each row as the authority of **that role alone**. Current roles are cumulative;
 the ability to grant another role is listed separately. Authentication, admission,
@@ -27,6 +29,11 @@ or project-admin role.
 | `member` | Member | Membre | Content read |
 
 The [example people](02-journeys.md#example-people-and-spaces) illustrate each role.
+The [Nova owner-only management path](A8-organizations.md#owner-only-team-management)
+exercises the separation without adding content rights: organization owner/member,
+team owner only. Adding editor to that team would be an explicit cumulative grant,
+not a prerequisite for managing its members. Role separation does not prevent an
+authorized owner from explicitly granting themselves a content role.
 
 | Role | Scope of grant | Agreed responsibility | Current permissions and limits, role alone | Permission scope |
 | --- | --- | --- | --- | --- |

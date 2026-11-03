@@ -1,0 +1,18 @@
+[
+  {
+    "username": "nova.admin",
+    "email": "nova.admin@nova.example",
+    "first_name": "Admin",
+    "last_name": "Nova",
+    "password": "Azerty123_",
+    "platform_roles": []
+  },
+  {
+    "username": "nova.responsable",
+    "email": "nova.responsable@nova.example",
+    "first_name": "Responsable",
+    "last_name": "Nova",
+    "password": "Azerty123_",
+    "platform_roles": []
+  }
+]

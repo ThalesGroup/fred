@@ -6,4 +6,5 @@ export const isPromptPublicationRoute = (pathname: string) =>
 
 /** These pages use Weaver admission, never Swift bootstrap/charter gates. */
 export const isWeaverContentRoute = (pathname: string) =>
-  /^\/team\/[^/]+\/(?:agents|managed-chat\/[^/]+)\/?$/.test(pathname) || isPromptPublicationRoute(pathname);
+  /^\/team\/[^/]+(?:\/(?:agents|settings(?:\/[^/]+)?|managed-chat\/[^/]+))?\/?$/.test(pathname) ||
+  isPromptPublicationRoute(pathname);

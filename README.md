@@ -15,7 +15,9 @@ shared identity, permissions and organization governance.
 - [Architecture and user journeys](docs/architecture/README.md): the maintained
   explanation of current Fred behavior.
 - [First local deployment](deploy/k3d/README.md#first-start-on-k3d): prerequisites,
-  startup and provisioning commands.
+  startup and provisioning commands; `make bundle-demo` generates the Acme/Globex demo.
+- [Nova coexistence exercise](apps/control-plane/tests/fixtures/import_export/nova_migration/README.md):
+  generate the isolated Weaver bundle with `make bundle-migration`.
 - [Local development](scripts/README-local-delegation.md): run components against
   the local infrastructure.
 - [Coding conventions](docs/CONVENTIONS.md) and [agent instructions](AGENTS.md).

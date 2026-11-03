@@ -83,6 +83,9 @@ function catalogQuery<Item, Args extends { after?: string } = ListPromptsApiArg>
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   addTagTypes: [
+    "SpaceMembers",
+    "MySpaces",
+    "SpaceAccess",
     "Folders",
     "Documents",
     "DocumentUploads",
@@ -100,6 +103,23 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "Attachments",
   ],
   endpoints: {
+    mySpaces: { providesTags: ["MySpaces"] },
+    spaceMembers: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { id }) => [{ type: "SpaceMembers", id }],
+    },
+    spaceMemberCandidates: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { id }) => [{ type: "SpaceMembers", id }],
+    },
+    grant: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess"],
+    },
+    revoke: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess"],
+    },
     // All three consumers need the complete catalog. Keep its pages in one RTK
     // result, never a component store. A failed page publishes no partial list.
     promptMarketplaces(endpoint) {
@@ -479,6 +499,10 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useSpaceMembersQuery,
+  useSpaceMemberCandidatesQuery,
+  useGrantMutation,
+  useRevokeMutation,
   usePromptMarketplacesQuery,
   usePromptPublicationTeamsQuery,
   usePublishedPromptsQuery,
@@ -552,6 +576,7 @@ export const { useSpaceAccessQuery } = enhancedControlPlaneApi.injectEndpoints({
   endpoints: (build) => ({
     spaceAccess: build.query<Allowed, SpaceCheck>({
       keepUnusedDataFor: 600,
+      providesTags: ["SpaceAccess"],
       queryFn: async (spaceCheck, { dispatch }) => {
         const answer = await dispatch(
           enhancedControlPlaneApi.endpoints.authorizeSpace.initiate({ spaceCheck }, { track: false }),

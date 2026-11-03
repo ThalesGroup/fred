@@ -654,13 +654,17 @@ The [deployment chapter](../../docs/architecture/A3-manager-operations.md) descr
 
 ## Import a provisioning bundle
 
-Build the checked-in demo, without running services:
+Build the checked-in demo from the repository root or `apps/control-plane`,
+without running services:
 
 ```sh
-make build-demo-bundle
-# Optional overrides, with the same names as control-plane:
-make build-demo-bundle DEMO_PROVISIONING_FIXTURE_DIR="/path/to/fixtures" DEMO_BUNDLE_FILE="/path/to/demo.zip"
+make bundle-demo
+# Optional overrides (absolute paths work from either directory):
+make bundle-demo DEMO_PROVISIONING_FIXTURE_DIR="/path/to/fixtures" DEMO_BUNDLE_FILE="/path/to/demo.zip"
 ```
+
+The default output is `apps/control-plane/target/demo-provisioning-bundle.zip`
+(path from the repository root). Both entry points delegate to the same packager.
 
 The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
 `teams.json` and `projects.json`. The manifest declares `format_version: 2`,
@@ -668,12 +672,12 @@ The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
 The demo's people, spaces and roles are listed once in
 [Example people and spaces](../../docs/architecture/02-journeys.md#example-people-and-spaces);
 the [fixture README](tests/fixtures/import_export/demo_provisioning/README.md) gives
-its counts and test password. `make build-demo-bundle` is the only demo build target.
+its counts and test password. `make bundle-demo` is the only demo build target.
 The [declaration contract](../../docs/architecture/A2-manager-contracts.md#provisioning-declarations)
 defines explicit parent references and roles, including projects. Old JSON and
 Python version-1 ZIPs return `not_yet_supported`; no conversion is performed.
 
-After compatible initialization, personal CGU acceptance and root bootstrap, save a platform admin's
+After compatible initialization, root bootstrap and personal CGU acceptance, save a platform admin's
 access token in a private file and run:
 
 ```sh
@@ -704,10 +708,25 @@ There is no cross-system rollback, so failure does not prove absence of effects.
 Keycloak, PostgreSQL, verifies replay and identity preservation, and
 imports a variant with a project.
 
+### Nova coexistence bundle
+
+For the separate Swift/Weaver exercise, run `make bundle-migration` from the
+repository root or this directory. It generates
+`apps/control-plane/target/nova-migration-bundle.zip` (path from the repository root)
+without contacting any service. It contains only Nova, its Pilote team and two
+accounts, with no project or platform grant. `nova.admin` is Nova's technical
+administrator; `nova.responsable` owns Nova and Pilote and explicitly holds
+`member` on Nova, as required for a team role.
+
+Follow the [Nova fixture and Chrome walkthrough](tests/fixtures/import_export/nova_migration/README.md)
+for credentials, shared-SSO collision checks and the manual import steps. This
+is fresh provisioning in Weaver, not a transfer of Swift data. The browser
+journey remains an operator validation step.
+
 ## Import through the frontend
 
 Fred's existing administration console exposes **Provisioning** at
-`/admin/provisioning` to manager platform admins. Select the ZIP produced by `make build-demo-bundle`.
+`/admin/provisioning` to manager platform admins. Select the ZIP produced by `make bundle-demo` or `make bundle-migration`.
 The page displays the completed server counts or an error with explicit replay
 guidance. The existing Home and sidebar display own memberships, hierarchy and roles.
 The account menu permits logout before and after admission. Platform admins are restricted to governance/account routes. Business users retain

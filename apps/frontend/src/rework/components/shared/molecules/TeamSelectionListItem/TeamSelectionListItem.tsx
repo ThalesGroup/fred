@@ -17,19 +17,9 @@ import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import type { TeamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
 import type { UserTeamRelation } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import { teamRoleLabel } from "@shared/utils/teamRoleLabel";
 import { useTranslation } from "react-i18next";
 import { Link, type To } from "react-router-dom";
-
-// Business owner first, then editor and analyst, in a stable order regardless of
-// the raw relation order the bootstrap returns. `team_member` is the implicit
-// baseline and is only shown (as the sole label) when no elevated role is held.
-const ROLE_PRIORITY: Record<string, number> = {
-  team_owner: 0,
-  team_admin: 0,
-  pending_team_admin: 0,
-  team_editor: 1,
-  team_analyst: 2,
-};
 
 interface TeamSelectionListItemProps {
   /** Where clicking the row navigates — into the team (or the personal space). */
@@ -71,15 +61,7 @@ export default function TeamSelectionListItem({
 }: TeamSelectionListItemProps) {
   const { t } = useTranslation();
 
-  const heldRoles = roles
-    .map((role) => (role.startsWith("team_") || role === "pending_team_admin" ? role : `team_${role}`))
-    .filter((relation) => relation in ROLE_PRIORITY)
-    .slice()
-    .sort((a, b) => ROLE_PRIORITY[a] - ROLE_PRIORITY[b]);
-  const roleLabel =
-    heldRoles.length === 0
-      ? t("rework.teamRoles.team_member")
-      : heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
+  const roleLabel = teamRoleLabel(roles, t);
 
   const content = (
     <>

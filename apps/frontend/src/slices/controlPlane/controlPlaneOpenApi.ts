@@ -415,6 +415,22 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    spaceMemberCandidates: build.query<SpaceMemberCandidatesApiResponse, SpaceMemberCandidatesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.id}/member-candidates`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    spaceMembers: build.query<SpaceMembersApiResponse, SpaceMembersApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.id}/members`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
     grant: build.mutation<GrantApiResponse, GrantApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.id}/roles/${queryArg.role}/${queryArg.user}`,
@@ -977,6 +993,16 @@ export type EntriesApiArg = {
   order?: EntryOrder;
   offset?: number;
   limit?: number;
+};
+export type SpaceMemberCandidatesApiResponse = /** status 200 undefined */ SpaceMembers;
+export type SpaceMemberCandidatesApiArg = {
+  id: string;
+  after?: string;
+};
+export type SpaceMembersApiResponse = /** status 200 undefined */ SpaceMembers;
+export type SpaceMembersApiArg = {
+  id: string;
+  after?: string;
 };
 export type GrantApiResponse = unknown;
 export type GrantApiArg = {
@@ -1978,6 +2004,15 @@ export type Directory = {
   };
 };
 export type EntryOrder = "name_asc" | "name_desc" | "created_asc" | "created_desc" | "size_asc" | "size_desc";
+export type SpaceMember = {
+  /** Roles on the managed space, also for candidates from its parent. */
+  roles: Role[];
+  user: UserSummary;
+};
+export type SpaceMembers = {
+  items: SpaceMember[];
+  next_cursor: string | null;
+};
 export type ModelOptions = {
   max_tokens?: number | null;
   temperature?: number | null;
@@ -2509,6 +2544,10 @@ export const {
   useLazyReceiptsQuery,
   useEntriesQuery,
   useLazyEntriesQuery,
+  useSpaceMemberCandidatesQuery,
+  useLazySpaceMemberCandidatesQuery,
+  useSpaceMembersQuery,
+  useLazySpaceMembersQuery,
   useGrantMutation,
   useRevokeMutation,
   useSummaryQuery,

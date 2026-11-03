@@ -1756,7 +1756,7 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     let output = std::env::temp_dir().join(format!("manager-demo-{}.zip", Uuid::new_v4()));
     assert!(
         tokio::process::Command::new("make")
-            .arg("build-demo-bundle")
+            .arg("bundle-demo")
             .env("DEMO_BUNDLE_FILE", &output)
             .status()
             .await
@@ -4649,3 +4649,137 @@ async fn role_grants_require_a_valid_known_subject() {
 
 #[path = "support/prompts.rs"]
 mod prompts;
+
+// The Nova path: owner-only team governance never implies content access.
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn owner_only_team_membership_governance() {
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let (org, team) = org_and_team(&e).await;
+    spaces::revoke(&e.pool, "alice", team.id, Role::Member, "alice")
+        .await
+        .unwrap();
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Member, "bob").await;
+    // A parent owner without a content role is not eligible for a child role.
+    grant(&e, org.id, Role::Owner, "governor").await;
+    let other = crate::support::member_organization(&e.pool, "Other", "outsider")
+        .await
+        .unwrap();
+    let directory = control_plane::users::Directory::Local(&e.pool);
+    let roster =
+        control_plane::space_members::list(&e.pool, &directory, "alice", team.id, None, false)
+            .await
+            .unwrap();
+    assert_eq!(roster.items.len(), 2);
+    assert_eq!(
+        roster
+            .items
+            .iter()
+            .find(|m| m.user.id == "alice")
+            .unwrap()
+            .roles,
+        [Role::Owner]
+    );
+    assert!(!reads(&e, "alice", team.id).await);
+    for caller in ["bob", "governor", "outsider", "root"] {
+        for candidates in [false, true] {
+            assert!(
+                control_plane::space_members::list(
+                    &e.pool, &directory, caller, team.id, None, candidates
+                )
+                .await
+                .is_err()
+            );
+        }
+    }
+    let eligible =
+        control_plane::space_members::list(&e.pool, &directory, "alice", team.id, None, true)
+            .await
+            .unwrap();
+    assert_eq!(
+        eligible
+            .items
+            .iter()
+            .map(|m| m.user.id.as_str())
+            .collect::<Vec<_>>(),
+        ["alice", "bob"]
+    );
+    assert!(
+        spaces::grant(
+            &e.pool,
+            &e.subjects(),
+            "alice",
+            team.id,
+            Role::Editor,
+            "outsider"
+        )
+        .await
+        .is_err()
+    );
+    spaces::grant(
+        &e.pool,
+        &e.subjects(),
+        "alice",
+        team.id,
+        Role::Editor,
+        "bob",
+    )
+    .await
+    .unwrap();
+    assert!(!reads(&e, "alice", team.id).await);
+    assert!(
+        spaces::revoke(&e.pool, "alice", team.id, Role::Owner, "alice")
+            .await
+            .is_err()
+    );
+    spaces::grant(&e.pool, &e.subjects(), "alice", team.id, Role::Owner, "bob")
+        .await
+        .unwrap();
+    spaces::revoke(&e.pool, "alice", team.id, Role::Owner, "alice")
+        .await
+        .unwrap();
+    assert!(
+        control_plane::space_members::list(&e.pool, &directory, "alice", team.id, None, false)
+            .await
+            .is_err()
+    );
+    assert!(
+        spaces::grant(
+            &e.pool,
+            &e.subjects(),
+            "alice",
+            team.id,
+            Role::Member,
+            "alice"
+        )
+        .await
+        .is_err()
+    );
+    assert!(!reads(&e, "bob", other.id).await);
+    sqlx::query("insert into space_role_grant(space_id,subject,role) select $1, 'candidate-' || lpad(n::text,3,'0'), 'member' from generate_series(1,51) n")
+        .bind(org.id).execute(&e.pool).await.unwrap();
+    let first = control_plane::space_members::list(&e.pool, &directory, "bob", team.id, None, true)
+        .await
+        .unwrap();
+    assert_eq!(first.items.len(), 50);
+    let second = control_plane::space_members::list(
+        &e.pool,
+        &directory,
+        "bob",
+        team.id,
+        first.next_cursor.as_deref(),
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(second.items.len(), 3);
+    assert!(second.next_cursor.is_none());
+    assert!(
+        first
+            .items
+            .iter()
+            .all(|a| second.items.iter().all(|b| a.user.id != b.user.id))
+    );
+}

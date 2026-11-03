@@ -43,6 +43,20 @@ Fred separates technical administration from business work.
   **editor** reads and writes, **analyst** reads and evaluates. Owner alone grants
   no content access.
 
+Roles are cumulative and explicit. An organization admin may also hold a content
+role on that organization; an owner may also be an editor on the same team.
+Neither admin nor owner automatically implies member or editor. Someone tasked
+with examining and modifying reported content needs the corresponding content
+role in that space, in addition to any governance role. Granting that role is a
+separate decision; receiving an alert does not itself confer access.
+
+For example, Nova's responsible person holds owner and member on Nova, but only
+owner on Pilote. They may manage Pilote's memberships without reading its agents,
+documents or conversations. Explicitly adding editor on Pilote would permit content
+read/write there; it would not change their organization roles or confer access to
+another team. The member role on Nova satisfies the parent prerequisite and grants
+nothing on Pilote.
+
 One person may hold several roles; nothing currently prevents an admin from also
 being an owner. The [roles annex](A11-roles.md) is the reference for
 responsibilities, effective permissions, attribution rules and the gaps to examine

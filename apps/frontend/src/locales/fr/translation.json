@@ -4916,6 +4916,19 @@
       "metricsUnavailable": "Les prompts publiés sont consultables. Le classement, les compteurs et les courbes d’usage ne sont pas encore disponibles.",
       "usageUnavailable": "Usage indisponible",
       "libraries": "Bibliothèques de prompts que vous pouvez publier"
+    },
+    "spaceMembers": {
+      "title": "Gérer {{name}}",
+      "separation": "Responsabilité et accès au contenu sont séparés. Les rôles peuvent être cumulés explicitement ; un rôle dans l'organisation ne donne pas accès à ses équipes. Chaque case ajoute ou retire immédiatement un rôle.",
+      "roster": "Membres actuels",
+      "candidates": "Ajouter des personnes de l'espace parent",
+      "eligibility": "Ces personnes ont un rôle de contenu direct dans l'organisation ou l'équipe parente. Sélectionnez chaque rôle à leur attribuer dans cet espace. Les rôles existants sont affichés ; aucun rôle n'est ajouté automatiquement.",
+      "person": "Personne",
+      "refresh": "Actualiser",
+      "empty": "Aucune personne sur cette page.",
+      "forbidden": "La gestion de cet espace nécessite son rôle Responsable.",
+      "conflict": "Cette modification est refusée. Conservez au moins un responsable et le rattachement parent requis par les rôles dans les espaces enfants. Actualisez la liste avant de réessayer.",
+      "failed": "La modification n'a pas pu être confirmée. Actualisez la liste avant de réessayer."
     }
   },
   "runtime": {

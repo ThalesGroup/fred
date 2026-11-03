@@ -149,10 +149,23 @@ queries. For ordinary users, the existing Home widgets, routes, sidebar modes an
 styles remain mounted.
 Home navigation consumes manager `/me/spaces` for team names/roles and personal
 opening, preserving the existing search/sort presentation. Organization data appears
-only in the profile. Selection opens the usual `/team/<UUID>/agents` destination.
+only in the profile. Selection opens `/team/<UUID>`, which chooses content or membership management
+from the current Weaver permissions.
 There is no synthetic Python team or permission mapping. Non-migrated service
 consumers keep their original calls, including task polling and announcements;
 service failure does not remove routes. Theme presentation uses startup configuration.
+
+## Frontend team membership management
+
+`TeamLandingPage` resolves Read and Manage separately; an owner without content
+access reaches `TeamSettingsPage` at `/team/:teamId/settings/members`.
+`TeamContentNavbar` uses the same Weaver decisions for the settings entry and
+content navigation. The page reuses `PageHeader`, `DataTable`, `Checkbox` and
+`Button`, with generated membership queries and existing grant/revoke mutations.
+It no longer depends on Swift bootstrap, charter or team-permission projections.
+The [membership contract and validation boundary](A8-organizations.md#owner-only-team-management)
+cover cumulative roles, directory scope, query invalidation and retained server
+constraints. This does not port the retired settings subsections.
 
 ## Frontend organization administration
 

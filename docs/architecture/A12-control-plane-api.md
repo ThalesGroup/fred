@@ -931,6 +931,8 @@ Operation `team_supervision`.
 | DELETE | [/spaces/{id}](#delete-spacesid) |  |
 | GET | [/spaces/{id}/document-uploads](#get-spacesiddocument-uploads) | The caller's upload receipts in the space, newest first, each with its latest processing attempt |
 | GET | [/spaces/{id}/entries](#get-spacesidentries) |  |
+| GET | [/spaces/{id}/member-candidates](#get-spacesidmember-candidates) |  |
+| GET | [/spaces/{id}/members](#get-spacesidmembers) |  |
 | PUT | [/spaces/{id}/roles/{role}/{user}](#put-spacesidrolesroleuser) |  |
 | DELETE | [/spaces/{id}/roles/{role}/{user}](#delete-spacesidrolesroleuser) |  |
 | GET | [/spaces/{id}/storage](#get-spacesidstorage) |  |
@@ -1015,6 +1017,30 @@ Operation `entries`.
 | `limit` | query | integer (int64) |  |  |
 
 - 200: [`Directory`](#directory)
+- 401, 403, 404, 409, 422, 503: [`ErrorBody`](#errorbody)
+
+### GET /spaces/{id}/member-candidates
+
+Operation `space_member_candidates`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | yes |  |
+| `after` | query | string |  |  |
+
+- 200: [`SpaceMembers`](#spacemembers)
+- 401, 403, 404, 409, 422, 503: [`ErrorBody`](#errorbody)
+
+### GET /spaces/{id}/members
+
+Operation `space_members`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | yes |  |
+| `after` | query | string |  |  |
+
+- 200: [`SpaceMembers`](#spacemembers)
 - 401, 403, 404, 409, 422, 503: [`ErrorBody`](#errorbody)
 
 ### PUT /spaces/{id}/roles/{role}/{user}
@@ -2806,6 +2832,20 @@ A space with its immutable placement and derived search path.
 ### SpaceKind
 
 One of: `organization`, `team`, `project`, `personal`.
+
+### SpaceMember
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `roles` | array of [`Role`](#role) | yes | Roles on the managed space, also for candidates from its parent. |
+| `user` | [`UserSummary`](#usersummary) | yes |  |
+
+### SpaceMembers
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | array of [`SpaceMember`](#spacemember) | yes |  |
+| `next_cursor` | string or null | yes |  |
 
 ### SpacePermission
 

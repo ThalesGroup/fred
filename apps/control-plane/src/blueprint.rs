@@ -660,6 +660,36 @@ mod tests {
         }
         assert!(Bundle::parse(b"not a zip").is_err());
     }
+    #[test]
+    fn nova_fixture_satisfies_parent_content_membership() {
+        let files = FILES
+            .into_iter()
+            .map(|name| {
+                let bytes = std::fs::read(format!(
+                    "tests/fixtures/import_export/nova_migration/{name}"
+                ))
+                .unwrap();
+                (name.to_owned(), bytes)
+            })
+            .collect();
+        let bundle = Bundle::parse(&pack(&files, zip::CompressionMethod::Deflated)).unwrap();
+        for child in &bundle.spaces {
+            let Some(parent) = child.parent else {
+                continue;
+            };
+            for (username, roles) in &child.roles {
+                if !roles.is_empty() {
+                    assert!(
+                        bundle.spaces[parent].roles[username]
+                            .iter()
+                            .any(|role| role.grants_content()),
+                        "{username} needs a direct parent content role, even when an owner"
+                    );
+                }
+            }
+        }
+    }
+
     // Offline packaging regression for the checked-in demo, not arbitrary bundles.
     // Keep roster assertions aligned with tests/fixtures/import_export/demo_provisioning/README.md.
     #[test]
@@ -678,7 +708,7 @@ mod tests {
         std::fs::create_dir_all(output.parent().unwrap()).unwrap();
         std::fs::write(&output, b"old invalid content").unwrap();
         let status = std::process::Command::new("make")
-            .arg("build-demo-bundle")
+            .arg("bundle-demo")
             .env("DEMO_PROVISIONING_FIXTURE_DIR", &source)
             .env("DEMO_BUNDLE_FILE", &output)
             .status()
@@ -705,7 +735,7 @@ mod tests {
         std::fs::remove_file(source.join("projects.json")).unwrap();
         let before = std::fs::read(&output).unwrap();
         let failed = std::process::Command::new("make")
-            .arg("build-demo-bundle")
+            .arg("bundle-demo")
             .env("DEMO_PROVISIONING_FIXTURE_DIR", &source)
             .env("DEMO_BUNDLE_FILE", &output)
             .output()

@@ -98,7 +98,7 @@ bootstrap token, then accept the terms of use ([journey](../../docs/architecture
 owner in **Provisioning**:
 
 ```sh
-make -C apps/control-plane build-demo-bundle   # -> apps/control-plane/target/demo-provisioning-bundle.zip
+make bundle-demo   # -> apps/control-plane/target/demo-provisioning-bundle.zip
 ```
 
 It creates Acme (team Research) and Globex (team Support) with the thirteen

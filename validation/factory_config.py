@@ -17,7 +17,7 @@
 Source of truth for the validation suite: parses
 ../apps/control-plane/tests/fixtures/import_export/demo_provisioning/users.json
 (the same checked-in fixture used to build the demo-provisioning bundle uploaded via
-Admin > Migration - see apps/control-plane/Makefile's `build-demo-bundle`)
+Admin > Migration - see apps/control-plane/Makefile's `bundle-demo`)
 into a typed user/role/team matrix, plus the env-configurable endpoints. Imported by
 both conftest.py and the tests so there is no fragile `import conftest`.
 """
@@ -53,7 +53,7 @@ KF_URL = os.getenv("FRED_KNOWLEDGE_FLOW_URL", "http://localhost:8111/knowledge-f
 # Same-repo sibling now that validation/ lives inside `fred` itself - no more
 # cross-repo env-var indirection needed for this file. This is the single source
 # of truth for the 15 demo users, checked into git and also used to build the
-# `make build-demo-bundle` zip uploaded via Admin > Migration (see
+# `make bundle-demo` zip uploaded via Admin > Migration (see
 # apps/control-plane/Makefile and PLATFORM-IMPORT-RFC.md Part A).
 CONFIG_PATH = Path(
     os.getenv(

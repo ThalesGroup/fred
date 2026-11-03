@@ -1,0 +1,15 @@
+[
+  {
+    "ref": "nova",
+    "name": "Nova",
+    "roles": {
+      "nova.admin": [
+        "organization_admin"
+      ],
+      "nova.responsable": [
+        "owner",
+        "member"
+      ]
+    }
+  }
+]

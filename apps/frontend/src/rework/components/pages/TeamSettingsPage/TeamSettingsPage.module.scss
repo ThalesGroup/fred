@@ -22,3 +22,10 @@
   min-height: 0;
   overflow: auto;
 }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+  margin-block: var(--spacing-m);
+}

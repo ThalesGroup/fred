@@ -1,97 +1,158 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
+import { useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
-import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
-import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
-import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx";
-import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
-import TeamSettingsRouting from "@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx";
-import WeaverFeaturePage from "@rework/features/weaver/WeaverFeaturePage";
-import TeamSettingsResponsibilities from "@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx";
-import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
-import { isPersonalTeamId } from "@shared/utils/teamId.ts";
+import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button";
+import Checkbox from "@shared/atoms/Checkbox/Checkbox";
+import PageHeader from "@shared/molecules/PageHeader/PageHeader";
+import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
+import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
+import {
+  useMySpacesQuery,
+  useSpaceMembersQuery,
+  useSpaceMemberCandidatesQuery,
+  useGrantMutation,
+  useRevokeMutation,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { Role, SpaceMember } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./TeamSettingsPage.module.scss";
 
-/**
- * Team settings, rendered in the main content area instead of a full-page
- * modal. The two-sidebar shell stays mounted: `TeamContentNavbar` keeps the
- * coloured team banner and swaps its menu to the settings sections, and the
- * left team rail is dimmed by `Sidebar`. This page only renders the section
- * body for the `:section` route param.
- */
+const ROLES: Role[] = ["owner", "member", "editor", "analyst"];
+const userLabel = ({ user }: SpaceMember) => {
+  const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
+  return name ? `${name} (${user.username ?? user.id})` : (user.username ?? user.id);
+};
+
+/** Governance only: existing Weaver grants/revocations, never implicit content access. */
 export default function TeamSettingsPage() {
-  const { section } = useParams<{ section: string }>();
-  const { teamId, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
-  const { bootstrap, isLoading: bootstrapLoading } = useFrontendBootstrap();
-  const charterEnabled = bootstrap?.team_admin_charter_enabled === true;
-  const capabilities = useTeamCapabilities(selectedTeam);
-  const { canUpdateInfo } = capabilities;
-  // The relations themselves: no permission belongs to team_admin alone.
-  const myRelations = selectedTeam && "my_relations" in selectedTeam ? (selectedTeam.my_relations ?? []) : [];
-  const isTeamAdmin = myRelations.includes("team_admin");
-  const isPendingTeamAdmin = myRelations.includes("pending_team_admin");
+  const { teamId, section } = useParams();
+  if (!teamId) return null;
+  if (section !== "members") return <Navigate to={`/team/${teamId}/settings/members`} replace />;
+  return <TeamMembers key={teamId} spaceId={teamId} />;
+}
 
-  // Permissions arrive with the per-team fetch. While they are still loading
-  // `selectedTeam` is either undefined or a permission-less bootstrap summary —
-  // render nothing (the banner/chrome are already visible) rather than bounce
-  // the user out before we actually know they lack access.
-  const permissionsLoaded = !!selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions);
-  if (!selectedTeam || !permissionsLoaded || (section === "responsibilities" && bootstrapLoading)) return null;
-
-  // Permissions are loaded and the user isn't even a team member: settings is
-  // not for them. Guards direct navigation / refresh on a settings URL.
-  if (!canOpenTeamSettings) return <Navigate to={`/team/${teamId}/agents`} replace />;
-
-  // AUTHZ-09: the outer gate above only proves membership — every non-"members"
-  // section still needs its own capability check, since a plain member reaching
-  // this page (by design, for "Members" + "Leave team") must not also reach
-  // sections the sidebar hides for them via a direct/refreshed URL.
-  const sectionAllowed =
-    section === "members" ||
-    (section === "responsibilities" && charterEnabled && (isTeamAdmin || isPendingTeamAdmin)) ||
-    ((section === "parameters" || section === "retention") && canUpdateInfo) ||
-    ((section === "activity" || section === "routing") && hasElevatedTeamRole(capabilities));
-  if (section && !sectionAllowed) return <Navigate to={`/team/${teamId}/settings/members`} replace />;
-
-  const renderSection = () => {
-    switch (section) {
-      case "members":
-        return <TeamSettingsMembers team={selectedTeam} />;
-      case "parameters":
-        return <TeamSettingsParameters team={selectedTeam} />;
-      case "retention":
-        // Retention now lives inside the Parameters section (no dedicated tab).
-        // Redirect any old /settings/retention link there.
-        return <Navigate to={`/team/${teamId}/settings/parameters`} replace />;
-      case "activity":
-        // The exact same shared surface the platform admin sees (OPS-04 §3.4),
-        // scoped to this team. Server enforces CAN_READ_MEMBERS.
-        return <WeaverFeaturePage feature="tasks" />;
-      case "routing":
-        // Team admins write the team's models; a personal space's owner holds
-        // no team_admin relation but owns the space.
-        return (
-          <TeamSettingsRouting team={selectedTeam} canWrite={canUpdateInfo || isPersonalTeamId(selectedTeam.id)} />
-        );
-      case "responsibilities":
-        return <TeamSettingsResponsibilities canAccept={isPendingTeamAdmin} />;
-      default:
-        return <Navigate to={`/team/${teamId}/settings/members`} replace />;
+function TeamMembers({ spaceId }: { spaceId: string }) {
+  const { t } = useTranslation();
+  const access = useSpaceAccess(spaceId, "manage");
+  const memberships = useMySpacesQuery();
+  const space = memberships.currentData?.find((item) => item.id === spaceId);
+  const [candidates, setCandidates] = useState(false);
+  const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
+  const after = cursors[cursors.length - 1];
+  const roster = useSpaceMembersQuery(
+    { id: spaceId, after },
+    { skip: !access.allowed || candidates, refetchOnMountOrArgChange: true },
+  );
+  const eligible = useSpaceMemberCandidatesQuery(
+    { id: spaceId, after },
+    { skip: !access.allowed || !candidates, refetchOnMountOrArgChange: true },
+  );
+  const query = candidates ? eligible : roster;
+  const [grant, granting] = useGrantMutation();
+  const [revoke, revoking] = useRevokeMutation();
+  const [error, setError] = useState<string>();
+  const busy = granting.isLoading || revoking.isLoading;
+  const page = access.allowed && !query.isFetching && !query.isError ? query.currentData : undefined;
+  const changeRole = async (member: SpaceMember, role: Role, checked: boolean) => {
+    if (!access.allowed || busy) return;
+    setError(undefined);
+    try {
+      const args = { id: spaceId, user: member.user.id, role };
+      await (checked ? grant(args) : revoke(args)).unwrap();
+    } catch (failure) {
+      const { status } = normalizeApiError(failure);
+      setError(status === 409 ? "conflict" : status === 403 ? "forbidden" : "failed");
     }
   };
-
-  return <div className={styles.teamSettingsPage}>{renderSection()}</div>;
+  return (
+    <div className={styles.teamSettingsPage}>
+      <PageHeader title={t("rework.spaceMembers.title", { name: space?.name ?? "" })} />
+      <p>{t("rework.spaceMembers.separation")}</p>
+      {error && <p role="alert">{t(`rework.spaceMembers.${error}`)}</p>}
+      {access.error ? (
+        <p role="alert">{t("rework.manager.unavailable")}</p>
+      ) : !access.settled ? (
+        <p role="status">{t("common.loading")}</p>
+      ) : !access.allowed ? (
+        <p role="alert">{t("rework.spaceMembers.forbidden")}</p>
+      ) : (
+        <>
+          <div className={styles.actions}>
+            <Button
+              color="primary"
+              variant="outlined"
+              size="small"
+              disabled={busy}
+              onClick={() => {
+                setCandidates(!candidates);
+                setCursors([undefined]);
+                setError(undefined);
+              }}
+            >
+              {t(candidates ? "rework.spaceMembers.roster" : "rework.spaceMembers.candidates")}
+            </Button>
+            <Button
+              color="primary"
+              variant="outlined"
+              size="small"
+              disabled={busy || query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              {t("rework.spaceMembers.refresh")}
+            </Button>
+          </div>
+          {candidates && <p>{t("rework.spaceMembers.eligibility")}</p>}
+          {query.isError ? (
+            <p role="alert">{t("rework.manager.unavailable")}</p>
+          ) : !page ? (
+            <p role="status">{t("common.loading")}</p>
+          ) : (
+            <DataTable
+              data={page.items}
+              columns={[
+                { label: t("rework.spaceMembers.person"), cellRenderer: (member) => <span>{userLabel(member)}</span> },
+                ...ROLES.map((role) => ({
+                  label: t(`rework.manager.roles.${role}`),
+                  cellRenderer: (member: SpaceMember) => (
+                    <Checkbox
+                      checked={member.roles.includes(role)}
+                      disabled={busy || !access.allowed}
+                      aria-label={`${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`}
+                      onChange={(event) => void changeRole(member, role, event.target.checked)}
+                    />
+                  ),
+                })),
+              ]}
+            />
+          )}
+          {page?.items.length === 0 && <p>{t("rework.spaceMembers.empty")}</p>}
+          <div className={styles.actions}>
+            <Button
+              color="primary"
+              variant="outlined"
+              size="small"
+              disabled={busy || !page || cursors.length < 2}
+              onClick={() => setCursors((values) => values.slice(0, -1))}
+            >
+              {t("dataTable.pagination.prev")}
+            </Button>
+            <Button
+              color="primary"
+              variant="outlined"
+              size="small"
+              disabled={busy || !page?.next_cursor}
+              onClick={() => {
+                if (page?.next_cursor) setCursors((values) => [...values, page.next_cursor!]);
+              }}
+            >
+              {t("dataTable.pagination.next")}
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }

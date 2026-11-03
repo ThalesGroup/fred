@@ -18,6 +18,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
+  canManage: false,
+  canRead: true,
+  memberships: [] as { id: string; kind: string; name: string; roles: string[] }[],
   isPersonalTeam: false,
   pathname: "/team/team-1/resources",
   relations: ["team_member"] as string[],
@@ -47,7 +50,11 @@ const h = vi.hoisted(() => ({
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePromptPublicationTeamsQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
-  useMySpacesQuery: () => ({ currentData: [], isError: false }),
+  useMySpacesQuery: () => ({ currentData: h.memberships, isError: false }),
+}));
+
+vi.mock("@core/hooks/useSpaceAccess", () => ({
+  useSpaceAccess: (_id: string, permission: string) => ({ allowed: permission === "manage" ? h.canManage : h.canRead }),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -331,4 +338,43 @@ it("skips legacy sidebar reads and shows the Weaver chat list on agent managemen
   expect(h.knowledgeBasesQuery).not.toHaveBeenCalled();
   expect(html).toContain("data-chat-list");
   expect(html).not.toContain("rework.weaverAgents.chatUnavailable");
+});
+
+// The owner-only Nova exercise must render the same role as the Home team list.
+it.each([["owner"], ["editor", "owner"]])("shows Weaver roles without falling back to member: %j", (...roles) => {
+  h.pathname = "/team/team-1/agents";
+  h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles }];
+  try {
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain("rework.teamRoles.team_owner");
+    expect(html).not.toContain("rework.teamRoles.team_member");
+    if (roles.includes("editor")) {
+      expect(html).toContain("rework.teamRoles.team_owner · rework.teamRoles.team_editor");
+    }
+  } finally {
+    h.memberships = [];
+  }
+});
+
+it("gives an owner the Weaver settings entry without reading content or conversations", () => {
+  h.canManage = true;
+  h.canRead = false;
+  h.pathname = "/team/team-1/agents";
+  h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles: ["owner"] }];
+  try {
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain("rework.teamSettings.navigation.settings");
+    expect(html).toContain("rework.teamRoles.team_owner");
+    expect(html).not.toContain("data-chat-list");
+    expect(html).not.toContain('href="/team/team-1/agents"');
+    h.pathname = "/team/team-1/settings/members";
+    const settings = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(settings).toContain('href="/team/team-1/settings/members"');
+    expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
+    expect(h.bootstrap).toHaveBeenLastCalledWith(true);
+  } finally {
+    h.memberships = [];
+    h.canManage = false;
+    h.canRead = true;
+  }
 });

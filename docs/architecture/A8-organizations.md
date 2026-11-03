@@ -122,6 +122,48 @@ selectors use the same strict distinction; selecting both requires both kinds.
 Folders classify only and carry no rights. Document metadata inherits its owning
 space's authority; read and scope probes use immutable space identifiers.
 
+
+### Owner-only team management
+
+The Nova exercise uses `owner` + `member` on Nova and only `owner` on Pilote.
+Management and content reads are separate Control Plane decisions. The UI's neutral
+`/team/:teamId` entry opens agents when `read` is allowed, otherwise the membership
+page when `manage` is allowed. The team sidebar exposes settings through the same
+`manage` decision and does not mount the conversation list without current `read`.
+Direct URLs remain subject to the page and API checks.
+
+`TeamSettingsPage` now uses Weaver's generated client for membership management,
+replacing its legacy Swift capability/charter gate. Its first integrated scope is
+listing members, listing eligible parent members, and adding/removing individual
+roles. Checkboxes are independent and apply immediately; no role is synthesized
+on entry or after granting owner. Renaming, project creation, invitations, retention
+and model routing are not added to this membership screen. Former settings
+subsection URLs resolve to the membership page rather than legacy Swift controls.
+
+| API (prefix `/control-plane/v1`) | Contract |
+| --- | --- |
+| `GET /spaces/{id}/members` | Direct holders and roles on a team/project, after current `Manage`; 50 people per page with an exclusive subject cursor. |
+| `GET /spaces/{id}/member-candidates` | Same authority; candidates hold a direct content role on the managed space's parent. Returned roles are on the managed space, not the parent. No global SSO directory search. |
+| `PUT` / `DELETE /spaces/{id}/roles/{role}/{user}` | Existing grant/revoke authority and transactions. Parent eligibility, known identity, last-owner protection and dependent-child safeguards remain enforced. |
+
+[space_members.rs](../../apps/control-plane/src/space_members.rs) reads grants and
+candidate eligibility in a read-only repeatable-read transaction. It releases SQL
+before bounded directory enrichment (15 seconds), then rechecks current Manage and
+lifecycle before returning. Display profiles confer no authority. There is no new
+table, migration, identity provisioning or change to the permission matrix.
+[spaces.rs](../../apps/control-plane/src/spaces.rs) remains the mutation owner.
+The generated-client cache invalidates rosters, memberships and access decisions
+after grant/revoke attempts, including refusals; cached permission alone cannot
+enable a mutation while authorization is being rechecked.
+
+The focused `owner_only_team_membership_governance` PostgreSQL integration test
+covers owner-only access, rejected member/parent-owner/platform-admin access,
+parent candidates, cumulative grants, last-owner protection, lost management and
+pagination. Frontend tests cover landing, role controls, refusals and sidebar
+content-query isolation. These checks are not deployed browser validation; the Nova
+operator exercise must be repeated after rebuilding Control Plane and frontend.
+
+
 ## Organization supervision
 
 Supervision is a stateless read module inside Control Plane, exposed by two GET

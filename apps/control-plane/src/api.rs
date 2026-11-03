@@ -1148,6 +1148,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::prompts::http::routes())
         .merge(crate::sessions::routes())
         .merge(crate::supervision::routes())
+        .merge(crate::space_members::routes())
         .routes(routes!(create_space))
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Package the five demo files atomically; never retain entries from an old ZIP."""
-import os
+"""Package a provisioning fixture atomically; never retain old ZIP entries."""
+import argparse
 from pathlib import Path
 import tempfile
 import zipfile
 
-source = Path(os.environ["DEMO_PROVISIONING_FIXTURE_DIR"])
-target = Path(os.environ["DEMO_BUNDLE_FILE"])
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("source", type=Path)
+parser.add_argument("target", type=Path)
+args = parser.parse_args()
+source, target = args.source, args.target
 target.parent.mkdir(parents=True, exist_ok=True)
 with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as temporary:
     staging = Path(temporary.name)
@@ -17,3 +20,4 @@ try:
     staging.replace(target)
 finally:
     staging.unlink(missing_ok=True)
+print(target.resolve())

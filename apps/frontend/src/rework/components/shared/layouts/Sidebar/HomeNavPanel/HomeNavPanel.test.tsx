@@ -200,7 +200,7 @@ it("keeps the team list and ordinary agents destination without an organization 
   expect(node.textContent).toContain("fredlab");
   expect(node.textContent).toContain("rework.home.yourTeams");
   expect(node.textContent).not.toContain("Demo");
-  expect(node.querySelector('a[href="/team/fredlab/agents"]')).not.toBeNull();
+  expect(node.querySelector('a[href="/team/fredlab"]')).not.toBeNull();
   expect(node.textContent).toContain("rework.teamRoles.team_editor");
   expect(node.textContent).not.toContain("rework.manager.hierarchy");
 });

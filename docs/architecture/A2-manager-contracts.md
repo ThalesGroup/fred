@@ -3,6 +3,9 @@
 Exact source-derived references for the organization/team/project implementation.
 Read [Security](03-security.md) and [Organizations](04-organizations.md) for meaning.
 
+Team/project membership reads and candidate eligibility are described in the
+[owner-only management contract](A8-organizations.md#owner-only-team-management).
+
 ## control-plane HTTP surface
 
 Health and frontend configuration are public. Other routes require a bearer token

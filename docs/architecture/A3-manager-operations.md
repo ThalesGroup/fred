@@ -356,7 +356,7 @@ reference through the dossier generator.
 ## Running provisioning
 
 Initialize SQL with the schema-init Job or `control-plane initialize-schema`, then start
-the service. Accept CGU and complete root bootstrap in the UI. CLI import itself
+the service. Complete root bootstrap, then accept CGU in the UI. CLI import itself
 never migrates SQL. It needs PostgreSQL and Keycloak; it does not need the HTTP
 server or Temporal to remain running.
 
@@ -364,21 +364,28 @@ From `apps/control-plane`, with the directory client configured and an operator 
 token in a private file:
 
 ```sh
-make build-demo-bundle
+make bundle-demo
 make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/path/to/operator-token
 ```
 
-`build-demo-bundle` packages the five checked-in JSON files with Python's standard
+`bundle-demo` packages the five checked-in JSON files with Python's standard
 ZIP library and atomically replaces its output. `DEMO_PROVISIONING_FIXTURE_DIR`
 and `DEMO_BUNDLE_FILE` override source/output paths, including paths with spaces;
 no running service is needed. The bundle's current account roster is maintained
 in the [component README](../../apps/control-plane/README.md#import-a-provisioning-bundle).
-The ZIP provisions Acme/Research and
-Globex/Support, with no projects, platform grants or personal spaces. Usernames
-are the lowercase, unaccented first names; the demo password is
-`Azerty123_`. The `admin` account is created and bootstrapped separately and is
-absent from the bundle. The manifest retains `source_platform: "swift"`, the value
-required by the current version-2 import format.
+The demo fixture also includes the Atlas project and the privileged `boss` account;
+its full roster is described in the
+[fixture README](../../apps/control-plane/tests/fixtures/import_export/demo_provisioning/README.md).
+The `admin` account is bootstrapped separately and is absent from the bundle.
+The manifest retains `source_platform: "swift"`, the value required by the current
+version-2 import format.
+
+For an isolated coexistence exercise, `make bundle-migration` packages the separate
+[Nova fixture](../../apps/control-plane/tests/fixtures/import_export/nova_migration/README.md)
+through the same atomic ZIP builder. It declares two accounts, one organization,
+one team and no project or platform grant. This is synthetic provisioning input,
+not a Swift data migration; shared-SSO precautions and the manual validation steps
+are kept with the fixture.
 
 HTTP clients submit the same ZIP as multipart `file` to
 `/control-plane/v1/import-export/import` on the running server. Replay is additive:

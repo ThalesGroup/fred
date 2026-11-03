@@ -1,168 +1,129 @@
 // @vitest-environment happy-dom
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
+// SPDX-License-Identifier: Apache-2.0
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var IS_REACT_ACT_ENVIRONMENT: boolean;
-}
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
 const h = vi.hoisted(() => ({
+  manage: true,
+  read: false,
+  settled: true,
   section: "members",
-  relations: [] as string[],
-  charterEnabled: true,
-  bootstrapLoading: false,
-  teamId: "team-1",
-  canUpdateInfo: false,
-  elevated: false,
+  grant: vi.fn(),
+  revoke: vi.fn(),
+  roster: vi.fn(),
+  candidates: vi.fn(),
 }));
-
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({
-  useParams: () => ({ section: h.section }),
-  Navigate: ({ to }: { to: string }) => `navigate:${to}`,
+  useParams: () => ({ teamId: "pilote", section: h.section }),
+  Navigate: ({ to }: { to: string }) => <p>{`navigate:${to}`}</p>,
 }));
-
-vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
-  useFrontendBootstrap: () => ({
-    bootstrap: h.bootstrapLoading ? undefined : { team_admin_charter_enabled: h.charterEnabled },
-    isLoading: h.bootstrapLoading,
+vi.mock("@core/hooks/useSpaceAccess", () => ({
+  useSpaceAccess: (_id: string, permission: string) => ({
+    allowed: permission === "manage" ? h.manage : h.read,
+    settled: h.settled,
   }),
 }));
-
-vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
-  useSelectedTeam: () => ({
-    teamId: h.teamId,
-    selectedTeam: { id: h.teamId, permissions: [], my_relations: h.relations },
-    canOpenTeamSettings: true,
-  }),
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useMySpacesQuery: () => ({ currentData: [{ id: "pilote", name: "Pilote", roles: ["owner"] }] }),
+  useSpaceMembersQuery: (...args: unknown[]) => {
+    h.roster(...args);
+    return {
+      currentData: {
+        items: [
+          { user: { id: "nova", username: "nova.responsable" }, roles: ["owner"] },
+          { user: { id: "bob", username: "bob" }, roles: ["member", "editor"] },
+        ],
+        next_cursor: null,
+      },
+      refetch: vi.fn(),
+    };
+  },
+  useSpaceMemberCandidatesQuery: (...args: unknown[]) => {
+    h.candidates(...args);
+    return { currentData: { items: [], next_cursor: null }, refetch: vi.fn() };
+  },
+  useGrantMutation: () => [h.grant, { isLoading: false }],
+  useRevokeMutation: () => [h.revoke, { isLoading: false }],
 }));
-
-vi.mock("@hooks/useTeamCapabilities.ts", () => ({
-  useTeamCapabilities: () => ({ canUpdateInfo: h.canUpdateInfo, canUpdateAgents: true, canUpdateResources: false }),
-}));
-
-vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => h.elevated }));
-
-vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx", () => ({
-  default: () => "members-section",
-}));
-vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx", () => ({
-  default: () => "parameters-section",
-}));
-vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx", () => ({
-  default: ({ canWrite }: { canWrite: boolean }) => `routing-section:${canWrite}`,
-}));
-vi.mock("@rework/features/weaver/WeaverFeaturePage", () => ({ default: () => "activity-section" }));
-vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx", () => ({
-  default: ({ canAccept }: { canAccept: boolean }) => `responsibilities-section:${canAccept}`,
-}));
-
-import TeamSettingsPage from "./TeamSettingsPage.tsx";
-
+import TeamSettingsPage from "./TeamSettingsPage";
+import TeamLandingPage from "./TeamLandingPage";
 let container: HTMLDivElement;
 let root: Root;
-
-function render(section: string, relations: string[]) {
-  h.section = section;
-  h.relations = relations;
+beforeEach(() => {
+  h.manage = true;
+  h.read = false;
+  h.settled = true;
+  h.section = "members";
+  vi.clearAllMocks();
+  h.grant.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.revoke.mockReturnValue({ unwrap: () => Promise.resolve() });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => {
-    root.render(<TeamSettingsPage />);
-  });
-}
-
-afterEach(() => {
-  act(() => {
-    root.unmount();
-  });
+});
+afterEach(async () => {
+  await act(async () => root.unmount());
   container.remove();
-  h.charterEnabled = true;
-  h.bootstrapLoading = false;
-  h.teamId = "team-1";
-  h.canUpdateInfo = false;
-  h.elevated = false;
 });
+const render = async (landing = false) => {
+  await act(async () => root.render(landing ? <TeamLandingPage /> : <TeamSettingsPage />));
+};
+const checkbox = (username: string, role: string) =>
+  container.querySelector<HTMLInputElement>(`input[aria-label="${username}: rework.manager.roles.${role}"]`)!;
 
-describe("TeamSettingsPage responsibilities", () => {
-  it("shows the Responsibilities section to a team admin", () => {
-    render("responsibilities", ["team_admin"]);
-
-    expect(container.textContent).toBe("responsibilities-section:false");
-  });
-
-  it("lets a pending admin accept the charter from the Responsibilities section", () => {
-    render("responsibilities", ["pending_team_admin", "team_editor"]);
-
-    expect(container.textContent).toBe("responsibilities-section:true");
-  });
-
-  it("redirects an admin when the charter is disabled", () => {
-    h.charterEnabled = false;
-    render("responsibilities", ["team_admin"]);
-
-    expect(container.textContent).toBe("navigate:/team/team-1/settings/members");
-  });
-
-  it("waits for bootstrap before resolving a direct Responsibilities URL", () => {
-    h.bootstrapLoading = true;
-    render("responsibilities", ["team_admin"]);
-
-    expect(container.textContent).toBe("");
-  });
-
-  it("redirects a plain member away from the Responsibilities section", () => {
-    render("responsibilities", ["team_member"]);
-
-    expect(container.textContent).toBe("navigate:/team/team-1/settings/members");
-  });
+it("opens management for an owner without content access and grants nothing automatically", async () => {
+  await render(true);
+  expect(container.textContent).toContain("navigate:/team/pilote/settings/members");
+  await render();
+  expect(checkbox("nova.responsable", "owner").checked).toBe(true);
+  expect(checkbox("nova.responsable", "member").checked).toBe(false);
+  expect(checkbox("nova.responsable", "editor").checked).toBe(false);
+  expect(checkbox("bob", "member").checked).toBe(true);
+  expect(checkbox("bob", "editor").checked).toBe(true);
+  expect(h.grant).not.toHaveBeenCalled();
+  expect(h.revoke).not.toHaveBeenCalled();
+  await act(async () => checkbox("bob", "analyst").click());
+  expect(h.grant).toHaveBeenCalledWith({ id: "pilote", user: "bob", role: "analyst" });
 });
-
-// The old entry was visible to agent editors. It must no longer render even
-// when that capability is granted.
-describe("retired evaluation settings", () => {
-  it("redirects an old evaluation settings URL to Members", () => {
-    render("evaluations", ["team_editor"]);
-    expect(container.textContent).toBe("navigate:/team/team-1/settings/members");
-  });
+it("keeps cumulative roles and reports a refused last-owner removal", async () => {
+  h.revoke.mockReturnValue({ unwrap: () => Promise.reject({ status: 409 }) });
+  await render();
+  await act(async () => checkbox("nova.responsable", "owner").click());
+  expect(h.revoke).toHaveBeenCalledWith({ id: "pilote", user: "nova", role: "owner" });
+  expect(container.textContent).toContain("rework.spaceMembers.conflict");
+  expect(checkbox("nova.responsable", "owner").checked).toBe(true);
 });
-
-// Team admins write the team's models; editors and analysts only read them.
-describe("Models section write access", () => {
-  it("lets a team admin edit", () => {
-    h.elevated = true;
-    h.canUpdateInfo = true;
-    render("routing", ["team_admin"]);
-    expect(container.textContent).toBe("routing-section:true");
-  });
-
-  it("keeps a team editor or analyst read-only", () => {
-    h.elevated = true;
-    render("routing", ["team_editor", "team_analyst"]);
-    expect(container.textContent).toBe("routing-section:false");
-  });
-
-  it("lets a personal space's owner edit", () => {
-    h.elevated = true;
-    h.teamId = "personal-user-1";
-    render("routing", ["team_editor"]);
-    expect(container.textContent).toBe("routing-section:true");
-  });
+it("blocks direct access and stops roster reads when management is revoked", async () => {
+  await render();
+  h.manage = false;
+  await render();
+  expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(container.textContent).toContain("rework.spaceMembers.forbidden");
+  expect(h.roster).toHaveBeenLastCalledWith(
+    { id: "pilote", after: undefined },
+    expect.objectContaining({ skip: true }),
+  );
+});
+it("waits for current authorization and sends content users to agents", async () => {
+  h.settled = false;
+  await render(true);
+  expect(container.textContent).not.toContain("navigate:");
+  h.settled = true;
+  h.read = true;
+  await render(true);
+  expect(container.textContent).toContain("navigate:/team/pilote/agents");
+});
+it("loads eligible parent users only on explicit request", async () => {
+  await render();
+  expect(h.candidates).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: true }));
+  const button = Array.from(container.querySelectorAll("button")).find((b) =>
+    b.textContent?.includes("rework.spaceMembers.candidates"),
+  )!;
+  await act(async () => button.click());
+  expect(h.candidates).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: false }));
+  expect(h.grant).not.toHaveBeenCalled();
 });

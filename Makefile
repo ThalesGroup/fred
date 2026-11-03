@@ -6,6 +6,16 @@ ENV_APPS := apps/control-plane apps/fred-agents apps/knowledge-flow-backend apps
 
 .DEFAULT_GOAL := help
 
+##@ Provisioning
+
+.PHONY: bundle-demo
+bundle-demo: ## Generate the Acme/Globex demo bundle offline, without importing it
+	$(MAKE) -C apps/control-plane bundle-demo
+
+.PHONY: bundle-migration
+bundle-migration: ## Generate the Nova coexistence bundle offline, without importing it
+	$(MAKE) -C apps/control-plane bundle-migration
+
 ##@ Code quality
 
 .PHONY: update-uv-locks

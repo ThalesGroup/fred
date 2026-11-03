@@ -203,7 +203,7 @@ export default function HomeNavPanel() {
           {sortedTeams.map((team) => (
             <TeamSelectionListItem
               key={team.id}
-              redirection={`/team/${team.id}/agents`}
+              redirection={`/team/${team.id}`}
               name={team.name}
               roles={team.roles}
               imgUrl={defaultTeamAvatarFile ? `/images/${defaultTeamAvatarFile}` : undefined}

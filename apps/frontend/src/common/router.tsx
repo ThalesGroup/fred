@@ -37,6 +37,7 @@ import PptFillerHelpPage from "@components/pages/PptFillerHelpPage/PptFillerHelp
 import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
+import TeamLandingPage from "@components/pages/TeamSettingsPage/TeamLandingPage";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
@@ -232,10 +233,9 @@ const applicationRoutes: RouteObject[] = [
         element: <TeamSettingsPage />,
       },
       {
-        // Bare /team/:teamId lands on the agents page; the legacy KnowledgePage
-        // (old team document library) was superseded by the Resources/Files page.
+        // Resolve content and governance independently through Weaver authorization.
         path: "team/:teamId",
-        element: <Navigate to="agents" replace />,
+        element: <TeamLandingPage />,
       },
       {
         path: "marketplace/teams",

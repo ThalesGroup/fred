@@ -1,6 +1,6 @@
 # Demo provisioning fixture and dependent tests
 
-These five JSON files are the checked-in demo input to `make build-demo-bundle`.
+These five JSON files are the checked-in demo input to `make bundle-demo`.
 The generated ZIP is also used by specific regression tests. Their fixed user,
 space and request counts describe this fixture, not limits of the importer.
 Other bundles are supported when they follow the provisioning contract.

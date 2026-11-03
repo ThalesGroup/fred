@@ -45,9 +45,15 @@ import-provisioning: dev ## Import a bundle as platform owner (BUNDLE=<zip path>
 DEMO_PROVISIONING_FIXTURE_DIR ?= tests/fixtures/import_export/demo_provisioning
 DEMO_BUNDLE_FILE ?= target/demo-provisioning-bundle.zip
 export DEMO_PROVISIONING_FIXTURE_DIR DEMO_BUNDLE_FILE
-.PHONY: build-demo-bundle
-build-demo-bundle: ## Build the Acme/Globex demo provisioning ZIP without running services
-	python3 tools/build_demo_bundle.py
+.PHONY: bundle-demo
+bundle-demo: ## Build the Acme/Globex demo provisioning ZIP without running services
+	python3 tools/build_provisioning_bundle.py "$$DEMO_PROVISIONING_FIXTURE_DIR" "$$DEMO_BUNDLE_FILE"
+
+MIGRATION_BUNDLE_FILE ?= target/nova-migration-bundle.zip
+export MIGRATION_BUNDLE_FILE
+.PHONY: bundle-migration
+bundle-migration: ## Build only the Nova coexistence provisioning ZIP; no services or import
+	python3 tools/build_provisioning_bundle.py tests/fixtures/import_export/nova_migration "$$MIGRATION_BUNDLE_FILE"
 
 .PHONY: test-browser
 test-browser: ## Run the real provisioning browser journey and integration regressions (frontend dependencies and Chromium required)

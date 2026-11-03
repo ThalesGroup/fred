@@ -4916,6 +4916,19 @@
       "metricsUnavailable": "Published prompts are available. Usage ranking, counters and charts are not yet available.",
       "usageUnavailable": "Usage unavailable",
       "libraries": "Prompt libraries you can publish from"
+    },
+    "spaceMembers": {
+      "title": "Manage {{name}}",
+      "separation": "Responsibility and content access are separate. Roles can be combined explicitly; changing an organization role does not grant access to its teams. Each checkbox immediately adds or removes one role.",
+      "roster": "Current members",
+      "candidates": "Add people from the parent space",
+      "eligibility": "These people hold a direct content role in the parent organization or team. Select each role to grant on this space. Existing roles are shown; no role is added automatically.",
+      "person": "Person",
+      "refresh": "Refresh",
+      "empty": "No people on this page.",
+      "forbidden": "Managing this space requires its Owner role.",
+      "conflict": "This change is not allowed. Keep at least one owner and preserve the parent membership required by roles in child spaces. Refresh the list before retrying.",
+      "failed": "The change could not be confirmed. Refresh the list before retrying."
     }
   },
   "runtime": {

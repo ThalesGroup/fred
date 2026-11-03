@@ -21,7 +21,7 @@ machinery (`fred_core.cli.auth`) — and exposes a per-user control-plane client
 The user/role/team matrix and endpoints live in `factory_config.py`.
 
 Team/role (and identity) provisioning is NOT done here: it is owned by
-control-plane's platform-import feature (`make build-demo-bundle` + Admin >
+control-plane's platform-import feature (`make bundle-demo` + Admin >
 Migration upload, see PLATFORM-IMPORT-RFC.md Part A). The autouse
 `_bootstrap_collaborative_teams` fixture below only *verifies* that
 provisioning already ran, failing fast with an actionable message if not.
@@ -194,7 +194,7 @@ def _platform_admin_username() -> str:
 # below. Team/role (and, since Part A of PLATFORM-IMPORT-RFC.md, identity) provisioning
 # is owned by control-plane's platform-import feature, not by this suite.
 _PROVISIONING_HOWTO = (
-    "run `cd apps/control-plane && make build-demo-bundle` then upload the "
+    "run `make bundle-demo` then upload the "
     "resulting zip via Admin -> Migration, using the fixture at "
     "apps/control-plane/tests/fixtures/import_export/demo_provisioning/"
 )
@@ -206,7 +206,7 @@ def _bootstrap_collaborative_teams(_require_stack) -> None:
 
     Team and role provisioning (and, as of PLATFORM-IMPORT-RFC.md Part A, identity
     creation too) is owned by control-plane's platform-import: the operator runs
-    `make build-demo-bundle` and uploads it once via Admin > Migration before running
+    `make bundle-demo` and uploads it once via Admin > Migration before running
     this suite. This fixture does not create anything - it reads the SAME expectations
     `factory_config.USERS`/`ALL_TEAMS` describe and fails fast, with an actionable
     message, if the live stack doesn't already match them. Kept idempotent-safe like

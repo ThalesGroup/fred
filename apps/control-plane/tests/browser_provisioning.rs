@@ -92,7 +92,7 @@ async fn provisioning_browser_journey() {
     let bundle = workspace.0.join("demo.zip");
     assert!(
         tokio::process::Command::new("make")
-            .arg("build-demo-bundle")
+            .arg("bundle-demo")
             .env("DEMO_BUNDLE_FILE", &bundle)
             .status()
             .await

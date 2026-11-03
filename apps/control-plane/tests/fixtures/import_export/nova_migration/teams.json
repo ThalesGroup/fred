@@ -1,0 +1,12 @@
+[
+  {
+    "ref": "nova-pilote",
+    "name": "Pilote",
+    "organization": "nova",
+    "roles": {
+      "nova.responsable": [
+        "owner"
+      ]
+    }
+  }
+]
