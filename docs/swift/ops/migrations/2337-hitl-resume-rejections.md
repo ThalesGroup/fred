@@ -3,7 +3,7 @@ schema: 1
 title: "Handle HITL resume conflicts and rejected cancellations"
 impact: none
 configuration: none
-configuration_reason: "Only frontend rejection handling and regression tests change; no configuration keys or defaults change."
+configuration_reason: "Frontend rejection handling, regression tests, and CI scanner installation change; no deployment configuration keys or defaults change."
 no_action_reason: "Existing runtime APIs and stored checkpoints are unchanged; normal frontend deployment applies the fix."
 ---
 ## Applicability
