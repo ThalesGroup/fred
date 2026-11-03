@@ -310,7 +310,7 @@ No consumer installation step may fetch or copy missing FRED assets. The decisiv
 
 Use public npm publication for the open-source packages, under a maintainer-controlled scope. Corporate deployments may use an approved npm mirror without changing imports or artifact contents. Registry selection is a distribution decision, not an iframe runtime dependency: deployed browsers receive the application bundle and do not contact npm.
 
-Use a dedicated frontend-package CI workflow, separate from Python package publishing and Docker image releases. Pin a tested Node/npm toolchain for that workflow; the existing frontend image uses Node `22.13.0`, which must not be assumed to include the npm CLI needed for OIDC publishing.
+Use a dedicated frontend-package CI workflow, separate from Python package publishing and Docker image releases. Use the Node/npm baseline documented in `libs/frontend/README.md`; release preparation validates the exact committed release-toolchain pins.
 
 The first prereleases were created through a separately approved bootstrap operation. The retained `Publish-frontend-packages.yml` workflow now defaults to selected-package preparation and has protected direct-OIDC publication and read-only verification paths for later versions. Their implementation is not evidence that each npm package's direct Trusted Publisher trust is configured or that the bootstrap token was revoked; maintainers review those prerequisites before actual publication. ([npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/))
 

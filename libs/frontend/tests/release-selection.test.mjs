@@ -208,8 +208,8 @@ test("disposable fourth profile exercises selection, record and generic verifier
       certificateIssuer: "fixture/issuer",
     },
     observedToolchains: {
-      producer: { node: "24.21.0", npm: "11.19.0" },
-      application: { node: "22.13.0", npm: "10.9.2" },
+      producer: { node: "24.22.2", npm: "11.19.0" },
+      application: { node: "24.22.2", npm: "11.19.0" },
     },
     gates: { archives: { validated: true } },
     archives: {

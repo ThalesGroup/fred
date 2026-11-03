@@ -26,12 +26,36 @@ d'abord une bibliothèque, puis déposez vos documents dedans.
 > agent.** C'est le premier point à vérifier lorsqu'un document semble ignoré.
 
 Les formats courants passent : PDF, texte, Word, OpenDocument, PowerPoint,
-Excel, CSV, Markdown, images et fichiers audio. Un format inhabituel peut être
-refusé ; convertissez-le dans un format courant.
+Excel, CSV, Markdown, mails et images. Un format inhabituel peut être refusé ;
+convertissez-le dans un format courant.
+
+## Importer des mails
+
+Un mail enregistré depuis Outlook (fichier **.msg**) ou depuis une autre
+messagerie (fichier **.eml**) se dépose comme n'importe quel document, dans une
+bibliothèque ou en pièce jointe d'une conversation. Pour l'obtenir, faites
+glisser le mail hors de votre messagerie, ou utilisez **Enregistrer sous**.
+
+Ce qui est gardé : l'expéditeur, les destinataires, la date, l'objet, le texte
+du mail et **le nom** de ses pièces jointes. Le texte des pièces jointes PDF,
+Word et PowerPoint est lu aussi ; un même fichier joint plusieurs fois n'est lu
+qu'une fois. Les autres pièces jointes (images, archives…) ne sont pas lues :
+déposez-les à part si l'agent doit s'en servir. Les destinataires en copie
+cachée ne sont jamais conservés.
+Un mail transféré en pièce jointe est lu aussi : son texte suit celui du mail.
+
+> **Un mail déposé est visible par toute l'équipe**, avec les noms et adresses
+> qu'il contient. Vérifiez qu'il peut être partagé avant de le déposer.
+
+Un mail chiffré ne peut pas être lu et sera refusé. Les signatures séparées
+(`multipart/signed`) sont prises en charge ; les signatures S/MIME opaques
+(`signed-data`, dont `.p7m`) ne le sont pas. Exportez une copie non chiffrée avec
+une signature séparée ou sans signature. Un mail dépassant 25 Mo est refusé :
+retirez ses pièces jointes les plus lourdes et enregistrez-le à nouveau.
 
 ## Un document du même nom existe déjà
 
-Si un document porte déjà le même nom dans la bibliothèque visée, {{siteDisplayName}} vous le
+Si un document porte déjà le même nom dans la bibliothèque visée, la plateforme vous le
 dit **avant** d'envoyer quoi que ce soit, et vous laisse choisir :
 
 - **Remplacer** : le document existant garde sa place et ses liens, seul son
@@ -50,7 +74,7 @@ ce sont deux documents indépendants.
 
 ## Suivre vos imports
 
-Dès que vous validez, la fenêtre se ferme : vous récupérez {{siteDisplayName}} tout de suite et
+Dès que vous validez, la fenêtre se ferme : vous reprenez la main tout de suite et
 l'envoi continue derrière. Un **panneau** s'ouvre à droite de la page et suit
 chaque fichier. Vous pouvez le replier en simple bouton, le rouvrir, et
 l'élargir en tirant son bord gauche.
@@ -59,14 +83,14 @@ Chaque fichier passe par quatre temps. Le panneau les montre comme quatre
 repères qui se cochent l'un après l'autre, et nomme celui en cours :
 
 1. **Envoi du fichier** — votre navigateur transmet. Tant que ce temps dure,
-   rien n'est encore arrivé chez {{siteDisplayName}}.
-2. **Préparation du document** — {{siteDisplayName}} a reçu le fichier et le range.
-3. **Extraction du contenu** — {{siteDisplayName}} lit le document. C'est presque toujours le
+   rien n'est encore arrivé sur la plateforme.
+2. **Préparation du document** — la plateforme a reçu le fichier et le range.
+3. **Extraction du contenu** — la plateforme lit le document. C'est presque toujours le
    temps le plus long : un PDF volumineux ou scanné peut y rester plusieurs
    minutes.
-4. **Indexation** — {{siteDisplayName}} range ce qui a été lu pour pouvoir le retrouver.
+4. **Indexation** — la plateforme range ce qu'elle a lu pour pouvoir le retrouver.
 
-{{siteDisplayName}} analyse quelques fichiers à la fois. Quand vous en importez plusieurs, ceux
+La plateforme analyse quelques fichiers à la fois. Quand vous en importez plusieurs, ceux
 qui attendent leur tour affichent **En attente…**, en gris, avec un repère
 immobile : le fichier est bien arrivé, son analyse démarrera dès qu'une place se
 libère.
@@ -79,7 +103,7 @@ puis disparaît d'elle-même au bout de quelques secondes : le document est dans
 le tableau, il n'y a plus rien à suivre. Seuls les fichiers en échec ou en
 attente de réponse restent.
 
-> Aucun de ces temps n'annonce de pourcentage : {{siteDisplayName}} ne sait pas combien de
+> Aucun de ces temps n'annonce de pourcentage : la plateforme ne sait pas combien de
 > temps il lui reste, et préfère ne pas l'inventer. Un temps qui dure n'est
 > pas un temps bloqué.
 
@@ -93,12 +117,12 @@ nouveau : un navigateur ne peut pas rouvrir un fichier tout seul.
 ### Annuler un envoi
 
 Les fichiers partent quelques-uns à la fois. Ceux qui attendent encore leur tour
-peuvent être annulés d'un clic ; ceux qui sont déjà partis appartiennent à {{siteDisplayName}}
-et vont au bout.
+peuvent être annulés d'un clic ; ceux qui sont déjà partis appartiennent à la
+plateforme et vont au bout.
 
 ### Si vous fermez l'onglet en cours d'import
 
-Ce qui est déjà arrivé chez {{siteDisplayName}} continue sans vous. Le reste n'est jamais
+Ce qui est déjà arrivé sur la plateforme continue sans vous. Le reste n'est jamais
 parti : à votre retour, le panneau **nomme les fichiers qui ne sont pas
 arrivés** et vous propose de les sélectionner à nouveau. Seuls ceux-là
 repartent, vers la même bibliothèque.

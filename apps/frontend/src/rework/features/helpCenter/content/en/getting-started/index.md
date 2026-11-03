@@ -1,13 +1,13 @@
 ---
 title: Welcome
 order: 0
-description: What {{siteDisplayName}} is, what it does not do, and where to start.
+description: What the platform is, what it does not do, and where to start.
 icon: rocket_launch
 ---
 
 # Welcome
 
-{{siteDisplayName}} brings together in one place **agents** — AI assistants — your
+The platform brings together in one place **agents** — AI assistants — your
 teams' **documents**, and the **conversations** that make the two work together.
 The point: answers grounded in your own content, with the passages used shown so
 you can check them.
@@ -17,7 +17,7 @@ for a specific purpose, a library of reusable prompts and a document space. You
 also have a **personal space** — a team you are the only member of — to try
 things without sharing anything.
 
-## What {{siteDisplayName}} does not do
+## What the platform does not do
 
 Worth stating from the outset:
 
