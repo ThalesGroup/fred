@@ -53,9 +53,8 @@ class BaseInputProcessor(ABC):
 
     description: Optional[str] = None
 
-    @abstractmethod
     def check_file_validity(self, file_path: Path) -> bool:
-        pass
+        return True
 
     @abstractmethod
     def extract_file_metadata(self, file_path: Path) -> dict:
