@@ -2733,6 +2733,7 @@
         "title": "Administration spaces"
       },
       "chatList": {
+        "answerReady": "Answer ready",
         "answering": "Answer in progress",
         "awaitingInput": "Waiting for your answer",
         "deleteDialog": {
@@ -2743,9 +2744,11 @@
         },
         "emptyManaged": "No conversations yet. Start a new chat with a managed {{agentsNicknameSingular}}.",
         "groupByAgent": "Group by {{agentsNicknameSingular}}",
+        "openConversation": "Open",
         "loading": "Loading...",
         "title": "Chat",
-        "unknownAgent": "Unknown {{agentsNicknameSingular}}"
+        "unknownAgent": "Unknown {{agentsNicknameSingular}}",
+        "unread": "Unread"
       },
       "marketplace": {
         "menu": {

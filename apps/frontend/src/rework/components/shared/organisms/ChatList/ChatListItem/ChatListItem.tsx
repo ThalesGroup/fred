@@ -14,7 +14,7 @@
 
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
 import { ThinkingDots } from "@shared/atoms/ThinkingDots/ThinkingDots";
-import { useTurnStatus } from "@core/hooks/backgroundTurns";
+import { useSessionUnread, useTurnStatus } from "@core/hooks/backgroundTurns";
 import React, { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties";
@@ -51,6 +51,7 @@ export function ChatListItem({
   const location = useLocation();
   const isSelected = location.search.includes(`session=${sessionId}`);
   const turnStatus = useTurnStatus(sessionId);
+  const unread = useSessionUnread(sessionId);
 
   const item = (
     <Link
@@ -60,7 +61,10 @@ export function ChatListItem({
       aria-describedby={agentDeleted ? statusId : undefined}
     >
       <div className={styles.chatDescription} data-read-only={agentDeleted}>
-        <div className={styles.title}>{label}</div>
+        <div className={styles.title} data-unread={unread}>
+          {label}
+          {unread && <span className={styles.accessibleStatus}>{t("rework.sidebar.chatList.unread")}</span>}
+        </div>
         {/* Only the agent name shrinks so the date stays readable. */}
         {(agentName || dateLabel) && (
           <div className={styles.meta}>

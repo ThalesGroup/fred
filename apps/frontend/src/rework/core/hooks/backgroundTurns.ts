@@ -58,7 +58,10 @@ const detached = new Map<string, LiveTurn>();
 const running = new Map<string, LiveTurn>();
 // Sessions whose last turn here stopped on a question; the next turn clears it.
 const awaitingInput = new Set<string>();
+// Sessions whose turn ended while no view showed it; opening one marks it read.
+const unread = new Set<string>();
 const runningListeners = new Set<() => void>();
+const settledListeners = new Set<(sessionId: string, awaitingInput: boolean) => void>();
 
 function notifyRunning(): void {
   for (const listener of runningListeners) listener();
@@ -84,6 +87,21 @@ export function useTurnStatus(sessionId: string): TurnStatus {
   );
 }
 
+/** Known only in this tab, like the turn status. */
+export function useSessionUnread(sessionId: string): boolean {
+  return useSyncExternalStore(subscribeRunning, () => unread.has(sessionId));
+}
+
+export function markSessionRead(sessionId: string): void {
+  if (unread.delete(sessionId)) notifyRunning();
+}
+
+/** Notified when a turn ends while no view shows its conversation. */
+export function subscribeBackgroundSettled(listener: (sessionId: string, awaitingInput: boolean) => void): () => void {
+  settledListeners.add(listener);
+  return () => settledListeners.delete(listener);
+}
+
 /**
  * Cancels the session's streaming turn and drops its cached thread. Called
  * before erasing a conversation: a running turn would write its history back.
@@ -91,7 +109,8 @@ export function useTurnStatus(sessionId: string): TurnStatus {
 export function abortTurn(sessionId: string): void {
   running.get(sessionId)?.controller.abort();
   forgetCachedSessionHistory(sessionId);
-  if (awaitingInput.delete(sessionId)) notifyRunning();
+  const cleared = awaitingInput.delete(sessionId);
+  if (unread.delete(sessionId) || cleared) notifyRunning();
 }
 
 export function readTurnMessages(turn: LiveTurn): ChatMessage[] {
@@ -140,5 +159,8 @@ export function settleTurn(turn: LiveTurn): void {
   // Only deletion aborts a detached turn: its thread must not be cached again.
   if (!turn.controller.signal.aborted) {
     turn.detachedCallbacks.onBackgroundTurnSettled?.(turn.sessionId, turn.messages);
+    unread.add(turn.sessionId);
+    notifyRunning();
+    for (const listener of settledListeners) listener(turn.sessionId, Boolean(turn.awaitingInput));
   }
 }

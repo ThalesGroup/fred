@@ -2733,6 +2733,7 @@
         "title": "Espace administration"
       },
       "chatList": {
+        "answerReady": "Réponse prête",
         "answering": "Réponse en cours",
         "awaitingInput": "En attente de votre réponse",
         "deleteDialog": {
@@ -2743,9 +2744,11 @@
         },
         "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un {{agentsNicknameSingular}} géré.",
         "groupByAgent": "Grouper par {{agentsNicknameSingular}}",
+        "openConversation": "Ouvrir",
         "loading": "Chargement...",
         "title": "Conversations",
-        "unknownAgent": "{{agentsNicknameSingular}} inconnu"
+        "unknownAgent": "{{agentsNicknameSingular}} inconnu",
+        "unread": "Non lue"
       },
       "marketplace": {
         "menu": {

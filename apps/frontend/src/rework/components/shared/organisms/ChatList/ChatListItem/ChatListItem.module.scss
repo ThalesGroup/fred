@@ -93,6 +93,10 @@
   font: var(--font-body-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  &[data-unread="true"] {
+    font-weight: 600;
+  }
 }
 
 /* One line, never two: the whole meta row is nowrap and the only flexible part

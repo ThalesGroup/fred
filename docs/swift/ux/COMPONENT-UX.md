@@ -877,7 +877,11 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   `--primary` `ThinkingDots` (`size="small"`) in a trailing status slot, with a
   visually hidden "Answer in progress" status. A turn that stopped on a question
   (human input or interrupted run) shows a solid `--primary` dot with a soft halo in
-  that slot instead, "Waiting for your answer", until the next
+  that slot instead, "Waiting for your answer". A turn that ends while no view shows
+  its conversation raises an info toast with the conversation title ("Answer ready"
+  or "Waiting for your answer", from `ChatList`) with an "Open" action to that
+  conversation, and bolds the title until the
+  conversation is opened or deleted. The waiting dot stays until the next
   turn of that conversation starts. Both are known only in the tab that ran the turn.
   Mechanism: `core/hooks/backgroundTurns.ts`.
 
@@ -3053,6 +3057,9 @@ high-information-density, zero decoration, color used only as a semantic signal 
 | `error`   | `--error`     | Manual only — errors persist until explicitly closed |
 
 Error toasts additionally expose a copy-to-clipboard icon button (`content_copy`) for developer convenience.
+
+A toast may offer one `action` (`{ label, onClick }`): a `--primary` text button under the detail that
+runs it and closes the toast, e.g. "Open" on a conversation whose answer ended out of sight.
 
 Team model routing shows a success toast after the save succeeds, or an error
 toast when it fails, keeping the server's error detail inline in the form.

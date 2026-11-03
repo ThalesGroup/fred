@@ -38,6 +38,7 @@ import { offersReasoning } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
+import { markSessionRead } from "@core/hooks/backgroundTurns";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -574,6 +575,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     // running later in this same commit, whose isTurnActive() must already see
     // whether this session has a live turn, or it would render over it.
     waitResponseRef.current = sessionId ? adoptBackgroundTurn(sessionId) : false;
+    if (sessionId) markSessionRead(sessionId);
     replacePendingHitls([]);
     hitlResumeOwnerRef.current = null;
     hitlResumePreparingRef.current = null;
