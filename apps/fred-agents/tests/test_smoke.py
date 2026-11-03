@@ -107,6 +107,8 @@ def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
     config_payload["storage"]["postgres"]["sqlite_path"] = str(
         tmp_path / "runtime.sqlite3"
     )
+    # This fixture runs as a standalone pod, without a live platform policy API.
+    config_payload["platform"]["control_plane_url"] = None
     config_file = tmp_path / "configuration.yaml"
     config_file.write_text(yaml.safe_dump(config_payload), encoding="utf-8")
 

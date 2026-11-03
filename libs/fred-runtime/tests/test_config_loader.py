@@ -517,27 +517,37 @@ def test_load_agent_pod_config_rejects_non_slug_runtime_id(
     assert exc_info.value.code == 1
 
 
-@pytest.mark.parametrize("directory", [None, "package", "../project-skills"])
-def test_skill_directory_configuration_is_optional_and_relative_to_config(
-    tmp_path: Path, directory: str | None, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("skills_yaml", "directory"),
+    [
+        ("", "package"),
+        ("skills: {}", "package"),
+        ("skills: null", None),
+        ("skills:\n  directory: package", "package"),
+        ("skills:\n  directory: ../project-skills", "../project-skills"),
+        ("skills:\n  directory: /opt/shared-skills", "/opt/shared-skills"),
+    ],
+)
+def test_skill_directory_defaults_and_overrides_survive_public_config_loading(
+    tmp_path: Path,
+    skills_yaml: str,
+    directory: str | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from fred_runtime.app.config_loader import _parse_agent_pod_config
+    """Load packaged defaults, explicit opt-out and custom paths from YAML."""
 
     config_dir = tmp_path / "config"
     config_dir.mkdir()
-    _write_configuration_yaml(config_dir)
-    _write_models_catalog(config_dir / "models_catalog.yaml")
-    _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="test")
+    _write_pod_bootstrap(config_dir)
     configuration = config_dir / "configuration.yaml"
-    if directory is not None:
-        configuration.write_text(
-            configuration.read_text() + f"\nskills:\n  directory: {directory}\n"
-        )
+    configuration.write_text(configuration.read_text() + f"\n{skills_yaml}\n")
+    monkeypatch.setenv("CONFIG_FILE", str(configuration))
+    monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
     monkeypatch.setenv(
         "FRED_MODELS_CATALOG_FILE", str(config_dir / "models_catalog.yaml")
     )
     monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(config_dir / "mcp_catalog.yaml"))
-    config = _parse_agent_pod_config(str(configuration))
+    config = load_agent_pod_config()
     if directory is None:
         assert config.skills is None
     else:

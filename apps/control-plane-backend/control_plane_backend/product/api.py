@@ -1739,6 +1739,14 @@ async def get_team_agent_instance_runtime(
         raise HTTPException(
             status_code=409, detail="Managed agent instance is disabled."
         )
+    if (
+        binding.disabled_platform_skills
+        and request.headers.get("X-Fred-Skill-Policy") != "1"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Runtime must support platform skill policy before executing this turn.",
+        )
     return binding
 
 

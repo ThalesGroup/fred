@@ -16,6 +16,26 @@
 
 version: 1
 operations:
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/platform/skills
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/platform/skills/{skill_name}
+    review_status: approved
+    required_permission: can_manage_capabilities
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/platform/skills/policy
+    review_status: approved
+    required_permission: authenticated # Names-only policy for a verified runtime caller.
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/platform-skills
+    review_status: approved
+    required_permission: can_manage_capabilities
   # Platform admission uses its own narrow self-status/enrollment boundary.
   - service: control-plane
     method: GET

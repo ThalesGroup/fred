@@ -98,6 +98,27 @@ class PodChartTests(unittest.TestCase):
                 result = self.render(chart, values)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_agent_charts_preserve_skill_defaults_and_explicit_overrides(self):
+        for chart, base in (("agent-pod", AGENT), ("fred", {})):
+            for configuration, expected in (
+                ({}, None),
+                ({"skills": None}, "skills: null"),
+                (
+                    {"skills": {"directory": "/opt/shared-skills"}},
+                    "directory: /opt/shared-skills",
+                ),
+            ):
+                with self.subTest(chart=chart, configuration=configuration):
+                    overrides = {"configuration": configuration}
+                    if chart == "fred":
+                        overrides = {"applications": {"fred-agents": overrides}}
+                    result = self.render(chart, merged(base, overrides))
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    if expected is None:
+                        self.assertNotIn("skills:", result.stdout)
+                    else:
+                        self.assertIn(expected, result.stdout)
+
     def test_no_default_image(self):
         for chart, values in (("agent-pod", AGENT), ("knowledge-base", KNOWLEDGE_BASE)):
             with self.subTest(chart=chart):

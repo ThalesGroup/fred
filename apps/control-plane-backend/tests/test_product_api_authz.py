@@ -390,7 +390,7 @@ async def test_runtime_binding_correlates_via_x_request_id_header(
     monkeypatch.setattr(
         product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
     )
-    fake_binding = SimpleNamespace(enabled=True)
+    fake_binding = SimpleNamespace(enabled=True, disabled_platform_skills=[])
     monkeypatch.setattr(
         product_api,
         "get_runtime_binding_for_team",
@@ -431,7 +431,9 @@ async def test_runtime_binding_omits_trace_without_the_header(
     monkeypatch.setattr(
         product_api,
         "get_runtime_binding_for_team",
-        AsyncMock(return_value=SimpleNamespace(enabled=True)),
+        AsyncMock(
+            return_value=SimpleNamespace(enabled=True, disabled_platform_skills=[])
+        ),
     )
     writer = _RecordingKPIWriter()
     deps = cast(
@@ -481,3 +483,41 @@ async def test_marketplace_reserved_command_keeps_per_target_error_code(
         _user(),
     )
     assert result.results[0].error_code == "prompt_command_reserved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "disabled,header,expected",
+    [([], None, 200), (["mermaid"], None, 409), (["mermaid"], "1", 200)],
+)
+async def test_runtime_binding_requires_policy_support_only_with_active_restrictions(
+    monkeypatch: pytest.MonkeyPatch,
+    disabled: list[str],
+    header: str | None,
+    expected: int,
+) -> None:
+    monkeypatch.setattr(
+        product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
+    )
+    binding = SimpleNamespace(enabled=True, disabled_platform_skills=disabled)
+    monkeypatch.setattr(
+        product_api, "get_runtime_binding_for_team", AsyncMock(return_value=binding)
+    )
+    deps = cast(
+        Any,
+        SimpleNamespace(team_dependencies=object(), get_kpi_writer=NoOpKPIWriter),
+    )
+    request = cast(Any, _FakeRequest({"X-Fred-Skill-Policy": header} if header else {}))
+    if expected == 409:
+        with pytest.raises(HTTPException) as exc:
+            await product_api.get_team_agent_instance_runtime(
+                TeamId("team"), "instance", request, deps, _user()
+            )
+        assert exc.value.status_code == 409
+    else:
+        assert (
+            await product_api.get_team_agent_instance_runtime(
+                TeamId("team"), "instance", request, deps, _user()
+            )
+            is binding
+        )

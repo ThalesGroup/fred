@@ -15,6 +15,7 @@
 import type {
   Channel,
   ChatMessage,
+  SkillLoadAttribution,
   ToolCallPart,
   ToolResultPart,
   VectorSearchHit,
@@ -26,7 +27,7 @@ import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "
 
 export function skillLoadOf(
   message: ChatMessage,
-): { name: string; origin: "user" | "agent"; load_id: string; child: boolean } | null {
+): Required<Pick<SkillLoadAttribution, "name" | "origin" | "load_id" | "child" | "builtin" | "partial">> | null {
   const extras = message.metadata?.extras as Record<string, unknown> | undefined;
   const value = extras?.skill_load;
   if (!value || typeof value !== "object") return null;
@@ -34,7 +35,14 @@ export function skillLoadOf(
   return typeof load.name === "string" &&
     typeof load.load_id === "string" &&
     (load.origin === "user" || load.origin === "agent")
-    ? { name: load.name, origin: load.origin, load_id: load.load_id, child: load.child === true }
+    ? {
+        name: load.name,
+        origin: load.origin,
+        load_id: load.load_id,
+        child: load.child === true,
+        builtin: load.builtin === true,
+        partial: load.partial === true,
+      }
     : null;
 }
 
@@ -661,7 +669,7 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       return "Tool result";
     case "system_note":
       return entry.kind === "solo" && skillLoadOf(entry.message) && translate
-        ? translate("chatbot.skills.loaded")
+        ? translate(skillLoadOf(entry.message)?.partial ? "chatbot.skills.partiallyLoaded" : "chatbot.skills.loaded")
         : "System";
     case "error":
       return "Error";

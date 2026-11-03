@@ -1205,7 +1205,10 @@ def test_migrated_sqlite_startup_reads_and_writes_history(
     assert messages[0].parts[0].text == "hello"
 
 
-def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted() -> None:
+@pytest.mark.parametrize("partial", [False, True])
+def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted(
+    partial: bool,
+) -> None:
     from fred_sdk.contracts.skills import SkillLoadAttribution
 
     store = AsyncMock()
@@ -1216,6 +1219,7 @@ def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted() -
         revision="r",
         load_id="load",
         agent_id="test",
+        partial=partial,
     )
     payload = {
         "kind": "status",
@@ -1239,6 +1243,7 @@ def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted() -
     assert row.role == Role.system and row.parts[0].text == "meeting-minutes"
     assert row.exchange_id == "e"
     assert row.metadata.extras["skill_load"] == attribution.model_dump(mode="json")
+    assert row.metadata.extras["skill_load"]["partial"] is partial
     # The same JSON is used by GET history and the live SSE projection.
     assert (
         row.model_dump(mode="json")["metadata"]["extras"]["skill_load"]["origin"]
@@ -1310,11 +1315,11 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
     )
     definition = DeepDefinition() if deep else _PingAgent()
     app = create_agent_app(registry={definition.agent_id: definition}, config=config)
-    selections = [{"name": "meeting-minutes"}, {"name": "mermaid"}]
+    selections = [{"name": "meeting-minutes"}, {"name": "graph"}]
     command = {
         "command": "summary",
         "prompt_id": "prompt",
-        "draft_text": "Before /summary /meeting-minutes /mermaid after",
+        "draft_text": "Before /summary /meeting-minutes /graph after",
         "draft_command_offset": 7,
     }
     with TestClient(app) as client:
@@ -1322,7 +1327,7 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
             "/pod/v1/agents/execute",
             json={
                 "agent_id": definition.agent_id,
-                "input": "Before\n\nPrompt instructions\n\n/meeting-minutes /mermaid after",
+                "input": "Before\n\nPrompt instructions\n\n/meeting-minutes /graph after",
                 "runtime_context": {
                     "session_id": "multiple-history",
                     "skills": selections + selections[:1],
@@ -1354,14 +1359,14 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
                 "runtime_context": {"skills": [selections[0], {"name": "missing"}]},
             },
         )
-        assert invalid.status_code == (200 if deep else 422), invalid.text
-        assert len(model.calls) == before + (1 if deep else 0)
+        assert invalid.status_code == 422, invalid.text
+        assert len(model.calls) == before
         forged = client.post(
             "/pod/v1/agents/execute",
             json={
                 "agent_id": definition.agent_id,
                 "input": "notes",
-                "runtime_context": {"skills": [{"name": "mermaid", "body": "FORGED"}]},
+                "runtime_context": {"skills": [{"name": "graph", "body": "FORGED"}]},
             },
         )
         assert forged.status_code == 422
@@ -1409,9 +1414,9 @@ def test_multiple_skills_reject_unsupported_runtime_configuration(
             "/pod/v1/agents/execute",
             json={
                 "agent_id": definition.agent_id,
-                "input": "/meeting-minutes /mermaid notes",
+                "input": "/meeting-minutes /graph notes",
                 "runtime_context": {
-                    "skills": [{"name": "meeting-minutes"}, {"name": "mermaid"}]
+                    "skills": [{"name": "meeting-minutes"}, {"name": "graph"}]
                 },
             },
         )
@@ -1420,7 +1425,7 @@ def test_multiple_skills_reject_unsupported_runtime_configuration(
 
 
 @pytest.mark.parametrize("selection", ["meeting-minutes", "missing"])
-def test_deep_selection_reaches_native_inference_without_snapshot_preload(
+def test_deep_selection_uses_native_pins_and_rejects_unknown_names(
     monkeypatch, tmp_path, selection
 ) -> None:
     from fred_runtime.app.config import LocalRuntimeFilesystemConfig, PodSkillsConfig
@@ -1465,9 +1470,24 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
                 },
             },
         )
+        if selection == "missing":
+            assert response.status_code == 422, response.text
+            assert model.calls == []
+            return
         assert response.status_code == 200, response.text
         messages = model.calls[0]
-        assert [m.content for m in messages if isinstance(m, HumanMessage)] == [text]
+        assert [
+            m.content
+            for m in messages
+            if isinstance(m, HumanMessage)
+            and m.additional_kwargs.get("lc_source") != "pinned_skill"
+        ] == [text]
+        pins = [
+            m
+            for m in messages
+            if m.additional_kwargs.get("lc_source") == "pinned_skill"
+        ]
+        assert len(pins) == 1 and "# Meeting minutes" in str(pins[0].content)
         assert "Loaded platform skill:" not in str(messages)
         assert "/skills/meeting-minutes/SKILL.md" in str(messages[0].content)
         assert "read_file" in model.bound_tool_names
@@ -1476,6 +1496,13 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
         rows = history.json()
         user_row = next(row for row in rows if row["role"] == "user")
         assert user_row["metadata"]["extras"]["skill_invocation"] == {"name": selection}
-        assert not any(
-            row.get("metadata", {}).get("extras", {}).get("skill_load") for row in rows
+        loads = [
+            row.get("metadata", {}).get("extras", {}).get("skill_load")
+            for row in rows
+            if row.get("metadata", {}).get("extras", {}).get("skill_load")
+        ]
+        assert (
+            len(loads) == 1
+            and loads[0]["name"] == selection
+            and loads[0]["origin"] == "user"
         )

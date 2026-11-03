@@ -180,6 +180,9 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/pod/v1/agents/platform-prompt` }),
     }),
+    getRuntimePlatformSkills: build.query<GetRuntimePlatformSkillsApiResponse, GetRuntimePlatformSkillsApiArg>({
+      query: () => ({ url: `/pod/v1/agents/platform-skills` }),
+    }),
     listSessionsPodV1AgentsSessionsGet: build.query<
       ListSessionsPodV1AgentsSessionsGetApiResponse,
       ListSessionsPodV1AgentsSessionsGetApiArg
@@ -228,6 +231,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           agent_instance_id: queryArg.agentInstanceId,
           team_id: queryArg.teamId,
+          metadata_version: queryArg.metadataVersion,
         },
       }),
     }),
@@ -240,6 +244,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           agent_instance_id: queryArg.agentInstanceId,
           team_id: queryArg.teamId,
+          metadata_version: queryArg.metadataVersion,
         },
       }),
     }),
@@ -424,6 +429,8 @@ export type RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiArg = {
 export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiResponse =
   /** status 200 Successful Response */ PlatformPromptFileResponse;
 export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiArg = void;
+export type GetRuntimePlatformSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetRuntimePlatformSkillsApiArg = void;
 export type ListSessionsPodV1AgentsSessionsGetApiResponse = /** status 200 Successful Response */ string[];
 export type ListSessionsPodV1AgentsSessionsGetApiArg = {
   userId?: string | null;
@@ -456,12 +463,14 @@ export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Resp
 export type GetRuntimeInstanceSkillsApiArg = {
   agentInstanceId: string;
   teamId: string;
+  metadataVersion?: number;
 };
 export type GetRuntimeInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
 export type GetRuntimeInstanceSkillDetailApiArg = {
   skillName: string;
   agentInstanceId: string;
   teamId: string;
+  metadataVersion?: number;
 };
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
@@ -970,11 +979,14 @@ export type SessionTitleRuntimeEvent = {
 };
 export type SkillLoadAttribution = {
   agent_id: string;
+  builtin?: boolean;
   child?: boolean;
   child_id?: string | null;
   load_id: string;
   name: string;
   origin: "user" | "agent";
+  /** The actual instruction read did not prove full-file coverage. */
+  partial?: boolean;
   revision: string;
 };
 export type StatusRuntimeEvent = {
@@ -1152,6 +1164,20 @@ export type PlatformPromptFileResponse = {
   platform_instructions: string;
   platform_prompt: string;
 };
+export type SkillSummary = {
+  argument_hint?: string | null;
+  builtin?: boolean;
+  description: string;
+  disable_model_invocation?: boolean;
+  name: string;
+  user_invocable?: boolean;
+};
+export type SkillCatalog = {
+  policy_supported?: boolean;
+  revision?: string;
+  skills?: SkillSummary[];
+  supported?: boolean;
+};
 export type ConversationFilesystemPurgeResponse = {
   purged: boolean;
 };
@@ -1295,16 +1321,6 @@ export type ChatMessage = {
   role: Role;
   session_id: string;
   timestamp: string;
-};
-export type SkillSummary = {
-  argument_hint?: string | null;
-  description: string;
-  name: string;
-};
-export type SkillCatalog = {
-  revision?: string;
-  skills?: SkillSummary[];
-  supported?: boolean;
 };
 export type SkillDetail = {
   content: string;
@@ -1553,6 +1569,8 @@ export const {
   useRefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostMutation,
   useGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
   useLazyGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
+  useGetRuntimePlatformSkillsQuery,
+  useLazyGetRuntimePlatformSkillsQuery,
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,

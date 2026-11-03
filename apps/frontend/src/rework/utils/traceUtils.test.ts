@@ -1513,6 +1513,26 @@ it("redacts historical tag ids and document ids without losing bracketed names",
 });
 
 describe("skill load history", () => {
+  it.each([
+    ["fr", fr, "Skill partiellement chargé"],
+    ["en", en, "Skill partially loaded"],
+  ] as const)("discloses partial persisted reads in %s", async (language, resources, label) => {
+    const locale = i18next.createInstance();
+    await locale.init({ lng: language, resources: { [language]: { translation: resources } } });
+    const step = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: {
+        extras: {
+          skill_load: { name: "graph", origin: "agent", load_id: "read", child: true, partial: true },
+        },
+      },
+    });
+    const [entry] = groupTraceEntries([JSON.parse(JSON.stringify(step))]);
+    expect(skillLoadOf(step)).toMatchObject({ partial: true, child: true });
+    expect(entryLabel(entry, (key) => locale.t(key))).toBe(label);
+  });
+
   it.each(["user", "agent"] as const)("retains compact %s attribution and hides successful body traces", (origin) => {
     const step = msg({
       role: "system",

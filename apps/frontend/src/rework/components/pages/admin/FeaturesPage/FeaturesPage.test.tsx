@@ -74,6 +74,18 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../../slices/controlPlane/controlPlaneOpenApi")>()),
+  useGetPlatformSkillsQuery: () => ({
+    data: { skills: [], unavailable_runtime_ids: [], unsupported_runtime_ids: [], disabled_skill_names: [] },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+  useSetPlatformSkillEnabledMutation: () => [vi.fn(), { isLoading: false }],
+}));
+
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => ({ ...h.list, refetch: h.refetch }),
   useModelDiscoveryQuery: () => ({
@@ -979,4 +991,24 @@ describe("FeaturesPage reasoning column (REASON-01, MODEL-REASONING-ENABLEMENT-R
     };
     expect(render()).not.toContain("rework.admin.capabilities.col.reasoning");
   });
+});
+
+it("opens the global Skills inventory without choosing a team or agent", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<FeaturesPage />));
+    const tab = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent === "rework.admin.capabilities.kindFilter.skill",
+    )!;
+    expect(tab).toBeDefined();
+    await act(async () => tab.click());
+    expect(container.querySelector('section[aria-label="rework.admin.skills.title"]')).not.toBeNull();
+    expect(container.textContent).toContain("rework.admin.skills.scope");
+    expect(container.textContent).not.toContain("rework.admin.capabilities.empty");
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+  }
 });

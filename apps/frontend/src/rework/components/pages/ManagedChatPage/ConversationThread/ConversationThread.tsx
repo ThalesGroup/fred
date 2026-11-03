@@ -26,6 +26,7 @@ import { HitlAnswerSummary } from "@shared/molecules/HitlAnswerSummary/HitlAnswe
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
 import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessagesArea";
+import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { hitlResponseKey } from "../toThreadMessages";
 
 interface ConversationThreadProps {
@@ -57,7 +58,7 @@ interface ConversationThreadProps {
   /** Opens the prompt a command turn sent. Omit to render those turns inert.
    *  Must keep a stable identity: it is handed to every memoized row. */
   onOpenSkill?: (name: string) => void;
-  skillDescriptions?: ReadonlyMap<string, string>;
+  skillSummaries?: ReadonlyMap<string, SkillSummary>;
   onOpenCommandPrompt?: (turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => void;
 }
 
@@ -85,7 +86,7 @@ export const ConversationThread = memo(function ConversationThread({
   onHitlAnswer,
   onOpenCommandPrompt,
   onOpenSkill,
-  skillDescriptions,
+  skillSummaries,
   maxChatInputChars,
   hitlFreeText,
   onHitlFreeTextChange,
@@ -126,9 +127,10 @@ export const ConversationThread = memo(function ConversationThread({
               text={key ? t(key) : msg.text}
               command={msg.command}
               skillNames={msg.skillNames}
-              skillDescriptions={skillDescriptions}
+              builtinSkillNames={msg.builtinSkillNames}
+              skillSummaries={skillSummaries}
               skillName={msg.skillName}
-              skillDescription={msg.skillName ? skillDescriptions?.get(msg.skillName) : undefined}
+              skillDescription={msg.skillName ? skillSummaries?.get(msg.skillName)?.description : undefined}
               onOpenSkill={onOpenSkill}
               onOpenCommand={onOpenCommandPrompt}
             />
