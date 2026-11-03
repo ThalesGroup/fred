@@ -135,6 +135,12 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 
 import { useChatSse } from "./useChatSse";
+import { abortTurn, useTurnStatus, type TurnStatus } from "./backgroundTurns";
+import {
+  clearSessionHistoryCache,
+  getCachedSessionHistory,
+  setCachedSessionHistory,
+} from "../../components/pages/ManagedChatPage/sessionHistoryCache";
 import type { RuntimeAwaitingHumanEvent } from "./useChatSse";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>) => void }) {
@@ -150,6 +156,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onSteeredMessage: (messageId, sessionId) => onSteeredMessageMock(messageId, sessionId),
     onStreamInterrupted: (sessionId) => onStreamInterruptedMock(sessionId),
     onSessionTitle: (title, sessionId) => onSessionTitleMock(title, sessionId),
+    onBackgroundTurnSettled: (sessionId, messages) => onBackgroundTurnSettledMock(sessionId, messages),
     isTurnCurrent,
     isExecutionAllowed,
   });
@@ -167,6 +174,7 @@ const onAwaitingHumanMock = vi.fn();
 const onSteeredMessageMock = vi.fn();
 const onStreamInterruptedMock = vi.fn();
 const onSessionTitleMock = vi.fn();
+const onBackgroundTurnSettledMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -193,6 +201,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onSteeredMessageMock.mockClear();
     onStreamInterruptedMock.mockClear();
     onSessionTitleMock.mockClear();
+    onBackgroundTurnSettledMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -1998,5 +2007,165 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(onErrorMock).toHaveBeenCalledTimes(1);
     expect(onErrorMock).toHaveBeenCalledWith(expect.stringContaining("stream dropped"));
     fetchSpy.mockRestore();
+  });
+
+  describe("a turn that outlives its view", () => {
+    // An SSE body whose frames the test pushes one by one.
+    const controlledStream = () => {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      const body = new ReadableStream<Uint8Array>({ start: (c) => (controller = c) });
+      const encoder = new TextEncoder();
+      return {
+        body,
+        push: (event: Record<string, unknown>) =>
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)),
+        close: () => controller.close(),
+      };
+    };
+
+    const startStreaming = async (sessionId: string) => {
+      const stream = controlledStream();
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        body: stream.body,
+      } as Response);
+      let sendPromise!: Promise<boolean>;
+      await act(async () => {
+        sendPromise = latest.send("hello", sessionId);
+        await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      });
+      const signal = fetchSpy.mock.calls[0][1]?.signal as AbortSignal;
+      return { stream, fetchSpy, signal, sendPromise };
+    };
+
+    const text = (message: { parts: unknown[] }) => (message.parts[0] as { text?: string }).text;
+
+    it("keeps streaming after its view unmounts and hands the full thread back", async () => {
+      mount();
+      const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
+      await act(async () => stream.push({ kind: "assistant_delta", delta: "Hel" }));
+
+      act(() => root.unmount());
+      expect(signal.aborted).toBe(false);
+      stream.push({ kind: "final", content: "Hello world" });
+      stream.close();
+      await sendPromise;
+
+      expect(onBackgroundTurnSettledMock).toHaveBeenCalledTimes(1);
+      const [sessionId, messages] = onBackgroundTurnSettledMock.mock.calls[0];
+      expect(sessionId).toBe("session-1");
+      expect(messages.map(text)).toEqual(["hello", "Hello world"]);
+      expect(onErrorMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+      mount();
+    });
+
+    it("is adopted live by the next view of its session", async () => {
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      act(() => latest.reset());
+      expect(latest.messages).toEqual([]);
+      expect(latest.waitResponse).toBe(false);
+      stream.push({ kind: "assistant_delta", delta: "Hel" });
+      await act(async () => vi.waitFor(() => expect(latest.adoptBackgroundTurn("session-1")).toBe(true)));
+
+      expect(latest.waitResponse).toBe(true);
+      expect(latest.messages.map(text)).toEqual(["hello", "Hel"]);
+      await act(async () => {
+        stream.push({ kind: "final", content: "Hello world" });
+        stream.close();
+        await sendPromise;
+      });
+
+      expect(latest.messages.map(text)).toEqual(["hello", "Hello world"]);
+      expect(latest.waitResponse).toBe(false);
+      expect(onBackgroundTurnSettledMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it("a turn that stops on a question leaves its session waiting for the user", async () => {
+      let status: TurnStatus = null;
+      function StatusProbe() {
+        status = useTurnStatus("session-1");
+        return null;
+      }
+      const probeRoot = createRoot(document.createElement("div"));
+      act(() => probeRoot.render(<StatusProbe />));
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      expect(status).toBe("running");
+      await act(async () => {
+        stream.push({
+          kind: "awaiting_human",
+          request: { stage: "agent_question", question: "Which year?", interrupt_id: "i-1", occurrence_id: "o-1" },
+        });
+        stream.close();
+        await sendPromise;
+      });
+      expect(status).toBe("awaiting_input");
+      act(() => abortTurn("session-1"));
+      expect(status).toBe(null);
+      act(() => probeRoot.unmount());
+      fetchSpy.mockRestore();
+    });
+
+    it("deleting the shown conversation cancels its turn, releases the composer and forgets its cache", async () => {
+      setCachedSessionHistory("session-1", [{ id: "cached" }] as never);
+      mount();
+      const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
+      act(() => abortTurn("session-1"));
+      expect(signal.aborted).toBe(true);
+      expect(getCachedSessionHistory("session-1")).toBeUndefined();
+      expect(sessionStorage.getItem("chat.history.session-1")).toBeNull();
+      // The view's departure snapshot runs after the deletion: it must not re-cache it.
+      setCachedSessionHistory("session-1", [{ id: "snapshot" }] as never);
+      expect(getCachedSessionHistory("session-1")).toBeUndefined();
+      clearSessionHistoryCache();
+      await act(async () => {
+        stream.close();
+        await sendPromise;
+      });
+      expect(latest.waitResponse).toBe(false);
+      expect(onErrorMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it("deleting a conversation answering in the background cancels it and caches nothing", async () => {
+      mount();
+      const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
+      act(() => root.unmount());
+      abortTurn("session-1");
+      expect(signal.aborted).toBe(true);
+      stream.close();
+      await sendPromise;
+      expect(onBackgroundTurnSettledMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+      mount();
+      expect(latest.adoptBackgroundTurn("session-1")).toBe(false);
+    });
+
+    it("never writes into the session shown meanwhile, and Stop after adoption still cancels", async () => {
+      mount();
+      const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
+      act(() => latest.reset());
+      act(() => latest.replaceAllMessages([]));
+      await act(async () => stream.push({ kind: "execution_error", message: "boom" }));
+      expect(latest.messages).toEqual([]);
+      expect(onErrorMock).not.toHaveBeenCalled();
+      expect(latest.adoptBackgroundTurn("session-2")).toBe(false);
+
+      act(() => {
+        latest.adoptBackgroundTurn("session-1");
+      });
+      act(() => latest.abort());
+      expect(signal.aborted).toBe(true);
+      stream.close();
+      await act(async () => sendPromise);
+      expect(latest.waitResponse).toBe(false);
+      expect(onBackgroundTurnSettledMock).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
   });
 });

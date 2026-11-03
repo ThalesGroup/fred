@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties";
@@ -27,6 +27,8 @@ import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import styles from "./ChatList.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
+import { abortTurn, subscribeBackgroundSettled } from "@core/hooks/backgroundTurns";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
@@ -46,6 +48,10 @@ function formatSessionDate(dateStr: string | undefined): string {
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${day}/${month}/${year} - ${hours}:${minutes}`;
+}
+
+function conversationHref(teamId: string | undefined, agentInstanceId: string, sessionId: string): string {
+  return `/team/${teamId}/managed-chat/${agentInstanceId}?session=${sessionId}`;
 }
 
 export default function ChatList({ teamId, spaceId }: ChatListProps) {
@@ -83,6 +89,7 @@ export default function ChatList({ teamId, spaceId }: ChatListProps) {
         confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
         cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
         onConfirm: async () => {
+          abortTurn(sessionId);
           try {
             await deleteSession({ spaceId: spaceId!, sessionId }).unwrap();
             clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });
@@ -98,7 +105,7 @@ export default function ChatList({ teamId, spaceId }: ChatListProps) {
     };
 
   const renderItem = (session: Session & { agent_instance_id: string }, showAgentName: boolean) => {
-    const href = `/team/${teamId}/managed-chat/${session.agent_instance_id}?session=${session.session_id}`;
+    const href = conversationHref(teamId, session.agent_instance_id, session.session_id);
     const label = session.title || session.session_id.slice(0, 8) + "…";
     return (
       <ChatListItem

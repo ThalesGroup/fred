@@ -23,6 +23,7 @@ export interface ToastInput {
   detail?: string;
   /** Auto-dismiss ms. null = manual dismiss only. Defaults: success/info/warn=6000, error=null */
   duration?: number | null;
+  action?: ToastData["action"];
 }
 
 export interface ToastContextValue {
@@ -60,7 +61,7 @@ export const ToastProvider = ({ children, ...actions }: ToastProviderProps) => {
     const id = nextId.current;
     setToasts((prev) => [
       ...prev,
-      { id, severity, summary: input.summary, detail: input.detail, duration, exiting: false },
+      { id, severity, summary: input.summary, detail: input.detail, duration, action: input.action, exiting: false },
     ]);
   }, []);
 

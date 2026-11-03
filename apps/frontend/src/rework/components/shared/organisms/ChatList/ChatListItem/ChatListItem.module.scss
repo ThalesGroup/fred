@@ -68,12 +68,35 @@
   }
 }
 
+/* Trailing slot, like an unread badge: the title truncates before it. */
+.turnStatus {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  width: 1.25rem;
+}
+
+/* "Your turn": a solid accent dot with a soft halo. */
+.awaitingInput {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 24%, transparent);
+  border-radius: 50%;
+  background-color: var(--primary);
+  width: 8px;
+  height: 8px;
+}
+
 .title {
+  min-width: 0;
   overflow: hidden;
   color: var(--on-surface);
   font: var(--font-body-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  &[data-unread="true"] {
+    font-weight: 600;
+  }
 }
 
 /* One line, never two: the whole meta row is nowrap and the only flexible part
