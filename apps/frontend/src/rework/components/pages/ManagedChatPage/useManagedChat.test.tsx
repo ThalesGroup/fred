@@ -126,6 +126,7 @@ let capturedIsTurnCurrent: ((sessionId: string) => boolean) | undefined;
 let capturedOnError: ((msg: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 let capturedOnSteeredMessage: ((messageId: string, sessionId: string) => void) | undefined;
+let capturedOnStreamInterrupted: ((sessionId: string) => void) | undefined;
 let capturedOnSessionTitle: ((title: string, sessionId: string) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
@@ -136,6 +137,7 @@ vi.mock("@hooks/useChatSse", () => ({
     onError?: (msg: string) => void;
     onAwaitingHuman?: (event: unknown) => void;
     onSteeredMessage?: (messageId: string, sessionId: string) => void;
+    onStreamInterrupted?: (sessionId: string) => void;
     onSessionTitle?: (title: string, sessionId: string) => void;
   }) => {
     capturedFlushPendingWrites = params.flushPendingWrites;
@@ -145,6 +147,7 @@ vi.mock("@hooks/useChatSse", () => ({
     capturedOnError = params.onError;
     capturedOnAwaitingHuman = params.onAwaitingHuman;
     capturedOnSteeredMessage = params.onSteeredMessage;
+    capturedOnStreamInterrupted = params.onStreamInterrupted;
     capturedOnSessionTitle = params.onSessionTitle;
     return {
       messages: chatSseMessages,
@@ -393,6 +396,7 @@ describe("useManagedChat — session write reliability", () => {
     capturedOnError = undefined;
     capturedOnAwaitingHuman = undefined;
     capturedOnSteeredMessage = undefined;
+    capturedOnStreamInterrupted = undefined;
   });
 
   afterEach(async () => {
@@ -1666,6 +1670,78 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingMessages[0].status).toBe("offered");
     act(() => capturedOnSteeredMessage?.(id, "session-1"));
     expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("discards the local queue on stream interruption", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    for (const text of ["waiting", "offered", "uncertain"]) {
+      act(() => latest.setInput(text));
+      await act(async () => latest.handleSend());
+    }
+    await act(async () => latest.forcePendingMessage(latest.pendingMessages[1].id));
+    steerActiveTurnMock.mockResolvedValueOnce("uncertain");
+    await act(async () => latest.forcePendingMessage(latest.pendingMessages[2].id));
+    expect(latest.pendingMessages.map((message) => message.status)).toEqual(["waiting", "offered", "uncertain"]);
+    act(() => capturedOnStreamInterrupted?.("session-1"));
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    expect(latest.pendingMessages).toEqual([]);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("forgets the queue on navigation without sending it into the next conversation", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("do not restore"));
+    await act(async () => latest.handleSend());
+    chatSseWaitResponse = false;
+    bindSession("session-2");
+    await tick();
+    expect(latest.pendingMessages).toEqual([]);
+    expect(sendMock).not.toHaveBeenCalled();
+    act(() => capturedOnStreamInterrupted?.("session-1"));
+    bindSession("session-1");
+    await tick();
+    expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("does not restore a queued turn when an old send settles after interruption", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("queued"));
+    await act(async () => latest.handleSend());
+    let rejectTurn: (accepted: boolean) => void = () => {};
+    sendMock.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          rejectTurn = resolve;
+        }),
+    );
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    act(() => capturedOnStreamInterrupted?.("session-1"));
+    await act(async () => rejectTurn(false));
+    expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("removes an uncertain message without resending it", async () => {
+    chatSseWaitResponse = true;
+    steerActiveTurnMock.mockResolvedValueOnce("uncertain");
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("remove me"));
+    await act(async () => latest.handleSend());
+    const id = latest.pendingMessages[0].id;
+    await act(async () => latest.forcePendingMessage(id));
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    act(() => latest.removePendingMessage(id));
+    expect(latest.pendingMessages).toEqual([]);
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it("holds uncertain delivery until the person retries", async () => {

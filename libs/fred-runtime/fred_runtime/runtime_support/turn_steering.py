@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 _ACTIVE_LEASE = timedelta(seconds=90)
 _PAUSED_RETENTION = timedelta(days=30)
 _MAX_PENDING = 32
+_CLEANUP_BATCH = 256
 _metadata = MetaData()
 _turns = Table(
     "runtime_turn_steering",
@@ -161,6 +162,7 @@ class TurnSteeringMailbox:
                     _turns.c.session_id == session_id,
                     _turns.c.turn_id == turn_id,
                     _turns.c.state.in_(("active", "resumed")),
+                    _turns.c.expires_at > datetime.now(UTC),
                 )
                 .values(expires_at=datetime.now(UTC) + _ACTIVE_LEASE)
             )
@@ -283,9 +285,23 @@ class TurnSteeringMailbox:
         if self._engine is None:
             return
         async with self._require_engine().begin() as conn:
-            await conn.execute(
-                delete(_turns).where(_turns.c.expires_at <= datetime.now(UTC))
+            sessions = (
+                (
+                    await conn.execute(
+                        select(_turns.c.session_id)
+                        .where(_turns.c.expires_at <= datetime.now(UTC))
+                        .order_by(_turns.c.expires_at)
+                        .limit(_CLEANUP_BATCH)
+                        .with_for_update(skip_locked=True)
+                    )
+                )
+                .scalars()
+                .all()
             )
+            if sessions:
+                await conn.execute(
+                    delete(_turns).where(_turns.c.session_id.in_(sessions))
+                )
 
 
 turn_steering_mailbox = TurnSteeringMailbox()
@@ -306,4 +322,15 @@ class TurnSteeringMiddleware(AgentMiddleware):
         writer = get_stream_writer()
         for message_id, text in messages:
             writer(SteeredUserMessageRuntimeEvent(message_id=message_id, content=text))
-        return {"messages": [HumanMessage(content=text) for _, text in messages]}
+        return {
+            "messages": [
+                HumanMessage(
+                    content="The user has sent an update while this task is in progress. "
+                    "Apply this latest instruction before deciding what to do next; "
+                    "it may add information, revise or cancel the earlier request. "
+                    "If the user asks you to stop, do not call more tools; "
+                    f"briefly acknowledge and end the turn.\n\n{text}"
+                )
+                for _, text in messages
+            ]
+        }
