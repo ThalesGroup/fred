@@ -1560,6 +1560,13 @@
         }
       },
       "platformModelBindings": {
+        "titleModel": {
+          "label": "Conversation title model",
+          "default": "Platform default model",
+          "saved": "Title model saved.",
+          "saveError": "Could not save the title model.",
+          "loadError": "The conversation title model requires the right to edit the platform prompt."
+        },
         "openButton": "Model defaults",
         "title": "Model defaults",
         "tabAria": "Model default scope",
@@ -2627,7 +2634,8 @@
         }
       },
       "recentAgents": {
-        "title": "Recently used agents"
+        "title": "Recently used agents",
+        "suggestedTitle": "Agents available to you"
       },
       "topAgents": {
         "title": "Your most-used agents",

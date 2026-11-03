@@ -193,6 +193,11 @@ export function parseTabularTraceResult(rawName: string, content: string): Tabul
     return null;
   }
 
+  // MCP wraps non-object responses in a result envelope. Keep the payload validation below.
+  if (isObject(parsed) && Object.keys(parsed).length === 1 && Array.isArray(parsed.result)) {
+    parsed = parsed.result;
+  }
+
   switch (kind) {
     case "documents": {
       if (!Array.isArray(parsed)) return null;

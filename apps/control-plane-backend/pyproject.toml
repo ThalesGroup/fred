@@ -14,7 +14,7 @@ dependencies = [
   "PyYAML==6.0.1",
   "python-dotenv>=1.0.1,<2.0.0",
   "pydantic>=2.10.0,<3.0.0",
-  "temporalio>=1.30.0,<2.0.0",
+  "temporalio>=1.35.0,<2.0.0",
   # 3.10.1, not 3.10.0: the Knowledge Base catalog id and its authorization
   # reference land in 3.10.1, and this backend calls both.
   "fred-core>=4.5.3",

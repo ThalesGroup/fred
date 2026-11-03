@@ -172,6 +172,7 @@ class RuntimeEventKind(str, Enum):
     TURN_PERSISTED = "turn_persisted"
     EXECUTION_ERROR = "execution_error"
     EXECUTION_INTERRUPTED = "execution_interrupted"
+    SESSION_TITLE = "session_title"
 
 
 InterruptedAction: TypeAlias = Literal["continue", "restart"]
@@ -503,6 +504,14 @@ class FinalRuntimeEvent(RuntimeEventBase):
         return coerce_finish_reason(v)
 
 
+class SessionTitleRuntimeEvent(RuntimeEventBase):
+    """Generated conversation title, emitted once as soon as it is ready when
+    the request carried `runtime_context.auto_title`."""
+
+    kind: Literal[RuntimeEventKind.SESSION_TITLE] = RuntimeEventKind.SESSION_TITLE
+    title: str = Field(..., min_length=1)
+
+
 class TurnPersistedEvent(RuntimeEventBase):
     """
     Signals that a completed turn's history has been durably persisted.
@@ -565,7 +574,8 @@ RuntimeEvent: TypeAlias = Annotated[
     | FinalRuntimeEvent
     | TurnPersistedEvent
     | RuntimeErrorEvent
-    | ExecutionInterruptedRuntimeEvent,
+    | ExecutionInterruptedRuntimeEvent
+    | SessionTitleRuntimeEvent,
     Field(discriminator="kind"),
 ]
 

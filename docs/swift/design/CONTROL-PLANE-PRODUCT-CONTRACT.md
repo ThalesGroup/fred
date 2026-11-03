@@ -5176,11 +5176,21 @@ frontend applies the database response or defaults to in-memory controls and
 does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
 
+### Conversation title model (2026-10-30)
+
+`GET`/`PUT /admin/platform/creation-assistant` carry an optional
+`title_model_profile_id`, stored on `creation_assistant_settings` and validated
+against `model_options`. `ManagedAgentRuntimeBinding.title_model_profile_id`
+delivers it on the per-turn runtime binding, because the team settings endpoint
+requires `CAN_UPDATE_AGENTS` and a plain member must get the same title model.
+`None` follows the platform chat binding, then the pod default; a profile unknown
+to the pod falls back to the pod default.
+
 ## 70. Contract Notes — capability readiness and vision flags (2026-10-05)
 
 **Readiness suspension.** `SuspensionReason` gains `capability_pending`: a selected
 capability reports, through its pod's `POST /agents/capabilities/readiness`
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.120), that its saved configuration is still
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.121), that its saved configuration is still
 being prepared, or that preparing it failed. `ManagedAgentInstanceSummary` gains
 `suspension_detail` (nullable; Alembic `b8e1f4a2c6d9` adds the column), set only
 with `capability_pending` to carry the failure message. The existing suspension
@@ -5235,5 +5245,5 @@ panel filters it on `supports_vision`, as the agent form filters the team list.
 
 The capability routes those panels call (ppt_builder `/platform*`) live on the pod
 and are gated by the pod's capability-manager check
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.121). Acceptance scenarios:
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.122). Acceptance scenarios:
 `openspec/specs/ppt-builder/spec.md`.

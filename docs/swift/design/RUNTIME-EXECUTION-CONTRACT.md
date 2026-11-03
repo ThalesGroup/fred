@@ -2322,7 +2322,7 @@ channel itself carries no guarantee against it.
 
 **Tool-loop safety guardrails:**
 
-- `max_tool_calls_per_turn = 12` on all five ReAct agents
+- `max_tool_calls_per_turn = 100` on all ReAct agents
   (`fred_agents/tool_pacing.py`), permanent — a real cap, not a
   documented-but-inert default; hitting it degrades the answer
   (`exit_behavior="continue"`) rather than erroring the turn.
@@ -7156,7 +7156,26 @@ gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
 
-### 8.119 Turn-free capability model port and route team authorizer (2026-10-05)
+### 8.119 Generated conversation title (2026-10-29)
+
+`RuntimeContext.auto_title: bool | None` is a new optional field, and
+`session_title` (`SessionTitleRuntimeEvent { title }`) is a new runtime event
+kind. The chat sets `auto_title=true` on a conversation's first turn only. The
+runtime then starts one call beside the turn
+(`fred_runtime/app/session_title.py`) without reasoning, on the admin's title
+model (`ManagedAgentRuntimeBinding.title_model_profile_id`), else the platform
+chat binding, else the pod default. It sends the first 600 characters of the
+turn input and keeps a title of 80 characters at most, made of letters, digits,
+spaces, apostrophes and hyphens; a reply without a letter gives no title. The event is streamed once, just before the first turn event that
+follows the call's completion, so the title usually shows while the answer is
+still streaming. If the call is still running when `final` arrives, the stream
+waits at most 2 s for it. A failure or timeout sends no event. The frontend stores it with the existing session `PATCH { title }`. A
+manual rename made before the title arrives wins, and the title is never
+regenerated afterwards. Child agent invocations never generate titles,
+because `PortableContext` has no `auto_title` field.
+Migration note: `docs/swift/ops/migrations/3346-generated-conversation-title.md`.
+
+### 8.120 Turn-free capability model port and route team authorizer (2026-10-05)
 
 `RuntimeServices.capability_model` (`CapabilityModelPort`, optional, appended last)
 gives capability code outside a turn one chat call:
@@ -7197,7 +7216,7 @@ that calls it. On a secured pod a save or readiness request without `team_id` is
 
 Acceptance scenarios: `openspec/specs/ppt-builder/spec.md`.
 
-### 8.120 Capability readiness hook and pod endpoint (2026-10-05)
+### 8.121 Capability readiness hook and pod endpoint (2026-10-05)
 
 `AgentCapability.readiness(stored, identity) -> CapabilityReadiness` is an optional
 async hook (default `ready`) for a capability whose save starts background work.
@@ -7219,7 +7238,7 @@ ready. Control-plane maps the answers to the `capability_pending` suspension
 `profile_ids` declaring `supports_vision`, mirrored on
 `CapabilityCatalogEntry.model_vision_profile_ids`.
 
-### 8.121 Capability manager check and teamless model port on capability routes (2026-10-22)
+### 8.122 Capability manager check and teamless model port on capability routes (2026-10-22)
 
 `CapabilityTeamAuthorizer.require_capability_manager()` is a non-abstract method: it
 returns 403 unless the caller holds `OrganizationPermission.CAN_MANAGE_CAPABILITIES`

@@ -838,8 +838,12 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   rendered richly: a tabular/SQL result (`{sql_query, rows, error}`) shows the executed SQL
   plus a row-count and preview; a RAG/vector-search result (`{query, hits}`) shows the
   search query plus retrieved sources via the existing `SourcesPanel` molecule. Any other
-  tool shape still falls back to the original redacted view — see
+  tool shape still falls back to the original redacted view - see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
+
+- **Tabular MCP result compatibility (2026-10-29)** - discovery and schema panels
+  accept both historical arrays and the MCP `{result: [...]}` envelope. The same
+  payload validation and hiding of internal document IDs and SQL aliases apply.
 
 - **Curated document tool views (updated 2026-10-12)** - `summarize_document`
   renders its summary through `MarkdownRenderer`. `list_document_tree` shows nested,
@@ -3824,6 +3828,11 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
   state until then. A chat with no session id is settled on the spot — it has no history to
   resolve, and making it wait would put a spinner in front of the one screen that is empty by
   nature.
+- **Welcome agent card hid the description (2026-10-29)** - the card showed only the name and a
+  one-line truncated role, so the agent's capabilities and prerequisites were invisible. The card
+  hugs its content, up to 560px wide, in three columns: icon, name and role (13rem max), then the
+  visible description. Text wraps, and descriptions scroll past 12rem with keyboard access. Below
+  600px of viewport width, the description moves under the icon and identity.
 
 ---
 
