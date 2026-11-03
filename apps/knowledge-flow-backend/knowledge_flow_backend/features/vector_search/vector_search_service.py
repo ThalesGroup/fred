@@ -18,6 +18,7 @@ import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any, List, Optional, Protocol, cast, runtime_checkable
 from uuid import UUID
 
@@ -104,6 +105,7 @@ class VectorSearchService:
         self.vector_store = ctx.get_create_vector_store(self.embedder, read_only=True)
         self.kpi: BaseKPIWriter = ctx.get_kpi_writer()
         self._crossencoder_model: Optional[Any] = None
+        self._crossencoder_lock = Lock()
 
     async def _require_corpus_ready(self) -> None:
         if isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
@@ -119,7 +121,9 @@ class VectorSearchService:
         # service (e.g. FastAPI route registration, OpenAPI generation) must not require
         # a working HF model client — see cross-encoder CI 429s on generate-openapi.
         if self._crossencoder_model is None:
-            self._crossencoder_model = ApplicationContext.get_instance().get_crossencoder_model()
+            with self._crossencoder_lock:
+                if self._crossencoder_model is None:
+                    self._crossencoder_model = ApplicationContext.get_instance().get_crossencoder_model()
         return self._crossencoder_model
 
     def _kpi_search_dims(self, *, policy: str) -> dict[str, Optional[str]]:
@@ -493,6 +497,8 @@ class VectorSearchService:
         policy_name: Optional[SearchPolicyName],
         context: DocumentAccessContext,
         authorized_space_ids: tuple[UUID, ...],
+        rerank: bool = False,
+        min_score: float | None = None,
     ) -> List[VectorSearchHit]:
         """Search one Weaver space and its ancestors; the caller checked the space read.
 
@@ -505,6 +511,7 @@ class VectorSearchService:
             scope = await resolve_scope(conn, context, user_id=user.uid, authorized_space_ids=authorized_space_ids)
         if (not scope.space_ids or scope.document_scope.is_empty) and not scope.attachment_ids:
             return []
+        pool = min(top_k * 5, 100) if rerank else top_k
         policy_key = policy_name or SearchPolicyName.hybrid
         strategy = {
             SearchPolicyName.strict: self._strict,
@@ -532,7 +539,7 @@ class VectorSearchService:
                 strategy(
                     question=question,
                     user=user,
-                    k=top_k,
+                    k=pool,
                     library_tags_ids=None,
                     metadata_terms_extra=terms,
                     metadata_any=selection,
@@ -542,7 +549,12 @@ class VectorSearchService:
         )
         documents = [(hit.document, hit.score) for hit in rankings[0]] if len(rankings) == 1 else _merge_rankings(rankings)
         # Verify the whole bounded union before applying the global limit.
-        hits = (await self._visible_hits(scope, documents, user))[:top_k]
+        hits = (await self._visible_hits(scope, documents, user))[:pool]
+        if rerank and hits:
+            hits = await asyncio.to_thread(self.rerank_documents, question, hits, top_r=top_k)
+        if min_score is not None:
+            hits = [hit for hit in hits if (hit.score or 0.0) >= min_score]
+        hits = hits[:top_k]
         stats_policy = policy_key
         if (policy_key == SearchPolicyName.strict and not isinstance(self.vector_store, SupportsFullTextSearch)) or (
             policy_key == SearchPolicyName.hybrid and not isinstance(self.vector_store, SupportsHybridSearch)

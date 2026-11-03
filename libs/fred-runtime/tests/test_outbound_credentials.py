@@ -26,6 +26,7 @@ import asyncio
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from uuid import UUID
 
 import httpx
 import pytest
@@ -36,6 +37,8 @@ from conftest import (
     StaticWorkloadTokens,
     admitted_provider,
 )
+from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DocumentAccessContext
 from fred_core.security.backend_to_backend_auth import TokenLease
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
@@ -309,7 +312,12 @@ async def test_a_retried_call_asks_again_and_keeps_the_same_grant(monkeypatch):
     provider = delegated(runtime)
     attempts: list[tuple[str, dict[str, str]]] = []
 
-    async def request() -> str:
+    client = object.__new__(kf_vectorsearch_client.VectorSearchClient)
+
+    async def request(**kwargs) -> httpx.Response:
+        assert kwargs["path"] == "/documents/search"
+        assert kwargs["json"] == {"question": "anchor", "top_k": 10, "rerank": True}
+        assert kwargs["read_timeout"] == 37.0
         # One attempt as a client makes it: the grant, then the adapter's lease.
         credentials = await provider.credentials()
         lease = await provider.get_token_lease()
@@ -317,9 +325,26 @@ async def test_a_retried_call_asks_again_and_keeps_the_same_grant(monkeypatch):
         if len(attempts) == 1:
             tokens.rotate()
             raise httpx.ConnectError("synthetic disconnect")
-        return "ok"
+        return httpx.Response(
+            200, json=[], request=httpx.Request("POST", "http://kf/documents/search")
+        )
 
-    assert await kf_vectorsearch_client._with_transient_retry(request) == "ok"
+    monkeypatch.setattr(client, "_request_with_token_refresh", request)
+    assert (
+        await client.search(
+            question="anchor",
+            document_context=DocumentAccessContext(
+                space_id=UUID(int=1),
+                document_scope=DocumentScope.from_ids(
+                    document_ids=["00000000-0000-0000-0000-000000000002"]
+                ),
+            ),
+            rerank=True,
+            read_timeout=37.0,
+            transient_retry=True,
+        )
+        == []
+    )
     assert [token for token, _ in attempts] == ["workload-1", "workload-2"]
     assert attempts[0][1] == attempts[1][1]
 

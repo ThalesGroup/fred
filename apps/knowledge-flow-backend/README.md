@@ -17,6 +17,14 @@ make run
 
 The API retains `/knowledge-flow/v2`, its JWT/delegation boundary, and tabular MCP under `/knowledge-flow/v2/mcp/tabular`. PostgreSQL publication/access reads use `cp_read`; the configured search projection is OpenSearch or pgvector.
 
+`POST /knowledge-flow/v2/documents/search` also serves targeted document similarity.
+Optional `rerank` retrieves `min(top_k * 5, 100)` candidates, applies publication
+and scope checks, then uses the existing CrossEncoder to keep `top_k` hits.
+Optional `min_score` filters the original retrieval scores after reranking; the
+reranker does not replace those scores. With both options omitted, ordinary
+search is unchanged. Similarity callers select corpus documents through the
+trusted document-context header and exclude conversation attachments.
+
 ## Configuration
 
 `CONFIG_FILE` and `ENV_FILE` retain their existing meaning. See [configuration](config/README.md).

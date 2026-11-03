@@ -321,3 +321,79 @@ async def test_newly_ready_files_wait_for_the_next_turn():
                     authority.document_context(bound.runtime_context).attachment_ids
                     == expected_ids
                 )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rerank", [False, True])
+async def test_similarity_sends_narrowed_corpus_context_without_bound_attachments(
+    monkeypatch, empty_runtime_context, rerank
+):
+    import httpx
+    from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
+    from fred_runtime.integrations.v2_runtime.adapters import DocumentSimilarityAdapter
+    from fred_runtime.runtime_context import (
+        RuntimeConfig,
+        RuntimeTimeouts,
+        set_runtime_context,
+    )
+    from fred_runtime.runtime_context import RuntimeContext as PodRuntimeContext
+
+    session = str(UUID(int=301))
+    bound = binding([D1])
+    bound.runtime_context.session_id = session
+    # A turn policy must not replace similarity's default search policy.
+    bound.runtime_context.search_policy = "strict"
+    attachment = dict(
+        document_id=str(UUID(int=401)), name="attached.txt", mime="text/plain"
+    )
+    authority = TurnAuthority(
+        turn_binding("agent-1", session=session, attachments=[attachment]), None
+    )
+    seen = []
+
+    async def request(self, **kwargs):
+        seen.append(kwargs)
+        return httpx.Response(
+            200, json=[], request=httpx.Request("POST", "http://kf/documents/search")
+        )
+
+    monkeypatch.setattr(VectorSearchClient, "_request_with_token_refresh", request)
+    set_runtime_context(
+        PodRuntimeContext(
+            RuntimeConfig(
+                knowledge_flow_url="http://kf.invalid",
+                timeouts=RuntimeTimeouts(similarity_read=37.0),
+            )
+        )
+    )
+    with RunScope.open() as run:
+        run.turn_authority = authority
+        authority.start(run)
+        authority.bind_documents(
+            bound.runtime_context, DocumentScope.from_ids([A]), attachments_enabled=True
+        )
+        assert authority.document_context(bound.runtime_context).attachment_ids
+        adapter = DocumentSimilarityAdapter(binding=bound, settings=_Settings())
+        result = await adapter.find_similar(
+            "anchor", document_uids=[D1, OUTSIDE], top_k=4, rerank=rerank, min_score=0.0
+        )
+        assert result.hits == ()
+    assert len(seen) == 1
+    call = seen[0]
+    assert call["path"] == "/documents/search"
+    assert call["json"] == {
+        "question": "anchor",
+        "top_k": 4,
+        "min_score": 0.0,
+        **({"rerank": True} if rerank else {}),
+    }
+    assert call["read_timeout"] == 37.0
+    context = DocumentAccessContext.model_validate_json(
+        call["headers"][DOCUMENT_CONTEXT_HEADER]
+    )
+    assert str(context.space_id) == SPACE_ID
+    assert context.attachment_ids == ()
+    assert context.document_scope == DocumentScope.from_ids([A]).intersect(
+        DocumentScope.from_ids(document_ids=[D1])
+    )
+    assert not context.document_scope.covers(UUID(OUTSIDE), UUID(A))

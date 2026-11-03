@@ -1,6 +1,6 @@
 # The checkout owns its topology; the factory owns infrastructure and browser URLs.
-{{- if ne (env "ENV") "secondary" }}
-{{- fail "This development profile requires ENV=secondary; the default environment is unchanged" }}
+{{- if and (ne (env "ENV") "secondary") (ne (env "INSTANCE") "weaver") }}
+{{- fail "Use INSTANCE=weaver for coexistence, or ENV=secondary for the standalone cluster" }}
 {{- end }}
 releases:
   - name: fred-app
@@ -9,6 +9,7 @@ releases:
       - base-values.yaml.gotmpl
       - secondary-values.yaml.gotmpl
       - values.yaml.gotmpl
+      - instance-values.yaml.gotmpl
       {{- with env "K3D_IMAGE_VALUES" }}
       - {{ . | quote }}
       {{- end }}

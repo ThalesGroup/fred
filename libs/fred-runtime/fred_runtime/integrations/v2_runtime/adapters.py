@@ -42,6 +42,7 @@ from contextlib import contextmanager
 from functools import partial
 from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
+from uuid import UUID
 
 import httpx
 from fred_core.common import OwnerFilter
@@ -1473,7 +1474,7 @@ class DocumentSimilarityAdapter(DocumentSimilarityPort):
     conversation's scope. Knowledge Flow's per-document ReBAC still gates real
     authorization, but that would leave the agent reading documents the user
     did not put in this conversation. An intersection that comes back empty
-    therefore returns no hits rather than calling Knowledge Flow untargeted,
+    therefore raises a scope refusal rather than calling Knowledge Flow untargeted,
     which is what an empty target list would mean downstream.
     """
 
@@ -1513,11 +1514,19 @@ class DocumentSimilarityAdapter(DocumentSimilarityPort):
         if get_rag_knowledge_scope(runtime_context) == "general_only":
             return DocumentSearchResult(hits=())
 
-        if not document_uids:
+        valid_uids = []
+        for uid in document_uids:
+            try:
+                UUID(uid)
+            except ValueError:
+                logger.debug("Ignoring invalid document similarity identifier: %r", uid)
+            else:
+                valid_uids.append(uid)
+        if not valid_uids:
             return DocumentSearchResult(hits=())
 
         effective_uids = _narrow_scope_ids(
-            get_document_uids(runtime_context), document_uids
+            get_document_uids(runtime_context), valid_uids
         )
         if not effective_uids:
             # Raising, not returning no hits: an empty result is
@@ -1531,12 +1540,22 @@ class DocumentSimilarityAdapter(DocumentSimilarityPort):
         top_k = top_k if isinstance(top_k, int) and top_k > 0 else 10
 
         try:
-            hits = await self._search_client.similarity_search(
-                anchor=anchor,
-                document_uids=effective_uids,
+            document_context = current_turn().document_context(
+                runtime_context,
+                DocumentScope.from_ids(document_ids=effective_uids),
+                include_attachments=False,
+                include_corpus=True,
+            )
+            hits = await self._search_client.search(
+                question=anchor,
+                document_context=document_context,
                 top_k=top_k,
                 rerank=rerank,
                 min_score=min_score,
+                read_timeout=float(
+                    get_runtime_context().config.timeouts.similarity_read
+                ),
+                transient_retry=True,
             )
         except Exception as exc:
             # Same SDK-typed mapping the other document adapters apply, so the

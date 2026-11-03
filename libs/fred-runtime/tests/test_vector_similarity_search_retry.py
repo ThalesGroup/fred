@@ -15,7 +15,7 @@
 """Transient-failure retry on the similarity-search path.
 
 `KfBaseClient._request_with_token_refresh` retries a 401 and nothing else, and
-no caller above `VectorSearchClient.similarity_search` retries either - so a
+no caller above the similarity adapter retries either - so a
 single dropped connection would otherwise fail a whole comparison run. These
 cases pin what counts as retryable (transport errors and 5xx, never a 4xx),
 that the retry budget is bounded, and that the happy path costs no extra call.
@@ -23,8 +23,12 @@ that the retry budget is bounded, and that the happy path costs no extra call.
 
 from __future__ import annotations
 
+from uuid import UUID
+
 import httpx
 import pytest
+from fred_core.documents.selection import DocumentScope
+from fred_core.documents.transport import DOCUMENT_CONTEXT_HEADER, DocumentAccessContext
 from fred_runtime.common import kf_vectorsearch_client as client_module
 from fred_runtime.common.kf_vectorsearch_client import _with_transient_retry
 
@@ -42,7 +46,7 @@ def _no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _http_error(status_code: int) -> httpx.HTTPStatusError:
-    request = httpx.Request("POST", "http://kf/vector/similarity-search")
+    request = httpx.Request("POST", "http://kf/documents/search")
     return httpx.HTTPStatusError(
         "boom", request=request, response=httpx.Response(status_code, request=request)
     )
@@ -132,10 +136,92 @@ async def test_does_not_retry_a_client_error() -> None:
     assert attempts.calls == 1
 
 
-async def test_rejects_an_empty_target_before_any_request() -> None:
-    """Targeting is the point of this mode - an empty list is a client bug, not
-    an invitation to search the whole corpus."""
-    unbound = client_module.VectorSearchClient.__new__(client_module.VectorSearchClient)
+@pytest.mark.parametrize(
+    "exc,failures,expected_calls",
+    [
+        (httpx.ConnectError("dropped"), 1, 2),
+        (_http_error(502), 1, 2),
+        (_http_error(503), 1, 2),
+        (_http_error(504), 1, 2),
+        (httpx.ConnectError("dropped"), 99, 3),
+        (httpx.ReadTimeout("slow"), 99, 1),
+        (httpx.WriteTimeout("slow"), 99, 1),
+        (_http_error(500), 99, 1),
+        (_http_error(422), 99, 1),
+    ],
+)
+async def test_search_similarity_options_retain_the_retry_contract(
+    monkeypatch, exc, failures, expected_calls
+) -> None:
+    client = object.__new__(client_module.VectorSearchClient)
+    calls = []
+    context = DocumentAccessContext(
+        space_id=UUID(int=1),
+        document_scope=DocumentScope.from_ids(
+            document_ids=["00000000-0000-0000-0000-000000000002"]
+        ),
+    )
 
-    with pytest.raises(ValueError):
-        await unbound.similarity_search(anchor="x", document_uids=[])
+    async def request(**kwargs):
+        calls.append(kwargs)
+        if len(calls) <= failures:
+            raise exc
+        return httpx.Response(
+            200, json=[], request=httpx.Request("POST", "http://kf/documents/search")
+        )
+
+    monkeypatch.setattr(client, "_request_with_token_refresh", request)
+    call = client.search(
+        question="anchor",
+        document_context=context,
+        top_k=7,
+        rerank=True,
+        min_score=0.3,
+        read_timeout=37.0,
+        transient_retry=True,
+    )
+    if failures == 99:
+        with pytest.raises(type(exc)):
+            await call
+    else:
+        assert await call == []
+    assert len(calls) == expected_calls
+    for attempt in calls:
+        assert attempt == {
+            "method": "POST",
+            "path": "/documents/search",
+            "phase_name": "kf_vector_similarity_search",
+            "headers": {DOCUMENT_CONTEXT_HEADER: context.model_dump_json()},
+            "json": {
+                "question": "anchor",
+                "top_k": 7,
+                "rerank": True,
+                "min_score": 0.3,
+            },
+            "read_timeout": 37.0,
+        }
+
+
+async def test_ordinary_search_does_not_opt_into_similarity_transport(
+    monkeypatch,
+) -> None:
+    client = object.__new__(client_module.VectorSearchClient)
+    calls = []
+
+    async def request(**kwargs):
+        calls.append(kwargs)
+        raise httpx.ConnectError("dropped")
+
+    monkeypatch.setattr(client, "_request_with_token_refresh", request)
+    with pytest.raises(httpx.ConnectError):
+        await client.search(
+            question="q",
+            document_context=DocumentAccessContext(
+                space_id=UUID(int=1),
+                document_scope=DocumentScope(),
+            ),
+        )
+    assert len(calls) == 1
+    assert calls[0]["json"] == {"question": "q", "top_k": 10}
+    assert calls[0]["read_timeout"] is None
+    assert calls[0]["phase_name"] == "kf_vector_search"
