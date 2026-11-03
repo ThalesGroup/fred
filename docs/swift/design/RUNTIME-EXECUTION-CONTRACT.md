@@ -7162,9 +7162,11 @@ Ordinary pending messages live in the current browser chat visit. Navigation,
 reload or stream interruption clears that list; there is no queue recovery API
 or delivery acknowledgement tied to history persistence. The existing SQL
 mailbox only coordinates temporary steering across replicas. Injected user
-messages are prefixed in model context to identify additional information to
-consider before continuing; the SSE delivery keeps the original text. Cancellation
-completes generator teardown and stops lease renewal; expired steering rows are
+messages are prefixed in model context as updated user instructions that may add
+information, revise or cancel the task. A request to stop asks the model to
+acknowledge and finish without further tool calls; the SSE delivery keeps the
+original text. This is model guidance; the Stop button cancels the stream.
+Cancellation completes generator teardown and stops lease renewal; expired steering rows are
 reclaimed every minute in bounded batches. The
 [managed conversations specification](../../../openspec/specs/managed-conversations/spec.md)
 defines the lifecycle and normal HITL behavior.

@@ -325,8 +325,11 @@ class TurnSteeringMiddleware(AgentMiddleware):
         return {
             "messages": [
                 HumanMessage(
-                    content="The user has provided additional information. "
-                    f"Take it into account before continuing:\n\n{text}"
+                    content="The user has sent an update while this task is in progress. "
+                    "Apply this latest instruction before deciding what to do next; "
+                    "it may add information, revise or cancel the earlier request. "
+                    "If the user asks you to stop, do not call more tools; "
+                    f"briefly acknowledge and end the turn.\n\n{text}"
                 )
                 for _, text in messages
             ]

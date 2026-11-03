@@ -88,8 +88,8 @@ async def test_human_pause_resumes_on_another_replica(monkeypatch, tmp_path) -> 
         message = update["messages"][0]
         assert isinstance(message, HumanMessage)
         assert isinstance(message.content, str)
-        assert "additional information" in message.content
-        assert "before continuing" in message.content
+        assert "latest instruction" in message.content
+        assert "revise or cancel" in message.content
         assert message.content.endswith("\n\nfocus on Marseille")
         assert [(event.message_id, event.content) for event in events] == [
             ("message", "focus on Marseille")
@@ -564,3 +564,93 @@ async def test_postgres_expiry_sweep_is_bounded_and_late_cleanup_preserves_owner
                 )
             )
         await asyncio.gather(*(engine.dispose() for engine in engines))
+
+
+@pytest.mark.asyncio
+async def test_compiled_agent_receives_stop_before_next_model_decision(
+    monkeypatch, tmp_path
+):
+    from conftest import ToolFriendlyFakeChatModel
+    from fred_runtime.react.middleware.frame import (
+        build_react_platform_middleware_frame,
+    )
+    from fred_sdk.contracts.context import (
+        BoundRuntimeContext,
+        PortableContext,
+        PortableEnvironment,
+    )
+    from fred_sdk.contracts.context import RuntimeContext as PortableRuntimeContext
+    from fred_sdk.contracts.models import ToolApprovalPolicy
+    from langchain.agents import create_agent
+    from langchain.agents.middleware import AgentMiddleware
+    from langchain_core.tools import tool
+
+    first, second, engine, other = await _replicas(tmp_path)
+    monkeypatch.setattr(turn_steering, "turn_steering_mailbox", first)
+    events = []
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: events.append)
+    inputs = []
+
+    class CaptureModelInput(AgentMiddleware):
+        async def awrap_model_call(self, request, handler):
+            inputs.append(list(request.messages))
+            return await handler(request)
+
+    @tool
+    async def search() -> str:
+        """Return a test result while the user changes the instruction."""
+        assert await second.offer("s", "a", "u", "t", "turn", "m", "Stop")
+        return "No relevant result"
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "search", "args": {}, "id": "search-1"}],
+            ),
+            AIMessage(content="Stopped."),
+        ]
+    )
+    binding = BoundRuntimeContext(
+        runtime_context=PortableRuntimeContext(),
+        portable_context=PortableContext(
+            request_id="r",
+            correlation_id="c",
+            actor="u",
+            tenant="t",
+            environment=PortableEnvironment.DEV,
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            baggage={"steering_turn_id": "turn"},
+        ),
+    )
+    middleware = build_react_platform_middleware_frame(
+        binding=binding,
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names={"search"},
+        tracer=None,
+        kpi=None,
+        max_history_messages=500,
+        max_history_chars=200_000,
+    )
+    agent = create_agent(
+        model=model, tools=[search], middleware=[*middleware, CaptureModelInput()]
+    )
+    try:
+        assert await first.start("s", "a", "u", "t", "turn")
+        await agent.ainvoke(
+            {"messages": [HumanMessage(content="Find relevant information")]}
+        )
+        assert len(inputs) == 2
+        assert isinstance(inputs[1][-2], ToolMessage)
+        assert isinstance(inputs[1][-1], HumanMessage)
+        assert inputs[1][-1].content.endswith("\n\nStop")
+        assert "do not call more tools" in inputs[1][-1].content
+        assert [(event.message_id, event.content) for event in events] == [
+            ("m", "Stop")
+        ]
+    finally:
+        await first.end("s", "turn")
+        await engine.dispose()
+        await other.dispose()
