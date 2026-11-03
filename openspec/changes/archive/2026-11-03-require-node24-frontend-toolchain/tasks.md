@@ -7,5 +7,5 @@
 ## 2. Verify and document compatibility
 
 - [x] 2.1 Update active setup/release documentation and the migration note; verify no active instruction advertises Node 22 support and run `make migration-check`.
-- [ ] 2.2 Run the root `make code-quality` once for the completed change and full application/producer test and build targets under the selected tooling; validate all three actual packed archives, isolated consumers, browser checks and packed SDK production-host integration, including the exact dependency graph from #3298.
-- [ ] 2.3 Apply the full branch audit and independent review against swift, disposition findings and record base/head and verification in the PR; reconcile, sync and archive this OpenSpec change when implementation verification is complete.
+- [x] 2.2 Run the root `make code-quality` once for the completed change and full application/producer test and build targets under the selected tooling; validate all three actual packed archives, isolated consumers, browser checks and packed SDK production-host integration, including the exact dependency graph from #3298.
+- [x] 2.3 Apply the full branch audit and independent review against swift, disposition findings and record base/head and verification in the PR; reconcile, sync and archive this OpenSpec change when implementation verification is complete.
