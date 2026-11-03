@@ -3,13 +3,15 @@
 
 import { type PropsWithChildren } from "react";
 import { useTranslation } from "react-i18next";
+import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage";
 import GcuPage from "@components/pages/GcuPage/GcuPage";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout";
 import Button from "@shared/atoms/Button/Button";
 import { useOnboardingStatusQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useRefetchOnWindowFocus } from "../hooks/crossSessionRefresh";
 
-export default function GcuGuard({ children }: PropsWithChildren) {
+/** Independent platform initialization: bootstrap, then personal consent, then application routes. */
+export default function OnboardingGuard({ children }: PropsWithChildren) {
   const { t } = useTranslation();
   const state = useOnboardingStatusQuery(undefined, { refetchOnMountOrArgChange: true });
   useRefetchOnWindowFocus(state.refetch, false);
@@ -24,6 +26,8 @@ export default function GcuGuard({ children }: PropsWithChildren) {
         </Button>
       </div>
     );
+  else if (state.data.root_bootstrap_required)
+    content = <BootstrapPage username={state.data.username || state.data.user_id} />;
   else if (state.data.gcu_version && state.data.acceptance?.version !== state.data.gcu_version)
     content = <GcuPage key={state.data.gcu_version} version={state.data.gcu_version} />;
   else return <>{children}</>;

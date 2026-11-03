@@ -29,6 +29,7 @@ the annexes. Validation records live in each lot's PR; remaining work in GitHub 
 
 | Question | Canonical explanation | Implementation entry |
 | --- | --- | --- |
+| [Independent platform initialization with shared SSO](03-security.md#independent-platform-initialization) | [Contract and validation scope](A6-security.md#independent-platform-initialization) | `onboarding.rs`, `bootstrap.rs`, `OnboardingGuard`, `BootstrapPage`; [source map](../../apps/control-plane/src/README.md) |
 | Login, CGU, first platform admin | [Journey](02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user), [Security](03-security.md) | [Source map](../../apps/control-plane/src/README.md) rows authentication, CGU, bootstrap |
 | Organization admin/owner selection and creation | [Organization creation](02.1-user-journeys.md#a-platform-admin-creates-an-organization), [Organizations](04-organizations.md#platform-administration) | Source map rows directory and organizations |
 | Organization totals, team detail and their disclosure boundary | [Overview](04-organizations.md#organization-supervision), [Supervision contract](A8-organizations.md#organization-supervision), [Read budget](09-quality.md#organization-supervision-read-budget) | [Implementation trace](A8-organizations.md#pagination-freshness-and-implementation-trace); organization supervision page |

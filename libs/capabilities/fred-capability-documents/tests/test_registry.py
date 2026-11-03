@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Registry boot invariants for the five document capabilities.
+"""Registry boot invariants for the four document capabilities.
 
 Unlike the per-capability tests, which hand-build an `EntryPoint`, this reads
 the entry points the INSTALLED distribution declares, so a typo in
@@ -31,7 +31,6 @@ from fred_sdk.contracts.models import TeamScopePolicy
 
 _EXPECTED_IDS = {
     "document_extract",
-    "document_label_search",
     "document_similarity",
     "document_summarize",
     "document_verbatim",
@@ -46,7 +45,7 @@ def _declared_entry_points():
     ]
 
 
-def test_installed_distribution_declares_the_five_capabilities() -> None:
+def test_installed_distribution_declares_the_four_capabilities() -> None:
     entries = _declared_entry_points()
 
     assert {entry.name for entry in entries} == _EXPECTED_IDS
@@ -64,7 +63,7 @@ def test_declared_entry_points_boot_into_a_registry() -> None:
 
 
 def test_every_capability_stays_admin_gated() -> None:
-    # None of the five is DEFAULT_ON: a team admin opts an agent in explicitly,
+    # None of the four is DEFAULT_ON: a team admin opts an agent in explicitly,
     # so installing the package changes no existing agent's tool set.
     for entry in _declared_entry_points():
         assert entry.load().manifest.team_scope == TeamScopePolicy.ADMIN_GATED, (

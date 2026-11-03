@@ -10,8 +10,6 @@ independently grantable by a team admin.
   (`RuntimeServices.document_summarize`).
 - **`document_similarity`** — targeted document-to-document comparison
   (`RuntimeServices.document_similarity`).
-- **`document_label_search`** — exhaustive, paginated resolution of a
-  business label to documents (`RuntimeServices.document_tree`).
 - **`document_verbatim`** — verbatim, paginated read of one document
   (`RuntimeServices.document_markdown`).
 - **`document_extract`** — exhaustive extraction from one document

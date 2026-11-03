@@ -25,7 +25,6 @@ import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/Platf
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
 import MarketplacesPage from "@components/pages/admin/MarketplacesPage/MarketplacesPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
-import BootstrapPage from "@components/pages/BootstrapPage/BootstrapPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
 import { GcuPageContent } from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
@@ -63,8 +62,7 @@ import MonitorPage from "@components/pages/admin/MonitorPage/MonitorPage";
 import OrganizationsPage from "@components/pages/admin/OrganizationsPage/OrganizationsPage";
 import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
 import ManagerArea from "@core/guards/ManagerArea";
-import GcuGuard from "@core/guards/GcuGuard";
-import BootstrapGuard from "@core/guards/BootstrapGuard";
+import OnboardingGuard from "@core/guards/OnboardingGuard";
 import ProvisioningPage from "@components/pages/admin/ProvisioningPage/ProvisioningPage";
 import AnnouncementStack from "../rework/features/announcements/AnnouncementStack";
 import PatchNoteGate from "../rework/features/announcements/PatchNoteGate";
@@ -82,23 +80,21 @@ function AdmittedContent() {
   const { pathname } = useLocation();
   const agentManagement = isWeaverContentRoute(pathname);
   return (
-    <GcuGuard>
-      <BootstrapGuard>
-        <OrganizationSupervisionAccessProvider>
-          <ManagerArea>
-            {(business) => (
-              <div className={appStyles.appContent}>
-                {business && !agentManagement && <AnnouncementStack />}
-                <div className={appStyles.routedContent}>
-                  {business && !agentManagement && <PatchNoteGate />}
-                  <Outlet />
-                </div>
+    <OnboardingGuard>
+      <OrganizationSupervisionAccessProvider>
+        <ManagerArea>
+          {(business) => (
+            <div className={appStyles.appContent}>
+              {business && !agentManagement && <AnnouncementStack />}
+              <div className={appStyles.routedContent}>
+                {business && !agentManagement && <PatchNoteGate />}
+                <Outlet />
               </div>
-            )}
-          </ManagerArea>
-        </OrganizationSupervisionAccessProvider>
-      </BootstrapGuard>
-    </GcuGuard>
+            </div>
+          )}
+        </ManagerArea>
+      </OrganizationSupervisionAccessProvider>
+    </OnboardingGuard>
   );
 }
 
@@ -424,7 +420,7 @@ const applicationRoutes: RouteObject[] = [
   },
   {
     path: "/bootstrap",
-    element: <BootstrapPage />,
+    element: <Navigate to="/" replace />,
   },
   {
     path: "/documents/:uid",

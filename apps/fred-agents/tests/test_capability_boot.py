@@ -128,7 +128,6 @@ _SHIPPED_CAPABILITY_IDS = frozenset(
         "document_verbatim",
         "document_extract",
         "document_similarity",
-        "document_label_search",
         "html_artifact",
         "open_writable_document",
         "ppt_filler",

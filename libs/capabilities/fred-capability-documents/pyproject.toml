@@ -1,7 +1,7 @@
 [project]
 name = "fred-capability-documents"
 version = "5.0.0"
-description = "Fred agent capabilities over the Knowledge Flow document ports: summarize, similarity, label search, extract, verbatim read."
+description = "Fred agent capabilities over the Knowledge Flow document ports: summarize, similarity, extract, verbatim read."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
@@ -28,7 +28,6 @@ document_summarize = "fred_capability_documents.document_summarize:DocumentSumma
 document_verbatim = "fred_capability_documents.document_verbatim:DocumentVerbatimCapability"
 document_extract = "fred_capability_documents.document_extract:DocumentExtractCapability"
 document_similarity = "fred_capability_documents.document_similarity:DocumentSimilarityCapability"
-document_label_search = "fred_capability_documents.document_label_search:DocumentLabelSearchCapability"
 
 [project.optional-dependencies]
 dev = [

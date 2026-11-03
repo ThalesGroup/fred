@@ -137,13 +137,7 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
     "prometheus_targets",
   ],
   "capabilities.documentAccess": ["list_document_tree"],
-  "capabilities.documents": [
-    "list_documents_by_label",
-    "read_document",
-    "summarize_document",
-    "extract_from_document",
-    "find_similar_passages",
-  ],
+  "capabilities.documents": ["read_document", "summarize_document", "extract_from_document", "find_similar_passages"],
   "capabilities.writableDocument": ["open_writable_document", "write_document"],
   "capabilities.teamWiki": [
     "wiki_list_pages",

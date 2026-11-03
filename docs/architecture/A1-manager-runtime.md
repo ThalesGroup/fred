@@ -143,7 +143,7 @@ the existing navigation and page guard. It does not infer manager authority from
 control-plane roles. The page uses the shared `PageHeader`, `FileDropzone` and
 `Button` components and the mutation's pending, error and completed-report state.
 `App`, the existing router, `MainLayout` and `Sidebar` compose this journey.
-`GcuGuard` reads manager onboarding and gates `BootstrapGuard` and admitted routes;
+`OnboardingGuard` reads manager onboarding and gates bootstrap, then CGU, then admitted routes;
 the same layout keeps the account menu available before admission without protected
 queries. For ordinary users, the existing Home widgets, routes, sidebar modes and
 styles remain mounted.
@@ -156,7 +156,7 @@ service failure does not remove routes. Theme presentation uses startup configur
 
 ## Frontend organization administration
 
-`ManagerArea`, after consent and bootstrap, resolves current `/me` authority.
+`ManagerArea`, after bootstrap and consent, resolves current `/me` authority.
 Platform admins enter `/admin/organizations`; business URLs redirect there even
 when the person also has organization/team roles. Organizations and Provisioning
 share the existing administration navigation. The boundary permits the same
@@ -188,7 +188,7 @@ Display preferences use the application context and i18n after startup loads
 `GET /users/me/preferences` through the generated Rust client.
 `user_preferences.rs` serves GET/PATCH with `OwnUser` before consent, deriving
 the subject from verified identity and refusing service accounts and asserted
-query subjects. Table `users_preferences` stores one row per subject;
+query subjects. Reads are side-effect free; PATCH requires completed platform initialization. Table `users_preferences` stores one row per subject;
 the optional UUID identity snapshot cannot own it. An atomic SQL upsert changes
 only supplied columns; explicit null restores defaults. Theme IDs stay opaque
 and syntax-validated. Missing rows/read failures use defaults; old personal
@@ -250,10 +250,11 @@ Personal-space reuse restores no grants.
 
 ## Platform admin bootstrap
 
-[`bootstrap.rs`](../../apps/control-plane/src/bootstrap.rs) verifies the caller's
-personal admission and deployment secret, then grants the platform role and records
-completion atomically under the platform lock. Later attempts return 409; changing
-the deployment secret does not reopen bootstrap.
+The [independent platform initialization contract](A6-security.md#independent-platform-initialization)
+owns the sequence and source map. `api.rs` verifies the caller's human bearer and
+installation secret; `bootstrap.rs` atomically grants the platform role and records
+completion under the platform lock. CGU gate subsequent protected operations.
+Later attempts return 409; changing the deployment secret does not reopen bootstrap.
 
 ## Document metadata and folder mutations
 

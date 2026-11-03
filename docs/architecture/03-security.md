@@ -18,6 +18,15 @@ their own terms of use when required. Neither step creates membership or content
 rights. Every protected action is checked by the server; a visible UI control is
 not an authorization.
 
+### Independent platform initialization
+
+An SSO session shared with Swift identifies a person without importing their Swift
+account or rights into Weaver. The installer selects their SSO identity and supplies
+Weaver's installation secret to establish its first platform administrator. This
+creates no organization or business membership. Personal terms of use then govern
+access to protected operations. The [implementation boundary and validation scope](A6-security.md#independent-platform-initialization)
+distinguish this initial setup from later user provisioning and migration.
+
 ## 3.2. Governance and content access
 
 Fred separates technical administration from business work.

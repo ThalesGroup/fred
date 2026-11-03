@@ -54,32 +54,6 @@
       "nosec": 0,
       "skipped_tests": 0
     },
-    "fred_capability_documents/document_label_search/__init__.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 12,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
-    "fred_capability_documents/document_label_search/capability.py": {
-      "CONFIDENCE.HIGH": 0,
-      "CONFIDENCE.LOW": 0,
-      "CONFIDENCE.MEDIUM": 0,
-      "CONFIDENCE.UNDEFINED": 0,
-      "SEVERITY.HIGH": 0,
-      "SEVERITY.LOW": 0,
-      "SEVERITY.MEDIUM": 0,
-      "SEVERITY.UNDEFINED": 0,
-      "loc": 188,
-      "nosec": 0,
-      "skipped_tests": 0
-    },
     "fred_capability_documents/document_read_common.py": {
       "CONFIDENCE.HIGH": 0,
       "CONFIDENCE.LOW": 0,

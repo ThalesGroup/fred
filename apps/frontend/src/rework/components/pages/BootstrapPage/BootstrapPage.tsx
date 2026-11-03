@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { useBootstrapPlatformAdminMutation } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { KeyCloakService } from "../../../../security/KeycloakService";
 import styles from "./BootstrapPage.module.css";
 
 /** Mirrors the backend's `BootstrapPlatformAdminRequest.token` `min_length=16`. */
@@ -35,7 +36,7 @@ const parseBootstrapError = (error: unknown): { status?: number; detail?: string
   };
 };
 
-export default function BootstrapPage() {
+export default function BootstrapPage({ username }: { username: string }) {
   const { t } = useTranslation();
   const [token, setToken] = useState("");
   const [trigger, { isLoading, isSuccess, data, error, reset }] = useBootstrapPlatformAdminMutation();
@@ -45,9 +46,6 @@ export default function BootstrapPage() {
   // the flag is now global and permanent, so the only sane next step is to
   // reload: this page will stop being reachable once manager onboarding state is read again.
   const isAlreadyCompleted = status === 409;
-  useEffect(() => {
-    if (detail === "user_not_accept_gcu") window.location.reload();
-  }, [detail]);
 
   // An invalid secret must not linger in the field: clear it so the user
   // can't accidentally resubmit the same wrong value, but keep the form on
@@ -117,6 +115,16 @@ export default function BootstrapPage() {
       <div className={styles.bootstrapTitle}>{t("rework.bootstrap.title")}</div>
       <div className={styles.bootstrapContent}>
         <p className={styles.bootstrapDescription}>{t("rework.bootstrap.description")}</p>
+        <p className={styles.bootstrapDescription}>{t("rework.bootstrap.connectedAs", { username })}</p>
+        <Button
+          color="primary"
+          variant="outlined"
+          size="medium"
+          disabled={isLoading}
+          onClick={KeyCloakService.CallLogout}
+        >
+          {t("rework.bootstrap.changeAccount")}
+        </Button>
         <TextInput
           type="password"
           label={t("rework.bootstrap.tokenLabel")}

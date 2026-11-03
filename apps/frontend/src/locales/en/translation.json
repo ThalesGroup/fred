@@ -175,10 +175,6 @@
         }
       }
     },
-    "document_label_search": {
-      "name": "Search documents by label",
-      "description": "Ability to list every document carrying a given business label, exhaustively and page by page."
-    },
     "document_summarize": {
       "name": "Summarize a document",
       "description": "Ability to summarize a document and make use of the result.",
@@ -2071,7 +2067,9 @@
     "back": "Back",
     "bootstrap": {
       "continue": "Continue",
-      "description": "This deployment has no platform administrator yet. Enter the deploy-time bootstrap secret to become the first one.",
+      "connectedAs": "Connected as {{username}}. This account will become the platform administrator.",
+      "changeAccount": "Sign out to change account",
+      "description": "This platform has not been initialized. Enter the installation bootstrap secret to activate platform administration. This creates no organization and imports no other accounts. Terms of use follow this step.",
       "errors": {
         "alreadyCompleted": "Root bootstrap has already been completed for this deployment.",
         "forbidden": "This bootstrap secret is not valid. Please try again.",
@@ -2221,7 +2219,6 @@
             "list_document_tree": "Reading the document tree"
           },
           "documents": {
-            "list_documents_by_label": "Finding documents by label",
             "read_document": "Reading a document",
             "summarize_document": "Summarizing a document",
             "extract_from_document": "Extracting information from a document",

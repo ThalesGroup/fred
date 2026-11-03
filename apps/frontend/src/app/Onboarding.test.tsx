@@ -68,8 +68,7 @@ vi.mock("../common/dynamicBaseQuery", () => ({
   },
 }));
 import { MemoryRouter } from "react-router-dom";
-import GcuGuard from "@core/guards/GcuGuard";
-import BootstrapGuard from "@core/guards/BootstrapGuard";
+import OnboardingGuard from "@core/guards/OnboardingGuard";
 import { KeyCloakService } from "../security/KeycloakService";
 import { enhancedControlPlaneApi as api } from "../slices/controlPlane/controlPlaneApiEnhancements";
 import { legacyControlPlaneApi } from "../slices/legacyControlPlane/legacyControlPlaneApi";
@@ -111,11 +110,9 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
       root.render(
         <Provider store={store}>
           <MemoryRouter>
-            <GcuGuard>
-              <BootstrapGuard>
-                <p>Admitted</p>
-              </BootstrapGuard>
-            </GcuGuard>
+            <OnboardingGuard>
+              <p>Admitted</p>
+            </OnboardingGuard>
           </MemoryRouter>
         </Provider>,
       );
@@ -141,14 +138,22 @@ async function click(host: HTMLDivElement, text: string) {
 }
 
 // Proves: I19
-it("keeps business queries unmounted until consent and root bootstrap are complete", async () => {
+it("keeps business queries unmounted until root bootstrap, then consent, are complete", async () => {
   await mounted(async (host) => {
+    expect(host.textContent).toContain("Root bootstrap");
+    expect(host.textContent).not.toContain("rework.gcu.validate");
+    expect(state.calls).toEqual(["/control-plane/v1/me/onboarding"]);
+    state.bootstrap = false;
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
     expect(host.textContent).toContain("rework.gcu.validate");
     expect(host.textContent).not.toContain("Root bootstrap");
     await click(host, "rework.gcu.validate");
-    expect(host.textContent).toContain("Root bootstrap");
-    expect(host.textContent).not.toContain("rework.gcu.validate");
+    expect(host.textContent).toContain("Admitted");
     expect(state.calls).toEqual([
+      "/control-plane/v1/me/onboarding",
       "/control-plane/v1/me/onboarding",
       "/control-plane/v1/gcu",
       "/control-plane/v1/me/onboarding",
@@ -165,12 +170,13 @@ it("an unavailable onboarding service fails closed and can be retried", async ()
     expect(host.textContent).not.toContain("rework.gcu.validate");
     state.failStatus = false;
     await click(host, "rework.provisioning.retryAuthority");
-    expect(host.textContent).toContain("rework.gcu.validate");
+    expect(host.textContent).toContain("Root bootstrap");
   });
 });
 
 // Proves: I19
 it("a stale consent submission never advances the journey or assumes success", async () => {
+  state.bootstrap = false;
   state.failConsent = true;
   await mounted(async (host) => {
     await click(host, "rework.gcu.validate");
@@ -183,6 +189,7 @@ it("a stale consent submission never advances the journey or assumes success", a
 
 // Proves: I19
 it("refreshing the active version reloads the legal document before consent", async () => {
+  state.bootstrap = false;
   await mounted(async (host) => {
     expect(host.textContent).toContain("Terms v1");
     state.version = "v2";
@@ -201,6 +208,7 @@ it("refreshing the active version reloads the legal document before consent", as
 
 // Proves: I19
 it("missing legal text exposes retry and never enables consent", async () => {
+  state.bootstrap = false;
   state.legalFailed = true;
   await mounted(async (host) => {
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("rework.gcu.unavailable");
@@ -223,7 +231,7 @@ it("allows disabled terms only after status confirms bootstrap completion", asyn
 it.each(["terms", "bootstrap", "failure"])(
   "keeps identity/logout available during %s without business queries",
   async (phase) => {
-    state.accepted = phase === "bootstrap";
+    state.bootstrap = phase === "bootstrap";
     state.failStatus = phase === "failure";
     await mounted(async (host) => {
       await act(async () => {

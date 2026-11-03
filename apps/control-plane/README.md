@@ -69,7 +69,10 @@ make k3d-logs SVC=control-plane-backend
 Use `ENV=secondary` for this checkout's local profile. It deploys
 `control-plane-backend`, `knowledge-flow-worker` and `frontend`; HTTP and background
 tasks run together as `control-plane serve`. See [the profile](../../deploy/k3d/README.md).
-Open Fred, sign in, accept the CGU, then enter the deployment bootstrap secret in the UI. The local service uses `FRED_BOOTSTRAP_TOKEN` from `config/.env`.
+Open Fred and check the connected SSO identity. Enter the installation bootstrap secret
+to activate platform administration for that account, then accept the CGU before
+using protected operations. Status reads do not create a local profile or consent.
+See [independent platform initialization](../../docs/architecture/A6-security.md#independent-platform-initialization). The local service uses `FRED_BOOTSTRAP_TOKEN` from `config/.env`.
 The k3d Fred values read the cluster secret `fred-secrets` key
 `CONTROL_PLANE_BOOTSTRAP_TOKEN`; use the value supplied by your deployment.
 
@@ -720,7 +723,7 @@ make test-provisioning-browser
 The test needs Docker, Node/npm and the Rust/protoc prerequisites above. It starts
 throwaway PostgreSQL and Keycloak plus the real manager governance router
 and Vite frontend, then removes its services. Starting with no root or consent,
-it accepts CGU, bootstraps through the UI, imports the actual Make ZIP, replays it,
+it bootstraps through the UI, accepts CGU, imports the actual Make ZIP, replays it,
 imports a project variant, then switches accounts in the same browser. It checks
 consent isolation, empty root memberships, persisted hierarchy/roles, reports,
 refusals, unsupported direct URLs and keyboard logout through the existing account

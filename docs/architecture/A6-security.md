@@ -82,18 +82,52 @@ the person's Keycloak bearer and from manager's Keycloak service-client secret.
 `CONTROL_PLANE_BOOTSTRAP_TOKEN`. That shared secret location does not synchronize
 Python and manager bootstrap records or roles.
 
-A person first accepts CGU, then presents their bearer and this secret. Comparison
-is constant-time; a token shorter than 16 characters is rejected with 422, a wrong
-secret with 403. The secret cannot nominate another person or bypass consent. The first platform admin is
-a real authenticated IAM person, not a local account created by the secret.
+### Independent platform initialization
 
-Control Plane grants the first platform-admin role and records bootstrap completion
-in one SQL transaction under the platform lock. Once complete, later bootstrap
-attempts return 409, even if a role is subsequently removed. Rotating the secret
-does not reset completion. Root receives no business membership.
+This is the admission boundary for a new Weaver installation, including one sharing
+an SSO with Swift. Authenticating an existing SSO subject is not a user import.
+Before initialization, reading onboarding status or preferences performs no identity
+snapshot or user-state insertion. CGU acceptance, preference writes and business
+handlers refuse with `platform_bootstrap_required`. No new table or migration is
+introduced for this feature.
 
-Afterwards platform administrators manage platform roles, while preserving at least
-one administrator.
+The installer presents their verified human bearer and the installation secret.
+Comparison is constant-time; a short token is rejected with 422 and a wrong secret
+with 403. A successful claim grants only the caller's platform-admin role and records
+completion in one SQL transaction under the platform lock. Concurrent claims cannot
+elect two initial administrators. The local directory, when configured, snapshots
+only the successful claimant at this point. Root receives no organization, team or
+content membership. Later bootstrap attempts return 409; neither removing a role
+nor rotating the secret reopens initialization.
+
+The UI identifies the currently connected account and offers the existing sign-out
+operation to select another one. The SSO session may be shared with Swift, so signing
+out can also end that provider session; a separate browser profile isolates the test.
+CGU follow successful initialization and remain required before protected operations.
+Subsequent users retain the normal personal-consent and role checks; this increment
+is not a general user-provisioning or Swift migration mechanism.
+
+| Boundary | Owner and persistent effect |
+| --- | --- |
+| Read the current SSO identity | [`OwnUser` in onboarding.rs](../../apps/control-plane/src/onboarding.rs); read-only authentication |
+| Block writes before initialization | `require_initialized`, reused by `AdmittedUser`, CGU acceptance and preference PATCH |
+| Claim the first platform role | [`bootstrap_platform_admin` in api.rs](../../apps/control-plane/src/api.rs), [`grant_root` in bootstrap.rs](../../apps/control-plane/src/bootstrap.rs); existing `platform_bootstrap` and `platform_role_grant` tables |
+| Personal consent and preferences | Existing `terms_acceptance` and `users_preferences`; no rows created by simply visiting the UI |
+| Optional local directory | [`snapshot` in users.rs](../../apps/control-plane/src/users.rs); existing `user_identity` remains a display cache, not an account or permission authority |
+| UI sequence | [`OnboardingGuard`](../../apps/frontend/src/rework/core/guards/OnboardingGuard.tsx) replaces the two separate guards; [`BootstrapPage`](../../apps/frontend/src/rework/components/pages/BootstrapPage/BootstrapPage.tsx) reuses the existing secret form and sign-out service |
+
+Focused evidence: `consent_and_root_bootstrap_are_personal_and_do_not_create_memberships`
+in [`integration.rs`](../../apps/control-plane/tests/integration.rs) checks a foreign
+SSO visitor and the claimant against a disposable database, including the local-directory
+mode; the other bootstrap tests cover concurrency and permanent completion. UI ordering,
+refresh/error handling and logout are covered by
+[`Onboarding.test.tsx`](../../apps/frontend/src/app/Onboarding.test.tsx) and
+[`OnboardingGuard.test.tsx`](../../apps/frontend/src/rework/core/guards/OnboardingGuard.test.tsx).
+These focused checks do not establish end-to-end production SSO or migration validation;
+the changed browser journey still needs operator validation on the deployed images.
+
+After initialization, platform administrators manage platform roles while preserving
+at least one administrator.
 
 ## Roles, permissions and ReBAC
 

@@ -2294,6 +2294,8 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
     use serde_json::{Value, json};
     use std::sync::Arc;
     use tower::ServiceExt;
+    const ROOT: &str = "11111111-1111-4111-8111-111111111111";
+    const PN: &str = "22222222-2222-4222-8222-222222222222";
     let e = env().await;
     let server = support::IdentityServer::start().await;
     let state = AppState {
@@ -2305,6 +2307,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         processing: None,
         lifecycle: Default::default(),
         onboarding: Onboarding {
+            user_directory: control_plane::users::DirectoryKind::Local,
             gcu_version: Some("v1".into()),
             bootstrap_token_env_var: Some("CONTROL_PLANE_TEST_BOOTSTRAP_TOKEN".into()),
             ..Default::default()
@@ -2336,8 +2339,19 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         ("GET", "/me", Value::Null, 403),
         ("GET", "/me/spaces", Value::Null, 403),
         ("POST", "/import-export/import", Value::Null, 403),
-        ("POST", "/bootstrap/platform-admin", secret.clone(), 403),
-        ("POST", "/gcu", json!({"version":"old"}), 409),
+        (
+            "POST",
+            "/bootstrap/platform-admin",
+            json!({"token":"wrong-but-long-enough"}),
+            403,
+        ),
+        ("POST", "/gcu", json!({"version":"v1"}), 403),
+        (
+            "PATCH",
+            "/users/me/preferences",
+            json!({"language":"fr"}),
+            403,
+        ),
         (
             "POST",
             "/gcu",
@@ -2353,7 +2367,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
     ] {
         assert_eq!(
             app.clone()
-                .oneshot(request(method, path, Some(server.token("root")), body))
+                .oneshot(request(method, path, Some(server.token(ROOT)), body))
                 .await
                 .unwrap()
                 .status(),
@@ -2361,9 +2375,22 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             "{path}"
         );
     }
+    // Merely opening Weaver with a valid foreign SSO session must remain read-only,
+    // including the local-directory configuration used with a generic OIDC provider.
+    for path in ["/me/onboarding", "/users/me/preferences"] {
+        assert_eq!(
+            app.clone()
+                .oneshot(request("GET", path, Some(server.token(PN)), Value::Null))
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
+    }
+    assert_eq!(sqlx::query_scalar::<_, i64>("select (select count(*) from user_identity) + (select count(*) from users_preferences) + (select count(*) from terms_acceptance) + (select count(*) from platform_role_grant)").fetch_one(&e.pool).await.unwrap(), 0);
     assert!(!onboarding::bootstrap_completed(&e.pool).await.unwrap());
     assert!(
-        onboarding::acceptance(&e.pool, "root")
+        onboarding::acceptance(&e.pool, ROOT)
             .await
             .unwrap()
             .is_none()
@@ -2399,8 +2426,75 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         app.clone()
             .oneshot(request(
                 "POST",
+                "/bootstrap/platform-admin",
+                Some(server.token(ROOT)),
+                secret.clone()
+            ))
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(request("GET", "/me", Some(server.token(ROOT)), Value::Null))
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from user_identity")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        1
+    );
+    for path in ["/me/onboarding", "/users/me/preferences"] {
+        assert_eq!(
+            app.clone()
+                .oneshot(request("GET", path, Some(server.token(PN)), Value::Null))
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
+    }
+    assert_eq!(
+        app.clone()
+            .oneshot(request("GET", "/me", Some(server.token(PN)), Value::Null))
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from user_identity where id::text = $1")
+            .bind(PN)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "POST",
                 "/gcu",
-                Some(server.token("root")),
+                Some(server.token(ROOT)),
+                json!({"version":"old"})
+            ))
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                "/gcu",
+                Some(server.token(ROOT)),
                 json!({"version":"v1"})
             ))
             .await
@@ -2408,7 +2502,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             .status(),
         204
     );
-    let first = onboarding::acceptance(&e.pool, "root")
+    let first = onboarding::acceptance(&e.pool, ROOT)
         .await
         .unwrap()
         .unwrap();
@@ -2417,7 +2511,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             .oneshot(request(
                 "POST",
                 "/gcu",
-                Some(server.token("root")),
+                Some(server.token(ROOT)),
                 json!({"version":"v1"})
             ))
             .await
@@ -2426,25 +2520,19 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
         204
     );
     assert_eq!(
-        onboarding::acceptance(&e.pool, "root")
+        onboarding::acceptance(&e.pool, ROOT)
             .await
             .unwrap()
             .unwrap()
             .accepted_at,
         first.accepted_at
     );
-    assert!(
-        control_plane::authorization::platform_roles(&e.pool, "root")
-            .await
-            .unwrap()
-            .is_empty()
-    );
     assert_eq!(
         app.clone()
             .oneshot(request(
                 "POST",
                 "/bootstrap/platform-admin",
-                Some(server.token("root")),
+                Some(server.token(ROOT)),
                 json!({"token":"wrong-but-long-enough"})
             ))
             .await
@@ -2452,26 +2540,13 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             .status(),
         403
     );
-    assert_eq!(
-        app.clone()
-            .oneshot(request(
-                "POST",
-                "/bootstrap/platform-admin",
-                Some(server.token("root")),
-                secret.clone()
-            ))
-            .await
-            .unwrap()
-            .status(),
-        200
-    );
     assert!(onboarding::bootstrap_completed(&e.pool).await.unwrap());
     assert_eq!(
         app.clone()
             .oneshot(request(
                 "POST",
                 "/bootstrap/platform-admin",
-                Some(server.token("root")),
+                Some(server.token(ROOT)),
                 secret
             ))
             .await
@@ -2498,12 +2573,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
     assert_eq!(
         upgraded
             .clone()
-            .oneshot(request(
-                "GET",
-                "/me",
-                Some(server.token("root")),
-                Value::Null
-            ))
+            .oneshot(request("GET", "/me", Some(server.token(ROOT)), Value::Null))
             .await
             .unwrap()
             .status(),
@@ -2515,7 +2585,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             .oneshot(request(
                 "POST",
                 "/gcu",
-                Some(server.token("root")),
+                Some(server.token(ROOT)),
                 json!({"version":"v1"})
             ))
             .await
@@ -2529,7 +2599,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             .oneshot(request(
                 "POST",
                 "/gcu",
-                Some(server.token("root")),
+                Some(server.token(ROOT)),
                 json!({"version":"v2"})
             ))
             .await
@@ -2539,12 +2609,7 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
     );
     assert_eq!(
         upgraded
-            .oneshot(request(
-                "GET",
-                "/me",
-                Some(server.token("root")),
-                Value::Null
-            ))
+            .oneshot(request("GET", "/me", Some(server.token(ROOT)), Value::Null))
             .await
             .unwrap()
             .status(),

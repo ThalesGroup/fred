@@ -189,6 +189,7 @@ async fn accept_terms(
     OwnUser(user): OwnUser,
     ApiJson(req): ApiJson<TermsRequest>,
 ) -> AppResult<StatusCode> {
+    onboarding::require_initialized(&s.pool, &s.auth).await?;
     onboarding::accept(
         &s.pool,
         s.onboarding
@@ -249,8 +250,8 @@ async fn bootstrap_platform_admin(
     if !s.auth.enabled() {
         return Err(AppError::Unavailable(bootstrap::AUTH_DISABLED.into()));
     }
-    onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
     bootstrap::grant_root(&s.pool, &user.uid).await?;
+    crate::users::snapshot(&AdmissionState::from_ref(&s), &user).await;
     tracing::info!(
         user_id = user.uid,
         "[BOOTSTRAP] Granted platform_admin via root bootstrap"

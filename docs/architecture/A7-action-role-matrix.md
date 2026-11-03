@@ -162,9 +162,9 @@ Import is additive. Its broader role-assignment authority is described in
 | --- | --- | --- | --- |
 | Frontend configuration - `GET /frontend/config` | Yes | Yes | Public; no bootstrap secret returned |
 | Health - `GET /healthz` | Yes | Yes | Public |
-| Own onboarding - `GET /me/onboarding` | Yes | Yes | Authenticated human identity; no CGU yet |
-| Accept own CGU - `POST /gcu` | Yes | Yes | Authenticated human, current version; cannot act for another person |
-| Claim initial platform administration - `POST /bootstrap/platform-admin` | Yes | Yes | Real human authentication, CGU, deployment secret, unfinished bootstrap; failed reservation retry belongs to claimant |
+| Own onboarding - `GET /me/onboarding` | Yes | Yes | Authenticated human identity; read-only, no bootstrap or CGU prerequisite |
+| Accept own CGU - `POST /gcu` | Yes | Yes | Completed platform bootstrap, authenticated human, current version; cannot act for another person |
+| Claim initial platform administration - `POST /bootstrap/platform-admin` | Yes | Yes | Real human authentication, installation secret, unfinished bootstrap; atomic one-time grant before CGU |
 | Own platform-role metadata - `GET /me` | Yes | Yes | Authenticated and CGU; returns own effective platform roles |
 | Own spaces - `GET /me/spaces` | Yes | Yes | Authenticated and CGU; own direct roles on active spaces, across all the caller's organizations; empty allowed |
 | Probe own platform permission - `POST /authorize/platform` | Yes | Yes | Authenticated and CGU; result may be false |

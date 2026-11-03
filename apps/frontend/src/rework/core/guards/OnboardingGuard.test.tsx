@@ -19,34 +19,43 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const state = vi.hoisted(() => ({ version: "v1" as string | null, accepted: "v1" as string | null }));
+const state = vi.hoisted(() => ({ version: "v1" as string | null, accepted: "v1" as string | null, bootstrap: false }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@components/pages/BootstrapPage/BootstrapPage", () => ({
+  default: ({ username }) => <div>Initialize {username}</div>,
+}));
 vi.mock("@components/pages/GcuPage/GcuPage", () => ({ default: () => <div>Accept terms</div> }));
 vi.mock("@shared/layouts/MainLayout/MainLayout", () => ({ default: ({ children }) => children }));
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useOnboardingStatusQuery: () => ({
-    data: { gcu_version: state.version, acceptance: { version: state.accepted } },
+    data: {
+      username: "simon",
+      root_bootstrap_required: state.bootstrap,
+      gcu_version: state.version,
+      acceptance: { version: state.accepted },
+    },
     refetch: vi.fn(),
   }),
 }));
 
-import GcuGuard from "./GcuGuard.tsx";
+import OnboardingGuard from "./OnboardingGuard.tsx";
 
 beforeEach(() => {
+  state.bootstrap = false;
   state.version = "v1";
   state.accepted = "v1";
 });
 
-describe("GcuGuard", () => {
+describe("OnboardingGuard", () => {
   it("requires a new version and restores the shell when that version is accepted", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
     const render = () =>
       act(() =>
         root.render(
-          <GcuGuard>
+          <OnboardingGuard>
             <div>Shell</div>
-          </GcuGuard>,
+          </OnboardingGuard>,
         ),
       );
     render();
@@ -66,6 +75,30 @@ describe("GcuGuard", () => {
     act(() => root.unmount());
   });
 
+  it("shows bootstrap before consent, then consent before business content", () => {
+    state.bootstrap = true;
+    state.accepted = null;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const render = () =>
+      act(() =>
+        root.render(
+          <OnboardingGuard>
+            <div>Shell</div>
+          </OnboardingGuard>,
+        ),
+      );
+    render();
+    expect(container.textContent).toBe("Initialize simon");
+    state.bootstrap = false;
+    render();
+    expect(container.textContent).toBe("Accept terms");
+    state.accepted = "v1";
+    render();
+    expect(container.textContent).toBe("Shell");
+    act(() => root.unmount());
+  });
+
   it("allows deployments without terms gating", () => {
     state.version = null;
     state.accepted = null;
@@ -73,9 +106,9 @@ describe("GcuGuard", () => {
     const root = createRoot(container);
     act(() =>
       root.render(
-        <GcuGuard>
+        <OnboardingGuard>
           <div>Shell</div>
-        </GcuGuard>,
+        </OnboardingGuard>,
       ),
     );
     expect(container.textContent).toBe("Shell");

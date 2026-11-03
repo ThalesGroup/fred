@@ -90,9 +90,9 @@ kubectl --context k3d-fred-secondary -n fred get deploy
 `fred-agents` and `frontend` must be `1/1`. `make k3d-app` ends by printing the
 command that reads the bootstrap token.
 
-**2. Platform admin.** Open <http://secondary.localhost:18088>, register an
-`admin` account, accept the terms of use and activate platform administration with the
-bootstrap token ([journey](../../docs/architecture/02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user)).
+**2. Platform admin.** Open <http://secondary.localhost:18088>, sign in with the intended
+admin identity (register only if needed), activate platform administration with the
+bootstrap token, then accept the terms of use ([journey](../../docs/architecture/02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user)).
 
 **3. Example people and spaces.** Build the demo bundle, then import it as the
 owner in **Provisioning**:

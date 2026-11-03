@@ -68,10 +68,10 @@ async function login(username, password, path = "/admin/provisioning") {
   });
   assert.equal(denied.status(), 403);
   if (username === "root") {
-    // Every direct account URL still passes personal admission first.
+    // Fresh installations show bootstrap before personal consent on every route.
     for (const accountPath of ["/settings", "/gcu", "/gdpr", "/release-notes"]) {
       await page.goto(origin + accountPath);
-      await expect(page.getByRole("button", { name: "Accept the TOS", exact: true })).toBeVisible();
+      await expect(page.getByLabel("Bootstrap secret", { exact: false })).toBeVisible();
       await page.getByRole("button", { name: /'s account$/ }).click();
       await expect(page.getByRole("menuitem", { name: "Profile", exact: true })).toHaveCount(0);
       await page.keyboard.press("Escape");
@@ -82,14 +82,6 @@ async function login(username, password, path = "/admin/provisioning") {
     await page.locator("#username").fill(username);
     await page.locator("#password").fill(password);
     await page.locator("#kc-login").click();
-  }
-  await acceptTerms(page);
-  if (username === "root") {
-    await logout(page);
-    await page.locator("#username").fill(username);
-    await page.locator("#password").fill(password);
-    await page.locator("#kc-login").click();
-
     await page.goto(origin + "/settings");
     await expect(page.getByLabel("Bootstrap secret", { exact: false })).toBeVisible();
     await page.goto(origin + path);
@@ -102,12 +94,14 @@ async function login(username, password, path = "/admin/provisioning") {
     await page.getByRole("button", { name: "Become platform administrator", exact: true }).click();
     await expect(page.getByText("You are now the platform administrator, root.")).toBeVisible();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await acceptTerms(page);
     await expect(page.getByRole("heading", { name: "Organizations", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Home", exact: true })).toHaveCount(0);
     assert.deepEqual(await get(context, bearer, "/me/spaces"), []);
     await page.getByRole("button", { name: "Technical console", exact: true }).click();
     await page.getByRole("link", { name: "Provisioning", exact: true }).click();
   }
+  if (username !== "root") await acceptTerms(page);
   await expect(page.getByRole("heading", { name: path === "/home" ? /^Hello / : "Provisioning" })).toBeVisible();
   return { context, page, bearer };
 }

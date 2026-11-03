@@ -1,7 +1,13 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Personal consent is independent of root authority and space membership.
+//! Independent platform initialization, including installations sharing an SSO with Swift.
+//!
+//! Reading the authenticated identity must not persist an account. A verified person
+//! first claims platform administration with this installation's bootstrap secret;
+//! only then can personal consent and other user writes proceed. Consent still gates
+//! business handlers. The existing bootstrap transaction owns the one-time role grant.
+//! See docs/architecture/A6-security.md, "Independent platform initialization".
 use std::sync::Arc;
 
 use axum::{
@@ -117,6 +123,14 @@ pub async fn bootstrap_completed(pool: &PgPool) -> AppResult<bool> {
     .await?)
 }
 
+/// Authentication alone must not initialize a fresh installation's user state.
+pub async fn require_initialized(pool: &PgPool, auth: &Authenticator) -> AppResult<()> {
+    if auth.enabled() && !bootstrap_completed(pool).await? {
+        return Err(AppError::Denied("platform_bootstrap_required".into()));
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
 pub struct AdmissionState {
     pub auth: Arc<Authenticator>,
@@ -139,22 +153,24 @@ where
             .await
             .map_err(IntoResponse::into_response)?;
         let admission = AdmissionState::from_ref(state);
-        crate::users::snapshot(&admission, &user).await;
+        require_initialized(&admission.pool, &admission.auth)
+            .await
+            .map_err(IntoResponse::into_response)?;
         if admission.auth.enabled() {
             require_accepted(&admission.pool, admission.version.as_deref(), &user.uid)
                 .await
                 .map_err(IntoResponse::into_response)?;
         }
+        crate::users::snapshot(&admission, &user).await;
         Ok(Self(user))
     }
 }
 
-/// Consent and root bootstrap never accept an asserted subject or a service identity.
+/// Read-only authentication: consent and bootstrap never assert another subject or use a service identity.
 pub struct OwnUser(pub CurrentUser);
 impl<S> FromRequestParts<S> for OwnUser
 where
     S: Send + Sync,
-    AdmissionState: FromRef<S>,
     Arc<Authenticator>: FromRef<S>,
 {
     type Rejection = Response;
@@ -168,7 +184,6 @@ where
         {
             return Err(AppError::Forbidden.into_response());
         }
-        crate::users::snapshot(&AdmissionState::from_ref(state), &user).await;
         Ok(Self(user))
     }
 }
