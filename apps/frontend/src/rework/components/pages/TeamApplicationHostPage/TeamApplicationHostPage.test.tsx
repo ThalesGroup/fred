@@ -1,4 +1,4 @@
-// @vitest-environment happy-dom
+// @vitest-environment jsdom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// jsdom supplies iframe windows without fetching their URLs, including when
+// Happy DOM disables remote iframe loading in its security-patched releases.
 import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 
 declare global {
@@ -105,19 +107,6 @@ function withUiPrefix(uiPrefix: string) {
 
 let container: HTMLDivElement | undefined;
 let root: Root | undefined;
-
-beforeAll(() => {
-  // Serve the frame document locally: without this happy-dom tries to fetch
-  // the iframe src over the network and dumps a connection error per test.
-  const settings = (globalThis as unknown as { happyDOM?: { settings?: { fetch?: Record<string, unknown> } } }).happyDOM
-    ?.settings;
-  if (settings?.fetch) {
-    settings.fetch.interceptor = {
-      beforeAsyncRequest: async () =>
-        new Response("<!doctype html><title>app</title>", { headers: { "content-type": "text/html" } }),
-    };
-  }
-});
 
 async function renderPage() {
   container = document.createElement("div");
@@ -214,14 +203,15 @@ describe("TeamApplicationHostPage frame admission", () => {
   it("grants only the reviewed sandbox permissions to an admitted frame", async () => {
     await renderPage();
 
-    const permissions = frame()?.sandbox;
-    expect(permissions).not.toBeNull();
-    expect(new Set(permissions ? Array.from(permissions) : [])).toEqual(
+    const sandbox = frame()?.getAttribute("sandbox");
+    expect(sandbox).not.toBeNull();
+    const permissions = new Set(sandbox?.split(/\s+/));
+    expect(permissions).toEqual(
       new Set(["allow-scripts", "allow-same-origin", "allow-forms", "allow-popups", "allow-downloads"]),
     );
-    expect(permissions?.contains("allow-top-navigation")).toBe(false);
-    expect(permissions?.contains("allow-top-navigation-by-user-activation")).toBe(false);
-    expect(permissions?.contains("allow-popups-to-escape-sandbox")).toBe(false);
+    expect(permissions.has("allow-top-navigation")).toBe(false);
+    expect(permissions.has("allow-top-navigation-by-user-activation")).toBe(false);
+    expect(permissions.has("allow-popups-to-escape-sandbox")).toBe(false);
   });
 
   it("points the frame at the catalog's configured prefix, not one derived from the id", async () => {
@@ -747,7 +737,7 @@ describe("TeamApplicationHostPage lifecycle replacement", () => {
     await rerender();
 
     expect(signal.aborted).toBe(true);
-    expect(frameWindow()).not.toBe(oldFrameWindow);
+    expect(frameWindow() === oldFrameWindow).toBe(false);
     const replacementSpy = spyOnFrame();
     await postFromFrame({ type: "fred:ready", protocolVersion: "1" }, oldFrameWindow);
     expect(replacementSpy).not.toHaveBeenCalled();
