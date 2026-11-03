@@ -398,6 +398,11 @@
   white-space: nowrap;
 }
 
+.pendingMessage[data-status="offered"]::after {
+  flex: 0 0 1.5rem; // Keep the 2xs menu slot while its actions are locked.
+  content: "";
+}
+
 .pendingAction {
   cursor: pointer;
   border: 0;

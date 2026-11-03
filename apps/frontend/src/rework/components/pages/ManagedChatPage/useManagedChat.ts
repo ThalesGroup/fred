@@ -42,7 +42,12 @@ import { modelChoiceKey, offersReasoning, parseModelChoice } from "../../../feat
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
-import { markSessionRead } from "@core/hooks/backgroundTurns";
+import {
+  markSessionRead,
+  setSessionAwaitingInput,
+  usePendingMessages,
+  type PendingMessage,
+} from "@core/hooks/backgroundTurns";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -127,7 +132,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     [dispatch],
   );
   const [input, setInput] = useState("");
-  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
+  const [pendingMessages, setPendingMessages] = usePendingMessages(sessionId);
   const queuedStartRef = useRef<PendingMessage | null>(null);
   const queueDrainRef = useRef(false);
   const queueSessionRef = useRef<string | null>(null);
@@ -423,7 +428,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       showError({ summary: "Agent error", detail: msg });
       refetchSessionRef.current();
     },
-    [showError],
+    [showError, setPendingMessages],
   );
   // Fires only once prepare-execution has actually succeeded and the turn is
   // really starting — clearing the composer any earlier would lose the
@@ -435,7 +440,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       return;
     }
     setInput("");
-  }, []);
+    attachments.clearReadyAttachments();
+  }, [attachments.clearReadyAttachments]);
   const handleTurnRejected = useCallback((_wireDraft: string, rejectedSessionId: string) => {
     if (activeSessionIdRef.current !== rejectedSessionId) return;
     if (queuedStartRef.current) {
@@ -585,9 +591,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     hitlDraftOwnerRef.current += 1;
     setHitlFreeText("");
     setInput("");
-    setPendingMessages([]);
     setRenamedTitle(null);
-    queueSessionRef.current = null;
+    queueSessionRef.current = sessionId;
     queuedStartRef.current = null;
     queueDrainRef.current = false;
     // A genuine entry into a (new or different) session — normal
@@ -652,6 +657,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       setHitlFreeText("");
       setSelectedHitlKey(null);
       const pending = reconstructPendingHitls(msgs);
+      const sid = msgs[0]?.session_id;
+      if (sid && activeSessionIdRef.current === sid) setSessionAwaitingInput(sid, pending.length > 0);
       lastHitlExchangeRef.current = pending[0]?.exchange_id ?? null;
       replacePendingHitls(pending);
     },
@@ -1046,6 +1053,8 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     waitResponse,
     pendingMessages.length,
     attachments.hasUploadingAttachments,
+    setPendingMessages,
+    attachments.attachments.length,
     inputTooLong,
     showWarn,
     t,
@@ -1058,11 +1067,14 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       setInput(message.text);
       setPendingMessages((current) => current.filter((item) => item.id !== id));
     },
-    [pendingMessages],
+    [pendingMessages, setPendingMessages],
   );
-  const removePendingMessage = useCallback((id: string) => {
-    setPendingMessages((current) => current.filter((item) => item.id !== id || item.status === "offered"));
-  }, []);
+  const removePendingMessage = useCallback(
+    (id: string) => {
+      setPendingMessages((current) => current.filter((item) => item.id !== id || item.status === "offered"));
+    },
+    [setPendingMessages],
+  );
   const retryPendingMessage = useCallback(
     (id: string) => {
       if (waitResponse) return;
@@ -1070,7 +1082,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
         current.map((item) => (item.id === id && item.status === "uncertain" ? { ...item, status: "waiting" } : item)),
       );
     },
-    [waitResponse],
+    [waitResponse, setPendingMessages],
   );
   const forcePendingMessage = useCallback(
     async (id: string) => {
@@ -1078,31 +1090,32 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       if (!message || !sessionId || !waitResponse) return;
       setPendingMessages((current) => current.map((item) => (item.id === id ? { ...item, status: "offered" } : item)));
       const result = await steerActiveTurn(sessionId, id, message.text);
-      if (activeSessionIdRef.current !== sessionId) return;
       if (result !== "accepted") {
         setPendingMessages((current) =>
           current.map((item) =>
             item.id === id ? { ...item, status: result === "uncertain" ? "uncertain" : "waiting" } : item,
           ),
         );
-        if (result === "rejected") {
+        if (result === "rejected" && activeSessionIdRef.current === sessionId) {
           showWarn({ summary: t("chatbot.pendingMessages.forceUnavailable") });
         }
       }
     },
-    [pendingMessages, sessionId, waitResponse, steerActiveTurn, showWarn, t],
+    [pendingMessages, sessionId, waitResponse, steerActiveTurn, showWarn, t, setPendingMessages],
   );
 
   useEffect(() => {
     if (
       waitResponse ||
+      waitResponseRef.current ||
       !sessionId ||
       queueSessionRef.current !== sessionId ||
       executionDisabledRef.current ||
-      pendingHitl ||
+      pendingHitlsRef.current.length > 0 ||
       hitlResumeOwnerRef.current?.session_id === sessionId ||
       attachments.hasUploadingAttachments ||
       (attachmentPreparations[sessionId] ?? 0) > 0 ||
+      !isHistorySettled ||
       isLoadingHistory
     )
       return;
@@ -1136,10 +1149,12 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     sessionId,
     pendingHitl,
     isLoadingHistory,
+    isHistorySettled,
     pendingMessages,
     sendTurn,
     attachments.hasUploadingAttachments,
     attachmentPreparations,
+    setPendingMessages,
   ]);
   // Read at answer time, like buildTurnContextRef, so the card's handler keeps
   // its identity across keystrokes.

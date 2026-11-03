@@ -2919,7 +2919,7 @@
       "chatList": {
         "answerReady": "Réponse prête",
         "answering": "Réponse en cours",
-        "awaitingInput": "En attente de votre réponse",
+        "awaitingInput": "Réponse attendue",
         "deleteDialog": {
           "title": "Supprimer cette conversation ?",
           "message": "« {{name}} » sera définitivement supprimée. Cette action est irréversible.",
