@@ -531,7 +531,7 @@ After a `build_presentation` result that delivers a deck, or proposes a plan wit
 
 ### Requirement: More native chart types
 
-The system SHALL accept `stacked_bar`, `radar`, `scatter` and `bubble`, built as native charts (`BAR_STACKED`, `RADAR_MARKERS`, `XY_SCATTER`, `BUBBLE`) under the chart placement, colour, font and code-decided legend, labels and formats rules. `stacked_bar` and `radar` take categories and values, follow the one-measure checks of their value axis including the spread question; a radar SHALL have 3 to 8 categories. `scatter` and `bubble` SHALL take series of points (numeric `x`, `y`, positive `size` for bubble, optional `label`), required `x_title` and `y_title`, optional `x_unit`, `unit`, `size_title`, `size_unit`, one unit per axis, no spread question, 3 to 50 points (scatter) or at most 15 (bubble); points' numbers count as the slide's figures for the source checks. Non-numeric categories on a scatter or bubble, or points on a category chart, SHALL name the type to use; numeric categories with values are read as x values. Every refusal SHALL be a `needs_revision` problem; no data SHALL be cut or rescaled.
+The system SHALL accept `stacked_bar`, `radar`, `scatter` and `bubble`, built as native charts (`BAR_STACKED`, `RADAR_MARKERS`, `XY_SCATTER`, `BUBBLE`) under the chart placement, colour, font and code-decided legend, labels and formats rules. `stacked_bar` and `radar` take categories and values, follow the one-measure checks of their value axis; a radar SHALL have 3 to 8 categories. `scatter` and `bubble` SHALL take series of points (numeric `x`, `y`, positive `size` for bubble, optional `label`), required `x_title` and `y_title`, optional `x_unit`, `unit`, `size_title`, `size_unit`, one unit per axis, 3 to 50 points (scatter) or at most 15 (bubble). Non-numeric categories on a scatter or bubble, or points on a category chart, SHALL name the type to use; numeric categories with values are read as x values. Every refusal SHALL be a `needs_revision` problem; no data SHALL be cut or rescaled.
 
 #### Scenario: Scatter built from points
 
@@ -548,19 +548,9 @@ The system SHALL accept `stacked_bar`, `radar`, `scatter` and `bubble`, built as
 - **WHEN** a `radar` has two categories, a `scatter` has categories `[Q1, Q2, Q3]` or no `x_title`, its x values mix "10 €" and "12 %", or a `bubble` point has `size: 0`
 - **THEN** `needs_revision` says, respectively, a radar needs 3 to 8 criteria (or `column`/`bar`), a scatter takes points (`line` or `column` for categories), what the horizontal axis measures, the x values mix units, a bubble needs a positive size
 
-#### Scenario: Radar mixing scales
-
-- **WHEN** a `radar` without `unit` has values from 2 to 900
-- **THEN** the call is refused once asking whether the values measure the same thing
-
-#### Scenario: Points are sourced figures
-
-- **WHEN** a `scatter` slide carries no `source`
-- **THEN** `needs_revision` asks for the source of the slide's figures
-
 ### Requirement: Template slides with several charts are filled
 
-The system SHALL treat every chart frame of a template slide that is not grouped, not declared `keep` and covers at least 5 % of the slide as a chart zone, up to four per slide, in reading order (top to bottom, then left to right), offered with its count (`charts×2`); a slide still holding another chart stays excluded with its reason. The plan SHALL accept `charts` beside `chart` (both on one slide is a `needs_revision`); a slide with k charts SHALL be built only on a template slide with exactly k zones, the i-th chart in the i-th zone, else refused naming the counts offered and how to reach one. Each chart SHALL follow every chart rule on its own frame, problems naming `charts[i]`; on a multi-chart slide each chart SHALL have a title, with one takeaway and one source for the slide. Edits address `charts[i]`; changing the count moves the slide or is refused.
+The system SHALL treat every chart frame of a template slide that is not grouped, not declared `keep` and covers at least 5 % of the slide as a chart zone, up to four per slide, in reading order (top to bottom, then left to right), offered with its count (`charts×2`); a slide still holding another chart stays excluded with its reason. The plan SHALL accept `charts` beside `chart` (both on one slide is a `needs_revision`); a slide with k charts SHALL be built only on a template slide with exactly k zones, the i-th chart in the i-th zone, else refused naming the counts offered and how to reach one. Each chart SHALL follow every chart rule on its own frame, problems naming `charts[i]`; a multi-chart slide has one takeaway and one source. Edits address `charts[i]`; changing the count moves the slide or is refused.
 
 #### Scenario: Four small charts are offered
 
@@ -571,8 +561,3 @@ The system SHALL treat every chart frame of a template slide that is not grouped
 
 - **WHEN** a slide has three charts and the template offers one, two and four
 - **THEN** no deck is built and `needs_revision` says the template offers 1, 2 or 4 charts per slide and suggests splitting the slide or merging charts
-
-#### Scenario: Untitled chart among several
-
-- **WHEN** a slide with two charts has a chart without `title`
-- **THEN** `needs_revision` asks what that chart shows, naming `charts[i]`
