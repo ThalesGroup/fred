@@ -101,6 +101,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const queuedStartRef = useRef<PendingMessage | null>(null);
   const queueDrainRef = useRef(false);
+  const queueSessionRef = useRef<string | null>(null);
   const executionDisabledRef = useRef(false);
   const locallyCreatedSessionIdRef = useRef<string | null>(null);
   const sessionCreateFailedIdRef = useRef<Set<string>>(new Set());
@@ -441,6 +442,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     attachments.clearReadyAttachments();
   }, [attachments.clearReadyAttachments]);
   const handleTurnRejected = useCallback((_wireDraft: string, rejectedSessionId: string) => {
+    if (activeSessionIdRef.current !== rejectedSessionId) return;
     if (queuedStartRef.current) {
       const queued = { ...queuedStartRef.current, status: "uncertain" as const };
       setPendingMessages((current) =>
@@ -461,6 +463,13 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   const handleSteeredMessage = useCallback((messageId: string, deliveredSessionId: string) => {
     if (activeSessionIdRef.current !== deliveredSessionId) return;
     setPendingMessages((current) => current.filter((message) => message.id !== messageId));
+  }, []);
+  const handleStreamInterrupted = useCallback((sid: string) => {
+    if (activeSessionIdRef.current !== sid) return;
+    queueSessionRef.current = null;
+    queuedStartRef.current = null;
+    queueDrainRef.current = false;
+    setPendingMessages([]);
   }, []);
 
   const {
@@ -483,6 +492,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     onTurnPersisted: touchSessionActivity,
     onSessionTitle: storeGeneratedTitle,
     onSteeredMessage: handleSteeredMessage,
+    onStreamInterrupted: handleStreamInterrupted,
     onAwaitingHuman: handleAwaitingHuman,
     onError: handleChatError,
     onTurnStarted: handleTurnStarted,
@@ -575,6 +585,9 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     setHitlFreeText("");
     setInput("");
     setPendingMessages([]);
+    queueSessionRef.current = null;
+    queuedStartRef.current = null;
+    queueDrainRef.current = false;
     setSessionTitle(null);
     titleRenamedRef.current = false;
     setContextPromptIds([]);
@@ -962,6 +975,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
   );
 
   const handleSend = useCallback(async () => {
+    if (executionDisabledRef.current) return;
     if (waitResponse || pendingMessages.length > 0) {
       if (attachments.attachments.length > 0) {
         showWarn({ summary: t("chatbot.pendingMessages.textOnly") });
@@ -969,6 +983,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       }
       const text = input.trim();
       if (!text || inputTooLong) return;
+      queueSessionRef.current = activeSessionIdRef.current;
       setPendingMessages((current) => [...current, { id: uuidv4(), text, status: "waiting" }]);
       setInput("");
       return;
@@ -995,7 +1010,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     [pendingMessages],
   );
   const removePendingMessage = useCallback((id: string) => {
-    setPendingMessages((current) => current.filter((item) => item.id !== id || item.status !== "waiting"));
+    setPendingMessages((current) => current.filter((item) => item.id !== id || item.status === "offered"));
   }, []);
   const retryPendingMessage = useCallback(
     (id: string) => {
@@ -1012,15 +1027,14 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
       if (!message || !sessionId || !waitResponse) return;
       setPendingMessages((current) => current.map((item) => (item.id === id ? { ...item, status: "offered" } : item)));
       const result = await steerActiveTurn(sessionId, id, message.text);
+      if (activeSessionIdRef.current !== sessionId) return;
       if (result !== "accepted") {
         setPendingMessages((current) =>
           current.map((item) =>
             item.id === id ? { ...item, status: result === "uncertain" ? "uncertain" : "waiting" } : item,
           ),
         );
-        if (result === "uncertain") {
-          showWarn({ summary: t("chatbot.pendingMessages.uncertain") });
-        } else {
+        if (result === "rejected") {
           showWarn({ summary: t("chatbot.pendingMessages.forceUnavailable") });
         }
       }
@@ -1032,6 +1046,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     if (
       waitResponse ||
       !sessionId ||
+      queueSessionRef.current !== sessionId ||
       executionDisabledRef.current ||
       pendingHitl ||
       hitlResumeOwnerRef.current?.session_id === sessionId ||
@@ -1050,8 +1065,8 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     queuedStartRef.current = next;
     void sendTurn(next.text, undefined, undefined, undefined, true)
       .then((accepted) => {
+        if (queuedStartRef.current !== next || activeSessionIdRef.current !== sessionId) return;
         if (!accepted) {
-          if (activeSessionIdRef.current !== sessionId) return;
           setPendingMessages((current) => {
             const pending = current.some((message) => message.id === next.id) ? current : [next, ...current];
             return pending.map((message) => (message.id === next.id ? { ...message, status: "uncertain" } : message));
@@ -1059,6 +1074,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
         }
       })
       .finally(() => {
+        if (queuedStartRef.current !== next) return;
         queuedStartRef.current = null;
         queueDrainRef.current = false;
       });
@@ -1528,7 +1544,10 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     handleHitlAnswer,
     handleSendAllHitl,
     handleSkipAllHitl,
-    handleAbort: abort,
+    handleAbort: () => {
+      if (sessionId) handleStreamInterrupted(sessionId);
+      abort();
+    },
     startNewConversation,
     commitTitle,
   };
