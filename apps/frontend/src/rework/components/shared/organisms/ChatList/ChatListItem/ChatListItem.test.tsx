@@ -80,6 +80,7 @@ describe("ChatListItem deleted agent presentation", () => {
     expect(container.textContent).not.toContain("Answer in progress");
     const turn: LiveTurn = {
       sessionId: "saved",
+      teamId: "team-1",
       controller: new AbortController(),
       steeringTurnId: "steering",
       thoughts: new Map(),
@@ -97,6 +98,7 @@ describe("ChatListItem deleted agent presentation", () => {
     show(false);
     const turnOn = (awaitingInput: boolean): LiveTurn => ({
       sessionId: "saved",
+      teamId: "team-1",
       controller: new AbortController(),
       steeringTurnId: "steering",
       thoughts: new Map(),
@@ -130,6 +132,7 @@ describe("ChatListItem deleted agent presentation", () => {
     show(false);
     const turn: LiveTurn = {
       sessionId: "saved",
+      teamId: "team-1",
       controller: new AbortController(),
       steeringTurnId: "running",
       thoughts: new Map(),
@@ -159,6 +162,7 @@ describe("ChatListItem deleted agent presentation", () => {
     const unsubscribe = subscribeBackgroundSettled(settled);
     const turn: LiveTurn = {
       sessionId: "saved",
+      teamId: "team-1",
       controller: new AbortController(),
       steeringTurnId: "steering",
       thoughts: new Map(),
@@ -171,7 +175,7 @@ describe("ChatListItem deleted agent presentation", () => {
     act(() => registerTurn(turn));
     act(() => settleTurn(turn));
     unsubscribe();
-    expect(settled).toHaveBeenCalledWith("saved", false);
+    expect(settled).toHaveBeenCalledWith(turn);
     expect(container.querySelector('[data-unread="true"]')!.textContent).toContain("Unread");
     expect(container.querySelector('[class*="unreadDot"]')).not.toBeNull();
     expect(container.querySelector('[title="Answer ready"]')).not.toBeNull();
@@ -186,6 +190,7 @@ describe("ChatListItem deleted agent presentation", () => {
     await labels.changeLanguage(language);
     const question: LiveTurn = {
       sessionId: "saved",
+      teamId: "team-1",
       controller: new AbortController(),
       steeringTurnId: "question",
       thoughts: new Map(),

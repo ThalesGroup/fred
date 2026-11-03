@@ -2220,6 +2220,40 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       fetchSpy.mockRestore();
     });
 
+    it("discards a detached queue when the stream connection fails before a response", async () => {
+      let queue: ReturnType<typeof usePendingMessages>[0] = [];
+      function Queue() {
+        [queue] = usePendingMessages("session-1");
+        return null;
+      }
+      const probeRoot = createRoot(document.createElement("div"));
+      act(() => probeRoot.render(<Queue />));
+      let rejectFetch!: (reason: Error) => void;
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementationOnce(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            rejectFetch = reject;
+          }),
+      );
+      mount();
+      let sendPromise!: Promise<boolean>;
+      await act(async () => {
+        sendPromise = latest.send("hello", "session-1");
+        await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      });
+      act(() => {
+        updatePendingMessages("session-1", [{ id: "queued", text: "discard", status: "waiting" }]);
+        latest.reset();
+      });
+      await act(async () => {
+        rejectFetch(new Error("no connection"));
+        await sendPromise;
+      });
+      expect(queue).toEqual([]);
+      act(() => probeRoot.unmount());
+      fetchSpy.mockRestore();
+    });
+
     it.each([false, true])("clears only the disconnected turn's queue after adoption=%s", async (adopt) => {
       let queueA: ReturnType<typeof usePendingMessages>[0] = [];
       let queueB: ReturnType<typeof usePendingMessages>[0] = [];

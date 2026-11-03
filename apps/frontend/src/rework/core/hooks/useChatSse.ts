@@ -337,6 +337,7 @@ export function useChatSse(
 ) {
   const {
     agentInstanceId,
+    teamId,
     spaceId = "",
     onError,
     onPreparation,
@@ -490,6 +491,7 @@ export function useChatSse(
       const turn: LiveTurn = {
         sessionId,
         scope: { actor: KeyCloakService.GetSessionIdentity(), spaceId, agentInstanceId },
+        teamId,
         controller,
         steeringTurnId,
         thoughts: new Map(),
@@ -501,7 +503,7 @@ export function useChatSse(
       registerTurn(turn);
       return turn;
     },
-    [host, spaceId, agentInstanceId],
+    [host, spaceId, teamId, agentInstanceId],
   );
 
   // Re-attaches the session's turn that kept streaming while this view was
@@ -1341,6 +1343,7 @@ export function useChatSse(
         );
         console.debug(`[useChatSse][${sendId}] streamToMessages completed normally`);
       } catch (err) {
+        turn.interrupted = true;
         const name = (err as Error)?.name;
         const msg = (err as Error)?.message ?? String(err);
         if (ac.signal.aborted || abortRef.current !== ac || isTurnCurrent?.(effectiveSessionId) === false) {

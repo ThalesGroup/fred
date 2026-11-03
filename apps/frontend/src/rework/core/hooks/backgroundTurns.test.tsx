@@ -71,6 +71,7 @@ describe("background indicator persistence", () => {
   function turn(id: string, flags: Partial<LiveTurn> = {}): LiveTurn {
     return {
       sessionId: id,
+      teamId: "team-1",
       controller: new AbortController(),
       steeringTurnId: id,
       thoughts: new Map(),
@@ -171,7 +172,11 @@ describe("background indicator persistence", () => {
   it.each(["incomplete", "interrupted", "cancelled"])(
     "does not persist an unread answer for a %s turn",
     async (outcome) => {
-      const value = turn("failed", { completed: outcome !== "incomplete", interrupted: outcome === "interrupted" });
+      const value = turn("failed", {
+        completed: outcome !== "incomplete",
+        interrupted: outcome === "interrupted",
+        awaitingInput: outcome === "interrupted",
+      });
       if (outcome === "cancelled") value.controller.abort();
       finish(value);
       await reload();
