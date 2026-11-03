@@ -518,7 +518,6 @@
       "edit": "Modifier",
       "remove": "Supprimer",
       "offered": "Envoi...",
-      "uncertain": "Vérifier l'envoi",
       "retry": "Renvoyer",
       "retryWarning": "Vérifiez d'abord la conversation. Le message pourrait être envoyé deux fois.",
       "textOnly": "Seul un message texte simple peut attendre pendant ce tour",
@@ -923,7 +922,7 @@
     "storageQuotaExceededMessage": "L'ajout de ces fichiers dépassera la capacité maximale autorisée pour cette équipe.",
     "storageQuotaExceededTitle": "Quota de stockage dépassé",
     "summary": "Résumé",
-    "supportedFormats": "Formats pris en charge : PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "supportedFormats": "Formats pris en charge : Documents PDF, DOCX, DOC, ODT, PPTX, PPT, TXT, MD · Tableurs CSV, XLSX, XLS, XLSM · Mails MSG, EML · Images PNG, JPG, JPEG, WEBP",
     "tooDeepRejected": "Rien n'a été ajouté : le dossier déposé imbriquerait des fichiers au-delà de {{max}} niveaux de dossiers.",
     "tooDeepSkipped_one": "{{count}} fichier a été ignoré : il serait imbriqué au-delà de {{max}} niveaux de dossiers.",
     "tooDeepSkipped_other": "{{count}} fichiers ont été ignorés : ils seraient imbriqués au-delà de {{max}} niveaux de dossiers.",
@@ -1424,6 +1423,13 @@
         "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement."
       },
       "platformModelBindings": {
+        "titleModel": {
+          "label": "Modèle des titres de conversation",
+          "default": "Modèle par défaut de la plateforme",
+          "saved": "Modèle des titres enregistré.",
+          "saveError": "Impossible d'enregistrer le modèle des titres.",
+          "loadError": "Le modèle des titres de conversation demande le droit de modifier le prompt plateforme."
+        },
         "openButton": "Modèles par défaut",
         "title": "Modèles par défaut",
         "tabAria": "Portée des modèles par défaut",
@@ -2486,7 +2492,8 @@
         }
       },
       "recentAgents": {
-        "title": "Derniers agents consultés"
+        "title": "Derniers agents consultés",
+        "suggestedTitle": "Agents disponibles pour vous"
       },
       "topAgents": {
         "title": "Les agents que vous avez le plus utilisés",

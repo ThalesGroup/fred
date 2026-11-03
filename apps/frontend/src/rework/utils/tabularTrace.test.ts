@@ -24,6 +24,21 @@ const document = {
 };
 
 describe("tabular trace result validation", () => {
+  it.each(["list_tabular_documents", "get_tabular_documents_schemas", "describe_tabular_documents"])(
+    "accepts the MCP result envelope for %s while validating its contents",
+    (name) => {
+      const documents = [{ ...document, markdown: "# Sales", tables: [{ ...table, columns: [] }] }];
+      expect(parseTabularTraceResult(name, JSON.stringify(documents))).not.toBeNull();
+      expect(parseTabularTraceResult(name, JSON.stringify({ result: documents }))).toEqual(
+        parseTabularTraceResult(name, JSON.stringify(documents)),
+      );
+      expect(parseTabularTraceResult(name, JSON.stringify({ result: [] }))).not.toBeNull();
+      expect(parseTabularTraceResult(name, JSON.stringify({ result: [{ document_uid: "bad" }] }))).toBeNull();
+      expect(parseTabularTraceResult(name, JSON.stringify({ result: { result: documents } }))).toBeNull();
+      expect(parseTabularTraceResult(name, JSON.stringify({ result: documents, extra: "untrusted" }))).toBeNull();
+    },
+  );
+
   it("recognizes bare and Knowledge Flow MCP tool names only", () => {
     expect(tabularToolKind("list_tabular_documents")).toBe("documents");
     expect(tabularToolKind("mcp__knowledge_flow__get_tabular_documents_schemas_2")).toBe("schemas");

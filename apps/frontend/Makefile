@@ -15,7 +15,7 @@ include ../../scripts/makefiles/config/INFO-frontend.mk
 
 .DEFAULT_GOAL := help
 
-NODE_VERSION=22.13.0
+include ../../scripts/makefiles/node.mk
 
 # Local application gateway configuration follows the backend config/.env
 # convention. Values already supplied by the invoking environment are restored
@@ -67,7 +67,7 @@ endif
 ##@ Common workflows
 ##> The commands you actually use day to day:
 ##>   make run             start the local dev server on http://localhost:5173
-##>   make code-quality    type-check + prettier check — run this before committing
+##>   make code-quality    type-check + prettier check + eslint - run this before committing
 ##>   make test            run the unit test suite with coverage
 ##>   make update-all-apis regenerate the API client after any backend change
 ##> First run installs npm dependencies automatically; later runs reuse them.
@@ -78,16 +78,6 @@ endif
 # description, so they do not appear in `make` help. They run automatically
 # before any target that needs Node or installed dependencies — do not run
 # them by hand.
-.PHONY: check-node
-check-node:
-	@REQUIRED=$(NODE_VERSION); \
-	CURRENT=$$(node -v | sed 's/^v//'); \
-	verlte() { [ "$$1" = "$$2" ] && return 0 || [  "$$(printf '%s\n' "$$1" "$$2" | sort -V | head -n1)" = "$$1" ]; }; \
-	if ! verlte "$$REQUIRED" "$$CURRENT"; then \
-		echo "Node.js v$$REQUIRED or higher is required, but found v$$CURRENT. Please use the correct version."; \
-		exit 1; \
-	fi
-
 
 # node_modules: install dependencies (reproducibly via `npm ci` when a lockfile
 # exists, otherwise `npm install`). A real file target, and check-node is
@@ -102,7 +92,7 @@ node_modules: package.json $(wildcard package-lock.json) | check-node
 
 .PHONY: regen-lockfile
 regen-lockfile: check-node ## Regenerate package-lock.json from scratch inside a clean Node container
-	docker run --rm -it -v $(CURDIR):/src -w /src node:22.13.0 bash -c "rm -rf node_modules package-lock.json && npm install"
+	docker run --rm -it -v $(CURDIR):/src -w /src node:$(NODE_VERSION) bash -c "npm install --global npm@$(NPM_VERSION) && rm -rf node_modules package-lock.json && npm install"
 
 .PHONY: build
 build: check-node node_modules ## Production build (Vite/Rollup) into dist/ — the artifact shipped in the image
