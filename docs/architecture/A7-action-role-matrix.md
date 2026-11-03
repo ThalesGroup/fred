@@ -20,8 +20,9 @@ Each role column describes what that role grants **by itself**. Roles are cumula
 The role is evaluated on the target space, except where the row explicitly names
 the parent or organization. Platform roles apply to `platform:root` only.
 
-All non-public business HTTP operations require an authenticated caller and current
-personal CGU acceptance when configured. Space business actions also require the
+Non-public business HTTP operations require an authenticated caller and current
+personal CGU acceptance when configured, except the authentication-only personal
+consumption read described below. Space business actions also require the
 caller to hold a direct role in the target's organization. Roles do not bypass admission.
 `GET /me/spaces` can list governance-only spaces: seeing an entry is not permission
 to read its Resources. Organization context is derived from committed spaces and
@@ -66,6 +67,17 @@ error order: missing or outside-organization space gives 404, retirement gives
 409 `space_pending_deletion`, and missing local Write gives 403. An organization
 admin alone is in context and receives 403; a retired team gives 409 even to an
 in-context non-editor. A missing prompt still gives 404 after access is checked.
+
+## Consumption reads
+
+| Action and HTTP entry | member | editor | owner | analyst | Extra condition / effect |
+| --- | --- | --- | --- | --- | --- |
+| Read space consumption - `GET /spaces/{space_id}/usage` | No | No | Yes, direct | Yes, direct | `ReadUsage` on the requested team/project. Team includes active, retired and purged projects and their agent names, without project roles. No per-user detail or content access. Organization and personal kinds are unsupported (422). |
+| Read own consumption - `GET /me/usage` | Yes | Yes | Yes | Yes | Authentication as a person only; no role, admission or CGU requirement. Only the verified subject's consumption, across all spaces including former memberships. |
+
+Both routes use the [consumption journal reader](../../apps/control-plane/src/sessions/usage/read.rs)
+and accept a bounded date range; [A12](A12-control-plane-api.md) describes the contract.
+The personal route is also available to a person with none of the listed roles.
 
 ## Model administration and the first managed chat
 

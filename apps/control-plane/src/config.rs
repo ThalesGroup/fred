@@ -196,6 +196,15 @@ impl Configuration {
 
     pub fn validate(&self) -> Result<()> {
         self.platform.validate()?;
+        if self.platform.knowledge_flow_url.is_some() {
+            // Match the startup branches that leave AppState::directory absent.
+            if self.security.user_directory == crate::users::DirectoryKind::Local {
+                bail!("platform.knowledge_flow_url requires security.user_directory=keycloak");
+            }
+            if !self.security.m2m.as_ref().is_some_and(|m2m| m2m.enabled) {
+                bail!("platform.knowledge_flow_url requires security.m2m.enabled=true");
+            }
+        }
         self.scheduler.lifecycle.validate()?;
         if let Some(content) = &self.storage.content {
             content.validate()?;
@@ -311,6 +320,36 @@ pub fn schema() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn knowledge_flow_requires_configured_directory() {
+        for mode in ["enabled", "local", "missing", "disabled"] {
+            let mut config: Configuration =
+                serde_yaml_ng::from_str(include_str!("../config/configuration.yaml")).unwrap();
+            config.platform.knowledge_flow_url =
+                Some("https://kf.example/knowledge-flow/v2".into());
+            match mode {
+                "local" => config.security.user_directory = crate::users::DirectoryKind::Local,
+                "missing" => config.security.m2m = None,
+                "disabled" => config.security.m2m.as_mut().unwrap().enabled = false,
+                _ => {}
+            }
+            if mode == "enabled" {
+                config.validate().unwrap();
+            } else {
+                let error = config.validate().unwrap_err().to_string();
+                assert!(error.contains("platform.knowledge_flow_url"));
+                assert!(error.contains(if mode == "local" {
+                    "security.user_directory"
+                } else {
+                    "security.m2m.enabled"
+                }));
+            }
+            // No KF tool means no new directory requirement.
+            config.platform.knowledge_flow_url = None;
+            config.validate().unwrap();
+        }
+    }
 
     // Proves: I19
     #[test]

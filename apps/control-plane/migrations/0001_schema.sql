@@ -545,6 +545,7 @@ create table model_usage (
     primary key (report_id, model_source_id, upstream_model_id)
 );
 create index model_usage_space_occurred_at on model_usage (space_id, occurred_at);
+create index model_usage_user_occurred_at on model_usage (user_id, occurred_at);
 comment on table model_usage is
     'Consumption fact per offer in a report (one run); reports are atomic and idempotent by report_id (Idempotency-Key). A turn consumes the sum of its reports. Future aggregates derive from this table.';
 

@@ -414,6 +414,7 @@ async fn placement_is_immutable_and_folders_stay_in_their_space() {
 #[ignore = "needs Postgres: make test-integration"]
 async fn owner_roles_grant_no_content_access() {
     let e = env().await;
+    bootstrap::grant_root(&e.pool, "dave").await.unwrap();
     let (org, _) = org_and_team(&e).await;
     grant(&e, org.id, Role::Member, "carol").await;
     let team = spaces::create_space(
@@ -435,7 +436,6 @@ async fn owner_roles_grant_no_content_access() {
         !reads(&e, "carol", team.id).await,
         "a space owner is not a reader"
     );
-    bootstrap::grant_root(&e.pool, "dave").await.unwrap();
     assert!(
         !reads(&e, "dave", org.id).await,
         "a platform admin is not a reader"
@@ -488,7 +488,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
                 SP::Read => matches!(role, Role::Member | Role::Editor | Role::Analyst),
                 SP::Write => *role == Role::Editor,
                 SP::Manage => *role == Role::Owner,
-                SP::RunEvaluations | SP::ManageEvaluationCorpus => {
+                SP::RunEvaluations | SP::ManageEvaluationCorpus | SP::ReadUsage => {
                     matches!(role, Role::Owner | Role::Analyst)
                 }
                 SP::ReadConversationsForEvaluation => *role == Role::Analyst,
@@ -657,8 +657,8 @@ async fn concurrent_owner_revocations_leave_one_owner_at_every_level() {
 #[ignore = "needs Postgres: make test-integration"]
 async fn teams_are_created_by_organization_owners_only() {
     let e = env().await;
-    let (org, team) = org_and_team(&e).await;
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let (org, team) = org_and_team(&e).await;
     // Platform adminship confers no business role in an organization.
     let by_root = spaces::create_space(
         &e.pool,
@@ -885,8 +885,8 @@ async fn wait_for_write_retry(pool: &PgPool, since: chrono::DateTime<chrono::Utc
 async fn revoked_platform_actor_cannot_complete_a_waiting_platform_or_owner_grant() {
     use control_plane::{platform, roles::PlatformRole as P};
     let e = env().await;
-    let (org, _) = org_and_team(&e).await;
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let (org, _) = org_and_team(&e).await;
     for owner_grant in [false, true] {
         control_plane::authorization::write_platform(
             &mut e.pool.acquire().await.unwrap(),
@@ -2873,6 +2873,9 @@ async fn tree(e: &Env) -> (Space, Space, Space) {
 async fn roles_stay_on_their_space() {
     use control_plane::roles::SpacePermission as P;
     let e = env().await;
+    bootstrap::grant_root(&e.pool, "roles-fixture-root")
+        .await
+        .unwrap();
     let (org, team, project) = tree(&e).await;
     for (user, role) in [
         ("bob", Role::Editor),
@@ -2889,6 +2892,7 @@ async fn roles_stay_on_their_space() {
                 P::RunEvaluations,
                 P::ManageEvaluationCorpus,
                 P::ReadConversationsForEvaluation,
+                P::ReadUsage,
             ] {
                 assert!(
                     control_plane::authorization::authorize(&e.pool, user, space, permission)
@@ -2911,6 +2915,7 @@ async fn roles_stay_on_their_space() {
             P::RunEvaluations,
             P::ManageEvaluationCorpus,
             P::ReadConversationsForEvaluation,
+            P::ReadUsage,
         ] {
             assert!(
                 control_plane::authorization::authorize(&e.pool, user, project.id, permission)
@@ -2933,6 +2938,7 @@ async fn roles_stay_on_their_space() {
                 matches!(role, Role::Analyst | Role::Owner),
             ),
             (P::ReadConversationsForEvaluation, role == Role::Analyst),
+            (P::ReadUsage, matches!(role, Role::Analyst | Role::Owner)),
         ] {
             assert_eq!(
                 control_plane::authorization::authorize(&e.pool, user, project.id, permission)
@@ -3190,6 +3196,7 @@ async fn space_and_folder_names_are_unique_in_canonical_form() {
 #[ignore = "needs Postgres: make test-integration"]
 async fn organization_admins_name_owners_and_read_nothing() {
     let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let server = support::IdentityServer::start().await;
     server
         .users
@@ -3198,7 +3205,6 @@ async fn organization_admins_name_owners_and_read_nothing() {
         .insert("olga".into(), "olga".into());
     let directory = server.directory();
     let (org, team) = org_and_team(&e).await;
-    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     // Only a platform admin names organization admins, and only on organizations.
     let by_admin = spaces::grant(
         &e.pool,
@@ -3357,6 +3363,7 @@ async fn business_routes_share_one_authorization_answer() {
     use serde_json::{Value, json};
     use tower::ServiceExt;
     let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let (org, team) = org_and_team(&e).await;
     grant(&e, org.id, Role::Editor, "writer").await;
     grant(&e, team.id, Role::Editor, "writer").await;
@@ -3381,7 +3388,6 @@ async fn business_routes_share_one_authorization_answer() {
     let retired_folder = spaces::create_folder(&e.pool, "writer", retired.id, None, "old".into())
         .await
         .unwrap();
-    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
     let retired_org =
@@ -3690,10 +3696,10 @@ async fn content_http_waiters_recheck_existence_after_deletion() {
 #[ignore = "needs Postgres: make test-integration"]
 async fn organization_admin_grants_require_directory_identity_and_deleted_admins_can_be_revoked() {
     let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let (org, _) = org_and_team(&e).await;
     let identity = support::IdentityServer::start().await;
     let app = content_app(&e, &identity).await;
-    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let token = identity.token("root");
     let before =
         control_plane::authorization::space_holders(&e.pool, org.id, Role::OrganizationAdmin)
@@ -4146,10 +4152,10 @@ async fn business_http_checks_each_organization_while_platform_metadata_stays_av
 #[ignore = "needs Postgres: make test-integration"]
 async fn import_and_a_waiting_grant_both_commit_across_organizations() {
     let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let a = crate::support::member_organization(&e.pool, "A", "alice")
         .await
         .unwrap();
-    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let server = support::IdentityServer::start().await;
     server.users.lock().await.insert("bob".into(), "bob".into());
     let gate = std::sync::Arc::new(support::Gate::default());
@@ -4202,8 +4208,8 @@ async fn import_and_a_waiting_grant_both_commit_across_organizations() {
 #[ignore = "needs Postgres: make test-integration"]
 async fn personal_open_requires_business_role_and_never_repairs_revocation() {
     let e = env().await;
-    let (org, _) = org_and_team(&e).await;
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let (org, _) = org_and_team(&e).await;
     spaces::grant(
         &e.pool,
         &e.subjects(),

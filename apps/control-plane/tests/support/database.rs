@@ -39,7 +39,8 @@ pub async fn database_with_migrator(migrator: sqlx::migrate::Migrator) -> PgPool
                     "/../../deploy/postgres/bootstrap.sql"
                 ),
             ])
-            .env("PGDATABASE", bootstrap_url)
+            .arg("--dbname")
+            .arg(bootstrap_url)
             .output()
             .expect("psql is required for the canonical deployment bootstrap")
             .status

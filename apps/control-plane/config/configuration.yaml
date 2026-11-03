@@ -56,6 +56,9 @@ scheduler:
 
 # Agent discovery and local model test source.
 platform:
+  # Enable Ralph's fixed search tool after granting the control-plane workload
+  # the fred-delegation audience and delegation_caller role accepted by KF.
+  # knowledge_flow_url: http://localhost:8111/knowledge-flow/v2
   # Workload-local attestation. Source revision and destination must match admission.
   inference_credentials:
     - source_id: mistral

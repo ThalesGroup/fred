@@ -294,9 +294,10 @@ async fn prompts_lifecycle_preserves_content_and_server_attribution() {
 #[ignore = "needs disposable Postgres: make test-integration"]
 async fn prompts_authorization_admission_and_placement() {
     let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
-    for actor in ["reader", "platform-editor"] {
+    for actor in ["reader", "platform-editor", "unconsented"] {
         grant(&e, org.id, Role::Member, actor).await;
     }
     grant(&e, team.id, Role::Member, "reader").await;
@@ -359,6 +360,7 @@ async fn prompts_authorization_admission_and_placement() {
     for (label, actor, space, read, write) in [
         ("anonymous", None, team.id, 401, 401),
         ("unadmitted", Some("unadmitted"), team.id, 403, 403),
+        ("unconsented", Some("unconsented"), team.id, 403, 403),
         ("reader", Some("reader"), team.id, 200, 403),
         (
             "platform role only",
@@ -390,6 +392,9 @@ async fn prompts_authorization_admission_and_placement() {
             let (status, result) = request(&app, &identity, actor, method, path, body).await;
             assert_eq!(status, expected, "{label} {method} {path}: {result}");
             if label == "unadmitted" {
+                assert_eq!(result["detail"], "user_not_admitted");
+            }
+            if label == "unconsented" {
                 assert_eq!(result["detail"], "user_not_accept_gcu");
             }
         }
@@ -443,7 +448,6 @@ async fn prompts_authorization_admission_and_placement() {
         .await,
         (200, json!({"items":[personal_summary], "next_cursor":null}))
     );
-    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
     lifecycle.accept(&e.pool, "root", team.id).await.unwrap();
@@ -986,6 +990,9 @@ async fn prompt_category_pagination_survives_renaming() {
 async fn prompt_tags_and_caller_favorites_preserve_access_and_attribution() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
+    support::member_organization(&e.pool, "Outside", "outsider")
+        .await
+        .unwrap();
     grant(&e, team.id, Role::Editor, "alice").await;
     grant(&e, org.id, Role::Member, "reader").await;
     grant(&e, team.id, Role::Member, "reader").await;
@@ -1203,6 +1210,7 @@ async fn prompt_tags_and_caller_favorites_preserve_access_and_attribution() {
 #[ignore = "needs disposable Postgres: make test-integration"]
 async fn publication_uses_current_definition_and_organization_participation() {
     let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
     let other = support::member_organization(&e.pool, "Other", "carol")
@@ -1458,11 +1466,33 @@ async fn publication_uses_current_definition_and_organization_participation() {
         .0,
         403
     );
-    // Removing the last collective business role also removes marketplace visibility.
+    // Removing the last collective role removes admission, even with old consent.
     sqlx::query("delete from space_role_grant where subject='owner-only'")
         .execute(&e.pool)
         .await
         .unwrap();
+    let (status, body) = request(
+        &app,
+        &identity,
+        Some("owner-only"),
+        "GET",
+        &catalog,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 403);
+    assert_eq!(body["detail"], "user_not_admitted");
+    // Admission through another organization still grants no marketplace visibility here.
+    spaces::grant(
+        &e.pool,
+        &e.subjects(),
+        "carol",
+        other.id,
+        Role::Member,
+        "owner-only",
+    )
+    .await
+    .unwrap();
     assert_eq!(
         request(
             &app,
@@ -1476,7 +1506,6 @@ async fn publication_uses_current_definition_and_organization_participation() {
         .0,
         404
     );
-    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
     lifecycle.config.enabled = true;
     lifecycle.accept(&e.pool, "root", team.id).await.unwrap();

@@ -542,15 +542,21 @@ async fn document_publication_rechecks_token_and_terms_without_locking_remote_io
 #[ignore = "needs disposable PostgreSQL and SeaweedFS"]
 async fn document_creation_reads_conflicts_receipts_and_safe_download() {
     let d = Documents::start(1024 * 1024).await;
-    for user in ["reader", "analyst", "owner", "stranger"] {
+    crate::support::member_organization(&d.e.pool, "Outside", "outsider")
+        .await
+        .unwrap();
+    for user in ["reader", "analyst", "owner", "stranger", "outsider"] {
         let (status, body) = d
             .upload(user, "denied.txt", b"bytes", Uuid::new_v4(), None)
             .await;
         assert_eq!(
             status,
-            if user == "stranger" { 404 } else { 403 },
+            if user == "outsider" { 404 } else { 403 },
             "{user}: {body}"
         );
+        if user == "stranger" {
+            assert_eq!(body["detail"], "user_not_admitted");
+        }
     }
     let key = Uuid::new_v4();
     let bytes = b"unchanged original\n".repeat(9000);
@@ -599,7 +605,7 @@ async fn document_creation_reads_conflicts_receipts_and_safe_download() {
         to_bytes(content.into_body(), 1024 * 1024).await.unwrap(),
         bytes
     );
-    for user in ["owner", "stranger"] {
+    for user in ["owner", "stranger", "outsider"] {
         assert_eq!(
             d.json(
                 user,
@@ -609,7 +615,7 @@ async fn document_creation_reads_conflicts_receipts_and_safe_download() {
             )
             .await
             .0,
-            if user == "owner" { 403 } else { 404 }
+            if user == "outsider" { 404 } else { 403 }
         );
     }
     assert_eq!(

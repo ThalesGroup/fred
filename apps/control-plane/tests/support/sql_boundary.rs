@@ -81,6 +81,8 @@ async fn consumers_only_read_their_cp_read_contract_and_visibility_tracks_public
     let deletion = Uuid::new_v4();
     sqlx::query("insert into space(id,kind,name,organization_id) values($1,'organization','SQL boundary',$1)")
         .bind(org).execute(&e.pool).await.unwrap();
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$1,'fixture','assistant','Fixture','{}','alice','fixture')")
+        .bind(conversation).bind(org).execute(&e.pool).await.unwrap();
     sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$1,$1,'fixture','Fixture',1)")
         .bind(conversation).bind(org).execute(&e.pool).await.unwrap();
     sqlx::query("insert into document(id,space_id,session_id,name,mime,size,sha256,created_by,object_key,quota_owner,retrievable) values($1,$2,$3,'fixture','text/plain',1,repeat('a',64),'alice','fixture',$2,true)")

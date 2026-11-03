@@ -254,7 +254,8 @@ impl IdentityServer {
 pub mod real_keycloak;
 
 /// Create through HTTP with a separate governance owner, then explicitly grant content
-/// to the business administrator. The temporary platform grant leaves bootstrap untouched.
+/// to the business administrator. Business fixtures need a bootstrapped platform;
+/// bootstrap-specific tests use the empty database directly instead.
 pub async fn member_organization(
     pool: &sqlx::PgPool,
     name: &str,
@@ -270,6 +271,14 @@ pub async fn member_organization(
     use serde_json::json;
     use tower::ServiceExt;
 
+    if !control_plane::onboarding::bootstrap_completed(pool)
+        .await
+        .unwrap()
+    {
+        control_plane::bootstrap::grant_root(pool, "fixture-root")
+            .await
+            .unwrap();
+    }
     let identity = IdentityServer::start().await;
     let owner = format!("{admin}-owner");
     for user in [owner.as_str(), admin] {

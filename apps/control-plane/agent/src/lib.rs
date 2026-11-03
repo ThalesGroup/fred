@@ -7,6 +7,7 @@ use std::{collections::BTreeMap, time::Duration};
 
 use fred_rust_sdk::inference::ModelOfferKey;
 use futures::{Stream, StreamExt, stream};
+pub use rig_core::completion::Usage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -28,10 +29,10 @@ pub const DEFINITION: AgentDefinition = AgentDefinition {
     title: "Ralph",
     version: env!("CARGO_PKG_VERSION"),
     provider: "control-plane",
-    description: "Rust chat agent. Each message is independent; no tools or saved history.",
+    description: "Rust chat agent with optional document search. Each message is independent; no saved history.",
 };
 
-// Fixed-response subset of fred-sdk/contracts/execution.py::RuntimeExecuteRequest.
+// Subset of fred-sdk/contracts/execution.py::RuntimeExecuteRequest accepted by Ralph.
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct ExecuteRequest {
     agent_id: Option<String>,

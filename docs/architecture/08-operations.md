@@ -81,15 +81,33 @@ is the unit of idempotency. Replaying the same report does not count twice; any
 change to its session, exchange, occurrence time, offers or counters conflicts.
 A turn interrupted for human validation produces several reports, and its
 consumption is the sum of those reports. Provenance survives retirement or purge.
-Embedded Ralph submits one report per decoded managed completion directly through
-the same validation and transaction, using the admitted offer and Rig's token
-counters. Managed execution requires a session; direct demonstration emits no
-report. Its single, two-second write attempt survives browser disconnection but
+Embedded Ralph submits one report per managed turn with at least one decoded
+model response, through the same validation and transaction. It sums Rig's token
+counters for the admitted offer, including responses received before a later
+failure or cancellation. Managed execution requires a session; direct
+demonstration emits no report. Its single, two-second write attempt survives browser disconnection but
 is best effort: a write failure or process crash can lose the report without
-changing the reply. Provider errors and deadlines emit no report. Counters never
-enter browser events. Daily aggregation, partitioning and retention, an outbox,
+changing the reply. A turn with no decoded model response emits no report.
+Counters never enter browser events. Daily aggregation, partitioning and
+retention, an outbox,
 monthly closure and pseudonymization are deliberately deferred. Any future
 consumption aggregate must derive from the journal.
+
+The consumption read API exposes token totals, a continuous time series and
+breakdowns by agent and model. Any authenticated person can read their own
+consumption across all spaces, even after losing their roles. A direct Owner or
+Analyst role on a team or project grants access to its consumption aggregates.
+A team includes its projects, including retired and purged projects; a project
+includes only itself. Team aggregates include project agents and their names
+even when the reader has no role in those projects. This grants no content access
+and exposes no per-user breakdown. Organization consumption is outside this API;
+personal spaces are covered by the person's own view.
+
+The default range is the last 30 days, with a maximum of 366 days. Buckets use UTC:
+hourly up to 48 hours, daily up to 92 days, then weekly, with zeros for empty
+buckets. User-timezone bucketing is deferred. A turn counts once at its first
+consumption; resuming after human validation adds tokens at their consumption
+time without another turn, even across days or query boundaries.
 
 ## Logs and lifecycle
 

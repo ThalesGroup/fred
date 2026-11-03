@@ -124,7 +124,8 @@ impl Directory {
         &self.realm
     }
 
-    async fn access_token(&self) -> Result<String> {
+    // Shared workload identity for directory requests and server-configured KF calls.
+    pub(crate) async fn access_token(&self) -> Result<String> {
         let mut cached = self.token.lock().await;
         if let Some(t) = cached.as_ref().filter(|t| t.expires > Instant::now()) {
             return Ok(t.value.clone());

@@ -39,6 +39,9 @@ const NATIVE_RUNTIME_ID: &str = fred_rust_agent::DEFINITION.provider;
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PlatformConfig {
+    /// Optional server-owned KF base URL; enables Ralph's fixed document search tool.
+    #[serde(default)]
+    pub knowledge_flow_url: Option<String>,
     #[serde(default)]
     pub model_sources: Vec<crate::model_catalog::config::ModelSource>,
     #[serde(default)]
@@ -65,6 +68,9 @@ pub struct RuntimeCatalogSource {
 
 impl PlatformConfig {
     pub fn validate(&self) -> Result<()> {
+        if let Some(url) = &self.knowledge_flow_url {
+            crate::embedded_agent::search::endpoint(url)?;
+        }
         crate::model_catalog::config::validate_sources(&self.model_sources)?;
         crate::model_catalog::initialization::validate(&self.organization_models)?;
         let mut bindings = std::collections::HashSet::new();
@@ -145,7 +151,7 @@ fn native_catalog() -> RuntimeCatalog {
             template_agent_id: definition.id.into(),
             title: definition.title.into(),
             description: definition.description.into(),
-            // Fixed response, with no ReAct loop or graph execution engine.
+            // At most one fixed document search and two LLM calls; no saved history.
             kind: "static".into(),
             public_version: Some(definition.version.into()),
             metadata: BTreeMap::from([

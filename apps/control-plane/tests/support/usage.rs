@@ -28,6 +28,9 @@ struct Fixture {
 impl Fixture {
     async fn new() -> Self {
         let e = env().await;
+        bootstrap::grant_root(&e.pool, "usage-fixture-root")
+            .await
+            .unwrap();
         let (_, team) = org_and_team(&e).await;
         let agent = Uuid::new_v4();
         let session = Uuid::new_v4();
@@ -145,6 +148,481 @@ fn usage() -> Value {
     json!({"occurred_at":"2026-01-01T12:00:00.123456789Z", "models":[
         model("test-source", "test-model"), model("other-source", "test-model")
     ]})
+}
+
+impl Fixture {
+    async fn get(&self, user: Option<&str>, path: &str) -> (u16, Value) {
+        support::request(&self.app, &self.identity, user, "GET", path, Value::Null).await
+    }
+
+    async fn admit(&self, user: &str) {
+        control_plane::onboarding::accept(&self.pool, Some("new-version"), user, "new-version")
+            .await
+            .unwrap();
+    }
+
+    async fn organization(&self) -> Uuid {
+        sqlx::query_scalar("select organization_id from space where id=$1")
+            .bind(self.space)
+            .fetch_one(&self.pool)
+            .await
+            .unwrap()
+    }
+
+    async fn project(&self, name: &str) -> Space {
+        spaces::create_space(
+            &self.pool,
+            "alice",
+            SpaceKind::Project,
+            self.space,
+            name.into(),
+            "alice",
+        )
+        .await
+        .unwrap()
+    }
+
+    async fn agent_session(&self, space: Uuid, user: &str, name: &str) -> (Uuid, Uuid) {
+        let agent = Uuid::new_v4();
+        let session = Uuid::new_v4();
+        sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$1,'native','assistant',$3,'{}','alice',$4)")
+            .bind(agent).bind(space).bind(name).bind(agent.to_string()).execute(&self.pool).await.unwrap();
+        sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,$2,$3,$4,$4,'native',$5,1)")
+            .bind(session).bind(user).bind(space).bind(agent).bind(name).execute(&self.pool).await.unwrap();
+        (agent, session)
+    }
+
+    async fn record_at(&self, space: Uuid, session: Uuid, exchange: &str, at: &str, input: i64) {
+        let mut offer = model("source", "model");
+        offer["input_tokens"] = json!(input);
+        let body = json!({"occurred_at":at,"models":[offer]});
+        let path = format!("/spaces/{space}/sessions/{session}/exchanges/{exchange}/usage");
+        let (status, problem) = self
+            .post_report(&self.workload, &path, &body, Uuid::new_v4())
+            .await;
+        assert_eq!(status, 204, "{problem}");
+    }
+}
+
+const READ_RANGE: &str = "since=2026-01-01T00:00:00Z&until=2026-01-03T00:00:00Z";
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn usage_read_requires_direct_owner_or_analyst_and_supported_space_kind() {
+    let f = Fixture::new().await;
+    let org = f.organization().await;
+    let project = f.project("Child").await;
+    for (user, role, expected) in [
+        ("owner", Role::Owner, 200),
+        ("analyst", Role::Analyst, 200),
+        ("member", Role::Member, 403),
+        ("editor", Role::Editor, 403),
+    ] {
+        let mut conn = f.pool.acquire().await.unwrap();
+        for (space, grant) in [(org, Role::Member), (f.space, role)] {
+            control_plane::authorization::write_role(&mut conn, user, grant, space, true)
+                .await
+                .unwrap();
+        }
+        drop(conn);
+        f.admit(user).await;
+        let (status, response) = f
+            .get(
+                Some(user),
+                &format!("/spaces/{}/usage?{READ_RANGE}", f.space),
+            )
+            .await;
+        assert_eq!(status, expected, "{user}: {response}");
+        // A team role does not authorize the project's own endpoint.
+        assert_eq!(
+            f.get(
+                Some(user),
+                &format!("/spaces/{}/usage?{READ_RANGE}", project.id)
+            )
+            .await
+            .0,
+            403
+        );
+    }
+    f.admit("alice").await;
+    let personal = spaces::create_personal_space(&f.pool, "alice", org)
+        .await
+        .unwrap()
+        .0;
+    for unsupported in [org, personal.id] {
+        let (status, error) = f
+            .get(
+                Some("alice"),
+                &format!("/spaces/{unsupported}/usage?{READ_RANGE}"),
+            )
+            .await;
+        assert_eq!(status, 422, "{error}");
+        assert_eq!(error["code"], "invalid_fields");
+    }
+    // An organization owner alone cannot read team usage either.
+    control_plane::authorization::write_role(
+        &mut f.pool.acquire().await.unwrap(),
+        "parent-owner",
+        Role::Owner,
+        org,
+        true,
+    )
+    .await
+    .unwrap();
+    f.admit("parent-owner").await;
+    assert_eq!(
+        f.get(Some("parent-owner"), &format!("/spaces/{}/usage", f.space))
+            .await
+            .0,
+        403
+    );
+    assert_eq!(f.get(None, "/me/usage").await.0, 401);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn team_usage_includes_retired_and_purged_projects_and_their_agent_names() {
+    let f = Fixture::new().await;
+    let org = f.organization().await;
+    f.admit("alice").await;
+    let active = f.project("Active").await;
+    let retired = f.project("Retired").await;
+    let purged = f.project("Purged").await;
+    let other_team = spaces::create_space(
+        &f.pool,
+        "alice",
+        SpaceKind::Team,
+        org,
+        "Other team".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    let (_, other_session) = f.agent_session(other_team.id, "alice", "Outside").await;
+    f.record_at(
+        other_team.id,
+        other_session,
+        "outside",
+        "2026-01-01T10:00:00Z",
+        10000,
+    )
+    .await;
+    f.record_at(f.space, f.session, "team", "2026-01-01T10:00:00Z", 100)
+        .await;
+    let mut agents = Vec::new();
+    for (project, input) in [(&active, 200), (&retired, 300), (&purged, 400)] {
+        let (agent, session) = f.agent_session(project.id, "alice", &project.name).await;
+        f.record_at(
+            project.id,
+            session,
+            "project",
+            "2026-01-01T11:00:00Z",
+            input,
+        )
+        .await;
+        agents.push(agent);
+    }
+    for project in [&retired, &purged] {
+        let deletion = Uuid::new_v4();
+        sqlx::query("insert into deletion(id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at) values($1,$2,'project',$3,$4,'alice',now(),now())")
+            .bind(deletion).bind(project.id).bind(f.space).bind(org).execute(&f.pool).await.unwrap();
+        sqlx::query("update space set deletion_id=$1 where id=$2")
+            .bind(deletion)
+            .bind(project.id)
+            .execute(&f.pool)
+            .await
+            .unwrap();
+    }
+    // The receipt and journal outlive physical space/instance removal.
+    sqlx::query("delete from agent_instance where space_id=$1")
+        .bind(purged.id)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    sqlx::query("delete from space_role_grant where space_id=$1")
+        .bind(purged.id)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    sqlx::query("delete from space where id=$1")
+        .bind(purged.id)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    sqlx::query("update deletion set status='completed',completed_at=now() where target_id=$1 and target_kind='project'")
+        .bind(purged.id).execute(&f.pool).await.unwrap();
+
+    // The analyst has no project role, yet sees aggregate names from those projects.
+    for (space, role) in [(org, Role::Member), (f.space, Role::Analyst)] {
+        control_plane::authorization::write_role(
+            &mut f.pool.acquire().await.unwrap(),
+            "analyst",
+            role,
+            space,
+            true,
+        )
+        .await
+        .unwrap();
+    }
+    f.admit("analyst").await;
+    let (status, team) = f
+        .get(
+            Some("analyst"),
+            &format!("/spaces/{}/usage?{READ_RANGE}", f.space),
+        )
+        .await;
+    assert_eq!(status, 200, "{team}");
+    assert_eq!(
+        team["totals"],
+        json!({"turns":4,"input_tokens":1000,"output_tokens":120,"cache_read_tokens":80,"cache_creation_tokens":40})
+    );
+    assert_eq!(
+        team["by_agent"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a["display_name"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["Purged", "Retired", "Active", "Usage"]
+    );
+    assert_eq!(
+        team["by_agent"][0]["agent_instance_id"],
+        agents[2].to_string()
+    );
+    assert_eq!(team["by_agent"][0]["space_id"], purged.id.to_string());
+    assert!(!team.to_string().contains("user_id"));
+    let (status, project) = f
+        .get(
+            Some("alice"),
+            &format!("/spaces/{}/usage?{READ_RANGE}", active.id),
+        )
+        .await;
+    assert_eq!(status, 200, "{project}");
+    assert_eq!(project["totals"]["input_tokens"], 200);
+    assert_eq!(project["by_agent"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        f.get(Some("alice"), &format!("/spaces/{}/usage", retired.id))
+            .await
+            .0,
+        409
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn personal_usage_keeps_only_the_persons_facts_after_all_roles_are_removed() {
+    let f = Fixture::new().await;
+    let org = f.organization().await;
+    let project = f.project("Project").await;
+    let personal = spaces::create_personal_space(&f.pool, "alice", org)
+        .await
+        .unwrap()
+        .0;
+    f.record_at(f.space, f.session, "team", "2026-01-01T10:00:00Z", 100)
+        .await;
+    for space in [project.id, personal.id] {
+        let (_, session) = f.agent_session(space, "alice", "Own").await;
+        f.record_at(space, session, "own", "2026-01-01T11:00:00Z", 200)
+            .await;
+    }
+    let (_, bob_session) = f.agent_session(f.space, "bob", "Bob").await;
+    f.record_at(f.space, bob_session, "other", "2026-01-01T12:00:00Z", 900)
+        .await;
+    sqlx::query("delete from space_role_grant where subject='alice'")
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    // No bootstrap or current consent either: authentication alone suffices.
+    sqlx::query("delete from platform_bootstrap")
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    sqlx::query("delete from platform_role_grant where subject='alice'")
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let (status, own) = f
+        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
+        .await;
+    assert_eq!(status, 200, "{own}");
+    assert_eq!(own["totals"]["turns"], 3);
+    assert_eq!(own["totals"]["input_tokens"], 500);
+    let (status, bob) = f.get(Some("bob"), &format!("/me/usage?{READ_RANGE}")).await;
+    assert_eq!(status, 200, "{bob}");
+    assert_eq!(bob["totals"]["input_tokens"], 900);
+    assert_eq!(
+        f.get(
+            Some("alice"),
+            &format!("/me/usage?{READ_RANGE}&user_id=bob")
+        )
+        .await
+        .0,
+        422
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn hitl_turns_stay_at_first_consumption_while_tokens_follow_each_report() {
+    let f = Fixture::new().await;
+    f.admit("alice").await;
+    f.record_at(f.space, f.session, "hitl", "2026-01-01T23:30:00Z", 100)
+        .await;
+    f.record_at(f.space, f.session, "hitl", "2026-01-02T01:30:00Z", 200)
+        .await;
+    // Same exchange spelling in another session is a different turn.
+    let (_, other_session) = f.agent_session(f.space, "alice", "Other").await;
+    f.record_at(f.space, other_session, "hitl", "2026-01-02T02:30:00Z", 50)
+        .await;
+    for path in ["/me/usage".to_owned(), format!("/spaces/{}/usage", f.space)] {
+        let (status, all) = f.get(Some("alice"), &format!("{path}?{READ_RANGE}")).await;
+        assert_eq!(status, 200, "{all}");
+        assert_eq!(
+            all["totals"],
+            json!({"turns":2,"input_tokens":350,"output_tokens":90,"cache_read_tokens":60,"cache_creation_tokens":30})
+        );
+        assert_eq!(all["interval"], "hour");
+        assert_eq!(all["series"].as_array().unwrap().len(), 48);
+        assert_eq!(
+            all["series"][0],
+            json!({"start":"2026-01-01T00:00:00Z","turns":0,"input_tokens":0,"output_tokens":0,"cache_read_tokens":0,"cache_creation_tokens":0})
+        );
+        assert_eq!(all["series"][23]["turns"], 1);
+        assert_eq!(all["series"][25]["turns"], 0);
+        assert_eq!(all["series"][25]["input_tokens"], 200);
+        assert_eq!(all["series"][26]["turns"], 1);
+        assert_eq!(all["by_agent"][0]["turns"], 1);
+        assert_eq!(all["by_model"][0]["turns"], 2);
+        let (status, resumed) = f
+            .get(
+                Some("alice"),
+                &format!("{path}?since=2026-01-02T01:00:00Z&until=2026-01-02T02:00:00Z"),
+            )
+            .await;
+        assert_eq!(status, 200, "{resumed}");
+        assert_eq!(resumed["totals"]["turns"], 0);
+        assert_eq!(resumed["totals"]["input_tokens"], 200);
+        assert_eq!(resumed["by_agent"][0]["turns"], 0);
+        assert_eq!(resumed["by_model"][0]["turns"], 0);
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn usage_names_fall_back_to_latest_session_and_models_sort_by_total_tokens() {
+    let f = Fixture::new().await;
+    let mut body = usage();
+    body["models"][0]["input_tokens"] = json!(200);
+    assert_eq!(f.post(&f.workload, &f.path("models"), &body).await.0, 204);
+    let newer_session = Uuid::new_v4();
+    sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision,updated_at) values($1,'alice',$2,$3,$3,'native','Latest snapshot',1,now()+interval '1 second')")
+        .bind(newer_session).bind(f.space).bind(f.agent).execute(&f.pool).await.unwrap();
+    let (_, current) = f
+        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
+        .await;
+    assert_eq!(current["by_agent"][0]["display_name"], "Usage");
+    assert_eq!(current["totals"]["turns"], 1);
+    assert_eq!(current["by_model"][0]["model_source_id"], "test-source");
+    assert_eq!(current["by_model"][1]["model_source_id"], "other-source");
+    assert_eq!(current["by_model"][0]["turns"], 1);
+    assert_eq!(current["by_model"][1]["turns"], 1);
+    sqlx::query("delete from agent_instance where agent_instance_id=$1")
+        .bind(f.agent)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let (_, deleted) = f
+        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
+        .await;
+    assert_eq!(deleted["by_agent"][0]["display_name"], "Latest snapshot");
+    sqlx::query("delete from session_metadata where agent_instance_id=$1")
+        .bind(f.agent)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let (_, purged) = f
+        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
+        .await;
+    assert_eq!(purged["by_agent"][0]["display_name"], Value::Null);
+    assert_eq!(purged["totals"], deleted["totals"]);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn usage_ranges_validate_dates_and_generate_continuous_utc_buckets() {
+    let f = Fixture::new().await;
+    f.admit("alice").await;
+    for path in ["/me/usage".to_owned(), format!("/spaces/{}/usage", f.space)] {
+        for invalid in [
+            "since=no-date",
+            "until=2026-01-01",
+            "since=2026-01-01T00:00:00",
+            "since=2026-01-01T00:00:00Z&until=2026-01-01T00:00:00Z",
+            "since=2026-01-02T00:00:00Z&until=2026-01-01T00:00:00Z",
+            "since=2024-01-01T00:00:00Z&until=2025-01-01T00:00:01Z",
+        ] {
+            let (status, error) = f.get(Some("alice"), &format!("{path}?{invalid}")).await;
+            assert_eq!(status, 422, "{invalid}: {error}");
+            assert_eq!(error["code"], "invalid_fields");
+        }
+        for (since, until, interval, count, first) in [
+            (
+                "2026-01-01T01:15:00%2B02:00",
+                "2026-01-01T03:00:00%2B02:00",
+                "hour",
+                2,
+                "2025-12-31T23:00:00Z",
+            ),
+            (
+                "2026-01-01T00:00:00Z",
+                "2026-04-03T00:00:00Z",
+                "day",
+                92,
+                "2026-01-01T00:00:00Z",
+            ),
+            (
+                "2026-01-01T00:00:00Z",
+                "2026-04-03T00:00:01Z",
+                "week",
+                14,
+                "2025-12-29T00:00:00Z",
+            ),
+        ] {
+            let (status, response) = f
+                .get(
+                    Some("alice"),
+                    &format!("{path}?since={since}&until={until}"),
+                )
+                .await;
+            assert_eq!(status, 200, "{response}");
+            assert_eq!(response["interval"], interval);
+            let series = response["series"].as_array().unwrap();
+            assert_eq!(series.len(), count);
+            assert_eq!(series[0]["start"], first);
+            for point in series {
+                for field in [
+                    "turns",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_read_tokens",
+                    "cache_creation_tokens",
+                ] {
+                    assert_eq!(point[field], 0);
+                }
+            }
+            assert_eq!(response["by_agent"], json!([]));
+            assert_eq!(response["by_model"], json!([]));
+        }
+        let before = chrono::Utc::now();
+        let (status, defaults) = f.get(Some("alice"), &path).await;
+        assert_eq!(status, 200, "{defaults}");
+        let since: chrono::DateTime<chrono::Utc> =
+            defaults["since"].as_str().unwrap().parse().unwrap();
+        let until: chrono::DateTime<chrono::Utc> =
+            defaults["until"].as_str().unwrap().parse().unwrap();
+        assert_eq!(until - since, chrono::Duration::days(30));
+        assert!(until >= before && until <= chrono::Utc::now());
+    }
 }
 
 #[tokio::test]

@@ -58,18 +58,21 @@ pub enum SpacePermission {
     RunEvaluations,
     ManageEvaluationCorpus,
     ReadConversationsForEvaluation,
+    /// Consumption aggregates on the requested team or project.
+    ReadUsage,
     /// Technical administration of an organization.
     AdministerOrganization,
     CreatePersonalSpace,
 }
 impl SpacePermission {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Read,
         Self::Write,
         Self::Manage,
         Self::RunEvaluations,
         Self::ManageEvaluationCorpus,
         Self::ReadConversationsForEvaluation,
+        Self::ReadUsage,
         Self::AdministerOrganization,
         Self::CreatePersonalSpace,
     ];

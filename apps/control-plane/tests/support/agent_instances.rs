@@ -676,13 +676,20 @@ async fn instances_capabilities_and_profiles_fail_explicitly() {
 async fn instances_discovery_concurrency_rechecks_and_isolation() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
+    support::member_organization(&e.pool, "Outside", "outsider")
+        .await
+        .unwrap();
     grant(&e, team.id, Role::Editor, "alice").await;
     let identity = Arc::new(support::IdentityServer::start().await);
     let catalog = Catalog::start().await;
     let app = app(&e, &identity, &catalog).await;
     let template = enable(&e, org.id, "custom", true).await;
     let instance = create(&app, &identity, team.id, creation(template, "Existing")).await;
-    for actor in [None, Some("stranger")] {
+    for (actor, expected) in [
+        (None, 401),
+        (Some("stranger"), 403),
+        (Some("outsider"), 404),
+    ] {
         for (method, path, body) in [
             ("GET", collection(team.id), Value::Null),
             ("GET", item(team.id, &instance), Value::Null),
@@ -694,10 +701,11 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
             ("PATCH", item(team.id, &instance), json!({})),
             ("DELETE", item(team.id, &instance), Value::Null),
         ] {
-            assert_eq!(
-                request(&app, &identity, actor, method, &path, body).await.0,
-                if actor.is_none() { 401 } else { 404 }
-            );
+            let (status, body) = request(&app, &identity, actor, method, &path, body).await;
+            assert_eq!(status, expected, "{actor:?} {method}: {body}");
+            if actor == Some("stranger") {
+                assert_eq!(body["detail"], "user_not_admitted");
+            }
         }
     }
     grant(&e, org.id, Role::Member, "viewer").await;
@@ -938,9 +946,9 @@ async fn instances_discovery_concurrency_rechecks_and_isolation() {
 async fn instances_retention_and_exact_space_purge() {
     use control_plane::lifecycle::{Lifecycle, Status, cleanup, store};
     let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
-    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let identity = Arc::new(support::IdentityServer::start().await);
     let catalog = Catalog::start().await;
     let app = app(&e, &identity, &catalog).await;

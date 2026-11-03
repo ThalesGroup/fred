@@ -114,11 +114,11 @@ Operation `team_registry`.
 
 | Method | Path | Summary |
 | --- | --- | --- |
-| POST | [/agents/execute/stream](#post-agentsexecutestream) | Managed inference through common admission; direct demo remains fixed and never calls an LLM |
+| POST | [/agents/execute/stream](#post-agentsexecutestream) | Embedded Ralph: at most one document search per admitted turn, without saved history |
 
 ### POST /agents/execute/stream
 
-Managed inference through common admission; direct demo remains fixed and never calls an LLM.
+Embedded Ralph: at most one document search per admitted turn, without saved history. Direct demonstration remains a fixed response without an LLM call.
 
 Operation `execute_stream`.
 
@@ -654,6 +654,7 @@ Request: [`ProvisioningUpload`](#provisioningupload) (`multipart/form-data`).
 | GET | [/me/prompt-marketplaces](#get-meprompt-marketplaces) | Organizations where the caller participates through an active collective business role |
 | GET | [/me/prompt-publication-teams](#get-meprompt-publication-teams) | Active teams where the caller has direct Write permission |
 | GET | [/me/spaces](#get-mespaces) |  |
+| GET | [/me/usage](#get-meusage) | Read only the authenticated person's consumption across all spaces, including spaces they can no longer access |
 
 ### GET /me
 
@@ -711,6 +712,20 @@ Operation `my_spaces`.
 
 - 200: array of [`MySpace`](#myspace) — Success
 - 401, 403, 500: [`ErrorBody`](#errorbody) — Request failed
+
+### GET /me/usage
+
+Read only the authenticated person's consumption across all spaces, including spaces they can no longer access. No role, admission or consent check is required. Tokens follow their consumption time; each turn belongs to its first consumption.
+
+Operation `my_usage`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `since` | query | string (date-time) |  | Inclusive ISO 8601 instant with offset; defaults to 30 days before until. |
+| `until` | query | string (date-time) |  | Exclusive ISO 8601 instant with offset; defaults to now. Maximum range: 366 days. |
+
+- 200: [`UsageResponse`](#usageresponse)
+- 401, 403, 422, 500, 503: [`ErrorBody`](#errorbody)
 
 ## /organizations routes
 
@@ -965,6 +980,7 @@ Operation `team_supervision`.
 | POST | [/spaces/{space_id}/sessions/{session_id}/attachments](#post-spacesspace_idsessionssession_idattachments) | Attach one file to the caller's conversation and request its `fast` processing atomically |
 | DELETE | [/spaces/{space_id}/sessions/{session_id}/attachments/{document_id}](#delete-spacesspace_idsessionssession_idattachmentsdocument_id) | Delete one attachment of the caller's conversation, as `DELETE /documents/{id}` does |
 | POST | [/spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage](#post-spacesspace_idsessionssession_idexchangesexchange_idusage) | Atomically record consumption reported by a trusted runtime workload in its own name |
+| GET | [/spaces/{space_id}/usage](#get-spacesspace_idusage) | Read team/project consumption with direct ReadUsage (Owner or Analyst) |
 
 ### POST /spaces
 
@@ -1501,6 +1517,21 @@ Request: [`UsageReport`](#usagereport).
 - 404: [`ErrorBody`](#errorbody) — Session not found in this space
 - 409: [`ErrorBody`](#errorbody) — idempotency_conflict: the report key already identifies a different consumption report
 
+### GET /spaces/{space_id}/usage
+
+Read team/project consumption with direct ReadUsage (Owner or Analyst). A team includes its projects, even retired or purged ones, and their agent names, without requiring roles in those projects. A project includes only itself. Organization and personal spaces are unsupported. No per-user detail is returned.
+
+Operation `space_usage`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `since` | query | string (date-time) |  | Inclusive ISO 8601 instant with offset; defaults to 30 days before until. |
+| `until` | query | string (date-time) |  | Exclusive ISO 8601 instant with offset; defaults to now. Maximum range: 366 days. |
+
+- 200: [`UsageResponse`](#usageresponse)
+- 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
 ## /users routes
 
 | Method | Path | Summary |
@@ -1661,6 +1692,16 @@ Form-facing projection of a permitted runtime template, not execution readiness.
 | `tags` | array of string | yes |  |
 | `team_instantiable` | boolean | yes |  |
 | `template_id` | string (uuid) | yes |  |
+
+### AgentUsage
+
+Extends [`UsageTotals`](#usagetotals) with:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent_instance_id` | string (uuid) | yes |  |
+| `display_name` | string or null | yes | Current instance name, latest retained session name, or null. |
+| `space_id` | string (uuid) | yes | Consumption space recorded in the journal. |
 
 ### Allowed
 
@@ -2014,11 +2055,11 @@ JSON error envelope shared by application, authentication and import failures.
 | `capability_base_urls` | map of string | yes | Browser-reachable router of each selected capability that ships one. |
 | `chat_controls` | array of [`ChatControlDescriptor`](#chatcontroldescriptor) | yes |  |
 | `execute_stream_url` | string | yes |  |
-| `execute_url` | string | yes |  |
+| `execute_url` | string or null | yes |  |
 | `execution_transport` | [`ExecutionTransport`](#executiontransport) | yes |  |
 | `inference` | [`InferenceSelection`](#inferenceselection) or null | yes |  |
 | `max_chat_input_chars` | integer (int64), >= 0 or null | yes |  |
-| `messages_url_template` | string | yes | RFC 6570 Level 1 template. Substitute the registered session ID. |
+| `messages_url_template` | string or null | yes | RFC 6570 Level 1 template; null when this runtime has no durable history. |
 | `model_choice` | [`ModelOfferKey`](#modelofferkey) or null | yes |  |
 | `model_error` | [`ModelPreparationError`](#modelpreparationerror) or null | yes |  |
 | `models` | [`PreparationModels`](#preparationmodels) | yes |  |
@@ -2246,6 +2287,15 @@ One of: `user_choice`, `instance_recommendation`, `default`, `withdrawal_fallbac
 | `model_source_id` | string, min length 1, max length 64 | yes | Source identifier of the Weaver catalogue offer; retained after its removal. |
 | `output_tokens` | integer (int64), >= 0 | yes |  |
 | `upstream_model_id` | string, min length 1, max length 256 | yes | Upstream model identifier, 1 to 256 UTF-8 bytes, without surrounding whitespace. |
+
+### ModelUsageTotals
+
+Extends [`UsageTotals`](#usagetotals) with:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `model_source_id` | string | yes |  |
+| `upstream_model_id` | string | yes |  |
 
 ### MySpace
 
@@ -2885,7 +2935,7 @@ One of: `organization`, `team`, `project`, `personal`.
 
 Evaluation is a space capability, never a document read/write permission.
 
-One of: `read`, `write`, `manage`, `run_evaluations`, `manage_evaluation_corpus`, `read_conversations_for_evaluation`, `administer_organization`, `create_personal_space`.
+One of: `read`, `write`, `manage`, `run_evaluations`, `manage_evaluation_corpus`, `read_conversations_for_evaluation`, `read_usage`, `administer_organization`, `create_personal_space`.
 
 ### Stage
 
@@ -3095,12 +3145,48 @@ Durable outcome of one upload request, readable by its request key.
 
 One of: `pending`, `stored`, `failed`.
 
+### UsageInterval
+
+UTC buckets: hour up to 48 hours, day up to 92 days, week beyond. Weeks start on Monday. Empty buckets contain zeros.
+
+One of: `hour`, `day`, `week`.
+
+### UsagePoint
+
+Extends [`UsageTotals`](#usagetotals) with:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `start` | string (date-time) | yes | Start of the UTC bucket; the first bucket may start before since. |
+
 ### UsageReport
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `models` | array of [`ModelUsage`](#modelusage), min items 1, max items 8 | yes | Complete set of distinct offers consumed during this report (one run); order is irrelevant. |
 | `occurred_at` | string (date-time) | yes | Time of consumption; at most five minutes ahead of server time. |
+
+### UsageResponse
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `by_agent` | array of [`AgentUsage`](#agentusage) | yes | Sorted by input + output tokens descending. No per-user breakdown. |
+| `by_model` | array of [`ModelUsageTotals`](#modelusagetotals) | yes | Sorted by input + output tokens descending; a turn may use several models. |
+| `interval` | [`UsageInterval`](#usageinterval) | yes |  |
+| `series` | array of [`UsagePoint`](#usagepoint) | yes |  |
+| `since` | string (date-time) | yes |  |
+| `totals` | [`UsageTotals`](#usagetotals) | yes |  |
+| `until` | string (date-time) | yes |  |
+
+### UsageTotals
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cache_creation_tokens` | integer (int64) | yes |  |
+| `cache_read_tokens` | integer (int64) | yes |  |
+| `input_tokens` | integer (int64) | yes |  |
+| `output_tokens` | integer (int64) | yes |  |
+| `turns` | integer (int64) | yes | Distinct (session_id, exchange_id) whose first consumption falls in the range. HITL resumes add tokens, never another turn. |
 
 ### UserPreferences
 

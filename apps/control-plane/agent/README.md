@@ -3,8 +3,8 @@
 `fred-rust-agent` executes admitted model calls inside the Control Plane workload.
 The host owns authentication, consent, instance/space authorization and the common
 `model_catalog::instance::decide` decision. The library owns local provisioning
-checks, Rig invocation, bounded execution and Fred event production. No separate
-listener, deployment, Ralph configuration, tools or memory is introduced.
+checks, Rig invocation, bounded execution and Fred event production. Document
+search is fixed in the runtime, without instance tuning or capability registration.
 
 ## Managed execution
 
@@ -20,8 +20,8 @@ configured HTTP mount, without an external runtime source entry. The existing
 chat's `steering_turn_id` and `language` are accepted as inert metadata; they do
 not enable steering or change the inference prompt.
 
-This first chat increment has no memory: every message is an independent model
-call. Preparation returns null synchronous-execution and history URLs, and false
+Ralph has no memory: every message is an independent turn. Preparation returns
+null synchronous-execution and history URLs, and false
 HITL/UI-parts support. The existing chat displays a notice and keeps only this
 visit's live messages; leaving/reloading does not restore them. Session metadata
 still uses the common ownership and instance-association checks. The browser
@@ -39,11 +39,12 @@ explicit API key, base URL and shared reqwest pool (redirects disabled; 5-second
 connect and 60-second HTTP timeouts). Its request builder consumes the admitted
 model, temperature, token ceiling, top-p and reasoning. Official versioned API:
 [completion request builder](https://docs.rs/rig-core/0.42.0/rig_core/completion/request/struct.CompletionRequestBuilder.html).
-The 120-second turn deadline starts at local admission. There are no tools or
-unbounded agent loops; calls within a turn retain the same credential and decision.
+The 120-second turn deadline starts at local admission and covers model and search
+calls. A turn makes at most two model calls and one document search, retaining the
+same model credential, offer and options throughout.
 
 The Fred SSE sequence is `status`, one `assistant_delta` with the completed provider
-text, then `final`. This currently buffers one completion; it is not token streaming
+text, then `final`. This buffers the final answer; it is not token streaming
 from the upstream provider. The provider's finish reason is retained in Fred's
 normalized vocabulary. A failed/timed-out completion emits terminal
 `execution_error`, with a fixed public message and no provider body or credential.
@@ -51,16 +52,52 @@ Dropping the stream cancels the in-flight future; no detached producer remains.
 No call can run after the turn closes. Attribution and revisions are logged through
 the host's tracing context; the host's existing logger strips dependency payloads.
 
+## Fixed document search
+
+Set `platform.knowledge_flow_url` to KF's trusted base URL, for example
+`http://localhost:8111/knowledge-flow/v2`, to expose `search_documents(query)` to
+the model. An absent URL keeps text-only execution. The selected model must
+support OpenAI-compatible tool calls; no model substitution is performed.
+
+The host reuses `security.m2m` and its cached, renewable Keycloak service token.
+The Control Plane workload must have KF's accepted delegation audience and caller
+role (normally `fred-delegation` and `delegation_caller`). The URL must contain no
+credentials, query or fragment. Redirects are disabled. Configuring a URL without
+M2M provisioning returns 503 before inference. Live role provisioning is an
+operator prerequisite, not something this library creates or verifies at startup.
+
+The first model response either answers directly or requests one search. The
+host calls KF's existing `POST /documents/search` using the admitted person,
+instance and space, with a server-generated run ID. The document-context header
+selects the authorized corpus of that space and its ancestors; attachments remain
+excluded. The model can supply only a nonblank query of at most 2,048 characters.
+KF remains responsible for access, publication and lifecycle checks.
+
+Search uses the default KF policy, `top_k=5`, no reranking or retry, and a 30-second
+timeout including service-token acquisition. The wire response is capped at
+512 KiB, and the model receives at most five excerpts of 4,000 characters, with
+document IDs, available page numbers and titles limited to 256 characters. Dataset pointers are
+excluded because they are not documentary evidence. Empty results are valid;
+transport, authorization and invalid-response failures end the turn explicitly.
+
+The second model call receives the correlated tool result and cannot request
+another search. The prompt treats excerpts as untrusted data and asks for textual
+title/page references. There is no new source panel or tool event in the browser.
+Only in-turn messages are retained, until the stream completes or is dropped.
+
 ## Consumption
 
 Ralph participates in the `model_usage` journal for managed execution. A missing
-`session_id` returns 422 before inference. After each completion decoded by Rig,
-the library passes input, output and cache token counts to the host, including
-when the response has no displayable text. Missing counters default to zero.
+`session_id` returns 422 before inference. The library accumulates input, output
+and cache token counts from decoded model responses, including responses without
+displayable text. Missing counters default to zero. It reports the aggregate once
+on completion, error or stream drop, if any model response was decoded. A failed
+search or second model call therefore preserves consumption of the first call.
 The host uses the admitted offer, fresh report/exchange UUIDs and server time;
 the shared HTTP-report transaction derives person, space and instance from the
 session. Token counts never enter browser events, and the agent crate has no DB
-access. Provider errors and deadlines produce no report.
+access. A turn with no decoded model response produces no report. These counters
+cover Ralph's model calls, not KF's embedding workload.
 
 The host starts one write attempt before yielding the response, with a two-second
 timeout. This accounting task survives browser disconnection; inference remains
@@ -72,7 +109,7 @@ a process crash. The shared transaction preserves atomicity and report idempoten
 
 The existing direct request `{"agent_id":"fred.github.ralph","input":"Bonjour"}`
 still replies `Hello world!` without any LLM or managed-instance authority. It cannot
-use inference provisioning or produce consumption reports. Default empty/null
+use inference provisioning, call KF or produce consumption reports. Default empty/null
 unsupported execution options remain accepted; nondefault capabilities, HITL and
 history options return 422.
 
@@ -81,11 +118,13 @@ history options return 422.
 `cargo test -p fred-rust-agent --lib` exercises the real Rig HTTP adapter against a
 loopback provider: destination, model, options, fictitious credential, repeated
 calls, missing/mismatched provisioning, errors, deadlines, stream cancellation
-and usage before the response event.
+usage before the response event, tool-call correlation, single-search bounds,
+partial failures and cancellation between model calls.
 Control Plane's `agent_instances::model_catalog` integration tests additionally
 cover HTTP instance/session creation, preparation under a custom router mount,
 the browser execution envelope, delegated admission, browser projection,
 source removal, revocation and consumption provenance, including browser
-disconnection, against disposable PostgreSQL. No real provider or k3d validation
+disconnection, against disposable PostgreSQL. A loopback KF fixture checks the
+delegated identity, document scope, excerpt limits, empty results and errors. No real provider or k3d validation
 is implied. Workspace Cargo.lock and the existing Docker build own the library
 dependency.

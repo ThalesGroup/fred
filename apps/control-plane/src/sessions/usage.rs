@@ -3,6 +3,8 @@
 
 use std::collections::HashSet;
 
+mod read;
+
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -65,7 +67,9 @@ struct StoredUsage {
 }
 
 pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
-    utoipa_axum::router::OpenApiRouter::new().routes(utoipa_axum::routes!(record_usage))
+    utoipa_axum::router::OpenApiRouter::new()
+        .routes(utoipa_axum::routes!(record_usage))
+        .merge(read::routes())
 }
 
 /// Atomically record consumption reported by a trusted runtime workload in its own name.

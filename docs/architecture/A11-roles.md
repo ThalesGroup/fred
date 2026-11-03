@@ -39,8 +39,8 @@ authorized owner from explicitly granting themselves a content role.
 | --- | --- | --- | --- | --- |
 | **Platform admin** (`platform_admin`) | Platform | Bootstrap platform administration and create organizations, selecting their admin and initial owner; no business role or right to know their contents. | Organization creation, platform-role and organization-admin assignment, provisioning and space retirement. Does not imply observer, feature-manager or prompt-editor roles. No direct space-content access. Platform-role assignment and standalone team/project retirement remain broader than organization-only governance. | Platform only; no space role or content inheritance. |
 | **Organization admin** (`organization_admin`) | Organization only | Name and replace organization owners, manage the organization access allowlist (not yet implemented), and read supervision aggregates. No content access or business-structure management. | Assign/revoke organization owners and read organization supervision aggregates. No content read/write, model management or evaluation permissions. Access-allowlist changes are **not implemented**. No team creation. | Organization only. |
-| **Owner** (`owner`) | Organization, team or project | Manage the business workspace and its community; create teams under an organization or projects under a team, naming their initial owner. At organization level, manage model choices and shared resources with analysts, editors and members. | Space management and role assignment; creation of teams/projects under an authorized parent. Organization owner manages model inventory/policy and template governance. Evaluation run/corpus permissions; no content read/write or evaluation-conversation read. | Granted space only. |
-| **Analyst** (`analyst`) | Organization, team or project | Consult content and evaluate the space's agents and their use. | Content read; evaluation run, corpus management and evaluation-conversation-read permissions. No ordinary content write, space management or organization model management. | Granted space only. |
+| **Owner** (`owner`) | Organization, team or project | Manage the business workspace and its community; create teams under an organization or projects under a team, naming their initial owner. At organization level, manage model choices and shared resources with analysts, editors and members. | Space management and role assignment; creation of teams/projects under an authorized parent. Organization owner manages model inventory/policy and template governance. Evaluation run/corpus permissions and `ReadUsage` for team/project consumption aggregates; no content read/write or evaluation-conversation read. | Granted space only. |
+| **Analyst** (`analyst`) | Organization, team or project | Consult content and evaluate the space's agents and their use. | Content read; evaluation run, corpus management, evaluation-conversation-read and `ReadUsage` for team/project consumption aggregates. No ordinary content write, space management or organization model management. | Granted space only. |
 | **Editor** (`editor`) | Organization, team or project; personal space at creation | Contribute to the space's content. | Content read/write, including agent-instance authoring where supported and template-authorized. No role management, evaluation permissions or organization model management. | Granted space only. |
 | **Member** (`member`) | Organization, team or project; personal space at creation | Consult the space's content and use its authorized assistants. | Content read and assistant access subject to template-use and execution checks. No content write, role management, evaluation permissions or organization model management. | Granted space only. |
 
@@ -50,6 +50,12 @@ another person's conversation. The evaluation permissions above are the model's
 `run_evaluations`, `manage_evaluation_corpus` and, for analysts only,
 `read_conversations_for_evaluation`: a positive permission answer does not prove
 that an evaluation or conversation-reading journey is wired and validated.
+
+`ReadUsage` (`read_usage` in the API) requires a direct role on the requested
+team or project. Team aggregates include its projects and their agent names,
+including retired projects, without granting any project role or content access.
+They contain no per-user breakdown. Own-consumption reads require authentication
+only and remain available after roles are removed; see [A7](A7-action-role-matrix.md#consumption-reads).
 
 A person is an **organization participant** when they hold a business role
 (`owner`, `member`, `editor` or `analyst`) on an active collective space in that

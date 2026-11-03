@@ -13,6 +13,9 @@ struct Provider {
     response: Arc<Mutex<(u16, Value, usize)>>,
     inference: Arc<Mutex<Vec<(HeaderMap, Value)>>>,
     inference_status: Arc<Mutex<u16>>,
+    next_message: Arc<Mutex<Option<Value>>>,
+    searches: Arc<Mutex<Vec<Value>>>,
+    search_response: Arc<Mutex<(u16, Value)>>,
     task: tokio::task::JoinHandle<()>,
 }
 impl Drop for Provider {
@@ -34,6 +37,12 @@ impl Provider {
         let completions = inference.clone();
         let inference_status = Arc::new(Mutex::new(200));
         let completion_status = inference_status.clone();
+        let next_message = Arc::new(Mutex::new(None));
+        let messages = next_message.clone();
+        let searches = Arc::new(Mutex::new(Vec::new()));
+        let captured_searches = searches.clone();
+        let search_response = Arc::new(Mutex::new((200, json!([]))));
+        let search_state = search_response.clone();
         let state = response.clone();
         let app = Router::new().route(
             "/models",
@@ -52,11 +61,29 @@ impl Provider {
         let app = app.route("/chat/completions", post(move |headers: HeaderMap, Json(body): Json<Value>| {
             let completions = completions.clone();
             let completion_status = completion_status.clone();
+            let messages = messages.clone();
             async move {
                 completions.lock().await.push((headers, body));
+                let message = messages.lock().await.take().unwrap_or_else(|| json!({"role":"assistant","content":"managed simulated inference"}));
+                let reason = if message.get("tool_calls").is_some() { "tool_calls" } else { "stop" };
                 (axum::http::StatusCode::from_u16(*completion_status.lock().await).unwrap(), Json(json!({"id":"fixture", "object":"chat.completion", "created":0, "model":"chat",
-                    "choices":[{"index":0,"message":{"role":"assistant","content":"managed simulated inference"},"finish_reason":"stop"}],
+                    "choices":[{"index":0,"message":message,"finish_reason":reason}],
                     "usage":{"prompt_tokens":2,"completion_tokens":2,"total_tokens":4}})))
+            }
+        }));
+        let app = app.route("/documents/search", post(move |headers: HeaderMap,
+            axum::extract::Query(grant): axum::extract::Query<std::collections::BTreeMap<String, String>>,
+            Json(body): Json<Value>| {
+            let captured = captured_searches.clone();
+            let state = search_state.clone();
+            async move {
+                captured.lock().await.push(json!({
+                    "authorization":headers["authorization"].to_str().unwrap(),
+                    "context":serde_json::from_str::<Value>(headers["x-fred-document-context"].to_str().unwrap()).unwrap(),
+                    "grant":grant, "body":body,
+                }));
+                let state = state.lock().await;
+                (axum::http::StatusCode::from_u16(state.0).unwrap(), Json(state.1.clone()))
             }
         }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -67,6 +94,9 @@ impl Provider {
             response,
             inference,
             inference_status,
+            next_message,
+            searches,
+            search_response,
             task,
         }
     }
@@ -194,14 +224,9 @@ async fn organization_provisioning_runs_the_pending_seed_without_model_ui_action
     for user in ["owner", "admin"] {
         identity.users.lock().await.insert(user.into(), user.into());
     }
-    control_plane::authorization::write_platform(
-        &mut e.pool.acquire().await.unwrap(),
-        "operator",
-        control_plane::roles::PlatformRole::PlatformAdmin,
-        true,
-    )
-    .await
-    .unwrap();
+    control_plane::bootstrap::grant_root(&e.pool, "operator")
+        .await
+        .unwrap();
     let app = model_app(&e, &identity, platform).await;
     let (status, org) = request(
         &app,
@@ -946,6 +971,77 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     assert_ne!(after_drop[0]["report_id"], after_drop[1]["report_id"]);
     assert_ne!(after_drop[0]["exchange_id"], after_drop[1]["exchange_id"]);
 
+    let mut search_state = state.clone();
+    search_state.agent_catalog.knowledge_flow_url = Some(provider.url.clone());
+    let search_app = routes(search_state);
+    let mut hits = vec![
+        json!({"uid":"pointer","title":"Dataset","content":"Not evidence","chunk_kind":"dataset_pointer"}),
+    ];
+    hits.extend((0..6).map(|i| json!({"uid":format!("doc-{i}"),"title":"é".repeat(260),"content":"界".repeat(4005),"page":2})));
+    for (index, (status, hits)) in [
+        (200, json!(hits)),
+        (200, json!([])),
+        (503, json!({"detail":"private KF failure"})),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        *provider.next_message.lock().await = Some(json!({"role":"assistant","content":null,
+            "tool_calls":[{"id":"search-1","type":"function","function":{
+                "name":"search_documents","arguments":"{\"query\":\"manual question\"}"}}]}));
+        *provider.search_response.lock().await = (status, hits);
+        let before = provider.inference.lock().await.len();
+        let response = send(search_app.clone(), execute.clone()).await.unwrap();
+        assert_eq!(response.status(), 200);
+        let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+        let body = String::from_utf8_lossy(&body);
+        assert!(body.contains(if status == 200 {
+            "\"kind\":\"final\""
+        } else {
+            "execution_error"
+        }));
+        assert!(!body.contains("private KF failure") && !body.contains("service-token"));
+        let rows = reports(3 + index).await;
+        let row = rows.last().unwrap();
+        assert_eq!(row["input_tokens"], if status == 200 { 4 } else { 2 });
+        assert_eq!(row["output_tokens"], if status == 200 { 4 } else { 2 });
+        assert_eq!(row["agent_instance_id"], instance.to_string());
+        assert_eq!(row["model_source_id"], "a");
+        let searches = provider.searches.lock().await;
+        assert_eq!(searches.len(), index + 1);
+        let call = searches.last().unwrap();
+        assert_eq!(call["authorization"], "Bearer service-token");
+        assert_eq!(call["grant"]["person"], "alice");
+        assert_eq!(call["grant"]["agent"], instance.to_string());
+        Uuid::parse_str(call["grant"]["run"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            call["context"],
+            json!({"space_id":team.id,"document_scope":{"selections":[]},"attachment_ids":[]})
+        );
+        assert_eq!(
+            call["body"],
+            json!({"question":"manual question","top_k":5})
+        );
+        let calls = provider.inference.lock().await;
+        assert_eq!(calls.len() - before, if status == 200 { 2 } else { 1 });
+        if status == 200 {
+            let messages = calls.last().unwrap().1["messages"].as_array().unwrap();
+            let tool = messages.last().unwrap();
+            assert_eq!(tool["role"], "tool");
+            assert_eq!(tool["tool_call_id"], "search-1");
+            let sources: Vec<Value> =
+                serde_json::from_str(tool["content"].as_str().unwrap()).unwrap();
+            assert_eq!(sources.len(), if index == 0 { 5 } else { 0 });
+            for source in sources {
+                assert_ne!(source["uid"], "pointer");
+                assert_eq!(source["content"].as_str().unwrap().chars().count(), 4000);
+                assert_eq!(source["title"].as_str().unwrap().chars().count(), 256);
+                assert_eq!(source["page"], 2);
+            }
+        }
+    }
+    let after_search = reports(5).await;
+
     let mut unprovisioned = state;
     unprovisioned.agent_catalog.inference_credentials.clear();
     assert_eq!(
@@ -978,12 +1074,12 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         .unwrap();
     assert_eq!(resolve().await.unwrap().status(), 409);
     assert_eq!(send(app.clone(), execute).await.unwrap().status(), 409);
-    assert_eq!(provider.inference.lock().await.len(), 3);
+    assert_eq!(provider.inference.lock().await.len(), 8);
     // Direct demonstration cannot access the provider even though provisioning exists.
     let direct = json!({"agent_id":fred_rust_agent::AGENT_ID,"input":"question"});
     let response = send(app.clone(), direct).await.unwrap();
     assert_eq!(response.status(), 200);
     let _ = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
-    assert_eq!(provider.inference.lock().await.len(), 3);
-    assert_eq!(reports(2).await, after_drop);
+    assert_eq!(provider.inference.lock().await.len(), 8);
+    assert_eq!(reports(5).await, after_search);
 }

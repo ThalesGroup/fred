@@ -18,7 +18,7 @@ pub fn grants(role: Role, permission: SpacePermission) -> bool {
         Read => matches!(role, Member | Editor | Analyst),
         Write => role == Editor,
         Manage => role == Owner,
-        RunEvaluations | ManageEvaluationCorpus => matches!(role, Analyst | Owner),
+        RunEvaluations | ManageEvaluationCorpus | ReadUsage => matches!(role, Analyst | Owner),
         ReadConversationsForEvaluation => role == Analyst,
         AdministerOrganization => role == OrganizationAdmin,
         CreatePersonalSpace => role == Owner || role.grants_content(),
