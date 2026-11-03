@@ -270,13 +270,14 @@ def build_tools(docs: Documents) -> list[BaseTool]:
           **bold**, | tables | in the body only, and an image from the
           IMAGES AVAILABLE list alone on its line as
           ![caption](img:<id>). A heading line of a level the template uses
-          below its chapters ("## Title", no number) adds a sub-heading; a
-          chapter-level heading line only when the collaborator asked for a
-          new chapter, with changes_template.
+          below its chapters ("## Title", no number) adds a sub-heading. A
+          write keeps every heading it covers: to delete a section, remove it.
         - {"op": "insert_after", "address": A, "markdown": M} - add Markdown
           content right after a paragraph or a table. Only when the
           collaborator explicitly asked for content the template has no
-          place for.
+          place for, such as a new chapter: after the last block of the
+          chapter it follows, a chapter-level heading line ("# Title") then
+          its content, with changes_template.
         - {"op": "repeat", "from": A, "to": B, "count": N} - add N copies of
           the paragraphs/tables, or of the table rows, from A to B, right
           after B.

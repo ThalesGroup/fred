@@ -109,7 +109,11 @@ items first, then fill each copy.
 - Keep the template's fixed wording, and add no chapter the template does \
 not have, unless the collaborator asked for it (see above). Structure your \
 content with sub-headings, paragraphs and lists under the template's \
-chapters.
+chapters. A chapter the collaborator asks for is a chapter of its own, never \
+a sub-heading inside another chapter: insert_after the last block of the \
+chapter it follows (the document's last block for a last chapter), with a \
+heading line of the chapters' level ("# Title" when they are heading 1) then \
+its content, and changes_template.
 - Content goes only where the template has a place for it: its cells, its \
 fields and the places holding instructions or sample content. Never add a \
 summary, an introduction or any other content outside those places (with \

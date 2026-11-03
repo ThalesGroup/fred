@@ -23,7 +23,7 @@ from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls, qn
-from fred_capability_word_template import apply_batch, build_map
+from fred_capability_word_template import apply_batch, build_map, replay
 from fred_capability_word_template.docmap import is_toc
 from fred_capability_word_template.toc import with_update_fields
 
@@ -100,6 +100,19 @@ def test_a_removed_chapter_leaves_the_table_of_contents():
     docx = _toc_document()
     removed = apply_batch(docx, [{"op": "remove", "from": "P6", "to": "P7"}])
     assert _toc(removed) == ["A 2", "C 4"]
+
+
+def test_a_replayed_log_matches_the_document_edited_live():
+    docx = _toc_document()
+    first = [{"op": "insert_after", "address": "P5", "markdown": "# New\n\nNew text"}]
+    live = apply_batch(docx, first)
+    # The new chapter's line in the table of contents moved "B text" down.
+    second = [{"op": "set_text", "address": "P10", "text": "B text edited"}]
+    live = apply_batch(live, second)
+    replayed = replay(docx, [first, second])
+    texts = [e.text for e in build_map(live).elements]
+    assert "B text edited" in texts
+    assert [e.text for e in build_map(replayed).elements] == texts
 
 
 def test_the_download_asks_word_to_update_its_fields():

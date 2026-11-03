@@ -13,28 +13,36 @@
 // limitations under the License.
 
 // One editable place's local draft: what the collaborator typed survives the
-// view refreshes caused by the AI's edits, and `remoteChange` flags that the
-// AI changed that same place meanwhile. The draft is dropped only once saved
-// (or cancelled), so a refused save (409/422) never loses the typed text.
+// view refreshes caused by the AI's edits, and is saved against the document
+// as it was when typing began, so an AI edit meanwhile is a conflict (409),
+// never text written over the AI's change or into a place that moved.
 
 import { useCallback, useRef, useState } from "react";
 import { changedRemotely, hasPendingChange, shownValue, typeInDraft, type PlaceDraft } from "./contentView";
 
-export function usePlaceDraft(serverValue: string, save: (value: string) => Promise<boolean>) {
+type Save = (value: string) => Promise<boolean>;
+
+export function usePlaceDraft(serverValue: string, save: Save) {
   const [draft, setDraft] = useState<PlaceDraft | null>(null);
   // Escape cancels then blurs: the blur's commit must not save the cancelled text.
   const cancelled = useRef(false);
+  // The save as of the draft's start: its address and the view's version.
+  const startSave = useRef<Save | null>(null);
 
   const onType = useCallback(
     (value: string) => {
       cancelled.current = false;
+      startSave.current ??= save;
       setDraft((d) => typeInDraft(d, serverValue, value));
     },
-    [serverValue],
+    [serverValue, save],
   );
 
   /** Start the draft from the value shown now (an editor that keeps its own copy of the text). */
-  const begin = useCallback(() => setDraft((d) => d ?? { value: serverValue, original: serverValue }), [serverValue]);
+  const begin = useCallback(() => {
+    startSave.current ??= save;
+    setDraft((d) => d ?? { value: serverValue, original: serverValue });
+  }, [serverValue, save]);
 
   /** Save the draft if it changed anything. Resolves false when the save was refused (the draft is kept). */
   const commit = useCallback(async (): Promise<boolean> => {
@@ -43,16 +51,22 @@ export function usePlaceDraft(serverValue: string, save: (value: string) => Prom
       return true;
     }
     if (!hasPendingChange(draft)) {
+      startSave.current = null;
       setDraft(null);
       return true;
     }
-    const saved = await save(draft.value);
+    // The AI changed this place: the notice offers its version, nothing is written over it.
+    if (changedRemotely(draft, serverValue)) return false;
+    const saved = await (startSave.current ?? save)(draft.value);
+    // Refused: the collaborator was told and the view reloads; a retry saves on it.
+    startSave.current = null;
     if (saved) setDraft(null);
     return saved;
-  }, [draft, save]);
+  }, [draft, save, serverValue]);
 
   const cancel = useCallback(() => {
     cancelled.current = true;
+    startSave.current = null;
     setDraft(null);
   }, []);
 

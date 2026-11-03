@@ -73,8 +73,9 @@ class WordTemplateSession(WordTemplateBase):
     """One chat session's base choice. The base is the attached file
     ``attachment_id`` when it is set, else the library template
     ``template_key``; it is the selected one until the first edit pins it
-    (``pinned_at`` set). ``user_id``/``team_id``/``agent_instance_id`` are
-    write provenance, used to fetch a library template at export time."""
+    (``pinned_at`` set). ``user_id`` is the owner, set once by the first
+    write; ``team_id``/``agent_instance_id`` are write provenance, used to
+    fetch a library template at export time."""
 
     __tablename__ = "cap_word_template_sessions"
 
@@ -320,6 +321,12 @@ class WordTemplateStore(ABC):
         """The session's template state, with its batch count, or None."""
 
     @abstractmethod
+    async def claim_session(
+        self, session_id: str, user_id: str
+    ) -> str:  # pragma: no cover - interface
+        """The session's owner; ``user_id`` becomes it when there is none yet."""
+
+    @abstractmethod
     async def select_base(
         self, session_id: str, base: BaseRef, writer: Writer, *, expected_count: int
     ) -> None:  # pragma: no cover - interface
@@ -487,7 +494,6 @@ def _set_base(row: WordTemplateSession, base: BaseRef) -> None:
 
 
 def _stamp(row: WordTemplateSession, writer: Writer, now: datetime) -> None:
-    row.user_id = writer.user_id
     if writer.team_id is not None:
         row.team_id = writer.team_id
     if writer.agent_instance_id is not None:
@@ -541,6 +547,23 @@ class SqlWordTemplateStore(WordTemplateStore):
                 select(func.count()).where(WordTemplateBatch.session_id == session_id)
             )
             return _state(row, int(count or 0))
+
+    async def claim_session(self, session_id: str, user_id: str) -> str:
+        # Two files attached at once claim together: the loser re-reads.
+        for attempt in range(2):
+            try:
+                async with self._sessionmaker() as session, session.begin():
+                    row = await session.get(WordTemplateSession, session_id)
+                    if row is None:
+                        row = WordTemplateSession(
+                            session_id=session_id, user_id=user_id, updated_at=_utcnow()
+                        )
+                        session.add(row)
+                    return row.user_id
+            except IntegrityError:
+                if attempt == 1:
+                    raise
+        raise AssertionError("unreachable")  # pragma: no cover
 
     async def select_base(
         self, session_id: str, base: BaseRef, writer: Writer, *, expected_count: int

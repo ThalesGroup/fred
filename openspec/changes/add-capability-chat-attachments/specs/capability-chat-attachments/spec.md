@@ -42,7 +42,8 @@ A handler MAY return a forget callback. The chat SHALL call it when the user
 removes that attachment from the chat, including when the removal happens
 before the handler has answered (the callback is then called as soon as it is
 returned). A forget callback's rejection SHALL be logged and SHALL NOT block
-the removal.
+the removal. The callback lives in the page: a removal after a page reload
+does not reach the capability.
 
 #### Scenario: A file attached then removed before sending
 

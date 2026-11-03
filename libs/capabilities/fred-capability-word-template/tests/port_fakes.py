@@ -61,7 +61,6 @@ class FakeWordTemplateStore(WordTemplateStore):
         if row is None:
             row = SessionState(session_id=session_id, user_id=writer.user_id)
             self.sessions[session_id] = row
-        row.user_id = writer.user_id
         row.team_id = writer.team_id or row.team_id
         row.agent_instance_id = writer.agent_instance_id or row.agent_instance_id
         row.updated_at = _now()
@@ -74,6 +73,12 @@ class FakeWordTemplateStore(WordTemplateStore):
         state = copy.copy(row)
         state.batch_count = len(self.batches.get(session_id, []))
         return state
+
+    async def claim_session(self, session_id: str, user_id: str) -> str:
+        row = self.sessions.setdefault(
+            session_id, SessionState(session_id=session_id, user_id=user_id)
+        )
+        return row.user_id
 
     @staticmethod
     def _set_base(row: SessionState, base: BaseRef) -> None:

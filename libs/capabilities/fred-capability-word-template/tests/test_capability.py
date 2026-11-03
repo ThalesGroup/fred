@@ -1388,42 +1388,39 @@ async def test_sub_headings_of_a_level_the_template_uses_need_no_request(fake_st
     document.add_heading("Annex detail", level=2)
     key = "word_template.docx.subheadings"
     assets = FakeAssets({key: to_bytes(document)})
-    tools = _tools(assets, [WordTemplateEntry(template_key=key, label="Report")])
-    await tools["read_template"].coroutine(part="1")
+    library = [WordTemplateEntry(template_key=key, label="Report")]
+    sessions = iter(range(100))
 
     async def edit(markdown: str) -> str:
+        # A fresh session each time: every case writes over the template's P5.
+        tools = _tools(assets, library, session_id=f"s-{next(sessions)}")
+        await tools["read_template"].coroutine(part="1")
         op = {"op": "write", "from": "P5", "markdown": markdown}
         content, _ = await tools["edit_document"].coroutine(operations=[op])
         return content
 
     refused = await edit("# Planning\n\nText.")
     assert "adds a heading" in refused and '"## "' in refused
-    assert fake_store.batches.get("s-1") in (None, [])
+    assert not any(fake_store.batches.values())
     applied = await edit("## Costs\n\nText.")
     assert applied.startswith("Applied") and '[P5 heading 2] "Costs"' in applied
     # A title written as a bold line becomes a sub-heading too.
-    await tools["read_template"].coroutine(part="1")
     bold = await edit("**Budget** :\n\nText.")
     assert bold.startswith("Applied") and '[P5 heading 2] "Budget"' in bold
     # A bold label introducing a list stays a bold line, not a sub-heading.
-    await tools["read_template"].coroutine(part="1")
     label = await edit("**Goals** :\n- one\n- two\n\n**Risks** :\n- three")
     assert label.startswith("Applied") and "Goals" in label
     assert 'heading 2] "Goals' not in label
     # Siblings written alike: one is followed by text, so all are titles.
-    await tools["read_template"].coroutine(part="1")
     siblings = await edit("**Background** :\n\nText.\n\n**Goals** :\n- one")
     assert 'heading 2] "Background"' in siblings and 'heading 2] "Goals"' in siblings
     # Numbered at two depths: the deeper one, with no level left, stays bold.
-    await tools["read_template"].coroutine(part="1")
     nested = await edit("**1. Phase**\n\n### 1.1 Goals\n- one")
     assert '[P5 heading 2] "Phase"\n[P6] "Goals" {bold}' in nested
     # A title typed with its number as plain text becomes a sub-heading too.
-    await tools["read_template"].coroutine(part="1")
     typed = await edit("2.1 Planning\n\nText.")
     assert typed.startswith("Applied") and 'heading 2] "' in typed
     # Deeper than the template's sub-headings: taken at their level, not refused.
-    await tools["read_template"].coroutine(part="1")
     deeper = await edit("### Risks\n\nText.")
     assert deeper.startswith("Applied") and '[P5 heading 2] "Risks"' in deeper
 

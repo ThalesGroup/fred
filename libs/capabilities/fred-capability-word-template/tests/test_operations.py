@@ -960,12 +960,57 @@ def test_only_the_template_headings_are_kept_from_a_model_write():
         "protected_tables": template_table_signatures(template),
         "template_headings": template_heading_texts(template),
     }
-    # Its own heading may be rewritten; the template's may not.
-    apply_batch(added, [{"op": "write", "from": sub.address, "markdown": "x"}], **shape)
+    # Its own section may be rewritten with its title; the template's may not.
+    rewrite = {"op": "write", "from": sub.address, "markdown": "## Added\n\nNew."}
+    apply_batch(added, [rewrite], **shape)
     with pytest.raises(BatchError, match="keep the template's headings"):
         apply_batch(
             added, [{"op": "write", "from": "P4", "to": "P5", "markdown": "x"}], **shape
         )
+
+
+def test_a_model_write_never_drops_a_heading_it_covers():
+    template = to_bytes(report_document())
+    added = apply_batch(
+        template, [{"op": "write", "from": "P5", "markdown": "## Added\n\nText."}]
+    )
+    sub = next(e for e in build_map(added).elements if e.text == "Added")
+    shape = {
+        "protected_tables": template_table_signatures(template),
+        "template_headings": template_heading_texts(template),
+    }
+    with pytest.raises(BatchError, match="Markdown drops the heading"):
+        apply_batch(
+            added,
+            [{"op": "write", "from": sub.address, "markdown": "## Other\n\nx"}],
+            **shape,
+        )
+    removed = apply_batch(added, [{"op": "remove", "from": sub.address}], **shape)
+    assert "Added" not in [e.text for e in build_map(removed).elements]
+
+
+def test_a_requested_chapter_is_added_after_the_chapter_it_follows():
+    template = to_bytes(report_document())
+    doc_map = build_map(template)
+    chapters = [e for e in doc_map.elements if e.heading_level == 1]
+    last = [e for e in doc_map.elements if e.container == "" and e.story == "body"][-1]
+    shape = {
+        "protected_tables": template_table_signatures(template),
+        "template_headings": template_heading_texts(template),
+    }
+    added = apply_batch(
+        template,
+        [
+            {
+                "op": "insert_after",
+                "address": last.address,
+                "markdown": "# Budget\n\nText.",
+            }
+        ],
+        **shape,
+    )
+    after = [e.text for e in build_map(added).elements if e.heading_level == 1]
+    assert after == [*(c.text for c in chapters), "Budget"]
 
 
 def _model(docx: bytes, *ops: dict) -> bytes:

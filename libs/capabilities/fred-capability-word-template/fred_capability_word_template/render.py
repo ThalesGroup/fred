@@ -33,8 +33,13 @@ from typing import Any, cast
 from docx import Document
 from docx.document import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
+from docx.opc.constants import CONTENT_TYPE as CT
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.opc.packuri import PackURI
+from docx.oxml import OxmlElement, parse_xml
+from docx.oxml.ns import nsdecls, qn
+from docx.package import Package
+from docx.parts.numbering import NumberingPart
 from docx.shared import Length, Pt
 from docx.styles.style import ParagraphStyle
 from docx.text.paragraph import Paragraph
@@ -91,6 +96,22 @@ def ensure_required_styles(document: DocxDocument) -> None:
         document.styles.element.append(copied)
 
 
+def _numbering_element(document: DocxDocument) -> Any:
+    """The document's numbering, created empty when it has none: Word only
+    writes one once a list is used, and python-docx cannot create it."""
+    try:
+        return document.part.numbering_part.element
+    except NotImplementedError:
+        part = NumberingPart(
+            PackURI("/word/numbering.xml"),
+            CT.WML_NUMBERING,
+            parse_xml(f"<w:numbering {nsdecls('w')}/>"),
+            cast(Package, document.part.package),
+        )
+        document.part.relate_to(part, RT.NUMBERING)
+        return part.element
+
+
 def _copy_style_numbering(target: DocxDocument, source: DocxDocument, style) -> None:
     """A copied list style points at a numbering definition by id, which may
     mean something else in the target: copy the definition under fresh ids."""
@@ -121,7 +142,7 @@ def _copy_style_numbering(target: DocxDocument, source: DocxDocument, style) -> 
     )
     if source_abstract is None:
         return
-    numbering = target.part.numbering_part.element
+    numbering = _numbering_element(target)
     new_abstract_id = 1 + max(
         (
             int(a.get(qn("w:abstractNumId")))

@@ -291,7 +291,11 @@ refused unless it declares `changes_template`, which the model sets only when
 the collaborator asked for a new chapter. A sub-heading of a level the
 template already uses below its chapters SHALL run without approval, in the
 template's heading style and numbering, so it reaches the table of contents.
-A bold line that starts with a typed section number ("**3.2 Costs**") SHALL
+A chapter the collaborator asks for SHALL be added after the chapter it
+follows, at the chapters' level, never as a sub-heading inside another
+chapter. A model `write` SHALL keep every heading its range covers: its
+Markdown writes their titles again, or the batch is refused; a section is
+deleted only by `remove`. A bold line that starts with a typed section number ("**3.2 Costs**") SHALL
 be refused: it is a sub-heading without its numbering, or a title whose
 number Word cannot keep. A model batch that removes content
 or declares `changes_template` SHALL go through the platform approval gate
@@ -359,6 +363,12 @@ SHALL receive its refusal as the tool result.
 - **WHEN** the collaborator asked for a new chapter and the batch declares `changes_template`
 - **THEN** the collaborator is asked to approve before anything is applied
 - **AND** refusing leaves the document unchanged
+- **AND** once approved, the chapter stands after the chapter it follows, at the chapters' level, and is listed in the table of contents
+
+#### Scenario: A rewrite that would drop a section
+
+- **WHEN** a model `write` range covers a sub-heading added earlier and its Markdown does not write that title again
+- **THEN** nothing is applied and the reply says to keep the heading or to remove the section, which the collaborator approves
 
 #### Scenario: Plain content needs no approval
 
@@ -555,8 +565,10 @@ allowed to edit on a read older than them.
 ### Requirement: Files removed from the chat are forgotten
 
 The capability SHALL forget an attached Word file or image when the
-collaborator removes it from the chat, except a file that is the document's
-base and images the document already places.
+collaborator removes it from the chat in the page where it was attached,
+except a file that is the document's base and images the document already
+places. After a page reload the capability is not told, and its copy stays
+with the session's data.
 
 #### Scenario: A file attached then removed before sending
 

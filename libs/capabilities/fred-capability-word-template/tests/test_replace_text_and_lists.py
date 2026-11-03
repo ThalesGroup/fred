@@ -264,6 +264,30 @@ def test_written_numbered_list_takes_the_look_and_restarts() -> None:
     assert num.find(f"{qn('w:lvlOverride')}/{qn('w:startOverride')}") is not None
 
 
+def test_a_template_without_any_list_definition_gets_written_lists() -> None:
+    document = Document()
+    numbering = next(
+        r for r, rel in document.part.rels.items() if rel.reltype.endswith("/numbering")
+    )
+    document.part.rels.pop(numbering)
+    for style in document.styles.element.findall(qn("w:style")):
+        if style.find(qn("w:name")).get(qn("w:val")).lower().startswith("list"):
+            document.styles.element.remove(style)
+    document.add_paragraph("Instruction.")
+    result = apply_batch(
+        to_bytes(document),
+        [{"op": "write", "from": "P1", "markdown": "Plain text\n\n- a\n1. b"}],
+    )
+    written = load(result)
+    defined = {
+        n.get(qn("w:numId"))
+        for n in written.part.numbering_part.element.iter(qn("w:num"))
+    }
+    assert [p.text for p in written.paragraphs] == ["Plain text", "a", "b"]
+    for name in ("List Bullet", "List Number"):
+        assert _num_id_of_style(written, name) in defined
+
+
 def test_without_template_lists_the_default_list_styles_stay() -> None:
     document = Document()
     document.add_paragraph("Instruction.")

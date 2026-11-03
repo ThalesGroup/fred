@@ -345,7 +345,7 @@
         "placeAria": "Texte du document",
         "unsaved": "Non enregistré.",
         "discardDraft": "Abandonner",
-        "remoteChange": "L'assistant a aussi modifié ce passage. Votre texte est conservé ; l'enregistrer remplacera sa version.",
+        "remoteChange": "L'assistant a aussi modifié ce passage : votre texte est conservé ici mais pas enregistré. Copiez-le si besoin, puis reprenez sa version.",
         "takeTheirs": "Reprendre sa version",
         "story": {
           "header": "En-tête",

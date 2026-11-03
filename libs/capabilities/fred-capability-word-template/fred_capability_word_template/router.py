@@ -14,8 +14,8 @@
 
 """The capability's routes, mounted under `/capabilities/word_template`.
 
-Every handler requires the caller to own the session (`_session_owner`, the
-pod's private-per-owner policy). Preview and download read the session's
+Every handler requires the caller to own the session (`_session_owner`: the
+first write claims it). Preview and download read the session's
 document (`session_document`); the "Rédaction" view reads and edits it
 (`.../content`, `.../edits`, `.../undo`); attachments and images keep the
 chat's files. Docx work runs in a worker thread.
@@ -30,7 +30,7 @@ from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from docx import Document
 from fastapi import (
@@ -38,6 +38,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Request,
     Security,
     UploadFile,
     status,
@@ -287,33 +288,23 @@ def _security_enabled() -> bool:
     return bool(getattr(oidc, "KEYCLOAK_ENABLED", False))
 
 
-def _history_store() -> Any | None:
-    """The pod's conversation history store, the authoritative record of
-    who owns a session (None outside a configured pod)."""
-    try:
-        from fred_runtime.runtime_context import get_runtime_context
-
-        return get_runtime_context().config.history_store
-    except Exception:  # noqa: BLE001 - no runtime context: nothing to check against
-        return None
-
-
 async def _session_owner(
     session_id: str,
+    request: Request,
     user: Annotated[KeycloakUser, Depends(get_current_user)],
 ) -> KeycloakUser:
-    """The caller, once they are known to own ``session_id`` (403 otherwise).
-    Mirrors the pod's ``_enforce_session_ownership``: a session with no
-    history yet is allowed."""
+    """The caller, once they own ``session_id`` (403 otherwise). As in
+    writable_document, the owner lives on the capability's own row: the first
+    write claims the session, so it outlives the chat's history."""
     if not _security_enabled():
         return user
-    history = _history_store()
-    if history is None:
-        return user
-    # The owner's own calls (the pane polls) cost one query.
-    if await history.session_belongs_to_user(session_id, user.uid):
-        return user
-    if not await history.session_exists(session_id):
+    store = get_word_template_store()
+    if request.method == "GET":
+        state = await store.get_session(session_id)
+        owner = state.user_id if state is not None else None
+    else:
+        owner = await store.claim_session(session_id, user.uid)
+    if owner is None or owner == user.uid:
         return user
     logger.warning(
         "[WORD_TEMPLATE] user=%s denied on session=%s (not its owner)",

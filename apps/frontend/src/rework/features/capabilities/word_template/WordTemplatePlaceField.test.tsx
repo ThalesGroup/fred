@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A field saves on blur, so the two ways out that must not save (Escape, and
-// "take theirs" while typing) are checked through real mounts.
+// A field saves on blur, so the ways out that must not save (Escape, "take
+// theirs", an AI change to the same place) are checked through real mounts.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -94,5 +94,47 @@ describe("WordTemplatePlaceField", () => {
     });
     expect(apply).not.toHaveBeenCalled();
     expect(field.value).toBe("ai version");
+  });
+
+  it("saves against the view the typing began on", async () => {
+    const atStart = vi.fn(async () => true);
+    const later = vi.fn(async () => true);
+    render("old", atStart);
+    const field = container.querySelector("textarea")!;
+    act(() => field.focus());
+    type(field, "mine");
+    // The AI edited elsewhere: a new view, this place unchanged.
+    render("old", later);
+    await act(async () => field.blur());
+    expect(atStart).toHaveBeenCalledTimes(1);
+    expect(later).not.toHaveBeenCalled();
+  });
+
+  it("retries a refused save on the view reloaded since", async () => {
+    const refused = vi.fn(async () => false);
+    const reloaded = vi.fn(async () => true);
+    render("old", refused);
+    const field = container.querySelector("textarea")!;
+    act(() => field.focus());
+    type(field, "mine");
+    await act(async () => field.blur());
+    render("old", reloaded);
+    act(() => field.focus());
+    await act(async () => field.blur());
+    expect(refused).toHaveBeenCalledTimes(1);
+    expect(reloaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("never writes over the AI's change to the same place", async () => {
+    const apply = vi.fn(async () => true);
+    render("old", apply);
+    const field = container.querySelector("textarea")!;
+    act(() => field.focus());
+    type(field, "mine");
+    render("ai version", apply);
+    await act(async () => field.blur());
+    expect(apply).not.toHaveBeenCalled();
+    expect(field.value).toBe("mine");
+    expect(container.textContent).toContain("capability.word_template.editor.remoteChange");
   });
 });

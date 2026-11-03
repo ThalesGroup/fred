@@ -262,17 +262,6 @@ def test_undo_drops_the_last_batch_whoever_made_it(http, fake):
 # --- ownership -----------------------------------------------------------------------
 
 
-class _History:
-    def __init__(self, owner: str | None) -> None:
-        self.owner = owner
-
-    async def session_exists(self, session_id: str) -> bool:
-        return self.owner is not None
-
-    async def session_belongs_to_user(self, session_id: str, user_id: str) -> bool:
-        return user_id == self.owner
-
-
 _ROUTES = [
     ("get", "/sessions/s-1"),
     ("get", "/sessions/s-1/content"),
@@ -283,23 +272,36 @@ _ROUTES = [
     ("post", "/sessions/s-1/attachments"),
     ("post", "/sessions/s-1/images"),
     ("get", "/sessions/s-1/images/img1"),
+    ("delete", "/sessions/s-1/attachments/a1"),
+    ("delete", "/sessions/s-1/images/img1"),
 ]
 
 
 @pytest.mark.parametrize(("method", "path"), _ROUTES)
-def test_every_route_refuses_another_users_session(http, monkeypatch, method, path):
+def test_every_route_refuses_another_users_session(
+    http, fake, monkeypatch, method, path
+):
     monkeypatch.setattr(router_module, "_security_enabled", lambda: True)
-    monkeypatch.setattr(router_module, "_history_store", lambda: _History("u-2"))
+    fake.sessions["s-1"].user_id = "u-2"
     response = getattr(http, method)(f"{_PREFIX}{path}", headers=_AUTH)
     assert response.status_code == 403
 
 
-def test_the_owner_and_a_new_session_are_allowed(http, monkeypatch):
+def test_the_owner_is_allowed_and_a_write_claims_a_new_session(http, fake, monkeypatch):
     monkeypatch.setattr(router_module, "_security_enabled", lambda: True)
-    monkeypatch.setattr(router_module, "_history_store", lambda: _History("u-1"))
     assert http.get(f"{_PREFIX}/sessions/s-1/content", headers=_AUTH).status_code == 200
-    monkeypatch.setattr(router_module, "_history_store", lambda: _History(None))
-    assert http.get(f"{_PREFIX}/sessions/s-1", headers=_AUTH).status_code == 200
+    # Reading a session nobody wrote to claims nothing.
+    assert http.get(f"{_PREFIX}/sessions/s-2", headers=_AUTH).status_code == 200
+    assert "s-2" not in fake.sessions
+    http.post(f"{_PREFIX}/sessions/s-2/images", headers=_AUTH)
+    assert fake.sessions["s-2"].user_id == "u-1"
+
+
+def test_the_owner_stays_when_someone_else_writes(http, fake):
+    base = BaseRef("template", FORM_KEY)
+    writer = Writer(user_id="u-2")
+    asyncio.run(fake.append_batch("s-1", base, [_SET_WEEK], writer, expected_count=0))
+    assert fake.sessions["s-1"].user_id == "u-1"
 
 
 # --- the model's side ----------------------------------------------------------------

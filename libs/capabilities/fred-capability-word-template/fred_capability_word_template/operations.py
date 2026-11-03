@@ -1119,8 +1119,8 @@ def _check_headings_kept(
     """Reject a model ``write`` over a chapter heading (renamed or not: the
     chapter would merge into the one before) or over another heading of the
     template (all headings when they are not given): it would turn a real
-    heading into body text. Removing a chapter with its heading stays
-    possible."""
+    heading into body text. Any other heading a write covers must come back
+    in its Markdown: dropping a section is a ``remove``, which is approved."""
     chapter_level = min(
         (e.heading_level for e in doc_map.elements if e.heading_level is not None),
         default=0,
@@ -1146,6 +1146,27 @@ def _check_headings_kept(
                 "between them (start after the heading, stop before the next one), "
                 "and do not repeat the heading in the Markdown. Rename a heading "
                 "with set_text; remove a whole chapter with remove"
+            )
+        written = {
+            _plain(match.group(2))
+            for line in plan.op.markdown.split("\n")
+            if (match := _HEADING_LINE_RE.match(line.strip()))
+        }
+        dropped = [
+            t
+            for t in plan.targets
+            if t.heading_level is not None
+            and t not in headings
+            and _plain(t.text) not in written
+        ]
+        if dropped:
+            names = ", ".join(f'{h.address} "{h.text[:60]}"' for h in dropped[:3])
+            problems.append(
+                f"operation {plan.index} (write): your Markdown drops the heading "
+                f"{names} its range includes; a write keeps every heading it "
+                "covers (write its title line again, or rename it with set_text). "
+                "To delete a section, remove it with remove in a batch of its "
+                "own, which the collaborator approves"
             )
 
 
@@ -2162,7 +2183,6 @@ def apply_batch(
     *,
     protected_tables: frozenset[TableSignature] | None = None,
     template_headings: frozenset[str] | None = None,
-    refresh_toc: bool = True,
 ) -> bytes:
     """Apply one batch to ``docx_bytes`` and return the new document.
 
@@ -2206,8 +2226,7 @@ def apply_batch(
     for plan in plans:
         applier.apply(plan)
     applier.finish()
-    if refresh_toc:
-        refresh_table_of_contents(document)
+    refresh_table_of_contents(document)
     buffer = io.BytesIO()
     document.save(buffer)
     return buffer.getvalue()
@@ -2221,9 +2240,9 @@ def replay(
     """Apply an operation log to the template: each batch is
     resolved against the result of the previous ones."""
     result = template_bytes
-    for index, batch in enumerate(batches, start=1):
-        # The table of contents is rebuilt once, after the last batch.
-        result = apply_batch(result, batch, images, refresh_toc=index == len(batches))
+    for batch in batches:
+        # Each batch was addressed with its table of contents up to date.
+        result = apply_batch(result, batch, images)
     return result
 
 

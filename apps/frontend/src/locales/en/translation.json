@@ -345,7 +345,7 @@
         "placeAria": "Document text",
         "unsaved": "Not saved.",
         "discardDraft": "Discard",
-        "remoteChange": "The assistant also changed this passage. Your text is kept; saving it will replace their version.",
+        "remoteChange": "The assistant also changed this passage: your text is kept here but not saved. Copy it if needed, then use their version.",
         "takeTheirs": "Use their version",
         "story": {
           "header": "Header",
