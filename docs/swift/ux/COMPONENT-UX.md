@@ -873,10 +873,11 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   loses the turn.
   Deleting a conversation (single or bulk) cancels its turn and drops its cached
   thread first, so a finishing turn cannot write history back after the erasure.
-  While any turn of a conversation streams, its `ChatListItem` shows
-  `ThinkingDots` after the title, with a visually hidden "Answer in progress" status.
-  A turn that stopped on a question (human input or interrupted run) shows a
-  `--primary` `front_hand` icon instead, "Waiting for your answer", until the next
+  While any turn of a conversation streams, its `ChatListItem` shows small
+  `--primary` `ThinkingDots` (`size="small"`) in a trailing status slot, with a
+  visually hidden "Answer in progress" status. A turn that stopped on a question
+  (human input or interrupted run) shows a solid `--primary` dot with a soft halo in
+  that slot instead, "Waiting for your answer", until the next
   turn of that conversation starts. Both are known only in the tab that ran the turn.
   Mechanism: `core/hooks/backgroundTurns.ts`.
 

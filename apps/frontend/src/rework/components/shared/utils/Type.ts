@@ -191,7 +191,6 @@ export const materialIcons = [
   "bar_chart",
   "help",
   "help_center",
-  "front_hand",
   "link",
   "rocket_launch",
   "quiz",

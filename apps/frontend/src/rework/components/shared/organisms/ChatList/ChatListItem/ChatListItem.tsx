@@ -14,7 +14,6 @@
 
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
 import { ThinkingDots } from "@shared/atoms/ThinkingDots/ThinkingDots";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { useTurnStatus } from "@core/hooks/backgroundTurns";
 import React, { useId } from "react";
 import { useTranslation } from "react-i18next";
@@ -61,21 +60,7 @@ export function ChatListItem({
       aria-describedby={agentDeleted ? statusId : undefined}
     >
       <div className={styles.chatDescription} data-read-only={agentDeleted}>
-        <div className={styles.titleRow}>
-          <span className={styles.title}>{label}</span>
-          {turnStatus === "running" && (
-            <>
-              <ThinkingDots />
-              <span className={styles.accessibleStatus}>{t("rework.sidebar.chatList.answering")}</span>
-            </>
-          )}
-          {turnStatus === "awaiting_input" && (
-            <span className={styles.awaitingInput}>
-              <Icon category="outlined" type="front_hand" />
-              <span className={styles.accessibleStatus}>{t("rework.sidebar.chatList.awaitingInput")}</span>
-            </span>
-          )}
-        </div>
+        <div className={styles.title}>{label}</div>
         {/* Only the agent name shrinks so the date stays readable. */}
         {(agentName || dateLabel) && (
           <div className={styles.meta}>
@@ -94,6 +79,18 @@ export function ChatListItem({
           </div>
         )}
       </div>
+      {turnStatus === "running" && (
+        <span className={styles.turnStatus}>
+          <ThinkingDots size="small" />
+          <span className={styles.accessibleStatus}>{t("rework.sidebar.chatList.answering")}</span>
+        </span>
+      )}
+      {turnStatus === "awaiting_input" && (
+        <span className={styles.turnStatus} title={t("rework.sidebar.chatList.awaitingInput")}>
+          <span className={styles.awaitingInput} />
+          <span className={styles.accessibleStatus}>{t("rework.sidebar.chatList.awaitingInput")}</span>
+        </span>
+      )}
       {agentDeleted && (
         <span id={statusId} className={styles.accessibleStatus}>
           {deletedStatus}
