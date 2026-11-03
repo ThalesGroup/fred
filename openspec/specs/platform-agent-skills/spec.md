@@ -1311,7 +1311,7 @@ The packaged catalog SHALL publish the following canonical skills and invocation
 | compare-options | Unavailable | Available |
 | graph | Available | Available |
 | grill-me | Available | Unavailable |
-| grounded-research | Available | Available |
+| grounded-research | Unavailable | Available |
 | meeting-minutes | Available | Unavailable |
 | summarize-document | Unavailable | Available |
 
@@ -1335,6 +1335,12 @@ Original Fred procedures SHALL include their instructions in packaged resources 
 - **WHEN** a user opens the command catalog or directly selects analyze-data, compare-options or summarize-document for execution
 - **THEN** these skills are absent from user commands and the direct selections are rejected before inference
 - **AND** eligible ReAct and native Deep agents can discover and load all three skills with agent-origin attribution
+
+#### Scenario: Grounded research is model-only
+- **WHEN** a user opens the command catalog or directly selects grounded-research for execution
+- **THEN** grounded-research is absent from user commands and the direct selection is rejected before inference
+- **AND** eligible ReAct agents, native Deep parents and native children can discover and load it autonomously with agent-origin attribution
+- **AND** the existing global packaged-skill enablement policy remains effective
 
 #### Scenario: Minutes require an explicit current selection for a new load
 - **WHEN** a request has no current explicit meeting-minutes selection
