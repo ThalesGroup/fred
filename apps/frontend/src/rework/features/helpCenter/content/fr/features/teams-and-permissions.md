@@ -10,17 +10,20 @@ icon: groups
 Tout contenu appartient à une équipe et n'est visible que par ses membres. Vos
 droits dépendent de votre **rôle** dans cette équipe.
 
+Vos conversations sont privées : vous seul pouvez les lire, dans tous les
+espaces.
+
 ## Les quatre rôles d'équipe
 
 Ils sont **cumulables** : une même personne peut porter plusieurs rôles,
 accordés séparément.
 
-| Rôle         | Peut                                                                                | Ne peut pas, sans autre rôle                           |
-| ------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| **Membre**   | Utiliser les agents, lire les conversations et les fichiers de l'équipe, la quitter | Modifier quoi que ce soit de partagé                   |
-| **Éditeur**  | Créer et modifier agents, prompts et ressources                                     | Gérer les membres ou les réglages de l'équipe          |
-| **Admin**    | Gérer les membres et leurs rôles, les réglages et la politique de l'équipe          | **Créer ou modifier un agent, un prompt, un document** |
-| **Analyste** | Créer et lancer des campagnes d'évaluation, gérer les corpus d'évaluation           | Toucher au corpus général, aux membres, aux réglages   |
+| Rôle         | Peut                                                                                                                   | Ne peut pas, sans autre rôle                           |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **Membre**   | Utiliser les agents, lire les fichiers de l'équipe, mener ses propres conversations (visibles de soi seul), la quitter | Modifier quoi que ce soit de partagé                   |
+| **Éditeur**  | Créer et modifier agents, prompts et ressources                                                                        | Gérer les membres ou les réglages de l'équipe          |
+| **Admin**    | Gérer les membres et leurs rôles, les réglages et la politique de l'équipe                                             | **Créer ou modifier un agent, un prompt, un document** |
+| **Analyste** | Créer et lancer des campagnes d'évaluation, gérer les corpus d'évaluation                                              | Toucher au corpus général, aux membres, aux réglages   |
 
 > **Admin et Éditeur sont deux autorisations distinctes, et non deux échelons.**
 > Ce point est fréquemment mal compris : un Admin gouverne l'équipe et n'a aucun
@@ -142,9 +145,9 @@ transverses et **ne donnent aucun accès aux données d'une équipe** :
 | **Observateur plateforme**          | Consulter les indicateurs d'usage à l'échelle de la plateforme                                                               |
 
 > **Un rôle de plateforme ne remplace jamais un rôle d'équipe.** Un Admin
-> plateforme sans rôle dans votre équipe ne peut ni y toucher aux agents, ni y
-> lire les conversations. Et personne, pas même lui, n'accède à votre espace
-> personnel.
+> plateforme sans rôle dans votre équipe ne peut pas toucher à ses agents. Et
+> personne, quel que soit son rôle, ne lit vos conversations ni n'accède à votre
+> espace personnel.
 
 ## Comment c'est appliqué
 
