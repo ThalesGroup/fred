@@ -85,20 +85,6 @@ Optional annotation channels: a shape name from the Selection pane (`title`,
 `body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
 Spec: `openspec/specs/ppt-builder/spec.md`.
 
-### Evaluation (opt-in)
-
-`make eval` runs prompts x templates through the real analysis, the real
-`build_presentation` tool and a real LLM acting as the agent, and writes one
-JSON per run, `summary.md` and, with `--contact-sheets`, PNG sheets. It reads
-only the API keys from `apps/fred-agents/config/.env` and the profile from
-`models_catalog.yaml` (default `chat.mistral.small`). Templates are never
-committed: pass them by path. LibreOffice is required.
-
-```bash
-make eval EVAL_ARGS="--template corporate=/path/to/template.pptx --out target/eval"
-# or PPT_EVAL_TEMPLATES=a.pptx,b.pptx; --modes vision,rules; --prompts pitch_4,kickoff
-```
-
 ## Spec
 
 The current template contract is in
