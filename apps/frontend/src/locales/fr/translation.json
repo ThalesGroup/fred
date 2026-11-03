@@ -427,7 +427,6 @@
       "edit": "Modifier",
       "remove": "Supprimer",
       "offered": "Envoi...",
-      "uncertain": "Vérifier l'envoi",
       "retry": "Renvoyer",
       "retryWarning": "Vérifiez d'abord la conversation. Le message pourrait être envoyé deux fois.",
       "textOnly": "Seul un message texte simple peut attendre pendant ce tour",

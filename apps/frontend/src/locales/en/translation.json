@@ -427,7 +427,6 @@
       "edit": "Edit",
       "remove": "Remove",
       "offered": "Sending...",
-      "uncertain": "Check delivery",
       "retry": "Send again",
       "retryWarning": "Check the conversation first. This may send a duplicate message.",
       "textOnly": "Only plain text can wait during an active turn",

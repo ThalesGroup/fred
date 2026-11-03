@@ -29,8 +29,12 @@ from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor
     collapse_whitespace,
     enforce_max_chars,
 )
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_speaker_notes import extract_speaker_notes
 
 logger = logging.getLogger(__name__)
+
+MAX_CHART_CATEGORIES = 50
+MAX_CHART_SERIES = 10
 
 
 def _escape_pipes(s: str) -> str:
@@ -45,6 +49,14 @@ def _clean_text(s: str) -> str:
     return "".join(ch if (ch >= " " or ch in "\n\t") else " " for ch in s)
 
 
+def _format_chart_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
 class LitePptxToMdExtractor(BaseLiteMdProcessor):
     """
     Lightweight PPTX -> Markdown (python-pptx only).
@@ -54,6 +66,7 @@ class LitePptxToMdExtractor(BaseLiteMdProcessor):
     - no images
     - no external binaries
     - deterministic slide-wise extraction
+    - speaker notes and native chart data (cached values) per slide
     """
 
     description = "Fast PPTX-to-Markdown extractor (python-pptx only)."
@@ -93,6 +106,11 @@ class LitePptxToMdExtractor(BaseLiteMdProcessor):
                         s_idx,
                         e,
                     )
+
+            # has_notes_slide first: reading notes_slide would create an empty one.
+            notes = extract_speaker_notes(slide) if slide.has_notes_slide else None
+            if notes:
+                lines += ["", "Notes:", notes]
 
             slide_md = "\n".join(line for line in lines if line is not None)
             slide_md = _clean_text(slide_md)
@@ -136,6 +154,10 @@ class LitePptxToMdExtractor(BaseLiteMdProcessor):
         return (start_s, end_s)
 
     def _shape_to_markdown(self, shape, opts: LiteMarkdownOptions) -> str:
+        # Native charts: their cached values are the only text they carry.
+        if getattr(shape, "has_chart", False):
+            return self._chart_to_markdown(shape.chart)
+
         # Tables
         has_table = bool(getattr(shape, "has_table", False))
         table = getattr(shape, "table", None)
@@ -172,6 +194,38 @@ class LitePptxToMdExtractor(BaseLiteMdProcessor):
                 out.append(f"{indent}{text}")
 
         return "\n".join(out).strip()
+
+    def _chart_to_markdown(self, chart) -> str:
+        """Title, type and cached data of a native chart: categories as rows, one column per series."""
+        title_part = chart.chart_title if chart.has_title else None
+        title = title_part.text_frame.text.strip() if title_part is not None and title_part.has_text_frame else ""
+        try:
+            chart_type = chart.chart_type.name.lower().replace("_", " ")
+        except Exception:  # noqa: BLE001 - plot types python-pptx does not map
+            chart_type = "chart"
+
+        plots = list(chart.plots)
+        if not plots:
+            return ""
+        series = [s for plot in plots for s in plot.series]
+        if chart_type.startswith(("pie", "doughnut")):
+            series = series[:1]
+        if not series:
+            return ""
+        categories = [str(c) for c in plots[0].categories]
+        columns = [list(s.values) for s in series[:MAX_CHART_SERIES]]
+        row_count = max([len(categories)] + [len(c) for c in columns])
+        rows = min(row_count, MAX_CHART_CATEGORIES)
+
+        header = ["Category"] + [_escape_pipes(str(s.name or "").strip()) or f"Series {i}" for i, s in enumerate(series[:MAX_CHART_SERIES], start=1)]
+        lines = [f"Chart ({chart_type})" + (f": {title}" if title else ""), "", "| " + " | ".join(header) + " |", "| " + " | ".join(["---"] * len(header)) + " |"]
+        for r in range(rows):
+            label = _escape_pipes(categories[r]) if r < len(categories) else str(r + 1)
+            cells = [_format_chart_value(c[r]) if r < len(c) else "" for c in columns]
+            lines.append("| " + " | ".join([label or " "] + [v or " " for v in cells]) + " |")
+        if row_count > rows or len(series) > MAX_CHART_SERIES:
+            lines.append("… (chart data truncated)")
+        return "\n".join(lines)
 
     def _table_to_markdown(self, table, opts: LiteMarkdownOptions) -> str:
         try:

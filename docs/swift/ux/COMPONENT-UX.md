@@ -5847,3 +5847,17 @@ The platform administration Teams registry owns the Free toggle, labeled Link ac
 Admission denial, every enrollment state and the transient admission-verification failure of `PlatformAdmissionGuard` share the card described above instead of PageError; sign-out appears on admission denial and on the guard's failure, never on the enrollment route. Ordinary error pages retain their home action. Picker values disappear on dismissal, unsupported numeric/boolean fields stay unselectable, and selecting a key only changes the draft.
 
 Invitation history filtering and cleanup (2026-10-09): the shared Select filters All, Active, Revoked or Expired across server-paginated history. Suspended links appear in All with grayscale rows at reduced opacity, retaining copying and revocation actions; the status is available to screen readers without a visible Suspended label or explanatory paragraph. Suspension has no separate filter. A height-bounded shared DataTable (same rule as the activation review) keeps headers and pagination outside its scrolling body. Loading hides previous rows while retaining pagination totals until the requested page arrives. Cleanup is triggered from the history dialog's footer, away from the filter, and uses the shared destructive confirmation Dialog (revocation confirms in the error colour too) with the selected team in its title and the team-wide eligible count; the history dialog remains visible behind it, inert and hidden from assistive navigation while confirmation alone handles focus and keyboard dismissal; it preserves the filter and refreshes history after success. Copy keeps the chat ActionBar feedback without changing modal geometry.
+
+### Pending chat messages (2026-11-02)
+
+The pending list belongs to the current chat visit, like the live generation.
+Changing conversation, leaving the page, reloading or interrupting its stream
+clears the list without restoring or replaying it. Normal completion drains the
+local queue; a normal human-input pause holds it until the user responds.
+Other uncertain outcomes offer text-only Send again / Renvoyer and Remove /
+Supprimer, without a delivery-status label or an additional delivery-check toast.
+The retry tooltip retains its duplicate-message guidance.
+
+The immediate Send / Envoyer action uses the small secondary tonal button with a
+bent right-arrow icon. Sending / Envoi uses the same button and icon, disabled;
+the action menu is hidden until the delivery outcome is known.
