@@ -1823,6 +1823,10 @@ test("all release inputs remain opaque across every actual Make boundary", async
     fakeNode,
     `#!${process.execPath}
 import { appendFileSync } from "node:fs";
+if (process.argv[2] === "-p" && process.argv[3] === "process.versions.node") {
+  console.log(process.versions.node);
+  process.exit(0);
+}
 const names = ${JSON.stringify([
       "PACKAGE",
       "RELEASE_DIR",
