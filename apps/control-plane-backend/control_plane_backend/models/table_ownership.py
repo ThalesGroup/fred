@@ -56,7 +56,6 @@ import control_plane_backend.models.model_reasoning_models  # noqa: F401
 import control_plane_backend.models.platform_default_team_models  # noqa: F401 - registers platform_default_teams with Base
 import control_plane_backend.models.platform_model_binding_models  # noqa: F401 — registers platform_model_binding with Base
 import control_plane_backend.models.platform_prompt_models  # noqa: F401 — registers platform_prompt / creation_assistant_settings with Base
-import control_plane_backend.models.platform_skill_policy_models  # noqa: F401 - registers packaged skill opt-outs
 import control_plane_backend.models.platform_ui_settings_models  # noqa: F401 — registers platform_ui_settings with Base
 import control_plane_backend.models.prompt_models  # noqa: F401
 import control_plane_backend.models.purge_queue_models  # noqa: F401
@@ -72,6 +71,7 @@ from control_plane_backend.models.base import Base
 
 import_module("control_plane_backend.models.model_discovery_models")
 import_module("control_plane_backend.models.model_display_name_models")
+import_module("control_plane_backend.models.platform_skill_policy_models")
 import_module("control_plane_backend.models.users_preferences_models")
 
 # CoreBase tables whose migrations this tree owns — explicit names, never
