@@ -1,0 +1,166 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// A streamed turn outlives the chat view that started it: leaving the
+// conversation detaches it here instead of aborting it (the runtime cancels a
+// turn whose stream closes), and the next view of that session adopts it back.
+// Module-level on purpose, like sessionHistoryCache: the page remounts per agent.
+
+import { useSyncExternalStore } from "react";
+
+import { forgetCachedSessionHistory } from "../../components/pages/ManagedChatPage/sessionHistoryCache";
+import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
+import type { ChatSseCallbacks } from "./useChatSse";
+
+export type ThoughtBuffer = {
+  rank: number;
+  text: string;
+  phase: string;
+  title: string | null | undefined;
+  source: string | null | undefined;
+};
+
+/** The chat view currently rendering a turn. */
+export type TurnHost = {
+  read: () => ChatMessage[];
+  write: (next: ChatMessage[]) => void;
+  callbacks: () => ChatSseCallbacks;
+  finish: (turn: LiveTurn) => void;
+};
+
+export type LiveTurn = {
+  sessionId: string;
+  controller: AbortController;
+  steeringTurnId: string;
+  thoughts: Map<string, ThoughtBuffer>;
+  /** Null while detached; `messages` is then the turn's own copy of the thread. */
+  host: TurnHost | null;
+  messages: ChatMessage[];
+  /** The turn ended on a question for the user (human input or interrupted run). */
+  awaitingInput?: boolean;
+  /** Session-keyed side effects that stay meaningful with no view attached. */
+  detachedCallbacks: Pick<ChatSseCallbacks, "onTurnPersisted" | "onSessionTitle" | "onBackgroundTurnSettled">;
+};
+
+const detached = new Map<string, LiveTurn>();
+// Every streaming turn, attached or not: what the sidebar shows and deletion cancels.
+const running = new Map<string, LiveTurn>();
+// Sessions whose last turn here stopped on a question; the next turn clears it.
+const awaitingInput = new Set<string>();
+// Sessions whose turn ended while no view showed it; opening one marks it read.
+const unread = new Set<string>();
+const runningListeners = new Set<() => void>();
+const settledListeners = new Set<(sessionId: string, awaitingInput: boolean) => void>();
+
+function notifyRunning(): void {
+  for (const listener of runningListeners) listener();
+}
+
+function subscribeRunning(listener: () => void): () => void {
+  runningListeners.add(listener);
+  return () => runningListeners.delete(listener);
+}
+
+export function registerTurn(turn: LiveTurn): void {
+  running.set(turn.sessionId, turn);
+  awaitingInput.delete(turn.sessionId);
+  notifyRunning();
+}
+
+export type TurnStatus = "running" | "awaiting_input" | null;
+
+/** Known only in this tab: the session list does not carry pending questions. */
+export function useTurnStatus(sessionId: string): TurnStatus {
+  return useSyncExternalStore(subscribeRunning, () =>
+    running.has(sessionId) ? "running" : awaitingInput.has(sessionId) ? "awaiting_input" : null,
+  );
+}
+
+/** Known only in this tab, like the turn status. */
+export function useSessionUnread(sessionId: string): boolean {
+  return useSyncExternalStore(subscribeRunning, () => unread.has(sessionId));
+}
+
+export function markSessionRead(sessionId: string): void {
+  if (unread.delete(sessionId)) notifyRunning();
+}
+
+/** Notified when a turn ends while no view shows its conversation. */
+export function subscribeBackgroundSettled(listener: (sessionId: string, awaitingInput: boolean) => void): () => void {
+  settledListeners.add(listener);
+  return () => settledListeners.delete(listener);
+}
+
+/**
+ * Cancels the session's streaming turn and drops its cached thread. Called
+ * before erasing a conversation: a running turn would write its history back.
+ */
+export function abortTurn(sessionId: string): void {
+  running.get(sessionId)?.controller.abort();
+  forgetCachedSessionHistory(sessionId);
+  const cleared = awaitingInput.delete(sessionId);
+  if (unread.delete(sessionId) || cleared) notifyRunning();
+}
+
+export function readTurnMessages(turn: LiveTurn): ChatMessage[] {
+  return turn.host ? turn.host.read() : turn.messages;
+}
+
+export function writeTurnMessages(turn: LiveTurn, next: ChatMessage[]): void {
+  if (turn.host) turn.host.write(next);
+  else turn.messages = next;
+}
+
+/** The callbacks a turn event may fire right now. */
+export function turnCallbacks(turn: LiveTurn): ChatSseCallbacks {
+  return turn.host ? turn.host.callbacks() : turn.detachedCallbacks;
+}
+
+export function detachTurn(turn: LiveTurn): void {
+  if (!turn.host) return;
+  const { onTurnPersisted, onSessionTitle, onBackgroundTurnSettled } = turn.host.callbacks();
+  turn.messages = turn.host.read();
+  turn.detachedCallbacks = { onTurnPersisted, onSessionTitle, onBackgroundTurnSettled };
+  turn.host = null;
+  detached.set(turn.sessionId, turn);
+}
+
+/** Removes and returns the session's detached turn, if one is still streaming. */
+export function takeDetachedTurn(sessionId: string): LiveTurn | undefined {
+  const turn = detached.get(sessionId);
+  detached.delete(sessionId);
+  return turn;
+}
+
+/** Ends the turn on its view, or hands a detached turn's final thread to its owner. */
+export function settleTurn(turn: LiveTurn): void {
+  // A replacement turn of the same session may already be registered.
+  if (running.get(turn.sessionId) === turn) {
+    running.delete(turn.sessionId);
+    if (turn.awaitingInput && !turn.controller.signal.aborted) awaitingInput.add(turn.sessionId);
+    notifyRunning();
+  }
+  if (turn.host) {
+    turn.host.finish(turn);
+    return;
+  }
+  if (detached.get(turn.sessionId) === turn) detached.delete(turn.sessionId);
+  // Only deletion aborts a detached turn: its thread must not be cached again.
+  if (!turn.controller.signal.aborted) {
+    turn.detachedCallbacks.onBackgroundTurnSettled?.(turn.sessionId, turn.messages);
+    unread.add(turn.sessionId);
+    notifyRunning();
+    for (const listener of settledListeners) listener(turn.sessionId, Boolean(turn.awaitingInput));
+  }
+}

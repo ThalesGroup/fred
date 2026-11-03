@@ -886,6 +886,26 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   another conversation. Saved-session availability and deletion guards remain defined
   in `openspec/specs/managed-conversations/spec.md`.
 
+- **A streamed answer survives in-app navigation (2026-11-02)** - leaving a
+  conversation (another session, another agent, another page) detaches its running
+  turn instead of aborting it, because the runtime cancels a turn whose stream
+  closes. Returning while it runs re-attaches it live, Stop included; once it ends
+  its full thread lands in the session-history cache. Reload or tab close still
+  loses the turn.
+  Deleting a conversation (single or bulk) cancels its turn and drops its cached
+  thread first, so a finishing turn cannot write history back after the erasure.
+  While any turn of a conversation streams, its `ChatListItem` shows small
+  `--primary` `ThinkingDots` (`size="small"`) in a trailing status slot, with a
+  visually hidden "Answer in progress" status. A turn that stopped on a question
+  (human input or interrupted run) shows a solid `--primary` dot with a soft halo in
+  that slot instead, "Waiting for your answer". A turn that ends while no view shows
+  its conversation raises an info toast with the conversation title ("Answer ready"
+  or "Waiting for your answer", from `ChatList`) with an "Open" action to that
+  conversation, and bolds the title until the
+  conversation is opened or deleted. The waiting dot stays until the next
+  turn of that conversation starts. Both are known only in the tab that ran the turn.
+  Mechanism: `core/hooks/backgroundTurns.ts`.
+
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed
   heights — the theme open issue above) heavy for what's often a 3-line payload, and each
@@ -3060,6 +3080,9 @@ high-information-density, zero decoration, color used only as a semantic signal 
 | `error`   | `--error`     | Manual only — errors persist until explicitly closed |
 
 Error toasts additionally expose a copy-to-clipboard icon button (`content_copy`) for developer convenience.
+
+A toast may offer one `action` (`{ label, onClick }`): a `--primary` text button under the detail that
+runs it and closes the toast, e.g. "Open" on a conversation whose answer ended out of sight.
 
 Team model routing shows a success toast after the save succeeds, or an error
 toast when it fails, keeping the server's error detail inline in the form.
