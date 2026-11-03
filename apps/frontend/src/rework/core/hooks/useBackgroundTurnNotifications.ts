@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { useStore } from "react-redux";
 
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { KeyCloakService } from "../../../security/KeycloakService";
 import { controlPlaneApi } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { AppState } from "../../../common/store";
 import { subscribeBackgroundSettled } from "./backgroundTurns";
@@ -43,6 +44,8 @@ export function useBackgroundTurnNotifications(navigate: (href: string) => void)
   useEffect(
     () =>
       subscribeBackgroundSettled((turn) => {
+        if (turn.sessionIdentity !== undefined &&
+            (!turn.sessionIdentity || turn.sessionIdentity !== KeyCloakService.GetSessionIdentity())) return;
         const title = sessionTitle(store.getState(), turn.spaceId, turn.sessionId);
         showInfo({
           summary: t(

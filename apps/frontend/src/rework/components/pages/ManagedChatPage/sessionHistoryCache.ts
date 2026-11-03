@@ -29,6 +29,10 @@ const cache = new Map<string, ChatMessage[]>();
 // snapshot, a background turn) must not cache them again.
 const forgotten = new Set<string>();
 
+export function sessionHistoryKey(actor: string | null, spaceId: string, sessionId: string | null): string {
+  return JSON.stringify([actor, spaceId, sessionId]);
+}
+
 function setInMemory(sessionId: string, messages: ChatMessage[]): void {
   cache.delete(sessionId);
   cache.set(sessionId, messages);

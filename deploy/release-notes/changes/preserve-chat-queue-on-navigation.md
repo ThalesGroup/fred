@@ -20,7 +20,7 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy the frontend normally. No Alembic migration, runtime upgrade procedure or data backfill is required.
+Deploy the frontend normally. No database migration, runtime upgrade procedure or data backfill is required.
 
 ## Validation
 

@@ -29,6 +29,7 @@ import styles from "./ChatList.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
 import { abortTurn } from "@core/hooks/backgroundTurns";
 import { conversationHref } from "@core/hooks/useBackgroundTurnNotifications";
+import { forgetCachedSessionHistory, sessionHistoryKey } from "@rework/components/pages/ManagedChatPage/sessionHistoryCache";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
@@ -88,6 +89,7 @@ export default function ChatList({ teamId, spaceId }: ChatListProps) {
           abortTurn(sessionId);
           try {
             await deleteSession({ spaceId: spaceId!, sessionId }).unwrap();
+            forgetCachedSessionHistory(sessionHistoryKey(KeyCloakService.GetSessionIdentity(), spaceId!, sessionId));
             clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });
           } catch {
             // Keep grants if deletion failed and the conversation still exists.

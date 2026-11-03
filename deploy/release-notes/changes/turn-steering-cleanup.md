@@ -20,7 +20,7 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy normally. No Alembic migration, data backfill, configuration change or special pod drain is required. The ordinary pending list stays local to the browser; no durable queue format is introduced.
+Deploy normally. No database migration, data backfill, configuration change or special pod drain is required. The ordinary pending list stays local to the browser; no durable queue format is introduced.
 
 ## Validation
 

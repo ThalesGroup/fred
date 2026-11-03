@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
-import { deleteCachedSessionHistory, setCachedSessionHistory } from "./sessionHistoryCache";
+import { deleteCachedSessionHistory, sessionHistoryKey, setCachedSessionHistory } from "./sessionHistoryCache";
 
 interface UseSessionHistoryArgs {
   sessionId: string | null;
@@ -40,7 +40,7 @@ export function useSessionHistory({
   getCurrentMessages,
 }: UseSessionHistoryArgs) {
   const actor = KeyCloakService.GetSessionIdentity();
-  const key = JSON.stringify([actor, spaceId, sessionId]);
+  const key = sessionHistoryKey(actor, spaceId, sessionId);
   const loadedKey = useRef<string | null>(null);
   const activeKey = useRef(key);
   activeKey.current = key;

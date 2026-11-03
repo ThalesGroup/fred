@@ -164,7 +164,6 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
     onSteeredMessage: (messageId, sessionId) => onSteeredMessageMock(messageId, sessionId),
     onStreamInterrupted: (sessionId) => onStreamInterruptedMock(sessionId),
-    onSessionTitle: (title, sessionId) => onSessionTitleMock(title, sessionId),
     onBackgroundTurnSettled: (sessionId, messages) => onBackgroundTurnSettledMock(sessionId, messages),
     isTurnCurrent,
     isExecutionAllowed,
@@ -182,7 +181,6 @@ const onTurnRejectedMock = vi.fn();
 const onAwaitingHumanMock = vi.fn();
 const onSteeredMessageMock = vi.fn();
 const onStreamInterruptedMock = vi.fn();
-const onSessionTitleMock = vi.fn();
 const onBackgroundTurnSettledMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
@@ -213,7 +211,6 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onAwaitingHumanMock.mockClear();
     onSteeredMessageMock.mockClear();
     onStreamInterruptedMock.mockClear();
-    onSessionTitleMock.mockClear();
     onBackgroundTurnSettledMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;

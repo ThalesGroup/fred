@@ -37,6 +37,7 @@ import {
 
 import { useConversationAvailability } from "./useConversationAvailability";
 import { useSessionHistory } from "./useSessionHistory";
+import { sessionHistoryKey, setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { modelChoiceKey, offersReasoning, parseModelChoice } from "../../../features/capabilities/modelChoice";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
@@ -95,8 +96,6 @@ interface UseManagedChatParams {
   agentInstanceId: string;
   spaceId?: string;
 }
-
-type PendingMessage = { id: string; text: string; status: "waiting" | "offered" | "uncertain" };
 
 export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseManagedChatParams) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -440,8 +439,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       return;
     }
     setInput("");
-    attachments.clearReadyAttachments();
-  }, [attachments.clearReadyAttachments]);
+  }, []);
   const handleTurnRejected = useCallback((_wireDraft: string, rejectedSessionId: string) => {
     if (activeSessionIdRef.current !== rejectedSessionId) return;
     if (queuedStartRef.current) {
@@ -480,6 +478,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     setPendingMessages([]);
   }, []);
 
+  const sessionActor = KeyCloakService.GetSessionIdentity();
   const {
     messages,
     waitResponse,
@@ -509,7 +508,10 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
       },
       [touchSessionActivity],
     ),
-    onBackgroundTurnSettled: setCachedSessionHistory,
+    onBackgroundTurnSettled: (sid, thread) => {
+      if (!sessionActor || KeyCloakService.GetSessionIdentity() !== sessionActor) return;
+      setCachedSessionHistory(sessionHistoryKey(sessionActor, spaceId, sid), thread);
+    },
     onSteeredMessage: handleSteeredMessage,
     onStreamInterrupted: handleStreamInterrupted,
     onAwaitingHuman: handleAwaitingHuman,

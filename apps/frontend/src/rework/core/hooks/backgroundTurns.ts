@@ -19,7 +19,6 @@
 
 import { useCallback, useSyncExternalStore, type SetStateAction } from "react";
 
-import { forgetCachedSessionHistory } from "../../components/pages/ManagedChatPage/sessionHistoryCache";
 import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 import type { ChatSseCallbacks } from "./useChatSse";
 
@@ -47,6 +46,7 @@ export type LiveTurn = {
   teamId: string;
   spaceId: string;
   agentInstanceId: string;
+  sessionIdentity?: string | null;
   controller: AbortController;
   steeringTurnId: string;
   thoughts: Map<string, ThoughtBuffer>;
@@ -179,7 +179,6 @@ export function subscribeBackgroundSettled(listener: (turn: LiveTurn) => void): 
 export function abortTurn(sessionId: string): void {
   updatePendingMessages(sessionId, []);
   running.get(sessionId)?.controller.abort();
-  forgetCachedSessionHistory(sessionId);
   const cleared = awaitingInput.delete(sessionId);
   if (unread.delete(sessionId) || cleared) notifyIndicatorsChanged();
 }

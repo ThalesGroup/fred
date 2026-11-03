@@ -1305,7 +1305,7 @@ describe("useManagedChat — session write reliability", () => {
     mount();
     const finished = [{ id: "done" }];
     capturedOnBackgroundTurnSettled?.("session-9", finished);
-    expect(getCachedSessionHistory("session-9")).toBe(finished);
+    expect(getCachedSessionHistory(JSON.stringify(["alice-session", "space-1", "session-9"]))).toBe(finished);
   });
 
   // handleHitlAnswer clears pendingHitl BEFORE awaiting the resume, so the
