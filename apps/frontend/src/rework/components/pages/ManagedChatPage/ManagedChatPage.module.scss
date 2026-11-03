@@ -340,13 +340,17 @@
   gap: var(--spacing-xs);
   cursor: pointer;
   border: 0;
-  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
   background: transparent;
   padding: var(--spacing-xs) var(--spacing-s);
   width: 100%;
   color: var(--on-surface);
   font: var(--font-label-large);
   text-align: left;
+}
+
+.pendingToggle[aria-expanded="false"] {
+  border-radius: inherit;
 }
 
 .pendingToggle:hover {
