@@ -21,7 +21,6 @@ const showInfo = vi.hoisted(() => vi.fn());
 const navigate = vi.hoisted(() => vi.fn());
 const sessionList = vi.hoisted(() => ({ data: [{ session_id: "saved", title: "Quarterly report" }] as unknown }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
 vi.mock("react-redux", () => ({ useStore: () => ({ getState: () => ({}) }) }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showInfo }) }));
 vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
@@ -36,7 +35,7 @@ import { useBackgroundTurnNotifications } from "./useBackgroundTurnNotifications
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 function Notifier() {
-  useBackgroundTurnNotifications();
+  useBackgroundTurnNotifications(navigate);
   return null;
 }
 

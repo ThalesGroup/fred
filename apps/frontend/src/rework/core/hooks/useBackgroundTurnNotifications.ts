@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Announces a turn that ended while its conversation was not shown. Mounted in
-// MainLayout so it runs on every page, including those without the chat list.
+// Announces a turn that ended while its conversation was not shown.
 
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "react-redux";
-import { useNavigate } from "react-router-dom";
 
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { controlPlaneApi } from "../../../slices/controlPlane/controlPlaneOpenApi";
@@ -37,10 +35,9 @@ function sessionTitle(state: AppState, teamId: string, sessionId: string): strin
   return data?.find((session) => session.session_id === sessionId)?.title || undefined;
 }
 
-export function useBackgroundTurnNotifications(): void {
+export function useBackgroundTurnNotifications(navigate: (href: string) => void): void {
   const { t } = useTranslation();
   const { showInfo } = useToast();
-  const navigate = useNavigate();
   const store = useStore<AppState>();
 
   useEffect(

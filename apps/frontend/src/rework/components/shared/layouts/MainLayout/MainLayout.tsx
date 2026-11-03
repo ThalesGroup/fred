@@ -17,13 +17,11 @@ import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
 import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate.tsx";
 import { useTaskPolling } from "../../../../features/tasks/useTaskPolling.ts";
 import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration.ts";
-import { useBackgroundTurnNotifications } from "@core/hooks/useBackgroundTurnNotifications";
 import styles from "./MainLayout.module.css";
 
 export default function MainLayout() {
   useTaskRehydration();
   useTaskPolling();
-  useBackgroundTurnNotifications();
   return (
     <div className={styles.mainLayout}>
       <nav className={styles.sidebar}>
