@@ -38,7 +38,7 @@ const gates = {
 const applicationToolchain = {
   source: "fixture",
   isolation: "application-owned",
-  node: "24.21.0",
+  node: "24.22.2",
   npm: "11.19.0",
 };
 
@@ -54,6 +54,15 @@ async function archives(context) {
   return values;
 }
 
+test("new candidate evidence rejects a stale application Node baseline", async () => {
+  const contract = await loadReleaseContract();
+  contract.applicationToolchain.node = "24.21.0";
+  await assert.rejects(
+    createCandidateEvidence({ contract }),
+    /differs from .nvmrc/,
+  );
+});
+
 test("fixture contracts produce only fixture evidence with bound provenance expectations", async (context) => {
   const contract = await loadReleaseContract();
   const values = await archives(context);
@@ -61,7 +70,7 @@ test("fixture contracts produce only fixture evidence with bound provenance expe
     contract,
     archives: values,
     sourceCommit: "fixture-commit",
-    producerToolchain: { node: "24.21.0", npm: "11.19.0" },
+    producerToolchain: { node: "24.22.2", npm: "11.19.0" },
     applicationToolchain,
     gates,
   });
@@ -109,7 +118,7 @@ test("provisional values cannot produce approved release-candidate evidence", as
       contract,
       archives: await archives(context),
       sourceCommit: "fixture-commit",
-      producerToolchain: { node: "24.21.0", npm: "11.19.0" },
+      producerToolchain: { node: "24.22.2", npm: "11.19.0" },
       applicationToolchain,
       gates,
       approved: true,
