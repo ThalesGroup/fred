@@ -47,9 +47,8 @@ profiles:
   - profile_id: chat.mistral.medium
     capability: chat
     model_display_name: "Mistral Medium 3.5"
-    # Medium supports reasoning when the platform admin enables it.
     supports_thinking: true
-    # Declared aptitude: accepts image input (capability calls needing vision).
+    # Medium supports reasoning when the platform admin enables it.
     supports_vision: true
     model:
       provider: openai
