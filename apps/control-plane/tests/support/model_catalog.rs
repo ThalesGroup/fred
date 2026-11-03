@@ -642,6 +642,9 @@ async fn initialization_preserves_administered_and_deleted_policies() {
 async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     use control_plane::{auth::Authenticator, config::Configuration};
     let e = env().await;
+    control_plane::bootstrap::grant_root(&e.pool, "ralph-test-admin")
+        .await
+        .unwrap();
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
     let provider = Provider::start().await;

@@ -99,6 +99,42 @@ describe("Weaver execution context and HTTP diagnostics", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renders Ralph's SSE response without a synchronous or history route", async () => {
+    const ralph: ExecutionPreparation = {
+      ...preparation,
+      runtime_id: "control-plane",
+      execute_stream_url: "/control-plane/v1/agents/execute/stream",
+      execute_url: null,
+      messages_url_template: null,
+      supports_hitl: false,
+    };
+    prepare.mockImplementation(() => ({ unwrap: async () => ralph }));
+    const frames = [
+      { kind: "status", sequence: 1, status: "running" },
+      { kind: "assistant_delta", sequence: 2, delta: "Bonjour" },
+      { kind: "final", sequence: 3, content: "Bonjour", finish_reason: "stop" },
+    ];
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(frames.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+          headers: { "content-type": "text/event-stream" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => {
+      expect(await latest.send("bonjour", "saved-session")).toBe(true);
+    });
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0][0])).toContain(ralph.execute_stream_url);
+    expect(latest.waitResponse).toBe(false);
+    expect(
+      latest.messages.some(
+        (message) =>
+          message.role === "assistant" && message.parts.some((part) => part.type === "text" && part.text === "Bonjour"),
+      ),
+    ).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it.each(["first", "reopened", "hitl"])("sends canonical space without team on %s turn", async (turn) => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ detail: "Refused" }), { status: 403 }));
     vi.stubGlobal("fetch", fetchMock);

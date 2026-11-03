@@ -2216,12 +2216,12 @@ export type ExecutionPreparation = {
   };
   chat_controls: ChatControlDescriptor[];
   execute_stream_url: string;
-  execute_url: string;
+  execute_url: string | null;
   execution_transport: ExecutionTransport;
   inference: InferenceSelection | null;
   max_chat_input_chars: number | null;
-  /** RFC 6570 Level 1 template. Substitute the registered session ID. */
-  messages_url_template: string;
+  /** RFC 6570 Level 1 template; null when this runtime has no durable history. */
+  messages_url_template: string | null;
   model_choice: ModelOfferKey | null;
   model_error: ModelPreparationError | null;
   models: PreparationModels;
