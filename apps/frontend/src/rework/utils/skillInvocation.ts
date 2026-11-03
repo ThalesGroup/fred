@@ -158,18 +158,64 @@ export function skillInvocationsText(
   return [...names].reverse().reduce((value, name) => skillInvocationText(value, name), text);
 }
 
-/** Badges show `/name` as text. A selection touching one is still serialised
- * here: the browser would copy icon glyphs as words and break lines around the
- * badge's flex box. */
-export function selectedSkillText(range: Range, container: HTMLElement): string | null {
+/** Preserve native cross-message separators, replacing only the selected badge labels. */
+function nativeSkillSelectionText(range: Range, container: HTMLElement, selection: Selection): string | null {
+  const labels = Array.from(container.querySelectorAll<HTMLElement>("[data-skill-name]")).filter(
+    (label) => range.intersectsNode(label) && label.textContent !== `/${label.dataset.skillName}`,
+  );
+  if (!labels.length || selection.rangeCount !== 1) return null;
+  const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+  const nativeText = selection.toString();
+  const serialize = (slice: Range) => {
+    selection.removeAllRanges();
+    selection.addRange(slice);
+    return selection.toString();
+  };
+  try {
+    const edits: { from: number; to: number; text: string }[] = [];
+    for (const label of labels) {
+      const selected = range.cloneRange();
+      selected.selectNodeContents(label);
+      if (selected.compareBoundaryPoints(Range.START_TO_START, range) < 0)
+        selected.setStart(range.startContainer, range.startOffset);
+      if (selected.compareBoundaryPoints(Range.END_TO_END, range) > 0)
+        selected.setEnd(range.endContainer, range.endOffset);
+      if (selected.collapsed) continue;
+      const prefix = range.cloneRange();
+      prefix.setEnd(selected.startContainer, selected.startOffset);
+      const before = serialize(prefix).trimEnd();
+      const text = serialize(selected);
+      if (!text || !nativeText.startsWith(before)) return null;
+      const from = nativeText.indexOf(text, before.length);
+      if (from < 0) return null;
+      edits.push({ from, to: from + text.length, text: `/${label.dataset.skillName}` });
+    }
+    return edits
+      .sort((a, b) => b.from - a.from)
+      .reduce((text, edit) => text.slice(0, edit.from) + edit.text + text.slice(edit.to), nativeText);
+  } finally {
+    if (anchorNode && focusNode) selection.setBaseAndExtent(anchorNode, anchorOffset, focusNode, focusOffset);
+  }
+}
+
+/** Same-turn copies omit icon glyphs and use canonical skill names. */
+export function selectedSkillText(range: Range, container: HTMLElement, selection?: Selection): string | null {
   if (!container.contains(range.commonAncestorContainer)) return null;
   const regionOf = (node: Node) =>
     (node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement)?.closest("[data-skill-message]");
   const region = regionOf(range.startContainer);
-  // Cross-turn selections keep the browser's block-boundary serialisation.
-  if (!region || region !== regionOf(range.endContainer)) return null;
-  const fragment = range.cloneContents();
+  if (!region || region !== regionOf(range.endContainer))
+    return selection ? nativeSkillSelectionText(range, container, selection) : null;
+  const copiedRange = range.cloneRange();
+  for (const label of Array.from(region.querySelectorAll("[data-skill-name]"))) {
+    if (label.contains(copiedRange.startContainer)) copiedRange.setStartBefore(label);
+    if (label.contains(copiedRange.endContainer)) copiedRange.setEndAfter(label);
+  }
+  const fragment = copiedRange.cloneContents();
   fragment.querySelectorAll('.material-symbols-outlined[aria-hidden="true"]').forEach((icon) => icon.remove());
+  fragment.querySelectorAll<HTMLElement>("[data-skill-name]").forEach((label) => {
+    label.textContent = `/${label.dataset.skillName}`;
+  });
   const text = fragment.textContent ?? "";
   const touchesBadge = Array.from(region.querySelectorAll("[data-skill-name]")).some((label) =>
     range.intersectsNode(label),

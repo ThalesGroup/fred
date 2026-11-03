@@ -64,7 +64,15 @@ async def get_instance_skills(
     if isinstance(definition, GraphAgentDefinition):
         return SkillCatalog(supported=False)
     skills = get_runtime_context().config.skills
-    return skills.catalog if skills is not None else SkillCatalog()
+    if skills is None:
+        return SkillCatalog()
+    return skills.catalog.model_copy(
+        update={
+            "skills": tuple(
+                skill for skill in skills.catalog.skills if skill.user_invocable
+            )
+        }
+    )
 
 
 async def get_instance_skill_detail(

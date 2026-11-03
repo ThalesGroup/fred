@@ -1079,11 +1079,13 @@ export type NodeErrorRuntimeEvent = {
 };
 export type SkillLoadAttribution = {
   agent_id: string;
+  builtin?: boolean;
   child?: boolean;
   child_id?: string | null;
   load_id: string;
   name: string;
   origin: "user" | "agent";
+  partial?: boolean;
   revision: string;
 };
 export type StatusRuntimeEvent = {
@@ -1334,10 +1336,14 @@ export type ChatMessage = {
 };
 export type SkillSummary = {
   argument_hint?: string | null;
+  builtin?: boolean;
   description: string;
+  disable_model_invocation?: boolean;
   name: string;
+  user_invocable?: boolean;
 };
 export type SkillCatalog = {
+  policy_supported?: boolean;
   revision?: string;
   skills?: SkillSummary[];
   supported?: boolean;

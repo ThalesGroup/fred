@@ -236,6 +236,7 @@ from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.model_routing import ModelProvider, RoutedChatModelFactory
 from fred_runtime.model_routing.turn import TurnAuthority, current_turn
 from fred_runtime.react.react_runtime import ReActRuntime
+from fred_runtime.skills.catalog import PlatformSkills
 from fred_runtime.runtime_support.authority import (
     AuthorityLostError,
     DelegationUnavailableError,
@@ -929,15 +930,22 @@ def _build_runtime_services(
     """
 
     runtime_config = get_runtime_context().config
+    skills = runtime_config.skills
+    if isinstance(skills, PlatformSkills):
+        skills = skills.for_execution(
+            tuple(
+                selection.name for selection in binding.runtime_context.selected_skills
+            ),
+            binding.disabled_platform_skills,
+            resuming=binding.is_resuming,
+        )
     if conversation_filesystem is None:
         conversation_filesystem = _build_conversation_filesystem(binding)
     conversation_port = None
     if conversation_filesystem is not None:
         backend, permissions = build_conversation_filesystem(
             conversation_filesystem,
-            skills=runtime_config.skills
-            if isinstance(definition, DeepAgentDefinition)
-            else None,
+            skills=skills if isinstance(definition, DeepAgentDefinition) else None,
         )
         conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(
@@ -1139,7 +1147,7 @@ def _build_runtime_services(
             credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
-        skills=runtime_config.skills,
+        skills=skills,
     )
 
 
@@ -4347,6 +4355,7 @@ async def _iterate_runtime_event_payloads_inner(
         runtime_context=runtime_context,
         portable_context=portable_context,
         platform_prompt=platform_prompt,
+        is_resuming=request.resume_payload is not None,
     )
 
     current_turn().check_context(runtime_context, definition.agent_id)

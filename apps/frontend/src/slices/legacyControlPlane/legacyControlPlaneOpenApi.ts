@@ -4950,11 +4950,15 @@ export type SkillSummary = {
   name: string;
   description: string;
   argument_hint?: string | null;
+  builtin?: boolean;
+  user_invocable?: boolean;
+  disable_model_invocation?: boolean;
 };
 export type SkillCatalog = {
   supported?: boolean;
   revision?: string;
   skills?: SkillSummary[];
+  policy_supported?: boolean;
 };
 export type SkillDetail = {
   skill: SkillSummary;

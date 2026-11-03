@@ -23,6 +23,8 @@ import {
   type DraftEdit,
 } from "@shared/molecules/RichInputField/RichInputField";
 import { useGetAgentInstanceSkillsQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useTranslation } from "react-i18next";
+import { skillPresentation } from "@rework/utils/skillPresentation";
 import {
   assemblePromptTurn,
   findCommandWords,
@@ -36,7 +38,7 @@ import {
   useLazyGetPromptQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Prompt, PromptSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import type { SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
+import type { SkillInvocation, SkillSummary, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 
 /**
  * The composer's command trigger: the menu `/` opens, and the resolution of a
@@ -190,10 +192,11 @@ export function useComposerCommands(params: {
     to: number;
   })[];
   selectedSkillArgumentHint: string | null;
-  skillDescriptions: ReadonlyMap<string, string>;
+  skillSummaries: ReadonlyMap<string, SkillSummary>;
   composerValue: string;
   onComposerChange: (value: string) => void;
 } {
+  const { t } = useTranslation();
   const { teamId, agentInstanceId, personalTeamId, enabled = true } = params;
   const scopeKey = JSON.stringify([teamId, agentInstanceId, personalTeamId, params.sessionId, enabled]);
   const scopeRef = useRef({ key: scopeKey, version: 0 });
@@ -232,14 +235,9 @@ export function useComposerCommands(params: {
   const skillsRef = useRef(skills);
   skillsRef.current = skills;
   const skillNames = useMemo(() => skills.map((skill) => skill.name), [skills]);
-  const skillDescriptions = useMemo(
+  const skillSummaries = useMemo(
     () =>
-      new Map(
-        (skillsQueried && catalog?.supported ? (catalog.skills ?? []) : []).map((skill) => [
-          skill.name,
-          skill.description,
-        ]),
-      ),
+      new Map((skillsQueried && catalog?.supported ? (catalog.skills ?? []) : []).map((skill) => [skill.name, skill])),
     [catalog, skillsQueried],
   );
   const listboxId = useId();
@@ -420,12 +418,12 @@ export function useComposerCommands(params: {
       skills.map((skill) => ({
         promptId: "platform:skill:" + skill.name,
         command: skill.name,
-        name: skill.name,
-        description: skill.description,
+        name: skillPresentation(t, skill).title,
+        description: skillPresentation(t, skill).description,
         kind: "skill",
         source: "platform",
       })),
-    [skills],
+    [skills, t],
   );
 
   // `null` while the composer holds no command query. `dismissedQuery` is the
@@ -554,7 +552,7 @@ export function useComposerCommands(params: {
       if (!activeRange) return;
       const input = paramsRef.current.input;
       const range = completionRange(input, activeRange);
-      const name = entry.kind === "skill" ? entry.name : entry.command;
+      const name = entry.command;
       const token = `/${name}`;
       const trailing = input.slice(range.end);
       const separator = /^\s/.test(trailing) ? "" : " ";
@@ -921,7 +919,7 @@ export function useComposerCommands(params: {
     selectedSkills,
     selectedPrompts,
     selectedSkillArgumentHint: selectedSkills.length === 1 ? selectedSummary?.argument_hint?.trim() || null : null,
-    skillDescriptions,
+    skillSummaries,
     composerValue: params.input,
     onComposerChange,
   };

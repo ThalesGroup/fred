@@ -816,7 +816,7 @@ function ManagedChatContent({
           onOpenPrompt: openPromptPreview,
           tokens: commands.selectedSkills.map((token) => ({
             ...token,
-            description: commands.skillDescriptions.get(token.name),
+            ...commands.skillSummaries.get(token.name),
             onOpen: openSkill,
           })),
         }}
@@ -1093,7 +1093,7 @@ function ManagedChatContent({
                         onHitlFreeTextChange={chat.setHitlFreeText}
                         onOpenCommandPrompt={openCommandPrompt}
                         onOpenSkill={openSkill}
-                        skillDescriptions={commands.skillDescriptions}
+                        skillSummaries={commands.skillSummaries}
                       />
                     )}
                   </div>
