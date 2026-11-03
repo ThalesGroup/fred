@@ -37,6 +37,7 @@ export function CommandTurn({ command, onOpen, inline = false }: CommandTurnProp
     <button
       type="button"
       className={styles.command}
+      data-skill-message={!inline || undefined}
       onClick={onOpen && (() => onOpen())}
       disabled={!onOpen}
       aria-label={
@@ -47,7 +48,9 @@ export function CommandTurn({ command, onOpen, inline = false }: CommandTurnProp
     >
       <span className={`${badgeStyles.badge} ${styles.slug}`} data-kind="prompt" data-surface="bubble">
         <Icon category="outlined" type="edit_note" />
-        <span className={badgeStyles.name}>/{command.command}</span>
+        <span className={badgeStyles.name} data-invocation-name={command.command}>
+          {command.command}
+        </span>
       </span>
       {appended && <span className={styles.appended}> {appended}</span>}
     </button>

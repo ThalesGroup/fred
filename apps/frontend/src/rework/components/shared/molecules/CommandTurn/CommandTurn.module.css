@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-/* Keep legacy appended text in the bubble's colour and inline flow.
-   Only the prompt token takes the container the composer gives it. */
+/* Keep legacy appended text in the bubble's colour and inline flow. */
 .command {
   display: inline-block;
   cursor: pointer;
@@ -29,19 +28,13 @@
   text-align: left;
 }
 
-/* Same tonal hover and press as the composer token. */
+/* Same hover and press as the composer token. */
 .command:hover:not(:disabled) .slug {
-  background-image: linear-gradient(
-    var(--state-on-secondary-container-hover),
-    var(--state-on-secondary-container-hover)
-  );
+  background-image: linear-gradient(var(--badge-hover-layer), var(--badge-hover-layer));
 }
 
 .command:active:not(:disabled) .slug {
-  background-image: linear-gradient(
-    var(--state-on-secondary-container-pressed),
-    var(--state-on-secondary-container-pressed)
-  );
+  background-image: linear-gradient(var(--badge-pressed-layer), var(--badge-pressed-layer));
 }
 
 .command:focus-visible {

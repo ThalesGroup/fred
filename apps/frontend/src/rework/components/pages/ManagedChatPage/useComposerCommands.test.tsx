@@ -1258,7 +1258,7 @@ describe("platform skills", () => {
       const append = "Before /meeting-minutes middle /review after";
       act(() => cm().dispatch({ changes: { from: cm().state.doc.length, insert: append } }));
       const prompt = container.querySelector<HTMLElement>("[data-kind=prompt]");
-      expect(prompt?.textContent).toBe("edit_note/summary");
+      expect(prompt?.textContent).toBe("edit_notesummary");
       expect(prompt?.title).toContain("Résumé");
       expect(container.querySelectorAll('[aria-label="chatbot.skills.open"]')).toHaveLength(2);
       const draft = cm().state.doc.toString();
@@ -1288,7 +1288,7 @@ describe("platform skills", () => {
         cmType(`${before} /su`);
         expect(labels()).toEqual(["/summary"]);
         cmPress("Tab");
-        expect(container.querySelector("[data-kind=prompt]")?.textContent).toBe("edit_note/summary");
+        expect(container.querySelector("[data-kind=prompt]")?.textContent).toBe("edit_notesummary");
         for (const insert of promptFirst ? ["middle /rev", "after /meet"] : ["after /meet"]) {
           act(() => {
             const end = cm().state.doc.length;
@@ -1493,7 +1493,7 @@ describe("personal and team prompt commands", () => {
     );
     const token = container.querySelector<HTMLElement>("[data-kind=prompt]")!;
     expect(token).not.toBeNull();
-    expect(token.textContent).toBe("edit_note/summary");
+    expect(token.textContent).toBe("edit_notesummary");
     expect(token.title.split("\n")[1]).toBe(
       `chatbot.commandMenu.sections.${source === "team" ? "teamFallback" : "personal"}`,
     );

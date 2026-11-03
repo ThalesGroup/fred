@@ -66,7 +66,7 @@ class SkillWidget extends WidgetType {
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
-    name.textContent = `/${this.token.name}`;
+    name.textContent = this.token.name;
     button.append(icon, name);
     button.onclick = () => this.token.onOpen(this.token.name);
     return button;
@@ -117,7 +117,7 @@ class PromptWidget extends WidgetType {
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
-    name.textContent = `/${this.target.command}`;
+    name.textContent = this.target.command;
     token.append(icon, name);
     return token;
   }

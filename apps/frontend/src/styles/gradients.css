@@ -40,10 +40,10 @@
      conic sweep seamless at 360deg. */
   --gradient-spectrum-stops: #ffffff, #37c9e4, #6f78fc, #e4ae66, #db47ae, #ffffff;
 
-  /* Saturated run only. For gradients clipped to text, where white is a hole
+  /* Closed saturated run for seamless text animation, where white is a hole
      rather than a highlight (invisible on the light theme) and peach sits too
      close to the surrounding body colour to read. */
-  --gradient-spectrum-stops-core: #37c9e4, #6f78fc, #db47ae;
+  --gradient-spectrum-stops-core: #37c9e4, #6f78fc, #db47ae, #6f78fc, #37c9e4;
 }
 
 /*
