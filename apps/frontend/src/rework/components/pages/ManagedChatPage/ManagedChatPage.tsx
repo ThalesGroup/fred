@@ -128,6 +128,11 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
               {agent.role}
             </span>
           </span>
+          {agent.description && (
+            <span className={styles.welcomeAgentDescription} data-chat-welcome-agent-description tabIndex={0}>
+              {agent.description}
+            </span>
+          )}
         </div>
       )}
       <p className={styles.welcomeTitle}>{t(WELCOME_VARIANT_KEYS[variantIndex], { username: welcomeName })}</p>
@@ -1133,17 +1138,23 @@ function ManagedChatContent({
                         {pendingExpanded && (
                           <ul id={pendingListId} className={styles.pendingList}>
                             {chat.pendingMessages?.map((message) => (
-                              <li className={styles.pendingMessage} key={message.id}>
+                              <li className={styles.pendingMessage} data-status={message.status} key={message.id}>
                                 <span className={styles.pendingMessageText} title={message.text}>
                                   {message.text}
                                 </span>
                                 {message.status === "offered" ? (
-                                  <span className={styles.pendingStatus}>{t("chatbot.pendingMessages.offered")}</span>
+                                  <Button
+                                    type="button"
+                                    color="secondary"
+                                    variant="tonal"
+                                    size="2xs"
+                                    disabled
+                                    aria-label={`${t("chatbot.pendingMessages.offered")}: ${message.text}`}
+                                  >
+                                    {t("chatbot.pendingMessages.offered")}
+                                  </Button>
                                 ) : message.status === "uncertain" ? (
                                   <>
-                                    <span className={styles.pendingStatus}>
-                                      {t("chatbot.pendingMessages.uncertain")}
-                                    </span>
                                     <button
                                       type="button"
                                       className={styles.pendingAction}
@@ -1154,6 +1165,14 @@ function ManagedChatContent({
                                     >
                                       {t("chatbot.pendingMessages.retry")}
                                     </button>
+                                    <button
+                                      type="button"
+                                      className={styles.pendingAction}
+                                      disabled={chat.waitResponse}
+                                      onClick={() => void chat.removePendingMessage(message.id)}
+                                    >
+                                      {t("chatbot.pendingMessages.remove")}
+                                    </button>
                                   </>
                                 ) : (
                                   <>
@@ -1163,6 +1182,7 @@ function ManagedChatContent({
                                         color="secondary"
                                         variant="tonal"
                                         size="2xs"
+                                        icon={{ category: "outlined", type: "subdirectory_arrow_right" }}
                                         aria-label={`${t("chatbot.pendingMessages.send")}: ${message.text}`}
                                         onClick={() => void chat.forcePendingMessage(message.id)}
                                       >

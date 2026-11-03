@@ -551,8 +551,11 @@ export function DocumentUploadDrawer({
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusHandoff(isOpen, dialogRef);
 
+  // Dismissal is explicit only (close / cancel): no backdrop click, and Escape
+  // only while nothing is picked or uploading, so a selection is never lost by accident.
+  const escapeCloses = files.length === 0 && !isLoading;
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !escapeCloses) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleClose();
     };
@@ -560,13 +563,13 @@ export function DocumentUploadDrawer({
     return () => window.removeEventListener("keydown", onKey);
     // handleClose only resets local state + calls onClose; a stale closure is harmless.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, escapeCloses]);
 
   if (!isOpen) return null;
 
   return (
     <Portal id="modal-portal">
-      <div className={styles.overlay} onClick={handleClose}>
+      <div className={styles.overlay}>
         <div
           ref={dialogRef}
           className={styles.dialog}

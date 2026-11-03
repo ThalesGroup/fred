@@ -24,6 +24,8 @@ export interface ToastData {
   summary: string;
   detail?: string;
   duration?: number | null;
+  /** One follow-up the toast offers, e.g. opening what it announces; it closes the toast. */
+  action?: { label: string; onClick: () => void };
 }
 
 export interface ToastActions {
@@ -67,6 +69,7 @@ export function Toast({
   summary,
   detail,
   duration,
+  action,
   exiting,
   onClose,
   onExited,
@@ -110,6 +113,20 @@ export function Toast({
         </div>
       </div>
       {detail && <div className={styles.detail}>{renderDetail(detail)}</div>}
+      {action && (
+        <div className={styles.footer}>
+          <button
+            type="button"
+            className={styles.textAction}
+            onClick={() => {
+              action.onClick();
+              onClose(id);
+            }}
+          >
+            {action.label}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

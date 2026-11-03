@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import assert from "node:assert/strict";
+import { assertRepositoryNodeBaseline } from "./release-toolchain.mjs";
 import { fileURLToPath } from "node:url";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -150,6 +151,7 @@ export async function buildReleaseCandidate({
   selection,
 }) {
   validateReleaseContract(contract);
+  await assertRepositoryNodeBaseline(contract);
   const selectedIds = selectReleaseMembers(contract, selection);
   const ledger = await loadCompatibilityLedger();
   if (selectedIds.includes("ui"))

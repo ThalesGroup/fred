@@ -155,6 +155,7 @@ describe("useSessionHistory authorized reads", () => {
     mount("session-a");
     await settle();
     expect(latest.isSettled).toBe(true);
+    expect(latest.isAuthorized).toBe(false);
     expect(latest.isUnavailable).toBe(false);
     expect(onLoaded).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
@@ -266,12 +267,15 @@ describe("useSessionHistory authorized reads", () => {
     await settle();
     expect(latest.isSettled).toBe(true);
 
+    expect(latest.isAuthorized).toBe(true);
+
     // Leave for B, which never answers, then come straight back to A: A's own
     // load is in flight again, so the verdict from its first visit is stale.
     render("session-b");
     render("session-a");
 
     expect(latest.isSettled).toBe(false);
+    expect(latest.isAuthorized).toBe(false);
   });
 
   // Leaving mid-load discards the answer (the stale guard) and caches nothing.

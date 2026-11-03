@@ -5,10 +5,17 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
+from contextvars import ContextVar
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx2
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.routing import APIRoute
 from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.server.providers.openapi import MCPType, RouteMap
@@ -22,6 +29,95 @@ from fred_core.security.mcp_delegation import mcp_mount_auth, verified_grant
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+logger = logging.getLogger(__name__)
+_REFERENCE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+_OPERATION_EXTENSION = "fred.mcp.operation"
+# Each transport dispatch owns its bag, including when ASGI creates child tasks.
+_operation: ContextVar[dict[str, str] | None] = ContextVar("fred_mcp_operation", default=None)
+
+
+class _DelegatedMCPTransport(httpx2.AsyncBaseTransport):
+    """Rewrite only reserved wire fields using invocation-local verified state."""
+
+    def __init__(self, app: FastAPI) -> None:
+        self._app = app
+        self._transport = httpx2.ASGITransport(app=self._dispatch, raise_app_exceptions=False)
+
+    async def _dispatch(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await self._app(scope, receive, send)
+        finally:
+            route = scope.get("route")
+            metadata = _operation.get()
+            if isinstance(route, APIRoute) and metadata is not None:
+                metadata.update(
+                    upstream_route=route.path,
+                    tool_name=route.operation_id or route.unique_id,
+                )
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        content = await request.aread()
+        headers = httpx2.Headers(request.headers)
+        headers.pop(CONTEXT_HEADER, None)
+        if verified_grant() is not None:
+            headers.update(outbound_context_headers())
+        params = [(name, value) for name, value in request.url.params.multi_items() if name not in GRANT_PARAM_NAMES]
+        grant = verified_grant()
+        if grant is not None:
+            params.extend((("person", grant.person), ("run", grant.run), ("agent", grant.agent)))
+        media_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        if media_type == "application/json" or media_type.endswith("+json"):
+            try:
+                body = json.loads(content)
+            except (ValueError, UnicodeError):
+                body = None
+            if isinstance(body, dict) and any(name in body for name in GRANT_PARAM_NAMES):
+                body = {name: value for name, value in body.items() if name not in GRANT_PARAM_NAMES}
+                content = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                headers.pop("transfer-encoding", None)
+                headers["content-length"] = str(len(content))
+        inner = httpx2.Request(
+            request.method,
+            request.url.copy_with(query=urlencode(params).encode("ascii")),
+            headers=headers,
+            content=content,
+            extensions=request.extensions,
+        )
+        metadata: dict[str, str] = {}
+        token = _operation.set(metadata)
+        try:
+            response = await self._transport.handle_async_request(inner)
+            response.extensions[_OPERATION_EXTENSION] = metadata
+            return response
+        finally:
+            _operation.reset(token)
+
+    async def aclose(self) -> None:
+        await self._transport.aclose()
+
+
+async def _inner_response(response: httpx2.Response) -> None:
+    if response.status_code < 400:
+        return
+    # HTTPX hooks run before automatic body reading; upstream must still read it.
+    await response.aread()
+    fields: dict[str, object] = {
+        "method": response.request.method,
+        "upstream_http_status": response.status_code,
+        **response.extensions.get(_OPERATION_EXTENSION, {}),
+    }
+    for name in ("request", "correlation"):
+        value = response.headers.get(f"X-{name}-ID", "")
+        if _REFERENCE.fullmatch(value):
+            fields[f"upstream_{name}_id"] = value
+    # A diagnostic sink must not replace the operation's original failure.
+    with suppress(Exception):
+        logger.log(
+            logging.ERROR if response.status_code >= 500 else logging.WARNING,
+            "mcp.inner_http_failure",
+            extra=fields,
+        )
 
 
 class _MountAuthentication:
@@ -120,6 +216,16 @@ class _ToolErrorPolicy(Middleware):
             return ToolResult(content="Tool request failed.", is_error=True)
 
 
+def _mcp_http_client(app: FastAPI) -> httpx2.AsyncClient:
+    return httpx2.AsyncClient(
+        transport=_DelegatedMCPTransport(app),
+        base_url="http://fastapi",
+        timeout=10.0,
+        follow_redirects=False,
+        event_hooks={"response": [_inner_response]},
+    )
+
+
 def mount_fastapi_tools(
     app: FastAPI,
     *,
@@ -130,8 +236,18 @@ def mount_fastapi_tools(
 ) -> FastMCP:
     """Project selected routes using FastMCP's maintained FastAPI integration."""
 
-    mcp = FastMCP.from_fastapi(
-        app,
+    client = _mcp_http_client(app)
+    client.event_hooks["request"].append(_forward_verified_identity)
+
+    @asynccontextmanager
+    async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
+        async with client:
+            yield
+
+    mcp = FastMCP.from_openapi(
+        app.openapi(),
+        client=client,
+        lifespan=lifespan,
         name=name,
         instructions=description,
         route_maps=[
@@ -141,10 +257,6 @@ def mount_fastapi_tools(
         mcp_component_fn=_curate_tool,
         cache_ttl=300,  # Protocol discovery only; tools/call results are not cached.
         cache_scope="private",
-        httpx_client_kwargs={
-            "follow_redirects": False,
-            "event_hooks": {"request": [_forward_verified_identity]},
-        },
         mask_error_details=True,
     )
     mcp.add_middleware(_ToolErrorPolicy())

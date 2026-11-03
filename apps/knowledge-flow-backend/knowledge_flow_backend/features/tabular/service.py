@@ -37,6 +37,7 @@ from fred_knowledge.artifacts.reader import safe_path
 from fred_knowledge.tabular.artifacts import TabularArtifactV1, TabularTableArtifactV1, build_default_query_alias, describe_numeric_column, read_tabular_artifact, read_tabular_multi_artifact
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound
 from knowledge_flow_backend.features.tabular.execution import DuckDBAbortHandle, close_duckdb_connection, open_duckdb_connection, run_duckdb_job
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
@@ -340,9 +341,12 @@ class TabularService:
         async def read_catalog(document_uid: str) -> tuple[str, str]:
             catalog = datasets_by_uid[document_uid][0].catalog
             if catalog is None:
-                raise FileNotFoundError("Published spreadsheet catalog is missing")
-            async with read_limit:
-                content = await asyncio.to_thread(self.artifact_reader.read_bytes, catalog.prefix, Artifact(path="output.md", size=catalog.size, sha256=catalog.sha256))
+                raise TabularDescriptionNotFound("Published spreadsheet catalog is missing", reason="preview_not_ready")
+            try:
+                async with read_limit:
+                    content = await asyncio.to_thread(self.artifact_reader.read_bytes, catalog.prefix, Artifact(path="output.md", size=catalog.size, sha256=catalog.sha256))
+            except FileNotFoundError as exc:
+                raise TabularDescriptionNotFound("Published spreadsheet catalog is unavailable", reason="preview_artifact_unavailable") from exc
             return document_uid, content.decode("utf-8")
 
         ordered_datasets = [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
@@ -805,16 +809,23 @@ class TabularService:
                 scope = await resolve_scope(conn, self.context, user_id=user.uid, authorized_space_ids=authorized_space_ids)
             cursor = UUID(int=0)
             resolved = []
+            published_count = 0
             while True:
                 # Release SQL connections before object-store I/O. No permission cache.
                 async with self.engine.connect() as conn:
                     documents, next_cursor = await published_tabular_documents(conn, scope, after=cursor, document_ids=ids)
+                published_count += len(documents)
                 for start in range(0, len(documents), 8):
                     batches = await asyncio.gather(*(asyncio.to_thread(self._read_published_datasets, doc) for doc in documents[start : start + 8]))
                     resolved.extend(dataset for batch in batches for dataset in batch)
                 if next_cursor is None:
                     break
                 cursor = next_cursor
+            if not resolved:
+                logger.info(
+                    "tabular.discovery_empty",
+                    extra={"reason": "no_registered_tables" if published_count else "no_published_documents_in_scope", "published_document_count": published_count, "resolved_table_count": 0},
+                )
             aliases = set()
             for dataset in resolved:
                 if dataset.query_alias in aliases:

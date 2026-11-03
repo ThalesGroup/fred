@@ -331,6 +331,32 @@ describe("TraceDetailDrawer free-text question answer", () => {
 });
 
 describe("TraceDetailDrawer tabular tools", () => {
+  it.each(["Audit", 'Sales "Q1"', "Sales\nQ1"])(
+    "renders MCP-wrapped results with identifiers hidden for %s",
+    (sheet) => {
+      const documents = [
+        {
+          document_uid: "private-uid",
+          document_name: "Audit.xlsx",
+          kind: "spreadsheet",
+          markdown: `# Audit\n- "${sheet}.t1"  query_alias="d_private_alias"  range=A1:B10`,
+          tables: [{ query_alias: "d_private_alias", sheet: "Audit", columns: [{ name: "Amount", dtype: "float" }] }],
+        },
+      ];
+      for (const name of ["list_tabular_documents", "describe_tabular_documents"]) {
+        const entry = tabularEntry(name, { result: documents });
+        const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+        expect(html).toContain("Audit.xlsx");
+        if (name === "describe_tabular_documents") expect(html).toContain("Amount");
+        expect(html).not.toContain("private-uid");
+        expect(html).not.toContain("d_private_alias");
+        expect(html).not.toContain("query_alias");
+        if (name === "describe_tabular_documents") expect(html).toContain("range=A1:B10");
+        expect(html).not.toContain("&quot;action&quot;");
+      }
+    },
+  );
+
   it("groups CSV and workbook tables under readable document names", () => {
     const entry = tabularEntry("mcp__knowledge_flow__list_tabular_documents", [
       {

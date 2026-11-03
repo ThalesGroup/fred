@@ -14,9 +14,13 @@
 
 import styles from "./ThinkingDots.module.css";
 
-export function ThinkingDots() {
+interface ThinkingDotsProps {
+  size?: "default" | "small";
+}
+
+export function ThinkingDots({ size = "default" }: ThinkingDotsProps) {
   return (
-    <span className={styles.dots} aria-label="Thinking…" aria-hidden="true">
+    <span className={styles.dots} data-size={size} aria-label="Thinking…" aria-hidden="true">
       <span className={styles.dot} />
       <span className={styles.dot} />
       <span className={styles.dot} />

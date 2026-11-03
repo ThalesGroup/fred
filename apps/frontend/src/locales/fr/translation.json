@@ -74,8 +74,8 @@
   },
   "app": {
     "loading": {
-      "router": "Fred démarre...",
-      "ui": "Fred prépare l'interface...",
+      "router": "{{siteDisplayName}} démarre...",
+      "ui": "{{siteDisplayName}} prépare l'interface...",
       "generic": "Chargement, veuillez patienter..."
     }
   },
@@ -414,7 +414,6 @@
       "edit": "Modifier",
       "remove": "Supprimer",
       "offered": "Envoi...",
-      "uncertain": "Vérifier l'envoi",
       "retry": "Renvoyer",
       "retryWarning": "Vérifiez d'abord la conversation. Le message pourrait être envoyé deux fois.",
       "textOnly": "Seul un message texte simple peut attendre pendant ce tour",
@@ -858,7 +857,7 @@
     "storageQuotaExceededMessage": "L'ajout de ces fichiers dépassera la capacité maximale autorisée pour cette équipe.",
     "storageQuotaExceededTitle": "Quota de stockage dépassé",
     "summary": "Résumé",
-    "supportedFormats": "Formats pris en charge : PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "supportedFormats": "Formats pris en charge : Documents PDF, DOCX, DOC, ODT, PPTX, PPT, TXT, MD · Tableurs CSV, XLSX, XLS, XLSM · Mails MSG, EML · Images PNG, JPG, JPEG, WEBP",
     "tooDeepRejected": "Rien n'a été ajouté : le dossier déposé imbriquerait des fichiers au-delà de {{max}} niveaux de dossiers.",
     "tooDeepSkipped_one": "{{count}} fichier a été ignoré : il serait imbriqué au-delà de {{max}} niveaux de dossiers.",
     "tooDeepSkipped_other": "{{count}} fichiers ont été ignorés : ils seraient imbriqués au-delà de {{max}} niveaux de dossiers.",
@@ -2623,7 +2622,7 @@
       }
     },
     "releaseNotes": {
-      "baseRelease": "Version de base Fred",
+      "baseRelease": "Version de base de la plateforme",
       "brandRelease": "Version {{brand}}",
       "copied": "Copié !",
       "copy": "Copier",
@@ -2918,6 +2917,9 @@
         }
       },
       "chatList": {
+        "answerReady": "Réponse prête",
+        "answering": "Réponse en cours",
+        "awaitingInput": "Réponse attendue",
         "deleteDialog": {
           "title": "Supprimer cette conversation ?",
           "message": "« {{name}} » sera définitivement supprimée. Cette action est irréversible.",
@@ -2926,9 +2928,11 @@
         },
         "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un {{agentsNicknameSingular}} géré.",
         "groupByAgent": "Grouper par {{agentsNicknameSingular}}",
+        "openConversation": "Ouvrir",
         "loading": "Chargement...",
         "title": "Conversations",
-        "unknownAgent": "{{agentsNicknameSingular}} inconnu"
+        "unknownAgent": "{{agentsNicknameSingular}} inconnu",
+        "unread": "Non lue"
       },
       "marketplace": {
         "menu": {
@@ -4966,9 +4970,9 @@
       "catalog-loading": "Chargement de l'application…",
       "connecting": "Connexion à l'application…",
       "unavailable": "Cette application n'est pas disponible.",
-      "protocol-mismatch": "Cette application utilise une version du protocole applicatif Fred non prise en charge par ce déploiement.",
+      "protocol-mismatch": "Cette application utilise une version du protocole applicatif {{siteDisplayName}} non prise en charge par ce déploiement.",
       "unreachable": "L'application n'a pas répondu. Elle est peut-être en cours de démarrage ou mal configurée.",
-      "render": "L'application s'est arrêtée de manière inattendue. Fred reste disponible."
+      "render": "L'application s'est arrêtée de manière inattendue. {{siteDisplayName}} reste disponible."
     }
   },
   "unauthorized": {

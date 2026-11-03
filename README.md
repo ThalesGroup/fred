@@ -12,6 +12,8 @@ shared identity, permissions and organization governance.
 
 ## Start here
 
+- **[Weaver: reprise des fonctionnalités Swift différées](WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md)** :
+  dossier de travail du 3 novembre 2026, décisions, commits sources et pistes de portage.
 - [Architecture and user journeys](docs/architecture/README.md): the maintained
   explanation of current Fred behavior.
 - [First local deployment](deploy/k3d/README.md#first-start-on-k3d): prerequisites,

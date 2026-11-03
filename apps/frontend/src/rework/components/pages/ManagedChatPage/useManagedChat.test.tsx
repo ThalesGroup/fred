@@ -16,12 +16,13 @@
 // Weaver session creation, admission and stale-response boundaries. Shared
 // interaction tests also exercise HITL mechanics without claiming Weaver enables it.
 
-import { act, useState } from "react";
+import { act, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assemblePromptTurn } from "@rework/utils/skillInvocation";
 import type { PreparationModels, ModelOfferKey } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { modelChoiceKey } from "../../../features/capabilities/modelChoice";
+import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -34,7 +35,12 @@ vi.mock("react-redux", async (importOriginal) => ({
   useDispatch: () => vi.fn(),
 }));
 vi.mock("../../../../security/KeycloakService", () => ({
-  KeyCloakService: { GetUserId: () => "alice", GetSessionIdentity: () => "alice-session" },
+  KeyCloakService: {
+    GetUserId: () => "alice",
+    GetSessionIdentity: () => "alice-session",
+    ensureFreshToken: async () => true,
+    GetToken: () => "test-token",
+  },
 }));
 
 const translate = vi.hoisted(() => (key: string) => key);
@@ -103,7 +109,10 @@ const chatSseResetMock = vi.fn();
 const sendHitlResumeMock = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
 const abortMock = vi.fn();
 const replaceAllMessagesMock = vi.fn();
-// Mutable displayed thread; reset between cases.
+const adoptBackgroundTurnMock = vi.fn((_sessionId: string) => false);
+let capturedOnBackgroundTurnSettled: ((sessionId: string, messages: unknown[]) => void) | undefined;
+// Mutable so the #2239 departure-snapshot test below can put a displayed
+// thread on screen; reset to [] in beforeEach.
 let chatSseMessages: unknown[] = [];
 let chatSseMaxChatInputChars: number | undefined;
 let chatSseChatControls: unknown[] = [];
@@ -115,6 +124,7 @@ let capturedIsTurnCurrent: ((sessionId: string) => boolean) | undefined;
 let capturedOnError: ((msg: string, code?: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 let capturedOnSteeredMessage: ((messageId: string, sessionId: string) => void) | undefined;
+let capturedOnStreamInterrupted: ((sessionId: string) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
     onTurnStarted?: () => void;
@@ -123,13 +133,17 @@ vi.mock("@hooks/useChatSse", () => ({
     onError?: (msg: string, code?: string) => void;
     onAwaitingHuman?: (event: unknown) => void;
     onSteeredMessage?: (messageId: string, sessionId: string) => void;
+    onStreamInterrupted?: (sessionId: string) => void;
+    onBackgroundTurnSettled?: (sessionId: string, messages: unknown[]) => void;
   }) => {
+    capturedOnBackgroundTurnSettled = params.onBackgroundTurnSettled;
     capturedOnTurnStarted = params.onTurnStarted;
     capturedOnTurnRejected = params.onTurnRejected;
     capturedIsTurnCurrent = params.isTurnCurrent;
     capturedOnError = params.onError;
     capturedOnAwaitingHuman = params.onAwaitingHuman;
     capturedOnSteeredMessage = params.onSteeredMessage;
+    capturedOnStreamInterrupted = params.onStreamInterrupted;
     return {
       preparation: { model_choice: preparedModelChoice, model_error: null, models: hostModels },
       messages: chatSseMessages,
@@ -142,6 +156,7 @@ vi.mock("@hooks/useChatSse", () => ({
       sendHitlResume: sendHitlResumeMock,
       abort: abortMock,
       reset: chatSseResetMock,
+      adoptBackgroundTurn: adoptBackgroundTurnMock,
       replaceAllMessages: replaceAllMessagesMock,
     };
   },
@@ -186,10 +201,26 @@ vi.mock("./useComposerSettings", () => ({
   },
 }));
 
-const sessionHistoryValue = { isLoading: false };
-vi.mock("./useSessionHistory", () => ({
-  useSessionHistory: () => sessionHistoryValue,
-}));
+const sessionHistoryValue = { isLoading: false, isSettled: true, isAuthorized: true };
+let historyToLoad: { sessionId: string; messages: ChatMessage[] } | undefined;
+// Select before mounting: race cases exercise the actual authenticated fetch;
+// other composer tests keep their controlled history fixture.
+let useRealSessionHistory = false;
+vi.mock("./useSessionHistory", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./useSessionHistory")>();
+  function useMockSessionHistory({ sessionId, onLoaded }: Parameters<typeof actual.useSessionHistory>[0]) {
+    useEffect(() => {
+      if (historyToLoad?.sessionId === sessionId) onLoaded(historyToLoad.messages);
+    }, [sessionId, onLoaded]);
+    return sessionHistoryValue;
+  }
+  return {
+    useSessionHistory: (args: Parameters<typeof actual.useSessionHistory>[0]) => {
+      const useHistory = useRealSessionHistory ? actual.useSessionHistory : useMockSessionHistory;
+      return useHistory(args);
+    },
+  };
+});
 
 const chatAttachmentsValue = {
   attachments: [] as unknown[],
@@ -291,6 +322,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
 }));
 
 import { useManagedChat } from "./useManagedChat";
+import { useTurnStatus, type TurnStatus, updatePendingMessages, abortTurn } from "@core/hooks/backgroundTurns";
 import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHistoryCache";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
@@ -354,6 +386,15 @@ describe("useManagedChat — session write reliability", () => {
   });
 
   beforeEach(() => {
+    abortTurn("session-1");
+    historyToLoad = undefined;
+    useRealSessionHistory = false;
+    sessionHistoryValue.isAuthorized = true;
+    sessionHistoryValue.isSettled = true;
+    updatePendingMessages("session-1", []);
+    updatePendingMessages("session-2", []);
+    vi.unstubAllGlobals();
+    adoptBackgroundTurnMock.mockReset();
     postponeNavigation = false;
     commitNavigation = undefined;
     localStorage.clear();
@@ -418,6 +459,7 @@ describe("useManagedChat — session write reliability", () => {
     capturedOnError = undefined;
     capturedOnAwaitingHuman = undefined;
     capturedOnSteeredMessage = undefined;
+    capturedOnStreamInterrupted = undefined;
   });
 
   afterEach(async () => {
@@ -425,6 +467,7 @@ describe("useManagedChat — session write reliability", () => {
       root.unmount();
     });
     container.remove();
+    vi.unstubAllGlobals();
   });
 
   it("waits for one confirmed session before two rapid attachment additions", async () => {
@@ -1271,6 +1314,78 @@ describe("useManagedChat — session write reliability", () => {
     expect(getCachedSessionHistory(JSON.stringify(["alice-session", "space-1", "session-a"]))).toBeUndefined();
   });
 
+  it("re-attaches the session's background turn when entering it", () => {
+    mount();
+    adoptBackgroundTurnMock.mockClear();
+    bindSession("session-1");
+    expect(adoptBackgroundTurnMock).toHaveBeenCalledWith("session-1");
+  });
+
+  it.each([200, 401, 403, 404, 500])(
+    "keeps a live transcript detached until the history response authorizes it (%s)",
+    async (status) => {
+      useRealSessionHistory = true;
+      const history = deferred<Response>();
+      const fetchHistory = vi.fn(() => history.promise);
+      vi.stubGlobal("fetch", fetchHistory);
+      const privateTranscript = [
+        { id: "private-before-navigation", session_id: "session-1", parts: [], metadata: {} },
+      ] as unknown as ChatMessage[];
+      // Model the live turn's restoration; the adoption implementation is
+      // separately exercised by useChatSse's controlled-stream tests.
+      adoptBackgroundTurnMock.mockImplementation(() => {
+        chatSseMessages = privateTranscript;
+        chatSseWaitResponse = true;
+        return true;
+      });
+      mount();
+      bindSession("session-1");
+      await tick();
+      expect(fetchHistory).toHaveBeenCalledTimes(1);
+      expect(adoptBackgroundTurnMock).not.toHaveBeenCalled();
+      expect(latest.messages).toEqual([]);
+
+      await act(async () => history.resolve(new Response(JSON.stringify([]), { status })));
+      await tick();
+      rerender();
+      if (status === 200) {
+        expect(adoptBackgroundTurnMock).toHaveBeenCalledExactlyOnceWith("session-1");
+        expect(latest.messages).toEqual(privateTranscript);
+      } else {
+        expect(adoptBackgroundTurnMock).not.toHaveBeenCalled();
+        expect(latest.messages).toEqual([]);
+        expect(latest.historyUnavailable).toBe(true);
+      }
+    },
+  );
+
+  it("cannot adopt a departed conversation when its history response arrives late", async () => {
+    useRealSessionHistory = true;
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    const fetchHistory = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    vi.stubGlobal("fetch", fetchHistory);
+    mount();
+    bindSession("session-1");
+    await tick();
+    bindSession("session-2");
+    await tick();
+    expect(fetchHistory).toHaveBeenCalledTimes(2);
+    await act(async () => first.resolve(new Response(JSON.stringify([]), { status: 200 })));
+    await tick();
+    expect(adoptBackgroundTurnMock).not.toHaveBeenCalled();
+    await act(async () => second.resolve(new Response(JSON.stringify([]), { status: 200 })));
+    await tick();
+    expect(adoptBackgroundTurnMock).toHaveBeenCalledExactlyOnceWith("session-2");
+  });
+
+  it("does not treat a background snapshot as authorized history", () => {
+    mount();
+    const finished = [{ id: "done" }];
+    capturedOnBackgroundTurnSettled?.("session-9", finished);
+    expect(getCachedSessionHistory("session-9")).toBeUndefined();
+  });
+
   // handleHitlAnswer clears pendingHitl BEFORE awaiting the resume, so the
   // prompt disappears from the UI immediately. When the resume never reaches
   // the backend (token refusal, prepare-execution failure) the checkpoint is
@@ -1343,6 +1458,264 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingMessages[0].status).toBe("offered");
     act(() => capturedOnSteeredMessage?.(id, "session-1"));
     expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("discards the local queue on stream interruption", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    for (const text of ["waiting", "offered", "uncertain"]) {
+      act(() => latest.setInput(text));
+      await act(async () => latest.handleSend());
+    }
+    await act(async () => latest.forcePendingMessage(latest.pendingMessages[1].id));
+    steerActiveTurnMock.mockResolvedValueOnce("uncertain");
+    await act(async () => latest.forcePendingMessage(latest.pendingMessages[2].id));
+    expect(latest.pendingMessages.map((message) => message.status)).toEqual(["waiting", "offered", "uncertain"]);
+    act(() => capturedOnStreamInterrupted?.("session-1"));
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    expect(latest.pendingMessages).toEqual([]);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("retains each conversation's queue without sending into the next conversation", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("keep for the first conversation"));
+    await act(async () => latest.handleSend());
+    bindSession("session-2");
+    expect(latest.pendingMessages).toEqual([]);
+    act(() => latest.setInput("keep for the second conversation"));
+    await act(async () => latest.handleSend());
+    bindSession("session-1");
+    expect(latest.pendingMessages.map((message) => message.text)).toEqual(["keep for the first conversation"]);
+    expect(sendMock).not.toHaveBeenCalled();
+    bindSession("session-2");
+    expect(latest.pendingMessages.map((message) => message.text)).toEqual(["keep for the second conversation"]);
+  });
+
+  it("waits for return before draining a queue whose turn finished in the background", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("resume on return"));
+    await act(async () => latest.handleSend());
+    chatSseWaitResponse = false;
+    bindSession("session-2");
+    await tick();
+    expect(sendMock).not.toHaveBeenCalled();
+    bindSession("session-1");
+    await tick();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0]?.slice(0, 2)).toEqual(["resume on return", "session-1"]);
+  });
+
+  it("does not drain during the render that reattaches a still-running turn", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("wait for generation"));
+    await act(async () => latest.handleSend());
+    bindSession("session-2");
+    chatSseWaitResponse = false;
+    adoptBackgroundTurnMock.mockReturnValueOnce(true);
+    bindSession("session-1");
+    expect(latest.pendingMessages[0]?.text).toBe("wait for generation");
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("retains the queue across a page unmount and stops it without restoration", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("keep across pages"));
+    await act(async () => latest.handleSend());
+    act(() => root.unmount());
+    container.remove();
+    mount();
+    bindSession("session-1");
+    expect(latest.pendingMessages[0]?.text).toBe("keep across pages");
+    act(() => latest.handleAbort());
+    expect(latest.pendingMessages).toEqual([]);
+    bindSession("session-2");
+    bindSession("session-1");
+    expect(latest.pendingMessages).toEqual([]);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("restores the waiting status from loaded HITL history after reload, then clears it from answered history", () => {
+    let status: TurnStatus = null;
+    function Status() {
+      status = useTurnStatus("session-1");
+      return null;
+    }
+    const probeRoot = createRoot(document.createElement("div"));
+    act(() => probeRoot.render(<Status />));
+    expect(status).toBeNull();
+    const question: ChatMessage = {
+      session_id: "session-1",
+      exchange_id: "persisted-question",
+      rank: 0,
+      timestamp: "2026-11-03T10:00:00Z",
+      role: "assistant",
+      channel: "hitl_request",
+      parts: [
+        {
+          type: "hitl_request",
+          stage: "agent_question",
+          question: "Which year?",
+          choices: [],
+          interrupt_id: "question-1",
+          occurrence_id: "occ-1",
+        },
+      ],
+    };
+    historyToLoad = { sessionId: "session-1", messages: [question] };
+    mount();
+    bindSession("session-1");
+    expect(status).toBe("awaiting_input");
+    expect(latest.pendingHitl?.payload.question).toBe("Which year?");
+    bindSession("session-2");
+    expect(status).toBe("awaiting_input");
+    historyToLoad.messages = [
+      question,
+      {
+        session_id: "session-1",
+        exchange_id: "persisted-question",
+        rank: 1,
+        timestamp: "2026-11-03T10:01:00Z",
+        role: "user",
+        channel: "hitl_response",
+        parts: [{ type: "hitl_response", occurrence_id: "occ-1", text: "2026" }],
+      },
+    ];
+    bindSession("session-1");
+    expect(status).toBeNull();
+    expect(latest.pendingHitl).toBeNull();
+    expect(sendMock).not.toHaveBeenCalled();
+    act(() => probeRoot.unmount());
+  });
+
+  it.each([false, true])(
+    "holds a restored queue until history settles or its question is answered (question=%s)",
+    async (question) => {
+      chatSseWaitResponse = true;
+      mount();
+      bindSession("session-1");
+      act(() => latest.setInput("do not bypass the question"));
+      await act(async () => latest.handleSend());
+      bindSession("session-2");
+      chatSseWaitResponse = false;
+      if (question) {
+        historyToLoad = {
+          sessionId: "session-1",
+          messages: [
+            {
+              session_id: "session-1",
+              exchange_id: "question-exchange",
+              rank: 0,
+              timestamp: "2026-11-03T10:00:00Z",
+              role: "assistant",
+              channel: "hitl_request",
+              parts: [
+                {
+                  type: "hitl_request",
+                  stage: "agent_question",
+                  question: "Which year?",
+                  choices: [],
+                  interrupt_id: "question-1",
+                },
+              ],
+            },
+          ],
+        };
+      } else sessionHistoryValue.isSettled = false;
+      bindSession("session-1");
+      await tick();
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(latest.pendingMessages[0]?.text).toBe("do not bypass the question");
+      if (question) expect(latest.pendingHitl?.payload.question).toBe("Which year?");
+      else {
+        sessionHistoryValue.isSettled = true;
+        rerender();
+        await tick();
+        expect(sendMock).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it("retains a late uncertain steering outcome while another conversation is shown", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("check before retrying"));
+    await act(async () => latest.handleSend());
+    let finish!: (result: string) => void;
+    steerActiveTurnMock.mockImplementationOnce(() => new Promise<string>((resolve) => (finish = resolve)));
+    let delivery!: Promise<void>;
+    act(() => {
+      delivery = latest.forcePendingMessage(latest.pendingMessages[0].id);
+    });
+    bindSession("session-2");
+    await act(async () => {
+      finish("uncertain");
+      await delivery;
+    });
+    expect(latest.pendingMessages).toEqual([]);
+    chatSseWaitResponse = false;
+    bindSession("session-1");
+    expect(latest.pendingMessages[0]).toMatchObject({ text: "check before retrying", status: "uncertain" });
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("deleting a background conversation forgets its queue", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("discard on deletion"));
+    await act(async () => latest.handleSend());
+    bindSession("session-2");
+    act(() => abortTurn("session-1"));
+    bindSession("session-1");
+    expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("does not restore a queued turn when an old send settles after interruption", async () => {
+    chatSseWaitResponse = true;
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("queued"));
+    await act(async () => latest.handleSend());
+    let rejectTurn: (accepted: boolean) => void = () => {};
+    sendMock.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          rejectTurn = resolve;
+        }),
+    );
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    act(() => capturedOnStreamInterrupted?.("session-1"));
+    await act(async () => rejectTurn(false));
+    expect(latest.pendingMessages).toEqual([]);
+  });
+
+  it("removes an uncertain message without resending it", async () => {
+    chatSseWaitResponse = true;
+    steerActiveTurnMock.mockResolvedValueOnce("uncertain");
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("remove me"));
+    await act(async () => latest.handleSend());
+    const id = latest.pendingMessages[0].id;
+    await act(async () => latest.forcePendingMessage(id));
+    chatSseWaitResponse = false;
+    await act(async () => rerender());
+    act(() => latest.removePendingMessage(id));
+    expect(latest.pendingMessages).toEqual([]);
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it("holds uncertain delivery until the person retries", async () => {

@@ -12,14 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import errno
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import Mock
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
+from docx import Document
 from PIL import Image
 
+from knowledge_flow_worker.core.processors.input.common.base_input_processor import InputValidationError
 from knowledge_flow_worker.core.processors.input.docx_markdown_processor import docx_markdown_processor as docx_module
-from knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor import DocxMarkdownProcessor
+from knowledge_flow_worker.core.processors.input.docx_markdown_processor.docx_markdown_processor import (
+    DocxMarkdownProcessor,
+)
+from knowledge_flow_worker.features.scheduler.extraction_process import _is_permanent
 
 
 @pytest.fixture
@@ -36,7 +45,8 @@ def samples_path():
 async def test_process_docx_file(processor: DocxMarkdownProcessor, samples_path):
     test_docx_path = samples_path / "sample.docx"
 
-    assert processor.check_file_validity(test_docx_path)
+    metadata = processor.extract_file_metadata(test_docx_path)
+    assert isinstance(metadata, dict)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         output_dir = Path(tmpdir)
@@ -51,11 +61,116 @@ async def test_process_docx_file(processor: DocxMarkdownProcessor, samples_path)
         assert output_dir.exists()
 
 
+def test_metadata_opens_each_docx_once_without_caching(processor, tmp_path, monkeypatch):
+    """Concurrent uploads sharing a processor must parse each input once and keep metadata separate."""
+    open_document = Mock(wraps=Document)
+    monkeypatch.setattr(docx_module, "Document", open_document)
+
+    paths = []
+    for title in ("First", "Second"):
+        path = tmp_path / f"{title}.docx"
+        doc = Document()
+        doc.core_properties.title = title
+        doc.save(path)
+        paths.append(path)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(processor.extract_file_metadata, path) for path in paths]
+        assert [future.result()["title"] for future in futures] == ["First", "Second"]
+
+    assert open_document.call_count == 2
+    assert all(call.args[0].closed for call in open_document.call_args_list)
+
+
+def test_process_docx_accepts_relationship_defined_main_part(processor, tmp_path):
+    """A parser-readable package must also reach Markdown conversion when its main part has another name."""
+    original = tmp_path / "original.docx"
+    renamed = tmp_path / "renamed.docx"
+    doc = Document()
+    doc.core_properties.title = "Nonstandard main part"
+    doc.add_paragraph("Readable renamed document body")
+    doc.save(original)
+
+    with ZipFile(original) as source, ZipFile(renamed, "w", ZIP_DEFLATED) as target:
+        for name in source.namelist():
+            content = source.read(name)
+            if name in ("[Content_Types].xml", "_rels/.rels"):
+                content = content.replace(b"word/document.xml", b"word/document2.xml")
+            name = name.replace("word/document.xml", "word/document2.xml").replace("word/_rels/document.xml.rels", "word/_rels/document2.xml.rels")
+            target.writestr(name, content)
+
+    metadata = processor.extract_file_metadata(renamed)
+
+    assert metadata["title"] == "Nonstandard main part"
+    result = processor.convert_file_to_markdown(renamed, tmp_path / "output", "document-uid")
+    assert "Readable renamed document body" in Path(result["md_file"]).read_text()
+
+
+@pytest.mark.parametrize("kind", ["not_zip", "incomplete_package", "invalid_xml", "ole"])
+def test_invalid_docx_fails_with_logged_actionable_error(processor, tmp_path, caplog, kind):
+    path = tmp_path / "broken.docx"
+    if kind == "not_zip":
+        path.write_bytes(b"not a document")
+    elif kind == "ole":
+        path.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 512)
+    elif kind == "incomplete_package":
+        with ZipFile(path, "w") as package:
+            package.writestr("word/document.xml", "<invalid/>")
+    else:
+        original = tmp_path / "original.docx"
+        Document().save(original)
+        with ZipFile(original) as source, ZipFile(path, "w") as target:
+            for name in source.namelist():
+                target.writestr(name, b"<broken" if name == "word/document.xml" else source.read(name))
+
+    with pytest.raises(InputValidationError) as caught:
+        processor.extract_file_metadata(path)
+
+    assert _is_permanent(caught.value)
+    message = str(caught.value)
+    assert "broken.docx" in message
+    assert str(tmp_path) not in message
+    assert "PDF" in message
+    assert "encrypted" in message if kind == "ole" else "damaged" in message
+    cause = caught.value.__cause__
+    assert cause is not None
+    record = next(record for record in caplog.records if record.message == "DOCX metadata extraction failed")
+    assert record.exc_info is not None
+    assert record.exc_info[1] is cause
+    assert record.file_type == "docx"
+    assert record.error_type == type(cause).__name__
+
+
+@pytest.mark.parametrize(
+    ("error", "permanent"),
+    [
+        (MemoryError(), False),
+        (OSError(errno.EIO, "temporary input read failure"), False),
+        (PermissionError(errno.EACCES, "temporary mount access failure"), False),
+        (TimeoutError("storage timeout"), False),
+        (RuntimeError("unexpected parser failure"), False),
+        (FileNotFoundError(errno.ENOENT, "missing original"), True),
+    ],
+)
+def test_docx_preserves_worker_retry_classification(processor, tmp_path, monkeypatch, error, permanent):
+    path = tmp_path / "document.docx"
+    path.write_bytes(b"dummy")
+    open_document = Mock(side_effect=error)
+    monkeypatch.setattr(docx_module, "Document", open_document)
+
+    with pytest.raises(type(error)) as caught:
+        processor.convert_file_to_markdown(path, tmp_path / "out", "document-uid")
+
+    assert caught.value is error
+    assert _is_permanent(caught.value) is permanent
+    open_document.assert_called_once()
+
+
 def test_convert_docx_skips_non_raster_media_in_cv_mode(processor: DocxMarkdownProcessor, tmp_path, monkeypatch):
     cv_dir = tmp_path / "path-without-marker"
     cv_dir.mkdir(parents=True, exist_ok=True)
     input_docx = cv_dir / "profile_cv.docx"
-    input_docx.write_text("dummy", encoding="utf-8")
+    Document().save(input_docx)
     output_dir = tmp_path / "output"
     document_uid = "doc-test-uid"
 
@@ -91,7 +206,7 @@ def test_convert_docx_skips_svg_for_cv_without_crash(processor: DocxMarkdownProc
     cv_dir = tmp_path / "path-without-marker"
     cv_dir.mkdir(parents=True, exist_ok=True)
     input_docx = cv_dir / "profile_cv.docx"
-    input_docx.write_text("dummy", encoding="utf-8")
+    Document().save(input_docx)
     output_dir = tmp_path / "output"
     document_uid = "doc-test-uid"
 
@@ -121,7 +236,7 @@ def test_convert_docx_handles_many_image_extensions(processor: DocxMarkdownProce
     cv_dir = tmp_path / "path-without-marker"
     cv_dir.mkdir(parents=True, exist_ok=True)
     input_docx = cv_dir / "profile_cv.docx"
-    input_docx.write_text("dummy", encoding="utf-8")
+    Document().save(input_docx)
     output_dir = tmp_path / "output"
     document_uid = "doc-test-uid"
 
@@ -194,7 +309,7 @@ def test_convert_docx_does_not_enable_cv_mode_when_only_path_contains_cv(process
     cv_dir.mkdir(parents=True, exist_ok=True)
     # Filename does not contain "cv" -> CV mode must not be triggered anymore.
     input_docx = cv_dir / "profile.docx"
-    input_docx.write_text("dummy", encoding="utf-8")
+    Document().save(input_docx)
     output_dir = tmp_path / "output"
     document_uid = "doc-test-uid"
 

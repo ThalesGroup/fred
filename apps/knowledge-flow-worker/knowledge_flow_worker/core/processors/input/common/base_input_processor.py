@@ -39,6 +39,10 @@ class StoredObjectInfo(BaseModel):
     document_uid: str | None = None
 
 
+class InputValidationError(ValueError):
+    """Input content is invalid or unsupported for the selected processor."""
+
+
 class InputConversionError(RuntimeError):
     """
     Raised when an input processor cannot generate a usable preview artifact.

@@ -64,6 +64,9 @@ class SelectionTest(unittest.TestCase):
             {"frontend"},
         )
 
+    def test_node_baseline_builds_only_frontend(self):
+        self.assertEqual(built(".nvmrc"), {"frontend"})
+
     def test_npm_package_producer_builds_nothing(self):
         self.assertEqual(built("libs/frontend/ui/src/index.tsx"), set())
 

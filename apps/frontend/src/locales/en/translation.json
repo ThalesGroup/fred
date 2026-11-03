@@ -74,8 +74,8 @@
   },
   "app": {
     "loading": {
-      "router": "Fred is starting...",
-      "ui": "Fred is getting the UI ready...",
+      "router": "{{siteDisplayName}} is starting...",
+      "ui": "{{siteDisplayName}} is getting the UI ready...",
       "generic": "Loading, please wait..."
     }
   },
@@ -414,7 +414,6 @@
       "edit": "Edit",
       "remove": "Remove",
       "offered": "Sending...",
-      "uncertain": "Check delivery",
       "retry": "Send again",
       "retryWarning": "Check the conversation first. This may send a duplicate message.",
       "textOnly": "Only plain text can wait during an active turn",
@@ -858,7 +857,7 @@
     "storageQuotaExceededMessage": "Adding these files will exceed the maximum storage capacity allowed for this team.",
     "storageQuotaExceededTitle": "Storage Quota Exceeded",
     "summary": "Summary",
-    "supportedFormats": "Supported files: PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "supportedFormats": "Supported files: Documents PDF, DOCX, DOC, ODT, PPTX, PPT, TXT, MD · Spreadsheets CSV, XLSX, XLS, XLSM · Emails MSG, EML · Images PNG, JPG, JPEG, WEBP",
     "tooDeepRejected": "Nothing was added: the dropped folder would nest files deeper than {{max}} folder levels.",
     "tooDeepSkipped_one": "{{count}} file was skipped: it would end up nested deeper than {{max}} folder levels.",
     "tooDeepSkipped_other": "{{count}} files were skipped: they would end up nested deeper than {{max}} folder levels.",
@@ -2623,7 +2622,7 @@
       }
     },
     "releaseNotes": {
-      "baseRelease": "Base Fred release",
+      "baseRelease": "Base platform release",
       "brandRelease": "{{brand}} release",
       "copied": "Copied!",
       "copy": "Copy",
@@ -2918,6 +2917,9 @@
         }
       },
       "chatList": {
+        "answerReady": "Answer ready",
+        "answering": "Answer in progress",
+        "awaitingInput": "Awaiting reply",
         "deleteDialog": {
           "title": "Delete this conversation?",
           "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",
@@ -2926,9 +2928,11 @@
         },
         "emptyManaged": "No conversations yet. Start a new chat with a managed {{agentsNicknameSingular}}.",
         "groupByAgent": "Group by {{agentsNicknameSingular}}",
+        "openConversation": "Open",
         "loading": "Loading...",
         "title": "Chat",
-        "unknownAgent": "Unknown {{agentsNicknameSingular}}"
+        "unknownAgent": "Unknown {{agentsNicknameSingular}}",
+        "unread": "Unread"
       },
       "marketplace": {
         "menu": {
@@ -4966,9 +4970,9 @@
       "catalog-loading": "Loading application…",
       "connecting": "Connecting to the application…",
       "unavailable": "This application is unavailable.",
-      "protocol-mismatch": "This application speaks a Fred application protocol this deployment does not support.",
+      "protocol-mismatch": "This application speaks a {{siteDisplayName}} application protocol this deployment does not support.",
       "unreachable": "The application did not respond. It may be starting up or misconfigured.",
-      "render": "The application stopped unexpectedly. Fred is still available."
+      "render": "The application stopped unexpectedly. {{siteDisplayName}} is still available."
     }
   },
   "unauthorized": {

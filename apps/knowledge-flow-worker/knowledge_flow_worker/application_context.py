@@ -40,6 +40,8 @@ EXTENSION_CATEGORY = {
     ".pdf": "markdown",
     ".docx": "markdown",
     ".pptx": "markdown",
+    ".msg": "markdown",
+    ".eml": "markdown",
     ".txt": "markdown",
     ".md": "markdown",
     ".csv": "tabular",

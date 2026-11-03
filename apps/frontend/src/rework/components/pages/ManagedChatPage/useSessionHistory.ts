@@ -128,6 +128,9 @@ export function useSessionHistory({
 
   const status = result.key === key ? result.status : "loading";
   return {
+    // Only a successful current history read authorizes restoring a detached transcript.
+    // A runtime declaring no history can be ready without granting that access.
+    isAuthorized: result.key === key && status === "ready" && loadedKey.current === key,
     isLoading: sessionId !== null && status === "loading",
     isSettled: sessionId === null || status !== "loading",
     errorKey: result.key === key ? result.errorKey : undefined,

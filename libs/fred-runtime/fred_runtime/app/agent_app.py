@@ -3435,6 +3435,7 @@ async def _stream(
         owns_run_record=True,
     )
     occurred_at: datetime | None = None
+    completed = False
     try:
         try:
             async for payload in payloads:
@@ -3446,28 +3447,37 @@ async def _stream(
                     await turn_steering_mailbox.pause(session_id, steering_token)
                 collected.append(payload)
                 yield _sse(json.dumps(payload, ensure_ascii=False))
+            completed = True
         finally:
-            # Closing this stream closes the run's stream with it, so a dropped
-            # response never leaves the run to garbage collection.
-            try:
-                await payloads.aclose()
-            finally:
-                occurred_at = datetime.now(timezone.utc)
-                if steering_heartbeat is not None:
-                    steering_heartbeat.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await steering_heartbeat
-                if steering_token is not None and session_id is not None:
-                    paused = any(
-                        payload.get("kind") == "awaiting_human" for payload in collected
-                    )
-                    failed = any(
-                        payload.get("kind") == "execution_error"
-                        for payload in collected
-                    )
-                    await turn_steering_mailbox.end(
-                        session_id, steering_token, paused=paused and not failed
-                    )
+
+            async def finish_stream() -> None:
+                nonlocal occurred_at
+                try:
+                    await payloads.aclose()
+                finally:
+                    occurred_at = datetime.now(timezone.utc)
+                    try:
+                        if steering_heartbeat is not None:
+                            steering_heartbeat.cancel()
+                            with suppress(asyncio.CancelledError):
+                                await steering_heartbeat
+                    finally:
+                        if steering_token is not None and session_id is not None:
+                            paused = any(
+                                item.get("kind") == "awaiting_human"
+                                for item in collected
+                            )
+                            failed = any(
+                                item.get("kind") == "execution_error"
+                                for item in collected
+                            )
+                            await turn_steering_mailbox.end(
+                                session_id,
+                                steering_token,
+                                paused=completed and paused and not failed,
+                            )
+
+            await complete_cleanup(finish_stream())
 
         _emit_turn_completed(
             container,
@@ -6415,7 +6425,7 @@ def create_agent_app(
 
             async def cleanup_expired_steering() -> None:
                 while True:
-                    await asyncio.sleep(24 * 60 * 60)
+                    await asyncio.sleep(60)
                     try:
                         await turn_steering_mailbox.cleanup_expired()
                     except Exception:

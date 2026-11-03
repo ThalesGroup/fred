@@ -23,11 +23,14 @@ from shutil import which
 
 from defusedxml import ElementTree as ET
 from docx import Document
+from docx.opc.exceptions import PackageNotFoundError
+from lxml.etree import XMLSyntaxError
 
 from knowledge_flow_worker.application_context import get_configuration
 from knowledge_flow_worker.common.processing_profile_context import get_current_processing_profile
-from knowledge_flow_worker.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
+from knowledge_flow_worker.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError, InputValidationError
 from knowledge_flow_worker.core.processors.input.common.image_describer import build_image_describer
+from knowledge_flow_worker.core.processors.input.common.legacy_office import OLE2_MAGIC
 
 logger = logging.getLogger(__name__)
 
@@ -169,16 +172,6 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         # Preserve trailing newline behavior
         return "\n".join(out)
 
-    def check_file_validity(self, file_path: Path) -> bool:
-        try:
-            with zipfile.ZipFile(file_path, "r") as docx_zip:
-                return "word/document.xml" in docx_zip.namelist()
-        except zipfile.BadZipFile:
-            logger.error(f"{file_path} n'est pas une archive ZIP valide.")
-        except Exception as e:
-            logger.error(f"Erreur inattendue lors de la vérification de {file_path}: {e}")
-        return False
-
     def _collect_non_empty_paragraphs(self, paragraphs, *, limit: int | None = None) -> list[str]:
         lines: list[str] = []
         for paragraph in paragraphs:
@@ -223,9 +216,18 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
 
         return header_lines, footer_lines
 
+    def check_file_validity(self, file_path: Path) -> bool:
+        self.extract_file_metadata(file_path)
+        return True
+
     def extract_file_metadata(self, file_path: Path) -> dict:
+        """Validate while extracting metadata, using one python-docx parse and no shared document cache."""
+        signature = b""
         try:
-            doc = Document(str(file_path))
+            with file_path.open("rb") as source:
+                signature = source.read(len(OLE2_MAGIC))
+                source.seek(0)
+                doc = Document(source)
             cp = doc.core_properties
             return {
                 # identity
@@ -241,11 +243,29 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
                     "docx.core.keywords": cp.keywords or None,
                 },
             }
-        except Exception as e:
-            logger.error(f"Error extracting metadata for {file_path}: {e}")
-            return {"document_name": file_path.name, "error": str(e)}
+        # Only malformed-package failures are permanent. Preserve resource and
+        # filesystem exceptions for the worker's existing retry classifier.
+        except (zipfile.BadZipFile, PackageNotFoundError, XMLSyntaxError, KeyError, ValueError) as exc:
+            logger.exception(
+                "DOCX metadata extraction failed",
+                extra={
+                    "file_type": "docx",
+                    "error_type": type(exc).__name__,
+                },
+            )
+            if not signature:
+                reason = "The uploaded file is empty (0 bytes). Download or export it again, then retry the upload."
+            elif signature == OLE2_MAGIC:
+                reason = (
+                    "It may be encrypted/password-protected or use the older .doc format. Save an unencrypted .docx copy (remove any password or sensitivity-label encryption), or export it as PDF."
+                )
+            else:
+                reason = "It may be damaged or use an unsupported format. Open it in Word and save a new .docx copy, or export it as PDF."
+            raise InputValidationError(f"Cannot read Word document '{file_path.name}'. {reason}") from exc
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        # Weaver has no upload-time processor metadata pass: validate at extraction.
+        self.extract_file_metadata(file_path)
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
 
