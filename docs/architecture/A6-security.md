@@ -92,6 +92,9 @@ handlers refuse with `platform_bootstrap_required`. No new table or migration is
 introduced for this feature.
 
 The installer presents their verified human bearer and the installation secret.
+An existing Swift platform-admin role provides no authority for this claim: the
+secret must belong to the Weaver installation. The shared SSO subject is reused,
+while Weaver's role grant is independent and leaves Swift's grant unchanged.
 Comparison is constant-time; a short token is rejected with 422 and a wrong secret
 with 403. A successful claim grants only the caller's platform-admin role and records
 completion in one SQL transaction under the platform lock. Concurrent claims cannot
