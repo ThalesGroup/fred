@@ -27,6 +27,8 @@ export const pptFillerCapability: CapabilityUiPlugin = {
   id: "ppt_filler",
   // Keyed by the backend chat part's `type` discriminator (#1977).
   partRenderers: { ppt_preview: PptPreviewCardRenderer },
+  // One deck per storage key: a rebuild in the same answer replaces its card.
+  partIdentities: { ppt_preview: (part) => (typeof part.preview_id === "string" ? part.preview_id : undefined) },
   // Keyed by the backend FieldSpec's `ui.widget` (RFC §9 item 4).
   configWidgets: { ppt_filler_template: PptFillerConfigForm },
   // Keyed by the backend manifest's SidePanelSpec.widget. `slideshow` is what

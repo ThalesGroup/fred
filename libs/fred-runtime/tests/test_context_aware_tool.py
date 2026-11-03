@@ -31,8 +31,14 @@ from typing import Any, Literal
 
 import pytest
 from fred_runtime.common.context_aware_tool import ContextAwareTool
-from fred_sdk.contracts.context import RuntimeContext, ToolContentKind
+from fred_sdk.contracts.context import (
+    RuntimeContext,
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationResult,
+)
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import ArgsSchema, BaseTool
 from pydantic import BaseModel
 
@@ -86,6 +92,47 @@ class _FakeAgentSettings:
     team_id: str | None = "team-1"
     tuning: AgentTuning | None = None
     active_mcp_servers: Sequence[MCPServerRef] = ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_call", [False, True])
+@pytest.mark.parametrize("structured", [False, True])
+async def test_mcp_success_normalization_handles_sync_and_async_calls(
+    async_call: bool, structured: bool
+) -> None:
+    payload: dict[str, object] = {"rows": [{"count": 12}]}
+
+    class Provider(BaseTool):
+        name: str = "read_query"
+        description: str = "Read a count."
+        response_format: Literal["content", "content_and_artifact"] = (
+            "content_and_artifact"
+        )
+
+        def _run(self, **kwargs: Any) -> tuple[str, dict[str, object] | None]:
+            return "12 cars", {"structured_content": payload} if structured else None
+
+        async def _arun(self, **kwargs: Any) -> tuple[str, dict[str, object] | None]:
+            return self._run(**kwargs)
+
+    wrapper = ContextAwareTool(
+        base_tool=Provider(),
+        context_provider=lambda: None,
+        agent_settings_provider=_FakeAgentSettings,
+    )
+    call = {"type": "tool_call", "id": "count", "name": wrapper.name, "args": {}}
+    result = await wrapper.ainvoke(call) if async_call else wrapper.invoke(call)
+
+    assert isinstance(result, ToolMessage)
+    assert result.status == "success"
+    assert result.content == "12 cars"
+    if structured:
+        assert isinstance(result.artifact, ToolInvocationResult)
+        assert result.artifact.blocks == (
+            ToolContentBlock(kind=ToolContentKind.JSON, data=payload),
+        )
+    else:
+        assert result.artifact is None
 
 
 @pytest.mark.asyncio

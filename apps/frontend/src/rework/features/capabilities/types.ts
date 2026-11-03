@@ -30,6 +30,9 @@ export interface UiPartRendererProps {
   part: RawUiPart;
 }
 
+/** The object a part shows (a document id, a file href), or undefined when it has none. */
+export type UiPartIdentity = (part: RawUiPart) => string | undefined;
+
 /** Renders ONE chat part of the kind it is registered under. */
 export type UiPartRenderer = ComponentType<UiPartRendererProps>;
 
@@ -208,6 +211,11 @@ export interface CapabilityUiPlugin {
    * and warns.
    */
   partRenderers?: Record<string, UiPartRenderer>;
+  /**
+   * The object each part kind shows, keyed by part `type`. A message renders one
+   * card per object, its last version. Kinds without an entry are never merged.
+   */
+  partIdentities?: Record<string, UiPartIdentity>;
   /**
    * Agent-creation form widgets keyed by `ui.widget` id (RFC §9 item 4,
    * #1903). A config field whose `ui.widget` resolves here renders through the
