@@ -58,7 +58,7 @@
   flex-direction: column;
   justify-content: safe center;
   align-items: center;
-  background-color: var(--surface-container-high);
+  background-color: var(--surface-main);
   padding: var(--spacing-m);
   min-height: 0;
   overflow-x: hidden;

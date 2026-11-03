@@ -15,17 +15,13 @@
  */
 
 /* ── Page shell ────────────────────────────────────────────────────────── */
-/* Grid: the header spans the top row; below it, [ pageBody ][ launcher rail ].
-   Push drawers open inside pageBody, so they never reach the header. */
+/* A row of [ pageBody ][ launcher rail ] on the app background: the page draws
+   its own cards instead of living in the shell's (data-shell-card). */
 .page {
   /* Single source of truth for the composer field width. */
   --composer-max-width: 720px;
-  display: grid;
+  display: flex;
   position: relative;
-  /* The trace drawer is a fixed overlay, so it doesn't participate. */
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-columns: minmax(0, 1fr) auto;
-  background: var(--surface-main);
   height: 100%;
   overflow: hidden;
   color: var(--on-surface);
@@ -37,21 +33,47 @@
    right, shifting the left stack left. */
 .pageBody {
   display: flex;
-  grid-row: 2;
-  grid-column: 1;
+  flex: 1 1 0;
   flex-direction: row;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
 
-/* ── Left stack — the conversation column: header above, content below ───── */
+/* ── Left stack — the chat card: header above, content below ──────────────── */
+/* Unclipped and above the panels, here and down to the main column, so the
+   composer's menus open over the viewer card. The welcome composer sits in
+   .chatArea's scroller, which still clips its menus. */
 .leftStack {
   display: flex;
+  position: relative;
   flex: 1 1 0;
   flex-direction: column;
+  z-index: 4;
+  border-radius: var(--radius-l);
+  background: var(--surface-main);
   min-width: 0;
-  overflow: hidden;
+}
+
+/* Same radii as the shell card (MainLayout.module.css). */
+@media (pointer: coarse) {
+  .leftStack {
+    border-radius: var(--radius-m);
+  }
+}
+
+@media (max-width: 767px) {
+  .leftStack {
+    border-radius: 0;
+  }
+}
+
+/* Facing corners tighten while a panel is open: the two cards work as one. */
+@media (min-width: 768px) {
+  .pageBody:has([data-layout="push"][data-open="true"]) .leftStack {
+    border-top-right-radius: var(--radius-s);
+    border-bottom-right-radius: var(--radius-s);
+  }
 }
 
 /* ── Content row — holds the main column below the header ────────────────── */
@@ -59,8 +81,9 @@
   display: flex;
   flex: 1 1 0;
   flex-direction: row;
+  border-bottom-right-radius: inherit;
+  border-bottom-left-radius: inherit;
   min-height: 0;
-  overflow: hidden;
 }
 
 /* ── Main column — holds the whole conversation surface ────────────────── */
@@ -69,10 +92,11 @@
   position: relative;
   flex: 1 1 0;
   flex-direction: column;
-  background: var(--surface-main);
+  /* The card does not clip: a theme background on [data-chat-main] needs the corners. */
+  border-bottom-right-radius: inherit;
+  border-bottom-left-radius: inherit;
   min-width: 0;
   height: 100%;
-  overflow: hidden;
 }
 
 /* ── Drop overlay ──────────────────────────────────────────────────────── */
@@ -113,8 +137,6 @@
 /* ── Session title bar — flat line above the thread ─────────────────────── */
 .topBar {
   display: flex;
-  grid-row: 1;
-  grid-column: 1 / -1;
   border-bottom: 1px solid var(--outline-muted);
   padding: var(--spacing-2xs) var(--spacing-xs);
 }
@@ -198,22 +220,27 @@
   font-size: 1rem;
 }
 
+/* Shrinks with the card, the token total first: it must not spill over the viewer. */
 .topBarRight {
   display: flex;
-  flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 /* Conversation-wide billed total. Just the number: the per-message badges
    carry the in/out breakdown, and repeating it here made the header a second
    place to read the same decomposition (#2403). */
 .conversationTokens {
+  min-width: 0;
+  overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   user-select: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Conversation stage — positioning context for the outline rail ───────

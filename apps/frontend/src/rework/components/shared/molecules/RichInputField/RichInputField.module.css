@@ -148,6 +148,7 @@
 /* Bottom row: options (left, flex-1) + send button (right) */
 .bottomRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-xs);
 }
@@ -170,9 +171,12 @@
 .rightSlot {
   display: flex;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-2xs); /* rightExtraSlot chip ↔ action group */
   margin-left: auto; /* pushes to right edge whether or not bottomLeft is present */
+  max-width: 100%;
 }
 
 .actionGroup {

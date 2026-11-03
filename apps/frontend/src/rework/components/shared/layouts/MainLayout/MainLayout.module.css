@@ -15,7 +15,7 @@
  */
 
 /* Shell: rail and nav panel sit on the app background; the page lives in one rounded
- * surface card, the only part that scrolls. The mode follows the input device: a fine
+ * surface card, the only part that scrolls, unless it draws its own. The mode follows the input device: a fine
  * pointer keeps compact values, a coarse one gets touch margins; under 768px the card
  * goes edge to edge between the section panel and a bottom bar (Sidebar.module.scss). */
 .mainLayout {
@@ -57,6 +57,18 @@
 
 .content:has([data-shell-inset="none"]) {
   padding: 0;
+}
+
+/* A page that draws its own cards. Below 768px the shell card is edge to edge and stays. */
+@media (min-width: 768px) {
+  .content:has([data-shell-card="none"]) {
+    background-color: transparent;
+  }
+
+  /* A rail beside the page's cards brings its own edge gap. */
+  .content:has([data-shell-rail]) {
+    margin-right: 0;
+  }
 }
 
 @media (pointer: coarse) {

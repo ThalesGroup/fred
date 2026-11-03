@@ -15,7 +15,7 @@
 // The chat's launcher rail: one icon button per side panel the conversation can
 // open. Two sources feed it — the session's capabilities (viewers a plugin
 // contributes) and first-party launchers the page passes in (session
-// attachments). Page-root sibling of the chat body, so in-flow it reserves its
+// attachments). Page-root sibling of the chat body, outside its cards, in its
 // own right-hand column.
 //
 // A capability launcher is only offered once its panel has something to show:
@@ -132,7 +132,7 @@ export function ChatLauncherRail({
   if (entries.length === 0 && launchers.length === 0 && footerLaunchers.length === 0) return null;
 
   return (
-    <div className={styles.rail}>
+    <div className={styles.rail} data-shell-rail>
       {launchers.map((launcher) => (
         <RailButton
           key={launcher.key}

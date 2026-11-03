@@ -13,16 +13,20 @@
  * limitations under the License.
  */
 
-/* In-flow against the right edge of the chat body, under the page header, set off
-   by a divider. Launchers stack from the top, first-party ones above the
-   capability-derived ones. */
+/* Outside the cards, on the app background. Launchers stack from the top,
+   first-party ones above the capability-derived ones. */
 .rail {
   display: flex;
-  grid-row: 2;
-  grid-column: 2;
   flex-direction: column;
-  border-left: 1px solid var(--outline-muted);
-  padding: var(--spacing-xs);
+  padding: 0 var(--spacing-2xs);
+}
+
+/* The shell card goes edge to edge, so the rail moves into it, set off by a divider. */
+@media (max-width: 767px) {
+  .rail {
+    border-left: 1px solid var(--outline-muted);
+    padding: var(--spacing-xs);
+  }
 }
 
 /* Footer group: tooling sits at the rail's bottom, away from the content
