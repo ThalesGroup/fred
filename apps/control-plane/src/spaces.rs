@@ -263,18 +263,6 @@ fn validate_space_name(name: &str) -> AppResult<String> {
     })
 }
 
-fn validate_username(username: &str) -> AppResult<()> {
-    if username.is_empty()
-        || username.chars().count() > 255
-        || username.chars().any(char::is_control)
-    {
-        return Err(AppError::Unprocessable(
-            "an existing username is required (1..255 characters)".into(),
-        ));
-    }
-    Ok(())
-}
-
 /// The subject of an existing account, looked up by exact username.
 async fn resolve_account(
     directory: &crate::users::Directory<'_>,
@@ -323,7 +311,7 @@ pub async fn create_managed_organization(
     authorization::require_platform(pool, caller, PlatformPermission::ManagePlatform).await?;
     let name = &validate_space_name(name)?;
     for username in [admin_username, owner_username] {
-        validate_username(username)?;
+        crate::users::validate_username(username)?;
     }
     // Resolve before taking the global mutation lock. No directory write is performed.
     let admin = resolve_account(directory, admin_username, ADMIN_NOT_FOUND).await?;
@@ -384,7 +372,7 @@ pub async fn update_managed_organization(
         .into_iter()
         .flatten()
     {
-        validate_username(username)?;
+        crate::users::validate_username(username)?;
     }
     let admin = match change.admin_username {
         Some(username) => Some(resolve_account(directory, username, ADMIN_NOT_FOUND).await?),

@@ -10,6 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   version: "v1" as string | null,
   bootstrap: true,
+  admitted: true,
   legalFailed: false,
   accepted: false,
   failStatus: false,
@@ -55,6 +56,7 @@ vi.mock("../common/dynamicBaseQuery", () => ({
               gcu_version: state.version,
               acceptance: state.accepted ? { version: "v1", accepted_at: "2026-10-15T00:00:00Z" } : null,
               root_bootstrap_required: state.bootstrap,
+              admitted: state.admitted,
             },
           };
     }
@@ -72,11 +74,13 @@ import OnboardingGuard from "@core/guards/OnboardingGuard";
 import { KeyCloakService } from "../security/KeycloakService";
 import { enhancedControlPlaneApi as api } from "../slices/controlPlane/controlPlaneApiEnhancements";
 import { legacyControlPlaneApi } from "../slices/legacyControlPlane/legacyControlPlaneApi";
+import { CROSS_SESSION_REFRESH_INTERVAL_MS } from "../rework/core/hooks/crossSessionRefresh";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 afterEach(() => {
   state.version = "v1";
   state.bootstrap = true;
+  state.admitted = true;
   vi.clearAllMocks();
   state.legalFailed = false;
   state.accepted = false;
@@ -84,6 +88,7 @@ afterEach(() => {
   state.failConsent = false;
   state.calls = [];
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
@@ -118,7 +123,8 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
       );
     });
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(20);
+      else await new Promise((resolve) => setTimeout(resolve, 20));
     });
     await run(host);
   } finally {
@@ -265,5 +271,45 @@ it("gates an admitted view again after a changed version or failed status refres
     });
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     expect(host.textContent).not.toContain("rework.gcu.validate");
+  });
+});
+
+it("waits for an existing membership before showing consent and retries admission", async () => {
+  state.bootstrap = false;
+  state.admitted = false;
+  await mounted(async (host) => {
+    expect(host.textContent).toContain("rework.manager.notAdmitted");
+    expect(host.textContent).not.toContain("Terms v1");
+    expect(host.querySelector("form")).toBeNull();
+    expect(state.calls).toEqual(["/control-plane/v1/me/onboarding"]);
+    state.admitted = true;
+    await click(host, "rework.provisioning.retryAuthority");
+    expect(host.textContent).toContain("Terms v1");
+    expect(state.calls).toEqual(["/control-plane/v1/me/onboarding", "/control-plane/v1/me/onboarding"]);
+  });
+});
+
+it.each(["v1", null])("observes revocation and readmission without a focus event (terms: %s)", async (version) => {
+  vi.useFakeTimers();
+  state.bootstrap = false;
+  state.accepted = true;
+  state.version = version;
+  await mounted(async (host) => {
+    expect(host.textContent).toContain("Admitted");
+    state.admitted = false;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CROSS_SESSION_REFRESH_INTERVAL_MS + 20);
+    });
+    expect(host.textContent).toContain("rework.manager.notAdmitted");
+    expect([...host.querySelectorAll("p")].some((paragraph) => paragraph.textContent === "Admitted")).toBe(false);
+    expect(host.textContent).not.toContain("Terms v1");
+    expect(host.querySelector("form")).toBeNull();
+    expect(state.calls).toHaveLength(2);
+    state.admitted = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CROSS_SESSION_REFRESH_INTERVAL_MS + 20);
+    });
+    expect(host.textContent).toContain("Admitted");
+    expect(state.calls).toHaveLength(3);
   });
 });

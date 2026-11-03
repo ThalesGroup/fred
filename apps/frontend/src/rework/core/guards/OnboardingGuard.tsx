@@ -8,12 +8,15 @@ import GcuPage from "@components/pages/GcuPage/GcuPage";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout";
 import Button from "@shared/atoms/Button/Button";
 import { useOnboardingStatusQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
-import { useRefetchOnWindowFocus } from "../hooks/crossSessionRefresh";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "../hooks/crossSessionRefresh";
 
-/** Independent platform initialization: bootstrap, then personal consent, then application routes. */
+/** Independent platform initialization: bootstrap, admission, personal consent, then application routes. */
 export default function OnboardingGuard({ children }: PropsWithChildren) {
   const { t } = useTranslation();
-  const state = useOnboardingStatusQuery(undefined, { refetchOnMountOrArgChange: true });
+  const state = useOnboardingStatusQuery(undefined, {
+    ...crossSessionRefreshOptions(false),
+    refetchOnMountOrArgChange: true,
+  });
   useRefetchOnWindowFocus(state.refetch, false);
   let content;
   if (state.isLoading) content = <p role="status">{t("common.loading")}</p>;
@@ -28,6 +31,15 @@ export default function OnboardingGuard({ children }: PropsWithChildren) {
     );
   else if (state.data.root_bootstrap_required)
     content = <BootstrapPage username={state.data.username || state.data.user_id} />;
+  else if (!state.data.admitted)
+    content = (
+      <div role="status">
+        <p>{t("rework.manager.notAdmitted")}</p>
+        <Button color="primary" variant="outlined" size="medium" onClick={() => void state.refetch()}>
+          {t("rework.provisioning.retryAuthority")}
+        </Button>
+      </div>
+    );
   else if (state.data.gcu_version && state.data.acceptance?.version !== state.data.gcu_version)
     content = <GcuPage key={state.data.gcu_version} version={state.data.gcu_version} />;
   else return <>{children}</>;

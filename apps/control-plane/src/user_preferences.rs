@@ -198,7 +198,7 @@ async fn patch_my_preferences(
     OwnUser(user): OwnUser,
     ApiJson(body): ApiJson<PatchUserPreferences>,
 ) -> AppResult<Json<UserPreferences>> {
-    crate::onboarding::require_initialized(&s.pool, &s.auth).await?;
+    crate::onboarding::require_admitted(&s.pool, &s.auth, &user.uid).await?;
     Ok(Json(patch(&s.pool, &user.uid, body).await?))
 }
 

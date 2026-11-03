@@ -137,6 +137,7 @@ struct OnboardingStatus {
     username: String,
     gcu_version: Option<String>,
     acceptance: Option<onboarding::Acceptance>,
+    admitted: bool,
     root_bootstrap_required: bool,
 }
 
@@ -151,6 +152,7 @@ async fn onboarding_status(
     OwnUser(user): OwnUser,
 ) -> AppResult<axum::response::Response> {
     use axum::response::IntoResponse;
+    let admitted = !s.auth.enabled() || authorization::is_admitted(&s.pool, &user.uid).await?;
     let acceptance = onboarding::acceptance(&s.pool, &user.uid).await?;
     let completed = onboarding::bootstrap_completed(&s.pool).await?;
     Ok((
@@ -164,6 +166,7 @@ async fn onboarding_status(
                 .clone()
                 .filter(|_| s.auth.enabled()),
             acceptance,
+            admitted,
             root_bootstrap_required: s.auth.enabled() && !completed,
         }),
     )
@@ -189,7 +192,7 @@ async fn accept_terms(
     OwnUser(user): OwnUser,
     ApiJson(req): ApiJson<TermsRequest>,
 ) -> AppResult<StatusCode> {
-    onboarding::require_initialized(&s.pool, &s.auth).await?;
+    onboarding::require_admitted(&s.pool, &s.auth, &user.uid).await?;
     onboarding::accept(
         &s.pool,
         s.onboarding

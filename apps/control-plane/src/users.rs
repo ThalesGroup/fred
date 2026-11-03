@@ -30,6 +30,40 @@ pub enum DirectoryKind {
 
 pub use fred_rust_sdk::security::authentication::DirectoryDelegation;
 
+pub(crate) fn validate_username(username: &str) -> AppResult<()> {
+    if username.trim().is_empty()
+        || username.chars().count() > 255
+        || username.chars().any(char::is_control)
+    {
+        return Err(AppError::Unprocessable(
+            "an existing username is required (1..255 characters)".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Explicit operator registration, never called by login or onboarding. Roles and
+/// consent remain separate; a replay must not replace an existing profile.
+pub async fn register_local(pool: &PgPool, id: Uuid, username: &str) -> AppResult<()> {
+    validate_username(username)?;
+    let registered: Option<Uuid> = sqlx::query_scalar(
+        "insert into user_identity (id, username) values ($1, $2)
+         on conflict (id) do update set username = excluded.username
+         where user_identity.username = excluded.username returning id",
+    )
+    .bind(id)
+    .bind(username)
+    .fetch_optional(pool)
+    .await?;
+    if registered.is_none() {
+        return Err(AppError::Conflict(
+            "subject already has another username".into(),
+        ));
+    }
+    tracing::info!(target: "fred.security.audit", audit_event = "identity.registered", actor_kind = "operator", target_uid = %id, outcome = "succeeded", "[SECURITY] identity.registered");
+    Ok(())
+}
+
 #[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct UserSummary {
     pub id: String,

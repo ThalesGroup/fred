@@ -44,7 +44,7 @@ manager authority, not a universal replacement for every Python security boundar
 
 Manager's public `/frontend/config` supplies authentication coordinates, the active
 terms version and bootstrap state. `/me/onboarding` reports the authenticated
-person's own acceptance. Both responses use `Cache-Control: no-store`; neither
+person's admission from existing roles and their own acceptance. Both responses use `Cache-Control: no-store`; neither
 returns the bootstrap secret.
 
 `app.gcu_version: v1` enables consent in the reference and k3d configurations.
@@ -54,7 +54,7 @@ the gate. The frontend's localized legal markdown and the configured version are
 deployed together; replacing text requires a version change.
 
 `POST /gcu {version}` accepts only the caller's own human credential and the active
-version. A stale version returns 409. Changing the displayed version reloads the
+version, after platform admission. A stale version returns 409. Changing the displayed version reloads the
 text and resets its reading state. Repeating acceptance of the same version keeps
 its original timestamp. The [SQL record](A2-manager-contracts.md#control-plane-sql-catalogue)
 contains subject, version and server timestamp, without roles or membership.
@@ -113,7 +113,7 @@ is not a general user-provisioning or Swift migration mechanism.
 | Boundary | Owner and persistent effect |
 | --- | --- |
 | Read the current SSO identity | [`OwnUser` in onboarding.rs](../../apps/control-plane/src/onboarding.rs); read-only authentication |
-| Block writes before initialization | `require_initialized`, reused by `AdmittedUser`, CGU acceptance and preference PATCH |
+| Block writes before initialization | `require_admitted`, reused by `AdmittedUser`, CGU acceptance and preference PATCH |
 | Claim the first platform role | [`bootstrap_platform_admin` in api.rs](../../apps/control-plane/src/api.rs), [`grant_root` in bootstrap.rs](../../apps/control-plane/src/bootstrap.rs); existing `platform_bootstrap` and `platform_role_grant` tables |
 | Personal consent and preferences | Existing `terms_acceptance` and `users_preferences`; no rows created by simply visiting the UI |
 | Optional local directory | [`snapshot` in users.rs](../../apps/control-plane/src/users.rs); existing `user_identity` remains a display cache, not an account or permission authority |
@@ -251,12 +251,28 @@ realm/subject checks, retries and safe errors.
 
 ## Account lifecycle and platform admission
 
-In this manager journey, a valid personal credential from the configured issuer
-allows access to onboarding. After accepting the active CGU, a person with no
-organization or platform roles can reach an empty Home view. This creates no
-membership, personal space or content access. Business operations still require
-a direct role in the target organization and the operation's Control Plane permission; platform actions
-require their separate platform permission.
+A valid personal credential from the configured issuer allows read-only onboarding.
+Admission requires an existing platform role or a direct role in an active organization,
+team or project; an orphaned personal space or an old CGU acceptance does not suffice.
+Space activity includes its organization and parent. No separate admission record is stored.
+
+The local directory requires explicit operator registration before the first role
+assignment; observing a shared SSO session does not register the person. Registration
+stores only a profile in the existing directory and grants no access or consent.
+See the [operator procedure](../../apps/control-plane/README.md#admit-a-user-with-the-local-directory).
+
+After platform initialization, an unadmitted person sees an access-unavailable message
+before the CGU. The API rejects consent, preference writes and business requests with
+403 `user_not_admitted`. The initial administrator can still claim the first platform
+role through bootstrap. Disabling CGU does not disable admission; local deployments
+with authentication disabled retain their development behavior.
+
+The frontend rechecks onboarding every minute and when its window regains focus,
+so a revoked last role also closes an already open view. Each new protected API
+request checks current admission independently of this display refresh.
+
+Admission grants no additional permission. Business operations still require their
+direct space roles, and platform actions require their separate platform permission.
 
 ## Space retirement and cleanup authority
 

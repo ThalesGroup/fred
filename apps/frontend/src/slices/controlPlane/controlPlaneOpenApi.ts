@@ -1663,6 +1663,7 @@ export type Acceptance = {
 };
 export type OnboardingStatus = {
   acceptance?: Acceptance | null;
+  admitted: boolean;
   gcu_version?: string | null;
   root_bootstrap_required: boolean;
   user_id: string;

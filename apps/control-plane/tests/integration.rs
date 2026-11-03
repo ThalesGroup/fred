@@ -2615,6 +2615,34 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             .status(),
         200
     );
+    let visitor = app
+        .clone()
+        .oneshot(request(
+            "GET",
+            "/me/onboarding",
+            Some(server.token(PN)),
+            Value::Null,
+        ))
+        .await
+        .unwrap();
+    let status: Value =
+        serde_json::from_slice(&to_bytes(visitor.into_body(), 65536).await.unwrap()).unwrap();
+    assert_eq!(status["admitted"], false);
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                "/gcu",
+                Some(server.token(PN)),
+                json!({"version":"v1"})
+            ))
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert!(onboarding::acceptance(&e.pool, PN).await.unwrap().is_none());
+
     let mut disabled = state;
     disabled.onboarding.gcu_version = None;
     assert_eq!(
@@ -2628,8 +2656,199 @@ async fn consent_and_root_bootstrap_are_personal_and_do_not_create_memberships()
             .await
             .unwrap()
             .status(),
-        200
+        403
     );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn admission_follows_active_grants_not_personal_space_or_old_consent() {
+    use control_plane::authorization::is_admitted;
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let (org, team) = org_and_team(&e).await;
+    assert!(!is_admitted(&e.pool, "bob").await.unwrap());
+    control_plane::onboarding::accept(&e.pool, Some("v1"), "bob", "v1")
+        .await
+        .unwrap();
+    assert!(!is_admitted(&e.pool, "bob").await.unwrap());
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Member, "bob").await;
+    delete_tuple(&e, "bob", "member", &format!("space:{}", org.id)).await;
+    assert!(is_admitted(&e.pool, "bob").await.unwrap());
+    spaces::create_personal_space(&e.pool, "bob", org.id)
+        .await
+        .unwrap();
+    delete_tuple(&e, "bob", "member", &format!("space:{}", team.id)).await;
+    assert!(!is_admitted(&e.pool, "bob").await.unwrap());
+    grant(&e, org.id, Role::Owner, "bob").await;
+    assert!(is_admitted(&e.pool, "bob").await.unwrap());
+    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+    lifecycle.config.enabled = true;
+    lifecycle.accept(&e.pool, "root", org.id).await.unwrap();
+    assert!(!is_admitted(&e.pool, "bob").await.unwrap());
+    assert!(is_admitted(&e.pool, "root").await.unwrap());
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn local_admission_requires_explicit_registration_and_a_role() {
+    use control_plane::{api, onboarding, users};
+    use serde_json::{Value, json};
+    use std::sync::Arc;
+    const ROOT: &str = "11111111-1111-4111-8111-111111111111";
+    const VISITOR: &str = "22222222-2222-4222-8222-222222222222";
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, ROOT).await.unwrap();
+    onboarding::accept(&e.pool, Some("v1"), ROOT, "v1")
+        .await
+        .unwrap();
+    let org = support::member_organization(&e.pool, "Local", ROOT)
+        .await
+        .unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = api::routes(api::AppState {
+        agent_catalog: Default::default(),
+        auth: Arc::new(identity.auth().await),
+        pool: e.pool.clone(),
+        directory: None,
+        content: None,
+        processing: None,
+        lifecycle: Default::default(),
+        onboarding: onboarding::Onboarding {
+            user_directory: users::DirectoryKind::Local,
+            gcu_version: Some("v1".into()),
+            ..Default::default()
+        },
+    });
+    let request = |actor, method, path, body| {
+        support::request(&app, &identity, Some(actor), method, path, body)
+    };
+    let role_path = format!("/spaces/{}/roles/member/{VISITOR}", org.id);
+    for (method, path, body, status) in [
+        ("GET", "/me/onboarding", Value::Null, 200),
+        ("GET", "/users/me/preferences", Value::Null, 200),
+        ("GET", "/me", Value::Null, 403),
+        ("POST", "/gcu", json!({"version":"v1"}), 403),
+        (
+            "PATCH",
+            "/users/me/preferences",
+            json!({"language":"fr"}),
+            403,
+        ),
+    ] {
+        assert_eq!(request(VISITOR, method, path, body).await.0, status);
+    }
+    assert!(
+        !users::Directory::Local(&e.pool)
+            .exists(VISITOR)
+            .await
+            .unwrap()
+    );
+    assert!(
+        onboarding::acceptance(&e.pool, VISITOR)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(request(ROOT, "PUT", &role_path, Value::Null).await.0, 422);
+
+    // Exercise the real operator command, using only this test's disposable database.
+    let pg = e.pool.connect_options();
+    let config = json!({
+        "app":{"base_url":"/control-plane/v1","port":8222},
+        "security":{"user_directory":"local","user":{"realm_url":identity.realm,"client_id":"app"}},
+        "storage":{"postgres":{"host":pg.get_host(),"port":pg.get_port(),"username":"fred_cp","database":pg.get_database()}},
+        "scheduler":{}
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("configuration.json");
+    std::fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
+    for (id, username, success) in [
+        (VISITOR, VISITOR, true),
+        (VISITOR, VISITOR, true),
+        (VISITOR, "another-name", false),
+        (VISITOR, "   ", false),
+        ("not-a-uuid", VISITOR, false),
+    ] {
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_control-plane"))
+            .args(["register-local-user", id, username])
+            .env("CONFIG_FILE", &path)
+            .env("ENV_FILE", "/nonexistent")
+            .env("FRED_POSTGRES_PASSWORD", "it")
+            .kill_on_drop(true)
+            .output()
+            .await
+            .unwrap();
+        assert_eq!(
+            output.status.success(),
+            success,
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+    let local = users::Directory::Local(&e.pool);
+    assert_eq!(
+        local.find_username(VISITOR).await.unwrap().unwrap().id,
+        VISITOR
+    );
+    assert!(
+        !control_plane::authorization::is_admitted(&e.pool, VISITOR)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        request(VISITOR, "POST", "/gcu", json!({"version":"v1"}))
+            .await
+            .0,
+        403
+    );
+
+    // Registration makes the identity eligible; only an authorized grant admits it.
+    assert_eq!(
+        request(VISITOR, "PUT", &role_path, Value::Null).await.0,
+        403
+    );
+    assert_eq!(request(ROOT, "PUT", &role_path, Value::Null).await.0, 204);
+    assert_eq!(
+        request(VISITOR, "GET", "/me/onboarding", Value::Null)
+            .await
+            .1["admitted"],
+        true
+    );
+    assert_eq!(request(VISITOR, "GET", "/me", Value::Null).await.0, 403);
+    assert_eq!(
+        request(VISITOR, "POST", "/gcu", json!({"version":"v1"}))
+            .await
+            .0,
+        204
+    );
+    assert_eq!(request(VISITOR, "GET", "/me", Value::Null).await.0, 200);
+
+    // Old consent and a retained profile do not survive removal of the last grant.
+    assert_eq!(
+        request(ROOT, "DELETE", &role_path, Value::Null).await.0,
+        204
+    );
+    assert_eq!(
+        request(VISITOR, "GET", "/me/onboarding", Value::Null)
+            .await
+            .1["admitted"],
+        false
+    );
+    for (method, path, body) in [
+        ("GET", "/me", Value::Null),
+        ("POST", "/gcu", json!({"version":"v1"})),
+        ("PATCH", "/users/me/preferences", json!({"language":"fr"})),
+    ] {
+        assert_eq!(
+            request(VISITOR, method, path, body).await,
+            (
+                403,
+                json!({"code":"admission_required","detail":"user_not_admitted"})
+            )
+        );
+    }
 }
 
 /// TSN > BID > project P, all administered by alice, who is a member of TSN and BID.

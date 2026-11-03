@@ -87,6 +87,21 @@ async fn preferences_are_personal_before_consent_and_patch_only_submitted_fields
         .await,
         (200, defaults.clone())
     );
+    assert_eq!(
+        request(
+            &app,
+            Some(identity.token("alice")),
+            "PATCH",
+            path,
+            json!({"language":"fr"})
+        )
+        .await
+        .0,
+        403
+    );
+    support::member_organization(&e.pool, "Preferences", "alice")
+        .await
+        .unwrap();
     let selected = json!({"ui_theme_id":"acme", "theme_mode":"dark", "language":"fr",
         "sidebar_collapsed":true, "team_sort_mode":"alpha", "agent_sort":"updated_at:desc"});
     let (status, saved) = request(

@@ -123,10 +123,13 @@ pub async fn bootstrap_completed(pool: &PgPool) -> AppResult<bool> {
     .await?)
 }
 
-/// Authentication alone must not initialize a fresh installation's user state.
-pub async fn require_initialized(pool: &PgPool, auth: &Authenticator) -> AppResult<()> {
+/// Authentication alone grants neither initialization nor platform admission.
+pub async fn require_admitted(pool: &PgPool, auth: &Authenticator, uid: &str) -> AppResult<()> {
     if auth.enabled() && !bootstrap_completed(pool).await? {
         return Err(AppError::Denied("platform_bootstrap_required".into()));
+    }
+    if auth.enabled() && !crate::authorization::is_admitted(pool, uid).await? {
+        return Err(AppError::Denied("user_not_admitted".into()));
     }
     Ok(())
 }
@@ -153,7 +156,7 @@ where
             .await
             .map_err(IntoResponse::into_response)?;
         let admission = AdmissionState::from_ref(state);
-        require_initialized(&admission.pool, &admission.auth)
+        require_admitted(&admission.pool, &admission.auth, &user.uid)
             .await
             .map_err(IntoResponse::into_response)?;
         if admission.auth.enabled() {

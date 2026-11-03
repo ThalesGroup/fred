@@ -19,7 +19,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const state = vi.hoisted(() => ({ version: "v1" as string | null, accepted: "v1" as string | null, bootstrap: false }));
+const state = vi.hoisted(() => ({
+  version: "v1" as string | null,
+  accepted: "v1" as string | null,
+  bootstrap: false,
+  admitted: true,
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@components/pages/BootstrapPage/BootstrapPage", () => ({
   default: ({ username }) => <div>Initialize {username}</div>,
@@ -30,6 +35,7 @@ vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useOnboardingStatusQuery: () => ({
     data: {
       username: "simon",
+      admitted: state.admitted,
       root_bootstrap_required: state.bootstrap,
       gcu_version: state.version,
       acceptance: { version: state.accepted },
@@ -42,6 +48,7 @@ import OnboardingGuard from "./OnboardingGuard.tsx";
 
 beforeEach(() => {
   state.bootstrap = false;
+  state.admitted = true;
   state.version = "v1";
   state.accepted = "v1";
 });
@@ -96,6 +103,22 @@ describe("OnboardingGuard", () => {
     state.accepted = "v1";
     render();
     expect(container.textContent).toBe("Shell");
+    act(() => root.unmount());
+  });
+
+  it("blocks an unadmitted person before consent, including previously accepted terms", () => {
+    state.admitted = false;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const render = () => act(() => root.render(<OnboardingGuard>Shell</OnboardingGuard>));
+    render();
+    expect(container.textContent).toContain("rework.manager.notAdmitted");
+    state.accepted = null;
+    render();
+    expect(container.textContent).not.toContain("Accept terms");
+    state.admitted = true;
+    render();
+    expect(container.textContent).toBe("Accept terms");
     act(() => root.unmount());
   });
 

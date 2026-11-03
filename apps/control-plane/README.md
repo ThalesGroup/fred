@@ -97,7 +97,30 @@ manager consent or bootstrap records.
 | `control-plane generate-openapi` | Prints the HTTP contract, without configuration or services |
 | `control-plane generate-config-schema` | Prints the configuration JSON Schema |
 | `control-plane processing-schema` | Prints the wire contracts shared with the Knowledge Flow worker |
+| `control-plane register-local-user <weaver-user-id> <username>` | Explicitly registers a known identity in the local directory, without roles or consent |
 | `control-plane import-provisioning <bundle.zip> --token-file <path>` | Authenticated additive import ([below](#import-a-provisioning-bundle)) |
+
+### Admit a user with the local directory
+
+With `security.user_directory: local` (required for generic OIDC), a deployment
+operator explicitly registers the identity before an administrator assigns its
+first role. Use the canonical Weaver UUID returned by the person's authenticated
+`GET /me/onboarding` and the exact username verified with the identity provider.
+For non-UUID OIDC subjects, this Weaver ID is different from the provider's raw
+subject; do not substitute the username or compute another mapping.
+
+```sh
+control-plane register-local-user <weaver-user-id> <username>
+```
+
+The command uses the usual `CONFIG_FILE` and deployment database credentials, like
+`initialize-models`; it requires enabled authentication and the local directory.
+It reuses `user_identity`, creates no provider account, role, personal space or
+CGU acceptance, and refuses to replace an existing subject's different username.
+Replaying the same registration preserves the profile. The administrator then
+uses the existing organization governance or role-grant API/UI. Only after this
+grant can the person accept CGU and enter Weaver. Merely signing in with a Swift
+SSO identity never performs this registration.
 
 ## Discover agent definitions
 

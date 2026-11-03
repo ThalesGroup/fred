@@ -4766,6 +4766,7 @@
       }
     },
     "manager": {
+      "notAdmitted": "Your account does not yet have access to Weaver. Contact your organization owner.",
       "spaces": "Your spaces",
       "empty": "You do not belong to any organization or space.",
       "unavailable": "Unable to load your access. Retry or reload this page.",

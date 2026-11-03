@@ -56,6 +56,20 @@ macro_rules! subject_spaces {
 }
 pub(crate) use subject_spaces;
 
+/// Existing grants admit a person to Weaver; a leftover personal space is not admission.
+pub async fn is_admitted<'e>(ex: impl sqlx::PgExecutor<'e>, subject: &str) -> AppResult<bool> {
+    Ok(sqlx::query_scalar(concat!(
+        subject_spaces!(),
+        "
+        select exists(select 1 from platform_role_grant where subject=$1)
+            or exists(select 1 from subject_spaces where active and kind <> 'personal')"
+    ))
+    .bind(subject)
+    .bind(roles_granting(SpacePermission::CreatePersonalSpace))
+    .fetch_one(ex)
+    .await?)
+}
+
 /// SQL consumers bind these roles instead of maintaining another role matrix.
 pub fn roles_granting(permission: SpacePermission) -> Vec<&'static str> {
     Role::ALL

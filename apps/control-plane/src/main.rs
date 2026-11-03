@@ -20,7 +20,7 @@ use sqlx::postgres::PgPoolOptions;
 
 use control_plane::{api, auth, config::Configuration as Config, logging};
 
-const USAGE: &str = "usage: control-plane [serve | initialize-models | discover-agents | initialize-schema | generate-openapi | generate-config-schema | processing-schema | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | initialize-models | discover-agents | initialize-schema | generate-openapi | generate-config-schema | processing-schema | register-local-user <weaver-user-id> <username> | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -125,6 +125,19 @@ async fn main() -> Result<()> {
         .as_slice()
     {
         [] | ["serve"] => serve(config).await,
+        ["register-local-user", id, username] => {
+            anyhow::ensure!(
+                config.security.user.enabled
+                    && config.security.user_directory == control_plane::users::DirectoryKind::Local,
+                "registration requires enabled authentication and security.user_directory=local"
+            );
+            let id = id
+                .parse()
+                .context("expected the canonical Weaver user UUID")?;
+            let pool = pool(&config).await?;
+            control_plane::users::register_local(&pool, id, username).await?;
+            Ok(())
+        }
         ["initialize-models"] => {
             let pool = pool(&config).await?;
             control_plane::model_catalog::configure_sources(&pool, &config.platform.model_sources)
