@@ -127,6 +127,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
     onSteeredMessage: (messageId, sessionId) => onSteeredMessageMock(messageId, sessionId),
+    onSessionTitle: (title, sessionId) => onSessionTitleMock(title, sessionId),
     isTurnCurrent,
     isExecutionAllowed,
   });
@@ -142,6 +143,7 @@ const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
 const onAwaitingHumanMock = vi.fn();
 const onSteeredMessageMock = vi.fn();
+const onSessionTitleMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -166,6 +168,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onTurnRejectedMock.mockClear();
     onAwaitingHumanMock.mockClear();
     onSteeredMessageMock.mockClear();
+    onSessionTitleMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -429,6 +432,20 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(outcome).toBe("uncertain");
     finishStream(new Response("", { status: 200 }));
     await act(async () => await sendPromise);
+    fetchSpy.mockRestore();
+  });
+
+  it("hands the streamed conversation title to the caller without adding a message", async () => {
+    const event = { kind: "session_title", title: "Quarterly sales review", sequence: 0 };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(`data: ${JSON.stringify(event)}\n\n`, { status: 200 }));
+    mount();
+    await act(async () => {
+      await latest.send("original", "session-1");
+    });
+    expect(onSessionTitleMock).toHaveBeenCalledWith("Quarterly sales review", "session-1");
+    expect(latest.messages.every((message) => message.role === "user")).toBe(true);
     fetchSpy.mockRestore();
   });
 
