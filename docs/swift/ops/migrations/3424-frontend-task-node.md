@@ -1,45 +1,50 @@
 ---
 schema: 1
-title: "Load the repository Node version in the VS Code frontend task"
+title: "Centralize the exact Node baseline in .nvmrc"
 impact: none
 configuration: local
-configuration_reason: "The local VS Code frontend task initializes nvm and reads the root .nvmrc; production configuration and chart values are unaffected."
-no_action_reason: "Deployed images and runtime behavior are unchanged; normal deployment suffices."
+configuration_reason: "Developer tooling, CI and build-image Node selection read .nvmrc; deployed configuration keys and chart values are unaffected."
+no_action_reason: "Node is used during frontend builds; the deployed nginx runtime requires no extra upgrade operation."
 ---
 
 ## Applicability
 
-Developers launching the frontend through VS Code tasks.
+Developers, frontend CI and build-image preparation. The exact Node baseline is
+24.22.2, selected after reviewing the October 2026 Node 24 security fixes.
 
 ## Prerequisites
 
-When using nvm, run nvm install from the repository to install the branch
-selected by .nvmrc. Without nvm, keep a compatible Node version on PATH.
+Run nvm install from the repository to install the exact version selected by
+.nvmrc. Release preparation continues to require npm 11.19.0. Without nvm,
+ordinary development still accepts the existing >=24.21.0 <25 engine range.
 
 ## Configuration
 
 The frontend task loads nvm from NVM_DIR, defaulting to ~/.nvm, when present.
-It runs nvm use without a version argument, which finds the root .nvmrc from
-the frontend directory. The file selects Node 24, and Make still enforces the
-existing minimum version. Activation failure stops the task. Without nvm, the
-existing PATH-based Node check still applies.
+Make, CI and active build-image entry points consume the root .nvmrc. Local
+frontend image builds should use make docker-build, which passes NODE_VERSION.
+Direct docker build calls must pass --build-arg NODE_VERSION="$(cat .nvmrc)".
+Devcontainer initialization generates its ignored build Dockerfile from the pin.
 
 ## Upgrade
 
-Deploy Fred normally; no operator action is required. Developers can relaunch
-the frontend task without restarting VS Code or activating Node manually.
+Deploy Fred normally; no operator action is required. Developers install the
+pinned version once and relaunch their tasks. Regenerate new release archives
+and evidence with the selected exact toolchain; retain historical records.
 
 ## Validation
 
-Launch the frontend task with an older Node version inherited from the IDE.
-Confirm it selects the installed Node 24 and passes the Make version check.
+Launch the frontend task with an older Node version inherited from the IDE and
+confirm it selects 24.22.2. Check that CI/build arguments agree with .nvmrc and
+that release preparation rejects a divergent current toolchain policy.
 
 ## Rollback
 
-Use the normal rollback procedure. Reverting the task restores inherited PATH
-selection and may require developers to activate Node manually again.
+Revert the coherent tooling change and regenerate any new candidate evidence
+under the restored toolchain. Existing deployment rollback remains unchanged.
 
 ## Limitations
 
-The task does not install Node or nvm. This change affects local development
-only and introduces no data migration or runtime scaling changes.
+The task does not install Node or nvm automatically. Selecting a patched Node
+version does not assert that the complete Docker image has zero known CVEs.
+No data migration or runtime scaling behavior changes are introduced.

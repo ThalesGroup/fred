@@ -1,4 +1,5 @@
-FROM mirror.gcr.io/node:24.21.0 AS node-toolchain
+ARG NODE_VERSION
+FROM mirror.gcr.io/node:${NODE_VERSION} AS node-toolchain
 
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 

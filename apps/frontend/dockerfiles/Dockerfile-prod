@@ -1,7 +1,10 @@
+# check=skip=InvalidDefaultArgInFrom
+# Make and CI must supply the exact NODE_VERSION from .nvmrc.
 # -----------------------------------------------------------------------------
 # BUILDER
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/node:24.21.0 AS builder
+ARG NODE_VERSION
+FROM mirror.gcr.io/node:${NODE_VERSION} AS builder
 
 RUN npm install --global npm@11.19.0
 
@@ -16,6 +19,7 @@ WORKDIR /workspace/apps/frontend
 # Copy project files
 COPY apps/frontend/ /workspace/apps/frontend/
 COPY scripts/ /workspace/scripts/
+COPY .nvmrc /workspace/.nvmrc
 ARG DIAG=1
 RUN if [ "$DIAG" = "1" ]; then \
       echo "== TIMESTAMP ==" && date -u; \
