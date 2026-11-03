@@ -84,7 +84,13 @@ async def test_human_pause_resumes_on_another_replica(monkeypatch, tmp_path) -> 
         )
         middleware = turn_steering.TurnSteeringMiddleware("s", "turn-2")
         update = await middleware.abefore_model({"messages": []}, Runtime(context=None))
-        assert update == {"messages": [HumanMessage(content="focus on Marseille")]}
+        assert update is not None
+        message = update["messages"][0]
+        assert isinstance(message, HumanMessage)
+        assert isinstance(message.content, str)
+        assert "latest instruction" in message.content
+        assert "revise or cancel" in message.content
+        assert message.content.endswith("\n\nfocus on Marseille")
         assert [(event.message_id, event.content) for event in events] == [
             ("message", "focus on Marseille")
         ]
@@ -295,7 +301,8 @@ async def test_steering_enters_after_completed_tool_pair(monkeypatch, tmp_path) 
             ToolMessage,
             HumanMessage,
         ]
-        assert merged[-1].content == "new direction"
+        assert isinstance(merged[-1].content, str)
+        assert merged[-1].content.endswith("\n\nnew direction")
         assert [(event.message_id, event.content) for event in events] == [
             ("m", "new direction")
         ]
@@ -389,3 +396,285 @@ async def test_projects_in_one_team_never_share_steering(tmp_path) -> None:
     finally:
         await first_engine.dispose()
         await second_engine.dispose()
+async def test_cancelled_stream_finishes_mailbox_teardown(monkeypatch, tmp_path):
+    from sqlalchemy import select
+
+    first, second, engine, other = await _replicas(tmp_path)
+    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", first)
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(history_store=None)),
+    )
+
+    async def exchange_id(**kwargs):
+        return "exchange"
+
+    async def events(*args, **kwargs):
+        yield {"kind": "status"}
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", exchange_id)
+    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", events)
+    entered, release = asyncio.Event(), asyncio.Event()
+    end = first.end
+
+    async def delayed_end(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        await end(*args, **kwargs)
+
+    monkeypatch.setattr(first, "end", delayed_end)
+    stream = agent_app_module._stream(
+        cast(ReActAgentDefinition, SimpleNamespace(agent_id="a")),
+        agent_app_module._AgentExecuteRequest(
+            agent_instance_id="a",
+            message="hi",
+            context={"session_id": "s", "user_id": "u", "team_id": "t"},
+            steering_turn_id="turn",
+        ),
+        team_id="t",
+        container=cast(PodApplicationContext, SimpleNamespace()),
+    )
+    try:
+        await anext(stream)
+        assert await second.offer("s", "a", "u", "t", "turn", "m", "discard")
+        closing = asyncio.create_task(stream.aclose())
+        await entered.wait()
+        closing.cancel()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await closing
+        async with engine.begin() as conn:
+            assert (await conn.execute(select(turn_steering._turns))).first() is None
+        assert await second.start("s", "a", "u", "t", "replacement")
+    finally:
+        await stream.aclose()
+        await engine.dispose()
+        await other.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kind,close_early",
+    [
+        ("final", False),
+        ("awaiting_human", False),
+        ("awaiting_human", True),
+        ("status", False),
+    ],
+)
+async def test_stream_keeps_steering_only_for_normal_human_pause(
+    monkeypatch, tmp_path, kind, close_early
+):
+    from sqlalchemy import select
+
+    first, second, engine, other = await _replicas(tmp_path)
+    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", first)
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(history_store=None)),
+    )
+
+    async def exchange_id(**kwargs):
+        return "exchange"
+
+    async def events(*args, **kwargs):
+        assert await second.offer("s", "a", "u", "t", "turn", "m", "pending")
+        yield {"kind": kind}
+
+    monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", exchange_id)
+    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", events)
+    monkeypatch.setattr(
+        agent_app_module, "_emit_turn_completed", lambda *args, **kwargs: None
+    )
+    stream = agent_app_module._stream(
+        cast(ReActAgentDefinition, SimpleNamespace(agent_id="a")),
+        agent_app_module._AgentExecuteRequest(
+            agent_instance_id="a",
+            message="hi",
+            context={"session_id": "s", "user_id": "u", "team_id": "t"},
+            steering_turn_id="turn",
+        ),
+        team_id="t",
+        container=cast(PodApplicationContext, SimpleNamespace()),
+    )
+    try:
+        await anext(stream)
+        if close_early:
+            await stream.aclose()
+        else:
+            async for _ in stream:
+                pass
+        async with engine.begin() as conn:
+            row = (await conn.execute(select(turn_steering._turns))).mappings().first()
+        if kind == "awaiting_human" and not close_early:
+            assert row is not None and row["state"] == "paused"
+            assert row["pending"] == [{"id": "m", "text": "pending"}]
+        else:
+            assert row is None
+    finally:
+        await stream.aclose()
+        await engine.dispose()
+        await other.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.integration_postgres
+@pytest.mark.asyncio
+async def test_postgres_expiry_sweep_is_bounded_and_late_cleanup_preserves_owner():
+    from sqlalchemy import insert, select
+
+    url = os.environ.get("FRED_TEST_POSTGRES_URL")
+    if not url:
+        pytest.skip("FRED_TEST_POSTGRES_URL is required")
+    engines = [create_async_engine(url) for _ in range(2)]
+    first, second = [turn_steering.TurnSteeringMailbox(engine) for engine in engines]
+    prefix = uuid4().hex
+    active = prefix + "active"
+    try:
+        async with engines[0].begin() as conn:
+            await conn.run_sync(turn_steering._metadata.create_all)
+            await conn.execute(
+                insert(turn_steering._turns),
+                [
+                    {
+                        "session_id": f"{prefix}-{i}",
+                        "turn_id": "old",
+                        "agent_instance_id": "a",
+                        "user_id": "u",
+                        "team_id": "t",
+                        "state": "active",
+                        "pending": [{"id": "m", "text": "expired"}],
+                        "seen": [],
+                        "expires_at": datetime(2000, 1, 1, tzinfo=UTC),
+                    }
+                    for i in range(turn_steering._CLEANUP_BATCH + 1)
+                ],
+            )
+        assert await first.start(active, "a", "u", "t", "current")
+        await first.cleanup_expired()
+        async with engines[0].begin() as conn:
+            remaining = (
+                (
+                    await conn.execute(
+                        select(turn_steering._turns.c.session_id).where(
+                            turn_steering._turns.c.session_id.startswith(prefix + "-")
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert len(remaining) == 1
+        await asyncio.gather(second.cleanup_expired(), first.renew(remaining[0], "old"))
+        async with engines[0].begin() as conn:
+            assert not (
+                await conn.execute(
+                    select(turn_steering._turns).where(
+                        turn_steering._turns.c.session_id.startswith(prefix + "-")
+                    )
+                )
+            ).first()
+        await second.end(active, "old")
+        assert await second.offer(active, "a", "u", "t", "current", "m", "keep")
+        assert await first.take(active, "current") == [("m", "keep")]
+    finally:
+        async with engines[0].begin() as conn:
+            await conn.execute(
+                turn_steering._turns.delete().where(
+                    turn_steering._turns.c.session_id.startswith(prefix)
+                )
+            )
+        await asyncio.gather(*(engine.dispose() for engine in engines))
+
+
+@pytest.mark.asyncio
+async def test_compiled_agent_receives_stop_before_next_model_decision(
+    monkeypatch, tmp_path
+):
+    from conftest import ToolFriendlyFakeChatModel
+    from fred_runtime.react.middleware.frame import (
+        build_react_platform_middleware_frame,
+    )
+    from fred_sdk.contracts.context import (
+        BoundRuntimeContext,
+        PortableContext,
+        PortableEnvironment,
+    )
+    from fred_sdk.contracts.context import RuntimeContext as PortableRuntimeContext
+    from fred_sdk.contracts.models import ToolApprovalPolicy
+    from langchain.agents import create_agent
+    from langchain.agents.middleware import AgentMiddleware
+    from langchain_core.tools import tool
+
+    first, second, engine, other = await _replicas(tmp_path)
+    monkeypatch.setattr(turn_steering, "turn_steering_mailbox", first)
+    events = []
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: events.append)
+    inputs = []
+
+    class CaptureModelInput(AgentMiddleware):
+        async def awrap_model_call(self, request, handler):
+            inputs.append(list(request.messages))
+            return await handler(request)
+
+    @tool
+    async def search() -> str:
+        """Return a test result while the user changes the instruction."""
+        assert await second.offer("s", "a", "u", "t", "turn", "m", "Stop")
+        return "No relevant result"
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "search", "args": {}, "id": "search-1"}],
+            ),
+            AIMessage(content="Stopped."),
+        ]
+    )
+    binding = BoundRuntimeContext(
+        runtime_context=PortableRuntimeContext(),
+        portable_context=PortableContext(
+            request_id="r",
+            correlation_id="c",
+            actor="u",
+            tenant="t",
+            environment=PortableEnvironment.DEV,
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            baggage={"steering_turn_id": "turn"},
+        ),
+    )
+    middleware = build_react_platform_middleware_frame(
+        binding=binding,
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names={"search"},
+        tracer=None,
+        kpi=None,
+        max_history_messages=500,
+        max_history_chars=200_000,
+    )
+    agent = create_agent(
+        model=model, tools=[search], middleware=[*middleware, CaptureModelInput()]
+    )
+    try:
+        assert await first.start("s", "a", "u", "t", "turn")
+        await agent.ainvoke(
+            {"messages": [HumanMessage(content="Find relevant information")]}
+        )
+        assert len(inputs) == 2
+        assert isinstance(inputs[1][-2], ToolMessage)
+        assert isinstance(inputs[1][-1], HumanMessage)
+        assert inputs[1][-1].content.endswith("\n\nStop")
+        assert "do not call more tools" in inputs[1][-1].content
+        assert [(event.message_id, event.content) for event in events] == [
+            ("m", "Stop")
+        ]
+    finally:
+        await first.end("s", "turn")
+        await engine.dispose()
+        await other.dispose()

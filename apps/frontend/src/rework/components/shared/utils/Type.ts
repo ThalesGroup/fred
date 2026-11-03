@@ -107,6 +107,7 @@ export const materialIcons = [
   "close",
   "cloud_off",
   "edit_note",
+  "subdirectory_arrow_right",
   "edit_document",
   "tune",
   "forum",

@@ -269,6 +269,7 @@ export type ChatSseCallbacks = {
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
   onTurnPersisted?: (sessionId: string) => void;
   onSteeredMessage?: (messageId: string, sessionId: string) => void;
+  onStreamInterrupted?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string, code?: string) => void;
   onPreparation?: (preparation: ExecutionPreparation) => void;
@@ -326,6 +327,7 @@ export function useChatSse(
     onBindDraftAgentToSessionId,
     onTurnPersisted,
     onSteeredMessage,
+    onStreamInterrupted,
     onAwaitingHuman,
     onError,
     onPreparation,
@@ -935,11 +937,23 @@ export function useChatSse(
       const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
         console.warn("[useChatSse] Failed to parse SSE frame:", raw),
       );
-      for await (const event of frames) {
-        processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+      let terminal = false;
+      let ended = false;
+      try {
+        for await (const event of frames) {
+          if (["final", "awaiting_human", "execution_interrupted", "execution_error"].includes(event.kind)) {
+            terminal = true;
+          }
+          processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+        }
+        ended = true;
+      } finally {
+        if ((!ended || !terminal) && (!abortRef.current || abortRef.current.signal === signal)) {
+          onStreamInterrupted?.(sessionId);
+        }
       }
     },
-    [processEvent],
+    [processEvent, onStreamInterrupted],
   );
 
   const send = useCallback(

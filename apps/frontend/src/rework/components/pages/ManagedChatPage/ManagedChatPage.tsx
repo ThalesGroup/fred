@@ -1138,12 +1138,19 @@ function ManagedChatContent({
                                   {message.text}
                                 </span>
                                 {message.status === "offered" ? (
-                                  <span className={styles.pendingStatus}>{t("chatbot.pendingMessages.offered")}</span>
+                                  <Button
+                                    type="button"
+                                    color="secondary"
+                                    variant="tonal"
+                                    size="2xs"
+                                    icon={{ category: "outlined", type: "subdirectory_arrow_right" }}
+                                    disabled
+                                    aria-label={`${t("chatbot.pendingMessages.offered")}: ${message.text}`}
+                                  >
+                                    {t("chatbot.pendingMessages.offered")}
+                                  </Button>
                                 ) : message.status === "uncertain" ? (
                                   <>
-                                    <span className={styles.pendingStatus}>
-                                      {t("chatbot.pendingMessages.uncertain")}
-                                    </span>
                                     <button
                                       type="button"
                                       className={styles.pendingAction}
@@ -1154,6 +1161,14 @@ function ManagedChatContent({
                                     >
                                       {t("chatbot.pendingMessages.retry")}
                                     </button>
+                                    <button
+                                      type="button"
+                                      className={styles.pendingAction}
+                                      disabled={chat.waitResponse}
+                                      onClick={() => void chat.removePendingMessage(message.id)}
+                                    >
+                                      {t("chatbot.pendingMessages.remove")}
+                                    </button>
                                   </>
                                 ) : (
                                   <>
@@ -1163,6 +1178,7 @@ function ManagedChatContent({
                                         color="secondary"
                                         variant="tonal"
                                         size="2xs"
+                                        icon={{ category: "outlined", type: "subdirectory_arrow_right" }}
                                         aria-label={`${t("chatbot.pendingMessages.send")}: ${message.text}`}
                                         onClick={() => void chat.forcePendingMessage(message.id)}
                                       >
