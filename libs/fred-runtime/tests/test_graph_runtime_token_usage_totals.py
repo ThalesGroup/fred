@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import pytest
 from fred_runtime.graph.node_context import NodeContext
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -120,7 +121,8 @@ def test_last_model_metadata_sums_every_call_the_node_made() -> None:
     assert finish_reason == "stop"
 
 
-def test_run_keeps_known_usage_across_nodes_after_authority_closes() -> None:
+@pytest.mark.asyncio
+async def test_run_keeps_known_usage_across_nodes_after_authority_closes() -> None:
     with active_turn("graph-agent") as authority:
         for _ in range(2):
             _node_context({}).record_model_metadata(
