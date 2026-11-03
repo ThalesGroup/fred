@@ -2140,7 +2140,9 @@ per-model off switch in place _before_ levels 3–4 widen exposure to it (RFC §
 | --------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `CapabilityEnablementItem.thinking_profile_ids`     | `GET /admin/capabilities` | The model's `supports_thinking` profile ids, from the pod. **Empty ⇒ the admin row shows no reasoning control at all**                                                |
 | `CapabilityEnablementItem.reasoning_enabled`        | `GET /admin/capabilities` | Current activation; `false` when no row is stored                                                                                                                     |
-| `CapabilityEnablementItem.model_display_name`       | `GET /admin/capabilities` | The model's ops-authored label, carried from the catalog entry. The admin table prefers it over `name`, which gateway siblings split by `model_id` share (2026-09-14) |
+| `CapabilityEnablementItem.model_display_name`       | `GET /admin/capabilities` | Effective display name. A saved administrator override takes priority over the pod catalog label; `name` remains the upstream wire id. |
+| `CapabilityEnablementItem.model_display_name_override` | `GET /admin/capabilities` | Saved administrator label, if any. The admin UI edits this value and can clear it to restore the pod label or identifier fallback. |
+| `CapabilityEnablementItem.model_context_window_tokens`, `model_max_input_tokens`, `model_max_output_tokens` | `GET /admin/capabilities` | Optional advisory token limits from the pod inventory. Missing metadata renders no value and never changes enablement. |
 | `CapabilityCatalogEntry.model_thinking_profile_ids` | catalog projection        | Carried verbatim from `GET /agents/models-catalog`, same as `model_profile_ids`. Absent on a pre-REASON-01 pod ⇒ reads as "cannot reason", the safe direction         |
 | `ExecutionPreparation.reasoning_enabled_model_ids`  | prepare-execution         | The activation snapshot the runtime enforces against                                                                                                                  |
 
@@ -2759,11 +2761,10 @@ retries once on the concurrent first-insert race (two admins, or a client
 retry, both observing no row and both attempting an insert on the single-row
 primary key) rather than surfacing a raw `IntegrityError` as a bare 500.
 
-**Authorization:** `organization_authz.require_manage_capabilities`
-(`organization#can_manage_capabilities`, §51), the same shared gate as
-`GET /admin/capabilities` — no team dimension (this is a platform-wide
-routing assertion, not a per-team permission, same reasoning as
-`model_reasoning`).
+**Authorization:** `GET` uses `organization_authz.require_manage_capabilities`
+(`organization#can_manage_capabilities`, §51). `PUT` and `DELETE` require
+`can_manage_platform`, since advanced binding settings can redirect a pod's
+provider credential to a new host. The binding has no team dimension.
 
 **API:** `GET`/`PUT`/`DELETE /control-plane/v1/admin/platform/model-bindings`
 — no `{model_capability}` path segment (chat-only, nothing to select
@@ -3137,12 +3138,12 @@ Parent and frame communicate only over `postMessage`, from the first message:
 
 ```text
 frame -> host : fred:ready { protocolVersion }
-host  -> frame: fred:context { protocolVersion, applicationId, context }
+host  -> frame: fred:context { protocolVersion, applicationId, context, capabilities? }
                 fred:route { subPath }
                 fred:response | fred:response-error { requestId, ... }
 frame -> host : fred:navigate { path, replace }
                 fred:open-chat { sessionId? }
-                fred:request { requestId, path, method, headers, body }
+                fred:request { requestId, path, method, headers, body, responseType? }
 ```
 
 The transport-neutral source of these protocol-`"1"` shapes, limits, pure parsers,
@@ -3157,10 +3158,14 @@ sub-path repeats—while request replies are settled only once by live request i
 
 The SDK adds client-side connection and request deadlines, a 16-request pending bound,
 local abort, and lifecycle disposal. These are local resource controls, not transferred
-cancellation or authorization. Its request API reconstructs buffered text/JSON
-`Response` objects, including inspectable HTTP errors and bodyless HEAD/204/205/304
-responses; it does not promise streams, binary bodies, remote cancellation, or
-automatic mutation retries. Host validation and all authority described below remain
+cancellation or authorization. Its request API reconstructs buffered `Response` objects,
+including inspectable HTTP errors and bodyless HEAD/204/205/304 responses. Bodies are
+text, or `Blob` both ways when the host announces `binary-bodies` in `capabilities`: the
+SDK then sends `Blob` and `FormData` (as a multipart `Blob`) bodies and sets
+`responseType: "blob"`, and the host answers that request with a `Blob`; it never sends
+one to a frame that did not ask. Upload size stays bounded by the gateway's
+`FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE`. The SDK does not promise streams, transfer
+progress, remote cancellation, or automatic mutation retries. Host validation and all authority described below remain
 mandatory for legacy and SDK clients alike.
 
 The host accepts a _set_ of protocol versions (currently `"1"`) because fork
@@ -3898,9 +3903,10 @@ still gates import/export, tasks and platform reset.
 surface moves off `can_manage_platform` onto `can_manage_capabilities`: the
 seven `/control-plane/v1/admin/capabilities*` routes (aggregate list,
 revoke-impact preview, per-team enable/disable, default-on, personal-scope,
-model reasoning) and the `GET`/`PUT`/`DELETE`
-`/control-plane/v1/admin/platform/model-bindings` trio, which is a panel of
-that same page. Paths are unchanged. `capability#can_manage` — the per-object
+model reasoning) and `GET /control-plane/v1/admin/platform/model-bindings`.
+The binding's `PUT` and `DELETE` require `can_manage_platform` because its
+advanced URL settings can redirect a provider credential. Paths are unchanged.
+`capability#can_manage` — the per-object
 gate every enablement mutation resolves through — is redefined from
 `platform_admin from organization` to `can_manage_capabilities from
 organization`; without that, a `feature_manager` would pass the org gate and
@@ -5128,3 +5134,54 @@ and persisted in `capability_config`, as for any capability (a 422 when no
 default is usable by the team, as for any template declaring defaults). Chat controls such
 as `document_scope.bound_library_ids` then follow from it. An instance saved
 earlier keeps `selected_capability_ids: []` until it is edited and saved.
+
+## 68. Contract Notes - delegated Platform Access (2026-10-22)
+
+`platform_access_manager` holds `organization#can_manage_platform_access`.
+All `/admin/platform/access` routes use this permission, including filtering,
+rules, individual and team exceptions, T0, Free settings and Free-link creation,
+history, joiners, token recovery, revocation and cleanup. Link creation and
+recovery still require the caller's own human credential. The role also holds
+`can_list_all_teams` so the Admin Teams page can show its Free controls, but
+it cannot create or edit team registry entries or administer users or roles.
+
+The role is a current admission source while filtering is active; revocation
+removes that source on the next request. Suspension, terms and resource checks
+remain independent. `team_manager` has no Platform Access authority, including
+Free links. `platform_admin` inherits both delegated surfaces through the
+OpenFGA role unions. Deploy the OpenFGA model before the backend and frontend.
+
+## 69. Contract Notes - personal display preferences (2026-10-24)
+
+`users_preferences` has one row per authenticated subject ID. It stores the
+selected UI theme ID, light/dark/system mode, language (`en` or `fr`), navigation
+sidebar collapsed state, and team and agent sort modes.
+Resizable pane widths and trace expansion remain in browser localStorage and are not sent to the
+preferences API. An absent row uses the frontend's
+existing defaults. The table is separate from `platform_ui_settings`, which
+continues to hold the administrator's platform-wide default and hidden themes.
+
+`GET /control-plane/v1/users/me/preferences` returns these typed values and an
+`initialized` flag. `PATCH` at the same path changes only submitted fields;
+the authenticated subject is the sole row key, with no target-user parameter.
+The backend validates theme ID shape, not catalog membership. A saved ID can
+remain when its theme is hidden or absent; the frontend resolves the visible
+theme by the existing platform fallback rules. Account deletion removes the
+preference row.
+
+The frontend reads the database record after login and before painting signed-in
+content. An absent row or failed read applies documented defaults. Existing
+personal localStorage values do not seed the row or serve as a fallback; the
+frontend applies the database response or defaults to in-memory controls and
+does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
+platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
+
+### Conversation title model (2026-10-30)
+
+`GET`/`PUT /admin/platform/creation-assistant` carry an optional
+`title_model_profile_id`, stored on `creation_assistant_settings` and validated
+against `model_options`. `ManagedAgentRuntimeBinding.title_model_profile_id`
+delivers it on the per-turn runtime binding, because the team settings endpoint
+requires `CAN_UPDATE_AGENTS` and a plain member must get the same title model.
+`None` follows the platform chat binding, then the pod default; a profile unknown
+to the pod falls back to the pod default.

@@ -13,6 +13,7 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import httpx
+import httpx2
 import pytest
 from fred_core.kpi import BaseKPIWriter
 from fred_core.model.diagnostics import active_model_http, observe_async_model_response
@@ -30,6 +31,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models._client_utils import StreamChunkTimeoutError
+from openai import APIConnectionError
 from pydantic import SecretStr
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.allow_hosts(["127.0.0.1"])]
@@ -246,10 +248,9 @@ async def test_real_stream_faults(mode, code, chunks, caplog):
             response = await invoke(model, middleware(kpi))
             assert response.result[0].content == "synthetic-answer"
         else:
+            # openai wraps mid-stream transport faults; the httpx cause stays chained.
             expected = (
-                httpx.RemoteProtocolError
-                if mode == "truncated"
-                else StreamChunkTimeoutError
+                APIConnectionError if mode == "truncated" else StreamChunkTimeoutError
             )
             with pytest.raises(expected) as caught:
                 await invoke(model, middleware(kpi))
@@ -318,7 +319,7 @@ async def test_callback_composition_and_broken_sinks(caplog):
         assert callback.count == 3
         assert model.callbacks == [callback]
     async with stream_server("truncated") as (model, _, _):
-        with pytest.raises(httpx.RemoteProtocolError):
+        with pytest.raises(APIConnectionError):
             await invoke(model, middleware(kpi))
 
 
@@ -397,7 +398,7 @@ async def test_diagnostics_remain_content_free(delegated, caplog):
     )
     try:
         async with stream_server("truncated") as (model, _, _):
-            with pytest.raises(httpx.RemoteProtocolError) as caught:
+            with pytest.raises(APIConnectionError) as caught:
                 await invoke(model, middleware(), text="private-prompt-canary")
             report_execution_error(
                 logging.getLogger("test.support"), caught.value, "execution"
@@ -441,8 +442,8 @@ async def test_existing_retry_produces_distinct_attempts(monkeypatch, caplog):
             if attempts == 1:
                 raise RateLimitError(
                     "private-provider-message",
-                    response=httpx.Response(
-                        429, request=httpx.Request("POST", "https://synthetic.invalid")
+                    response=httpx2.Response(
+                        429, request=httpx2.Request("POST", "https://synthetic.invalid")
                     ),
                     body=None,
                 )

@@ -34,7 +34,7 @@ Gateway API follow-up: https://github.com/ThalesGroup/fred/issues/3187
   generalized or removed.
 - Fred states the **application chart contract** in the FORKING_GUIDE: what an
   application's own chart must contain (UI and optional service, required `ui.hostOrigin`,
-  credentials by reference, notes printing both registration blocks, values schema, README,
+  credentials by reference, notes printing its `registrations` entry, values schema, README,
   `deploy/k3d/`), with fred-agent-evaluator's chart as the reference. Fred publishes no
   generic application chart: an application's service is arbitrary code.
 - Out of this change: moving each satellite onto the charts or the contract (one change per

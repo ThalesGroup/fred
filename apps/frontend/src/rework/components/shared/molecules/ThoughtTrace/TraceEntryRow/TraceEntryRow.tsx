@@ -84,8 +84,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   const isCrashLine = entry.kind === "solo" && status === "error";
   const isCancelled = isCancelledByUser(entry);
 
-  // Curated volume metadata (never raw args/content) so two calls to the same
-  // tool are distinguishable — "Reading query" ×2 was byte-identical (#2172).
+  // Safe result metadata distinguishes repeated calls with the same label.
   const discriminator = toolDiscriminator(entry);
   const discriminatorText = discriminator
     ? `${t(`rework.chatTrace.${discriminator.kind}`, { count: discriminator.count })}${discriminator.partial ? ` · ${t("rework.chatTrace.tabular.partialResult")}` : ""}`

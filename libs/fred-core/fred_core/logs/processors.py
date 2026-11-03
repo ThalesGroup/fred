@@ -35,6 +35,7 @@ from fred_core.logs.context import (
     safe_value,
 )
 from fred_core.logs.log_structures import AUDIT_LOGGER_NAME, KPI_LOGGER_NAME
+from fred_core.logs.redaction import sanitize_sensitive_query_params
 
 STANDARD_ATTRIBUTES = frozenset(vars(logging.LogRecord("", 0, "", 0, "", (), None))) | {
     "message",
@@ -157,13 +158,10 @@ class EventProcessor:
         }
         if self.role is not None:
             result["service_role"] = self.role
-        if record.exc_info:
-            # Delegated call sites and the server filter supply bounded diagnostics.
-            from fred_core.security.delegation import get_delegation_config
-
-            if not get_delegation_config().in_use:
-                result["exc_info"] = record.exc_info
-                result = format_exc_info(logger, method, result)
+        if exc_info := event.get("exc_info"):
+            result["exc_info"] = exc_info
+            result = format_exc_info(logger, method, result)
+            result["exception"] = sanitize_sensitive_query_params(result["exception"])
         return result
 
 

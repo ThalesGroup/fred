@@ -18,7 +18,7 @@ import pytest
 from langchain_community.embeddings import FakeEmbeddings
 from langchain_core.documents import Document
 
-from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD
+from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, SearchFilter
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 
 
@@ -28,6 +28,9 @@ class _BrokenStore:
     than the store legitimately holding zero matching chunks."""
 
     def items(self):
+        raise RuntimeError("simulated backend outage")
+
+    def values(self):
         raise RuntimeError("simulated backend outage")
 
 
@@ -102,3 +105,23 @@ def test_delete_vectors_for_document_raises_on_a_genuine_backend_failure():
 
     with pytest.raises(RuntimeError):
         store.delete_vectors_for_document(document_uid="doc-1")
+
+
+def test_set_document_tag_ids_moves_the_document_between_folder_filters():
+    store = _make_store()
+    store.add_documents([Document(page_content="report", metadata={CHUNK_ID_FIELD: "doc-1::chunk::0", "document_uid": "doc-1", "tag_ids": ["alpha"]})])
+
+    store.set_document_tag_ids(document_uid="doc-1", tag_ids=["beta", "gamma"])
+
+    def found(tag_id: str) -> bool:
+        return bool(store.ann_search("report", k=5, search_filter=SearchFilter(tag_ids=[tag_id])))
+
+    assert (found("alpha"), found("beta"), found("gamma")) == (False, True, True)
+
+
+def test_set_document_tag_ids_raises_on_a_genuine_backend_failure():
+    store = _make_store()
+    store.vectorstore.store = _BrokenStore()
+
+    with pytest.raises(RuntimeError):
+        store.set_document_tag_ids(document_uid="doc-1", tag_ids=["beta"])

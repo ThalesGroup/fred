@@ -162,6 +162,32 @@ describe("capability enablement invalidation", () => {
     await vi.waitFor(() => expect(callsTo(agentsPath("team-b"))).toBe(2));
     release();
   });
+
+  it("refreshes pod default choices when a model is switched off", async () => {
+    const podDefaultsPath = "/control-plane/v1/admin/pod-chat-defaults";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request | string) => {
+        const request = typeof input === "string" ? new Request(input) : input;
+        requested.push(request.url);
+        return json(request.method === "PUT" ? {} : { pods: [] });
+      }),
+    );
+    const store = makeStore();
+    const defaults = store.dispatch(api.endpoints.getPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGet.initiate());
+    await defaults;
+    expect(callsTo(podDefaultsPath)).toBe(1);
+
+    await store.dispatch(
+      api.endpoints.putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut.initiate({
+        capabilityId: "model__mistral__small",
+        setCapabilityDefaultOnRequest: { default_on: false },
+      }),
+    );
+
+    await vi.waitFor(() => expect(callsTo(podDefaultsPath)).toBe(2));
+    defaults.unsubscribe();
+  });
 });
 
 describe("agent marketplace listing invalidation", () => {

@@ -161,6 +161,21 @@ describe("CapabilityTeamMatrixDrawer tri-state controls", () => {
     expect(html).toContain("rework.admin.capabilities.matrix.enable");
   });
 
+  it("prevents new grants for an unavailable model while leaving existing grants reversible", () => {
+    const html = render({
+      capability: capability({ kind: "model", enabled_team_ids: ["nb"] }),
+      teams: [team("nb", "Nightly Build"), team("ops", "Ops")],
+      unavailable: true,
+    });
+    const rows = rowsInOrder(html);
+    const enabledSegment = (row: string) =>
+      row.split("<button").find((button) => button.includes("rework.admin.capabilities.matrix.enable")) ?? "";
+
+    expect(html).toContain("rework.admin.capabilities.discovery.unavailableGrantHint");
+    expect(enabledSegment(rows[0])).not.toContain("disabled");
+    expect(enabledSegment(rows[1])).toContain("disabled");
+  });
+
   it("does not offer the personal-space class control for an application", () => {
     const html = render({
       capability: capability({ id: "app__example", kind: "app" }),

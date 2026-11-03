@@ -14,8 +14,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, SearchFilter
@@ -79,3 +82,103 @@ def test_ann_search_keeps_a_single_value_as_plain_equality():
 
     assert fake.filters == [{"document_uid": "doc-a"}]
     assert [h.document.metadata["document_uid"] for h in hits] == ["doc-a"]
+
+
+class _RecordingEngine:
+    """Captures the statement and parameters `set_document_tag_ids` sends."""
+
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, dict[str, Any]]] = []
+
+    def begin(self):
+        engine = self
+
+        class _Conn:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def execute(self, statement, params):
+                engine.executed.append((str(statement), params))
+                return type("Result", (), {"rowcount": 2})()
+
+        return _Conn()
+
+
+def test_set_document_tag_ids_replaces_the_jsonb_array_on_every_chunk():
+    store, _ = _make_store([])
+    engine = _RecordingEngine()
+    store._engine = cast(Any, engine)
+
+    store.set_document_tag_ids(document_uid="doc-1", tag_ids=["alpha", "beta"])
+
+    [(sql, params)] = engine.executed
+    assert "jsonb_set(e.cmetadata, '{tag_ids}', CAST(:tag_ids AS jsonb))" in sql
+    assert params == {"collection": "test-collection", "doc_uid": "doc-1", "tag_ids": '["alpha", "beta"]'}
+
+
+class _FakeEngine:
+    """Applies the adapter's retrievable UPDATE to the fake store's chunks, matching on document and collection."""
+
+    def __init__(self, fake: _FakePGVector, collection: str, *, fail: bool = False) -> None:
+        self.fake = fake
+        self.collection = collection
+        self.fail = fail
+        self.statements: list[tuple[str, dict[str, Any]]] = []
+
+    @contextmanager
+    def begin(self):
+        yield self
+
+    def execute(self, statement: Any, params: dict[str, Any]):
+        if self.fail:
+            raise ConnectionError("database unavailable")
+        sql = str(statement)
+        self.statements.append((sql, params))
+        assert "jsonb_set(e.cmetadata, '{retrievable}'" in sql
+        updated = 0
+        if params["collection"] == self.collection:
+            for doc in self.fake.documents:
+                if doc.metadata.get("document_uid") == params["doc_uid"]:
+                    doc.metadata["retrievable"] = params["value"]
+                    updated += 1
+        return SimpleNamespace(rowcount=updated)
+
+
+def _searchable_uids(store: PgVectorStoreAdapter) -> set[str]:
+    hits = store.ann_search("chunk", k=10, search_filter=SearchFilter(metadata_terms={"retrievable": [True]}))
+    return {h.document.metadata["document_uid"] for h in hits}
+
+
+def test_retrievable_toggle_round_trip_hides_then_restores_only_that_document():
+    store, fake = _make_store([_chunk(uid, i) for uid in ("doc-a", "doc-b") for i in range(2)])
+    engine = _FakeEngine(fake, "test-collection")
+    store._engine = cast(Any, engine)
+
+    store.set_document_retrievable(document_uid="doc-a", value=False)
+
+    assert engine.statements[0][1] == {"collection": "test-collection", "doc_uid": "doc-a", "value": False}
+    assert {d.metadata["document_uid"]: d.metadata["retrievable"] for d in fake.documents} == {"doc-a": False, "doc-b": True}
+    assert _searchable_uids(store) == {"doc-b"}
+
+    store.set_document_retrievable(document_uid="doc-a", value=True)
+
+    assert all(d.metadata["retrievable"] is True for d in fake.documents)
+    assert _searchable_uids(store) == {"doc-a", "doc-b"}
+
+
+def test_ann_search_keeps_legacy_chunks_without_a_retrievable_field():
+    legacy = Document(page_content="chunk 0 of doc-old", metadata={CHUNK_ID_FIELD: "doc-old-0", "document_uid": "doc-old"})
+    store, _ = _make_store([legacy, _chunk("doc-a", 0)])
+
+    assert _searchable_uids(store) == {"doc-old", "doc-a"}
+
+
+def test_retrievable_toggle_raises_when_the_update_fails():
+    store, fake = _make_store([_chunk("doc-a", 0)])
+    store._engine = cast(Any, _FakeEngine(fake, "test-collection", fail=True))
+
+    with pytest.raises(RuntimeError, match="retrievable"):
+        store.set_document_retrievable(document_uid="doc-a", value=False)

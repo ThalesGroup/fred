@@ -731,6 +731,47 @@ def test_write_turn_history_persists_reasoning_blocks() -> None:
     assert thought.rank < tool_call_rank
 
 
+def test_write_turn_history_places_steering_after_tool_results() -> None:
+    from fred_core.history.history_schema import Role
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+    asyncio.run(
+        _write_turn_history(
+            session_id="steered",
+            user_id="user",
+            request_message="original",
+            payloads=[
+                {
+                    "kind": "tool_call",
+                    "call_id": "c1",
+                    "tool_name": "search",
+                    "arguments": {},
+                },
+                {"kind": "tool_result", "call_id": "c1", "content": "found"},
+                {
+                    "kind": "steered_user_message",
+                    "message_id": "m1",
+                    "content": "new direction",
+                },
+                {"kind": "final", "content": "updated"},
+            ],
+            history_store=store,
+        )
+    )
+    messages = store.save.call_args.kwargs["messages"]
+    assert [message.role for message in messages] == [
+        Role.user,
+        Role.assistant,
+        Role.tool,
+        Role.user,
+        Role.assistant,
+    ]
+    assert [message.rank for message in messages] == [0, 1, 2, 3, 4]
+    assert messages[3].parts[0].text == "new direction"
+
+
 def test_write_turn_history_skips_synthetic_tool_use_thoughts() -> None:
     """
     ``tool_use`` blocks must not be persisted.

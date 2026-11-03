@@ -238,3 +238,36 @@ def test_destructive_team_registry_capabilities_stay_platform_admin_only() -> No
         assert organization["relations"][capability] == {
             "computedUserset": {"relation": "platform_admin"}
         }, f"{capability} must be platform_admin-only."
+
+
+def test_delegated_platform_access_is_isolated() -> None:
+    organization = _type_definition("organization")
+    relations = organization["relations"]
+
+    assert relations["platform_access_manager"] == {
+        "union": {
+            "child": [{"this": {}}, {"computedUserset": {"relation": "platform_admin"}}]
+        }
+    }
+    assert relations["can_manage_platform_access"] == {
+        "computedUserset": {"relation": "platform_access_manager"}
+    }
+    assert {
+        child["computedUserset"]["relation"]
+        for child in relations["can_list_all_teams"]["union"]["child"]
+    } == {
+        "platform_admin",
+        "team_manager",
+        "feature_manager",
+        "platform_access_manager",
+    }
+    assert relations["can_manage_platform"] == {
+        "computedUserset": {"relation": "platform_admin"}
+    }
+    for name, expression in relations.items():
+        if name not in {
+            "platform_access_manager",
+            "can_manage_platform_access",
+            "can_list_all_teams",
+        }:
+            assert "platform_access_manager" not in json.dumps(expression), name

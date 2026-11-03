@@ -45,9 +45,8 @@
     }
   }
 
-  // Same rules as resolveUiTheme: user's choice if offered, else the platform
-  // default if offered, else the first offered theme (platform settings cached
-  // from the last /frontend/config; index.tsx re-applies the fresh ones).
+  // Before login, only public platform settings and OS mode are available.
+  // Signed-in choices come from the database before application content mounts.
   var platform = read("localHook:ApplicationContextProvider.platformUiThemes") || {};
   var hidden = platform.hidden_themes instanceof Array ? platform.hidden_themes : [];
   var offered = [];
@@ -56,16 +55,10 @@
   }
   if (offered.length === 0) offered = THEMES;
 
-  var theme = read("localHook:ApplicationContextProvider.uiTheme");
-  if (offered.indexOf(theme) < 0) {
-    theme = offered.indexOf(platform.default_theme) >= 0 ? platform.default_theme : offered[0];
-  }
+  var theme = offered.indexOf(platform.default_theme) >= 0 ? platform.default_theme : offered[0];
 
-  var mode = read("localHook:ApplicationContextProvider.themeMode");
-  if (mode !== "light" && mode !== "dark") {
-    var prefersDark = !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    mode = prefersDark ? "dark" : "light";
-  }
+  var prefersDark = !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  var mode = prefersDark ? "dark" : "light";
 
   document.documentElement.setAttribute("data-ui-theme", theme);
   document.documentElement.setAttribute("data-ui-base-theme", bases[theme] || theme);

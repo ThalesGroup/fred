@@ -111,6 +111,8 @@ spec:
             {{- if $isFrontend }}
             - name: FRONTEND_ENABLE_APPLICATIONS
               value: {{ ternary "true" "false" $enableApplications | quote }}
+            - name: FRONTEND_APPLICATIONS_JSON
+              value: {{ (include "fred.registrations" .root | fromYaml).gateways | toJson | quote }}
             {{- end }}
           {{- end }}
 

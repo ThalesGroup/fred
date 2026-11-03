@@ -14,7 +14,8 @@ Knowledge Flow first-party MCP mounts and tabular discovery/description.
 ## Prerequisites
 
 Use the normal matched Fred images with the updated shared-core package.
-The existing fastapi-mcp 0.4.0 pin remains unchanged.
+Diagnostics use the current MCP v2 mount and its application-owned HTTP client.
+The existing MCP v2 / FastMCP dependencies remain unchanged.
 
 ## Configuration
 

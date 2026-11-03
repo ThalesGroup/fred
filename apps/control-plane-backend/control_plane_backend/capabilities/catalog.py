@@ -48,6 +48,14 @@ logger = logging.getLogger(__name__)
 _CAPABILITY_ID_RE = re.compile(CAPABILITY_ID_PATTERN)
 
 
+async def model_display_name_overrides(
+    deps: ProductServiceDependencies,
+) -> dict[str, str]:
+    getter = getattr(deps, "get_model_display_name_override_store", None)
+    store = getter() if getter is not None else None
+    return await store.list_all() if store is not None else {}
+
+
 def _union_profile_ids(*groups: tuple[str, ...]) -> tuple[str, ...]:
     seen: dict[str, None] = {}
     for group in groups:
@@ -202,7 +210,11 @@ async def aggregate_capability_catalog(
                     KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
                 )
                 continue
-            if entry.kind != "model":
+            if entry.kind == "model":
+                entry = entry.model_copy(
+                    update={"model_runtime_ids": (source.runtime_id,)}
+                )
+            else:
                 # Stamp the advertising pod. Skipped for models on purpose:
                 # several pods can serve the same model and their entries are
                 # unioned just below, so a single pod id would be whichever one
@@ -220,9 +232,25 @@ async def aggregate_capability_catalog(
                         "model_profile_ids": _union_profile_ids(
                             existing.model_profile_ids, entry.model_profile_ids
                         ),
+                        "model_capabilities": _union_profile_ids(
+                            existing.model_capabilities, entry.model_capabilities
+                        ),
+                        "model_chat_capability_verified": (
+                            existing.model_chat_capability_verified
+                            or entry.model_chat_capability_verified
+                        ),
+                        "model_runtime_ids": _union_profile_ids(
+                            existing.model_runtime_ids, entry.model_runtime_ids
+                        ),
                         "model_chat_profile_ids": _union_profile_ids(
                             existing.model_chat_profile_ids,
                             entry.model_chat_profile_ids,
+                        ),
+                        "model_platform_binding": (
+                            entry.model_platform_binding
+                            if entry.model_platform_binding
+                            == existing.model_platform_binding
+                            else None
                         ),
                         "model_thinking_profile_ids": _union_profile_ids(
                             existing.model_thinking_profile_ids,
@@ -239,6 +267,22 @@ async def aggregate_capability_catalog(
                         # heuristic. Both naming it: last wins, as elsewhere.
                         "model_display_name": (
                             entry.model_display_name or existing.model_display_name
+                        ),
+                        "model_discovery_source_id": (
+                            entry.model_discovery_source_id
+                            or existing.model_discovery_source_id
+                        ),
+                        "model_context_window_tokens": (
+                            entry.model_context_window_tokens
+                            or existing.model_context_window_tokens
+                        ),
+                        "model_max_input_tokens": (
+                            entry.model_max_input_tokens
+                            or existing.model_max_input_tokens
+                        ),
+                        "model_max_output_tokens": (
+                            entry.model_max_output_tokens
+                            or existing.model_max_output_tokens
                         ),
                     }
                 )
@@ -281,6 +325,13 @@ async def aggregate_capability_catalog(
             team_scope=TeamScopePolicy.ADMIN_GATED,
         )
         catalog[entry.id] = entry
+    overrides = await model_display_name_overrides(deps)
+    for capability_id, display_name in overrides.items():
+        entry = catalog.get(capability_id)
+        if entry is not None and entry.kind == "model":
+            catalog[capability_id] = entry.model_copy(
+                update={"model_display_name": display_name}
+            )
     return catalog
 
 

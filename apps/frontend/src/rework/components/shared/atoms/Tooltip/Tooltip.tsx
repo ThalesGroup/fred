@@ -305,7 +305,7 @@ export const Tooltip = ({
       maxWidth: availableWidth,
       overflow: "auto",
     });
-  }, [triggerRect, placement, gapPx]);
+  }, [triggerRect, placement, gapPx, content, text]);
 
   const child = isValidElement(children)
     ? cloneElement(children as ReactElement<{ "aria-describedby"?: string }>, {

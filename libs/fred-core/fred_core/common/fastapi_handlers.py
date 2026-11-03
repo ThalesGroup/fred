@@ -124,11 +124,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def generic_exception_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        """Handle all unhandled exceptions by logging and returning 500."""
+        """Render 500; the request boundary owns the correlated error diagnostic."""
         from fred_core.kpi.http_middleware import record_unhandled_request_exception
 
         record_unhandled_request_exception(request.scope, exc)
-        logger.error("Unhandled request failure")
         return JSONResponse(
             status_code=500, content={"detail": "Internal server error"}
         )

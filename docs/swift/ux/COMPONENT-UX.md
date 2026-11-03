@@ -61,6 +61,17 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Admin self-test authorization controls
+
+**Location:** `src/rework/components/pages/admin/SelfTestPage/AuthorizationExtras.tsx`
+
+**Status:** Functional; not visually reviewed. The second-account form has
+only credentials and the isolation/role campaign, with no team/role selection.
+The campaign requires credentials
+and confirmation, explains its temporary privilege changes and offers recovery
+when a local journal remains. Other runs are disabled during execution.
+Live browser validation of the new campaign remains pending.
+
 ---
 
 ### `SearchField`
@@ -467,8 +478,8 @@ control" below).
 Conversation-level projection of the latest valid Deep Agent `write_todos` snapshot. The panel is
 mounted by `ManagedChatPage` between the scrollable conversation and the composer, aligned to the
 composer's 720px content lane, so the current plan stays visible while messages scroll. The panel
-extends behind the higher-stacking composer by its corner radius plus one spacing step. Hovering
-`Tasks` highlights only that header; the backing surface never changes colour through the composer.
+has a complete rounded border and a small gap above the composer, like the pending-message list.
+Hovering `Tasks` highlights only that header.
 
 The compact header shows `Tasks` plus the number of pending or in-progress items. Expanded content
 keeps all three states visible: pending uses an open circle, in-progress uses the primary-colour
@@ -720,6 +731,9 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
 
 #### Resolved
 
+- **Agent question label** - The `ask_user` trace row uses a localized description of the request
+  for information instead of showing the tool name.
+
 - **Tool step showed "running" before the HITL confirmation was even answered, and one
   confirmation was asked per document instead of once for the whole folder (2026-08-03)** —
   a HITL-gated tool call (`document_access`'s `summarize_document` in particular) rendered its
@@ -824,8 +838,12 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   rendered richly: a tabular/SQL result (`{sql_query, rows, error}`) shows the executed SQL
   plus a row-count and preview; a RAG/vector-search result (`{query, hits}`) shows the
   search query plus retrieved sources via the existing `SourcesPanel` molecule. Any other
-  tool shape still falls back to the original redacted view — see
+  tool shape still falls back to the original redacted view - see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
+
+- **Tabular MCP result compatibility (2026-10-29)** - discovery and schema panels
+  accept both historical arrays and the MCP `{result: [...]}` envelope. The same
+  payload validation and hiding of internal document IDs and SQL aliases apply.
 
 - **Curated document tool views (updated 2026-10-12)** - `summarize_document`
   renders its summary through `MarkdownRenderer`. `list_document_tree` shows nested,
@@ -972,6 +990,49 @@ _(none — streaming indicator resolved 2026-05-18)_
   while any supported fence is still open, including Mermaid. The user sees the language header,
   copy action, and raw source text immediately during streaming, then the block switches to syntax
   highlighting / Mermaid / KaTeX / directive rendering once complete.
+
+---
+
+### `MermaidBlock`
+
+**Location:** `src/rework/components/shared/molecules/MermaidBlock/`
+**Status:** `Functional`
+
+Completed Mermaid fences use beautiful-mermaid for its supported subset, with official Mermaid
+as a compatibility renderer for other syntax (including one-line semicolon headers, pie and
+Gantt). The original source is attempted before the existing syntax repair. Open fences remain
+source previews until they close.
+
+Both the inline diagram and enlarged view follow Fred's current theme: `surface-container` canvas,
+`surface-container-high` nodes, `on-surface` labels, `on-surface-retreat` connectors/secondary labels,
+`primary` accent and `outline-variant` borders. Diagram fonts are local application fonts; SVG styles,
+IDs, references and animations are isolated per view. Theme and mode changes update mounted diagrams.
+Compatibility diagrams use the primary, secondary and tertiary token pairs for section colors and
+journey actors; timeline axes retain the connector token in both modes.
+The diagram is unframed: no code-block label, header fill or border. Quiet actions retain source
+copy and translated fullscreen/download icons. The action order is fullscreen, download, copy.
+Download saves the complete graph as `diagram.svg` on a white background, using the selected theme's
+light palette even from a dark interface. The standalone SVG retains scoped styles, references and
+safe HTML labels; fonts use the existing stack and local fallbacks. Fullscreen also offers download
+as its second action, and export failures show localized feedback without replacing the diagram.
+Inline SVGs fit the available width without
+cropping. In chat, a diagram can extend beyond the prose column up to 1.4 times its reading measure;
+surrounding text keeps its original width. Full-width document previews let diagrams span their
+content area. The fullscreen view uses the available window, retains natural-size scrolling for
+large diagrams, and returns focus to its trigger on Escape. Rendering errors retain source copy.
+
+For a representative example, paste this completed block into an existing Markdown surface:
+
+````markdown
+```mermaid
+flowchart LR
+  Q[Question] --> A[Agent]
+  A --> D[Documents]
+  A --> W[Recherche web]
+  D --> R[Réponse]
+  W --> R
+```
+````
 
 ---
 
@@ -3474,7 +3535,7 @@ Popup title editor — Claude.com pattern. Display mode: `<button>` with `font: 
 **Location:** `src/rework/components/shared/molecules/RichInputField/RichInputField.tsx`
 **Status:** `Functional`
 
-Auto-growing textarea with optional `topSlot`, `leftSlot`, `rightSlot`, and `showSendButton`. Height grows with content up to `maxHeight` (200px default); `overflowY` switches from `hidden` to `auto` at max height. Enter (no Shift) sends; Shift+Enter inserts newline. `.bar` uses a gradient fade (`transparent → --surface-container-lowest`) so the field floats above the thread visually.
+Auto-growing textarea with optional `topSlot`, `leftSlot`, `rightSlot`, and `showSendButton`. Height grows with content up to `maxHeight` (200px default); `overflowY` switches from `hidden` to `auto` at max height. Enter (no Shift) sends; Shift+Enter inserts newline. `.bar` uses a gradient fade (`transparent` to `--surface-main`) above an active thread. `ManagedChatPage` removes the bar background in the initial empty state.
 
 #### Required composer-control pattern
 
@@ -3621,6 +3682,11 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
   state until then. A chat with no session id is settled on the spot — it has no history to
   resolve, and making it wait would put a spinner in front of the one screen that is empty by
   nature.
+- **Welcome agent card hid the description (2026-10-29)** - the card showed only the name and a
+  one-line truncated role, so the agent's capabilities and prerequisites were invisible. The card
+  hugs its content, up to 560px wide, in three columns: icon, name and role (13rem max), then the
+  visible description. Text wraps, and descriptions scroll past 12rem with keyboard access. Below
+  600px of viewport width, the description moves under the icon and identity.
 
 ---
 
@@ -5765,3 +5831,17 @@ The platform administration Teams registry owns the Free toggle, labeled Link ac
 Admission denial, every enrollment state and the transient admission-verification failure of `PlatformAdmissionGuard` share the card described above instead of PageError; sign-out appears on admission denial and on the guard's failure, never on the enrollment route. Ordinary error pages retain their home action. Picker values disappear on dismissal, unsupported numeric/boolean fields stay unselectable, and selecting a key only changes the draft.
 
 Invitation history filtering and cleanup (2026-10-09): the shared Select filters All, Active, Revoked or Expired across server-paginated history. Suspended links appear in All with grayscale rows at reduced opacity, retaining copying and revocation actions; the status is available to screen readers without a visible Suspended label or explanatory paragraph. Suspension has no separate filter. A height-bounded shared DataTable (same rule as the activation review) keeps headers and pagination outside its scrolling body. Loading hides previous rows while retaining pagination totals until the requested page arrives. Cleanup is triggered from the history dialog's footer, away from the filter, and uses the shared destructive confirmation Dialog (revocation confirms in the error colour too) with the selected team in its title and the team-wide eligible count; the history dialog remains visible behind it, inert and hidden from assistive navigation while confirmation alone handles focus and keyboard dismissal; it preserves the filter and refreshes history after success. Copy keeps the chat ActionBar feedback without changing modal geometry.
+
+### Pending chat messages (2026-11-02)
+
+The pending list belongs to the current chat visit, like the live generation.
+Changing conversation, leaving the page, reloading or interrupting its stream
+clears the list without restoring or replaying it. Normal completion drains the
+local queue; a normal human-input pause holds it until the user responds.
+Other uncertain outcomes offer text-only Send again / Renvoyer and Remove /
+Supprimer, without a delivery-status label or an additional delivery-check toast.
+The retry tooltip retains its duplicate-message guidance.
+
+The immediate Send / Envoyer action uses the small secondary tonal button with a
+bent right-arrow icon. Sending / Envoi uses the same button and icon, disabled;
+the action menu is hidden until the delivery outcome is known.

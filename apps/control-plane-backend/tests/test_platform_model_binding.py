@@ -30,9 +30,7 @@ Covers:
   can be inserted, even bypassing the store's own API — and a row that
   bypasses the store's own `set()` entirely (malformed provider, unknown
   settings key) fails closed on `get()`, not just at write time
-- the service's feature-governance gate
-  (`organization_authz.require_manage_capabilities`, shared with
-  `capabilities/service.py`)
+- the service's feature-governance read gate and platform-admin write gate
 - `resolve_platform_chat_model_binding`: the trusted, no-client-authz
   per-turn entrypoint threaded into `ManagedAgentRuntimeBinding.
   platform_chat_model_binding` — resolved fresh on the runtime's own
@@ -437,10 +435,8 @@ async def test_admin_get_set_delete_all_succeed() -> None:
     assert store.delete_calls == 1
 
 
-async def test_model_bindings_gate_on_the_narrow_feature_relation() -> None:
-    """The panel lives on the features page, so a `feature_manager` must reach
-    it — checking the `can_manage_platform` catch-all here would drag
-    import/export, tasks and platform reset along with the delegation."""
+async def test_model_bindings_require_platform_permission_to_write() -> None:
+    """A binding URL can redirect the pod's provider credential."""
 
     rebac = _FakeOrgAdminRebac(allow=True)
     deps = _deps(store=_RecordingPlatformModelBindingStore(), rebac=rebac)
@@ -451,10 +447,37 @@ async def test_model_bindings_gate_on_the_narrow_feature_relation() -> None:
     )
     await routing_policy_service.delete_platform_model_binding(user=_user(), deps=deps)
 
-    assert (
-        rebac.checked
-        == [(OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID)] * 3
+    assert rebac.checked == [
+        (OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID),
+        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID),
+        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID),
+    ]
+
+
+async def test_feature_manager_cannot_write_a_platform_binding() -> None:
+    class _FeatureManagerRebac(_FakeOrgAdminRebac):
+        async def check_user_permission_or_raise(
+            self, user, permission, resource_id, **kwargs
+        ) -> None:
+            self.checked.append((permission, resource_id))
+            if permission != OrganizationPermission.CAN_MANAGE_CAPABILITIES:
+                raise AuthorizationError(
+                    user.uid, str(permission), Resource.ORGANIZATION, "denied"
+                )
+
+    deps = _deps(
+        store=_RecordingPlatformModelBindingStore(),
+        rebac=_FeatureManagerRebac(allow=True),
     )
+    await routing_policy_service.get_platform_model_binding(user=_user(), deps=deps)
+    with pytest.raises(AuthorizationError):
+        await routing_policy_service.set_platform_model_binding(
+            user=_user(), binding=_binding(), deps=deps
+        )
+    with pytest.raises(AuthorizationError):
+        await routing_policy_service.delete_platform_model_binding(
+            user=_user(), deps=deps
+        )
 
 
 # ---------------------------------------------------------------------------

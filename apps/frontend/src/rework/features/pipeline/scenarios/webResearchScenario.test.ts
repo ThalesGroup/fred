@@ -96,7 +96,12 @@ describe("web research self-test", () => {
   it("skips everything when the harness template is missing", async () => {
     const { status, deps } = await run("", null);
     expect(status("web-provision")).toBe("skipped");
-    expect(deps.provisionAgentInstance).toHaveBeenCalledWith(WEB_SELF_TEST_AGENT_ID);
+    expect(deps.provisionAgentInstance).toHaveBeenCalledWith(
+      WEB_SELF_TEST_AGENT_ID,
+      undefined,
+      undefined,
+      expect.stringMatching(/^[a-z0-9]{8}$/i),
+    );
     expect(deps.runAgentTurn).not.toHaveBeenCalled();
   });
 

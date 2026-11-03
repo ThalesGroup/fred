@@ -96,6 +96,7 @@ from fred_runtime.react.react_tool_binding import (
 )
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
+from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 from fred_runtime.skills.catalog import PlatformSkills
 
 logger = logging.getLogger(__name__)
@@ -538,6 +539,16 @@ def _build_deepagent_runtime_middleware(
             max_history_messages=None,
             binding=binding,
             kpi=kpi,
+        ),
+        *(
+            (
+                TurnSteeringMiddleware(
+                    binding.portable_context.session_id,
+                    binding.portable_context.baggage.get("steering_turn_id"),
+                ),
+            )
+            if not child
+            else ()
         ),
         # Deep Agents no longer installs planning for non-Codex models.
         cast(AgentMiddleware, TodoListMiddleware()),

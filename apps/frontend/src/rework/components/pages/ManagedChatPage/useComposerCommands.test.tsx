@@ -294,6 +294,17 @@ describe("the command menu", () => {
     expect(focusedLabel()).toBe("/summary");
   });
 
+  it("keeps the same menu mounted while the command is typed", () => {
+    type("/");
+    const list = container.querySelector('[role="listbox"]');
+    type("/s");
+    type("/su");
+
+    expect(list).not.toBeNull();
+    expect(container.querySelector('[role="listbox"]')).toBe(list);
+    expect(labels()).toEqual(["/summary"]);
+  });
+
   it("matches anywhere inside a command name, whatever the case, and nowhere else", () => {
     type("/MAR");
     expect(labels()).toEqual(["/summary"]);

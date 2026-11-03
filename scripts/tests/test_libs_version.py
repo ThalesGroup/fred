@@ -256,13 +256,12 @@ class PrepareTest(unittest.TestCase):
         pending = {package_dir(self.root, name) for name in first["selected_packages"]}
         for package in pending:
             build_artifacts(package)
-        with patch.object(release_validator, "ROOT", self.root):
-            self.assertEqual(
-                release_validator.validate(
-                    packages, base="code/v1.0.0", pending=pending
-                ),
-                [],
-            )
+        self.assertEqual(
+            release_validator.validate(
+                packages, prepared=set(first["selected_packages"]), pending=pending
+            ),
+            [],
+        )
 
     def test_manifest_free_package_can_advance(self) -> None:
         self.fixture.write(

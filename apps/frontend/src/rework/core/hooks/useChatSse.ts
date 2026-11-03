@@ -34,6 +34,8 @@ import type {
   RuntimeErrorEvent,
   ExecutionInterruptedRuntimeEvent,
   RuntimeExecuteRequest,
+  SessionTitleRuntimeEvent,
+  SteeredUserMessageRuntimeEvent,
   StatusRuntimeEvent,
   ThoughtDeltaEvent,
   ThoughtEndEvent,
@@ -48,11 +50,6 @@ import { countUnicodeCodePoints } from "../utils/chatInput";
 import { personalTeamId } from "../../components/shared/utils/teamId";
 import { normalizeApiError } from "../errors/normalizeApiError";
 
-// The UI may still carry the bare "personal" placeholder (teamId.ts) in the URL
-// before bootstrap resolves the real per-user id. The control-plane resolves
-// that alias server-side (teams/system.py), but fred-runtime's OpenFGA check
-// does not — it authorizes the raw team_id in runtime_context. Canonicalize
-// before it reaches the runtime, mirroring usePipelineRun.ts.
 function canonicalizeRuntimeTeamId(teamId: string): string {
   return teamId === "personal" ? personalTeamId(KeyCloakService.GetUserId() ?? "") : teamId;
 }
@@ -174,6 +171,7 @@ async function verifyTokenStillUsable(): Promise<string | null> {
 // ── SSE event union ───────────────────────────────────────────────────────────
 
 type AnyRuntimeEvent =
+  | ({ kind: "steered_user_message" } & SteeredUserMessageRuntimeEvent)
   | ({ kind: "assistant_delta" } & AssistantDeltaRuntimeEvent)
   | ({ kind: "awaiting_human" } & AwaitingHumanRuntimeEvent)
   | ({ kind: "final" } & FinalRuntimeEvent)
@@ -186,7 +184,8 @@ type AnyRuntimeEvent =
   | ({ kind: "tool_result" } & ToolResultRuntimeEvent)
   | ({ kind: "turn_persisted" } & TurnPersistedEvent)
   | ({ kind: "execution_error" } & RuntimeErrorEvent)
-  | ({ kind: "execution_interrupted" } & ExecutionInterruptedRuntimeEvent);
+  | ({ kind: "execution_interrupted" } & ExecutionInterruptedRuntimeEvent)
+  | ({ kind: "session_title" } & SessionTitleRuntimeEvent);
 
 /** The user's answer to an interrupted Graph run, sent with the next turn. */
 export type InterruptedRunChoice = {
@@ -258,6 +257,10 @@ export type RuntimeAwaitingHumanEvent = {
 export type ChatSseCallbacks = {
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
   onTurnPersisted?: (sessionId: string) => void;
+  /** The conversation title the runtime generated on the first turn, streamed once ready. */
+  onSessionTitle?: (title: string, sessionId: string) => void;
+  onSteeredMessage?: (messageId: string, sessionId: string) => void;
+  onStreamInterrupted?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string) => void;
   /**
@@ -312,6 +315,9 @@ export function useChatSse(
     teamId,
     onBindDraftAgentToSessionId,
     onTurnPersisted,
+    onSessionTitle,
+    onSteeredMessage,
+    onStreamInterrupted,
     onAwaitingHuman,
     onError,
     onTurnStarted,
@@ -352,6 +358,7 @@ export function useChatSse(
   // send in that session restarts instead. Survives session switches.
   const stoppedSessionsRef = useRef(new Set<string>());
   const turnSessionRef = useRef<string | null>(null);
+  const activeSteeringTurnIdRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const thoughtBufsRef = useRef<
     Map<
@@ -378,6 +385,7 @@ export function useChatSse(
     () => () => {
       abortRef.current?.abort();
       abortRef.current = null;
+      activeSteeringTurnIdRef.current = null;
       preflightOwnerRef.current = null;
     },
     [],
@@ -409,6 +417,7 @@ export function useChatSse(
     console.debug("[useChatSse] reset() called — clearing all state");
     abortRef.current?.abort();
     abortRef.current = null;
+    activeSteeringTurnIdRef.current = null;
     // An explicit reset always cancels whatever attempt currently owns the
     // lock (if any) and immediately frees the slot for the next send() —
     // unconditional, unlike releasePreflightLock's ownership-checked release,
@@ -433,6 +442,7 @@ export function useChatSse(
     console.debug("[useChatSse] abort() called — clearing waitResponse");
     abortRef.current?.abort();
     abortRef.current = null;
+    activeSteeringTurnIdRef.current = null;
     // Otherwise an explicit Stop during preflight would leave the lock held
     // forever, blocking every subsequent Send. Unconditional for the same
     // reason as in reset() above.
@@ -476,6 +486,20 @@ export function useChatSse(
         });
 
       switch (event.kind) {
+        case "steered_user_message": {
+          emit({
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            rank: rankRef.current++,
+            timestamp: ts,
+            role: "user",
+            channel: "final",
+            parts: [{ type: "text", text: event.content }],
+            metadata: { extras: { steered_message_id: event.message_id } },
+          });
+          onSteeredMessage?.(event.message_id, sessionId);
+          break;
+        }
         case "assistant_delta": {
           if (deltaRankRef.current === null) {
             deltaRankRef.current = rankRef.current++;
@@ -698,6 +722,11 @@ export function useChatSse(
           break;
         }
 
+        case "session_title": {
+          onSessionTitle?.(event.title, sessionId);
+          break;
+        }
+
         case "turn_persisted": {
           onBindDraftAgentToSessionId?.(event.session_id);
           onTurnPersisted?.(event.session_id);
@@ -829,7 +858,17 @@ export function useChatSse(
           break;
       }
     },
-    [onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onTurnRejected, onError, dropOptimisticTurn, i18n],
+    [
+      onAwaitingHuman,
+      onBindDraftAgentToSessionId,
+      onTurnPersisted,
+      onSessionTitle,
+      onSteeredMessage,
+      onTurnRejected,
+      onError,
+      dropOptimisticTurn,
+      i18n,
+    ],
   );
 
   const streamToMessages = useCallback(
@@ -874,11 +913,23 @@ export function useChatSse(
       const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
         console.warn("[useChatSse] Failed to parse SSE frame:", raw),
       );
-      for await (const event of frames) {
-        processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+      let terminal = false;
+      let ended = false;
+      try {
+        for await (const event of frames) {
+          if (["final", "awaiting_human", "execution_interrupted", "execution_error"].includes(event.kind)) {
+            terminal = true;
+          }
+          processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+        }
+        ended = true;
+      } finally {
+        if ((!ended || !terminal) && (!abortRef.current || abortRef.current.signal === signal)) {
+          onStreamInterrupted?.(sessionId);
+        }
       }
     },
-    [processEvent],
+    [processEvent, onStreamInterrupted],
   );
 
   const send = useCallback(
@@ -910,6 +961,7 @@ export function useChatSse(
         abortRef.current.abort();
       }
       const ac = new AbortController();
+      const steeringTurnId = uuidv4();
       abortRef.current = ac;
       preflightOwnerRef.current = ac;
       // Immediately non-reentrant, not only once prepare-execution succeeds —
@@ -1093,6 +1145,7 @@ export function useChatSse(
         preflightOwnerRef.current = null;
       }
       turnSessionRef.current = effectiveSessionId;
+      activeSteeringTurnIdRef.current = steeringTurnId;
       // A continue sends no message: the composer keeps the user's draft.
       if (!continuing) onTurnStarted?.();
 
@@ -1140,6 +1193,7 @@ export function useChatSse(
             agent_instance_id: agentInstanceId,
             input,
             session_id: sessionId,
+            steering_turn_id: steeringTurnId,
             runtime_context: effectiveContext,
             ...(turnOptions ? { turn_options: turnOptions } : {}),
             ...(choice ? { interrupted_action: choice.action, interruption_id: choice.interruptionId ?? null } : {}),
@@ -1182,6 +1236,7 @@ export function useChatSse(
           onError?.(`Streaming failed: ${msg}`);
         }
       } finally {
+        if (activeSteeringTurnIdRef.current === steeringTurnId) activeSteeringTurnIdRef.current = null;
         console.debug(
           `[useChatSse][${sendId}] finally — ac.signal.aborted=${ac.signal.aborted} → will ${ac.signal.aborted ? "NOT" : ""} clear waitResponse`,
         );
@@ -1366,6 +1421,7 @@ export function useChatSse(
       // exchange_id before groupTraceEntries can pair a call with its result
       // by call_id).
       const exchangeId = pending.exchange_id;
+      const steeringTurnId = uuidv4();
       const hitlPayload = pending.payload;
       const hasChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
       const exactFreeText = typeof freeText === "string" && freeText.trim() ? freeText : undefined;
@@ -1374,6 +1430,7 @@ export function useChatSse(
       const answersToMirror = batchAnswers ?? [{ event: pending, answer, freeText, skipped }];
 
       setWaitResponse(true);
+      activeSteeringTurnIdRef.current = steeringTurnId;
 
       // Only flipped once the runtime answers 2xx. A fetch rejection or a
       // 401/502/503 means the resume never ran, so the caller must be told
@@ -1386,6 +1443,7 @@ export function useChatSse(
           {
             agent_instance_id: agentInstanceId,
             session_id: sessionId,
+            steering_turn_id: steeringTurnId,
             // #2216: a resume echoes interrupt_id (LangGraph's Interrupt.id,
             // validated against the currently pending occurrence backend-side).
             interrupt_id: batchAnswers ? null : (hitlPayload?.interrupt_id ?? null),
@@ -1547,6 +1605,7 @@ export function useChatSse(
           }
         }
       } finally {
+        if (activeSteeringTurnIdRef.current === steeringTurnId) activeSteeringTurnIdRef.current = null;
         if (!ac.signal.aborted) {
           setWaitResponse(false);
         }
@@ -1587,12 +1646,48 @@ export function useChatSse(
     [teamId, agentInstanceId, prepareExecution, applyPreparation],
   );
 
+  const steerActiveTurn = useCallback(
+    async (sessionId: string, messageId: string, input: string): Promise<"accepted" | "rejected" | "uncertain"> => {
+      let requestStarted = false;
+      try {
+        const steeringTurnId = activeSteeringTurnIdRef.current;
+        if (!steeringTurnId) return "rejected";
+        const prep = await prepareExecution({ teamId, agentInstanceId, sessionId }).unwrap();
+        const streamPath = runtimeExecuteStreamPath(prep.execute_stream_url);
+        const path = streamPath.replace(/\/execute\/stream$/, `/sessions/${encodeURIComponent(sessionId)}/steer`);
+        await KeyCloakService.ensureFreshToken(TURN_TOKEN_HARD_FLOOR_S);
+        requestStarted = true;
+        const steeringRequest: RuntimeExecuteRequest = {
+          agent_instance_id: agentInstanceId,
+          session_id: sessionId,
+          steering_turn_id: steeringTurnId,
+          input,
+          runtime_context: { team_id: canonicalizeRuntimeTeamId(teamId) },
+        };
+        const response = await fetch(`${path}?message_id=${encodeURIComponent(messageId)}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}`,
+          },
+          body: JSON.stringify(steeringRequest),
+        });
+        if (response.ok) return "accepted";
+        return response.status < 500 ? "rejected" : "uncertain";
+      } catch {
+        return requestStarted ? "uncertain" : "rejected";
+      }
+    },
+    [teamId, agentInstanceId, prepareExecution],
+  );
+
   return {
     messages,
     waitResponse,
     chatControls,
     maxChatInputChars,
     prepareChatControls,
+    steerActiveTurn,
     send,
     sendHitlResume,
     abort,

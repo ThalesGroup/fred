@@ -14,7 +14,9 @@
 
 import {
   APPLICATION_REQUEST_METHODS,
+  BINARY_BODIES_CAPABILITY,
   FRED_APP_PROTOCOL_VERSION,
+  isApplicationBody,
   MAX_APPLICATION_REQUEST_HEADERS,
   MAX_APPLICATION_REQUEST_ID_LENGTH,
   MAX_PENDING_APPLICATION_REQUESTS,
@@ -41,6 +43,7 @@ export type FredApplicationClientErrorCode =
   | "application-mismatch"
   | "not-connected"
   | "invalid-request"
+  | "unsupported-by-host"
   | "request-capacity"
   | "request-timeout"
   | "transport-error"
@@ -66,7 +69,7 @@ export interface FredApplicationClientOptions {
 export interface FredApplicationRequestInit {
   method?: ApplicationRequestMethod;
   headers?: HeadersInit;
-  body?: string | null;
+  body?: string | Blob | FormData | null;
   signal?: AbortSignal;
   timeoutMs?: number;
 }
@@ -178,6 +181,7 @@ class FredApplicationClientImplementation implements FredApplicationClient {
   readonly #pending = new Map<string, PendingRequest>();
   #state: ClientState = "idle";
   #context: FredApplicationContext | null = null;
+  #binaryBodies = false;
   #connectionPromise?: Promise<FredApplicationContext>;
   #resolveConnection?: (context: FredApplicationContext) => void;
   #rejectConnection?: (reason: unknown) => void;
@@ -316,17 +320,39 @@ class FredApplicationClientImplementation implements FredApplicationClient {
         ),
       );
     }
-    if (
-      init.body !== undefined &&
-      init.body !== null &&
-      typeof init.body !== "string"
-    ) {
+    const body = init.body ?? null;
+    const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+    const isBinary = isForm || (body !== null && typeof body !== "string");
+    if (body !== null && !isForm && !isApplicationBody(body)) {
       return Promise.reject(
-        clientError("invalid-request", "request body must be a string or null"),
+        clientError(
+          "invalid-request",
+          "request body must be a string, Blob, FormData or null",
+        ),
+      );
+    }
+    if (isBinary && !this.#binaryBodies) {
+      return Promise.reject(
+        clientError(
+          "unsupported-by-host",
+          "the FRED host does not relay binary request bodies",
+        ),
       );
     }
     const headers = new Headers(init.headers);
-    if ([...headers].length > MAX_APPLICATION_REQUEST_HEADERS) {
+    if (isForm && headers.has("content-type")) {
+      return Promise.reject(
+        clientError(
+          "invalid-request",
+          "a FormData body sets its own content-type",
+        ),
+      );
+    }
+    // A FormData body adds its content-type header.
+    if (
+      [...headers].length + (isForm ? 1 : 0) >
+      MAX_APPLICATION_REQUEST_HEADERS
+    ) {
       return Promise.reject(
         clientError(
           "invalid-request",
@@ -389,15 +415,39 @@ class FredApplicationClientImplementation implements FredApplicationClient {
         init.signal.addEventListener("abort", pending.abort, { once: true });
       }
       this.#pending.set(requestId, pending);
+      const send = (sent: string | Blob | null) => {
+        // A FormData request may have timed out or been aborted while it was serialized.
+        if (this.#pending.get(requestId) !== pending) return;
+        try {
+          this.#post({
+            type: "fred:request",
+            requestId,
+            path: normalizedPath,
+            method,
+            headers: Object.fromEntries(headers),
+            body: sent,
+            ...(this.#binaryBodies ? { responseType: "blob" as const } : {}),
+          });
+        } catch (error) {
+          this.#rejectPending(requestId, error);
+        }
+      };
+      if (!isForm) {
+        send(body as string | Blob | null);
+        return;
+      }
+      // FormData is not cloneable: send it as the multipart Blob fetch would build.
       try {
-        this.#post({
-          type: "fred:request",
-          requestId,
-          path: normalizedPath,
-          method,
-          headers: Object.fromEntries(headers),
-          body: typeof init.body === "string" ? init.body : null,
+        const form = new Request("https://fred.invalid/", {
+          method: "POST",
+          body: body as FormData,
         });
+        headers.set("content-type", form.headers.get("content-type") ?? "");
+        form
+          .blob()
+          .then(send, (error: unknown) =>
+            this.#rejectPending(requestId, error),
+          );
       } catch (error) {
         this.#rejectPending(requestId, error);
       }
@@ -463,6 +513,8 @@ class FredApplicationClientImplementation implements FredApplicationClient {
         return;
       }
       this.#context = freezeContext(message.context);
+      this.#binaryBodies =
+        message.capabilities?.includes(BINARY_BODIES_CAPABILITY) ?? false;
       if (this.#state === "connected") {
         for (const subscriber of [...this.#contextSubscribers]) {
           try {
@@ -505,7 +557,9 @@ class FredApplicationClientImplementation implements FredApplicationClient {
     const body =
       pending.method === "HEAD" || [204, 205, 304].includes(message.status)
         ? null
-        : new TextEncoder().encode(message.body);
+        : typeof message.body === "string"
+          ? new TextEncoder().encode(message.body)
+          : message.body;
     let response: Response;
     try {
       response = new Response(body, {

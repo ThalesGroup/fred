@@ -119,9 +119,92 @@ const SLUG_OVERRIDES: Record<string, string> = {
   // tavily-mcp v0.2.x reports its tool as "tavily-search"
   "tavily-search": "Searching the web",
   tavily_search: "Searching the web",
-  // ppt_filler capability: the raw tool name would render as "Fill Ppt Template"
   fill_ppt_template: "Generating the PowerPoint",
 };
+
+// Group names match the MCP mounts and Fred tool sources.
+const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
+  "mcp.text": ["search_documents_using_vectorization"],
+  "mcp.opensearchOps": [
+    "os_health",
+    "os_pending_tasks",
+    "os_cluster_settings",
+    "os_cluster_state",
+    "os_cluster_stats",
+    "os_allocation_explain",
+    "os_nodes_stats",
+    "os_nodes_info",
+    "os_nodes_hot_threads",
+    "os_indices",
+    "os_index_stats",
+    "os_index_mapping",
+    "os_index_settings",
+    "os_index_recovery",
+    "os_tasks",
+    "os_task_get",
+    "os_shards",
+    "os_cat_nodes",
+    "os_cat_allocation",
+    "os_cat_thread_pool",
+    "os_recovery",
+    "os_diagnostics",
+  ],
+  "mcp.prometheusOps": [
+    "prometheus_query",
+    "prometheus_query_range",
+    "prometheus_series",
+    "prometheus_metrics",
+    "prometheus_metrics_catalog",
+    "prometheus_metadata",
+    "prometheus_labels",
+    "prometheus_label_values",
+    "prometheus_targets",
+  ],
+  "capabilities.documentAccess": ["list_document_tree"],
+  "capabilities.documents": [
+    "list_documents_by_label",
+    "read_document",
+    "summarize_document",
+    "extract_from_document",
+    "find_similar_passages",
+  ],
+  "capabilities.writableDocument": ["open_writable_document", "write_document"],
+  "capabilities.teamWiki": [
+    "wiki_list_pages",
+    "wiki_read_page",
+    "wiki_propose_page_text",
+    "wiki_propose_page",
+    "wiki_publish_proposal",
+  ],
+  "capabilities.htmlArtifact": ["render_html_artifact"],
+  "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template"],
+  "capabilities.platformOps": ["postgres_list_tables", "postgres_run_query"],
+  skills: ["load_skill", "read_skill_file"],
+  deep: [
+    "ls",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "glob",
+    "grep",
+    "execute",
+    "concat_files",
+    "task",
+    "write_todos",
+  ],
+};
+
+const TOOL_LABEL_KEY_BY_NAME = new Map(
+  Object.entries(TOOL_LABEL_GROUPS).flatMap(([group, names]) =>
+    names.map((name) => [name, `rework.chatTrace.toolLabels.${group}.${name}`] as const),
+  ),
+);
+
+function knownToolLabelKey(rawName: string): string | null {
+  if (rawName.startsWith("mcp__") && !rawName.startsWith("mcp__knowledge_flow__")) return null;
+  const slug = toolSlug(rawName);
+  return TOOL_LABEL_KEY_BY_NAME.get(slug) ?? null;
+}
 
 // Action verb stems → gerund display form.
 const GERUNDS: Record<string, string> = {
@@ -418,8 +501,11 @@ export function stripDocumentUids(tree: string): string {
 }
 
 /** Curated {action, status, latency} payload for tool results with no recognized richer shape. */
-export function genericToolPayload(entry: Extract<TraceEntry, { kind: "combo" }>): Record<string, unknown> {
-  const action = humanizeToolName(toolName(entry.call));
+export function genericToolPayload(
+  entry: Extract<TraceEntry, { kind: "combo" }>,
+  translate?: (key: string) => string,
+): Record<string, unknown> {
+  const action = entryLabel(entry, translate);
   if (!entry.result) return { action, status: "running" };
   return {
     action,
@@ -554,16 +640,21 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       return "Observation";
     case "tool_call": {
       if (entry.kind !== "combo") return "Tool call";
+      if (toolName(entry.call) === "ask_user" && translate) {
+        return translate("rework.chatTrace.toolLabels.platform.askUser");
+      }
       if (skillFilePathOf(entry) && translate) {
-        return translate("rework.chatTrace.toolLabels.readSkillFile");
+        return translate("rework.chatTrace.toolLabels.platform.readSkillFile");
       }
       if (toolSlug(toolName(entry.call)) === "read_query" && translate) {
-        return translate("rework.chatTrace.toolLabels.readQuery");
+        return translate("rework.chatTrace.toolLabels.mcp.tabular.readQuery");
       }
       const webKind = webResearchToolKind(toolName(entry.call));
-      if (webKind && translate) return translate(`rework.chatTrace.toolLabels.${webKind}`);
+      if (webKind && translate) return translate(`rework.chatTrace.toolLabels.capabilities.webResearch.${webKind}`);
       const tabularKind = tabularToolKind(toolName(entry.call));
-      if (tabularKind && translate) return translate(`rework.chatTrace.toolLabels.${tabularKind}`);
+      if (tabularKind && translate) return translate(`rework.chatTrace.toolLabels.mcp.tabular.${tabularKind}`);
+      const knownKey = knownToolLabelKey(toolName(entry.call));
+      if (knownKey && translate) return translate(knownKey);
       return humanizeToolName(toolName(entry.call)) || "Tool";
     }
     case "tool_result":
@@ -1280,13 +1371,8 @@ export function traceRows(entries: TraceEntry[]): TraceRow[] {
 }
 
 /**
- * Curated discriminator for a tool step, so two calls to the same tool are
- * distinguishable ("Reading query" ×2 was byte-identical before).
- *
- * Only volume and partial-result metadata are derived — never raw arguments or raw result content,
- * which stay redacted per the rule enforced in {@link primaryTextForEntry}.
- * Returns null when the result shape is unrecognized, still running, or failed
- * (the red status dot already carries the failure).
+ * Safe result metadata distinguishes repeated calls without exposing raw arguments.
+ * Returns null for unrecognized, running, or failed results.
  */
 export function toolDiscriminator(
   entry: TraceEntry,

@@ -100,6 +100,21 @@ afterEach(() => {
 });
 
 describe("PlatformRolesPage grant", () => {
+  it("offers the platform access manager role", async () => {
+    h.grantRole.mockReturnValue({ unwrap: () => Promise.resolve(null) });
+    const role = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "rework.platformRoles.roles.platform_access_manager",
+    );
+    expect(role).toBeDefined();
+    act(() => role!.click());
+    pickNextUser();
+    await act(async () => submit().click());
+    expect(h.grantRole).toHaveBeenCalledWith({
+      userId: "u-alice",
+      grantPlatformRoleRequest: { relation: "platform_access_manager" },
+    });
+  });
+
   it("grants the chosen role to every picked user", async () => {
     h.grantRole.mockReturnValue({ unwrap: () => Promise.resolve(null) });
     pickNextUser();

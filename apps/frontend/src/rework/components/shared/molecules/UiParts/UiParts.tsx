@@ -14,7 +14,7 @@
 
 import { useTranslation } from "react-i18next";
 import type { RawUiPart } from "@rework/types/parts";
-import { rendererForPartKind } from "../../../../features/capabilities/partRendererRegistry";
+import { latestPartPerObject, rendererForPartKind } from "../../../../features/capabilities/partRendererRegistry";
 import styles from "./UiParts.module.css";
 
 interface UiPartsProps {
@@ -25,11 +25,12 @@ interface UiPartsProps {
  * Render a message's chat parts through the part-renderer registry (#1977).
  * Kinds with no registered renderer are silently skipped — the data stays on
  * `ThreadMessage`, only the visual is absent. Never a crash on unknown kinds.
+ * An object updated several times in the message shows one card, its last.
  */
 export function UiParts({ parts }: UiPartsProps) {
   const { t } = useTranslation();
 
-  const renderable = parts
+  const renderable = latestPartPerObject(parts)
     .map((part, index) => ({ part, index, Renderer: rendererForPartKind(part.type) }))
     .filter((entry) => entry.Renderer !== undefined);
   if (renderable.length === 0) return null;

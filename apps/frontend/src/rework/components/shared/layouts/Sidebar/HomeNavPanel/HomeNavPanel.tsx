@@ -21,7 +21,8 @@ import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import TeamSelectionListItem from "@shared/molecules/TeamSelectionListItem/TeamSelectionListItem.tsx";
 import { PERSONAL_TEAM_COLOR } from "@shared/atoms/TeamInitials/teamColor.ts";
 import TeamSortSelect, { type TeamSortOption } from "./TeamSortSelect.tsx";
-import { getTeamRecency, getTeamSortMode, setTeamSortMode, type TeamSortMode } from "@shared/utils/teamRecency.ts";
+import { getTeamRecency, setTeamSortMode, type TeamSortMode } from "@shared/utils/teamRecency.ts";
+import { useCurrentUserPreference } from "../../../../../../app/userPreferences.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
@@ -46,13 +47,12 @@ export default function HomeNavPanel() {
   // overlay over the list header) once opened; it collapses again when it loses
   // focus, but only while empty — a live filter keeps it open (chosen #2298).
   const [searchOpen, setSearchOpen] = useState(false);
-  const [sortMode, setSortMode] = useState<TeamSortMode>(getTeamSortMode);
+  const sortMode = useCurrentUserPreference("team_sort_mode", "recent") as TeamSortMode;
   // Read once on mount — recency only changes while the user is inside a team,
   // and this panel remounts when they return to Home.
   const recency = useMemo(() => getTeamRecency(), []);
 
   const changeSortMode = (mode: TeamSortMode) => {
-    setSortMode(mode);
     setTeamSortMode(mode);
   };
 

@@ -14,6 +14,7 @@
 
 import { runStep, SkipStep } from "../step";
 import type { Reporter, Scenario, StepStatus } from "../types";
+import { newRunScope } from "./runScope";
 
 export const WEB_SELF_TEST_AGENT_ID = "fred.github.self_test_web";
 /** The fixed header the harness agent puts before its JSON report. */
@@ -79,10 +80,11 @@ export function reportProbes(report: Reporter, probes: WebProbe[]): void {
  * research is not enabled on the deployment.
  */
 export const webResearchScenario: Scenario = async (deps, report) => {
+  const scope = newRunScope();
   let agentInstanceId: string | null = null;
   try {
     agentInstanceId = await runStep(report, "web-provision", "Provision the web research self-test agent", async () => {
-      const id = await deps.provisionAgentInstance(WEB_SELF_TEST_AGENT_ID);
+      const id = await deps.provisionAgentInstance(WEB_SELF_TEST_AGENT_ID, undefined, undefined, scope.token);
       if (!id)
         throw new SkipStep(
           `template '${WEB_SELF_TEST_AGENT_ID}' not found — restart the fred-agents pod with the new code`,

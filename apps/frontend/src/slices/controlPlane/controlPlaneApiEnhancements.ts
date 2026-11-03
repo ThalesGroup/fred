@@ -84,6 +84,8 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePrompt",
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
+    "ControlPlaneModelDiscovery",
+    "ControlPlanePodChatDefault",
     "ControlPlanePlatformPrompt",
     "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
@@ -310,6 +312,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: {
       providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
+    putModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePut: {
+      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }, "ControlPlaneRoutingPolicy"],
+    },
     // The team application catalog is another projection of capability
     // enablement. Reusing the LIST tag makes a local admin toggle remove or add
     // an open app immediately; focus + bounded polling cover other sessions.
@@ -338,6 +343,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
       invalidatesTags: [
         { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlanePodChatDefault", id: "LIST" },
         { type: "ControlPlaneAgentInstance", id: "ALL" },
         { type: "ControlPlaneAgentMarketplace", id: "LIST" },
         "ControlPlaneTeam",
@@ -844,6 +850,41 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     deletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDelete: {
       invalidatesTags: [{ type: "ControlPlanePlatformModelBinding", id: "LIST" }],
     },
+    getModelDiscoveryControlPlaneV1AdminModelDiscoveryGet: {
+      providesTags: [{ type: "ControlPlaneModelDiscovery" as const, id: "LIST" }],
+    },
+    dismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDelete: {
+      invalidatesTags: [{ type: "ControlPlaneModelDiscovery", id: "LIST" }],
+    },
+    getPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGet: {
+      providesTags: [{ type: "ControlPlanePodChatDefault" as const, id: "LIST" }],
+    },
+    putPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPut: {
+      invalidatesTags: [{ type: "ControlPlanePodChatDefault", id: "LIST" }],
+    },
+    clearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDelete: {
+      invalidatesTags: [{ type: "ControlPlanePodChatDefault", id: "LIST" }],
+    },
+    putPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPut: {
+      invalidatesTags: [{ type: "ControlPlanePodChatDefault", id: "LIST" }],
+    },
+    clearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDelete: {
+      invalidatesTags: [{ type: "ControlPlanePodChatDefault", id: "LIST" }],
+    },
+    refreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPost: {
+      invalidatesTags: [
+        { type: "ControlPlaneModelDiscovery", id: "LIST" },
+        { type: "ControlPlanePodChatDefault", id: "LIST" },
+        { type: "ControlPlaneCapability", id: "LIST" },
+      ],
+    },
+    putModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPut: {
+      invalidatesTags: [
+        { type: "ControlPlaneModelDiscovery", id: "LIST" },
+        { type: "ControlPlanePodChatDefault", id: "LIST" },
+        { type: "ControlPlaneCapability", id: "LIST" },
+      ],
+    },
     // Platform-wide platform prompt — a single row, so one LIST tag covers it,
     // same shape as the platform model binding above.
     getPlatformPromptControlPlaneV1AdminPlatformPromptGet: {
@@ -1063,6 +1104,8 @@ export const {
   useResetPlatformDataControlPlaneV1ImportExportResetPostMutation: useResetPlatformMutation,
   // Admin capabilities dashboard (CAPAB-01 / #1981).
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery: useAdminCapabilitiesQuery,
+  usePutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutMutation:
+    useSetModelDisplayNameMutation,
   // Team-scoped native applications catalog.
   useGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery: useTeamApplicationsQuery,
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation:
@@ -1084,6 +1127,18 @@ export const {
   usePutPlatformModelBindingControlPlaneV1AdminPlatformModelBindingsPutMutation: useSetPlatformModelBindingMutation,
   useDeletePlatformModelBindingControlPlaneV1AdminPlatformModelBindingsDeleteMutation:
     useDeletePlatformModelBindingMutation,
+  useGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery: useModelDiscoveryQuery,
+  useDismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteMutation:
+    useDismissRemovedModelMutation,
+  useGetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetQuery: usePodChatDefaultsQuery,
+  usePutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutMutation: useSetPodChatDefaultMutation,
+  useClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteMutation: useClearPodChatDefaultMutation,
+  usePutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutMutation: useSetPodChatFallbackMutation,
+  useClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteMutation:
+    useClearPodChatFallbackMutation,
+  useLazyGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery: useLazyModelDiscoveryDetailQuery,
+  useRefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostMutation: useRefreshModelDiscoveryMutation,
+  usePutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutMutation: useSetModelDiscoveryUrlMutation,
   // Platform-wide platform prompt — the first block of every agent's system prompt.
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,

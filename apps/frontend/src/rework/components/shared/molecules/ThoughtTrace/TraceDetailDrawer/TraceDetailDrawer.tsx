@@ -156,7 +156,8 @@ function SummarizeDocumentDetail({ text }: { text: string }) {
 
 /** Fallback: redacted {action, status, latency} view for unrecognized tools. */
 function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "combo" }> }) {
-  const payload = genericToolPayload(entry);
+  const { t } = useTranslation();
+  const payload = genericToolPayload(entry, (key) => t(key));
   return (
     <div className={styles.detail}>
       <CodeBlock code={JSON.stringify(payload, null, 2)} language="json" />

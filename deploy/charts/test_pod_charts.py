@@ -259,8 +259,11 @@ class PodChartTests(unittest.TestCase):
     def test_knowledge_base_notes_give_the_publisher(self):
         result = self.render("knowledge-base", KNOWLEDGE_BASE, notes=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("- client_id: pod", result.stdout)
-        self.assertIn("prefix: my.kb", result.stdout)
+        # The notes are a quoted string here: their newlines are escaped.
+        self.assertIn(
+            r"knowledgeBasePublishers:\n        pod:\n          prefix: my.kb",
+            result.stdout,
+        )
 
     def test_agent_pod_mounts_extra_config_files(self):
         result = self.render(

@@ -214,6 +214,9 @@ class ModelProfile(FrozenModel):
             "should agree, and the catalog projection takes the first declared."
         ),
     )
+    context_window_tokens: int | None = Field(default=None, gt=0)
+    max_input_tokens: int | None = Field(default=None, gt=0)
+    max_output_tokens: int | None = Field(default=None, gt=0)
     supports_thinking: bool = Field(
         default=False,
         description=(
@@ -342,6 +345,7 @@ class ModelRoutingPolicy(FrozenModel):
     default_profile_by_capability: dict[ModelCapability, str]
     profiles: tuple[ModelProfile, ...]
     agent_profile_overrides: dict[str, str] = Field(default_factory=dict)
+    unavailable_discovered_chat_profile_ids: frozenset[str] = frozenset()
 
     @model_validator(mode="after")
     def validate_references(self) -> "ModelRoutingPolicy":
@@ -368,7 +372,10 @@ class ModelRoutingPolicy(FrozenModel):
                     "ModelRoutingPolicy.agent_profile_overrides keys must be "
                     "non-empty agent ids."
                 )
-            if profile_id not in known:
+            if (
+                profile_id not in known
+                and profile_id not in self.unavailable_discovered_chat_profile_ids
+            ):
                 raise ValueError(
                     f"agent_profile_overrides[{agent_id!r}] targets unknown "
                     f"profile_id={profile_id!r}."
@@ -400,6 +407,7 @@ class ModelSelectionSource(str, Enum):
     USER_CHOICE = "user_choice"
     INSTANCE_RECOMMENDATION = "instance_recommendation"
     PLATFORM_BINDING = "platform_binding"
+    POD_FALLBACK = "pod_fallback"
 
 
 class ModelSelection(FrozenModel):

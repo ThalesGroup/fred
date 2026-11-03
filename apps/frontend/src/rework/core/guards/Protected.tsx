@@ -25,11 +25,23 @@ import type { UserCapabilities } from "../../types/conversation.ts";
  * inside the page (see `useTeamCapabilities`), not on the route. Add one only
  * when a route genuinely needs it.
  */
-export type ProtectedRequirement = "admin" | "observer" | "teams" | "features" | "platformPrompt";
+export type ProtectedRequirement =
+  | "admin"
+  | "observer"
+  | "teams"
+  | "teamRoster"
+  | "platformAccess"
+  | "features"
+  | "platformPrompt";
 
 export type ProtectedCapabilities = Pick<
   UserCapabilities,
-  "canAdmin" | "canObservePlatform" | "canManageTeams" | "canManageFeatures" | "canEditPlatformPrompt"
+  | "canAdmin"
+  | "canObservePlatform"
+  | "canManageTeams"
+  | "canManagePlatformAccess"
+  | "canManageFeatures"
+  | "canEditPlatformPrompt"
 >;
 
 /** The capability flag that satisfies each requirement. Adding a delegated
@@ -38,6 +50,8 @@ const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabi
   admin: "canAdmin",
   observer: "canObservePlatform",
   teams: "canManageTeams",
+  teamRoster: "canManageTeams",
+  platformAccess: "canManagePlatformAccess",
   features: "canManageFeatures",
   platformPrompt: "canEditPlatformPrompt",
 };
@@ -46,6 +60,9 @@ const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabi
  * `canAdmin` satisfies every requirement, mirroring the OpenFGA schema where
  * each role relation unions in `platform_admin`. */
 export function isProtectedAllowed(requires: ProtectedRequirement, capabilities: ProtectedCapabilities): boolean {
+  if (requires === "teamRoster") {
+    return capabilities.canAdmin || capabilities.canManageTeams || capabilities.canManagePlatformAccess;
+  }
   return capabilities.canAdmin || capabilities[REQUIREMENT_CAPABILITY[requires]];
 }
 
@@ -56,6 +73,18 @@ export function canEnterAdminSection(capabilities: ProtectedCapabilities): boole
   return (Object.keys(REQUIREMENT_CAPABILITY) as ProtectedRequirement[]).some((requirement) =>
     isProtectedAllowed(requirement, capabilities),
   );
+}
+
+const ADMIN_LANDING: [ProtectedRequirement, string][] = [
+  ["teams", "/admin/teams"],
+  ["platformAccess", "/admin/platform-access"],
+  ["features", "/admin/features"],
+  ["platformPrompt", "/admin/platform-prompt"],
+  ["observer", "/admin/analytics"],
+];
+
+export function adminLandingPath(capabilities: ProtectedCapabilities): string {
+  return ADMIN_LANDING.find(([requires]) => isProtectedAllowed(requires, capabilities))?.[1] ?? "/unauthorized";
 }
 
 interface ProtectedProps {

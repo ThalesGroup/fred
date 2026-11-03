@@ -16,6 +16,7 @@ import type { ApplicationSummary } from "../../../slices/controlPlane/controlPla
 
 export {
   ACCEPTED_APP_PROTOCOL_VERSIONS,
+  BINARY_BODIES_CAPABILITY,
   FRED_APP_PROTOCOL_VERSION,
   parseApplicationFrameMessage,
 } from "./applicationProtocol.ts";

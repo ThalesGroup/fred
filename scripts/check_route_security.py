@@ -139,6 +139,12 @@ def has_auth_dependency(app, path: str, method: str) -> bool:
         for route in app.routes:
             if hasattr(route, 'path') and hasattr(route, 'methods'):
                 if route.path == path and method.upper() in route.methods:
+                    # MCP routes use an ASGI endpoint that authenticates each request.
+                    mcp_mount_module = sys.modules.get('knowledge_flow_backend.mcp_mount')
+                    auth_wrapper = getattr(mcp_mount_module, '_MountAuthentication', None)
+                    if isinstance(auth_wrapper, type) and isinstance(route.endpoint, auth_wrapper):
+                        return True
+
                     # Check if route has security dependencies
                     if hasattr(route, 'dependencies') and route.dependencies:
                         # Look for get_current_user in dependencies

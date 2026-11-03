@@ -39,15 +39,14 @@ configuration:
       host: temporal:7233
 ```
 
-Fred lets the pod declare itself only if its client owns the prefix: add one entry
-to `knowledge_bases.publishers` in the Fred chart's values
-(`applications.control-plane-backend.configuration`), then restart the Control Plane.
-The install prints it:
+Fred lets the pod declare itself only if its client owns the prefix: add one entry,
+keyed by the client, to `registrations.knowledgeBasePublishers` in the Fred chart's
+values, then upgrade Fred. The install prints it:
 
 ```yaml
-knowledge_bases:
-  publishers:
-    - client_id: kb-my
+registrations:
+  knowledgeBasePublishers:
+    kb-my:
       prefix: my.kb
 ```
 
@@ -122,7 +121,7 @@ volume (`extraVolumes`, `extraVolumeMounts`).
 
 ## Enable in Fred
 
-Once the Control Plane lists the client under `knowledge_bases.publishers` and the
+Once the Fred chart registers the client under `registrations.knowledgeBasePublishers` and the
 `publish` Job succeeds, the Knowledge Base appears in Fred's admin; a platform
 admin enables it for the teams that should use it.
 

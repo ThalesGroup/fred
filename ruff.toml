@@ -12,7 +12,12 @@
 # Python baseline for the whole monorepo (matches requires-python >= 3.12).
 # Lets ruff recognise 3.12 builtins (e.g. ExceptionGroup) instead of flagging F821.
 target-version = "py312"
+# Keep the Python-only scope used before Ruff 0.16 added Markdown by default.
+include = ["*.py", "*.pyi", "*.ipynb", "**/pyproject.toml"]
 
 [lint]
+# Preserve the pre-0.16 default policy across tool upgrades. New rule families
+# are adopted explicitly through extend-select, not through Ruff's defaults.
+select = ["E4", "E7", "E9", "F"]
 # PIE790: redundant `pass`/`...` after a docstring or another statement.
 extend-select = ["PIE790"]

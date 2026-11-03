@@ -184,11 +184,11 @@ make python-release-plan BASE_TAG=code/vX.Y.Z
 make prepare-python-release BASE_TAG=code/vX.Y.Z \
   CAPABILITY_PACKAGES="fred-capability-documents" \
   CAPABILITY_MANIFESTS="libs/capabilities/fred-capability-documents/fred_capability_documents/document_summarize/capability.py"
-make publish-libs-dry-run BASE_TAG=code/vX.Y.Z
-# Inspect the target/dist artifacts. Publication uses these exact files.
+make publish-libs-dry-run
+# Inspect the target/dist artifacts and the PyPI comparison.
 
 export PYPI_TOKEN=...
-make publish-libs BASE_TAG=code/vX.Y.Z
+make publish-libs
 ```
 
 Prepare these versions and synchronized locks in the release-preparation PR.
@@ -225,13 +225,19 @@ The order is **mandatory** and is defined by `PYPI_PACKAGES` in the root
 Selected packages floor newly prepared FRED dependencies at their corresponding
 versions; unchanged packages retain compatible older floors. Publishing out of
 order can therefore resolve against a release that does not exist yet.
-The root target skips coordinates already present on PyPI, but any other PyPI
-response stops the release. Before running it, confirm that the release
+Publication takes PyPI, not a tag, as its reference, so a skipped publication
+is harmless. Both targets build every package, then compare each one with PyPI:
+a version above PyPI's latest is to upload; a version equal to PyPI's latest
+must build the published wheel, entry for entry (only `WHEEL` and `RECORD`,
+which stamp the build tool, may differ), or the release stops because a change
+shipped without a version bump. A version below PyPI's latest, a version that is
+not X.Y.Z, or any PyPI answer other than 200 or 404 also stops it. Rerunning `make publish-libs` after a partial upload resumes it: the
+packages already uploaded now compare equal. Before running it, confirm that the release
 credential can create every package name that does not yet exist on PyPI; do
 not discover missing project-creation authority after existing packages have
 been updated. The target validates the independent version map, internal floors and
-prebuilt artifact metadata for pending packages before the first upload. It then uploads each pending
-package in the order above without rebuilding it;
+artifact metadata for pending packages before the first upload. It then uploads each pending
+package in the order above;
 after it completes, wait for every
 `https://pypi.org/pypi/<name>/<version>/json` endpoint to return 200 before any
 consumer resolves the new package coordinates because the index is not immediate.

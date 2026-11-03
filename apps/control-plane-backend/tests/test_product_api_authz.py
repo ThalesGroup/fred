@@ -34,6 +34,7 @@ from control_plane_backend.product.schemas import (
     PromptScoreUpdateRequest,
     UpdatePromptRequest,
 )
+from fastapi import HTTPException
 from fred_core import KeycloakUser, OrganizationPermission, TeamPermission
 from fred_core.common import TeamId
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
@@ -298,6 +299,62 @@ async def test_include_non_public_requires_real_openfga_platform_admin(
     )
     assert list_templates.await_args is not None
     assert list_templates.await_args.kwargs["include_non_public"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_team_sessions_requires_can_read_conversations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", guard)
+    monkeypatch.setattr(product_api, "list_sessions", AsyncMock(return_value=[]))
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+
+    await product_api.get_team_sessions(TeamId("public-team"), deps, _user())
+
+    assert guard.await_args is not None
+    assert guard.await_args.kwargs.get("required_permissions") == [
+        TeamPermission.CAN_READ_CONVERSATIONS
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_team_sessions_keeps_canonical_team_and_authenticated_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard = AsyncMock(return_value=_FAKE_TEAM_ID)
+    listing = AsyncMock(return_value=[])
+    monkeypatch.setattr(product_api, "require_team_access", guard)
+    monkeypatch.setattr(product_api, "list_sessions", listing)
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+    user = _user()
+
+    assert await product_api.get_team_sessions(TeamId("personal"), deps, user) == []
+
+    assert guard.await_args is not None
+    assert guard.await_args.args == (user, TeamId("personal"), deps.team_dependencies)
+    listing.assert_awaited_once_with(_FAKE_TEAM_ID, user_id=user.uid, deps=deps)
+
+
+@pytest.mark.asyncio
+async def test_get_team_sessions_denial_prevents_metadata_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard = AsyncMock(side_effect=HTTPException(status_code=403, detail="Not a member"))
+    listing = AsyncMock(return_value=[])
+    monkeypatch.setattr(product_api, "require_team_access", guard)
+    monkeypatch.setattr(product_api, "list_sessions", listing)
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+
+    with pytest.raises(HTTPException) as error:
+        await product_api.get_team_sessions(TeamId("public-team"), deps, _user())
+
+    assert error.value.status_code == 403
+    assert guard.await_args is not None
+    assert guard.await_args.kwargs["required_permissions"] == [
+        TeamPermission.CAN_READ_CONVERSATIONS
+    ]
+    listing.assert_not_awaited()
 
 
 class _RecordingKPIWriter(NoOpKPIWriter):

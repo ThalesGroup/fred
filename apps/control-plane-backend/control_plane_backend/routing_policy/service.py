@@ -34,7 +34,10 @@ from fred_core import (
     TeamPermission,
 )
 from fred_core.common import TeamId, is_personal_team_id
-from fred_sdk.contracts.capability.manifest import model_capability_id
+from fred_sdk.contracts.capability.manifest import (
+    CapabilityCatalogEntry,
+    model_capability_id,
+)
 from fred_sdk.contracts.context import (
     ChatProfileOrigin,
     ModelBinding,
@@ -48,9 +51,13 @@ from control_plane_backend.capabilities.authz import (
 )
 from control_plane_backend.capabilities.catalog import (
     aggregate_capability_catalog,
+    model_display_name_overrides,
     universally_available_chat_model_profile_ids,
 )
-from control_plane_backend.organization_authz import require_manage_capabilities
+from control_plane_backend.organization_authz import (
+    require_manage_capabilities,
+    require_manage_platform_model_binding,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.routing_policy.schemas import (
     AvailableModelProfile,
@@ -176,27 +183,64 @@ async def _team_pod_default_profiles(
 
     from control_plane_backend.product.service import _model_capabilities_for_source
 
-    catalogs = await asyncio.gather(
-        *(
-            _model_capabilities_for_source(source.base_url)
-            for source in _team_sources(deps, source_runtime_ids)
-        )
+    sources = _team_sources(deps, source_runtime_ids)
+    catalogs, overrides, fallbacks, discovery_states = await asyncio.gather(
+        asyncio.gather(
+            *(_model_capabilities_for_source(source.base_url) for source in sources)
+        ),
+        deps.get_pod_chat_default_store().list_all(),
+        deps.get_pod_chat_default_store().list_fallbacks(),
+        deps.get_model_discovery_state_store().list_all(),
     )
+    removed_profiles = {
+        profile_id
+        for state in discovery_states
+        for item in state.removed
+        for profile_id in item.get("chat_profile_ids", [])
+    }
     defaults: list[tuple[str, str]] = []
-    for catalog in catalogs:
-        if catalog is None or catalog.default_chat_profile_id is None:
+    for source, catalog in zip(sources, catalogs, strict=True):
+        if catalog is None:
+            continue
+        override = overrides.get(source.runtime_id)
+        if override in removed_profiles:
+            default_profile_id = next(
+                (
+                    profile_id
+                    for profile_id in (
+                        fallbacks.get(source.runtime_id),
+                        catalog.default_chat_profile_id,
+                    )
+                    if profile_id is not None
+                    for entry in catalog.entries
+                    if profile_id in entry.model_chat_profile_ids
+                    and entry.model_discovery_source_id is None
+                ),
+                None,
+            )
+        else:
+            default_profile_id = _effective_pod_chat_default(catalog, override)
+        if default_profile_id is None:
             continue
         entry = next(
             (
                 candidate
                 for candidate in catalog.entries
-                if catalog.default_chat_profile_id in candidate.model_chat_profile_ids
+                if default_profile_id in candidate.model_chat_profile_ids
             ),
             None,
         )
         if entry is not None:
-            defaults.append((catalog.default_chat_profile_id, entry.id))
+            defaults.append((default_profile_id, entry.id))
     return defaults
+
+
+def _effective_pod_chat_default(catalog, override: str | None) -> str | None:
+    if override is not None and any(
+        override in entry.model_chat_profile_ids for entry in catalog.entries
+    ):
+        return override
+    return catalog.default_chat_profile_id
 
 
 async def _unreachable_team_pods(
@@ -414,8 +458,9 @@ async def resolve_effective_chat_model(
     # here and applied to every return path below: the composer must not offer
     # an inert toggle for a model whose reasoning is off, because
     # `RoutedChatModelFactory` strips the reasoning settings in that case.
-    reasoning_enabled_ids = (
-        await deps.get_model_reasoning_store().list_enabled_model_ids()
+    reasoning_enabled_ids, display_name_overrides = await asyncio.gather(
+        deps.get_model_reasoning_store().list_enabled_model_ids(),
+        model_display_name_overrides(deps),
     )
 
     # A platform binding outranks every profile-valued level and bypasses team
@@ -428,12 +473,11 @@ async def resolve_effective_chat_model(
         )
         return EffectiveChatModel(
             name=platform_binding.name,
+            display_name=display_name_overrides.get(binding_capability_id),
             capability_id=binding_capability_id,
             reasoning_enabled=binding_capability_id in reasoning_enabled_ids,
             choice_locked=True,
-            # No `display_name`: an operator binding may name a model absent
-            # from every pod catalog, so there is no profile to read an
-            # ops-authored label from. The prettifying fallback covers it.
+            # An absent admin label keeps the frontend's name fallback.
         )
 
     from control_plane_backend.product.service import (
@@ -459,10 +503,25 @@ async def resolve_effective_chat_model(
     if pod_models is None:
         return empty
 
-    stored, usable = await asyncio.gather(
+    (
+        stored,
+        usable,
+        pod_fallback_profile_id,
+        discovery_states,
+        pod_default_override,
+    ) = await asyncio.gather(
         deps.get_team_routing_policy_store().get(team_id=team_id),
         usable_capability_ids(deps.team_dependencies.rebac, team_id),
+        deps.get_pod_chat_default_store().get_fallback(instance.source_runtime_id),
+        deps.get_model_discovery_state_store().list_all(),
+        deps.get_pod_chat_default_store().get(instance.source_runtime_id),
     )
+    removed_profiles = {
+        profile_id: item["id"]
+        for state in discovery_states
+        for item in state.removed
+        for profile_id in item.get("chat_profile_ids", [])
+    }
     disabled, reasoning_off = _stored_lists(stored)
     # Chat profile -> its pod entry, for this pod only.
     entry_by_profile = {
@@ -471,23 +530,94 @@ async def resolve_effective_chat_model(
         for profile_id in entry.model_chat_profile_ids
     }
 
+    def _current_profile(entry: CapabilityCatalogEntry) -> str | None:
+        return next(
+            (
+                profile_id
+                for profile_id in entry.model_chat_profile_ids
+                if profile_id not in removed_profiles
+            ),
+            None,
+        )
+
     def _selectable(capability_id: str) -> bool:
         return (usable is None or capability_id in usable) and (
             capability_id not in disabled
         )
 
+    def _fallback_result() -> EffectiveChatModel:
+        fallback_entry = next(
+            (
+                candidate
+                for profile_id in (
+                    pod_fallback_profile_id,
+                    pod_models.default_chat_profile_id,
+                )
+                if profile_id is not None
+                for candidate in [entry_by_profile.get(profile_id)]
+                if candidate is not None and candidate.model_discovery_source_id is None
+            ),
+            None,
+        )
+        if fallback_entry is None:
+            return empty
+        fallback_id = fallback_entry.id
+        fallback_name = fallback_entry.name
+        return EffectiveChatModel(
+            name=fallback_name,
+            display_name=display_name_overrides.get(
+                fallback_id,
+                fallback_entry.model_display_name
+                if fallback_entry is not None
+                else None,
+            ),
+            capability_id=fallback_id,
+            reasoning_enabled=fallback_id in reasoning_enabled_ids,
+            selectable_models=[
+                SelectableChatModel(
+                    profile_id=profile_id,
+                    capability_id=entry.id,
+                    name=entry.name,
+                    display_name=display_name_overrides.get(
+                        entry.id, entry.model_display_name
+                    ),
+                    reasoning_enabled=entry.id in reasoning_enabled_ids,
+                    reasoning_default_on=(
+                        entry.id in reasoning_enabled_ids
+                        and entry.id not in reasoning_off
+                    ),
+                )
+                for entry in pod_models.entries
+                for profile_id in [_current_profile(entry)]
+                if profile_id is not None and _selectable(entry.id)
+            ],
+        )
+
     # Same validation the pod applies before trusting the recommendation.
     recommended = instance.tuning.recommended_chat_profile_id
     recommended_entry = entry_by_profile.get(recommended) if recommended else None
+    if (
+        recommended is not None
+        and recommended in removed_profiles
+        and _selectable(removed_profiles[recommended])
+        and instance.source_agent_id not in pod_models.agent_chat_profile_overrides
+    ):
+        return _fallback_result()
     resolution = resolve_effective_chat_profile(
         agent_id=instance.source_agent_id,
         pod_agent_chat_profile_overrides=pod_models.agent_chat_profile_overrides,
-        pod_default_chat_profile_id=pod_models.default_chat_profile_id,
+        pod_default_chat_profile_id=(
+            pod_default_override
+            if pod_default_override in removed_profiles
+            else _effective_pod_chat_default(pod_models, pod_default_override)
+        ),
         # No user level: this read names what a NEW conversation starts on.
         user_chat_profile_id=None,
         instance_chat_profile_id=(
             recommended
-            if recommended_entry is not None and _selectable(recommended_entry.id)
+            if recommended_entry is not None
+            and recommended not in removed_profiles
+            and _selectable(recommended_entry.id)
             else None
         ),
         team_chat_default_profile_id=(
@@ -498,7 +628,11 @@ async def resolve_effective_chat_model(
         return empty
 
     entry = entry_by_profile.get(resolution.profile_id)
-    if entry is None:
+    if entry is None or resolution.profile_id in removed_profiles:
+        if resolution.profile_id in removed_profiles and _selectable(
+            removed_profiles[resolution.profile_id]
+        ):
+            return _fallback_result()
         # The winning profile is not a chat profile this pod advertises. For a
         # team-origin id that is exactly the drift
         # `TeamRoutingProfileDriftError` raises at turn time; either way there
@@ -514,18 +648,19 @@ async def resolve_effective_chat_model(
         for candidate in pod_models.entries:
             if candidate.id in selectable or not _selectable(candidate.id):
                 continue
-            if not candidate.model_chat_profile_ids:
+            profile_id = _current_profile(candidate)
+            if profile_id is None:
                 continue
             reasoning_enabled = candidate.id in reasoning_enabled_ids
             selectable[candidate.id] = SelectableChatModel(
                 profile_id=(
-                    resolution.profile_id
-                    if candidate.id == entry.id
-                    else candidate.model_chat_profile_ids[0]
+                    resolution.profile_id if candidate.id == entry.id else profile_id
                 ),
                 capability_id=candidate.id,
                 name=candidate.name,
-                display_name=candidate.model_display_name,
+                display_name=display_name_overrides.get(
+                    candidate.id, candidate.model_display_name
+                ),
                 reasoning_enabled=reasoning_enabled,
                 reasoning_default_on=reasoning_enabled
                 and candidate.id not in reasoning_off,
@@ -534,7 +669,7 @@ async def resolve_effective_chat_model(
         # `CapabilityCatalogEntry.name` already IS the concrete model name for a
         # `kind="model"` entry.
         name=entry.name,
-        display_name=entry.model_display_name,
+        display_name=display_name_overrides.get(entry.id, entry.model_display_name),
         capability_id=entry.id,
         # `None` means unrestricted (every capability usable), matching
         # `usable_capability_ids`' own contract — not "nothing usable".
@@ -763,7 +898,7 @@ async def set_platform_model_binding(
     binding: ModelBinding,
     deps: ProductServiceDependencies,
 ) -> PlatformModelBinding:
-    """Feature-governance-gated write of the platform-wide `chat` binding.
+    """Platform-admin-gated write of the platform-wide `chat` binding.
 
     `binding` arrives already validated by `ModelBinding` (provider
     restricted to `fred_core.model.models.ModelProvider`, settings
@@ -772,7 +907,7 @@ async def set_platform_model_binding(
     that same validated object — see `PlatformModelBindingStore.set`.
     """
 
-    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    await require_manage_platform_model_binding(deps.team_dependencies.rebac, user)
     store = deps.get_platform_model_binding_store()
     stored = await store.set(binding=binding, updated_by=user.uid)
     return _to_platform_model_binding(stored)
@@ -783,7 +918,7 @@ async def delete_platform_model_binding(
     user: KeycloakUser,
     deps: ProductServiceDependencies,
 ) -> PlatformModelBinding:
-    """Feature-governance-gated unset of the platform-wide `chat` binding.
+    """Platform-admin-gated unset of the platform-wide `chat` binding.
 
     Returns the now-unset state (`binding=None`) rather than nothing, so the
     caller can render the row without a second read — same result shape as
@@ -791,7 +926,7 @@ async def delete_platform_model_binding(
     delete.
     """
 
-    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    await require_manage_platform_model_binding(deps.team_dependencies.rebac, user)
     store = deps.get_platform_model_binding_store()
     await store.delete()
     return PlatformModelBinding(binding=None)

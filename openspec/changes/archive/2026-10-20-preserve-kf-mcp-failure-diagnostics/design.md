@@ -1,5 +1,22 @@
 # Design
 
+## MCP v2 integration (2026-11-03)
+
+The initial implementation described below predates swift's MCP v2 migration.
+The final PR keeps that migration: Knowledge Flow's `mcp_mount.py` supplies an
+application-owned `httpx2.AsyncClient` through the public
+`FastMCP.from_openapi` interface and closes it in the mount lifespan. The same
+invocation-local ASGI transport and response hook now live alongside that mount;
+fred-core no longer depends on a FastApiMCP bridge. FastMCP middleware preserves
+ordinary HTTP status/detail text and the existing authority-loss marker, without
+private executor overrides. Dependency confinement now covers `fastmcp`.
+
+Existing MCP v2 authentication, stateless mounts, schema curation and runtime
+presentation remain in place. Mounted diagnostics tests run against MCP v2;
+obsolete v1 bridge/runtime tests are superseded by the v2 mount and runtime
+consumer suites. No dependency or configuration upgrade is introduced by this PR.
+The earlier design and verification below record the original implementation.
+
 ## Context
 
 See proposal.md for motivation. The current `DelegatedFastApiMCP._execute_api_tool` copies request construction and result handling from upstream, but discards most failures with `RuntimeError("Tool request failed.") from None`. Its authority-refusal and curated `read_query` 400 branches return earlier. The pinned `fastapi-mcp==0.4.0` already accepts a public `http_client` constructor argument and ordinarily logs/re-raises errors containing the tool name, HTTP status and response text.

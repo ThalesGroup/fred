@@ -309,6 +309,10 @@
   width: 100%;
 }
 
+.initialComposer > :first-child {
+  background: none;
+}
+
 /* ── Composer footer — in-flow, keeps its intrinsic height ─────────────── */
 .inputOverlay {
   position: relative;
@@ -316,11 +320,105 @@
   z-index: 2;
 }
 
-.todoPanelSlot {
+.pendingMessages {
   position: relative;
-  flex-shrink: 0;
   z-index: 1;
-  margin-bottom: calc(0px - var(--radius-m) - var(--spacing-s));
+  margin: 0 auto var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-low);
+  width: calc(100% - var(--spacing-l) - var(--spacing-l));
+  max-width: var(--composer-max-width);
+  overflow: visible;
+  color: var(--on-surface);
+}
+
+.pendingToggle {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
+  background: transparent;
+  padding: var(--spacing-xs) var(--spacing-s);
+  width: 100%;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+  text-align: left;
+}
+
+.pendingToggle[aria-expanded="false"] {
+  border-radius: inherit;
+}
+
+.pendingToggle:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.pendingToggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.pendingToggle > :last-child {
+  color: var(--on-surface-muted);
+  font-size: 1rem;
+}
+
+.pendingCount {
+  color: var(--on-surface-muted);
+  font: var(--font-label-medium);
+}
+
+.pendingList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  max-height: min(35vh, 16rem);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.pendingMessage {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  min-height: 1.5rem;
+  font: var(--font-body-small);
+}
+
+.pendingMessageText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pendingAction {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0 var(--spacing-2xs);
+  color: var(--primary);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.pendingAction:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.todoPanelSlot {
+  flex-shrink: 0;
+  margin-bottom: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-l) 0;
 }
 
@@ -361,19 +459,17 @@
   text-align: center;
 }
 
-/* Agent identity above the greeting, stacked and centred: round icon, name,
-   role. Palette follows Home's recent-agent tiles. */
+// Three columns that hug their content: icon, identity, then the description.
 .welcomeAgent {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  gap: var(--spacing-s);
+  gap: var(--spacing-m);
+  box-sizing: border-box;
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
   padding: var(--spacing-m);
-  width: min(200px, 100%);
-  min-height: 144px;
+  max-width: min(560px, 100%);
+  text-align: left;
 }
 
 .welcomeAgentIcon {
@@ -391,28 +487,47 @@
 
 .welcomeAgentIdentity {
   display: flex;
+  flex: none;
   flex-direction: column;
-  align-items: center;
-  max-width: 100%;
-}
-
-.welcomeAgentName,
-.welcomeAgentRole {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 13rem;
+  overflow-wrap: anywhere;
 }
 
 .welcomeAgentName {
-  max-width: 100%;
   color: var(--secondary);
   font: var(--font-title-medium);
+  line-height: 1.2;
 }
 
 .welcomeAgentRole {
-  max-width: 100%;
   color: var(--on-surface);
   font: var(--font-body-medium);
+  line-height: 1.2;
+}
+
+// Keep the composer reachable even with a very long description.
+.welcomeAgentDescription {
+  min-width: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+  white-space: pre-line;
+}
+
+.welcomeAgentDescription:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .welcomeAgent {
+    flex-wrap: wrap;
+  }
+
+  .welcomeAgentDescription {
+    flex-basis: 100%;
+  }
 }
 
 .welcomeTitle {
@@ -420,7 +535,7 @@
   color: var(--on-surface);
   font: var(--font-headline-small);
   line-height: 1.1;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* ── Error state ───────────────────────────────────────────────────────── */

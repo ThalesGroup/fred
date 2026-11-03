@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import duckdb
 import pytest
 
 from knowledge_flow_backend.features.tabular.utils import validate_read_query
@@ -103,6 +104,35 @@ def test_validate_read_query_allows_analytical_functions_without_a_fixed_catalog
 
 
 @pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        ("TRIM(value)", "40A123456"),
+        ("TRIM(BOTH FROM value)", "40A123456"),
+        ("TRIM(LEADING FROM value)", "40A123456 "),
+        ("TRIM(TRAILING FROM value)", " 40A123456"),
+        ("LOWER(TRIM(value))", "40a123456"),
+        ("SUBSTRING(value, 5, 6)", "123456"),
+        ("SUBSTRING(value FROM 5 FOR 6)", "123456"),
+        ("SUBSTRING(TRIM(value) FROM 4)", "123456"),
+        ("main.trim(value)", "40A123456"),
+        ("main.substring(value, 5, 6)", "123456"),
+        ("main.split_part(TRIM(value), 'A', 2)", "123456"),
+        ("main.roundbankers(2.5, 0)", 2.0),
+        ("main.map_contains_entry(MAP {'a': 1}, 'a', 1)", True),
+    ],
+)
+def test_validate_read_query_accepts_pure_builtin_qualification(expression, expected):
+    query = f"SELECT {expression} AS cleaned FROM d_sales"
+    validated = validate_read_query(query, allowed_relations={"d_sales"})
+
+    with duckdb.connect(database=":memory:", config={"threads": "1"}) as connection:
+        connection.execute("CREATE TABLE d_sales(value VARCHAR)")
+        connection.execute("INSERT INTO d_sales VALUES (?)", [" 40A123456 "])
+        assert connection.execute(validated.sql).fetchall() == [(expected,)]
+    assert validated.referenced_relations == frozenset({"d_sales"})
+
+
+@pytest.mark.parametrize(
     "query",
     [
         "SELECT current_setting('allowed_paths') FROM d_sales",
@@ -116,6 +146,19 @@ def test_validate_read_query_allows_analytical_functions_without_a_fixed_catalog
         "SELECT pg_get_viewdef(1) FROM d_sales",
         "SELECT write_log('untrusted') FROM d_sales",
         "SELECT unknown_network_function('https://outside.example') FROM d_sales",
+        "SELECT main.getvariable('secret') FROM d_sales",
+        "SELECT main.getenv('HOME') FROM d_sales",
+        "SELECT main.write_log('untrusted') FROM d_sales",
+        "SELECT pg_catalog.pg_sleep(1) FROM d_sales",
+        "SELECT pg_catalog.pg_get_viewdef(1) FROM d_sales",
+        "SELECT main.current_schemas(true) FROM d_sales",
+        "SELECT TRIM(main.current_setting('allowed_paths')) FROM d_sales",
+        "SELECT main.split_part(current_setting('allowed_paths'), ',', 1) FROM d_sales",
+        "SELECT private.trim(city) FROM d_sales",
+        "SELECT pg_catalog.trim(city) FROM d_sales",
+        "SELECT memory.main.trim(city) FROM d_sales",
+        "SELECT system.main.trim(city) FROM d_sales",
+        "SELECT main.unknown_network_function('https://outside.example') FROM d_sales",
     ],
 )
 def test_validate_read_query_rejects_runtime_inspection_functions(query: str):

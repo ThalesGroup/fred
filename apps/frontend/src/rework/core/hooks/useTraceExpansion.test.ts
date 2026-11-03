@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +13,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
-import { resolveTraceExpanded } from "./useTraceExpansion";
+import { localStorageKey } from "../../../hooks/useLocalStorageState";
+import { TRACE_EXPANDED_PREFERENCE_KEY, resolveTraceExpanded, useTraceExpansion } from "./useTraceExpansion";
 
 describe("resolveTraceExpanded", () => {
   it("opens while the turn streams, and a block that never streamed opens collapsed", () => {
@@ -44,4 +48,28 @@ describe("resolveTraceExpanded", () => {
     expect(resolveTraceExpanded(true, false, true)).toBe(true);
     expect(resolveTraceExpanded(false, true, false)).toBe(false);
   });
+});
+
+it("keeps trace expansion in browser storage across a remount", () => {
+  localStorage.clear();
+  localStorage.setItem(localStorageKey(TRACE_EXPANDED_PREFERENCE_KEY), "false");
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  let current: ReturnType<typeof useTraceExpansion>;
+  const Host = () => {
+    current = useTraceExpansion(false);
+    return null;
+  };
+  let root = createRoot(container);
+  act(() => root.render(createElement(Host)));
+  expect(current!.expanded).toBe(false);
+  act(() => current!.toggle());
+  expect(localStorage.getItem(localStorageKey(TRACE_EXPANDED_PREFERENCE_KEY))).toBe("true");
+  act(() => root.unmount());
+  root = createRoot(container);
+  act(() => root.render(createElement(Host)));
+  expect(current!.expanded).toBe(true);
+  act(() => root.unmount());
+  container.remove();
+  localStorage.clear();
 });

@@ -25,8 +25,10 @@ from starlette.requests import ClientDisconnect
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from fred_core.logs.context import completion_log_scope, request_log_scope
+from fred_core.logs.reported_exceptions import mark_reported
 
 logger = logging.getLogger("http")
+exception_logger = logging.getLogger(__name__)
 REFERENCE_HEADERS = ["X-Request-ID", "X-Correlation-ID"]
 
 
@@ -90,8 +92,16 @@ class RequestLoggingMiddleware:
             except ClientDisconnect:
                 outcome = "disconnected"
                 raise
-            except OSError:
-                outcome = "disconnected" if response.disconnected else "failed"
+            except Exception as exc:
+                outcome = (
+                    "disconnected"
+                    if isinstance(exc, OSError) and response.disconnected
+                    else "failed"
+                )
+                if outcome == "failed":
+                    with completion_log_scope(owner.values):
+                        exception_logger.exception("Unhandled request failure")
+                    mark_reported(exc)
                 raise
             finally:
                 successful = (

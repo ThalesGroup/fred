@@ -39,6 +39,7 @@ const h = vi.hoisted(() => ({
       default_changed_since_override: false,
       default_revised_at: null as string | null,
       model_profile_id: null as string | null,
+      title_model_profile_id: null as string | null,
       reasoning_effort: "medium" as "off" | "low" | "medium" | "high",
       default_model_profile_id: null as string | null,
       model_options: [
@@ -259,7 +260,12 @@ describe("CreationAssistantPane", () => {
     expect(saveButton().disabled).toBe(false);
     await act(async () => saveButton().click());
     expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: { text: null, model_profile_id: "chat.small", reasoning_effort: "medium" },
+      setCreationAssistantSettingsRequest: {
+        text: null,
+        model_profile_id: "chat.small",
+        title_model_profile_id: null,
+        reasoning_effort: "medium",
+      },
     });
   });
 
@@ -278,9 +284,38 @@ describe("CreationAssistantPane", () => {
       setCreationAssistantSettingsRequest: {
         text: "Mine in {language}.",
         model_profile_id: "chat.large",
+        title_model_profile_id: null,
         reasoning_effort: "medium",
       },
     });
+  });
+
+  it("keeps the conversation title model when saving", async () => {
+    const previous = h.assistant.data;
+    h.assistant.data = {
+      ...previous,
+      is_default: true,
+      text: "Write in {language}.",
+      model_profile_id: null,
+      title_model_profile_id: "chat.small",
+    };
+    h.saveAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    render("/admin/platform-prompt?tab=creation-assistant");
+    const select = container.querySelector('[data-testid="model-select"]') as HTMLSelectElement;
+    act(() => {
+      select.value = "chat.large";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => saveButton().click());
+    expect(h.saveAssistant).toHaveBeenLastCalledWith({
+      setCreationAssistantSettingsRequest: {
+        text: null,
+        model_profile_id: "chat.large",
+        title_model_profile_id: "chat.small",
+        reasoning_effort: "medium",
+      },
+    });
+    h.assistant.data = previous;
   });
 
   it("keeps an unavailable saved model visible without offering it for selection", () => {
@@ -310,6 +345,7 @@ describe("CreationAssistantPane", () => {
       setCreationAssistantSettingsRequest: {
         text: "Mine in {language}.",
         model_profile_id: "chat.gone",
+        title_model_profile_id: null,
         reasoning_effort: "medium",
       },
     });
@@ -331,7 +367,12 @@ describe("CreationAssistantPane", () => {
     expect(saveButton().disabled).toBe(false);
     await act(async () => saveButton().click());
     expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: { text: null, model_profile_id: null, reasoning_effort: "off" },
+      setCreationAssistantSettingsRequest: {
+        text: null,
+        model_profile_id: null,
+        title_model_profile_id: null,
+        reasoning_effort: "off",
+      },
     });
   });
 
@@ -346,7 +387,12 @@ describe("CreationAssistantPane", () => {
       act(() => reasoningSwitch().click());
       await act(async () => saveButton().click());
       expect(h.saveAssistant).toHaveBeenLastCalledWith({
-        setCreationAssistantSettingsRequest: { text: null, model_profile_id: null, reasoning_effort: "medium" },
+        setCreationAssistantSettingsRequest: {
+          text: null,
+          model_profile_id: null,
+          title_model_profile_id: null,
+          reasoning_effort: "medium",
+        },
       });
     } finally {
       h.assistant.data = previous;
@@ -396,7 +442,12 @@ describe("CreationAssistantPane", () => {
     act(() => buttonByText("rework.platformPrompt.creationAssistant.reasoning.levels.high").click());
     await act(async () => saveButton().click());
     expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: { text: null, model_profile_id: "chat.gpt", reasoning_effort: "high" },
+      setCreationAssistantSettingsRequest: {
+        text: null,
+        model_profile_id: "chat.gpt",
+        title_model_profile_id: null,
+        reasoning_effort: "high",
+      },
     });
   });
 
@@ -415,7 +466,12 @@ describe("CreationAssistantPane", () => {
     expect(reasoningSwitch().checked).toBe(true);
     await act(async () => saveButton().click());
     expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: { text: null, model_profile_id: "chat.large", reasoning_effort: "medium" },
+      setCreationAssistantSettingsRequest: {
+        text: null,
+        model_profile_id: "chat.large",
+        title_model_profile_id: null,
+        reasoning_effort: "medium",
+      },
     });
   });
 
@@ -450,6 +506,7 @@ describe("CreationAssistantPane", () => {
       setCreationAssistantSettingsRequest: {
         text: "Write well in {language}.",
         model_profile_id: model,
+        title_model_profile_id: null,
         reasoning_effort: effort,
       },
     });

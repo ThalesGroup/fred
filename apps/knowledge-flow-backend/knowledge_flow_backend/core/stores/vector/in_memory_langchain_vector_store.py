@@ -281,6 +281,12 @@ class InMemoryLangchainVectorStore(BaseVectorStore):
         except Exception:
             logger.exception("❌ Failed to update document_name for document_uid=%s in in-memory store", document_uid)
 
+    def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
+        for rec in self.vectorstore.store.values():
+            md = rec.get("metadata") or {}
+            if md.get("document_uid") == document_uid:
+                md["tag_ids"] = [str(t) for t in tag_ids]
+
     # ---- BaseVectorStore: ANN ----
 
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:

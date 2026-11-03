@@ -227,3 +227,84 @@ The theme installer SHALL reject blank or overlong tab titles and favicon names 
 
 - **WHEN** a ZIP catalog contains a favicon name with a slash, traversal or URL
 - **THEN** activation is rejected through the existing optional/required failure behavior
+
+### Requirement: Mermaid previews follow the active UI theme
+
+Completed Mermaid blocks SHALL use the active UI theme's semantic roles for renderer-supplied background, text, connectors, accents, node surfaces and borders, and SHALL use the application's font family. Inline and enlarged views SHALL have the same appearance. Changing the shipped or deployment theme or light/dark mode SHALL update mounted previews without requiring a page reload or a diagram-specific theme choice.
+
+#### Scenario: Shipped theme and mode change
+
+- **GIVEN** a completed Mermaid diagram is visible
+- **WHEN** the user switches between Pebble, Cobalt and Cloud, or changes light/dark mode
+- **THEN** its colors and font follow the newly active theme
+- **AND** the enlarged view uses the same palette as the inline diagram
+
+#### Scenario: Deployment theme overrides
+
+- **WHEN** a deployment theme overrides Fred's primary, surface, text and outline tokens
+- **THEN** Mermaid previews use those effective token values rather than a stock diagram palette
+
+### Requirement: Themed Mermaid previews preserve shared rendering behavior
+
+The themed preview SHALL render supported diagrams without losing their nodes, relationships or labels. Previously renderable Mermaid syntax outside the preferred renderer's supported subset SHALL retain a compatibility rendering path. Raw source SHALL be attempted before syntax repair. Source copying, enlarged viewing, readable error reporting and the existing transition from streaming source to a completed diagram SHALL remain available.
+
+#### Scenario: Common diagram types
+
+- **WHEN** a user views a supported flowchart, state, sequence, class, entity-relationship or XY diagram
+- **THEN** the diagram's nodes, relationships and labels are visible in the themed preview
+
+#### Scenario: Compatibility diagram
+
+- **WHEN** a valid Mermaid pie or Gantt diagram, or syntax unsupported by the preferred renderer, is displayed
+- **THEN** the compatibility path renders it with the active UI theme's default palette
+- **AND** a source rewrite is attempted only if the original source cannot render
+
+#### Scenario: Existing interactions and invalid source
+
+- **WHEN** a rendered diagram is copied or enlarged
+- **THEN** copying returns the original source and enlargement preserves the diagram
+- **AND WHEN** neither the original nor repaired source can render
+- **THEN** the preview shows a readable error without breaking surrounding Markdown
+
+### Requirement: Diagram previews are isolated and use local assets
+
+Diagram content SHALL NOT execute scripts, load remote fonts or leak styles into surrounding UI. SVG references SHALL remain local to each diagram view, including simultaneously mounted diagrams and enlarged copies.
+
+#### Scenario: Multiple diagrams and an enlarged copy
+
+- **WHEN** multiple Mermaid blocks and an enlarged view are mounted together
+- **THEN** every SVG reference resolves within its own view
+- **AND** other diagrams and surrounding application text retain their own styles
+
+#### Scenario: Untrusted content and offline fonts
+
+- **WHEN** diagram source contains script-bearing markup or the browser cannot access external font services
+- **THEN** the content cannot execute code and rendering uses the application's locally supplied fonts
+
+### Requirement: Mermaid diagrams can be downloaded with their active theme
+
+Successfully rendered Mermaid diagrams SHALL offer a translated, keyboard-accessible SVG download action as the second action in inline and fullscreen views. The downloaded `diagram.svg` SHALL contain the entire diagram, have a white background, use the selected theme's light palette, preserve labels and local SVG references, and remain readable in a browser outside Fred without the application's stylesheets. Export SHALL run locally without fetching assets, changing the preview or exposing unrelated page content. Loading or failed renders SHALL NOT offer an active download. An export failure SHALL show translated feedback while retaining the diagram and its existing actions.
+
+#### Scenario: Preferred-renderer diagram download
+
+- **WHEN** a user downloads a rendered flowchart from its inline preview
+- **THEN** a standalone SVG containing all nodes, labels and connectors is downloaded
+- **AND** its full diagram bounds and selected theme are preserved on white
+
+#### Scenario: Compatibility diagram and fullscreen
+
+- **WHEN** a user downloads an official compatibility diagram from fullscreen
+- **THEN** the SVG retains its labels, theme and local marker or gradient references outside Fred
+- **AND** fullscreen remains open until the user closes it normally
+
+#### Scenario: Theme changes before download
+
+- **WHEN** the user changes theme or mode and downloads the updated diagram
+- **THEN** the file uses the newly selected theme's light palette on white, independently of the interface mode
+
+#### Scenario: Unavailable rendering and failed export
+
+- **WHEN** the diagram is still loading or cannot render
+- **THEN** downloading an incomplete or stale diagram is unavailable
+- **AND WHEN** an export of a rendered diagram fails
+- **THEN** translated feedback is shown without losing the preview, source copy or fullscreen action

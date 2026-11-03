@@ -133,6 +133,7 @@ def _setup_test_schema() -> None:
     import control_plane_backend.models.agent_instance_models  # noqa: F401
     import control_plane_backend.models.agent_marketplace_models  # noqa: F401
     import control_plane_backend.models.announcement_models  # noqa: F401
+    import control_plane_backend.models.model_discovery_models  # noqa: F401
     import control_plane_backend.models.model_reasoning_models  # noqa: F401
     import control_plane_backend.models.platform_model_binding_models  # noqa: F401
     import control_plane_backend.models.prompt_models  # noqa: F401

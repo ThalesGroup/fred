@@ -1801,7 +1801,12 @@ async def get_team_sessions(
     Example:
     - `GET /control-plane/v1/teams/personal/sessions`
     """
-    team_id = await require_team_access(user, team_id, deps.team_dependencies)
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_READ_CONVERSATIONS],
+    )
     return await list_sessions(team_id, user_id=user.uid, deps=deps)
 
 

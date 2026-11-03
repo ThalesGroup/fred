@@ -135,7 +135,7 @@ def test_generic_exception_handler_returns_internal_server_error(caplog) -> None
 
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal server error"}
-    assert "Unhandled request failure" in caplog.text
+    assert "Unhandled request failure" not in caplog.text
     assert "boom" not in caplog.text
 
 
@@ -175,7 +175,9 @@ def test_authorization_handler_logs_no_identity_or_exception_chain(
         assert all(canary not in rendered for canary in canaries)
 
 
-def test_generic_handler_logs_no_request_or_chained_exception_details(caplog) -> None:
+def test_generic_handler_leaves_exception_reporting_to_the_request_boundary(
+    caplog,
+) -> None:
     app = FastAPI()
     register_exception_handlers(app)
     canaries = ("route-canary", "query-canary", "error-canary", "cause-canary")
@@ -196,12 +198,7 @@ def test_generic_handler_logs_no_request_or_chained_exception_details(caplog) ->
         for record in caplog.records
         if record.name == "fred_core.common.fastapi_handlers"
     ]
-    assert [record.getMessage() for record in records] == ["Unhandled request failure"]
-    for record in records:
-        assert not record.args
-        assert record.exc_info is None
-        rendered = logging.Formatter().format(record)
-        assert all(canary not in rendered for canary in canaries)
+    assert records == []
 
 
 def test_authorization_error_is_a_permission_error() -> None:

@@ -40,6 +40,132 @@
       },
       "additionalProperties": false
     },
+    "registrations": {
+      "type": "object",
+      "properties": {
+        "applications": {
+          "type": "object",
+          "propertyNames": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "description": "One application this deployment serves, registered by an operator.\n\nMirrors ``RuntimeCatalogSourceConfig``. Everything here is browser-facing\nor catalog metadata: the server-side proxy upstreams belong to the\nfrontend gateway, which is the only process that routes to them.",
+                "properties": {
+                  "ui_prefix": {
+                    "description": "Browser-facing prefix the application frame loads. Must be exactly /apps/<app_id> while the UI is served from Fred's origin, or an absolute http(s) URL when it is served from its own.",
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Ui Prefix",
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+                    "title": "Version",
+                    "type": "string"
+                  },
+                  "icon": {
+                    "default": "extension",
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                    "title": "Icon",
+                    "type": "string"
+                  },
+                  "display_name": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Locale to display name, e.g. {\"en\": \"Reactor\"}.",
+                    "title": "Display Name",
+                    "type": "object"
+                  },
+                  "description": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Locale to description.",
+                    "title": "Description",
+                    "type": "object"
+                  },
+                  "enabled": {
+                    "default": true,
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "gateway": {
+                    "type": "object",
+                    "properties": {
+                      "ui_upstream": {
+                        "type": "string"
+                      },
+                      "service_upstream": {
+                        "type": "string"
+                      },
+                      "service_required": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "ui_upstream"
+                    ]
+                  }
+                },
+                "required": [
+                  "ui_prefix",
+                  "version",
+                  "display_name",
+                  "description",
+                  "gateway"
+                ],
+                "title": "ApplicationSourceConfig",
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "knowledgeBasePublishers": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "description": "A client allowed to publish Knowledge Base definitions, and the one\nprefix it owns.",
+                "properties": {
+                  "prefix": {
+                    "description": "The prefix this client owns: it may publish only definitions named under it, and must present exactly it when publishing.",
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9]+(?:[_-][a-z0-9]+)*(?:\\.[a-z0-9]+(?:[_-][a-z0-9]+)*)*$",
+                    "title": "Prefix",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "prefix"
+                ],
+                "title": "KnowledgeBasePublisher",
+                "type": "object",
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "applications": {
       "type": "object",
       "properties": {

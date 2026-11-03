@@ -231,48 +231,34 @@ libs-version-tests: ## Test independent Python release preparation offline
 publish-libs-tests: ## Test bulk publishing offline with fake packages
 	python3 -m unittest discover -s scripts/tests -p 'test_publish_libs.py'
 
-.PHONY: publish-libs-dry-run
-publish-libs-dry-run: ## Build every PyPI package in dependency order, stop at the first failure, upload nothing
-	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
+# PyPI is the reference, not a tag: releases may skip a publication. A package
+# whose version is above PyPI's latest is uploaded; one at PyPI's latest must
+# build the published wheel, or its version was not raised and nothing is
+# uploaded. The check needs every package built, so each target builds them all.
+.PHONY: _build-libs
+_build-libs:
 	@test -n "$(PYPI_UV)" || { echo "uv is required to build the PyPI packages."; exit 1; }
 	@set -e; \
 	for dir in $(PYPI_PACKAGES); do \
 		echo "************ Building $$dir ************"; \
 		env -u VIRTUAL_ENV $(MAKE) -C $$dir UV="$(PYPI_UV)" publish-dry-run; \
 		done
-	$(MAKE) validate-python-release BASE_TAG="$(BASE_TAG)"
+
+.PHONY: publish-libs-dry-run
+publish-libs-dry-run: ## Build every PyPI package in order and check it against PyPI, upload nothing
+	@$(MAKE) --no-print-directory _build-libs
+	@$(MAKE) --no-print-directory validate-python-release
 
 .PHONY: validate-python-release
-validate-python-release: ## Validate independently versioned PyPI artifacts and internal floors
-	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
-	$(PYPI_RELEASE_CHECK) --base "$(BASE_TAG)" $(PYPI_PACKAGES)
-
-# The packages whose version is not on PyPI yet, one directory per line; a
-# package already there is reported on stderr. PyPI answers 200 for a release
-# it has and 404 for one it has not: any other answer stops the release rather
-# than guess.
-.PHONY: _pypi-pending
-_pypi-pending:
-	@set -e; \
-	for dir in $(PYPI_PACKAGES); do \
-		set -- $$(python3 -c "import tomllib; p = tomllib.load(open('$$dir/pyproject.toml', 'rb'))['project']; print(p['name'], p['version'])"); \
-		code=$$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/$$1/$$2/json"); \
-		case "$$code" in \
-			200) echo "$$1 $$2 is already on PyPI: skipped." >&2 ;; \
-			404) echo "$$dir" ;; \
-			*) echo "PyPI answered $$code for $$1 $$2: stopping." >&2; exit 1 ;; \
-		esac; \
-	done
+validate-python-release: ## Check the built PyPI packages against PyPI: what is new, and that nothing changed under a published version
+	$(PYPI_RELEASE_CHECK) --pypi $(PYPI_PACKAGES) >/dev/null
 
 .PHONY: publish-libs
-publish-libs: ## Validate and publish prebuilt PyPI artifacts in order, skipping versions already present (requires PYPI_TOKEN)
-	@test -n "$(BASE_TAG)" || { echo "BASE_TAG is required."; exit 1; }
-	@test -n "$(PYPI_UV)" || { echo "uv is required to publish the PyPI packages."; exit 1; }
+publish-libs: ## Build, check against PyPI, then upload in order the packages with a new version (requires PYPI_TOKEN)
 	@test -n "$$PYPI_TOKEN" || { echo "PYPI_TOKEN is not set: nothing was built or uploaded."; exit 1; }
-	$(PYPI_RELEASE_CHECK) --base "$(BASE_TAG)" --pending -- $(PYPI_PACKAGES)
+	@$(MAKE) --no-print-directory _build-libs
 	@set -e; \
-	pending=$$($(MAKE) --no-print-directory -s _pypi-pending); \
-	$(PYPI_RELEASE_CHECK) --base "$(BASE_TAG)" --pending $$pending -- $(PYPI_PACKAGES); \
+	pending=$$($(PYPI_RELEASE_CHECK) --pypi $(PYPI_PACKAGES)); \
 	for dir in $$pending; do \
 		echo "************ Publishing $$dir ************"; \
 		env -u VIRTUAL_ENV $(MAKE) -C $$dir UV="$(PYPI_UV)" publish; \

@@ -19,6 +19,7 @@
 .area {
   display: flex;
   flex-direction: column;
+  container: chat-messages / inline-size;
   min-height: 100%;
 }
 

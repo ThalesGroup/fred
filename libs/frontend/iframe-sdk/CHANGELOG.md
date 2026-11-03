@@ -1,5 +1,10 @@
 # Iframe SDK changelog
 
+## 0.1.1-alpha.1
+
+Review: approved
+Changes: Relay binary request and response bodies through the request bridge when the host announces `binary-bodies` in `fred:context`: `Blob` and `FormData` request bodies, and `Blob` responses read with `blob()`, `arrayBuffer()`, `text()` or `json()`. Protocol "1" is retained; with an older host, text requests are unchanged and binary bodies reject locally with `unsupported-by-host`. This version is prepared in source only; publication remains a separate release action.
+
 ## 0.1.1-alpha.0
 
 Review: approved

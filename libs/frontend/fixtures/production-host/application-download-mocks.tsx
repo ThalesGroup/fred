@@ -71,9 +71,20 @@ export function useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstan
   return [() => ({ unwrap: async () => [] })];
 }
 
+// The "echo" service records what it received and answers with the bytes reversed.
 export function createApplicationRequest() {
-  return async () =>
-    new Response("Unexpected application request", { status: 500 });
+  return async (path: string, init: RequestInit = {}) => {
+    if (path !== "echo" || !(init.body instanceof Blob))
+      return new Response("Unexpected application request", { status: 500 });
+    const received = new Uint8Array(await init.body.arrayBuffer());
+    (window as unknown as { fixtureUpload: unknown }).fixtureUpload = {
+      bytes: Array.from(received),
+      type: init.body.type,
+    };
+    return new Response(received.slice().reverse(), {
+      headers: { "content-type": "application/octet-stream" },
+    });
+  };
 }
 
 export default function PageEmptyState({ message }: { message: string }) {

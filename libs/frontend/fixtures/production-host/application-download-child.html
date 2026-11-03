@@ -6,6 +6,7 @@
   </head>
   <body>
     <button id="download" type="button">Download Markdown</button>
+    <button id="transfer" type="button">Upload and download binary</button>
     <script>
       const hostOrigin = new URLSearchParams(location.search).get("hostOrigin");
       if (!hostOrigin) throw new Error("hostOrigin is required");
@@ -15,25 +16,61 @@
           hostOrigin,
         );
       const retry = setInterval(announce, 100);
-      window.addEventListener("message", (event) => {
-        if (event.origin === hostOrigin && event.data?.type === "fred:context")
-          clearInterval(retry);
-      });
-      announce();
-
-      document.getElementById("download").addEventListener("click", () => {
-        const blob = new Blob(
-          ["# Hosted synthesis\n\nKnown Markdown bytes.\n"],
-          { type: "text/markdown" },
-        );
+      const save = (blob, filename) => {
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
-        anchor.download = "synthesis.md";
+        anchor.download = filename;
         document.body.append(anchor);
         anchor.click();
         anchor.remove();
         setTimeout(() => URL.revokeObjectURL(url), 0);
+      };
+      window.addEventListener("message", (event) => {
+        if (event.origin !== hostOrigin) return;
+        if (event.data?.type === "fred:context") {
+          clearInterval(retry);
+          document.body.dataset.capabilities = (
+            event.data.capabilities ?? []
+          ).join(",");
+        }
+        if (
+          event.data?.type === "fred:response" &&
+          event.data.requestId === "binary-1" &&
+          event.data.body instanceof Blob
+        )
+          save(event.data.body, "echo.bin");
+      });
+      announce();
+
+      document.getElementById("download").addEventListener("click", () => {
+        save(
+          new Blob(["# Hosted synthesis\n\nKnown Markdown bytes.\n"], {
+            type: "text/markdown",
+          }),
+          "synthesis.md",
+        );
+      });
+
+      // Bytes that are not valid UTF-8, so a text transport would alter them.
+      document.getElementById("transfer").addEventListener("click", () => {
+        window.parent.postMessage(
+          {
+            type: "fred:request",
+            requestId: "binary-1",
+            path: "echo",
+            method: "POST",
+            headers: {},
+            body: new Blob(
+              [new Uint8Array([0x00, 0xff, 0xc3, 0x28, 0x80, 0x7f])],
+              {
+                type: "application/octet-stream",
+              },
+            ),
+            responseType: "blob",
+          },
+          hostOrigin,
+        );
       });
     </script>
   </body>

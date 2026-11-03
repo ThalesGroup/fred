@@ -2,18 +2,38 @@
 
 FIXTURE_TRANSFER_ROOT ?= target/fixture-transfer
 FIXTURE_VALIDATION_ROOT ?= target/fixture-validation
-RELEASE_CONTRACT ?= release/proposed-release-contract.json
-RELEASE_TRANSFER_ROOT ?= target/release-transfer
-RELEASE_VALIDATION_ROOT ?= target/release-validation
 RELEASE_SELECTION ?=
 SELECTION_ARGS = $(if $(filter command line,$(origin RELEASE_SELECTION)),--select "$(RELEASE_SELECTION)",$(if $(RELEASE_SELECTION),--select "$(RELEASE_SELECTION)",))
+PACKAGE ?=
+RELEASE_DIR ?=
+AUTH_MODE ?= local
+DRY_RUN ?=
+VERSION ?=
+CHANNEL ?=
+REGISTRY ?= https://registry.npmjs.org/
 
-# Every target below that shells out to npm needs the installed tree; only
-# `help` and `clean` run on Node builtins alone. Declaring the dependency once
-# here is what keeps a fresh clone from failing with "eslint: not found".
-NPM_TARGETS := build lint format-check format-fix test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate release-transfer-create release-transfer-validate release-candidate release-verify-evidence registry-verify
+# Preserve every public release value as opaque environment data. `$(value ...)`
+# prevents inherited and command-line text from being expanded as Make syntax,
+# and `override` prevents callers from replacing the internal capture directly.
+override FRED_RELEASE_PACKAGE := $(value PACKAGE)
+override FRED_RELEASE_RELEASE_DIR := $(value RELEASE_DIR)
+override FRED_RELEASE_AUTH_MODE := $(value AUTH_MODE)
+override FRED_RELEASE_DRY_RUN := $(value DRY_RUN)
+override FRED_RELEASE_REGISTRY := $(value REGISTRY)
+override FRED_RELEASE_VERSION := $(value VERSION)
+override FRED_RELEASE_CHANNEL := $(value CHANNEL)
+export FRED_RELEASE_PACKAGE FRED_RELEASE_RELEASE_DIR FRED_RELEASE_AUTH_MODE
+export FRED_RELEASE_DRY_RUN FRED_RELEASE_REGISTRY FRED_RELEASE_VERSION
+export FRED_RELEASE_CHANNEL
+unexport PACKAGE RELEASE_DIR AUTH_MODE DRY_RUN REGISTRY VERSION CHANNEL
 
-.PHONY: help install code-quality code-quality-fix clean $(NPM_TARGETS)
+# Ordinary npm-backed targets need the installed tree. Release operations are
+# separate because their built-in-only preflight must reject bad inputs (and,
+# for preparation, a wrong Node/npm pair) before dependency installation.
+NPM_TARGETS := build lint format-check format-fix test pack pack-tokens pack-ui pack-iframe-sdk pack-check pack-check-tokens pack-check-ui pack-check-iframe-sdk consumer-provision consumer-provision-iframe-sdk consumer-provision-react compatibility-provision isolated-consumer host-integration browser-install browser-smoke release-check release-test fixture-transfer-create fixture-transfer-validate registry-verify
+RELEASE_TARGETS := prepare-release publish verify-release promote
+
+.PHONY: help install code-quality code-quality-fix clean $(NPM_TARGETS) $(RELEASE_TARGETS)
 
 $(NPM_TARGETS): node_modules
 
@@ -110,20 +130,28 @@ fixture-transfer-create: ## Produce the three-archive fixture transfer for this 
 fixture-transfer-validate: ## Verify and exercise the received fixture archives
 	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run fixture:transfer:validate -- --transfer $(FIXTURE_TRANSFER_ROOT) --evidence $(FIXTURE_VALIDATION_ROOT)/final-evidence.json --stage-root $(FIXTURE_VALIDATION_ROOT)/staged $(SELECTION_ARGS)
 
-release-transfer-create: ## Produce a maintainer-confirmed candidate transfer
-	npm run release:transfer:create -- --contract $(RELEASE_CONTRACT) --output $(RELEASE_TRANSFER_ROOT) $(SELECTION_ARGS)
-
-release-transfer-validate: ## Validate candidate bytes under application tooling
-	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:transfer:validate -- --contract $(RELEASE_CONTRACT) --transfer $(RELEASE_TRANSFER_ROOT) --evidence $(RELEASE_TRANSFER_ROOT)/candidate-evidence.json --stage-root $(RELEASE_VALIDATION_ROOT)/staged $(SELECTION_ARGS)
-
-release-candidate: ## Build evidence under an explicitly selected contract
-	PLAYWRIGHT_BROWSERS_PATH=target/playwright npm run release:candidate -- $(SELECTION_ARGS)
-
-release-verify-evidence: ## Recompute integrity for an existing candidate set
-	npm run release:verify-evidence -- $(SELECTION_ARGS)
-
 registry-verify: ## Verify exact published coordinates (network; never local fallback)
 	npm run registry:verify -- $(SELECTION_ARGS)
+
+prepare-release: ## Build and validate one package into a portable release directory
+	node scripts/release-preflight.mjs prepare
+	$(MAKE) node_modules
+	PLAYWRIGHT_BROWSERS_PATH=target/playwright node scripts/npm-release.mjs prepare
+
+publish: ## Publish exact prepared bytes to next (use DRY_RUN=1 for no mutation)
+	node scripts/release-preflight.mjs publish
+	$(MAKE) node_modules
+	node scripts/npm-release.mjs publish
+
+verify-release: ## Verify prepared package bytes against the exact registry version
+	node scripts/release-preflight.mjs verify
+	$(MAKE) node_modules
+	node scripts/npm-release.mjs verify
+
+promote: ## Move CHANNEL to an existing VERSION (use DRY_RUN=1 for no mutation)
+	node scripts/release-preflight.mjs promote
+	$(MAKE) node_modules
+	node scripts/npm-release.mjs promote
 
 clean: ## Remove disposable producer output and review evidence
 	node scripts/clean.mjs

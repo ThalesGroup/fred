@@ -126,6 +126,9 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onTurnStarted: () => onTurnStartedMock(),
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
+    onSteeredMessage: (messageId, sessionId) => onSteeredMessageMock(messageId, sessionId),
+    onStreamInterrupted: (sessionId) => onStreamInterruptedMock(sessionId),
+    onSessionTitle: (title, sessionId) => onSessionTitleMock(title, sessionId),
     isTurnCurrent,
     isExecutionAllowed,
   });
@@ -140,6 +143,9 @@ const onErrorMock = vi.fn();
 const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
 const onAwaitingHumanMock = vi.fn();
+const onSteeredMessageMock = vi.fn();
+const onStreamInterruptedMock = vi.fn();
+const onSessionTitleMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -163,6 +169,9 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onTurnStartedMock.mockClear();
     onTurnRejectedMock.mockClear();
     onAwaitingHumanMock.mockClear();
+    onSteeredMessageMock.mockClear();
+    onStreamInterruptedMock.mockClear();
+    onSessionTitleMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -184,6 +193,58 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       root.unmount();
     });
     container.remove();
+  });
+
+  it.each(["final", "awaiting_human", "status"])("reports only premature EOF as an interruption (%s)", async (kind) => {
+    const event = {
+      kind,
+      content: "done",
+      status: "running",
+      request: { stage: "agent_question", question: "Continue?" },
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(`data: ${JSON.stringify(event)}\n\n`));
+    mount();
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+    expect(onStreamInterruptedMock).toHaveBeenCalledTimes(kind === "status" ? 1 : 0);
+    if (kind === "status") expect(onStreamInterruptedMock).toHaveBeenCalledWith("session-1");
+  });
+
+  it.each(["status", "awaiting_human"])("reports abort after %s, but not a failed HTTP preflight", async (kind) => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (_url, init) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({ kind, request: { stage: "agent_question", question: "Continue?" } })}\n\n`,
+                ),
+              );
+              init?.signal?.addEventListener("abort", () =>
+                controller.error(new DOMException("Stopped", "AbortError")),
+              );
+            },
+          }),
+        ),
+    );
+    mount();
+    let sending!: Promise<boolean>;
+    await act(async () => {
+      sending = latest.send("hello", "session-1");
+    });
+    await act(async () => {
+      latest.abort();
+      await sending;
+    });
+    expect(onStreamInterruptedMock).toHaveBeenCalledWith("session-1");
+    onStreamInterruptedMock.mockClear();
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response("unavailable", { status: 503 }));
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+    expect(onStreamInterruptedMock).not.toHaveBeenCalled();
   });
 
   it.each([false, true])("rejects %s resume/send when availability changes during preparation", async (resume) => {
@@ -375,6 +436,90 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       fetchSpy.mockRestore();
     },
   );
+
+  it("posts steering through the prepared runtime URL", async () => {
+    let finishStream!: (response: Response) => void;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finishStream = resolve)))
+      .mockResolvedValueOnce(new Response("{}", { status: 202 }));
+    mount();
+    let sendPromise!: Promise<boolean>;
+    await act(async () => {
+      sendPromise = latest.send("original", "session-1");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    let accepted = "rejected";
+    await act(async () => {
+      accepted = await latest.steerActiveTurn("session-1", "message-1", "new direction");
+    });
+    expect(accepted).toBe("accepted");
+    expect(fetchSpy.mock.calls[1][0]).toBe("/runtime/agents-v2/agents/sessions/session-1/steer?message_id=message-1");
+    const streamBody = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    const body = JSON.parse(String(fetchSpy.mock.calls[1][1]?.body));
+    expect(body).toMatchObject({
+      agent_instance_id: "agent-1",
+      session_id: "session-1",
+      input: "new direction",
+      steering_turn_id: streamBody.steering_turn_id,
+    });
+    finishStream(new Response("", { status: 200 }));
+    await act(async () => await sendPromise);
+    fetchSpy.mockRestore();
+  });
+
+  it("reports uncertain steering when the request loses its response", async () => {
+    let finishStream!: (response: Response) => void;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finishStream = resolve)))
+      .mockRejectedValueOnce(new Error("network lost"));
+    mount();
+    let sendPromise!: Promise<boolean>;
+    await act(async () => {
+      sendPromise = latest.send("original", "session-1");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    let outcome = "rejected";
+    await act(async () => {
+      outcome = await latest.steerActiveTurn("session-1", "message-1", "new direction");
+    });
+    expect(outcome).toBe("uncertain");
+    finishStream(new Response("", { status: 200 }));
+    await act(async () => await sendPromise);
+    fetchSpy.mockRestore();
+  });
+
+  it("hands the streamed conversation title to the caller without adding a message", async () => {
+    const event = { kind: "session_title", title: "Quarterly sales review", sequence: 0 };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(`data: ${JSON.stringify(event)}\n\n`, { status: 200 }));
+    mount();
+    await act(async () => {
+      await latest.send("original", "session-1");
+    });
+    expect(onSessionTitleMock).toHaveBeenCalledWith("Quarterly sales review", "session-1");
+    expect(latest.messages.every((message) => message.role === "user")).toBe(true);
+    fetchSpy.mockRestore();
+  });
+
+  it("shows an injected user message only after its delivery event", async () => {
+    const event = { kind: "steered_user_message", message_id: "message-1", content: "new direction", sequence: 1 };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(`data: ${JSON.stringify(event)}\n\n`, { status: 200 }));
+    mount();
+    await act(async () => {
+      await latest.send("original", "session-1");
+    });
+    expect(onSteeredMessageMock).toHaveBeenCalledWith("message-1", "session-1");
+    expect(latest.messages.filter((message) => message.role === "user").map((message) => message.parts[0])).toEqual([
+      { type: "text", text: "original" },
+      { type: "text", text: "new direction" },
+    ]);
+    fetchSpy.mockRestore();
+  });
 
   it("calls prepare-execution and fires onTurnStarted exactly once when the write barrier reports success", async () => {
     flushPendingWrites = async () => true;

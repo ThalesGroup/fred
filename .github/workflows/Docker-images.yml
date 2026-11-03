@@ -154,6 +154,8 @@ jobs:
       - name: Set up uv for PDF corpus generation
         if: ${{ github.event_name == 'pull_request' && !inputs.publish && startsWith(matrix.name, 'knowledge-flow-backend') }}
         uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
 
       - name: Verify PDF image inventory and real processors
         timeout-minutes: 15

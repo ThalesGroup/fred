@@ -81,6 +81,55 @@ def test_one_entry_per_distinct_provider_and_name() -> None:
     assert entries[0].name == "gpt-5.1"
     assert entries[0].profile_ids == ["chat.openai.gpt51", "language.openai.gpt51"]
     assert entries[0].chat_profile_ids == ["chat.openai.gpt51"]
+    assert entries[0].platform_binding is not None
+
+
+def test_non_chat_profile_before_chat_does_not_hide_the_chat_binding() -> None:
+    catalog = ModelCatalog(
+        default_profile_by_capability={ModelCapability.CHAT: "chat.openai.gpt51"},
+        profiles=(
+            _profile("language.openai.gpt51", capability=ModelCapability.LANGUAGE),
+            _profile("chat.openai.gpt51", capability=ModelCapability.CHAT),
+        ),
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+    assert len(entries) == 1
+    assert entries[0].platform_binding is not None
+
+
+def test_platform_binding_keeps_safe_effective_settings() -> None:
+    catalog = ModelCatalog(
+        common_model_settings={"temperature": 0.2, "timeout": {"read": 10}},
+        profiles=(
+            _profile(
+                "chat.gateway.small",
+                settings={"base_url": "https://models.example/v1", "max_retries": 2},
+            ),
+        ),
+    )
+
+    binding = _project_model_catalog_entries(catalog)[0].platform_binding
+
+    assert binding is not None
+    assert binding.provider == "openai"
+    assert binding.settings.base_url == "https://models.example/v1"
+    assert binding.settings.temperature == 0.2
+    assert binding.settings.max_retries == 2
+    assert "timeout" not in binding.settings.model_dump(exclude_none=True)
+
+
+def test_platform_binding_omits_unsafe_or_ambiguous_catalog_settings() -> None:
+    unsafe = _catalog((_profile("chat.unsafe", settings={"api_key": "pod-only"}),))
+    assert _project_model_catalog_entries(unsafe)[0].platform_binding is None
+
+    ambiguous = _catalog(
+        (
+            _profile("chat.a", settings={"temperature": 0.2}),
+            _profile("chat.b", settings={"temperature": 0.8}),
+        )
+    )
+    assert _project_model_catalog_entries(ambiguous)[0].platform_binding is None
 
 
 def test_sibling_profiles_sharing_provider_and_name_are_all_listed() -> None:
@@ -428,12 +477,18 @@ def test_response_advertises_the_pod_chat_default() -> None:
     assert response.default_chat_profile_id == "chat.a"
 
 
-def test_response_chat_default_is_none_when_catalog_declares_none() -> None:
-    """A legal pod with no chat default. Control-plane must see `None` rather
-    than a guess, so it reports "nothing routed" instead of naming a model."""
-
+def test_response_infers_single_manual_chat_default() -> None:
     catalog = ModelCatalog(
         default_profile_by_capability={}, profiles=(_profile("chat.a"),)
+    )
+    response = _project_model_catalog_response(catalog)
+    assert response.default_chat_profile_id == "chat.a"
+
+
+def test_response_chat_default_is_none_with_multiple_manual_chat_profiles() -> None:
+    catalog = ModelCatalog(
+        default_profile_by_capability={},
+        profiles=(_profile("chat.a"), _profile("chat.b", name="gpt-4.1")),
     )
     response = _project_model_catalog_response(catalog)
     assert response.default_chat_profile_id is None

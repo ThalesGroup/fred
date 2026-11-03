@@ -97,6 +97,7 @@ it("ignores the local-login flag when security is disabled", async () => {
   expect(authenticated).toHaveBeenCalledOnce();
   expect(state.settings).toBeNull();
   expect(state.signinRedirect).not.toHaveBeenCalled();
+  expect(KeyCloakService.GetIdentityProvider()).toBeNull();
 });
 
 describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provider) => {
@@ -115,6 +116,7 @@ describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provi
           : "openid profile offline_access api://fred-api/access_as_user",
     });
     if (provider === "oidc") expect(KeyCloakService.GetKeycloakRealmConfig()).toBeNull();
+    expect(KeyCloakService.GetIdentityProvider()).toBe(provider);
   });
 
   it("uses the API access token and configured identity/roles after a login callback", async () => {

@@ -54,6 +54,9 @@ export default function RecentAgents() {
     return { since: since.toISOString(), until: until.toISOString() };
   }, []);
   const { data } = useUserRecentAgentsQuery(range, { refetchOnMountOrArgChange: 300 });
+  // Never used an agent yet: suggest the agents of the user's teams instead
+  // (on first login, the default teams granted to new users).
+  const suggest = data?.rows.length === 0;
   const rows = useMemo(() => data?.rows ?? [], [data]);
 
   // Resolve the ids to full instances, one cached fetch per distinct origin
@@ -63,10 +66,11 @@ export default function RecentAgents() {
   const [instancesByTeam, setInstancesByTeam] = useState<Record<string, ManagedAgentInstanceSummary[]>>({});
 
   const teamIds = useMemo(() => {
+    if (suggest) return availableTeams.map((team) => team.id).filter((id) => !isPersonalTeamId(id));
     const ids = new Set<string>();
     for (const row of rows) if (row.team_id) ids.add(row.team_id);
     return [...ids];
-  }, [rows]);
+  }, [rows, suggest, availableTeams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +100,10 @@ export default function RecentAgents() {
 
   const tiles = useMemo(() => {
     const out: { instance: ManagedAgentInstanceSummary; teamId: string }[] = [];
-    for (const row of rows) {
+    const candidates = suggest
+      ? teamIds.flatMap((team_id) => (instancesByTeam[team_id] ?? []).map((i) => ({ ...i, team_id })))
+      : rows;
+    for (const row of candidates) {
       if (!row.team_id) continue;
       const list = instancesByTeam[row.team_id];
       if (!list) continue; // team not resolved yet
@@ -108,15 +115,16 @@ export default function RecentAgents() {
       if (out.length >= TILE_COUNT) break;
     }
     return out;
-  }, [rows, instancesByTeam]);
+  }, [rows, suggest, teamIds, instancesByTeam]);
 
   if (tiles.length === 0) return null;
+  const title = t(suggest ? "rework.home.recentAgents.suggestedTitle" : "rework.home.recentAgents.title");
 
   return (
-    <section className={styles.section} aria-label={t("rework.home.recentAgents.title")}>
+    <section className={styles.section} aria-label={title}>
       <div className={styles.head}>
         <Icon category="outlined" type="history" />
-        <h2 className={styles.title}>{t("rework.home.recentAgents.title")}</h2>
+        <h2 className={styles.title}>{title}</h2>
       </div>
       <div className={styles.row} data-count={tiles.length}>
         {tiles.map(({ instance, teamId }) => (

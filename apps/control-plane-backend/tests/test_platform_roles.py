@@ -19,7 +19,7 @@ The load-bearing guarantees these tests lock in:
 - `platform_admin` is granted and revoked by the bootstrap root only — the
   uid in `platformbootstrap.completed_by`, never a live tuple count;
 - the root itself is unrevocable, for every caller including itself;
-- every other role (`platform_observer` and the three delegated ones)
+- every other role (`platform_observer` and the four delegated ones)
   carries none of those restrictions — any admin grants and revokes them;
 - with no bootstrap marker there is no root, so `platform_admin` management
   refuses (409-mapped) instead of falling open;
@@ -516,7 +516,7 @@ async def test_revoke_refuses_when_rebac_disabled_before_root_guards():
 
 
 # ---------------------------------------------------------------------------
-# delegated roles (team_manager / feature_manager / prompt_editor)
+# delegated roles (including team_manager and platform_access_manager)
 # ---------------------------------------------------------------------------
 
 # Every role but `platform_admin`: the root guards are scoped to that one

@@ -40,6 +40,78 @@ const GEO = { type: "geo", geojson: { type: "FeatureCollection", features: [] } 
 const DEMO_CARD = { type: "demo_card", title: "Demo echo", body: "HELLO" };
 const UNKNOWN = { type: "part_kind_from_the_future", payload: { x: 1 } };
 
+it("shows a steered user message in the current exchange", () => {
+  const rows = toThreadMessages(
+    [
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Find notes" }] }),
+      msg({
+        role: "system",
+        channel: "system_note",
+        rank: 1,
+        metadata: { extras: { skill_load: { name: "review", origin: "user", load_id: "load" } } },
+      }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 2,
+        parts: [{ type: "tool_call", call_id: "call-1", name: "search", args: {} }],
+      }),
+      msg({
+        role: "tool",
+        channel: "tool_result",
+        rank: 3,
+        parts: [{ type: "tool_result", call_id: "call-1", ok: true, content: "Found notes" }],
+      }),
+      msg({
+        role: "user",
+        rank: 4,
+        parts: [{ type: "text", text: "Focus on October" }],
+      }),
+      msg({ role: "assistant", rank: 5, parts: [{ type: "text", text: "October notes" }] }),
+    ],
+    false,
+  );
+
+  expect(rows.map((row) => row.role)).toEqual(["user", "assistant", "user", "assistant"]);
+  expect(rows[0].skillName).toBe("review");
+  expect(
+    rows[1].traceMessages.filter((message) => ["tool_call", "tool_result"].includes(message.channel)),
+  ).toHaveLength(2);
+  expect(rows[2].text).toBe("Focus on October");
+  expect(rows[2].skillName).toBeNull();
+  expect(rows[2].id).toBe("e1:steer:4:user");
+  expect(rows[3].text).toBe("October notes");
+});
+
+it("preserves the context token anchor across a steered tool segment", () => {
+  const rows = toThreadMessages(
+    [
+      msg({
+        exchange_id: "previous",
+        rank: 0,
+        metadata: { context_tokens: 100, token_usage: { input_tokens: 100, output_tokens: 5, total_tokens: 105 } },
+      }),
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Find notes" }] }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 1,
+        parts: [{ type: "tool_call", call_id: "call-1", name: "search", args: {} }],
+      }),
+      msg({ role: "user", rank: 2, parts: [{ type: "text", text: "Focus on October" }] }),
+      msg({
+        role: "assistant",
+        rank: 3,
+        parts: [{ type: "text", text: "October notes" }],
+        metadata: { context_tokens: 120, token_usage: { input_tokens: 110, output_tokens: 10, total_tokens: 120 } },
+      }),
+    ],
+    false,
+  );
+
+  expect(rows[rows.length - 1]?.marginalTokenUsage).toEqual({ input_tokens: 20, output_tokens: 10, total_tokens: 30 });
+});
+
 describe("explicit skill selection on user turns", () => {
   const user = () => msg({ role: "user", parts: [{ type: "text", text: "Notes\nAction" }] });
   const load = (origin: "user" | "agent", exchange_id = "e1", child = false) =>

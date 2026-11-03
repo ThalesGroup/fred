@@ -141,11 +141,13 @@ jobs:
               - 'Makefile'
               - '.github/workflows/Check-pending-requests.yml'
               - '.github/workflows/Publish-frontend-packages.yml'
+              - '.github/scripts/frontend-release-workflow.mjs'
               - 'docs/swift/FRED-FRONTEND-PACKAGING-RFC.md'
             agentic:
               - 'agentic-backend/**'
             deploy-chart:
               - 'deploy/charts/**'
+              - 'scripts/check_chart_registrations.py'
             knowledge-flow:
               - 'apps/knowledge-flow-backend/**'
             fred-pod:
@@ -487,6 +489,7 @@ jobs:
           - check: type-check
           - check: format-check
           - check: lint
+          - check: test
           # - check: knip
           #   continue-on-error: true
     name: Code Quality - frontend - ${{ matrix.check }}
@@ -558,6 +561,9 @@ jobs:
 
       - name: Check chart - knowledge-flow ingestion worker groups
         run: make check-chart-ingestion-workers
+
+      - name: Check chart - registrations
+        run: make check-chart-registrations
 
       - name: Check charts - agent-pod and knowledge-base
         run: make pod-chart-tests

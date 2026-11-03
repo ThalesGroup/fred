@@ -96,6 +96,7 @@ class RelationType(str, Enum):
     # `platform_admin` in schema.fga, so an admin holds them all by computation
     # — only directly-written tuples are real grants.
     TEAM_MANAGER = "team_manager"
+    PLATFORM_ACCESS_MANAGER = "platform_access_manager"
     FEATURE_MANAGER = "feature_manager"
     PROMPT_EDITOR = "prompt_editor"
 
@@ -250,7 +251,7 @@ class OrganizationPermission(str, Enum):
     CAN_LIST_ALL_TEAMS = "can_list_all_teams"
     CAN_DELETE_TEAM = "can_delete_team"
     CAN_RESCUE_TEAM_ADMIN = "can_rescue_team_admin"
-    # Rename, describe and reassign admins of any team, audited per edit.
+    # Reassign admins of any team; name and description have a narrower gate.
     CAN_EDIT_TEAM_REGISTRY = "can_edit_team_registry"
 
     # RFC FRED-AUTHORIZATION-TARGET-MODEL §6.1: platform_observer's own named
@@ -275,6 +276,7 @@ class OrganizationPermission(str, Enum):
     # Platform administration (platform_admin only).
     CAN_ADMINISTER_USERS = "can_administer_users"
     CAN_MANAGE_PLATFORM = "can_manage_platform"
+    CAN_MANAGE_PLATFORM_ACCESS = "can_manage_platform_access"
 
     # Carved out of the `can_manage_platform` catch-all (which also gates
     # import/export, tasks and platform reset) so one narrow surface can be
@@ -288,6 +290,7 @@ class OrganizationPermission(str, Enum):
     # single gated action stands for the role.
     IS_PLATFORM_OBSERVER = "platform_observer"
     IS_TEAM_MANAGER = "team_manager"
+    IS_PLATFORM_ACCESS_MANAGER = "platform_access_manager"
     IS_FEATURE_MANAGER = "feature_manager"
     IS_PROMPT_EDITOR = "prompt_editor"
 

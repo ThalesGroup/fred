@@ -79,7 +79,12 @@ export const upsertOne = (all: ChatMessage[], m: ChatMessage): ChatMessage[] => 
   const incomingCallId = toolResultCallId(m);
   const idx = base.findIndex((x) => {
     if (keyOf(x) === k) return true;
-    if (isOptimisticUserMessage(x) && m.role === "user" && m.channel === "final") {
+    if (
+      isOptimisticUserMessage(x) &&
+      m.role === "user" &&
+      m.channel === "final" &&
+      !m.metadata?.extras?.steered_message_id
+    ) {
       return stableConversationKeyOf(x) === stableConversationKey;
     }
     // A real tool_result must REPLACE the optimistic cancellation for the same

@@ -618,23 +618,24 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 | fred-runtime | `./libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI |
 | fred-capability-* | `./libs/capabilities` | First-party capabilities, one package each — a pod installs those it offers |
 
-Each package has its own version. From the repository root, use the previous
-stable code tag to prepare and validate the next release:
+Each package has its own version. From the repository root, prepare the next
+release from the previous stable code tag, then publish against PyPI:
 
 ```bash
 make python-release-plan BASE_TAG=code/vX.Y.Z
 make prepare-python-release BASE_TAG=code/vX.Y.Z \
   CAPABILITY_PACKAGES="fred-capability-documents" \
   CAPABILITY_MANIFESTS="libs/capabilities/fred-capability-documents/fred_capability_documents/document_summarize/capability.py"
-make publish-libs-dry-run BASE_TAG=code/vX.Y.Z
-PYPI_TOKEN=... make publish-libs BASE_TAG=code/vX.Y.Z
+make publish-libs-dry-run
+PYPI_TOKEN=... make publish-libs
 ```
 
 Select only changed capability packages and affected manifests; leave those
 arguments empty when none changed. `fred-pod` requires `POD_CHANGED=true` if its
 package changed. Review the version and lockfile diff before release approval.
-PyPI publication requires separate authorization and skips coordinates already
-published. See [the release strategy](docs/swift/RELEASE-STRATEGY.md) for the full
+PyPI publication requires separate authorization. It uploads the packages whose
+version is above PyPI's latest and stops, before any upload, if a package at
+PyPI's latest version does not build the published wheel. See [the release strategy](docs/swift/RELEASE-STRATEGY.md) for the full
 sequence.
 
 > `agentic-backend` (`./agentic-backend`) remains during migration. Do not add new features there.

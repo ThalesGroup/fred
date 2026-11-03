@@ -148,6 +148,7 @@ def unwrap_run_stop_error(exc: BaseException) -> RunStopError | None:
 
 class RuntimeEventKind(str, Enum):
     STATUS = "status"
+    STEERED_USER_MESSAGE = "steered_user_message"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     THOUGHT_START = "thought_start"
@@ -160,6 +161,7 @@ class RuntimeEventKind(str, Enum):
     TURN_PERSISTED = "turn_persisted"
     EXECUTION_ERROR = "execution_error"
     EXECUTION_INTERRUPTED = "execution_interrupted"
+    SESSION_TITLE = "session_title"
 
 
 InterruptedAction: TypeAlias = Literal["continue", "restart"]
@@ -222,6 +224,14 @@ class StatusRuntimeEvent(RuntimeEventBase):
     status: str = Field(..., min_length=1)
     detail: str | None = None
     skill_load: SkillLoadAttribution | None = None
+
+
+class SteeredUserMessageRuntimeEvent(RuntimeEventBase):
+    kind: Literal[RuntimeEventKind.STEERED_USER_MESSAGE] = (
+        RuntimeEventKind.STEERED_USER_MESSAGE
+    )
+    message_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
 
 
 class ThoughtStartEvent(RuntimeEventBase):
@@ -483,6 +493,14 @@ class FinalRuntimeEvent(RuntimeEventBase):
         return coerce_finish_reason(v)
 
 
+class SessionTitleRuntimeEvent(RuntimeEventBase):
+    """Generated conversation title, emitted once as soon as it is ready when
+    the request carried `runtime_context.auto_title`."""
+
+    kind: Literal[RuntimeEventKind.SESSION_TITLE] = RuntimeEventKind.SESSION_TITLE
+    title: str = Field(..., min_length=1)
+
+
 class TurnPersistedEvent(RuntimeEventBase):
     """
     Signals that a completed turn's history has been durably persisted.
@@ -533,6 +551,7 @@ class RuntimeErrorEvent(RuntimeEventBase):
 
 RuntimeEvent: TypeAlias = Annotated[
     StatusRuntimeEvent
+    | SteeredUserMessageRuntimeEvent
     | ThoughtStartEvent
     | ThoughtDeltaEvent
     | ThoughtEndEvent
@@ -544,7 +563,8 @@ RuntimeEvent: TypeAlias = Annotated[
     | FinalRuntimeEvent
     | TurnPersistedEvent
     | RuntimeErrorEvent
-    | ExecutionInterruptedRuntimeEvent,
+    | ExecutionInterruptedRuntimeEvent
+    | SessionTitleRuntimeEvent,
     Field(discriminator="kind"),
 ]
 

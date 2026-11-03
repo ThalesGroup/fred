@@ -329,7 +329,7 @@ export function RichInputField({
   );
 
   const hasText = value.trim().length > 0;
-  const showStop = showSendButton && disabled && !!onInterrupt;
+  const showStop = showSendButton && !!onInterrupt;
   const showSend = showSendButton && !disabled && hasText;
   const canUseVoiceInput = enableVoiceInput && !!onTranscribeAudio;
   const hasDefaultAction = canUseVoiceInput || showStop || showSend;
@@ -459,7 +459,7 @@ export function RichInputField({
             aria-label={t("chatbot.recordAudio")}
           />
         ))}
-      {showStop ? (
+      {showStop && (
         <IconButton
           variant="filled"
           color="error"
@@ -468,7 +468,8 @@ export function RichInputField({
           onClick={onInterrupt}
           aria-label={t("chatbot.stopResponse")}
         />
-      ) : showSend ? (
+      )}
+      {showSend && (
         <IconButton
           variant="filled"
           color="primary"
@@ -478,7 +479,7 @@ export function RichInputField({
           disabled={sendDisabled}
           aria-label={t("chatbot.sendMessage")}
         />
-      ) : null}
+      )}
     </div>
   );
 

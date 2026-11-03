@@ -32,6 +32,9 @@ export LOG_LEVEL ?= info
 # opensearchpy's requests session, breaking connections to services with self-signed certs.
 export SSL_CERT_FILE ?= $(shell test -f /etc/ssl/certs/ca-certificates.crt && echo /etc/ssl/certs/ca-certificates.crt)
 export PIP_CERT ?= $(SSL_CERT_FILE)
+# The same bundle, lent to `docker build` as a secret: the image never keeps it.
+, := ,
+DOCKER_CA_SECRET = $(if $(SSL_CERT_FILE),--secret id=ca-bundle$(,)src=$(SSL_CERT_FILE))
 
 # Bypass corporate proxy for local services (Keycloak, Temporal, Postgres, etc.).
 # Without this, http_proxy routes localhost requests through the corporate proxy,

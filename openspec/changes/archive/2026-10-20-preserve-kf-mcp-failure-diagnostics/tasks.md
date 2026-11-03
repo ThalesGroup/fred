@@ -1,5 +1,9 @@
 # Tasks
 
+MCP v2 integration on 2026-11-03 supersedes the original FastApiMCP-specific
+steps below; see design.md. Current verification and review evidence is recorded
+in PR #3197. Earlier evidence remains historical.
+
 ## 1. Establish the implementation handoff
 
 - [x] 1.1 Implementation and focused issue publication authorized on 2026-10-20. Tracking #3196, branch `codex/preserve-kf-mcp-failure-diagnostics`, target `swift`; unrelated login-link planning remains excluded.
@@ -38,6 +42,14 @@
 - Captured real KF SQL HTTP 400 via mounted MCP inside outer HTTP 200, with complete failure/access JSON logs, delegated user/run/agent identity, session/team/exchange/instance context and linked inner references. Evidence is included in the draft PR description.
 - Exclusions: unrelated login-link planning; live deployment/GCP collector validation; a production-load campaign. Integration tests remain outside the offline suites.
 
-Draft PR: https://github.com/ThalesGroup/fred/pull/3197 (target swift, assigned to florian-muller, GitHub reports MERGEABLE).
+Draft PR: https://github.com/ThalesGroup/fred/pull/3197 (target swift, assigned to florian-muller).
 
 The optional repository-wide active-change validation sweep also reported existing out-of-scope errors in `add-agent-initiated-human-questions`, `rebase-python-images-on-ubuntu`, and `whitelist-lists-individual-exceptions` (52 other changes passed). This change and the synced structured-logging spec passed strict validation; unrelated planning was not modified.
+
+## MCP v2 integration verification (2026-11-03)
+
+- KF MCP/delegation/tabular/inventory: 172 passed; runtime v2/result/authority consumers: 48 passed; core logging/context: 98 passed. Tests used worktree sources with existing installed dependencies, socket blocking and the existing localhost Parquet fixture allowance.
+- Root `make code-quality`: exit 0 across all 17 modules, including 28 migration-tool tests. Reused Python environments without synchronization; npm dependencies were installed only in the isolated worktree.
+- Structured-logging strict validation and diff checks passed. Independent read-only correctness/security/performance review covered target `swift` at `3dcec9d3f`, the resolved implementation and subsequent fixture/documentation delta; no actionable findings.
+- Live Playwright check on isolated PR services: four MCP v2 tools discovered, tabular discovery succeeded, and a deliberately invalid SQL alias returned inner HTTP 400 with a correlated metadata-only failure event. Existing local Control Plane schema was advanced through the already-committed nullable-column migration before testing; no migration was added to this PR.
+- Live model output miscounted 22 discovered documents as 24; outside this diagnostic/transport change. Production load and GCP collector validation remain excluded.
