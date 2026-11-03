@@ -9,7 +9,7 @@ requires-python = ">=3.12,<3.13"
 
 dependencies = [
   "fred-knowledge>=5.0.0,<6",
-  "temporalio>=1.30.0,<2.0.0",
+  "temporalio>=1.35.0,<2.0.0",
   "langchain-core>=1.6.5",
   "langchain-community>=0.4.1",
   "langchain-text-splitters>=1.1.2",
@@ -26,7 +26,7 @@ dependencies = [
   "pandas==2.2.3",
   # Parquet engine required by the Excel processor's pandas exports.
   "pyarrow==23.0.1",
-  "pypdf==6.21.2",
+  "pypdf==6.21.4",
   "pypdfium2>=5.10.1",
   "python-pptx==1.0.2",
   "rich==14.0.0",
@@ -147,4 +147,3 @@ environments = [
   "sys_platform == 'linux' and platform_machine == 'aarch64'",
   "sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
-
