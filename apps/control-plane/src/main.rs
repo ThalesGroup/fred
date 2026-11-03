@@ -73,8 +73,8 @@ async fn main() -> Result<()> {
                 use sqlx::migrate::MigrateError;
                 match error {
                     MigrateError::VersionMissing(_) | MigrateError::VersionMismatch(_) | MigrateError::Dirty(_) =>
-                        anyhow::anyhow!("incompatible control-plane schema: this Weaver build requires a fresh database; no incremental upgrade or automatic reset is supported; do not rewrite SQLx history"),
-                    _ => anyhow::anyhow!("control-plane schema initialization failed; check database privileges and that the target is empty or already initialized by this build"),
+                        anyhow::anyhow!("incompatible control-plane migration history: an applied migration is missing, changed or incomplete; restore matching migration files or recover the database; do not rewrite SQLx history"),
+                    _ => anyhow::anyhow!("control-plane schema migration failed; check database privileges and migration prerequisites"),
                 }
             })?;
         println!("Control Plane schema initialized");
@@ -156,7 +156,7 @@ async fn pool(config: &Config) -> Result<sqlx::PgPool> {
         .await
         .context("postgres unreachable")?;
     control_plane::db::require_initialized(&pool).await.context(
-        "database schema does not match this control-plane binary; run `control-plane initialize-schema` on a fresh database before starting the API; an incompatible database requires explicit recreation, never rewriting SQLx history",
+        "database schema does not match this control-plane binary; run `control-plane initialize-schema` to apply supported pending migrations before starting the API; incompatible history must not be rewritten",
     )?;
     Ok(pool)
 }

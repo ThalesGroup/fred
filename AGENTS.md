@@ -137,13 +137,16 @@ or sticky routing. Use existing durable ownership, idempotency, leases and retry
 mechanisms where needed. Bound work, memory, timeouts and batch sizes. Do not
 hold SQL transactions across model calls, network requests or human waits.
 
-Weaver Control Plane currently supports fresh installations only. Maintain the
-complete schema in `apps/control-plane/migrations/0001_schema.sql`, without adding
-incremental migrations or data backfills during this phase. SQLx supplies atomic
-initialization, locking and fingerprint verification; an incompatible database
-requires explicit recreation, never automatic reset or rewritten
-`_sqlx_migrations` checksums. Supporting upgrades requires an explicit release
-decision before introducing an immutable migration chain.
+Weaver Control Plane uses immutable SQLx migrations from the current baseline in
+`apps/control-plane/migrations/0001_schema.sql`. Once deployed, never edit a migration:
+add a numbered transactional migration for an explicitly supported upgrade. The
+first supported upgrade is the additive cp_read document-tree views (0003) from the
+matching 0001/0002 history; older draft/public schemas are not converted. Preserve
+constraints, reader grants and data, and test both fresh initialization and upgrade.
+SQLx serializes initialization and validates fingerprints. Never reset live data or
+rewrite `_sqlx_migrations` checksums; incompatible history requires explicit recovery
+or separately authorized recreation. API startup only verifies the schema; the
+initialization command/deployment hook applies the supported chain after backup.
 Python components retain their own immutable Alembic histories. Inspect actual migration
 ownership rather than assuming one framework across Fred. Never change a live
 installation or reset data as an incidental validation step; inspect migration

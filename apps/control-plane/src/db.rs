@@ -37,7 +37,7 @@ macro_rules! document {
 }
 
 /// Read-only schema fingerprint verification for API startup and CLI commands.
-/// Only initialize-schema creates the schema, using the single SQLx baseline.
+/// Only initialize-schema creates or upgrades the schema through immutable SQLx migrations.
 pub async fn require_initialized(pool: &PgPool) -> anyhow::Result<()> {
     use sqlx::migrate::Migrate;
     let mut connection = pool.acquire().await?;

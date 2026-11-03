@@ -590,11 +590,10 @@ See [activation and policy configuration](../../docs/architecture/A3-manager-ope
 ## Changing it
 
 A change described in the dossier updates its chapter in the same commit. A test that
-proves an invariant carries `// Proves: I<n>` above it. During Weaver's fresh-install
-phase, update `migrations/0001_schema.sql` directly and retain its complete
-constraints, indexes and triggers. Do not add incremental migrations or backfills.
-A changed baseline requires explicit recreation of the disposable installation,
-never a live checksum rewrite (see [Existing local state](#existing-local-state)).
+proves an invariant carries `// Proves: I<n>` above it. Keep deployed SQLx migrations
+immutable; add a numbered transaction for a supported upgrade, preserving constraints,
+indexes, reader grants and data. Test fresh initialization and the preceding deployed
+history. Never rewrite live checksums (see [Existing local state](#existing-local-state)).
 
 ## Generate the frontend contract
 
@@ -758,20 +757,26 @@ dependencies and Chromium are already installed.
 The architecture dossier contains the [SQL table catalogue](../../docs/architecture/A2-manager-contracts.md#control-plane-sql-catalogue)
 and [SQLx operations](../../docs/architecture/A3-manager-operations.md#sqlx-schema-initialization).
 
-`migrations/0001_schema.sql` contains the complete current Weaver schema. SQLx
-records its fingerprint in `_sqlx_migrations`, serializes initialization and applies
-it in one transaction. There is no incremental Control Plane migration chain.
-`control-plane initialize-schema` creates it on a fresh database; repeating the
-command with the same binary preserves all data. The API only verifies the fingerprint.
+`migrations/0001_schema.sql` creates the baseline tables; `0002_cp_read.sql` creates
+the consumer views and grants. `0003_cp_read_document_tree.sql` appends display
+columns to three views without replacing their grants or changing stored data.
+All deployed migration files are immutable. SQLx records their fingerprints in
+`control_plane._sqlx_migrations`, serializes initialization and runs each migration
+transactionally. `control-plane initialize-schema` creates a fresh schema or applies
+pending migrations from a matching history. Repeating it preserves data. API startup
+only verifies the complete fingerprint and does not apply migrations.
 
 The k3d profile enables the pre-install/pre-upgrade `control-plane-backend-schema-init`
-Job through the shared chart's `migration` settings. An application-only redeployment
-reuses the matching schema. A schema change requires rebuilding the image and an
-explicitly recreated disposable installation. Existing draft databases, including
-those with the old numbered migration history, are incompatible. Initialization and
-startup refuse them without resetting data or rewriting recorded checksums.
-Back up anything needed before separately authorizing recreation; the deployment
-command does not perform it. Python runtimes keep their own Alembic histories.
+Job through the shared chart's `migration` settings. Back up the target database before
+upgrading. The document-tree upgrade supports the original matching 0001/0002 history;
+it does not convert historical draft schemas or public tables. Changed, missing or
+incomplete migration history is refused without resetting data or rewriting checksums.
+The view upgrade has a five-second lock timeout: a busy database fails the hook safely
+and can be retried after the blocker ends. Python runtimes retain their Alembic histories.
+
+Older binaries enforce an exact migration history and may refuse to restart after
+0003 is applied. Prefer a forward fix; a database rollback requires a coherent backup
+and an explicitly planned recovery, never removing SQLx history rows in place.
 
 Role mutations, initial space grants and bootstrap commit atomically in PostgreSQL.
 The service and binary are named `control-plane`; the image remains

@@ -475,14 +475,14 @@ async fn initialization_replays_without_data_changes_and_refuses_incompatible_hi
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(versions, vec![1, 2]);
+    assert_eq!(versions, vec![1, 2, 3]);
 
     // Simulate a draft installation's obsolete history only in this disposable fixture.
     sqlx::query("insert into _sqlx_migrations(version,description,success,checksum,execution_time) values(99,'obsolete draft',true,decode('00','hex'),0)")
         .execute(&pool).await.unwrap();
     let rejected = initialize();
     assert!(!rejected.status.success());
-    assert!(String::from_utf8_lossy(&rejected.stderr).contains("requires a fresh database"));
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("do not rewrite SQLx history"));
     assert!(control_plane::db::require_initialized(&pool).await.is_err());
     let retained: String = sqlx::query_scalar("select name from space where id=$1")
         .bind(org)
@@ -490,4 +490,72 @@ async fn initialization_replays_without_data_changes_and_refuses_incompatible_hi
         .await
         .unwrap();
     assert_eq!(retained, "Keep this organization");
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn document_tree_upgrade_preserves_data_history_and_reader_grants() {
+    let mut baseline = sqlx::migrate!();
+    baseline.migrations = std::borrow::Cow::Owned(
+        baseline
+            .iter()
+            .filter(|m| m.version <= 2)
+            .cloned()
+            .collect(),
+    );
+    let pool = database::database_with_migrator(baseline).await;
+    let org = organization(&pool, "Preserved Nova").await;
+    let history: Vec<(i64, Vec<u8>)> =
+        sqlx::query_as("select version,checksum from _sqlx_migrations order by version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(control_plane::db::require_initialized(&pool).await.is_err());
+    sqlx::migrate!().run(&pool).await.unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    control_plane::db::require_initialized(&pool).await.unwrap();
+    let after: Vec<(i64, Vec<u8>)> = sqlx::query_as(
+        "select version,checksum from _sqlx_migrations where version<=2 order by version",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(history, after);
+    let name: String = sqlx::query_scalar("select name from cp_read.space_state where id=$1")
+        .bind(org)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(name, "Preserved Nova");
+    // The real consumer role can read the new contract, including empty result sets.
+    let reader = PgPool::connect_with(
+        pool.connect_options()
+            .as_ref()
+            .clone()
+            .username("fred_kf")
+            .password("it"),
+    )
+    .await
+    .unwrap();
+    sqlx::query("select mime,created_at from cp_read.document_visibility limit 1")
+        .fetch_all(&reader)
+        .await
+        .unwrap();
+    sqlx::query("select name from cp_read.folder_path limit 1")
+        .fetch_all(&reader)
+        .await
+        .unwrap();
+    sqlx::query("select name from cp_read.space_state where id=$1")
+        .bind(org)
+        .fetch_one(&reader)
+        .await
+        .unwrap();
+    reader.close().await;
+    let forbidden: bool = sqlx::query_scalar(
+        "select has_table_privilege('fred_runtime_reader','cp_read.document_visibility','select')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(!forbidden);
 }

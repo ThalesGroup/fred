@@ -281,7 +281,7 @@ The local profile runs `control-plane-backend` using the image built from
 `apps/control-plane`. Port 8222 serves `/control-plane/v1`. The initialization hook
 invokes `control-plane initialize-schema` with `DATABASE_URL` alone, including the factory's
 `postgresql+asyncpg` scheme. It creates the complete schema without loading identity,
-authorization or runtime configuration. API startup verifies the baseline version
+authorization or runtime configuration. API startup verifies all migration versions
 and checksums without applying them.
 
 ## SQLx schema initialization
@@ -292,8 +292,12 @@ the control-plane tables and their responsibilities. The baseline
 the owned tables, constraints, indexes and triggers.
 [`0002_cp_read.sql`](../../apps/control-plane/migrations/0002_cp_read.sql) defines
 the consumer views and their SELECT grants. SQLx
-embeds both in the Rust binary and records migration fingerprints in `control_plane._sqlx_migrations`.
-There is no incremental upgrade path for draft Weaver installations.
+embeds the migration chain in the Rust binary and records fingerprints in
+`control_plane._sqlx_migrations`.
+[`0003_cp_read_document_tree.sql`](../../apps/control-plane/migrations/0003_cp_read_document_tree.sql)
+adds document MIME/arrival time and space/folder display names. It uses transactional
+`CREATE OR REPLACE VIEW`, appending columns so existing column positions and reader
+grants remain intact. No application row or recorded checksum is rewritten.
 
 `control-plane initialize-schema` connects using `DATABASE_URL` without loading
 application configuration. Both this command and the configured API pool explicitly
@@ -303,7 +307,7 @@ The administrator must first execute `deploy/postgres/bootstrap.sql`; SQLx logs 
 as `fred_cp`, never as the administrator. SQLx serializes concurrent initializers with a database
 lock and executes each migration in a transaction. Repeating initialization on the
 same schema preserves data. An incompatible history or checksum is refused with
-an explicit fresh-database requirement; no automatic reset or checksum rewrite occurs.
+an explicit incompatible-history error; no automatic reset or checksum rewrite occurs.
 
 When enabled through `applications.control-plane-backend.migration.enabled`, the
 shared chart renders a `control-plane-backend-schema-init` pre-install/pre-upgrade
@@ -317,12 +321,15 @@ the same verification. Outside Kubernetes, run `control-plane initialize-schema`
 before starting the API. This separates schema execution from normal startup;
 database roles enforce the schema boundary independently of the application.
 
-This build remains for fresh installations; the cp_read migration does not
-convert old public tables. Changing the schema requires rebuilding the image and
-explicitly recreating an incompatible disposable installation.
-An application-only redeployment reuses the matching schema. Preserve needed data
-before a separately authorized recreation; deployment does not perform it. A future
-supported upgrade path requires an explicit release decision and immutable migrations.
+The matching original 0001/0002 history can upgrade through 0003 after backup. This
+supports the document-tree view change, not conversion of historical public tables or
+other draft histories. Deployed migrations are immutable. The five-second lock timeout
+fails the hook safely under contention; retry after the blocker ends. The regression
+`document_tree_upgrade_preserves_data_history_and_reader_grants` checks upgrade,
+replay, preserved baseline checksums/data and actual Knowledge Flow reader access;
+initialization replay and incompatible-history rejection have a separate regression.
+Older binaries require their exact history and may refuse to restart after upgrade;
+prefer forward repair rather than manually deleting migration rows for rollback.
 
 These read-only queries inspect an installation without reading user profiles or
 document contents. Run them in the configured control-plane database (`fred` in

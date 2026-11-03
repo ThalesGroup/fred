@@ -50,7 +50,8 @@ _BINDINGS = (
     bindparam("space_ids", type_=ARRAY(Uuid)),
     bindparam("selections", type_=JSONB),
 )
-_ANCHOR = text(_CORPUS + "SELECT space_id, path FROM scoped_folders WHERE id = :folder_id").bindparams(*_BINDINGS, bindparam("folder_id", type_=Uuid))
+# Only fixed SQL fragments are concatenated; all request values use bound parameters.
+_ANCHOR = text(_CORPUS + "SELECT space_id, path FROM scoped_folders WHERE id = :folder_id").bindparams(*_BINDINGS, bindparam("folder_id", type_=Uuid))  # nosec B608
 _ENTRIES = text(
     _CORPUS
     + """
@@ -67,7 +68,7 @@ JOIN cp_read.space_state s ON s.id = e.space_id AND NOT s.retired
 WHERE (:anchor_space IS NULL OR e.space_id = :anchor_space) AND e.path LIKE :prefix
 ORDER BY e.space_id, e.path COLLATE "C", e.kind DESC, e.name COLLATE "C", e.id
 LIMIT :fetch_limit
-"""
+"""  # nosec B608
 ).bindparams(*_BINDINGS, bindparam("anchor_space", type_=Uuid))
 
 

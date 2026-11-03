@@ -15,7 +15,9 @@ from fred_core.documents.tree import (
 SPACE, FOLDER, CHILD = [UUID(int=i) for i in range(1, 4)]
 
 
-def document(uid=4, folder_id=FOLDER, name="Report.pdf"):
+def document(
+    uid: int = 4, folder_id: UUID | None = FOLDER, name: str = "Report.pdf"
+) -> DocumentTreeDocument:
     return DocumentTreeDocument(
         document_uid=UUID(int=uid),
         space_id=SPACE,

@@ -156,9 +156,9 @@ For each proposal, identify which responsibility enforces each guarantee:
 
 Reuse a table when its meaning, ownership and lifecycle fit. Do not force unrelated
 objects into one table to avoid a justified new table. Follow `AGENTS.md`'s
-persistence phase: Weaver Control Plane currently maintains one complete initial
-schema for fresh installations, without incremental migrations. Never rewrite a
-live database's SQLx history. Other components retain their immutable histories.
+persistence policy: keep deployed migrations immutable and use the explicitly
+supported upgrade chain. Preserve data and test fresh initialization and upgrade.
+Never rewrite a live database's SQLx history. Other components retain their immutable histories.
 
 ## Cost and concurrency
 
