@@ -36,4 +36,3 @@ During an active managed ReAct or Deep turn, the composer SHALL accept additiona
 - **GIVEN** a queued message offered to an agent before navigating elsewhere
 - **WHEN** the runtime acknowledges delivery while the conversation is detached
 - **THEN** that message is absent from the queue on return and is not sent again
-

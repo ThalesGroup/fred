@@ -905,7 +905,9 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   A normally completed background answer shows a plain info-blue unread dot with
   no shadow and a bold title until opening. Errors, cancellation and premature
   EOF do not imply a ready answer. Completed answers and pending questions still
-  raise the existing localized info toast with the title and "Open" action.
+  raise the existing localized info toast with the cached title when available
+  and an "Open" action from `useBackgroundTurnNotifications` in `MainLayout`,
+  on every page including those without the chat list.
   Waiting and unread indicators survive refresh in the same tab through a
   best-effort `sessionStorage` mirror, bounded to 100 ids per indicator. Restoring
   does not emit toasts or resume live turns/queues. The existing history load
