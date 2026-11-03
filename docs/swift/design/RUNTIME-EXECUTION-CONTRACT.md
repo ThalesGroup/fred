@@ -7210,9 +7210,12 @@ and legacy HTTP peers to use the same catalog entries.
 
 ### Managed chat stream lifetime (2026-11-02)
 
-Ordinary pending messages live in the current browser chat visit. Navigation,
-reload or stream interruption clears that list; there is no queue recovery API
-or delivery acknowledgement tied to history persistence. The existing SQL
+Ordinary pending messages live per conversation in browser-tab memory and survive
+in-app navigation alongside a background generation. They resume ordinary FIFO
+sends only when that conversation is reopened and its generation and human-input
+holds are resolved. Stop, deletion, reload or a genuine stream interruption clears
+the matching list; there is no queue recovery API or delivery acknowledgement tied
+to history persistence. The existing SQL
 mailbox only coordinates temporary steering across replicas. Injected user
 messages are prefixed in model context as updated user instructions that may add
 information, revise or cancel the task. A request to stop asks the model to
