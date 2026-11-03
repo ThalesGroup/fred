@@ -17,11 +17,13 @@
 // turn whose stream closes), and the next view of that session adopts it back.
 // Module-level on purpose, like sessionHistoryCache: the page remounts per agent.
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore, type SetStateAction } from "react";
 
 import { forgetCachedSessionHistory } from "../../components/pages/ManagedChatPage/sessionHistoryCache";
 import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 import type { ChatSseCallbacks } from "./useChatSse";
+
+export type PendingMessage = { id: string; text: string; status: "waiting" | "offered" | "uncertain" };
 
 export type ThoughtBuffer = {
   rank: number;
@@ -49,10 +51,13 @@ export type LiveTurn = {
   messages: ChatMessage[];
   /** The turn ended on a question for the user (human input or interrupted run). */
   awaitingInput?: boolean;
+  interrupted?: boolean;
   /** Session-keyed side effects that stay meaningful with no view attached. */
   detachedCallbacks: Pick<ChatSseCallbacks, "onTurnPersisted" | "onSessionTitle" | "onBackgroundTurnSettled">;
 };
 
+const emptyQueue: PendingMessage[] = [];
+const pendingQueues = new Map<string, PendingMessage[]>();
 const detached = new Map<string, LiveTurn>();
 // Every streaming turn, attached or not: what the sidebar shows and deletion cancels.
 const running = new Map<string, LiveTurn>();
@@ -70,6 +75,28 @@ function notifyRunning(): void {
 function subscribeRunning(listener: () => void): () => void {
   runningListeners.add(listener);
   return () => runningListeners.delete(listener);
+}
+
+export function updatePendingMessages(sessionId: string, update: SetStateAction<PendingMessage[]>): void {
+  const current = pendingQueues.get(sessionId) ?? emptyQueue;
+  const next = typeof update === "function" ? update(current) : update;
+  if (next === current) return;
+  if (next.length) pendingQueues.set(sessionId, next);
+  else pendingQueues.delete(sessionId);
+  notifyRunning();
+}
+
+export function usePendingMessages(sessionId: string | null) {
+  const messages = useSyncExternalStore(subscribeRunning, () =>
+    sessionId ? (pendingQueues.get(sessionId) ?? emptyQueue) : emptyQueue,
+  );
+  const setMessages = useCallback(
+    (update: SetStateAction<PendingMessage[]>) => {
+      if (sessionId) updatePendingMessages(sessionId, update);
+    },
+    [sessionId],
+  );
+  return [messages, setMessages] as const;
 }
 
 export function registerTurn(turn: LiveTurn): void {
@@ -107,6 +134,7 @@ export function subscribeBackgroundSettled(listener: (sessionId: string, awaitin
  * before erasing a conversation: a running turn would write its history back.
  */
 export function abortTurn(sessionId: string): void {
+  updatePendingMessages(sessionId, []);
   running.get(sessionId)?.controller.abort();
   forgetCachedSessionHistory(sessionId);
   const cleared = awaitingInput.delete(sessionId);
@@ -147,6 +175,7 @@ export function takeDetachedTurn(sessionId: string): LiveTurn | undefined {
 export function settleTurn(turn: LiveTurn): void {
   // A replacement turn of the same session may already be registered.
   if (running.get(turn.sessionId) === turn) {
+    if (turn.interrupted || turn.controller.signal.aborted) updatePendingMessages(turn.sessionId, []);
     running.delete(turn.sessionId);
     if (turn.awaitingInput && !turn.controller.signal.aborted) awaitingInput.add(turn.sessionId);
     notifyRunning();

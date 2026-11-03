@@ -5895,10 +5895,13 @@ Invitation history filtering and cleanup (2026-10-09): the shared Select filters
 
 ### Pending chat messages (2026-11-02)
 
-The pending list belongs to the current chat visit, like the live generation.
-Changing conversation, leaving the page, reloading or interrupting its stream
-clears the list without restoring or replaying it. Normal completion drains the
-local queue; a normal human-input pause holds it until the user responds.
+The pending list belongs to its conversation in browser-tab memory. Changing
+conversation or leaving the page preserves it alongside a background generation,
+including when that generation finishes before return. Ordinary queued turns send
+only while the conversation is open, after history and human-input holds are
+resolved. Steering deliveries received while detached remove their queued entries.
+Stop, deletion, reload, tab close or genuine stream interruption discards that
+conversation's queue. A normal human-input pause holds it until the user responds.
 Other uncertain outcomes offer text-only Send again / Renvoyer and Remove /
 Supprimer, without a delivery-status label or an additional delivery-check toast.
 The retry tooltip retains its duplicate-message guidance.
