@@ -119,7 +119,6 @@ let capturedOnError: ((msg: string, code?: string) => void) | undefined;
 let capturedOnAwaitingHuman: ((event: unknown) => void) | undefined;
 let capturedOnSteeredMessage: ((messageId: string, sessionId: string) => void) | undefined;
 let capturedOnStreamInterrupted: ((sessionId: string) => void) | undefined;
-let capturedOnSessionTitle: ((title: string, sessionId: string) => void) | undefined;
 vi.mock("@hooks/useChatSse", () => ({
   useChatSse: (params: {
     onTurnStarted?: () => void;
@@ -129,7 +128,6 @@ vi.mock("@hooks/useChatSse", () => ({
     onAwaitingHuman?: (event: unknown) => void;
     onSteeredMessage?: (messageId: string, sessionId: string) => void;
     onStreamInterrupted?: (sessionId: string) => void;
-    onSessionTitle?: (title: string, sessionId: string) => void;
     onBackgroundTurnSettled?: (sessionId: string, messages: unknown[]) => void;
   }) => {
     capturedOnBackgroundTurnSettled = params.onBackgroundTurnSettled;
@@ -140,7 +138,6 @@ vi.mock("@hooks/useChatSse", () => ({
     capturedOnAwaitingHuman = params.onAwaitingHuman;
     capturedOnSteeredMessage = params.onSteeredMessage;
     capturedOnStreamInterrupted = params.onStreamInterrupted;
-    capturedOnSessionTitle = params.onSessionTitle;
     return {
       preparation: { model_choice: preparedModelChoice, model_error: null, models: hostModels },
       messages: chatSseMessages,

@@ -282,8 +282,6 @@ export type ChatSseCallbacks = {
   onTurnPersisted?: (sessionId: string) => void;
   /** A turn that kept streaming after its view left has ended; `messages` is its full thread. */
   onBackgroundTurnSettled?: (sessionId: string, messages: ChatMessage[]) => void;
-  /** The conversation title the runtime generated on the first turn, streamed once ready. */
-  onSessionTitle?: (title: string, sessionId: string) => void;
   onSteeredMessage?: (messageId: string, sessionId: string) => void;
   onStreamInterrupted?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
@@ -339,6 +337,7 @@ export function useChatSse(
 ) {
   const {
     agentInstanceId,
+    teamId,
     spaceId = "",
     onBindDraftAgentToSessionId,
     onTurnPersisted,
@@ -496,6 +495,9 @@ export function useChatSse(
     (sessionId: string, controller: AbortController, steeringTurnId: string): LiveTurn => {
       const turn: LiveTurn = {
         sessionId,
+        teamId,
+        spaceId,
+        agentInstanceId,
         controller,
         steeringTurnId,
         thoughts: new Map(),
@@ -507,7 +509,7 @@ export function useChatSse(
       registerTurn(turn);
       return turn;
     },
-    [host],
+    [host, teamId, spaceId, agentInstanceId],
   );
 
   // Re-attaches the session's turn that kept streaming while this view was
@@ -570,7 +572,6 @@ export function useChatSse(
         onAwaitingHuman,
         onBindDraftAgentToSessionId,
         onTurnPersisted,
-        onSessionTitle,
         onSteeredMessage,
         onTurnRejected,
         onError,
@@ -1341,6 +1342,7 @@ export function useChatSse(
         );
         console.debug(`[useChatSse][${sendId}] streamToMessages completed normally`);
       } catch (err) {
+        turn.interrupted = true;
         const name = (err as Error)?.name;
         const msg = (err as Error)?.message ?? String(err);
         if (ac.signal.aborted || abortRef.current !== ac || isTurnCurrent?.(effectiveSessionId) === false) {

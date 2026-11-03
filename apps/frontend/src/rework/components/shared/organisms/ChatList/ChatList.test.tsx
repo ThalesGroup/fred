@@ -34,8 +34,7 @@ vi.mock("../../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "" }),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-const navigate = vi.hoisted(() => vi.fn());
-vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
+vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: vi.fn() }),
 }));
@@ -60,7 +59,6 @@ vi.mock("./ChatListItem/ChatListItem.tsx", () => ({
   ),
 }));
 import ChatList from "./ChatList";
-import { abortTurn, registerTurn, settleTurn, type LiveTurn } from "@core/hooks/backgroundTurns";
 
 beforeEach(() => {
   sessions = [{ ...defaultSession }];
@@ -165,38 +163,5 @@ it("groups by agent identity while preserving distinct live and deleted names", 
   } finally {
     act(() => root.unmount());
     container.remove();
-  }
-});
-
-it("announces a turn that ended out of sight with its title and a way to open it", () => {
-  const container = document.createElement("div");
-  const root = createRoot(container);
-  const turn = (awaitingInput: boolean): LiveTurn => ({
-    sessionId: "saved",
-    controller: new AbortController(),
-    steeringTurnId: "steering",
-    thoughts: new Map(),
-    host: null,
-    messages: [],
-    detachedCallbacks: {},
-    awaitingInput,
-    completed: !awaitingInput,
-  });
-  try {
-    act(() => root.render(<ChatList teamId="team-1" />));
-    for (const awaitingInput of [false, true]) {
-      const finished = turn(awaitingInput);
-      registerTurn(finished);
-      settleTurn(finished);
-    }
-    expect(showInfo.mock.calls.map(([toast]) => [toast.summary, toast.detail])).toEqual([
-      ["rework.sidebar.chatList.answerReady", "Preserved conversation"],
-      ["rework.sidebar.chatList.awaitingInput", "Preserved conversation"],
-    ]);
-    showInfo.mock.calls[0][0].action.onClick();
-    expect(navigate).toHaveBeenCalledWith("/team/team-1/managed-chat/agent-1?session=saved");
-  } finally {
-    act(() => root.unmount());
-    abortTurn("saved");
   }
 });

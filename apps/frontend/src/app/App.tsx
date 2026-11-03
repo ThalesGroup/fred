@@ -24,6 +24,7 @@ import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 import { uiThemeBase, uiThemeTab } from "./uiThemes";
+import { useBackgroundTurnNotifications } from "@core/hooks/useBackgroundTurnNotifications.ts";
 import styles from "./App.module.css";
 
 const LoadingScreen = ({
@@ -51,6 +52,11 @@ const LoadingScreen = ({
     </div>
   );
 };
+
+function BackgroundTurnNotificationHost({ navigate }: { navigate: (href: string) => void }) {
+  useBackgroundTurnNotifications(navigate);
+  return null;
+}
 
 function FredUiContent() {
   const [router, setRouter] = useState<any>(null);
@@ -107,6 +113,7 @@ function FredUiContent() {
                   await writeRichClipboard("", text);
                 }}
               >
+                <BackgroundTurnNotificationHost navigate={router.navigate} />
                 <RouterProvider router={router} />
               </ToastProvider>
             </ConfirmationDialogProvider>
