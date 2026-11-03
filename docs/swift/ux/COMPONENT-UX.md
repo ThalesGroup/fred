@@ -2000,6 +2000,12 @@ _(none yet)_
 
 #### Resolved
 
+- **Resume rejection recovery (2026-11-03)** - An obsolete-card conflict explains
+  that the response was not applied and asks the user to reopen the conversation.
+  Batch mismatches and other conflicts keep answers editable. Cancelling a request
+  before acceptance restores the card without displaying false cancelled tools.
+  Only an accepted resume records the answer or a conversation approval preference.
+
 - **Focus management (2026-10-10)** — closed without autofocus (owner decision): the card never takes focus, and number keys, Enter and Escape answer it instead (see the visual refresh below).
 
 - **Visual refresh, design tokens only (2026-10-10)** — OpenSpec `refresh-hitl-card-visuals`.

@@ -558,6 +558,9 @@
       "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
       "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer.",
       "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères.",
+      "hitlUnavailable": "Cette demande n'attend plus de réponse. Votre réponse n'a pas été appliquée. Rouvrez la conversation pour voir son état actuel.",
+      "hitlQuestionsChanged": "Les questions en attente ont changé. Vos réponses n'ont pas été appliquées. Rouvrez la conversation pour charger les questions actuelles.",
+      "hitlConflict": "Votre réponse n'a pas pu être appliquée car la conversation est occupée ou a changé. Réessayez, ou rouvrez la conversation si le problème persiste.",
       "toolApprovalSaveFailedSummary": "Approbation non enregistrée",
       "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée."
     },

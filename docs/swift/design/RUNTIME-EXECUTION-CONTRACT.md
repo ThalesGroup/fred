@@ -3104,14 +3104,21 @@ proceeds with a console warning. Ordinary fetches keep the 30 s default.
 **A refusal must leave the interaction retryable.** `handleHitlAnswer` clears
 `pendingHitl` before awaiting the resume, so a refused HITL resume would have
 hidden a prompt whose checkpoint is still paused server-side, with no way to
-answer it. `sendHitlResume` therefore resolves `false` for **every** outcome
+answer it. `sendHitlResume` therefore resolves `false` for retryable outcomes
 where the resume never reached the runtime — token refusal, prepare-execution
 failure, an abort/supersession before the stream started, *or* the runtime
 rejecting the request outright (a fetch failure, or a non-2xx such as 503 from
 an unready pod). The dividing line is the runtime's own acceptance:
 `streamToMessages` signals `onAccepted` once past its status check, and only
 after that does a failure count as reached — a mid-stream reset must NOT
-resurrect the prompt, because the checkpoint has already been consumed.
+resurrect the prompt, because execution may already have started. HTTP acceptance
+is not proof that the later durable resume claim succeeded; post-2xx SSE failures
+keep their existing behavior.
+A 409 removes the card only when the existing runtime reason proves that its
+checkpoint is missing, no longer waiting, or belongs to a different interrupt
+or occurrence. Batch mismatches and unknown conflicts keep answers retryable.
+These refusals never call `onAccepted` or mirror an answer into history. The UI
+uses localized explanations rather than displaying the raw HTTP status.
 
 Not-reached is a fact about the backend, not about who owns the UI, so
 `handleHitlAnswer` guards the restore itself, three ways: same session
@@ -3125,15 +3132,12 @@ update, so a newer `awaiting_human` is never overwritten by a late-settling
 continuation). No counter or rollback state is kept for this: nothing
 accumulates, so nothing needs unwinding when a superseding send fails. A
 `.catch()` mirrors the same restore, since `pendingHitl` is cleared before the
-await and this continuation is the only path that can put it back. For the same reason the optimistic "cancelled"
-tool_results now go in **after** prepare-execution succeeds, not before:
-applied earlier, a failed preparation left the gated calls displayed as
-cancelled by an attempt that never ran, and because those messages are ranked
-by `Date.now()` they could never collide with a backend rank in `upsertOne` —
-so the real results arriving on the retry sat *alongside* the fake ones, and
-`groupTraceEntries` (last result per `call_id` in rank order) kept the fake one
-permanently. `upsertOne` now also matches an optimistic cancellation by
-`call_id` within its exchange, so a real result supersedes it in every case.
+await and this continuation is the only path that can put it back. Cancellation
+placeholders are written only after the runtime accepts the resume, through the
+owning turn so a detached conversation cannot change the newly visible thread.
+A refused or aborted-before-acceptance cancellation leaves no false tool result.
+`upsertOne` matches accepted cancellation placeholders by `call_id` within their
+exchange so real results supersede them.
 
 **Cleared-session fail-closed (2026-08-09).** keycloak-js ends the session
 itself when a refresh comes back HTTP 400 (`clearToken()`), and that state was
