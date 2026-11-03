@@ -1,0 +1,23 @@
+From: Jane Doe <jane.doe@example.com>
+To: Bob Martin <bob@example.com>
+Date: Tue, 27 Oct 2026 11:00:00 +0100
+Subject: Fwd: confidential
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="outer"
+
+--outer
+Content-Type: text/plain; charset=utf-8
+
+The attached mail is encrypted.
+--outer
+Content-Type: message/rfc822
+
+From: Alan Smith <alan@example.com>
+To: Jane Doe <jane.doe@example.com>
+Subject: Confidential
+MIME-Version: 1.0
+Content-Type: application/pkcs7-mime; smime-type=enveloped-data; name="smime.p7m"
+Content-Transfer-Encoding: base64
+
+MIIBENCRYPTED
+--outer--

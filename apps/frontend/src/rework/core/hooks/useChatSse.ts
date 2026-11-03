@@ -50,11 +50,6 @@ import { countUnicodeCodePoints } from "../utils/chatInput";
 import { personalTeamId } from "../../components/shared/utils/teamId";
 import { normalizeApiError } from "../errors/normalizeApiError";
 
-// The UI may still carry the bare "personal" placeholder (teamId.ts) in the URL
-// before bootstrap resolves the real per-user id. The control-plane resolves
-// that alias server-side (teams/system.py), but fred-runtime's OpenFGA check
-// does not — it authorizes the raw team_id in runtime_context. Canonicalize
-// before it reaches the runtime, mirroring usePipelineRun.ts.
 function canonicalizeRuntimeTeamId(teamId: string): string {
   return teamId === "personal" ? personalTeamId(KeyCloakService.GetUserId() ?? "") : teamId;
 }
@@ -265,6 +260,7 @@ export type ChatSseCallbacks = {
   /** The conversation title the runtime generated on the first turn, streamed once ready. */
   onSessionTitle?: (title: string, sessionId: string) => void;
   onSteeredMessage?: (messageId: string, sessionId: string) => void;
+  onStreamInterrupted?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string) => void;
   /**
@@ -321,6 +317,7 @@ export function useChatSse(
     onTurnPersisted,
     onSessionTitle,
     onSteeredMessage,
+    onStreamInterrupted,
     onAwaitingHuman,
     onError,
     onTurnStarted,
@@ -916,11 +913,23 @@ export function useChatSse(
       const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
         console.warn("[useChatSse] Failed to parse SSE frame:", raw),
       );
-      for await (const event of frames) {
-        processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+      let terminal = false;
+      let ended = false;
+      try {
+        for await (const event of frames) {
+          if (["final", "awaiting_human", "execution_interrupted", "execution_error"].includes(event.kind)) {
+            terminal = true;
+          }
+          processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+        }
+        ended = true;
+      } finally {
+        if ((!ended || !terminal) && (!abortRef.current || abortRef.current.signal === signal)) {
+          onStreamInterrupted?.(sessionId);
+        }
       }
     },
-    [processEvent],
+    [processEvent, onStreamInterrupted],
   );
 
   const send = useCallback(

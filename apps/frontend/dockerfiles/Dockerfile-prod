@@ -1,7 +1,9 @@
 # -----------------------------------------------------------------------------
 # BUILDER
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/node:22.13.0 AS builder
+FROM mirror.gcr.io/node:24.21.0 AS builder
+
+RUN npm install --global npm@11.19.0
 
 # Install dependencies
 RUN apt-get update && \

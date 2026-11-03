@@ -34,6 +34,10 @@ membres. Votre **espace personnel** n'est visible que de vous — pas même d'un
 Admin plateforme. Un rôle de plateforme ne donne accès à aucune donnée
 d'équipe : il faut un rôle _dans_ l'équipe.
 
+Vos **conversations**, elles, ne sont visibles que de vous, dans tous les
+espaces : aucun rôle d'équipe ou de plateforme ne permet à quelqu'un d'autre de
+les lire.
+
 ## Ce que devient une conversation supprimée
 
 Elle est **masquée immédiatement**, puis effacée définitivement au terme du

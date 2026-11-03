@@ -251,3 +251,32 @@ def test_markdown_preview_maps_tabular_execution_errors(content_client, raised, 
     response = client.get("/markdown/doc-1")
 
     assert response.status_code == expected_status, "a saturated pod must not turn a document preview into a 500"
+
+
+@pytest.mark.parametrize("reason", ["datasets_not_resolved", "preview_not_ready", "preview_artifact_unavailable"])
+def test_description_failure_logs_closed_reason_before_unchanged_404(tabular_client, caplog, reason):
+    from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound
+
+    client, controller = tabular_client
+
+    async def fail(*_args, **_kwargs):
+        raise TabularDescriptionNotFound("BODY-CANARY", reason=reason)
+
+    controller.service.describe_documents = fail
+    response = client.get("/tabular/documents/schemas", params={"document_uids": "UID-CANARY"})
+    assert response.status_code == 404 and response.json() == {"detail": "BODY-CANARY"}
+    [event] = [r for r in caplog.records if r.getMessage() == "tabular.description_failure"]
+    assert event.reason == reason
+    assert "CANARY" not in repr(event.__dict__)
+
+
+def test_description_permission_denial_emits_no_resolution_hint(tabular_client, caplog):
+    client, controller = tabular_client
+
+    async def fail(*_args, **_kwargs):
+        raise PermissionError("BODY-CANARY")
+
+    controller.service.describe_documents = fail
+    response = client.get("/tabular/documents/schemas", params={"document_uids": "UID-CANARY"})
+    assert response.status_code == 403 and response.json() == {"detail": "BODY-CANARY"}
+    assert not [r for r in caplog.records if r.getMessage() == "tabular.description_failure"]
