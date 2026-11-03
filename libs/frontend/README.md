@@ -30,7 +30,8 @@ authorization, routing, and authentication code is not package input.
 
 ## Provisioning
 
-Use the repository Node `22.13.0` and npm `10.9.2` baseline:
+Use the repository Node `24.21.0` and npm `11.19.0` baseline. Only Node
+`>=24.21.0 <25` is supported for the application, producer and package consumers:
 
 ```sh
 make install

@@ -187,6 +187,7 @@ export const PUBLISH_WORKFLOW_HELPER_PATH =
 
 export const VALIDATION_ORCHESTRATION_PATHS = [
   "Makefile",
+  "scripts/makefiles/node.mk",
   WORKFLOW_PATH,
   PUBLISH_WORKFLOW_PATH,
   PUBLISH_WORKFLOW_HELPER_PATH,

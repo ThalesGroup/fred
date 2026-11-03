@@ -133,8 +133,8 @@ const gates = {
 const applicationToolchain = {
   source: "fixture",
   isolation: "application-owned",
-  node: "22.13.0",
-  npm: "10.9.2",
+  node: "24.21.0",
+  npm: "11.19.0",
 };
 
 test("uses npm's dist.attestations.url metadata path for provenance", async (context) => {

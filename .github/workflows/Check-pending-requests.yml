@@ -39,6 +39,7 @@ jobs:
           filters: |
             frontend:
               - 'apps/frontend/**'
+              - 'scripts/makefiles/node.mk'
               - '.github/workflows/Check-pending-requests.yml'
             frontend-packages:
               - 'libs/frontend/**'
@@ -140,6 +141,7 @@ jobs:
               - 'apps/frontend/src/i18n.ts'
               - 'LICENSE'
               - 'Makefile'
+              - 'scripts/makefiles/node.mk'
               - '.github/workflows/Check-pending-requests.yml'
               - '.github/workflows/Publish-frontend-packages.yml'
               - '.github/scripts/frontend-release-workflow.mjs'
@@ -387,7 +389,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22.13.0"
+          node-version: "24.21.0"
+
+      - name: Pin npm
+        run: npm install --global npm@11.19.0
 
       - name: Install producer dependencies
         run: npm ci
@@ -508,7 +513,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22.13.0"
+          node-version: "24.21.0"
+
+      - name: Pin npm
+        run: npm install --global npm@11.19.0
 
       - name: Run ${{ matrix.check }}
         run: |
@@ -530,7 +538,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22.13.0"
+          node-version: "24.21.0"
+
+      - name: Pin npm
+        run: npm install --global npm@11.19.0
 
       - name: Frontend build
         run: |
@@ -710,7 +721,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22.13.0"
+          node-version: "24.21.0"
+
+      - name: Pin npm
+        run: npm install --global npm@11.19.0
 
       - name: Setup backend dependencies
         if: matrix.name != 'control-plane'
