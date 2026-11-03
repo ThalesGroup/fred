@@ -1563,6 +1563,7 @@ async function verifyProductionHostDownload(browser) {
   ];
   const mockedImports = new Set([
     "../../../../hooks/useSelectedTeam.ts",
+    "../../../../hooks/useFrontendProperties.ts",
     "../../../../app/ApplicationContextProvider.tsx",
     "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts",
   ]);
