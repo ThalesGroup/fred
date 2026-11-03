@@ -12,6 +12,7 @@ struct Provider {
     url: String,
     response: Arc<Mutex<(u16, Value, usize)>>,
     inference: Arc<Mutex<Vec<(HeaderMap, Value)>>>,
+    inference_status: Arc<Mutex<u16>>,
     task: tokio::task::JoinHandle<()>,
 }
 impl Drop for Provider {
@@ -31,6 +32,8 @@ impl Provider {
         )));
         let inference = Arc::new(Mutex::new(Vec::new()));
         let completions = inference.clone();
+        let inference_status = Arc::new(Mutex::new(200));
+        let completion_status = inference_status.clone();
         let state = response.clone();
         let app = Router::new().route(
             "/models",
@@ -48,11 +51,12 @@ impl Provider {
         );
         let app = app.route("/chat/completions", post(move |headers: HeaderMap, Json(body): Json<Value>| {
             let completions = completions.clone();
+            let completion_status = completion_status.clone();
             async move {
                 completions.lock().await.push((headers, body));
-                Json(json!({"id":"fixture", "object":"chat.completion", "created":0, "model":"chat",
+                (axum::http::StatusCode::from_u16(*completion_status.lock().await).unwrap(), Json(json!({"id":"fixture", "object":"chat.completion", "created":0, "model":"chat",
                     "choices":[{"index":0,"message":{"role":"assistant","content":"managed simulated inference"},"finish_reason":"stop"}],
-                    "usage":{"prompt_tokens":2,"completion_tokens":2,"total_tokens":4}}))
+                    "usage":{"prompt_tokens":2,"completion_tokens":2,"total_tokens":4}})))
             }
         }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -62,6 +66,7 @@ impl Provider {
             url,
             response,
             inference,
+            inference_status,
             task,
         }
     }
@@ -841,6 +846,16 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
                 .unwrap(),
         )
     };
+    let mut without_session = execute.clone();
+    without_session
+        .as_object_mut()
+        .unwrap()
+        .remove("session_id");
+    let response = send(app.clone(), without_session).await.unwrap();
+    assert_eq!(response.status(), 422);
+    let error = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    assert!(String::from_utf8_lossy(&error).contains("session_id"));
+    assert!(provider.inference.lock().await.is_empty());
     let response = send(app.clone(), execute.clone()).await.unwrap();
     assert_eq!(response.status(), 200);
     let stream = String::from_utf8(
@@ -855,6 +870,37 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         "{stream}"
     );
     assert!(!stream.contains("synthetic-inference-key"));
+    assert!(!stream.contains("tokens") && !stream.contains("usage"));
+    // Accounting is asynchronous and bounded; wait for the committed report.
+    let reports = |expected| {
+        let pool = &e.pool;
+        async move {
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                loop {
+                    let rows: Vec<Value> = sqlx::query_scalar(
+                        "select to_jsonb(u) from model_usage u where session_id=$1 order by occurred_at",
+                    ).bind(session).fetch_all(pool).await.unwrap();
+                    assert!(rows.len() <= expected, "duplicate usage reports: {rows:?}");
+                    if rows.len() == expected { break rows; }
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            }).await.unwrap()
+        }
+    };
+    let rows = reports(1).await;
+    let report = &rows[0];
+    assert_eq!(report["session_id"], session.to_string());
+    assert_eq!(report["space_id"], team.id.to_string());
+    assert_eq!(report["user_id"], "alice");
+    assert_eq!(report["agent_instance_id"], instance.to_string());
+    assert_eq!(report["model_source_id"], "a");
+    assert_eq!(report["upstream_model_id"], "chat");
+    assert_eq!(report["input_tokens"], 2);
+    assert_eq!(report["output_tokens"], 2);
+    assert_eq!(report["cache_read_tokens"], 0);
+    assert_eq!(report["cache_creation_tokens"], 0);
+    Uuid::parse_str(report["report_id"].as_str().unwrap()).unwrap();
+    Uuid::parse_str(report["exchange_id"].as_str().unwrap()).unwrap();
     let calls = provider.inference.lock().await;
     assert_eq!(calls.len(), 1);
     assert_eq!(
@@ -866,6 +912,40 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         assert_eq!(&calls[0].1[key], value);
     }
     drop(calls);
+
+    // A failed provider call does not submit a consumption report.
+    *provider.inference_status.lock().await = 500;
+    let response = send(app.clone(), execute.clone()).await.unwrap();
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    assert!(String::from_utf8_lossy(&body).contains("execution_error"));
+    assert_eq!(reports(1).await, rows);
+    *provider.inference_status.lock().await = 200;
+
+    // Hold the journal write until after the browser drops the response body.
+    let mut lock = e.pool.begin().await.unwrap();
+    sqlx::query("lock table model_usage in access exclusive mode")
+        .execute(&mut *lock)
+        .await
+        .unwrap();
+    let response = send(app.clone(), execute.clone()).await.unwrap();
+    let mut stream = response.into_body().into_data_stream();
+    use futures::StreamExt;
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while let Some(frame) = stream.next().await {
+            if String::from_utf8_lossy(&frame.unwrap()).contains("assistant_delta") {
+                return;
+            }
+        }
+        panic!("missing provider response");
+    })
+    .await
+    .unwrap();
+    drop(stream);
+    lock.commit().await.unwrap();
+    let after_drop = reports(2).await;
+    assert_ne!(after_drop[0]["report_id"], after_drop[1]["report_id"]);
+    assert_ne!(after_drop[0]["exchange_id"], after_drop[1]["exchange_id"]);
+
     let mut unprovisioned = state;
     unprovisioned.agent_catalog.inference_credentials.clear();
     assert_eq!(
@@ -898,11 +978,12 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         .unwrap();
     assert_eq!(resolve().await.unwrap().status(), 409);
     assert_eq!(send(app.clone(), execute).await.unwrap().status(), 409);
-    assert_eq!(provider.inference.lock().await.len(), 1);
+    assert_eq!(provider.inference.lock().await.len(), 3);
     // Direct demonstration cannot access the provider even though provisioning exists.
     let direct = json!({"agent_id":fred_rust_agent::AGENT_ID,"input":"question"});
     let response = send(app.clone(), direct).await.unwrap();
     assert_eq!(response.status(), 200);
     let _ = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
-    assert_eq!(provider.inference.lock().await.len(), 1);
+    assert_eq!(provider.inference.lock().await.len(), 3);
+    assert_eq!(reports(2).await, after_drop);
 }

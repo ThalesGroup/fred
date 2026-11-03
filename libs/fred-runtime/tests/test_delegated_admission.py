@@ -1024,7 +1024,7 @@ def test_a_role_holder_naming_nobody_is_refused_where_grants_are_not_believed(
 class _NullExecutor:
     async def stream(self, *args: object, **kwargs: object):
         return
-        yield  # pragma: no cover - makes this an async generator
+        yield  # pragma: no cover - makes this an async generator  # pyright: ignore[reportUnreachable]
 
 
 class _RecordingRuntime:

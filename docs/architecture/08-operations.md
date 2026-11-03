@@ -81,10 +81,15 @@ is the unit of idempotency. Replaying the same report does not count twice; any
 change to its session, exchange, occurrence time, offers or counters conflicts.
 A turn interrupted for human validation produces several reports, and its
 consumption is the sum of those reports. Provenance survives retirement or purge.
-This increment provides only the journal and its Control Plane write API; runtime reporting is not yet
-connected. Daily aggregation, partitioning and retention, an outbox, monthly
-closure and pseudonymization are deliberately deferred. Any future consumption
-aggregate must derive from the journal.
+Embedded Ralph submits one report per decoded managed completion directly through
+the same validation and transaction, using the admitted offer and Rig's token
+counters. Managed execution requires a session; direct demonstration emits no
+report. Its single, two-second write attempt survives browser disconnection but
+is best effort: a write failure or process crash can lose the report without
+changing the reply. Provider errors and deadlines emit no report. Counters never
+enter browser events. Daily aggregation, partitioning and retention, an outbox,
+monthly closure and pseudonymization are deliberately deferred. Any future
+consumption aggregate must derive from the journal.
 
 ## Logs and lifecycle
 

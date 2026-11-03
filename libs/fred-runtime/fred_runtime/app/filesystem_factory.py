@@ -52,4 +52,7 @@ async def build_runtime_filesystem(
             bucket_name=config.bucket_name,
             project_id=config.project_id,
         )
-    raise TypeError(f"Unsupported runtime filesystem config: {type(config).__name__}")
+    # Defend against callers that bypass the annotated configuration union.
+    raise TypeError(  # pyright: ignore[reportUnreachable]
+        f"Unsupported runtime filesystem config: {type(config).__name__}"
+    )

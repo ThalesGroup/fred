@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fred_core.documents.selection import DocumentScope
 from fred_core.documents.transport import DocumentAccessContext
+from fred_core.history.history_schema import ChatTokenUsage
 from fred_sdk.contracts.context import PortableContext, RuntimeContext
 from fred_sdk.contracts.weaver import (
     ModelOfferKey,
@@ -16,6 +17,7 @@ from fred_sdk.contracts.weaver import (
 )
 
 from fred_runtime.runtime_support.authority import AuthorityLostError
+from fred_runtime.runtime_support.model_metadata import sum_token_usage
 from fred_runtime.runtime_support.request_context_helpers import (
     get_document_library_tags_ids,
     get_document_uids,
@@ -35,11 +37,23 @@ class TurnAuthority:
         choice: ModelOfferKey | None,
     ):
         self.binding = binding
+        self.usage_report_id = str(uuid4())
+        self.token_usage: ChatTokenUsage | None = None
         self.choice = choice
         self._scope: RunScope | None = None
         self._ended = False
         self.models: dict[ModelOfferKey, BaseChatModel] = {}
         self._documents: DocumentAccessContext | None = None
+
+    def record_usage(self, usage: dict[str, int] | None) -> None:
+        """Retain known consumption even if the run never emits a final event."""
+        if usage is not None:
+            self.token_usage = ChatTokenUsage.model_validate(
+                sum_token_usage(
+                    self.token_usage.model_dump() if self.token_usage else None,
+                    usage,
+                )
+            )
 
     def bind_documents(
         self,

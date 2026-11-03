@@ -277,6 +277,18 @@ class DelegationRuntime:
         self._token_provider = token_provider
         self._records = records if records is not None else RunRecordStore()
 
+    async def workload_token_lease(
+        self, *, rejected: TokenLease | None = None
+    ) -> TokenLease | None:
+        """Acquire this pod's own identity, independent of any run or person."""
+        provider = self._token_provider
+        if provider is None:
+            return None
+        if rejected is not None:
+            refresh = getattr(provider, "refresh_rejected", None)
+            return await refresh(rejected) if refresh is not None else None
+        return await provider.get_token_lease()
+
     @property
     def enabled(self) -> bool:
         """True when this pod's outgoing calls act for people."""

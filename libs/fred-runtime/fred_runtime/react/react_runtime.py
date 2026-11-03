@@ -680,6 +680,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             nonlocal context_tokens
 
             context_tokens = (call_usage or {}).get("input_tokens")
+            scope = RunScope.current()
+            if scope is not None and scope.turn_authority is not None:
+                scope.turn_authority.record_usage(call_usage)
 
         # The timer hands back its dimensions so the turn can name its own
         # outcome; a pod with no metrics provider hands back nothing.

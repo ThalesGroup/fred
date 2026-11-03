@@ -9,7 +9,7 @@ listener, deployment, Ralph configuration, tools or memory is introduced.
 ## Managed execution
 
 `POST {base_url}/agents/execute/stream` accepts an `agent_instance_id`, nonblank
-`input` (at most 65,536 bytes), optional `session_id`, and `runtime_context` containing
+`input` (at most 65,536 bytes), required `session_id`, and `runtime_context` containing
 `space_id`, optional `model_choice: {source_id, upstream_model_id}` and `reasoning`.
 The authenticated host resolves current identity and instance authority in process.
 It checks the instance's runtime/template, then passes the private admitted decision
@@ -51,21 +51,41 @@ Dropping the stream cancels the in-flight future; no detached producer remains.
 No call can run after the turn closes. Attribution and revisions are logged through
 the host's tracing context; the host's existing logger strips dependency payloads.
 
+## Consumption
+
+Ralph participates in the `model_usage` journal for managed execution. A missing
+`session_id` returns 422 before inference. After each completion decoded by Rig,
+the library passes input, output and cache token counts to the host, including
+when the response has no displayable text. Missing counters default to zero.
+The host uses the admitted offer, fresh report/exchange UUIDs and server time;
+the shared HTTP-report transaction derives person, space and instance from the
+session. Token counts never enter browser events, and the agent crate has no DB
+access. Provider errors and deadlines produce no report.
+
+The host starts one write attempt before yielding the response, with a two-second
+timeout. This accounting task survives browser disconnection; inference remains
+cancellable. A failed write is logged without content or secrets and does not
+change the reply. This is best effort: there is no retry, outbox or recovery after
+a process crash. The shared transaction preserves atomicity and report idempotency.
+
 ## Direct demonstration
 
 The existing direct request `{"agent_id":"fred.github.ralph","input":"Bonjour"}`
 still replies `Hello world!` without any LLM or managed-instance authority. It cannot
-use inference provisioning. Default empty/null unsupported execution options remain
-accepted; nondefault capabilities, HITL and history options return 422.
+use inference provisioning or produce consumption reports. Default empty/null
+unsupported execution options remain accepted; nondefault capabilities, HITL and
+history options return 422.
 
 ## Targeted verification
 
 `cargo test -p fred-rust-agent --lib` exercises the real Rig HTTP adapter against a
 loopback provider: destination, model, options, fictitious credential, repeated
-calls, missing/mismatched provisioning, errors, deadlines and stream cancellation.
+calls, missing/mismatched provisioning, errors, deadlines, stream cancellation
+and usage before the response event.
 Control Plane's `agent_instances::model_catalog` integration tests additionally
 cover HTTP instance/session creation, preparation under a custom router mount,
 the browser execution envelope, delegated admission, browser projection,
-source removal and revocation against disposable PostgreSQL. No real provider or
-k3d validation is implied. Workspace Cargo.lock and the existing Docker build own
-the library dependency.
+source removal, revocation and consumption provenance, including browser
+disconnection, against disposable PostgreSQL. No real provider or k3d validation
+is implied. Workspace Cargo.lock and the existing Docker build own the library
+dependency.

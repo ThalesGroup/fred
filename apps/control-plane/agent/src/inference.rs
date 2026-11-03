@@ -5,10 +5,10 @@
 use std::{sync::OnceLock, time::Duration};
 
 use fred_rust_sdk::inference::{InferenceAdmission, InferenceCredentialBinding};
-use futures::{Stream, stream};
+use futures::{Stream, StreamExt, stream};
 use rig_core::{
     client::CompletionClient,
-    completion::{AssistantContent, CompletionModel, FinishReason},
+    completion::{AssistantContent, CompletionModel, FinishReason, Usage},
     providers::openai,
 };
 use tokio::time::Instant;
@@ -113,7 +113,7 @@ impl InferenceTurn {
     pub async fn complete(
         &mut self,
         input: String,
-    ) -> Result<(String, &'static str), InferenceError> {
+    ) -> Result<(String, &'static str, Usage), InferenceError> {
         if self.ended || Instant::now() >= self.deadline {
             return Err(InferenceError::Ended);
         }
@@ -170,64 +170,51 @@ impl InferenceTurn {
                 _ => None,
             })
             .collect();
-        if content.is_empty() {
-            self.close();
-            return Err(InferenceError::Provider);
-        }
-        Ok((content, finish_reason))
+        // A decoded response can consume tokens even when it has no displayable text.
+        Ok((content, finish_reason, response.usage))
     }
 }
 
-/// Dropping this stream drops the in-flight request; there is no detached producer.
-/// Only a managed host admission can construct its inference turn.
-pub fn execute(turn: InferenceTurn, input: String) -> impl Stream<Item = RuntimeEvent> + Send {
-    stream::unfold(
-        (Some(turn), Some(input), 0u8, None),
-        |(mut turn, mut input, step, content)| async move {
-            match step {
-                0 => Some((
-                    RuntimeEvent::Status {
-                        sequence: 1,
-                        status: "running",
+/// Dropping this stream cancels inference. The host receives usage synchronously
+/// before any response event is yielded, independently of later browser reads.
+pub fn execute(
+    mut turn: InferenceTurn,
+    input: String,
+    on_usage: impl FnOnce(Usage) + Send,
+) -> impl Stream<Item = RuntimeEvent> + Send {
+    stream::once(async {
+        RuntimeEvent::Status {
+            sequence: 1,
+            status: "running",
+        }
+    })
+    .chain(
+        stream::once(async move {
+            let result = turn.complete(input).await;
+            turn.close();
+            let content = result.map(|(text, reason, usage)| {
+                on_usage(usage);
+                (text, reason)
+            });
+            match content {
+                Ok((text, reason)) if !text.is_empty() => vec![
+                    RuntimeEvent::AssistantDelta {
+                        sequence: 2,
+                        delta: text.clone(),
                     },
-                    (turn, input, 1, content),
-                )),
-                1 => {
-                    let active = turn.as_mut()?;
-                    let result = active.complete(input.take()?).await;
-                    active.close();
-                    match result {
-                        Ok((text, reason)) => Some((
-                            RuntimeEvent::AssistantDelta {
-                                sequence: 2,
-                                delta: text.clone(),
-                            },
-                            (None, None, 2, Some((text, reason))),
-                        )),
-                        Err(_) => Some((
-                            RuntimeEvent::Error {
-                                sequence: 2,
-                                message: "Inference failed or exceeded its deadline.",
-                            },
-                            (None, None, 3, None),
-                        )),
-                    }
-                }
-                2 => {
-                    let (text, reason) = content?;
-                    Some((
-                        RuntimeEvent::Final {
-                            sequence: 3,
-                            content: text,
-                            finish_reason: reason,
-                        },
-                        (None, None, 4, None),
-                    ))
-                }
-                // Fred's error event is terminal, like the Python runtime contract.
-                _ => None,
+                    RuntimeEvent::Final {
+                        sequence: 3,
+                        content: text,
+                        finish_reason: reason,
+                    },
+                ],
+                _ => vec![RuntimeEvent::Error {
+                    sequence: 2,
+                    message: "Inference failed or exceeded its deadline.",
+                }],
             }
-        },
+        })
+        .flat_map(stream::iter),
     )
 }
 
@@ -266,6 +253,14 @@ mod tests {
     }
     impl Provider {
         async fn start(delay: Duration, status: u16) -> Self {
+            Self::with_response(delay, status, "simulated answer", "stop").await
+        }
+        async fn with_response(
+            delay: Duration,
+            status: u16,
+            content: &'static str,
+            reason: &'static str,
+        ) -> Self {
             let calls = Arc::new(Mutex::new(Vec::new()));
             let captured = calls.clone();
             let app = Router::new().route("/v1/chat/completions", post(move |headers: HeaderMap, Json(body): Json<Value>| {
@@ -275,7 +270,7 @@ mod tests {
                     tokio::time::sleep(delay).await;
                     (axum::http::StatusCode::from_u16(status).unwrap(), Json(json!({
                         "id":"completion-fixture", "object":"chat.completion", "created":0, "model":"model",
-                        "choices":[{"index":0,"message":{"role":"assistant","content":"simulated answer"},"finish_reason":"stop"}],
+                        "choices":[{"index":0,"message":{"role":"assistant","content":content},"finish_reason":reason}],
                         "usage":{"prompt_tokens":2,"completion_tokens":2,"total_tokens":4}
                     })))
                 }
@@ -301,9 +296,12 @@ mod tests {
         let provider = Provider::start(Duration::ZERO, 200).await;
         let mut turn = provider.turn();
         for _ in 0..2 {
+            let (text, reason, usage) = turn.complete("fixture question".into()).await.unwrap();
+            assert_eq!((text.as_str(), reason), ("simulated answer", "stop"));
+            assert_eq!((usage.input_tokens, usage.output_tokens), (2, 2));
             assert_eq!(
-                turn.complete("fixture question".into()).await.unwrap(),
-                ("simulated answer".into(), "stop")
+                (usage.cached_input_tokens, usage.cache_creation_input_tokens),
+                (0, 0)
             );
         }
         turn.close();
@@ -364,29 +362,64 @@ mod tests {
     #[tokio::test]
     async fn stream_uses_real_rig_response_and_finishes_once() {
         let provider = Provider::start(Duration::ZERO, 200).await;
-        let events: Vec<_> = execute(provider.turn(), "question".into()).collect().await;
+        let events: Vec<_> = execute(provider.turn(), "question".into(), |_| {})
+            .collect()
+            .await;
         assert_eq!(events.len(), 3);
         assert!(
             matches!(&events[2], RuntimeEvent::Final { content, .. } if content == "simulated answer")
         );
         assert_eq!(provider.calls.lock().unwrap().len(), 1);
         let failing = Provider::start(Duration::ZERO, 401).await;
-        let events: Vec<_> = execute(failing.turn(), "question".into()).collect().await;
+        let events: Vec<_> = execute(failing.turn(), "question".into(), |_| {
+            panic!("failed inference has no usage")
+        })
+        .collect()
+        .await;
         assert_eq!(events.len(), 2);
         assert!(matches!(&events[1], RuntimeEvent::Error { .. }));
     }
 
     #[tokio::test]
+    async fn usage_is_reported_once_before_yield_even_without_displayable_text() {
+        // Rig preserves an empty completion when the model's token limit is reached.
+        for (content, reason) in [("simulated answer", "stop"), ("", "length")] {
+            let provider = Provider::with_response(Duration::ZERO, 200, content, reason).await;
+            let reported = Arc::new(Mutex::new(Vec::new()));
+            let captured = reported.clone();
+            let mut events = Box::pin(execute(provider.turn(), "question".into(), move |usage| {
+                captured
+                    .lock()
+                    .unwrap()
+                    .push((usage.input_tokens, usage.output_tokens));
+            }));
+            assert!(matches!(
+                events.next().await,
+                Some(RuntimeEvent::Status { .. })
+            ));
+            assert!(reported.lock().unwrap().is_empty());
+            let response = events.next().await.unwrap();
+            if content.is_empty() {
+                assert!(matches!(response, RuntimeEvent::Error { .. }));
+            } else {
+                assert!(matches!(response, RuntimeEvent::AssistantDelta { .. }));
+            }
+            drop(events);
+            assert_eq!(*reported.lock().unwrap(), vec![(2, 2)]);
+        }
+    }
+
+    #[tokio::test]
     async fn cancellation_before_invocation_and_during_http_drops_the_producer() {
         let provider = Provider::start(Duration::from_secs(60), 200).await;
-        let mut events = Box::pin(execute(provider.turn(), "question".into()));
+        let mut events = Box::pin(execute(provider.turn(), "question".into(), |_| {}));
         assert!(matches!(
             events.next().await,
             Some(RuntimeEvent::Status { .. })
         ));
         drop(events);
         assert!(provider.calls.lock().unwrap().is_empty());
-        let mut events = Box::pin(execute(provider.turn(), "question".into()));
+        let mut events = Box::pin(execute(provider.turn(), "question".into(), |_| {}));
         events.next().await;
         assert!(
             tokio::time::timeout(Duration::from_millis(100), events.next())

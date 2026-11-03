@@ -73,6 +73,7 @@ from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
 )
+from fred_runtime.runtime_support.run_scope import RunScope
 from fred_runtime.runtime_support.tool_approval import (
     GatedToolCall,
     ToolApproval,
@@ -196,6 +197,9 @@ class NodeContext:
         finish_reason: str | None,
     ) -> None:
         """Fold one model call into this node's metadata; usage is summed."""
+        scope = RunScope.current()
+        if scope is not None and scope.turn_authority is not None:
+            scope.turn_authority.record_usage(token_usage)
         if model_name:
             self._last_model_name = model_name
         if token_usage:

@@ -47,7 +47,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import tool as lc_tool
 from pydantic import BaseModel
-from weaver_fixtures import in_turn, local_binding
+from weaver_fixtures import active_turn, in_turn, local_binding
 
 
 def _binding() -> BoundRuntimeContext:
@@ -118,6 +118,28 @@ def test_last_model_metadata_sums_every_call_the_node_made() -> None:
     }
     assert model_name == "gpt-4o"
     assert finish_reason == "stop"
+
+
+def test_run_keeps_known_usage_across_nodes_after_authority_closes() -> None:
+    with active_turn("graph-agent") as authority:
+        for _ in range(2):
+            _node_context({}).record_model_metadata(
+                model_name="provider-alias",
+                token_usage={
+                    "input_tokens": 10,
+                    "output_tokens": 2,
+                    "cache_read_tokens": 3,
+                    "cache_creation_tokens": 1,
+                },
+                finish_reason=None,
+            )
+    assert authority.token_usage is not None
+    assert authority.token_usage.model_dump(exclude={"total_tokens"}) == {
+        "input_tokens": 20,
+        "output_tokens": 4,
+        "cache_read_tokens": 6,
+        "cache_creation_tokens": 2,
+    }
 
 
 def test_graph_tool_call_event_carries_no_token_figure() -> None:

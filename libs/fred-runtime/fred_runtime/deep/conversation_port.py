@@ -68,8 +68,11 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
             raise ConversationFilesystemPermissionError("Skills are read-only")
         if origin == "system":
             return
+        # Literal annotations do not validate values supplied at runtime.
         if origin != "agent":
-            raise ValueError("Filesystem origin must be 'agent' or 'system'")
+            raise ValueError(  # pyright: ignore[reportUnreachable]
+                "Filesystem origin must be 'agent' or 'system'"
+            )
         for rule in self._permissions:
             if operation not in rule.operations:
                 continue

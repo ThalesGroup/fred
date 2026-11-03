@@ -27,7 +27,7 @@ Why this exists:
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 
 import pytest
 from fred_core.store import VectorSearchHit
@@ -52,6 +52,7 @@ from fred_sdk.contracts.runtime import (
     ToolResultRuntimeEvent,
 )
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from weaver_fixtures import active_turn
 
 
 class _FakePortable:
@@ -103,6 +104,46 @@ async def _run_stream(events: list[object]) -> list[object]:
     async for event in executor.stream(input_model, ExecutionConfig()):
         collected.append(event)
     return collected
+
+
+@pytest.mark.asyncio
+async def test_consumption_survives_close_before_final_event() -> None:
+    message = AIMessage(
+        content="",
+        tool_calls=[{"id": "call", "name": "probe", "args": {}}],
+        usage_metadata={
+            "input_tokens": 11,
+            "output_tokens": 4,
+            "total_tokens": 15,
+            "input_token_details": {"cache_read": 3, "cache_creation": 2},
+        },
+    )
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=_FakeCompiledAgent(  # type: ignore[arg-type]
+            [("updates", {"agent": {"messages": [message]}})]
+        ),
+        binding=_FakeBinding(),  # type: ignore[arg-type]
+        services=_FakeServices(),  # type: ignore[arg-type]
+        runtime_class_name="ReActRuntime",
+    )
+    with active_turn("agent-1") as authority:
+        stream = executor.stream(
+            ReActInput(
+                messages=(ReActMessage(role=ReActMessageRole.USER, content="hi"),)
+            ),
+            ExecutionConfig(),
+        )
+        assert isinstance(stream, AsyncGenerator)
+        await anext(stream)
+        await stream.aclose()
+    assert authority.token_usage is not None
+    assert authority.token_usage.model_dump() == {
+        "input_tokens": 11,
+        "output_tokens": 4,
+        "total_tokens": 15,
+        "cache_read_tokens": 3,
+        "cache_creation_tokens": 2,
+    }
 
 
 def _tool_calls_message(*call_ids: str) -> AIMessage:

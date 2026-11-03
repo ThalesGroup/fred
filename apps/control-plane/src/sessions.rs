@@ -8,6 +8,8 @@
 mod attachments;
 mod usage;
 
+pub(crate) use usage::{ModelUsage, UsageReport, persist_usage};
+
 use axum::{
     Json,
     extract::State,

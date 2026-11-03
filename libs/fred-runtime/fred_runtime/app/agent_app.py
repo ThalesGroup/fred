@@ -188,6 +188,7 @@ from fred_runtime.app.history_access import (
     require_history_person,
 )
 from fred_runtime.app.security import prepare_authorization
+from fred_runtime.app.usage import report_run_usage
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
     AssetSlotViolationError,
@@ -3433,73 +3434,89 @@ async def _stream(
         credential_provider=credential_provider,
         owns_run_record=True,
     )
+    occurred_at: datetime | None = None
     try:
-        async for payload in payloads:
-            if (
-                payload.get("kind") == "awaiting_human"
-                and steering_token is not None
-                and session_id is not None
-            ):
-                await turn_steering_mailbox.pause(session_id, steering_token)
-            collected.append(payload)
-            yield _sse(json.dumps(payload, ensure_ascii=False))
-    finally:
-        # Closing this stream closes the run's stream with it, so a dropped
-        # response never leaves the run to garbage collection.
         try:
-            await payloads.aclose()
+            async for payload in payloads:
+                if (
+                    payload.get("kind") == "awaiting_human"
+                    and steering_token is not None
+                    and session_id is not None
+                ):
+                    await turn_steering_mailbox.pause(session_id, steering_token)
+                collected.append(payload)
+                yield _sse(json.dumps(payload, ensure_ascii=False))
         finally:
-            if steering_heartbeat is not None:
-                steering_heartbeat.cancel()
-                with suppress(asyncio.CancelledError):
-                    await steering_heartbeat
-            if steering_token is not None and session_id is not None:
-                paused = any(
-                    payload.get("kind") == "awaiting_human" for payload in collected
-                )
-                failed = any(
-                    payload.get("kind") == "execution_error" for payload in collected
-                )
-                await turn_steering_mailbox.end(
-                    session_id, steering_token, paused=paused and not failed
-                )
+            # Closing this stream closes the run's stream with it, so a dropped
+            # response never leaves the run to garbage collection.
+            try:
+                await payloads.aclose()
+            finally:
+                occurred_at = datetime.now(timezone.utc)
+                if steering_heartbeat is not None:
+                    steering_heartbeat.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await steering_heartbeat
+                if steering_token is not None and session_id is not None:
+                    paused = any(
+                        payload.get("kind") == "awaiting_human" for payload in collected
+                    )
+                    failed = any(
+                        payload.get("kind") == "execution_error"
+                        for payload in collected
+                    )
+                    await turn_steering_mailbox.end(
+                        session_id, steering_token, paused=paused and not failed
+                    )
 
-    _emit_turn_completed(
-        container,
-        session_id=session_id,
-        exchange_id=exchange_id,
-        user_id=user_id,
-        team_id=resolved_team_id,
-        agent_instance_id=request.agent_instance_id,
-        agent_instance_name=agent_instance_name,
-        template_agent_id=definition.agent_id,
-        payloads=collected,
-        turn_start=turn_start,
-    )
+        _emit_turn_completed(
+            container,
+            session_id=session_id,
+            exchange_id=exchange_id,
+            user_id=user_id,
+            team_id=resolved_team_id,
+            agent_instance_id=request.agent_instance_id,
+            agent_instance_name=agent_instance_name,
+            template_agent_id=definition.agent_id,
+            payloads=collected,
+            turn_start=turn_start,
+        )
 
-    # Fire-and-forget: write history after the SSE stream is fully sent.
-    # The client already received all events before this task begins.
-    if session_id:
-        history_store = get_runtime_context().config.history_store
-        if history_store is not None:
-            spawn(
-                _write_turn_history(
-                    session_id=session_id,
-                    user_id=user_id,
-                    request_message=request.message,
-                    turn_command=_turn_command(ctx),
-                    skill_invocation=ctx.get("skill"),
-                    skill_invocations=ctx.get("skills"),
-                    payloads=collected,
-                    history_store=history_store,
-                    space_id=space_id,
-                    agent_instance_id=request.agent_instance_id,
-                    exchange_id=exchange_id,
-                    resume_payload=request.resume_payload,
-                    occurrence_id=request.occurrence_id,
-                    previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
+        # Fire-and-forget: write history after the SSE stream is fully sent.
+        # The client already received all events before this task begins.
+        if session_id:
+            history_store = get_runtime_context().config.history_store
+            if history_store is not None:
+                spawn(
+                    _write_turn_history(
+                        session_id=session_id,
+                        user_id=user_id,
+                        request_message=request.message,
+                        turn_command=_turn_command(ctx),
+                        skill_invocation=ctx.get("skill"),
+                        skill_invocations=ctx.get("skills"),
+                        payloads=collected,
+                        history_store=history_store,
+                        space_id=space_id,
+                        agent_instance_id=request.agent_instance_id,
+                        exchange_id=exchange_id,
+                        resume_payload=request.resume_payload,
+                        occurrence_id=request.occurrence_id,
+                        previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
+                    )
                 )
+    finally:
+        # Detached reporting uses the workload identity, even after run teardown.
+        # Loss is possible beyond the deadline or if this pod stops: the key
+        # prevents duplicates, not loss. A durable outbox can later use this route.
+        # Never await this task: SSE closure unlocks the next user input.
+        spawn(
+            report_run_usage(
+                request._turn_authority,
+                exchange_id=exchange_id,
+                occurred_at=occurred_at or datetime.now(timezone.utc),
             )
+        )
 
 
 def _build_capability_save_services(
@@ -5917,24 +5934,35 @@ def _build_agent_router(
                 internal_req._turn_authority.close()
             _discard_run_record(target.credential_provider)
             raise
-        payloads = [
-            payload
-            async for payload in _iterate_runtime_event_payloads(
-                target.definition,
-                internal_req,
-                access_token=None
-                if target.credential_provider and target.credential_provider.delegated
-                else access_token,
-                registry=registry,
-                exchange_id=exchange_id,
-                tuning=target.tuning,
-                capability_registry=_capability_registry_of(http_request),
-                team_settings=target.team_settings,
-                platform_prompt=target.platform_prompt,
-                credential_provider=target.credential_provider,
-                owns_run_record=True,
+        try:
+            payloads = [
+                payload
+                async for payload in _iterate_runtime_event_payloads(
+                    target.definition,
+                    internal_req,
+                    access_token=None
+                    if target.credential_provider
+                    and target.credential_provider.delegated
+                    else access_token,
+                    registry=registry,
+                    exchange_id=exchange_id,
+                    tuning=target.tuning,
+                    capability_registry=_capability_registry_of(http_request),
+                    team_settings=target.team_settings,
+                    platform_prompt=target.platform_prompt,
+                    credential_provider=target.credential_provider,
+                    owns_run_record=True,
+                )
+            ]
+        finally:
+            # Same detached workload report as the streaming route.
+            spawn(
+                report_run_usage(
+                    internal_req._turn_authority,
+                    exchange_id=exchange_id,
+                    occurred_at=datetime.now(timezone.utc),
+                )
             )
-        ]
         session_id: str | None = request.effective_session_id()
         user_id_str = request.effective_user_id() or "unknown"
         _emit_turn_completed(
@@ -6023,24 +6051,35 @@ def _build_agent_router(
                 internal_req._turn_authority.close()
             _discard_run_record(target.credential_provider)
             raise
-        payloads = [
-            payload
-            async for payload in _iterate_runtime_event_payloads(
-                target.definition,
-                internal_req,
-                access_token=None
-                if target.credential_provider and target.credential_provider.delegated
-                else access_token,
-                registry=registry,
-                exchange_id=exchange_id,
-                tuning=target.tuning,
-                capability_registry=_capability_registry_of(http_request),
-                team_settings=target.team_settings,
-                platform_prompt=target.platform_prompt,
-                credential_provider=target.credential_provider,
-                owns_run_record=True,
+        try:
+            payloads = [
+                payload
+                async for payload in _iterate_runtime_event_payloads(
+                    target.definition,
+                    internal_req,
+                    access_token=None
+                    if target.credential_provider
+                    and target.credential_provider.delegated
+                    else access_token,
+                    registry=registry,
+                    exchange_id=exchange_id,
+                    tuning=target.tuning,
+                    capability_registry=_capability_registry_of(http_request),
+                    team_settings=target.team_settings,
+                    platform_prompt=target.platform_prompt,
+                    credential_provider=target.credential_provider,
+                    owns_run_record=True,
+                )
+            ]
+        finally:
+            # Same detached workload report as the streaming route.
+            spawn(
+                report_run_usage(
+                    internal_req._turn_authority,
+                    exchange_id=exchange_id,
+                    occurred_at=datetime.now(timezone.utc),
+                )
             )
-        ]
         session_id: str | None = request.effective_session_id()
         eval_session_id = session_id or str(uuid4())
         user_id_str = request.effective_user_id() or "unknown"

@@ -99,7 +99,28 @@ async fn record_usage(
     if !state.auth.accepts_runtime_delegation(&caller) {
         return Err(AppError::Forbidden);
     }
-    let report_id = idempotency_key(&headers)?;
+    persist_usage(
+        &state.pool,
+        space_id,
+        session_id,
+        &exchange_id,
+        idempotency_key(&headers)?,
+        body,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Shared by workload HTTP reports and admitted embedded turns. The caller owns
+/// admission; this transaction derives provenance from the retained session.
+pub(crate) async fn persist_usage(
+    pool: &sqlx::PgPool,
+    space_id: Uuid,
+    session_id: Uuid,
+    exchange_id: &str,
+    report_id: Uuid,
+    body: UsageReport,
+) -> AppResult<()> {
     let mut offers = HashSet::new();
     if !(1..=256).contains(&exchange_id.chars().count())
         || exchange_id.trim() != exchange_id
@@ -127,7 +148,7 @@ async fn record_usage(
         ));
     }
 
-    let mut tx = state.pool.begin().await?;
+    let mut tx = pool.begin().await?;
     // Serialize the entire set, including its initial absence, across all replicas.
     sqlx::query("select pg_advisory_xact_lock(hashtextextended($1, 0))")
         .bind(format!("model_usage:{report_id}"))
@@ -155,7 +176,7 @@ async fn record_usage(
     )
     .bind(report_id)
     .bind(session_id)
-    .bind(&exchange_id)
+    .bind(exchange_id)
     .bind(body.occurred_at)
     .bind(space)
     .bind(&user)
@@ -172,7 +193,7 @@ async fn record_usage(
             )
             .bind(report_id)
             .bind(session_id)
-            .bind(&exchange_id)
+            .bind(exchange_id)
             .bind(body.occurred_at)
             .bind(space)
             .bind(&user)
@@ -198,5 +219,5 @@ async fn record_usage(
         ));
     }
     tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(())
 }

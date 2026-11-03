@@ -481,8 +481,9 @@ class _ConversationTextNamespace:
 
 
 def _normalize_path(path: str, *, allow_root: bool = False) -> str:
+    # Python callers can bypass the str annotation; retain runtime validation.
     if not isinstance(path, str):
-        raise ConversationScratchpadInvalidPathError(
+        raise ConversationScratchpadInvalidPathError(  # pyright: ignore[reportUnreachable]
             "Scratchpad path must be relative POSIX text"
         )
     if path == "" and allow_root:
@@ -505,8 +506,9 @@ def _normalize_path(path: str, *, allow_root: bool = False) -> str:
 
 
 def _encode_text(content: str) -> bytes:
+    # Python callers can bypass the str annotation; retain runtime validation.
     if not isinstance(content, str):
-        raise ConversationScratchpadUnsupportedContentError(
+        raise ConversationScratchpadUnsupportedContentError(  # pyright: ignore[reportUnreachable]
             "Scratchpad supports UTF-8 text only"
         )
     try:

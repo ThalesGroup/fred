@@ -13,6 +13,7 @@ use axum::{
 };
 use fred_rust_agent::{ExecuteError, ExecuteRequest, RequestedTarget, RuntimeEvent};
 use futures::StreamExt;
+use tracing::Instrument;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
@@ -22,6 +23,7 @@ use crate::{
     error::{AppError, AppResult},
     extract::ApiJson,
     onboarding::AdmittedUser,
+    sessions::{ModelUsage, UsageReport, persist_usage},
 };
 
 pub fn routes() -> OpenApiRouter<AppState> {
@@ -65,16 +67,16 @@ async fn execute_stream(
             .map_err(|_| AppError::Unprocessable("Invalid agent_instance_id.".into()))?;
         let space_id = Uuid::parse_str(space_id)
             .map_err(|_| AppError::Unprocessable("Invalid runtime_context.space_id.".into()))?;
-        let session_id = session_id
-            .map(Uuid::parse_str)
-            .transpose()
-            .map_err(|_| AppError::Unprocessable("Invalid session_id.".into()))?;
+        let session_id = Uuid::parse_str(session_id.ok_or_else(|| {
+            AppError::Unprocessable("session_id is required for managed Ralph execution.".into())
+        })?)
+        .map_err(|_| AppError::Unprocessable("Invalid session_id.".into()))?;
         let binding = agent_instances::resolve_person_runtime_binding(
             &state,
             &user,
             space_id,
             instance_id,
-            session_id,
+            Some(session_id),
             choice.as_ref(),
             reasoning,
         )
@@ -101,6 +103,7 @@ async fn execute_stream(
                 "Inference admission is unavailable.",
             )
         })?;
+        let offer = admission.selection.key.clone();
         let turn = span
             .in_scope(|| {
                 fred_rust_agent::inference::InferenceTurn::admit(
@@ -115,7 +118,48 @@ async fn execute_stream(
                     "Local inference provisioning is unavailable or inconsistent.",
                 )
             })?;
-        fred_rust_agent::inference::execute(turn, request.input).boxed()
+        let pool = state.pool.clone();
+        let space_id = binding.space.id;
+        let report_id = Uuid::new_v4();
+        let exchange_id = Uuid::new_v4().to_string();
+        fred_rust_agent::inference::execute(turn, request.input, move |usage| {
+            let tokens = [
+                usage.input_tokens,
+                usage.output_tokens,
+                usage.cached_input_tokens,
+                usage.cache_creation_input_tokens,
+            ].map(i64::try_from);
+            let [Ok(input_tokens), Ok(output_tokens), Ok(cache_read_tokens), Ok(cache_creation_tokens)] = tokens else {
+                tracing::warn!(parent: &span, event = "run_usage", outcome = "lost", reason = "token_overflow");
+                return;
+            };
+            let report = UsageReport {
+                occurred_at: chrono::Utc::now(),
+                models: vec![ModelUsage {
+                    model_source_id: offer.source_id,
+                    upstream_model_id: offer.upstream_model_id,
+                    input_tokens,
+                    output_tokens,
+                    cache_read_tokens,
+                    cache_creation_tokens,
+                }],
+            };
+            // Only the bounded accounting write survives a disconnected browser.
+            // It starts before yielding the response; inference itself is never spawned.
+            tokio::spawn(
+                async move {
+                    let failure = match tokio::time::timeout(
+                        std::time::Duration::from_secs(2),
+                        persist_usage(&pool, space_id, session_id, &exchange_id, report_id, report),
+                    ).await {
+                        Ok(Ok(())) => return,
+                        Ok(Err(_)) => "write_failed",
+                        Err(_) => "timeout",
+                    };
+                    tracing::warn!(event = "run_usage", outcome = "lost", reason = failure, %report_id);
+                }.instrument(span),
+            );
+        }).boxed()
     } else {
         fred_rust_agent::execute().boxed()
     };
