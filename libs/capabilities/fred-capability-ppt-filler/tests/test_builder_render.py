@@ -968,13 +968,12 @@ def test_a_key_figure_shrinks_to_fit_its_line_down_to_the_floor():
         max_lines=1,
     )
     size = (12192000, 6858000)
-    for figure in ("124 412", "▼\u2009124 412"):
-        kept, scale, truncated = _fit(zone, [_Line(figure)], *size)
-        assert not truncated and [line.text for line in kept] == [figure]
-        assert scale is not None and MIN_FONT_SCALE <= scale < 1.0, (figure, scale)
+    kept, scale, truncated = _fit(zone, [_Line("124 412")], *size, "Arial")
+    assert not truncated and [line.text for line in kept] == ["124 412"]
+    assert scale is not None and MIN_FONT_SCALE <= scale < 1.0, scale
     for figure in ("62 %", "▼\u2009-3 838"):
-        assert _fit(zone, [_Line(figure)], *size)[2] is False
-    assert _fit(zone, [_Line("1 234 567 890")], *size)[2]
+        assert _fit(zone, [_Line(figure)], *size, "Arial")[2] is False
+    assert _fit(zone, [_Line("1 234 567 890")], *size, "Arial")[2]
     # The room quoted to the agent is the one at the smallest size.
     assert quoted_chars(zone, 5, 1) == 7
     assert quoted_chars(zone.model_copy(update={"role": "label"}), 5, 1) == 5

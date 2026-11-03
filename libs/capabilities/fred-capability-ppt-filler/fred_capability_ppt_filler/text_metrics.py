@@ -86,10 +86,10 @@ _local = threading.local()
 
 
 def _font(family: Optional[str], bold: bool) -> Optional[ImageFont.FreeTypeFont]:
-    # An empty family still resolves: fontconfig answers with its default font,
-    # which is also what the renderer falls back to. Keyed by the resolved file,
-    # so the dozens of families a template names share the few faces installed.
-    path = _font_file(family or "sans-serif", bold)
+    # An empty family is measured in DejaVu Sans, the renderer's fallback in the fred-agents
+    # image, not the host's own default. Keyed by the resolved file, so the dozens of
+    # families a template names share the few faces installed.
+    path = _font_file(family or "DejaVu Sans", bold)
     if path is None:
         return None
     faces: Dict[str, Optional[ImageFont.FreeTypeFont]] = (

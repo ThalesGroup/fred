@@ -798,7 +798,7 @@ def test_a_text_too_long_everywhere_names_the_element_and_its_measured_limit():
         _inventory(_bullets("layout:1", "Plain")), _plan(slide)
     ).problems
     assert problem.problem == (
-        "closest fit, a 'bullets' slide: bullets: 2 entries wrap to 23 lines; "
+        "closest fit, a 'bullets' slide: bullets: 2 entries wrap to 22 lines; "
         "this zone holds 11 (longest: bullets[1], 999 chars)"
     )
     assert any(o.startswith("keep each bullets entry") for o in problem.options)
@@ -813,7 +813,7 @@ def test_a_close_kind_misfit_names_why_and_the_close_kind_once():
     ).problems
     assert problem.problem == (
         "this template has no 'timeline' slide; closest close kind, a 'bullets' "
-        "slide: bullets: 2 entries wrap to 23 lines; this zone holds 11 "
+        "slide: bullets: 2 entries wrap to 22 lines; this zone holds 11 "
         "(longest: bullets[1], 999 chars)"
     )
 
