@@ -20,7 +20,7 @@ import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import Icon from "@shared/atoms/Icon/Icon";
 import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkChip";
 import { CitationLinkChip } from "@shared/molecules/ArtifactLinks/CitationLinkChip";
-import type { UiPartRenderer, UiPartRendererProps } from "./types";
+import type { UiPartIdentity, UiPartRenderer, UiPartRendererProps } from "./types";
 import styles from "./builtinPartRenderers.module.css";
 
 // Citations open the third-party page directly; every other kind is a Fred file.
@@ -47,6 +47,14 @@ function GeoPartRenderer({ part }: UiPartRendererProps) {
   const features = Array.isArray(geo.geojson?.features) ? geo.geojson.features.length : 0;
   return <GeoSummaryChip features={features} />;
 }
+
+/**
+ * A download chip is about its file: the same href twice in a message is one chip.
+ * Other links, citations first, may legitimately repeat an href and are never merged.
+ */
+export const builtinPartIdentities: Record<string, UiPartIdentity> = {
+  link: (part) => (part.kind === "download" && typeof part.href === "string" ? part.href : undefined),
+};
 
 /** Registry seed for the frozen base kinds; plugin kinds must not collide. */
 export const builtinPartRenderers: Record<string, UiPartRenderer> = {
