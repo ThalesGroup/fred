@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Background template analysis. The save records a pending row
-in ``cap_ppt_builder_analysis`` and returns; a job on that replica analyses,
-labels and stores the result, which every replica reads. A lease the job keeps
-alive tells an interrupted job from a slow one."""
+"""Background template analysis: the save records a pending row and returns; a job
+on that replica analyses, labels and stores the result every replica reads.
+A lease the job keeps alive tells an interrupted job from a slow one."""
 
 from __future__ import annotations
 
@@ -1076,10 +1075,9 @@ def _port_for(record: AnalysisRecord) -> bool:
 async def refresh_outdated(
     store: AnalysisStore, record: AnalysisRecord, *, force: bool = False
 ) -> bool:
-    """Re-run an analysis made by older rules from its stored template, its
-    result staying in use meanwhile. One replica wins the claim; a failure is
-    not retried unless ``force`` (an author's action). A vision-labelled one is
-    refreshed automatically only where the save left its model port."""
+    """Re-run an analysis made by older rules, its result staying in use meanwhile.
+    One replica wins the claim; a failure is retried only with ``force``. A vision-
+    labelled one is refreshed automatically only where the save left its model port."""
     if not record.outdated() or record.refreshing(_utcnow()):
         return False
     instance_id = record.agent_instance_id

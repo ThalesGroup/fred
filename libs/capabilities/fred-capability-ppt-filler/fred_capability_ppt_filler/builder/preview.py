@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The patterns preview deck: one slide per inventory pattern, in inventory
-order, so a PDF conversion yields one thumbnail page per pattern for the
-review widget. Layout patterns are instantiated with their zone roles typed
-into the placeholders; example slides are copied as they are. The same PDF,
-rasterised with numbered slot marks, is what the vision labelling looks at."""
+"""The patterns preview deck: one slide per pattern, in order, so its PDF has one page per
+pattern for the review widget and, with numbered slot marks, for the vision labelling.
+Layouts show their zone roles; example slides are copied as they are."""
 
 from __future__ import annotations
 
@@ -103,11 +101,8 @@ def marked_pattern_images(
     *,
     width_px: int = 1024,
 ) -> Dict[str, bytes]:
-    """PNG per requested pattern, its slots outlined and numbered.
-
-    Page N of the patterns PDF is pattern N; a page-count mismatch yields
-    nothing rather than a misattributed image. CPU-bound: call off the loop.
-    """
+    """PNG per requested pattern, slots outlined and numbered (page N = pattern N; a
+    page-count mismatch yields nothing, never a misattributed image). CPU-bound."""
     wanted = {
         index: pattern
         for index, pattern in enumerate(inventory.patterns)

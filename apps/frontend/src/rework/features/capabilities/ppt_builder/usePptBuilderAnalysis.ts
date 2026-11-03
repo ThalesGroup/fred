@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Shared ppt_builder template state for the Advanced widget and the Simple
-// pack options. The template is analysed in the background after a save: this
-// hook polls that analysis, asks control-plane to re-check the agent once it
-// ends (so the agent leaves "preparing"), and writes the author's overrides.
+// Polls the background analysis a save starts, asks control-plane to re-check
+// the agent once it ends (so it leaves "preparing"), and writes the overrides.
 // A re-run is a save too: only the save carries the labelling model.
 
 import { useEffect, useMemo, useState } from "react";

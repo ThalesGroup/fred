@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A table's intents (total row, highlighted row and column), drawn from its
-style: the style's own total-row formatting, a tint of its accent.
-PowerPoint's predefined styles are referenced by GUID and never written in
-the file, so the accent each is built on is listed here."""
+"""A table's intents (total row, highlighted row and column), drawn from its style.
+PowerPoint's predefined styles are referenced by GUID and never written in the
+file, so the accent each is built on is listed here."""
 
 from __future__ import annotations
 

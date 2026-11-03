@@ -12,21 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Chat-time tools of ``ppt_builder``: ``build_presentation`` and the image
-folder listing.
-
-Same seams as the filler's tools: typed context through the closure, image
-bytes prefetched on the event loop, the CPU-bound render in one thread under
-the package's heavy-job slot, delivery through the workspace port with the
-shared PDF preview part.
-
-The model sends content only; :func:`assign.assign` picks the template slide
-for each entry. A malformed call never fails validation (the arguments are
-coerced), a slide that fits nothing builds nothing and returns a structured
-``needs_revision`` result (not an error: the model revises and calls again),
-and every error result carries its text so the user sees it instead of an
-opaque failure.
-"""
+"""Chat-time tools of ``ppt_builder``: ``build_presentation`` and the image folder listing.
+Arguments are coerced, never refused; a slide that fits nothing returns ``needs_revision``
+(not an error), and every error result carries its text for the user."""
 
 from __future__ import annotations
 
@@ -969,11 +957,9 @@ def _needs_revision(
     lead: List[str],
     origins: Optional[Mapping[int, Origin]] = None,
 ) -> tuple[str, ToolInvocationResult]:
-    """The problems, each flagged when the previous call already had it, so the
-    model never reads the same message twice without learning what changed;
-    a first call's variety ask joins them, so it never costs a round of its own.
-    With ``origins`` (a `changes` call), slides are numbered on the deck the
-    changes apply to, as the corrected resend is."""
+    """The problems, each flagged when the previous call already had it, plus a first
+    call's variety ask (never a round of its own). With ``origins`` (a `changes` call),
+    slides are numbered on the deck the changes apply to."""
     from_changes = origins is not None
     current: _Previous = {}
     slides = []
@@ -1636,13 +1622,9 @@ def build_builder_tools(
     history: Callable[[], Sequence[BaseMessage]] = _no_history,
     can_ask: Callable[[], bool] = lambda: False,
 ) -> list[BaseTool]:
-    """The build tool bound to one turn's context and effective inventory.
-
-    ``template_bytes_loader`` is an async callable returning the template
-    bytes (the stored asset, or the built-in template); ``history`` returns the
-    messages of the model call that asked for the tool; ``can_ask`` whether
-    that call offered the ask_user tool.
-    """
+    """The build tool bound to one turn's context and effective inventory. ``history``
+    returns the messages of the model call that asked for the tool; ``can_ask``
+    whether that call offered the ask_user tool."""
     services = ctx.services
     identity = ctx.identity
     validate_plan = ctx.config.validate_plan

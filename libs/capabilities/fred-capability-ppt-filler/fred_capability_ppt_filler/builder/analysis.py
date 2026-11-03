@@ -12,18 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Template analysis: from a plain ``.pptx`` to a :class:`TemplateInventory`.
-
-Deterministic and offline. One pass over each layout and slide collects a flat
-list of shape records (kind, geometry, text, font size, placeholder type);
-every rule below works on those records, never on the XML again.
-
-On an example slide every text-bearing shape is a slot, except text repeated
-on several slides and date/footer/slide-number fields; roles come from
-placeholder types, repeated groups, geometry and font rank. The slide kind is
-a heuristic the vision pass refines. Optional annotations
-(shape names, ``kind:`` notes) override the corresponding heuristic.
-"""
+"""Template analysis, deterministic and offline: ``.pptx`` to :class:`TemplateInventory`.
+One pass collects flat shape records every rule works on, never the XML again;
+the slide kind is a heuristic the vision pass refines, annotations override it."""
 
 from __future__ import annotations
 
@@ -306,13 +297,9 @@ def _placeholder_pt(shape, layout, master) -> Optional[float]:
 
 @dataclass(frozen=True)
 class FrameMetrics:
-    """What a text box costs in room before a single glyph is drawn.
-
-    PowerPoint lays text inside the box's padding, and advances each paragraph
-    by its own line spacing plus the space declared around it. A template that
-    sets ``lnSpc 114%`` and ``spcBef 16pt`` on its body style fits barely half
-    the bullets a bare "height / (size × 1.2)" would promise.
-    """
+    """What a text box costs in room (padding, line spacing, paragraph spacing)
+    before a glyph is drawn: ``lnSpc 114%`` + ``spcBef 16pt`` fits barely half
+    the bullets a bare "height / (size × 1.2)" would promise."""
 
     lr_inset: int = 2 * text_metrics.DEFAULT_INSET_EMU
     tb_inset: int = 2 * text_metrics.DEFAULT_V_INSET_EMU
@@ -517,10 +504,7 @@ def _records(
     theme: Tuple[Optional[str], Optional[str]] = (None, None),
 ) -> List[_Rec]:
     """Flatten ``shapes`` (groups included) into records with per-mille boxes.
-
-    ``layout``/``master`` let a placeholder without explicit run sizes report
-    the size it inherits, which the capacity estimate needs.
-    """
+    ``layout``/``master`` give a placeholder without run sizes its inherited size."""
     slide_area = float(width * height) or 1.0
     records: List[_Rec] = []
     taken: set[int] = set()
@@ -613,14 +597,8 @@ def estimate_capacity(
     sample: str = "",
 ) -> Tuple[int, int]:
     """(chars_per_line, max_lines) of a box, as the renderer will really fill it.
-
-    Both dimensions go through the box's own formatting: the padding comes off
-    the usable width and height, and a line advances by the paragraph's line
-    spacing plus the space declared around it. Widths are measured with the
-    real font (see ``text_metrics``); greedy wrapping wastes about half a word
-    at every line break, so each line is credited a little less than it holds.
-    The designer's ``sample`` calibrates the width (``text_metrics.calibrate``).
-    """
+    Measured with the real font through the box's padding and spacing; each line is
+    credited a little less (greedy wrapping), and ``sample`` calibrates the width."""
     pt = font_pt or _DEFAULT_PT.get(role, 16.0)
     metrics = frame or FrameMetrics()
     width_emu_box = box.w / 1000 * width_emu - metrics.lr_inset

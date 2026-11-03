@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Base RTK Query slice for the ppt_builder capability's OWN router: the
-// stateless template analysis and the built-in template inventory. The generated
-// `pptBuilderCapabilityOpenApi.ts` injects the endpoints; the base query
-// resolves the capability's base URL from `capabilityRoutingSlice`. Registered
-// once in `common/store.tsx`.
+// Base RTK Query slice for the ppt_builder capability's own router; the generated
+// `pptBuilderCapabilityOpenApi.ts` injects the endpoints. The base URL comes from
+// `capabilityRoutingSlice`. Registered once in `common/store.tsx`.
 
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { createCapabilityBaseQuery } from "../../../../../common/capabilityBaseQuery";

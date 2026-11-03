@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Persisted models of the builder: the template inventory the analysis
-produces, the author overrides, and the analysis envelope the form consumes.
-
-Geometry is normalized to per-mille of the slide (0..1000) so the form can draw
-zone outlines over a rendered thumbnail without knowing the slide size.
-"""
+"""Persisted builder models: inventory, author overrides, analysis envelope.
+Geometry is per-mille of the slide (0..1000) so the form can outline zones on a
+thumbnail without knowing the slide size."""
 
 from __future__ import annotations
 
@@ -103,11 +100,8 @@ TABLE_SLACK_PT = 0.5
 
 
 class TableSpec(BaseModel):
-    """What a template's data table holds, measured at analysis.
-
-    Heights are in points. A row is never shorter than ``row_pt`` (the
-    template's own rows) and the rows together never taller than ``height_pt``.
-    """
+    """What a template's data table holds, measured at analysis (points): a row never
+    shorter than ``row_pt``, the rows together never taller than ``height_pt``."""
 
     header: bool
     # Characters per line of each column at its template width (cell margins off).
@@ -131,13 +125,9 @@ class TableSpec(BaseModel):
 
 
 class Zone(BaseModel):
-    """One fillable area of a pattern.
-
-    ``key`` addresses the shape: ``ph:<idx>`` for a placeholder, ``sp:<id/..>``
-    for a free shape (its shape-id path through groups). ``chars_per_line`` ×
-    ``max_lines`` is the capacity measured once at analysis: the fit check, the
-    renderer and the tool description all read it.
-    """
+    """One fillable area: ``key`` is ``ph:<idx>`` (placeholder) or ``sp:<id/..>`` (shape-id
+    path through groups). ``chars_per_line`` × ``max_lines`` is measured once at analysis
+    and read by the fit check, the renderer and the tool description."""
 
     key: str
     role: ZoneRole
@@ -170,11 +160,8 @@ class Zone(BaseModel):
 
 
 class RepeatGroup(BaseModel):
-    """N sibling items of identical structure (agenda entries, KPI cards, steps).
-
-    ``items`` holds the zones of every item, in reading order; ``item_zones`` is
-    the role list of one item, in the same order inside each item.
-    """
+    """N sibling items of identical structure (agenda entries, KPI cards, steps):
+    ``items`` in reading order, ``item_zones`` the role list of one item, same order."""
 
     key: str
     count: int

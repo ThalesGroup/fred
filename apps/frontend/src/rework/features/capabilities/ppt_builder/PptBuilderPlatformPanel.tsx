@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Admin > Features drawer of "Generate a presentation": the platform default
-// template agents without their own build on. A replacement is analysed while
+// Admin drawer for the platform default template. A replacement is analysed while
 // the current one stays in use; only capability managers see the write actions.
 // Without a platform template, the manager reviews and corrects the Fred template.
 

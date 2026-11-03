@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The deck plan the agent hands to the build tool: content only, with an
-optional ``kind`` last. Which template slide shows each entry is decided in
-:mod:`assign`; this module also says, in plan fields, what a pattern holds.
-"""
+"""The deck plan the agent hands to the build tool: content only, optional ``kind`` last
+(:mod:`assign` picks the slides). Also says, in plan fields, what a pattern holds."""
 
 from __future__ import annotations
 

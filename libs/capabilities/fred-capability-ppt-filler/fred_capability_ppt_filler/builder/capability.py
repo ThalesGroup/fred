@@ -12,14 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""``PptBuilderCapability`` — generate a deck from a chat plan on an analysed
-template, or on the built-in template when the agent has none.
-
-The save never waits on the analysis: it stores the template, records a pending
-analysis row and returns; ``analysis_job`` runs it in the background and
-``readiness`` keeps the agent unavailable until it succeeds. The preview chat
-part and side pane are ``ppt_filler``'s (one owner per kind).
-"""
+"""``PptBuilderCapability``: a deck from a chat plan on an analysed or built-in template.
+The save never waits on the analysis (``analysis_job`` runs it, ``readiness`` holds the
+agent until it succeeds); the preview part and side pane are ``ppt_filler``'s."""
 
 from __future__ import annotations
 
@@ -667,12 +662,9 @@ def _plain(value: Any) -> Any:
 
 
 class _PptBuilderMiddleware(AgentMiddleware):
-    """Carries the build tools and overlays the working rules on the system prompt.
-
-    With a template, the analysis is read on the first model call (one DB read
-    per template per pod, then cached); the registered build tool delegates to
-    the template's tool and refuses while the analysis has not succeeded.
-    Without one, the platform default comes from the pod's snapshot."""
+    """Build tools plus working rules on the system prompt. The analysis is read on the
+    first model call (cached per template per pod) and the tool refuses until it has
+    succeeded; without a template, the platform default comes from the pod's snapshot."""
 
     def __init__(self, ctx: CapabilityContext[PptBuilderConfig, EmptyModel]) -> None:
         super().__init__()

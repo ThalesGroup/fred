@@ -12,22 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""How wide a text runs, in em (multiples of the font size).
-
-The one place that answers "does this text fit": the analysis' capacity
-estimate, the overflow control and the no-wrap box sizing all measure through
-it, so a deck is judged by one ruler.
-
-Measured with the font the renderer will actually use — resolved through
-fontconfig, which maps a template's font to the substitute the server has, the
-same mapping LibreOffice applies for the preview. The fontconfig
-lookup is cached per process (it is a subprocess); the font faces are cached
-per thread and by file, because one FreeType face must not be measured from
-two threads at once. Measuring costs microseconds either way — the cache is
-there for safety and allocation, not for parallelism.
-Without fontconfig or the font file (a bare test container), a conservative
-average per character stands in.
-"""
+"""How wide a text runs, in em: the one ruler for capacity, overflow and no-wrap sizing,
+with the substitute font fontconfig (and so LibreOffice) picks. Faces are cached per thread
+(FreeType is not thread-safe); without fontconfig, a conservative average stands in."""
 
 from __future__ import annotations
 
@@ -166,11 +153,8 @@ def lines_needed(
 def calibrate(
     sample: str, per_line: int, lines: int, family: Optional[str], bold: bool
 ) -> int:
-    """``per_line`` raised until the designer's sample fits its ``lines``.
-
-    The sample fits its box in PowerPoint; when it does not by this ruler, the
-    substitute font is wider than the designer's. Bounded by ``CALIBRATION_FLOOR``.
-    """
+    """``per_line`` raised until the designer's sample fits its ``lines``: a sample that
+    does not fit here means a wider substitute font. Bounded by ``CALIBRATION_FLOOR``."""
     paragraphs = [p for p in sample.splitlines() if p.strip()]
     if not paragraphs or lines_needed(paragraphs, per_line, family, bold) <= lines:
         return per_line

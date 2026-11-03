@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The one surface both the Advanced widget and the Simple pack options render
-// for ppt_builder: the optional template and the plan approval switch, then a
-// collapsed advanced section (slide review, vision, variety). The slide review
-// moves up when the analysis set slides aside itself. Nothing here is mandatory.
+// Shared by the Advanced widget and the Simple pack options. The slide review
+// moves out of the collapsed advanced section when the analysis set slides
+// aside itself. Nothing here is mandatory.
 
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

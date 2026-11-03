@@ -12,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""After-render check of duplicated example slides, and the per-slide report.
-
-The renderer records into a :class:`DeckReport` what it truncated or could not
-place; :func:`remove_leftovers` adds the example text it had to sweep away.
-"""
+"""After-render check of duplicated example slides, and the per-slide :class:`DeckReport`
+of what was truncated, unplaced or swept away (:func:`remove_leftovers`)."""
 
 from __future__ import annotations
 
@@ -118,11 +115,8 @@ def remove_leftovers(
     handled: Collection[Any],
     shared: Collection[str],
 ) -> List[str]:
-    """Remove the example text a duplicated slide still shows; returns it.
-
-    ``handled`` holds the elements of the zones the renderer filled, cleared or
-    was told to keep; ``shared`` the template's repeated texts (footers).
-    """
+    """Remove and return the example text a duplicated slide still shows. ``handled``:
+    zones the renderer filled, cleared or kept; ``shared``: repeated texts (footers)."""
     removed: List[str] = []
     for key, shape in list(_text_shapes(slide)):
         text = _text(shape)
@@ -144,10 +138,9 @@ def remove_leftovers(
 
 
 def settle_charts(slide, keep: bool = True) -> int:
-    """Pair chart frames and chart parts one to one: a frame without its part goes
-    (PowerPoint would repair it), a part no frame shows is unrelated (not saved).
-    ``keep=False`` drops every chart: a slide shown as is never shows example data.
-    Returns the number of frames removed."""
+    """Pair chart frames and parts one to one, dropping a frame without its part
+    (PowerPoint would repair it); ``keep=False`` drops every chart so a slide shown
+    as is never shows example data. Returns the number of frames removed."""
     rid = qn("r:id")
     rels = slide.part.rels
     frames = [

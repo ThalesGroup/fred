@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The one-measure check of a deck plan's charts (amounts in k€ and M€ are
-first put in one scale, large amounts of the text shortened), run before the assignment
-(problems in the assigner's shape join its ``needs_revision``), and the plan
-outline shown for validation. Whether a slide makes a point, cites a source or
-needs a cover is the model's call (working rules), never refused here.
-"""
+"""The one-measure check of a plan's charts (run before the assignment, joining its
+``needs_revision``), large-amount shortening, and the plan outline for validation.
+Whether a slide makes a point or needs a cover is the model's call, never refused here."""
 
 from __future__ import annotations
 
@@ -211,10 +208,9 @@ def _reach(chart: PlanChart, amounts: Sequence[Optional[float]]) -> float:
     )
 
 
-# A large amount written in text, its currency after (1 250 000 €) or before
-# ($1,250,000), or a range of two (450 000–520 000 €); "450 k€" or "$500k"
-# already carry a scale and do not match. Never inside an identifier or a path
-# (REF-120000€, p=1250000€), a plain negative amount (-120 000 €) still matches.
+# A large amount in text (1 250 000 €, $1,250,000, 450 000–520 000 €); "450 k€" already
+# carries a scale. Never inside an identifier or a path (REF-120000€, p=1250000€),
+# though a plain negative amount (-120 000 €) still matches.
 _FIGURE = r"\d{1,3}(?:[ \u00a0\u202f,.]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?"
 _GLUED = r"[\w/\\=.,#&?@]"
 _DASH = r"[ \u00a0\u202f]?[–-][ \u00a0\u202f]?"
@@ -231,9 +227,8 @@ _Model = TypeVar("_Model", bound=BaseModel)
 
 
 def rescaled_text(text: str, language: str) -> str:
-    """Amounts of ``text`` past `_LARGE` in the scale that keeps them short:
-    ``520 000 €`` → ``520 k€``, ``$1,250,000`` → ``$1.25M``, both ends of a
-    range in one scale. An amount grouped with the deck's decimal mark
+    """Amounts of ``text`` past `_LARGE` shortened (``520 000 €`` → ``520 k€``), both ends
+    of a range in one scale. An amount grouped with the deck's decimal mark
     ($1,250,000 in a French deck) is another convention: left as written."""
     mark = "," if language == "fr" else "."
 

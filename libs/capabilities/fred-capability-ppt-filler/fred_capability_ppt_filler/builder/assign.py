@@ -12,18 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Which template slide shows each entry of a plan, decided for the whole deck.
-
-A slide's candidates are the patterns that hold all of its content: of the
-requested kind, then of the kinds close to it (never an unrelated one); with
-no kind, of the kinds its content suggests, then of any kind. Each
-substitution is reported with the edit that would give the requested kind.
-A list longer than its kind's slides hold first continues on a second slide
-of the same kind. A beam search picks one per slide under the deck rules,
-pricing every reuse of a template slide anywhere in the deck. A slide that
-fits nothing is a problem the model must fix, named down to the element:
-never a silent fallback.
-"""
+"""Which template slide shows each plan entry: a beam search over the patterns holding
+all of a slide's content (requested kind, then close kinds), pricing every reuse deck-wide.
+A slide that fits nothing is a problem named down to the element, never a silent fallback."""
 
 from __future__ import annotations
 
@@ -1657,10 +1648,9 @@ def _holding(pattern: Pattern, entries: int) -> Optional[_Variant]:
 def _advice(
     pool: List[Pattern], kind: str, shape: Shape
 ) -> Optional[Tuple[str, Pattern]]:
-    """``kind`` and what its favoured slide holds for this content, with the
-    size to shorten to when the longest entry would not fit, and that slide;
-    None if none can. Favoured as the assigner would: room, no empty picture,
-    an example slide."""
+    """``kind``'s favoured slide for this content (as the assigner favours: room, no
+    empty picture, an example slide), what it holds and the size to shorten the
+    longest entry to; None if none can."""
     found = [
         (v, p) for p in pool if p.kind == kind and (v := _holding(p, shape.entries))
     ]
@@ -1690,10 +1680,9 @@ def _suggested(
     uses: Dict[str, int],
     cap: Callable[[Pattern], Tuple[str, int]],
 ) -> List[Tuple[List[int], str, str]]:
-    """Per slide, one other kind its content suits, the least suggested so far,
-    while the template has a variant of it left and never on a slide already at
-    its cap (``uses``, counted on by each suggestion); slides with the same advice
-    share a line."""
+    """Per slide, the least-suggested other kind its content suits, while a variant
+    is left and never past its cap (``uses``, counted on by each suggestion);
+    slides with the same advice share a line."""
     found: Dict[Tuple[str, str], List[int]] = {}
 
     def free(p: Pattern) -> bool:
@@ -1787,11 +1776,9 @@ def _repeats(
     caps: Optional[_Caps],
     sections: Optional[Dict[int, int]] = None,
 ) -> List[Repeat]:
-    """Template slides (or, ``by_kind``, content kinds) on more slides of one
-    section than their cap, or on three slides or more without caps; with caps,
-    also three identical template slides in a row. Slides asked alike are left
-    out; structural slides count apart, deck-wide. Alternatives are read from
-    the sections concerned. Full rule: design.md D27."""
+    """Template slides (or, ``by_kind``, content kinds) over their cap in one section,
+    or on three slides or more without caps, or three alike in a row with caps.
+    Slides asked alike are left out; structural slides count deck-wide."""
     at = sections or {}
     named: Dict[str, str] = {}
     variants: Dict[str, set[str]] = {}

@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Sample-text and annotation vocabularies of the template analysis.
-
-Everything here is a plain word list, kept in one place. Sample text never
-decides what is fillable: it serves the after-render check and keeps a
-repeated sample box from passing for a footer.
-"""
+"""Sample-text and annotation word lists of the template analysis. Sample text never
+decides what is fillable: it serves the after-render check and keeps a repeated
+sample box from passing for a footer."""
 
 from __future__ import annotations
 
@@ -287,13 +284,9 @@ def is_url(text: str) -> bool:
 
 
 def role_from_shape_name(name: str) -> str | None:
-    """Role declared through a Selection-pane shape name, else None.
-
-    PowerPoint's automatic names (`TextBox 12`, `Title 1`, `Image 44`,
-    `Titre 3`) are `<words> <number>` and never count as a declaration. A
-    declared name is a vocabulary word, optionally followed by a `_`/`-`
-    suffix (`heading_2`, `image-main`).
-    """
+    """Role declared through a Selection-pane shape name (`heading_2`, `image-main`),
+    else None. PowerPoint's automatic `<words> <number>` names (`TextBox 12`,
+    `Titre 3`) never count as a declaration."""
     if is_auto_name(name):
         return None
     norm = normalize(name)

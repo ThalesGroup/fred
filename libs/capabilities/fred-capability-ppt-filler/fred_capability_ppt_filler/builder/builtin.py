@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The built-in Fred template used when an agent has none.
-
-A designed deck shipped as package data with its stored analysis, so "no
-template" goes through the customer render path. Regenerate the analysis with
-``make builtin-inventory`` (``python -m fred_capability_ppt_filler.builder.builtin``).
-"""
+"""The built-in template, shipped with its stored analysis so "no template" goes
+through the customer render path. Regenerate the analysis with
+``make builtin-inventory`` (``python -m fred_capability_ppt_filler.builder.builtin``)."""
 
 from __future__ import annotations
 

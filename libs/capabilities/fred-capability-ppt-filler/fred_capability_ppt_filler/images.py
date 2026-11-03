@@ -84,9 +84,7 @@ def fit_inside_box(
     img_w: int, img_h: int, box_left: int, box_top: int, box_w: int, box_h: int
 ) -> Tuple[int, int, int, int]:
     """Scale ``(img_w, img_h)`` into the box preserving the aspect ratio, centred.
-
-    Inputs and outputs are EMU; the pixel size only sets the aspect ratio.
-    """
+    Inputs and outputs are EMU; the pixel size only sets the aspect ratio."""
     if img_w <= 0 or img_h <= 0 or box_w <= 0 or box_h <= 0:
         return (box_left, box_top, box_w, box_h)
     ratio = img_w / img_h

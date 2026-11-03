@@ -12,13 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Author overrides on top of an analysed inventory.
-
-The inventory is what the analysis found; the overrides are the author's
-corrections. Applying them yields the *effective* inventory the tool and the
-form use. Overrides that no longer match (after a re-upload changed the
-template) are reported, never silently kept.
-"""
+"""Author overrides applied to an analysed inventory give the *effective* inventory the
+tool and the form use. Overrides that no longer match (a re-upload changed the
+template) are reported, never silently kept."""
 
 from __future__ import annotations
 

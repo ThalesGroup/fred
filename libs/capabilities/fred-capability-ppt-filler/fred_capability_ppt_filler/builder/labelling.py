@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Vision labelling of example slides: a vision model looks at
-each slide with its slots numbered and refines the heuristic kind, label,
-reusable flag and slot purposes. Geometry and capacities never change, and
-any failure leaves that slide's heuristic label in place."""
+"""Vision labelling: a model looks at each example slide, slots numbered, and refines the
+heuristic kind, label, reusable flag and slot purposes. Geometry and capacities never
+change; any failure leaves that slide's heuristic label in place."""
 
 from __future__ import annotations
 
@@ -242,13 +241,9 @@ async def label_inventory(
     profile_id: Optional[str] = None,
     use_vision: bool = True,
 ) -> TemplateInventory:
-    """Refine the included example slides with a vision model.
-
-    ``patterns_pdf`` is the patterns deck converted to PDF (page N = pattern N).
-    No call is made when vision is off, no port or PDF is available; the port
-    refusing (no vision-capable model) stops all calls. Unlabelled slides keep
-    their heuristic label and ``labelled_by="heuristic"``.
-    """
+    """Refine the included example slides from ``patterns_pdf`` (page N = pattern N).
+    No call without vision, port or PDF; a port refusal stops all calls. Unlabelled
+    slides keep their heuristic label and ``labelled_by="heuristic"``."""
     targets = [p for p in inventory.patterns if p.source == "slide" and p.included]
     if not use_vision or port is None or not patterns_pdf or not targets:
         return inventory

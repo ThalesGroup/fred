@@ -12,17 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Render a :class:`DeckPlan` on a template into ``.pptx`` bytes.
-
-Synchronous, CPU-bound: the caller runs it off the event loop under the
-package's heavy-job slot. Works on a copy of the template: layout patterns
-are instantiated, example-slide patterns are duplicated (shapes deep-copied,
-picture/media relationships re-created on the new slide), every zone is
-filled by role, unused zones are emptied or removed, example text left on a
-duplicated slide is swept (`checks`), and the template's own
-slides are dropped at the end so the output holds the plan's slides only, in
-plan order.
-"""
+"""Render a :class:`DeckPlan` on a copy of the template into ``.pptx`` bytes: CPU-bound,
+run off the event loop under the heavy-job slot. The template's own slides are dropped
+at the end, so the output holds the plan's slides only, in plan order."""
 
 from __future__ import annotations
 
@@ -145,13 +137,9 @@ def _is_bare_text_box(sp) -> bool:
 
 
 def _widen_no_wrap_text(presentation) -> int:
-    """Give every one-line text box the room it would take in PowerPoint.
-
-    LibreOffice ignores "do not wrap" and breaks such a box as soon as its
-    substitute font runs wider than the designer's ("Merc|i"). Widening it in
-    the preview copy, anchored on its alignment, changes nothing a reader of the
-    .pptx would see; the delivered file is never touched.
-    """
+    """Widen one-line boxes in the preview copy only: LibreOffice ignores "do not wrap"
+    and breaks them once its substitute font runs wider ("Merc|i"). The delivered
+    file is never touched."""
     width = presentation.slide_width
     widened = 0
     parts = [slide for slide in presentation.slides]
@@ -269,11 +257,8 @@ def _all_layouts(presentation) -> list:
 def _copy_relationships(
     source_part, dest_part, shared: Sequence[str] = _MEDIA_RELS
 ) -> Dict[str, str]:
-    """Re-create the media and external-link relationships on ``dest_part``.
-
-    Targets are shared, so an image copied ten times stays one part. Links to
-    other slides are not copied: they would keep removed template slides alive.
-    """
+    """Re-create media and external-link relationships on ``dest_part`` (shared targets).
+    Links to other slides are not copied: they would keep removed template slides alive."""
     rid_map: Dict[str, str] = {}
     for rId, rel in source_part.rels.items():
         if rel.is_external:
@@ -324,9 +309,8 @@ def _drawn_shapes(owner) -> List[Any]:
 
 
 def _lift_layout_graphics(slide) -> set[int]:
-    """Copy the graphics the layout (and its master, unless the layout hides
-    them) draws onto the slide, behind its own shapes, and hide the originals:
-    a frame drawn there for an unused item can then go like the slide's own.
+    """Copy the layout's (and master's) graphics onto the slide behind its shapes and hide
+    the originals, so a frame for an unused item can go like the slide's own.
     Returns the shape ids of the copies."""
     layout = slide.slide_layout
     owners = [layout]
@@ -399,14 +383,9 @@ def _mark_of(box: _Box, reach: Sequence[_Box]) -> Optional[int]:
 def _decoration_fate(
     kept: Sequence[_Box], dropped: Sequence[_Box], decoration: Sequence[_Box]
 ) -> List[str]:
-    """``remove``, ``move`` (with the kept items) or ``stay`` per decoration box.
-
-    An item owns the frame drawn around or mostly under it and whatever that
-    frame holds (its icon, its step number); a connector belongs to the two
-    neighbours it joins. Unused items lose what they own and their connectors,
-    and so does anything inside the area they occupied; a shape that also
-    touches another item (a background, a panel behind the row) stays.
-    """
+    """``remove``, ``move`` or ``stay`` per decoration box. Unused items lose the frame
+    around them, what it holds, their connectors and anything inside their area;
+    a shape that also touches another item (a background, a panel) stays."""
     items = [(box, True) for box in kept] + [(box, False) for box in dropped]
 
     def touches(box: _Box, skip: int) -> bool:
@@ -742,12 +721,9 @@ def _paragraph_style(paragraph) -> Tuple[int, Any, Any]:
 
 
 def _write_lines(shape, lines: Sequence[_Line], french: bool = False) -> None:
-    """Replace a text frame's content, inheriting the template's style per level.
-
-    The first paragraph of each level gives the ``pPr``/``rPr`` every new line
-    of that level clones; a level the template lacks takes the first
-    paragraph's. Inline ``**bold**``/``*italic*`` is honoured per span.
-    """
+    """Replace a text frame's content, each new line cloning the ``pPr``/``rPr`` of its
+    level's first paragraph (else the first paragraph's). Inline ``**bold**``/``*italic*``
+    is honoured per span."""
     _write_paragraphs(shape.text_frame._txBody, lines, french)
 
 
@@ -859,18 +835,9 @@ def _text_insets(shape) -> int:
 
 
 def _grows_with_text(shape, inherited=None) -> bool:
-    """A box that does not wrap: its width follows its text, so it is sized
-    rather than fitted.
-
-    Auto-sizing the *height* is a different thing and must not come here: such a
-    box still wraps inside its width, and widening it pushes the text out of the
-    design (a cover title over the photo beside it). It grows downwards without
-    complaint, which is exactly why its line budget has to be enforced — off the
-    bottom of the slide is not "fitted".
-
-    A placeholder cloned from a layout carries a bare ``bodyPr`` and draws with
-    the layout's rule, so the layout's own is what decides.
-    """
+    """A box that does not wrap, so it is sized rather than fitted. Height auto-size must
+    not come here: that box still wraps and widening it breaks the design. A cloned
+    placeholder's bare ``bodyPr`` defers to the layout's rule."""
     for bodyPr in (shape.text_frame._txBody.find(qn("a:bodyPr")), inherited):
         if bodyPr is not None and bodyPr.get("wrap") == "none":
             return True
@@ -2306,13 +2273,9 @@ class _Renderer:
         dropped: List[List[PlacedShape]],
         decoration: Sequence[PlacedShape],
     ) -> None:
-        """Slide the used items back to the middle of the room the group had.
-
-        Four cards of a six-card row left at the designer's coordinates hug the
-        left edge with a third of the slide empty beside them. A translation
-        only: the corporate spacing and sizing are untouched. ``decoration``
-        is what was drawn for the kept items (frames, icons, connectors).
-        """
+        """Slide the used items back to the middle of the group's room, a translation only
+        (spacing and sizing untouched). ``decoration`` is what was drawn for the kept
+        items (frames, icons, connectors)."""
         used = [_union_box(item) for item in kept if item]
         whole = used + [_union_box(item) for item in dropped]
         shift_x = ((min(b[0] for b in whole) + max(b[2] for b in whole)) // 2) - (
@@ -2368,16 +2331,9 @@ class _Renderer:
         font_name: Optional[str] = None,
         bold: bool = False,
     ) -> Tuple[Optional[float], Optional[int]]:
-        """Keep a box that grows with its text (a KPI figure, its caption)
-        inside its card, identically in PowerPoint and in the PDF preview.
-
-        The room runs to the card's right edge (or the slide's). A box too
-        narrow for its text is widened to that room. A figure stays on one line
-        and shrinks as needed; a one-line heading or label with text right below
-        it shrinks down to the overflow floor, then wraps and returns how many
-        characters would fit, so the agent shortens it; other text wraps between words and only shrinks
-        for a word longer than the room. Returns ``(font scale, one-line room)``.
-        """
+        """Keep a growing box (KPI figure, caption) inside its card, alike in PowerPoint and
+        the PDF preview: a figure shrinks on one line, a heading shrinks to the overflow
+        floor then wraps, other text wraps. Returns ``(font scale, one-line room)``."""
         if not zone.font_pt or placed.width <= 0:
             return None, None
         right = (
@@ -2543,15 +2499,9 @@ def render_deck(
     numbers: Optional[Sequence[int]] = None,
     starts: Optional[Sequence[int]] = None,
 ) -> RenderResult:
-    """Render ``plan`` on the template, slide ``i`` on ``patterns[i]`` as
-    chosen by :func:`assign.assign` (CPU-bound; call off the event loop).
-    ``numbers`` gives each slide's number in the sent plan: a split list's parts
-    share it. Messages name the slide's own position in the deck. ``starts``
-    (``Assignment.starts``) numbers a list's continuation on from its first part.
-
-    Raises :class:`RenderError` for a pattern the template no longer holds;
-    anything else propagates.
-    """
+    """Render ``plan``, slide ``i`` on ``patterns[i]`` (CPU-bound; call off the event loop).
+    ``numbers``: sent-plan numbers; ``starts`` continues a split list's numbering.
+    Raises :class:`RenderError` for a pattern the template no longer holds."""
     presentation = open_presentation(template_bytes)
     try:
         return _Renderer(presentation, inventory, images or {}).render(

@@ -635,11 +635,9 @@ def deck_delta(
     resent: bool = False,
     numbers: Optional[Sequence[int]] = None,
 ) -> str:
-    """Which slides of ``after`` differ from the delivered ``before`` (content
-    or design), as a line the agent can describe its edit from truthfully;
-    ``resent``: the whole deck came in `slides`; ``numbers``: each slide's
-    number in the sent plan (a split list's parts share it). Rendered slides
-    compare by what the file shows: an edit that renders the same is no change."""
+    """Which slides of ``after`` differ from the delivered ``before``, as a line the agent
+    describes its edit from; ``numbers``: sent-plan numbers (split parts share one).
+    Rendered slides compare by what the file shows: same render, no change."""
     a = [
         json.dumps(_shown(s, kinds), sort_keys=True, default=str) for s in before.slides
     ]
@@ -827,13 +825,9 @@ def apply_changes(
     kinds: Optional[Mapping[str, str]] = None,
     after_cover: Optional[List[int]] = None,
 ) -> DeckPlan:
-    """The whole plan after ``changes``, all numbered on ``base``. Untouched
-    slides stay the base's objects; raises :class:`ChangeError` listing every
-    bad change, so nothing is built from half of them. With ``unplaced``, a kind
-    edit clears the fields it names; ``cleared`` gets them per resulting slide,
-    ``origins`` where each resulting slide comes from. With ``kinds`` (template
-    slide to kind), a slide sent before the cover goes after it, its resulting
-    number added to ``after_cover``."""
+    """The whole plan after ``changes`` (numbered on ``base``); raises :class:`ChangeError`
+    listing every bad change, so nothing is built from half of them. With ``unplaced`` a kind
+    edit clears the fields it names; with ``kinds`` a slide sent before the cover moves after it."""
     n = len(base.slides)
     behind = _behind_the_cover(base, changes, kinds) if kinds is not None else set()
     changes = [

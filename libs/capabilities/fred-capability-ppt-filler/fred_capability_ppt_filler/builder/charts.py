@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Charts: the plan's data checked, measured against the zone that will show
-it, and drawn as a native python-pptx chart styled by the template's theme.
-
-The type mapping, chart-data construction, legend rule and series-length check
-are adapted from ``fred-capability-pptx-generator``, by Shuigami.
-"""
+"""Charts: the plan's data checked, measured against its zone, and drawn as a native
+python-pptx chart in the template's theme. Type mapping, chart data, legend rule and
+series-length check are adapted from ``fred-capability-pptx-generator``."""
 
 from __future__ import annotations
 
