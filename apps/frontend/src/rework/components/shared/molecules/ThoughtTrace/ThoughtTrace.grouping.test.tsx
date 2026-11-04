@@ -107,6 +107,21 @@ function groups(): HTMLButtonElement[] {
 }
 
 describe("ThoughtTrace code groups", () => {
+  it("continues numbering after a separately displayed user skill", () => {
+    const skill = {
+      ...msg("system_note", [], 1),
+      role: "system" as const,
+      metadata: { extras: { skill_load: { name: "tabular-evidence", origin: "user", load_id: "skill-1" } } },
+    };
+    renderTrace([skill, call("c1", "execute_code", "# Analyze the table\npython analyze.py", 2), result("c1", 3)]);
+
+    const skillRow = [...container.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      button.getAttribute("aria-label")?.includes("tabular-evidence"),
+    );
+    expect(skillRow?.getAttribute("aria-label")).toMatch(/^1\. /);
+    expect(groups()[0].getAttribute("aria-label")).toMatch(/^2\. /);
+  });
+
   it("keeps reasoning between code calls and starts a new group after another tool", () => {
     renderTrace([
       call("c1", "execute_code", "find /inputs -name '*.txt'", 1),

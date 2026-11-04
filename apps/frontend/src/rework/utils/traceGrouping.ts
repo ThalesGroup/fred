@@ -36,12 +36,13 @@ export function groupTraceRows(
   rows: TraceRow[],
   rules: readonly TraceGroupRule[],
   messages?: readonly ChatMessage[],
+  startIndex = 0,
 ): TraceDisplayItem[] {
   const items: TraceDisplayItem[] = [];
   let active: Extract<TraceDisplayItem, { kind: "group" }> | null = null;
   let activeRun: number | undefined;
   let between: TraceRow[] = [];
-  let displayIndex = 0;
+  let displayIndex = startIndex;
   const runByCallId = new Map<string, number>();
   if (messages) {
     let run = 0;

@@ -830,9 +830,9 @@ export default function FeaturesPage() {
             <p className={styles.status}>{t("rework.admin.capabilities.discovery.refreshing")}</p>
           )}
 
-          <SandboxSettingsPanel
-            visible={activeKindFilter === "tool" && allCapabilities.some((cap) => cap.id === "code_sandbox")}
-          />
+          {activeKindFilter === "tool" && allCapabilities.some((cap) => cap.id === "code_sandbox") && (
+            <SandboxSettingsPanel visible />
+          )}
 
           {activeKindFilter === "model" && hasDiscovery && (
             <div className={styles.modelToolbar}>

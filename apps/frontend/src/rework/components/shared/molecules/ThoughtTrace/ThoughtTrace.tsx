@@ -135,7 +135,10 @@ export function ThoughtTrace({
     [entries, expanded, initialSkillCount],
   );
   const hasActivities = entries.length > initialSkillCount;
-  const displayItems = useMemo(() => groupTraceRows(rows, GROUP_RULES, messages), [rows, messages]);
+  const displayItems = useMemo(
+    () => groupTraceRows(rows, GROUP_RULES, messages, initialSkillCount),
+    [rows, messages, initialSkillCount],
+  );
 
   if (entries.length === 0) return null;
 
