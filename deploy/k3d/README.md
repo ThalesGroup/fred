@@ -27,7 +27,9 @@ agent pods; the separate manager worker is disabled.
 
 The k3d profile enables `scheduler.lifecycle.enabled` for deletion admission and
 lifecycle processing through `temporal:7233` in the same control-plane process.
-Its purge retention is one minute (`PT1M`); physical cleanup follows worker execution.
+Its purge retention and lifecycle sweep interval are each one minute (`PT1M`).
+After retention expires, physical cleanup starts on a subsequent sweep; it is not
+guaranteed to finish exactly one minute after the UI deletion.
 
 This checkout owns the complete profile in `deploy/k3d/helmfile.yaml.gotmpl`,
 `values.yaml.gotmpl` and its `prepare` hook. `base-values.yaml.gotmpl` imports

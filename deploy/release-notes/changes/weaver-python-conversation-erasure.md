@@ -2,8 +2,8 @@
 schema: 1
 title: "Weaver: complete Python conversation erasure with durable write ownership"
 impact: minor
-configuration: none
-configuration_reason: "No chart values or application configuration keys change. Existing PostgreSQL, object storage, M2M and lifecycle settings are reused. Mandatory migration, supported-backend and storage/IAM checks are described below; no user grants are added."
+configuration: local
+configuration_reason: "The local k3d profile overrides the existing lifecycle sweep interval to PT1M for retesting. Production defaults and configuration keys are unchanged. Mandatory migration and storage/IAM checks are described below; no user grants are added."
 after:
   - weaver-conversation-persistence-and-purge
 ---
@@ -48,9 +48,11 @@ Do not enable cleanup during a mixed old/new rollout.
 
 ## Configuration
 
-Existing lifecycle policies, sweep interval, runtime catalog sources, public
-history routing and M2M configuration remain the owners of those choices. This
-change neither changes the sweep interval nor adds a parallel worker.
+The local k3d profile sets `scheduler.lifecycle.sweep_interval: PT1M` for retesting;
+its retention is already `PT1M`. Production defaults retain `PT10M`. The CP worker
+reconciles the existing Temporal schedule on startup after configuration is applied.
+Existing lifecycle policies, runtime sources, public history routing and M2M
+configuration are reused; no parallel worker is introduced.
 
 The runtime purge request uses the configured **private** runtime URL and existing
 CP M2M token. CP accepts `manage_platform` for its own verified service account,

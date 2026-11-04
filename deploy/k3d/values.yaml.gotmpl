@@ -202,6 +202,7 @@ applications:
       scheduler:
         lifecycle:
           enabled: true
+          sweep_interval: PT1M
           temporal: {host: "temporal:7233"}
         processing:
           enabled: true
