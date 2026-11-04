@@ -160,9 +160,13 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
     let children: Vec<Receipt> = sqlx::query_as(
         "insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id)
          select gen_random_uuid(),s.session_id,'session',s.space_id,$2,$3,$4,$5,$6
-         from session_metadata s join space p on p.id=s.space_id
-         where p.deletion_id=$1 and s.deletion_id is null
-         order by s.session_id limit 100 returning *",
+         from session_metadata s
+         where s.deletion_id is null and s.space_id = (
+             select p.id from space p where p.deletion_id=$1
+               and exists(select 1 from session_metadata live where live.space_id=p.id and live.deletion_id is null)
+             order by p.kind, p.id limit 1
+         )
+         order by s.space_id, s.session_id limit 100 returning *",
     ).bind(id).bind(receipt.organization_id).bind(&receipt.actor_subject)
         .bind(receipt.requested_at).bind(receipt.due_at).bind(&receipt.rule_id)
         .fetch_all(&mut *tx).await?;

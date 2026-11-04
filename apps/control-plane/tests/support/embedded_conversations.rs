@@ -98,45 +98,52 @@ async fn embedded_log_is_atomic_across_handles_and_checks_expected_length() {
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
 async fn embedded_log_upgrade_retains_retired_content_until_metadata_purge() {
-    let mut previous = sqlx::migrate!();
-    previous.migrations =
-        std::borrow::Cow::Owned(previous.iter().filter(|m| m.version < 6).cloned().collect());
-    let pool = environment::database::database_with_migrator(previous).await;
-    let (id, space) = conversation(&pool).await;
-    sqlx::migrate!().run(&pool).await.unwrap();
-    db::require_initialized(&pool).await.unwrap();
-    let store = ConversationStore(pool.clone());
-    let name = id.to_string();
-    store.append_log_async(&name, 0, b"opaque").await.unwrap();
-    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
-    lifecycle.config.enabled = true;
-    lifecycle
-        .accept_session(&pool, "alice", space, id)
-        .await
-        .unwrap();
-    assert_eq!(store.read_log_async(&name).await.unwrap(), b"opaque");
-    // An admitted turn may finish during retention. The FK, not an extra admission
-    // refresh, prevents writing again once effective purge removed the session.
-    store
-        .append_log_async(&name, 6, b" retained")
-        .await
-        .unwrap();
-    sqlx::query("delete from session_metadata where session_id=$1")
-        .bind(id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    assert_eq!(
-        store.read_log_async(&name).await.unwrap_err().kind(),
-        ErrorKind::NotFound
-    );
-    assert!(
-        store
-            .append_log_async(&name, 0, b"cannot revive")
+    for next in [6, 7] {
+        let mut previous = sqlx::migrate!();
+        previous.migrations = std::borrow::Cow::Owned(
+            previous
+                .iter()
+                .filter(|m| m.version < next)
+                .cloned()
+                .collect(),
+        );
+        let pool = environment::database::database_with_migrator(previous).await;
+        let (id, space) = conversation(&pool).await;
+        sqlx::migrate!().run(&pool).await.unwrap();
+        db::require_initialized(&pool).await.unwrap();
+        let store = ConversationStore(pool.clone());
+        let name = id.to_string();
+        store.append_log_async(&name, 0, b"opaque").await.unwrap();
+        let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+        lifecycle.config.enabled = true;
+        lifecycle
+            .accept_session(&pool, "alice", space, id)
             .await
-            .is_err()
-    );
-    sqlx::migrate!().run(&pool).await.unwrap();
+            .unwrap();
+        assert_eq!(store.read_log_async(&name).await.unwrap(), b"opaque");
+        // An admitted turn may finish during retention. The FK, not an extra admission
+        // refresh, prevents writing again once effective purge removed the session.
+        store
+            .append_log_async(&name, 6, b" retained")
+            .await
+            .unwrap();
+        sqlx::query("delete from session_metadata where session_id=$1")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.read_log_async(&name).await.unwrap_err().kind(),
+            ErrorKind::NotFound
+        );
+        assert!(
+            store
+                .append_log_async(&name, 0, b"cannot revive")
+                .await
+                .is_err()
+        );
+        sqlx::migrate!().run(&pool).await.unwrap();
+    }
 }
 
 #[tokio::test]

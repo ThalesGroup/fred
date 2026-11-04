@@ -271,7 +271,9 @@ async fn organization_retirement_keeps_python_conversations_and_their_space_unti
         .accept(&e.pool, "root", org.id)
         .await
         .unwrap();
-    cleanup::batch(&e.pool, parent.id).await.unwrap();
+    for _ in 0..2 {
+        cleanup::batch(&e.pool, parent.id).await.unwrap();
+    }
     let children: Vec<(Uuid, Uuid)> =
         sqlx::query_as("select id,target_id from deletion where target_kind='session'")
             .fetch_all(&e.pool)
