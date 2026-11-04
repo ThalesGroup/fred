@@ -425,6 +425,20 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         output_file_name = f"{visible_name}.xlsx"
         folder = f"spreadsheets/{session_id}" if session_id else "spreadsheets"
         path = f"{folder}/{visible_name}-{uuid.uuid4().hex[:8]}.xlsx"
+        stored = StoredWorkbook(workbook_id, version, base_name, spec_json)
+        too_large = len(spec_json.encode()) > MAX_STORED_SPEC_BYTES
+        kept = None if too_large else stored
+        # The stored base is the commit point: saved before the file is published,
+        # so a later turn never edits a workbook older than the last one delivered.
+        if durable:
+            try:
+                await _save_base(session_id, instance_id, kept)
+            except Exception as exc:
+                logger.warning("[SPREADSHEET] base store failed", exc_info=True)
+                return _error(
+                    f"No file was written: the workbook state could not be saved "
+                    f"[{type(exc).__name__}]. Tell the user to try again later."
+                )
         try:
             published = await workspace.write(
                 path,
@@ -434,6 +448,14 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             )
         except Exception as exc:
             logger.exception("[SPREADSHEET] upload failed path=%s", path)
+            if durable:
+                try:
+                    await _save_base(session_id, instance_id, base)
+                except Exception:
+                    # The next edit then builds on this undelivered version: its
+                    # changes are kept and its version number is not reused.
+                    logger.warning("[SPREADSHEET] base restore failed", exc_info=True)
+                    turn.base, turn.too_large = kept, too_large
             return _error(
                 f"The Excel file was built but could not be stored "
                 f"[{type(exc).__name__}]. Tell the user to try again later."
@@ -457,12 +479,8 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
                 document_uid=published.document_uid,
                 file_name=output_file_name,
             )
-        revisable = await _remember(
-            turn,
-            StoredWorkbook(workbook_id, version, base_name, spec_json),
-            cast(str, session_id) if durable else None,
-            cast(str, instance_id) if durable else None,
-        )
+        turn.base, turn.too_large, turn.loaded = kept, too_large, True
+        revisable = not too_large
         logger.info(
             "[SPREADSHEET] created session=%s key=%s sheets=%d bytes=%d revision=%s",
             session_id,
@@ -501,31 +519,16 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
     )
 
 
-async def _remember(
-    turn: _TurnState,
-    workbook: StoredWorkbook,
-    session_id: str | None,
-    instance_id: str | None,
-) -> bool:
-    """Keep the delivered request as the next base; False when too large to keep."""
+async def _save_base(
+    session_id: str | None, instance_id: str | None, workbook: StoredWorkbook | None
+) -> None:
+    """Make `workbook` the next base; None clears it (too large to keep)."""
 
-    spec_json = workbook.spec_json
-    too_large = len(spec_json.encode()) > MAX_STORED_SPEC_BYTES
-    turn.base = None if too_large else workbook
-    turn.too_large = too_large
-    turn.loaded = True
-    if session_id is None or instance_id is None:
-        return not too_large
     store = get_workbook_spec_store()
-    try:
-        if too_large:
-            await store.clear(session_id, instance_id)
-        else:
-            await store.put(session_id, instance_id, workbook)
-    except Exception:
-        # The file is delivered; the next turn's base is then the previous one.
-        logger.warning("[SPREADSHEET] base store failed", exc_info=True)
-    return not too_large
+    if workbook is None:
+        await store.clear(cast(str, session_id), cast(str, instance_id))
+    else:
+        await store.put(cast(str, session_id), cast(str, instance_id), workbook)
 
 
 def _resolve_request(

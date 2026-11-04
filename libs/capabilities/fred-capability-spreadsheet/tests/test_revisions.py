@@ -428,6 +428,50 @@ async def test_a_too_large_request_is_delivered_but_not_kept(store, monkeypatch)
     assert artifact.is_error and "too large to keep" in text
 
 
+class _FailingPuts(MemoryWorkbookSpecStore):
+    def __init__(self, inner: MemoryWorkbookSpecStore) -> None:
+        super().__init__()
+        self.rows = inner.rows
+        self.fail = True
+
+    async def put(self, session_id, instance_id, workbook):
+        if self.fail:
+            raise OSError("database down")
+        await super().put(session_id, instance_id, workbook)
+
+
+@pytest.mark.asyncio
+async def test_a_base_store_failure_never_rolls_a_later_turn_back(store):
+    workspace = FakeWorkspace()
+    await _tool(workspace)(**BUDGET)
+    failing = _FailingPuts(store)
+    set_workbook_spec_store_provider(lambda: failing)
+    travel = [{"op": "add_rows", "sheet": "Budget", "rows": [["Travel", 10, 9]]}]
+    text, artifact = await _tool(workspace)(changes=travel)
+    # v2 was not kept as the base, so it must not have been delivered either.
+    delivered = [w[3] for w in workspace.writes if w[0].endswith(".xlsx")]
+    assert artifact.is_error and "No file was written" in text, text
+    assert delivered == ["Budget.xlsx"]
+    failing.fail = False
+    # A fresh turn edits the last delivered file, under a version never delivered.
+    insurance = [{"op": "add_rows", "sheet": "Budget", "rows": [["Insurance", 5, 4]]}]
+    text, artifact = await _tool(workspace)(changes=insurance)
+    assert artifact.is_error is False, text
+    assert artifact.ui_parts[0].file_name not in delivered
+    assert store.rows[("s-1", "agent-1")].version == 2
+
+
+@pytest.mark.asyncio
+async def test_a_failed_upload_keeps_the_previous_base(store):
+    workspace = FakeWorkspace()
+    await _tool(workspace)(**BUDGET)
+    workspace.fail = True
+    travel = [{"op": "add_rows", "sheet": "Budget", "rows": [["Travel", 10, 9]]}]
+    text, artifact = await _tool(workspace)(changes=travel)
+    assert artifact.is_error
+    assert store.rows[("s-1", "agent-1")].version == 1
+
+
 @pytest.mark.asyncio
 async def test_graph_assembled_tool_takes_changes_through_a_tool_call(store):
     from fred_runtime.capabilities.assembly import build_capability_agent_block

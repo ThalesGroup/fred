@@ -18,6 +18,7 @@ Tracking: GitHub issue #3208.
 - [x] 3.1 `changes` applied on the base, formula references adjusted (D10)
 - [x] 3.2 `cap_spreadsheet_workbook` table, store, Alembic tree (D11)
 - [x] 3.3 Versioned names and latest-version marker (D12)
+- [x] 3.4 Base saved before the file is published: a store failure delivers nothing, never a silent rollback on the next turn (D11)
 
 ## 4. Frontend and docs
 

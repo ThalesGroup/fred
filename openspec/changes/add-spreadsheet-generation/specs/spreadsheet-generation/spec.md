@@ -233,13 +233,20 @@ The `create_spreadsheet` tool SHALL accept either `sheets` (the whole workbook) 
 
 ### Requirement: The revision base survives trimming and replicas
 
-After each delivery the system SHALL store the delivered request, per conversation and agent instance, in a capability-owned table with its own migrations, so that a `changes` call in a later turn finds it on any replica, after the conversation history was trimmed, and on ReAct, Deep and Graph agents. A failed write SHALL NOT fail the delivery. A request too large to store (over 4 MB) SHALL be delivered with a success text saying changes are not available for this file.
+After each delivery the system SHALL store the delivered request, per conversation and agent instance, in a capability-owned table with its own migrations, so that a `changes` call in a later turn finds it on any replica, after the conversation history was trimmed, and on ReAct, Deep and Graph agents. The stored base SHALL be written before the file is published: when that write fails, no file SHALL be written and the error SHALL tell the model so; when the upload then fails, the previous base SHALL be restored. A later turn SHALL never edit a workbook older than the last one delivered. A request too large to store (over 4 MB) SHALL be delivered with a success text saying changes are not available for this file.
 
 #### Scenario: Revision after history trimming
 
 - **GIVEN** a workbook delivered many turns ago, whose tool call is no longer in the model's context
 - **WHEN** the user asks to add a row and the request reaches another fred-agents replica
 - **THEN** the change applies to that delivered workbook and a new version is delivered
+
+#### Scenario: Base store failure
+
+- **GIVEN** a delivered `Budget.xlsx` and a database that refuses the next base write
+- **WHEN** the model adds a row with `changes`
+- **THEN** the tool returns an error saying no file was written, and `Budget-v2.xlsx` is not delivered
+- **AND** the next turn's change applies to `Budget.xlsx` and delivers a version never delivered before
 
 #### Scenario: Graph agent revision
 

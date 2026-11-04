@@ -54,7 +54,7 @@ Rejected: rebuilding the base from conversation history (trimmed), patching the 
 
 ### D11. Base in a capability-owned table
 
-`cap_spreadsheet_workbook`, key `(session_id, agent_instance_id)`, own Alembic tree with one initial revision, version table `cap_spreadsheet_alembic_version`. One upsert per delivery; replica-safe. Bases over 4 MB are not stored and the success text says so.
+`cap_spreadsheet_workbook`, key `(session_id, agent_instance_id)`, own Alembic tree with one initial revision, version table `cap_spreadsheet_alembic_version`. One upsert per delivery, before the file is published: it is the commit point, so a failed write delivers nothing and a later turn never edits an older workbook than the last one delivered; a failed upload restores the previous base. Replica-safe. Bases over 4 MB are not stored and the success text says so.
 
 Rejected: a control-plane table (capability boundary), the conversation filesystem (optional and agent-editable), a spec file in workspace storage (the port is write-only).
 
