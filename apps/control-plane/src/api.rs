@@ -812,29 +812,14 @@ struct PlatformCheck {
 )]
 async fn authorize_platform(
     State(s): State<AppState>,
-    authorization::RuntimeCaller(caller): authorization::RuntimeCaller,
-    ApiQuery(delegation): ApiQuery<authorization::Delegation>,
+    authorization::DecisionUser(user): authorization::DecisionUser,
     ApiJson(req): ApiJson<PlatformCheck>,
 ) -> AppResult<impl IntoResponse> {
-    // The lifecycle worker acts as the Control Plane itself when purging runtime
-    // state. It never borrows a person's platform permission or consent.
-    let own_workload = req.permission == PlatformPermission::ManagePlatform
-        && delegation.person.is_none()
-        && delegation.run.is_none()
-        && delegation.agent.is_none()
-        && s.directory
-            .as_ref()
-            .is_some_and(|directory| directory.is_own_service_account(&caller));
-    let allowed = if own_workload {
-        true
-    } else {
-        let user = delegation.subject(&s, &caller)?;
-        onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), user).await?;
-        authorization::check_platform(&s.pool, user, req.permission).await?
-    };
     Ok((
         [(axum::http::header::CACHE_CONTROL, "no-store")],
-        Json(Allowed { allowed }),
+        Json(Allowed {
+            allowed: authorization::check_platform(&s.pool, &user, req.permission).await?,
+        }),
     ))
 }
 #[derive(Deserialize, utoipa::ToSchema)]
