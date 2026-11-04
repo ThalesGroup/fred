@@ -20,10 +20,22 @@ const commandCatalog = vi.hoisted(() => ({
   supported: true,
   skills: [{ name: "graph", description: "Create diagrams" }],
 }));
-vi.mock("src/slices/controlPlane/controlPlaneOpenApi", () => ({
-  useGetAgentInstanceSkillsQuery: () => ({ currentData: commandCatalog }),
-  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ currentData: [] }),
-  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [vi.fn()],
+vi.mock("src/slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
+  useGetAgentInstanceSkillsQuery: () => ({
+    currentData: commandCatalog,
+    isFetching: false,
+    isError: false,
+    refetch: async () => ({ data: commandCatalog }),
+  }),
+}));
+vi.mock("src/slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  usePromptCatalogQuery: () => ({
+    currentData: { items: [] },
+    isFetching: false,
+    isError: false,
+    refetch: async () => ({ data: { items: [] } }),
+  }),
+  useLazyGetPromptQuery: () => [vi.fn()],
 }));
 // jsdom has no layout engine; interaction assertions do not use geometry.
 beforeAll(() => {
@@ -473,6 +485,7 @@ function mountResetComposer() {
     const commands = useComposerCommands({
       teamId: "team-1",
       agentInstanceId: "instance-1",
+      skillsEnabled: true,
       input,
       setInput,
       onRunSkill: (run) => {
