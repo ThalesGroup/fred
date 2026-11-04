@@ -2079,111 +2079,21 @@ class FredMcpToolProvider(ToolProviderPort):
 
 
 class FredWorkspaceFs(WorkspaceFsPort):
-    """
-    Fred-side adapter exposing the team-rooted virtual filesystem to v2 runtimes.
+    """Publish capability outputs in the existing conversation filesystem.
 
-    Agents address files by short, author-relative paths. This adapter injects the team and
-    acting user from the verified session context and forwards a full team-rooted path to
-    Knowledge Flow over the unified ``/fs`` routes:
-
-    - a bare path        -> ``teams/{team}/agents/{agent}/users/{uid}/...``
-    - an absolute ``/teams/{t}/...`` is accepted only for the session team
+    Configuration assets retain their separate AgentConfigAssetsAdapter. This
+    write port accepts only outputs of the currently bound conversation.
     """
 
     def __init__(
         self,
         *,
         binding: BoundRuntimeContext,
-        settings: AgentSettingsLike,
-        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
-        self._settings = settings
-        self._credentials = credentials
-        self._agent = _WorkspaceAgentShim(
-            binding=binding, settings=settings, credentials=credentials
-        )
-        self._workspace_client = KfWorkspaceClient(agent=self._agent)
         self._binding = binding
 
     def bind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
-        self._agent.rebind(binding)
-
-    # ---- session context (the only source of team/user) ----
-    def _session_team(self) -> str:
-        team = (
-            getattr(self._binding.runtime_context, "team_id", None)
-            or self._settings.team_id
-        )
-        if not team:
-            raise RuntimeError(
-                "Workspace filesystem requires a team in the session context."
-            )
-        return str(team)
-
-    def _session_user(self) -> str:
-        uid = getattr(self._binding.runtime_context, "user_id", None)
-        if not uid:
-            raise RuntimeError(
-                "Workspace filesystem requires a user in the session context."
-            )
-        return str(uid)
-
-    def _session_agent_instance_id(self) -> str:
-        # The agents subtree is keyed by the immutable per-team agent_instance_id
-        # (FILES-04 / docs/swift/design/FILESYSTEM.md), injected from the execution grant
-        # — never the template agent_id, never agent-supplied.
-        aid = getattr(self._binding.runtime_context, "agent_instance_id", None)
-        if not aid:
-            raise RuntimeError(
-                "Workspace filesystem requires an agent instance in the session context."
-            )
-        return str(aid)
-
-    # ---- path relativization (§7.1 security rule) ----
-    def _resolve(self, path: str) -> str:
-        team = self._session_team()
-        # Bare agent paths resolve to the running agent's own per-user space
-        # (FILES-04 / docs/swift/design/FILESYSTEM.md).
-        agent_root = (
-            f"teams/{team}/agents/{self._session_agent_instance_id()}"
-            f"/users/{self._session_user()}"
-        )
-        parts = [p for p in (path or "").strip().replace("\\", "/").split("/") if p]
-        if ".." in parts:
-            raise ValueError("Path cannot contain parent path segments")
-        if not parts:
-            raise ValueError("Path cannot be empty")
-        head = parts[0]
-        if head == "teams":
-            # absolute restatement: must name the session team, never another
-            if len(parts) < 2 or parts[1] != team:
-                named = parts[1] if len(parts) > 1 else ""
-                raise PermissionError(
-                    f"Path team '{named}' is not the session team '{team}'."
-                )
-            return "/".join(parts)
-        if head == "shared":
-            raise PermissionError("The team-shared area is retired")
-        return f"{agent_root}/" + "/".join(parts)
-
-    def _agent_root(self) -> str:
-        return (
-            f"teams/{self._session_team()}/agents/{self._session_agent_instance_id()}"
-            f"/users/{self._session_user()}"
-        )
-
-    def _resolve_owned(self, path: str) -> str:
-        """
-        Resolve an output path inside the current agent and user subtree.
-        """
-        resolved = self._resolve(path)
-        root = self._agent_root()
-        if resolved != root and not resolved.startswith(root + "/"):
-            raise PermissionError(
-                f"Agents may only write inside their own space; '{path}' resolves outside it."
-            )
-        return resolved
 
     async def write(
         self,
@@ -2193,20 +2103,47 @@ class FredWorkspaceFs(WorkspaceFsPort):
         content_type: str | None = None,
         title: str | None = None,
     ) -> PublishedArtifact:
-        resolved = self._resolve_owned(path)
-        file_name = resolved.rsplit("/", 1)[-1]
-        result = await self._workspace_client.fs_upload(
-            resolved, content, file_name, content_type
+        from fred_runtime.conversation_filesystem import ConversationFilesystemService
+
+        session_id = self._binding.runtime_context.session_id
+        if not session_id:
+            raise RuntimeError("Publishing an artifact requires a conversation")
+        prefix = f"outputs/{session_id}/"
+        if not path.startswith(prefix):
+            raise PermissionError("Artifacts must belong to the bound conversation")
+        relative = path.removeprefix(prefix)
+        runtime = get_runtime_context().config
+        if runtime.filesystem is None:
+            raise RuntimeError("Conversation filesystem unavailable")
+        filesystem = ConversationFilesystemService(
+            runtime.filesystem,
+            session_id,
+            fence=runtime.session_fence,
+            kpi=runtime.kpi_writer,
         )
+        await filesystem.exports().write_bytes(relative, content)
+        file_name = relative.rsplit("/", 1)[-1]
         return PublishedArtifact(
-            key=result.key,
-            file_name=result.file_name or file_name,
-            size=result.size,
-            href=result.download_url,
-            document_uid=_coerce_optional_string(result.document_uid),
+            key=f"conversations/{session_id}/exports/{relative}",
+            file_name=file_name,
+            size=len(content),
+            href=f"{runtime.api_base_url.rstrip('/')}/agents/sessions/{quote(session_id, safe='')}/filesystem/exports/{quote(relative, safe='/')}",
             mime=content_type,
             title=title or file_name,
         )
+
+    async def convert_office_to_pdf(
+        self, content: bytes, *, suffix: str
+    ) -> bytes | None:
+        from fred_runtime.conversation_filesystem import ConversationFilesystemService
+
+        session_id = self._binding.runtime_context.session_id
+        runtime = get_runtime_context().config
+        if not session_id or runtime.filesystem is None:
+            raise RuntimeError("Conversion requires a conversation filesystem")
+        return await ConversationFilesystemService(
+            runtime.filesystem, session_id, fence=runtime.session_fence
+        ).convert_office_to_pdf(content, suffix=suffix)
 
 
 class _VectorSearchAgentShim:

@@ -299,7 +299,11 @@ set-version: ## Update the chart and application versions; Python packages have 
 ##@ Database Migrations (combined)
 
 MIGRATION_COMPOSE    := scripts/docker-compose.postgres.yml
-PG_COMBINED_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migrations
+FRED_MIGRATION_PG_PORT ?= 5433
+export FRED_MIGRATION_PG_PORT
+PG_COMBINED_URL      := postgresql+asyncpg://fred_runtime:test@localhost:$(FRED_MIGRATION_PG_PORT)/test_migrations
+PG_COMBINED_ADMIN    := postgresql+asyncpg://test:test@localhost:$(FRED_MIGRATION_PG_PORT)/test_migrations
+MIGRATION_CARGO      ?= cargo
 SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 # One entry per Alembic tree. These lists are hardcoded, not discovery: a new
 # tree is exercised by nothing until it is added to all three targets below.
@@ -337,18 +341,16 @@ db-check-combined-sqlite: ## upgrade every Alembic tree against the same SQLite 
 	@echo "=== Combined SQLite migration check passed ==="
 
 .PHONY: db-check-combined-postgres
-db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade every Alembic tree against the same DB, check for drift, then downgrade
-	@echo "=== Combined migration check: upgrade ==="
-	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
-	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
-	@echo "=== Combined migration check: drift check ==="
-	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic check
-	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic check
-	@echo "=== Combined migration check: downgrade ==="
-	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
-	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic downgrade base
-	@echo "=== Combined migration check passed ==="
-	$(MAKE) db-check-combined-postgres-down
+db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## verify the real CP root, runtime migrations and concurrent cascades
+	@set -e; trap '$(MAKE) db-check-combined-postgres-down' EXIT; \
+	docker compose -f $(MIGRATION_COMPOSE) exec -T postgres psql -X -v ON_ERROR_STOP=1 -v database=test_migrations -U test -d test_migrations < deploy/postgres/bootstrap.sql; \
+	docker compose -f $(MIGRATION_COMPOSE) exec -T postgres psql -X -v ON_ERROR_STOP=1 -U test -d test_migrations -c "ALTER ROLE fred_cp PASSWORD 'test'; ALTER ROLE fred_runtime PASSWORD 'test'"; \
+	DATABASE_URL="postgresql://fred_cp:test@localhost:$(FRED_MIGRATION_PG_PORT)/test_migrations" $(MIGRATION_CARGO) run --locked -p control-plane -- initialize-schema; \
+	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(RT_UV) run --directory $(RT_DIR) alembic upgrade head; \
+	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(WD_UV) run --directory $(WD_DIR) alembic upgrade head; \
+	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(RT_UV) run --directory $(RT_DIR) alembic check; \
+	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(WD_UV) run --directory $(WD_DIR) alembic check; \
+	FRED_TEST_POSTGRES_URL="$(PG_COMBINED_ADMIN)" FRED_TEST_ROLE_PASSWORD=test $(RT_UV) run --directory $(RT_DIR) pytest tests/test_session_ownership.py tests/test_session_filesystem_postgres.py -q
 
 include scripts/makefiles/help.mk
 include scripts/makefiles/chart-schema.mk

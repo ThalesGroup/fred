@@ -116,6 +116,8 @@ def _run_soffice(command: list[str], *, timeout: float) -> None:
 def convert_office_file_to_pdf(
     source_path: Path,
     timeout_seconds: float = DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS,
+    *,
+    strict_cleanup: bool = False,
 ) -> Path | None:
     """Convert an office document to a PDF next to it using headless LibreOffice.
 
@@ -140,7 +142,7 @@ def convert_office_file_to_pdf(
         # left in a bad state, make soffice exit 0 and write nothing. Costs ~1s of
         # first-run init, which is noise next to the surrounding agent turn.
         with tempfile.TemporaryDirectory(
-            prefix="soffice-profile-", ignore_cleanup_errors=True
+            prefix="soffice-profile-", ignore_cleanup_errors=not strict_cleanup
         ) as profile_dir:
             _run_soffice(
                 [
@@ -183,6 +185,7 @@ async def convert_office_bytes_to_pdf(
     *,
     suffix: str,
     timeout_seconds: float = DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS,
+    strict_cleanup: bool = False,
 ) -> bytes | None:
     """Convert in-memory office-document bytes to PDF bytes, off the event loop and bounded.
 
@@ -190,7 +193,8 @@ async def convert_office_bytes_to_pdf(
     LibreOffice selects its import filter from it, so passing the wrong one fails the
     conversion. Returns the PDF bytes, or ``None`` when the conversion is unavailable or
     fails. Never raises for a conversion problem, so a caller can treat the result as
-    best-effort.
+    best-effort. ``strict_cleanup=True`` propagates unexpected errors, including
+    temporary-file cleanup failures, so a lifecycle owner cannot acknowledge them.
 
     Example:
     ```python
@@ -205,7 +209,9 @@ async def convert_office_bytes_to_pdf(
             source_path = Path(tmp) / f"source{suffix}"
             source_path.write_bytes(source_bytes)
             pdf_path = convert_office_file_to_pdf(
-                source_path, timeout_seconds=timeout_seconds
+                source_path,
+                timeout_seconds=timeout_seconds,
+                strict_cleanup=strict_cleanup,
             )
             if pdf_path is None:
                 return None
@@ -218,4 +224,6 @@ async def convert_office_bytes_to_pdf(
         Exception
     ):  # pragma: no cover - defensive: never let conversion break the caller
         logger.exception("[OFFICE2PDF] Unexpected error during Office→PDF conversion.")
+        if strict_cleanup:
+            raise
         return None

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from fred_runtime.conversation_filesystem import (
         ConversationFilesystemQuotaSettings,
     )
+    from fred_runtime.runtime_support.session_fence import SessionFence
 
 
 class McpConfigurationLike(Protocol):
@@ -156,6 +157,8 @@ class RuntimeConfig:
     # Pod-lifetime fred-core filesystem shared by all conversation namespaces.
     # Appended to preserve positional compatibility for external pod authors.
     filesystem: BaseFilesystem | None = None
+    session_fence: SessionFence | None = None
+    api_base_url: str = "/api/v1"
     # Grouped code-default quotas for the two conversation filesystem namespaces.
     conversation_filesystem_quotas: ConversationFilesystemQuotaSettings | None = None
     skills: SkillsPort | None = None

@@ -14,11 +14,14 @@
 
 import asyncio
 import logging
+import os
 import re
 from io import BytesIO
 from typing import List, Set
 from urllib.parse import urlparse
 
+import certifi
+import urllib3
 from fred_core.filesystem.structures import (
     BaseFilesystem,
     FilesystemResourceInfo,
@@ -46,6 +49,7 @@ class MinioFilesystem(BaseFilesystem):
         secret_key: str,
         bucket_name: str,
         secure: bool,
+        require_erasure: bool = False,
     ):
         """
         Initialize a MinIO client and create the bucket if it does not exist.
@@ -68,12 +72,24 @@ class MinioFilesystem(BaseFilesystem):
         ).replace("http://", "")
         self.secure = secure
         self.bucket_name = bucket_name
+        self.require_erasure = require_erasure
 
         self.client = Minio(
             self._clean_endpoint,
             access_key=access_key,
             secret_key=secret_key,
             secure=secure,
+            # An SDK retry can return success while a preceding timed-out PUT
+            # remains in flight. The lifecycle journal must see that uncertainty.
+            http_client=urllib3.PoolManager(
+                timeout=urllib3.Timeout(connect=5, read=300),
+                maxsize=10,
+                cert_reqs="CERT_REQUIRED",
+                ca_certs=os.environ.get("SSL_CERT_FILE") or certifi.where(),
+                retries=False,
+            )
+            if require_erasure
+            else None,
         )
 
         # Prefix injected externally by the app if needed (ex: user_id/)
@@ -82,6 +98,15 @@ class MinioFilesystem(BaseFilesystem):
         if not self.client.bucket_exists(bucket_name):
             self.client.make_bucket(bucket_name)
             logger.info("[MINIO_SETUP] bucket=%s created", bucket_name)
+
+        if require_erasure:
+            self._verify_erasure()
+
+    def _verify_erasure(self) -> None:
+        # Suspended buckets can still contain old versions. An ordinary DELETE
+        # there only creates a marker and cannot acknowledge physical erasure.
+        if self.client.get_bucket_versioning(self.bucket_name).status is not None:
+            raise RuntimeError("Conversation bucket must never have versioning enabled")
 
     def _resolve_path(self, path: str) -> str:
         """
@@ -273,6 +298,8 @@ class MinioFilesystem(BaseFilesystem):
         prefix = resolved.rstrip("/") + "/"
 
         def _delete() -> None:
+            if getattr(self, "require_erasure", False):
+                self._verify_erasure()
             to_remove = [
                 DeleteObject(obj.object_name)
                 for obj in self.client.list_objects(

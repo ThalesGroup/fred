@@ -6,7 +6,7 @@
 # under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 # CONDITIONS OF ANY KIND, either express or implied. See the License for the
 # specific language governing permissions and limitations under the License.
-"""Real PostgreSQL index upgrade and prepared-plan regression coverage.
+"""Real PostgreSQL prepared-plan regression coverage.
 
 Set FRED_TEST_POSTGRES_URL to an isolated local postgresql+asyncpg database.
 Only uniquely prefixed test tables are created and dropped.
@@ -25,21 +25,17 @@ from sqlalchemy.ext.asyncio import create_async_engine
 @pytest.mark.integration
 @pytest.mark.integration_postgres
 @pytest.mark.asyncio
-async def test_session_indexes_upgrade_and_support_generic_plans():
+async def test_session_indexes_support_generic_plans():
     url = os.environ.get("FRED_TEST_POSTGRES_URL")
     if not url:
         pytest.skip("FRED_TEST_POSTGRES_URL is required")
     engine = create_async_engine(url)
     cp = FredSqlCheckpointer(engine, prefix=f"perf_{uuid4().hex[:8]}_")
     try:
-        # Model an existing deployment that has tables but lacks the new indexes.
+        # Query-only fixture: production DDL and ownership upgrade are covered
+        # by test_session_ownership using the real Alembic tree.
         async with engine.begin() as conn:
             await conn.run_sync(cp._metadata.create_all)
-            for index in cp._session_indexes:
-                await conn.run_sync(index.drop)
-        await cp._ensure_tables()
-        rebuilt = FredSqlCheckpointer(engine, prefix=cp.store.prefix)
-        await rebuilt._ensure_tables()
         async with engine.begin() as conn:
             for table in (cp.checkpoints_table, cp.writes_table):
                 indexes = await conn.run_sync(

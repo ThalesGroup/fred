@@ -154,6 +154,7 @@ from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
     AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
+    ConversationScratchpadFileNotFoundError,
     ConversationScratchpadInvalidPathError,
     ConversationScratchpadStorageError,
     ExecutionConfig,
@@ -259,6 +260,7 @@ from fred_runtime.runtime_support.hitl_batch import (
     BatchedHumanAnswer,
     parse_batched_human_answers,
 )
+from fred_runtime.runtime_support.session_fence import SessionWritesPending
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_runtime.runtime_support.turn_steering import turn_steering_mailbox
 
@@ -473,6 +475,12 @@ class _ConversationFilesystemPurgeResponse(BaseModel):
     """Stable acknowledgement for an idempotent runtime filesystem purge."""
 
     purged: bool
+
+
+class _SessionPurgeResponse(_ConversationFilesystemPurgeResponse):
+    """Filesystem erased; SQL ownership is enforced by CP-rooted foreign keys."""
+
+    sql_cascade: bool
 
 
 class _RuntimeErrorPayload(BaseModel):
@@ -1067,11 +1075,7 @@ def _build_runtime_services(
         credentials=credential_provider,
         document_scope=document_scope,
     )
-    workspace_fs = FredWorkspaceFs(
-        binding=binding,
-        settings=settings,
-        credentials=credential_provider,
-    )
+    workspace_fs = FredWorkspaceFs(binding=binding)
     handlers = (
         build_authored_tool_handlers(
             definition=definition,  # type: ignore[arg-type]
@@ -1182,6 +1186,7 @@ def _build_conversation_filesystem(
             else ConversationFilesystemQuotaConfig()
         ),
         kpi=runtime_config.kpi_writer,
+        fence=runtime_config.session_fence,
     )
 
 
@@ -3702,7 +3707,7 @@ def _build_capability_save_services(
     settings = _PodAgentSettings(id=actor, name=actor, team_id=team_id, tuning=None)
     web_factory = get_runtime_context().config.web_research_factory
     return RuntimeServices(
-        workspace_fs=FredWorkspaceFs(binding=binding, settings=settings),
+        workspace_fs=FredWorkspaceFs(binding=binding),
         agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
         document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
         web_research=(web_factory(binding) if web_factory else None),
@@ -4851,7 +4856,7 @@ def _build_agent_router(
     - base_url is the pod's normalized mount prefix, needed only to advertise
       each capability's `route_base_url` in the template catalog (#1979)
     """
-    from fred_runtime.app.security import current_user
+    from fred_runtime.app.security import current_user, current_user_or_service
 
     router = APIRouter(prefix="/agents", tags=["Agents"])
 
@@ -4863,6 +4868,7 @@ def _build_agent_router(
     # Returns None in local-dev mode so dev pods start without Keycloak.
     _authenticated_user = _make_user_dependency(current_user, security_enabled)
     _execution_subject = _make_execution_dependency(current_user, security_enabled)
+    _purge_subject = _make_user_dependency(current_user_or_service, security_enabled)
 
     def _enforce_chat_input_limit(request: RuntimeExecuteRequest) -> None:
         violation = validate_runtime_request(request, max_chat_input_chars)
@@ -5566,46 +5572,90 @@ def _build_agent_router(
 
     @router.delete(
         "/sessions/{session_id}",
-        status_code=status.HTTP_200_OK,
+        response_model=_SessionPurgeResponse,
     )
-    async def delete_session_history(
+    async def purge_session(
         http_request: Request,
         session_id: str,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> dict[str, int]:
+        caller: KeycloakUser | None = Depends(_purge_subject),
+    ) -> _SessionPurgeResponse:
+        """Close object writes permanently, then erase conversation files.
+
+        Only platform maintenance may perform physical lifecycle erasure. The
+        success acknowledgement is deliberately distinct from the old history-only
+        DELETE: an older pod must never let Control Plane complete a receipt.
         """
-        Permanently delete history rows for a session.
-
-        DELETE <base_url>/agents/sessions/{session_id}
-
-        Security: only rows belonging to the authenticated user are deleted.
-        Returns {"deleted": 0} when the session does not exist or belongs to
-        another user — callers cannot distinguish the two cases by design.
-
-        Checkpoint state is NOT touched; delete separately via
-        DELETE /agents/checkpoints/{session_id} if required.
-
-        Returns 503 when no history store is configured.
-        """
-        history_store = get_runtime_context().config.history_store
-        if history_store is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="No history store configured — session history is unavailable.",
-            )
-        caller_uid = caller.uid if caller is not None else None
-        if await _caller_can_manage_platform(
+        _refuse_reserved_session_id(session_id)
+        if security_enabled and not await _caller_can_manage_platform(
             caller, http_request.headers.get("Authorization")
         ):
-            # Platform admin (e.g. CTRLP-12 lifecycle erase-at-expiry): delete every
-            # row for the session, not just the caller's — ownership is waived,
-            # authentication stays enforced upstream.
-            caller_uid = None
-        count = await history_store.delete_session(
-            session_id=session_id, user_id=caller_uid
+            raise HTTPException(status_code=403, detail="Access denied.")
+        runtime = get_runtime_context().config
+        fence = runtime.session_fence
+        if fence is None:
+            raise HTTPException(status_code=503, detail="session_purge_unavailable")
+        if runtime.filesystem is None:
+            raise HTTPException(
+                status_code=503, detail="session_filesystem_unavailable"
+            )
+        try:
+            await fence.close(session_id)
+            # The delimiter keeps neighbouring sessions isolated; erase every
+            # namespace, including namespaces removed from a newer capability.
+            await ConversationFilesystemService(runtime.filesystem, session_id).purge()
+            await fence.acknowledge_purge(session_id)
+        except SessionWritesPending as exc:
+            raise HTTPException(
+                status_code=503, detail="session_writes_pending"
+            ) from exc
+        except Exception as exc:
+            logger.warning("Session purge failed: %s", type(exc).__name__)
+            raise HTTPException(
+                status_code=503, detail="session_purge_unavailable"
+            ) from exc
+        return _SessionPurgeResponse(purged=True, sql_cascade=True)
+
+    @router.get("/sessions/{session_id}/filesystem/exports/{path:path}")
+    async def download_session_export(
+        http_request: Request,
+        session_id: str,
+        path: str,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> Response:
+        """Read generated artifacts through the same live ownership as history."""
+        import mimetypes
+        from urllib.parse import quote
+
+        await authorize_history_read(
+            session_id, caller, http_request.headers.get("Authorization")
         )
-        await turn_steering_mailbox.purge(session_id, caller_uid)
-        return {"deleted": count}
+        runtime = get_runtime_context().config
+        if runtime.filesystem is None:
+            raise HTTPException(
+                status_code=503, detail="session_filesystem_unavailable"
+            )
+        try:
+            content = (
+                await ConversationFilesystemService(runtime.filesystem, session_id)
+                .exports()
+                .read_bytes(path)
+            )
+        except ConversationScratchpadInvalidPathError as exc:
+            raise HTTPException(
+                status_code=422, detail="Invalid artifact path"
+            ) from exc
+        except ConversationScratchpadFileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Artifact not found") from exc
+        return Response(
+            content=content,
+            media_type=mimetypes.guess_type(path)[0] or "application/octet-stream",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "attachment; filename*=UTF-8''"
+                + quote(path.rsplit("/", 1)[-1], safe=""),
+            },
+        )
 
     @router.delete(
         "/sessions/{session_id}/filesystem",
@@ -6621,6 +6671,8 @@ def create_agent_app(
                         checkpointer=checkpointer,
                         history_store=history_store,
                         filesystem=container.get_filesystem(),
+                        session_fence=container.session_fence,
+                        api_base_url=base_url,
                         skills=skills,
                         conversation_filesystem_quotas=(
                             config.storage.conversation_filesystem

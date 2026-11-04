@@ -236,10 +236,8 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         # keyed by thread_id only — no user, no age — so they can be neither
         # erased per-user nor swept by retention. This one row per thread makes
         # both possible (A6 idle sweep via last_activity_at; per-user erase via
-        # user_id). It is a checkpoint-side table, so it self-inits with its
-        # siblings via create_all — deliberately NOT alembic-tracked, exactly
-        # like langgraph_checkpoint/_blob/_write (alembic env is scoped to
-        # session_history only). Keyed by thread_id, so MEMORY-02's per-agent
+        # user_id). PostgreSQL DDL belongs to runtime Alembic; standalone SQLite
+        # initializes these tables locally. Keyed by thread_id, so the per-agent
         # checkpoint_ns split is orthogonal: many (thread_id, ns) checkpoints
         # simply refresh one owner row.
         self.thread_owner_table = Table(
@@ -271,9 +269,8 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         # phantom pending write, corrupting `pending_write_count`
         # administration and risking interference with LangGraph's own
         # resume-matching internals. This is a side table, same doctrine as
-        # `thread_owner_table` just above: self-inits via create_all,
-        # deliberately not alembic-tracked, keyed by thread_id so a full
-        # thread erasure removes it too (see `adelete_thread`).
+        # `thread_owner_table` just above: migrated with runtime and keyed by
+        # thread_id so a full thread erasure removes it too (see `adelete_thread`).
         #
         # Key is (thread_id, checkpoint_ns, occurrence_key), stored in the
         # existing `interrupt_id` column. Pauses without an occurrence retain
@@ -368,21 +365,34 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             connection.execute(
                 text(f"ALTER TABLE {quoted} ADD COLUMN binding_json {column_type}")
             )
-        if connection.dialect.name == "postgresql":
-            # create_all skips indexes on tables that already exist.
-            for index in self._session_indexes:
-                index.create(connection, checkfirst=True)
 
     async def _ensure_tables(self) -> None:
         if self._tables_ready:
             return
         async with self.phase("v2_checkpoint_ensure_tables"):
-            await run_ddl_with_advisory_lock(
-                engine=self.store.engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=self._create_tables,
-                logger=self._logger,
-            )
+            if self.store.engine.dialect.name == "postgresql":
+                from fred_runtime.runtime_support.session_ownership import (
+                    verify_conversation_ownership,
+                )
+
+                async with self.store.engine.connect() as connection:
+                    await verify_conversation_ownership(
+                        connection,
+                        {
+                            table.name: "thread_id"
+                            for table in self._metadata.tables.values()
+                        },
+                    )
+                    for table in self._metadata.tables.values():
+                        await connection.execute(select(table).limit(0))
+            else:
+                # Standalone SQLite has no cross-service lifecycle root.
+                await run_ddl_with_advisory_lock(
+                    engine=self.store.engine,
+                    lock_key=self._ddl_lock_id,
+                    ddl_sync_fn=self._create_tables,
+                    logger=self._logger,
+                )
         self._tables_ready = True
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:  # type: ignore[override]

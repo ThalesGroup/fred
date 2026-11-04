@@ -11,20 +11,40 @@ Execution-space schema (revision a7b8c9d0e1f2):
   team ID. New managed turns write their admitted space. Downgrade likewise does
   not reconstruct ancestry from space. Session/rank keys are unchanged.
 
-FredSqlCheckpointer owns its tables outside Alembic, through _create_tables under
-its existing advisory lock. Fresh owner tables contain space_id. create_all does
-not upgrade an existing owner table: a table lacking space_id is rejected with
-an explicit schema error. No automatic reset, ancestry conversion or backfill is
-performed. Weaver supports fresh installations only.
+PostgreSQL conversation ownership (revision b8c9d0e1f2a3):
+- Control Plane session_metadata is the lifecycle root. Runtime history, steering,
+  and all five v2_ checkpoint tables have generated UUID conversation_id columns
+  and immediate, validated ON DELETE CASCADE foreign keys to that root. Derived
+  Graph threads use the UUID before their first colon; checkpoint namespaces do
+  not change ownership. The writable_document capability applies the same relation
+  through its own w2r3i4t5a6b7 migration. Web research activity remains an independent
+  restricted trace with its existing retention; conversation deletion does not erase it.
+- Initialize the Control Plane schema and its narrow REFERENCES grant first.
+  fred_runtime owns runtime tables but cannot read or create Control Plane roots.
+  Control Plane deletes the root; PostgreSQL performs cascades without giving it
+  direct access to runtime content. A concurrent insert either commits before
+  root deletion and is cascaded, or fails its FK after deletion. Old admitted SQL
+  producers cannot recreate content after a crash or on another replica.
+- This migration adopts the existing v2_ checkpoint tables and creates them on a
+  fresh installation. PostgreSQL startup verifies generated expressions and the
+  validated, nondeferrable cascade constraints; it no longer creates or repairs
+  checkpoint tables. A remaining writable_document table must also have its
+  ownership migration even when the capability is no longer installed; startup
+  refuses an unmigrated table rather than promising an incomplete cascade.
+  The previously supported execution-space columns remain a
+  prerequisite. Custom PostgreSQL prefixes are not part of the Weaver schema.
+- Backfill is strict: invalid UUIDs, missing conversation roots or incompatible
+  existing tables fail the whole migration. No row is silently removed, and no
+  missing root is manufactured from content. Resolve such data through an explicit
+  operator decision before retrying; never rewrite applied migration history.
+- SQLite remains a standalone SDK/test store. Its checkpoint tables still initialize
+  locally, and these cross-service FK migrations are no-ops. It does not implement
+  the Weaver physical-purge endpoint. PostgreSQL ownership migrations deliberately
+  refuse downgrade, which would restore the write-after-purge race.
 
-A pre-existing local database therefore needs an explicit operator schema action
-before running this code: on the configured (possibly prefixed)
-checkpoint_thread_owner table, drop the old nullable team_id and add nullable
-space_id. Do not rename/copy team_id; leave existing space metadata NULL. Preserve
-thread_id, user_id, binding_json, timestamps, other tables and indexes. Do not
-recreate that owner table alone: doing so would discard conversation provenance.
-Alternatively provision a separate fresh local database. This is an operational
-prerequisite, not a command executed by this change.
+Object filesystem coordination belongs to revision c9d0e1f2a3b4: a manifest and
+pending write intents restrict root deletion until filesystem erasure is acknowledged.
+The runtime's SQL content itself needs no second tombstone, write guard or purge loop.
 
 The owner index remains retention metadata. Conversation access still uses the
 existing Weaver binding_json provenance and Control Plane checks. Neither NULL

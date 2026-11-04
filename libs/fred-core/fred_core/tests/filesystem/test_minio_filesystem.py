@@ -144,3 +144,50 @@ async def test_delete_propagates_recursive_object_failure():
 
     with pytest.raises(RuntimeError, match="Failed to delete MinIO objects"):
         await fs.delete("conversation")
+
+
+@pytest.mark.parametrize("status", [None, "Enabled", "Suspended"])
+def test_erasure_requires_never_versioned_bucket_and_disables_http_retries(
+    monkeypatch, status
+):
+    from fred_core.filesystem import minio_filesystem
+
+    client = MagicMock()
+    client.bucket_exists.return_value = True
+    client.get_bucket_versioning.return_value = SimpleNamespace(status=status)
+    constructor = MagicMock(return_value=client)
+    monkeypatch.setattr(minio_filesystem, "Minio", constructor)
+    if status is None:
+        MinioFilesystem(
+            "http://minio.invalid",
+            "test",
+            "synthetic",
+            "bucket",
+            False,
+            require_erasure=True,
+        )
+    else:
+        with pytest.raises(RuntimeError, match="never have versioning"):
+            MinioFilesystem(
+                "http://minio.invalid",
+                "test",
+                "synthetic",
+                "bucket",
+                False,
+                require_erasure=True,
+            )
+    transport = constructor.call_args.kwargs["http_client"]
+    assert transport.connection_pool_kw["retries"].total is False
+
+
+@pytest.mark.asyncio
+async def test_erasure_rechecks_bucket_before_acknowledging_delete():
+    fs = _fs_with_response(MagicMock())
+    fs.require_erasure = True
+    client = MagicMock()
+    fs.client = client
+    client.get_bucket_versioning.return_value = SimpleNamespace(status="Suspended")
+    with pytest.raises(RuntimeError, match="never have versioning"):
+        await fs.delete("conversations/one")
+    client.remove_objects.assert_not_called()
+    client.remove_object.assert_not_called()

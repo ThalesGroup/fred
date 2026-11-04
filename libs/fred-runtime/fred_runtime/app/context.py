@@ -33,6 +33,7 @@ from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.runtime_support.session_fence import SessionFence
 
 if TYPE_CHECKING:
     from fred_core.filesystem.structures import BaseFilesystem
@@ -122,6 +123,7 @@ class PodApplicationContext:
     def __init__(self, configuration: AgentPodConfig) -> None:
         self.configuration = configuration
         self._sql_engine: AsyncEngine | None = None
+        self.session_fence: SessionFence | None = None
         self._checkpointer: object | None = None
         self._history_store: HistoryStorePort | None = None
         self._filesystem: BaseFilesystem | None = None
@@ -162,7 +164,8 @@ class PodApplicationContext:
         from fred_runtime.app.filesystem_factory import build_runtime_filesystem
 
         self._filesystem = await build_runtime_filesystem(
-            self.configuration.storage.object_store
+            self.configuration.storage.object_store,
+            require_erasure=self.session_fence is not None,
         )
 
     async def initialize_sql(self) -> None:
@@ -213,13 +216,42 @@ class PodApplicationContext:
         # Runtime migrations own history/checkpoints, never the Python manager.
         await require_tables(
             engine,
-            [SessionHistoryRow.__tablename__, "runtime_turn_steering"],
+            [
+                SessionHistoryRow.__tablename__,
+                "runtime_turn_steering",
+            ],
             component="fred-runtime",
             migrate_command=_MIGRATE_COMMAND,
             version_table=_RUNTIME_VERSION_TABLE,
         )
 
         checkpointer = FredSqlCheckpointer(engine, kpi=self.get_kpi_writer())
+        await checkpointer._ensure_tables()
+        if engine.dialect.name == "postgresql":
+            self.session_fence = SessionFence(engine)
+            await self.session_fence.check_ready()
+            await require_tables(
+                engine,
+                ["runtime_session_filesystem", "runtime_session_file_write"],
+                component="fred-runtime",
+                migrate_command=_MIGRATE_COMMAND,
+                version_table=_RUNTIME_VERSION_TABLE,
+            )
+            from fred_runtime.runtime_support.session_ownership import (
+                verify_conversation_ownership,
+            )
+
+            async with engine.connect() as connection:
+                await verify_conversation_ownership(
+                    connection,
+                    {
+                        "session_history": "session_id",
+                        "runtime_turn_steering": "session_id",
+                    },
+                    # Uninstalling a capability does not relinquish its stored
+                    # content. Its migration must run before erasure is enabled.
+                    optional_tables={"cap_writable_document_docs": "session_id"},
+                )
         history_store = PostgresHistoryStore(engine, kpi=self.get_kpi_writer())
         self._checkpointer = checkpointer
         self._history_store = history_store
@@ -240,7 +272,8 @@ class PodApplicationContext:
                 )
             return
         store = WebResearchActivityStore(
-            self._sql_engine, policy.activity_retention_days
+            self._sql_engine,
+            policy.activity_retention_days,
         )
         try:
             await store.check_ready()
@@ -253,7 +286,9 @@ class PodApplicationContext:
         self.web_research_activity = store
         if policy.enabled:
             self.web_research = WebResearchService(
-                policy, self._sql_engine, service_name=self.configuration.app.runtime_id
+                policy,
+                self._sql_engine,
+                service_name=self.configuration.app.runtime_id,
             )
         self._kpi_tasks.append(asyncio.create_task(self._purge_web_activity()))
 

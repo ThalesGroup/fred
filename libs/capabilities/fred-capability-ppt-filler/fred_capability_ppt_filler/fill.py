@@ -55,7 +55,6 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
 
-from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
 from fred_sdk.contracts.context import (
     LinkKind,
@@ -137,7 +136,7 @@ class PptPreviewPart(BaseModel):
       .pptx download, so a separate download chip is redundant.
 
     Durability:
-    - both URLs are the DURABLE, bearer-protected KF ``/fs/download/{path}``
+    - both URLs are bearer-protected conversation artifact downloads
       hrefs (never a signed short-TTL link) — this part is persisted in the
       conversation, so a frozen signed URL would 403 when the chat is reopened
       later. The frontend fetches them with the session bearer at open time.
@@ -151,7 +150,7 @@ class PptPreviewPart(BaseModel):
     type: Literal["ppt_preview"] = "ppt_preview"
     preview_id: str  # stable id for this deck within the session (storage key)
     title: str
-    pdf_download_url: str  # durable KF /fs/download href for the preview PDF
+    pdf_download_url: str  # conversation-owned href for the preview PDF
     version: str  # per-fill token; drives cache-busting + react-pdf remount
     pptx_download_url: Optional[str] = None  # durable href for the source .pptx
     file_name: Optional[str] = None  # .pptx download file name
@@ -832,7 +831,7 @@ def build_fill_tools(
             return fill_error, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
         assert filled_bytes is not None  # fill_error is None here
 
-        # 4. Write to the agent workspace (session-scoped path so outputs of
+        # 4. Publish through the conversation filesystem (so outputs of
         #    different conversations never clobber each other) and build the
         #    durable download href.
         output_file_name = _sanitize_output_file_name(provided.get(_OUTPUT_NAME_FIELD))
@@ -868,7 +867,17 @@ def build_fill_tools(
         #    upload error) degrades to the plain download chip so a preview
         #    problem never costs the user the deck.
         pdf_download_url: Optional[str] = None
-        pdf_bytes = await convert_office_bytes_to_pdf(filled_bytes, suffix=".pptx")
+        try:
+            pdf_bytes = await workspace.convert_office_to_pdf(
+                filled_bytes, suffix=".pptx"
+            )
+        except Exception as exc:
+            # The runtime retains an uncertain conversion intent; returning the
+            # deck must never imply its temporary files have been cleaned up.
+            logger.warning(
+                "[PPTFILL][TOOL] preview conversion failed: %s", type(exc).__name__
+            )
+            pdf_bytes = None
         if pdf_bytes is not None:
             try:
                 pdf_artifact = await workspace.write(

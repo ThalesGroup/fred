@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Conversation-bound text files stored in Fred Runtime's shared filesystem."""
+"""Conversation-bound files stored in Fred Runtime's shared filesystem."""
 
 from __future__ import annotations
 
@@ -21,9 +21,10 @@ import logging
 import string
 import threading
 import weakref
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
@@ -42,13 +43,36 @@ from fred_sdk.contracts.runtime import (
 if TYPE_CHECKING:
     from fred_core.kpi import BaseKPIWriter
 
+    from fred_runtime.runtime_support.session_fence import SessionFence
+
 _SAFE_SESSION_ID_FIRST_CHARACTERS = frozenset(string.ascii_letters + string.digits)
 _SAFE_SESSION_ID_CHARACTERS = _SAFE_SESSION_ID_FIRST_CHARACTERS | frozenset("._:@+-")
 _LOGGER = logging.getLogger(__name__)
 _LOCK_REGISTRY_GUARD = threading.Lock()
+_FILESYSTEM_WRITES: set[asyncio.Task[Any]] = set()
 _STATES_BY_FILESYSTEM: weakref.WeakKeyDictionary[
     object, dict[str, _NamespaceAccounting]
 ] = weakref.WeakKeyDictionary()
+
+
+async def _run_filesystem_operation[T](
+    session_id: str,
+    fence: SessionFence | None,
+    operation: Callable[[], Awaitable[T]],
+) -> T:
+    async def persist() -> T:
+        token = await fence.begin_filesystem_write(session_id) if fence else None
+        result = await operation()
+        if token is not None and fence is not None:
+            await fence.end_filesystem_write(token)
+        return result
+
+    # Keep the task alive after caller cancellation. A to_thread SDK operation or
+    # converter must really finish before its intent can be acknowledged.
+    task = asyncio.create_task(persist())
+    _FILESYSTEM_WRITES.add(task)
+    task.add_done_callback(_finish_filesystem_write)
+    return await asyncio.shield(task)
 
 
 class ConversationFilesystemQuotaSettings(Protocol):
@@ -107,6 +131,9 @@ class ConversationTextNamespacePort(Protocol):
         raise NotImplementedError
 
     async def write_text(self, path: str, content: str) -> None:
+        raise NotImplementedError
+
+    async def write_bytes(self, path: str, content: bytes) -> None:
         raise NotImplementedError
 
     async def edit_text(
@@ -171,6 +198,7 @@ class ConversationFilesystemService:
         *,
         quotas: ConversationFilesystemQuotaSettings = _DEFAULT_QUOTAS,
         kpi: BaseKPIWriter | None = None,
+        fence: SessionFence | None = None,
     ) -> None:
         if not _is_safe_session_id(session_id):
             raise ConversationScratchpadInvalidPathError(
@@ -180,6 +208,7 @@ class ConversationFilesystemService:
         self._session_id = session_id
         self._quotas = quotas
         self._kpi = kpi
+        self._fence = fence
 
     def scratchpad(self) -> ConversationTextNamespacePort:
         """Return the trusted physical default namespace for runtime maintenance."""
@@ -187,6 +216,14 @@ class ConversationFilesystemService:
             "scratchpad",
             max_bytes=self._quotas.scratchpad_max_bytes,
             max_files=self._quotas.scratchpad_max_files,
+        )
+
+    def exports(self) -> ConversationTextNamespacePort:
+        """Generated binary artifacts share the conversation lifecycle."""
+        return self.namespace(
+            "exports",
+            max_bytes=self._quotas.deep_max_bytes,
+            max_files=self._quotas.deep_max_files,
         )
 
     def namespace(
@@ -199,11 +236,31 @@ class ConversationFilesystemService:
             namespace_id,
             quota=_NamespaceQuota(max_bytes, max_files),
             kpi=self._kpi,
+            fence=self._fence,
         )
+
+    async def convert_office_to_pdf(
+        self, content: bytes, *, suffix: str
+    ) -> bytes | None:
+        from fred_core.conversion.office_pdf import convert_office_bytes_to_pdf
+
+        async def convert() -> bytes | None:
+            return await convert_office_bytes_to_pdf(
+                content, suffix=suffix, strict_cleanup=True
+            )
+
+        return await _run_filesystem_operation(self._session_id, self._fence, convert)
 
     @property
     def quotas(self) -> ConversationFilesystemQuotaSettings:
         return self._quotas
+
+    async def purge(self) -> None:
+        """Erase every namespace after the durable fence has closed its writers."""
+        try:
+            await self._filesystem.delete(f"conversations/{self._session_id}")
+        except FileNotFoundError:
+            pass
 
     async def purge_namespace(self, namespace_id: str) -> None:
         await self.namespace(namespace_id, max_bytes=0, max_files=0).purge()
@@ -218,12 +275,14 @@ class _ConversationTextNamespace:
         *,
         quota: _NamespaceQuota,
         kpi: BaseKPIWriter | None,
+        fence: SessionFence | None,
     ) -> None:
         if not _is_safe_namespace_id(namespace):
             raise ConversationScratchpadInvalidPathError(
                 "Namespace identifier must be one safe path segment"
             )
         self._filesystem = filesystem
+        self._fence = fence
         self._conversation_id = session_id
         self._namespace = namespace
         self._prefix = f"conversations/{session_id}/{namespace}/"
@@ -257,8 +316,11 @@ class _ConversationTextNamespace:
             ) from exc
 
     async def write_text(self, path: str, content: str) -> None:
+        await self.write_bytes(path, _encode_text(content))
+
+    async def write_bytes(self, path: str, content: bytes) -> None:
+        encoded = content
         relative_path = _normalize_path(path)
-        encoded = _encode_text(content)
         async with self._lock:
             await self._ensure_accounting()
             self._check_write_quota(relative_path, len(encoded))
@@ -271,9 +333,13 @@ class _ConversationTextNamespace:
         self, relative_path: str, encoded: bytes, *, operation: str
     ) -> None:
         physical_path = self._physical_path(relative_path)
-        try:
+
+        async def persist() -> None:
             await self._filesystem.mkdir(str(PurePosixPath(physical_path).parent))
             await self._filesystem.write(physical_path, encoded)
+
+        try:
+            await _run_filesystem_operation(self._conversation_id, self._fence, persist)
         except Exception as exc:
             raise self._storage_error(operation, exc) from exc
 
@@ -542,3 +608,9 @@ def _namespace_accounting(
     with _LOCK_REGISTRY_GUARD:
         states = _STATES_BY_FILESYSTEM.setdefault(filesystem, {})
         return states.setdefault(prefix, _NamespaceAccounting(lock=asyncio.Lock()))
+
+
+def _finish_filesystem_write(task: asyncio.Task[Any]) -> None:
+    _FILESYSTEM_WRITES.discard(task)
+    if not task.cancelled():
+        task.exception()  # Observe failures even when the caller disconnected.

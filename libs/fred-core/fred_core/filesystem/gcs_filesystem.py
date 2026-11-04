@@ -51,6 +51,7 @@ class GcsFilesystem(BaseFilesystem):
         bucket_name: str,
         prefix: str = "",
         project_id: Optional[str] = None,
+        require_erasure: bool = False,
     ):
         """
         Bind to a GCS bucket using ADC. The bucket is referenced lazily; no
@@ -63,6 +64,7 @@ class GcsFilesystem(BaseFilesystem):
             project_id (str | None): GCP project; inferred from ADC when empty.
         """
         self.bucket_name = bucket_name
+        self.require_erasure = require_erasure
         # Configured base prefix (e.g. "vfs"). Normalized without surrounding slashes.
         self.base_prefix = (prefix or "").strip("/")
         # Prefix injected externally by the app if needed (mirrors MinioFilesystem).
@@ -70,6 +72,35 @@ class GcsFilesystem(BaseFilesystem):
 
         self.client = build_gcs_client(project_id)
         self.bucket = self.client.bucket(bucket_name)
+        if require_erasure:
+            self._verify_erasure()
+            # Some buckets reject softDeleted listings when no policy exists.
+            # Verify this read-only proof is available before advertising a pod
+            # that would otherwise fail every effective-erasure acknowledgement.
+            next(
+                iter(
+                    self.client.list_blobs(
+                        self.bucket_name,
+                        prefix=self._resolve_path("conversations/"),
+                        soft_deleted=True,
+                        max_results=1,
+                    )
+                ),
+                None,
+            )
+
+    def _verify_erasure(self) -> None:
+        # Requires storage.buckets.get; absence of that permission is an explicit
+        # startup/purge failure, not permission to promise effective deletion.
+        self.bucket.reload()
+        if (
+            self.bucket.versioning_enabled
+            or self.bucket.retention_period
+            or self.bucket.soft_delete_policy.retention_duration_seconds
+        ):
+            raise RuntimeError(
+                "Conversation bucket requires versioning, retention and soft delete disabled"
+            )
 
     def health_check(self) -> dict:
         """Verify object-level access to the bucket via ADC / Workload Identity.
@@ -159,7 +190,10 @@ class GcsFilesystem(BaseFilesystem):
                     raise FileNotFoundError(
                         f"Parent path '{parent}' does not exist. Cannot write '{full}'."
                     )
-            self.bucket.blob(full).upload_from_string(data_bytes)
+            if self.require_erasure:
+                self.bucket.blob(full).upload_from_string(data_bytes, retry=None)  # pyright: ignore[reportArgumentType] -- SDK documents None to disable retries
+            else:
+                self.bucket.blob(full).upload_from_string(data_bytes)
 
         await asyncio.to_thread(_write)
 
@@ -228,7 +262,16 @@ class GcsFilesystem(BaseFilesystem):
         prefix = resolved.rstrip("/") + "/"
 
         def _delete() -> None:
-            for blob in list(self.client.list_blobs(self.bucket_name, prefix=prefix)):
+            if self.require_erasure:
+                self._verify_erasure()
+                # Include historical generations from before versioning was
+                # disabled; soft-deleted generations cannot be hard-deleted yet.
+                blobs = self.client.list_blobs(
+                    self.bucket_name, prefix=prefix, versions=True
+                )
+            else:
+                blobs = self.client.list_blobs(self.bucket_name, prefix=prefix)
+            for blob in list(blobs):
                 try:
                     blob.delete()
                 except NotFound:
@@ -238,6 +281,20 @@ class GcsFilesystem(BaseFilesystem):
                     self.bucket.blob(key).delete()
                 except NotFound:
                     logger.debug("[GCS_DELETE] marker already gone")
+
+            if self.require_erasure:
+                if next(
+                    iter(
+                        self.client.list_blobs(
+                            self.bucket_name,
+                            prefix=prefix,
+                            soft_deleted=True,
+                            max_results=1,
+                        )
+                    ),
+                    None,
+                ):
+                    raise RuntimeError("Conversation still has soft-deleted objects")
 
         await asyncio.to_thread(_delete)
 
@@ -254,7 +311,14 @@ class GcsFilesystem(BaseFilesystem):
         """
         dir_path = self._resolve_path(path).rstrip("/") + "/"
         logger.info("[GCS_MKDIR] bucket=%s", self.bucket_name)
-        await asyncio.to_thread(self.bucket.blob(dir_path).upload_from_string, b"")
+        if self.require_erasure:
+            await asyncio.to_thread(
+                self.bucket.blob(dir_path).upload_from_string,
+                b"",
+                retry=None,  # pyright: ignore[reportArgumentType] -- SDK documents None
+            )
+        else:
+            await asyncio.to_thread(self.bucket.blob(dir_path).upload_from_string, b"")
 
     async def exists(self, path: str) -> bool:
         """Return True if the object exists or any object shares its prefix."""

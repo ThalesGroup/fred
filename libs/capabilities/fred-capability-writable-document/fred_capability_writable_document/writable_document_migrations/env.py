@@ -27,11 +27,40 @@ from alembic import context
 from fred_capability_writable_document.store import WritableDocumentBase
 from fred_core.common import load_postgres_config
 from fred_core.sql import make_alembic_env
+from fred_core.sql.alembic_env import _build_url
+from sqlalchemy import Column, Computed, ForeignKey, Index, MetaData, Table, Uuid
+
+_metadata = MetaData()
+for table in WritableDocumentBase.metadata.tables.values():
+    table.to_metadata(_metadata)
+if _build_url(load_postgres_config).startswith("postgresql"):
+    Table(
+        "session_metadata",
+        _metadata,
+        Column("session_id", Uuid, primary_key=True),
+        schema="control_plane",
+    )
+    _documents = _metadata.tables["cap_writable_document_docs"]
+    _documents.append_column(
+        Column(
+            "conversation_id",
+            Uuid,
+            Computed("session_id::uuid", persisted=True),
+            ForeignKey(
+                "control_plane.session_metadata.session_id",
+                ondelete="CASCADE",
+                name="cap_writable_document_docs_conversation_fk",
+            ),
+            nullable=False,
+        )
+    )
+    Index("cap_writable_document_docs_conversation_idx", _documents.c.conversation_id)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
-    target_metadata=WritableDocumentBase.metadata,
+    target_metadata=_metadata,
     get_postgres_config=load_postgres_config,
     version_table="cap_writable_document_alembic_version",
+    owned_tables=["cap_writable_document_docs"],
 )
 
 if context.is_offline_mode():

@@ -259,3 +259,99 @@ async def test_list_does_not_leak_sibling_prefix(monkeypatch):
 
     # grep iterates list(), so the leak must not surface through content search.
     assert await fs.grep(r"not yours", "") == []
+
+
+@pytest.mark.parametrize(
+    "versioning,retention,soft_delete",
+    [(True, 0, 0), (False, 3600, 0), (False, 0, 604800)],
+)
+def test_erasure_refuses_bucket_retention(
+    monkeypatch, versioning, retention, soft_delete
+):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from fred_core.filesystem import gcs_filesystem
+
+    bucket = MagicMock()
+    bucket.versioning_enabled = versioning
+    bucket.retention_period = retention
+    bucket.soft_delete_policy = SimpleNamespace(retention_duration_seconds=soft_delete)
+    client = MagicMock()
+    client.bucket.return_value = bucket
+    monkeypatch.setattr(gcs_filesystem, "build_gcs_client", lambda _: client)
+    with pytest.raises(RuntimeError, match="disabled"):
+        gcs_filesystem.GcsFilesystem("bucket", require_erasure=True)
+    bucket.reload.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_erasure_disables_upload_retry_and_deletes_historical_generations(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from fred_core.filesystem import gcs_filesystem
+
+    bucket = MagicMock()
+    bucket.versioning_enabled = False
+    bucket.retention_period = 0
+    bucket.soft_delete_policy = SimpleNamespace(retention_duration_seconds=0)
+    client = MagicMock()
+    client.bucket.return_value = bucket
+    historical = MagicMock()
+
+    def listing(*args, **kwargs):
+        if kwargs.get("soft_deleted"):
+            return []
+        return [historical]
+
+    client.list_blobs.side_effect = listing
+    monkeypatch.setattr(gcs_filesystem, "build_gcs_client", lambda _: client)
+    fs = gcs_filesystem.GcsFilesystem("bucket", require_erasure=True)
+    await fs.mkdir("conversations/one/exports")
+    bucket.blob.return_value.upload_from_string.assert_called_with(b"", retry=None)
+    await fs.write("conversations/one/exports/deck", b"private")
+    bucket.blob.return_value.upload_from_string.assert_called_with(
+        b"private", retry=None
+    )
+    await fs.delete("conversations/one")
+    historical.delete.assert_called_once()
+    assert any(call.kwargs.get("versions") for call in client.list_blobs.call_args_list)
+    assert bucket.reload.call_count == 2
+    historical.reset_mock()
+
+    def late_retention(*args, **kwargs):
+        # Metadata can report a disabled policy before its cache propagates.
+        # Detect retention resulting from THIS delete, not only before it.
+        if kwargs.get("soft_deleted"):
+            return [historical] if historical.delete.called else []
+        return [historical]
+
+    client.list_blobs.side_effect = late_retention
+    with pytest.raises(RuntimeError, match="soft-deleted"):
+        await fs.delete("conversations/one")
+
+
+def test_erasure_requires_soft_deleted_inventory_to_be_verifiable_at_startup(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from fred_core.filesystem import gcs_filesystem
+    from google.api_core.exceptions import BadRequest
+
+    bucket = MagicMock()
+    bucket.versioning_enabled = False
+    bucket.retention_period = 0
+    bucket.soft_delete_policy = SimpleNamespace(retention_duration_seconds=0)
+    client = MagicMock()
+    client.bucket.return_value = bucket
+    client.list_blobs.side_effect = BadRequest("soft-deleted inventory unavailable")
+    monkeypatch.setattr(gcs_filesystem, "build_gcs_client", lambda _: client)
+    with pytest.raises(BadRequest, match="inventory unavailable"):
+        gcs_filesystem.GcsFilesystem("bucket", require_erasure=True)
+    assert client.list_blobs.call_args.kwargs["soft_deleted"] is True
+    bucket.blob.assert_not_called()

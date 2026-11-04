@@ -364,3 +364,36 @@ async def test_history_hitl_availability_follows_weaver_authorization(
         case.store.save.assert_not_called()
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_generated_export_uses_live_history_authority(case):
+    filesystem = AsyncMock()
+    filesystem.read.return_value = b"binary-pptx"
+    object.__setattr__(agent_app.get_runtime_context().config, "filesystem", filesystem)
+    response = await case.client.get(
+        f"/agents/sessions/{SESSION}/filesystem/exports/Quarter%201.pptx"
+    )
+    assert response.status_code == 200
+    assert response.content == b"binary-pptx"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["Content-Disposition"].startswith("attachment;")
+    filesystem.read.assert_awaited_once_with(
+        f"conversations/{SESSION}/exports/Quarter 1.pptx"
+    )
+    assert len(case.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cp_status", [404, 403, 503])
+async def test_retired_or_unreadable_conversation_export_never_reads_storage(
+    case, cp_status
+):
+    filesystem = AsyncMock()
+    object.__setattr__(agent_app.get_runtime_context().config, "filesystem", filesystem)
+    case.status = cp_status
+    response = await case.client.get(
+        f"/agents/sessions/{SESSION}/filesystem/exports/deck.pptx"
+    )
+    assert response.status_code in (404, 503)
+    filesystem.read.assert_not_awaited()

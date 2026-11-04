@@ -14,6 +14,10 @@ on:
     # Pull requests only: a base-branch push still checks every Alembic tree.
     paths:
       - 'apps/knowledge-flow-backend/**'
+      - 'apps/control-plane/**'
+      - 'deploy/postgres/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'libs/fred-*/**'
       - 'libs/capabilities/**'
       - 'Makefile'
@@ -103,6 +107,9 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Set up Python
         uses: actions/setup-python@v5

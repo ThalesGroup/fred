@@ -665,6 +665,17 @@ class WorkspaceFsPort(ABC):
     ) -> PublishedArtifact:
         """Write an agent output and return its downloadable description."""
 
+    @abstractmethod
+    async def convert_office_to_pdf(
+        self, content: bytes, *, suffix: str
+    ) -> bytes | None:
+        """Convert an output while owning every temporary file until cleanup.
+
+        No conversion may start after conversation closure. Cancellation must
+        preserve ownership until its background work really stops and cleans up.
+        Missing converters may return None; uncertain cleanup must remain pending.
+        """
+
 
 class ConversationScratchpadError(Exception):
     """Base error for conversation-bound scratchpad operations."""

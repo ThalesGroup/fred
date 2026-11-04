@@ -180,14 +180,18 @@ def make_alembic_env(
     # The set of table names owned by this backend: declared by the caller, or
     # derived from the metadata when the metadata contains nothing shared.
     if owned_tables is not None:
-        _owned_tables: frozenset[str] = frozenset(owned_tables) | {version_table}
+        _owned_tables: frozenset[str] = frozenset(owned_tables) - {version_table}
     else:
         metas = (
             target_metadata
             if isinstance(target_metadata, Sequence)
             else [target_metadata]
         )
-        _owned_tables = frozenset(t for m in metas for t in m.tables) | {version_table}
+        _owned_tables = frozenset(t for m in metas for t in m.tables) - {version_table}
+
+    # Alembic owns its version table, not application metadata. With an explicit
+    # version_table_schema and search_path, reflection also sees its unqualified
+    # name; including that alias would propose dropping the migration history.
 
     _include_name, _include_object = build_ownership_filters(_owned_tables)
 

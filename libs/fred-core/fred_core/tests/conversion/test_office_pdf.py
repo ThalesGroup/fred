@@ -291,3 +291,26 @@ async def test_convert_bytes_with_real_libreoffice() -> None:
 
     assert pdf is not None
     assert pdf.startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_conversion_does_not_hide_temp_cleanup_errors(monkeypatch):
+    from contextlib import contextmanager
+
+    from fred_core.conversion import office_pdf
+
+    original = office_pdf.tempfile.TemporaryDirectory
+
+    @contextmanager
+    def failed_cleanup(*args, **kwargs):
+        with original(*args, **kwargs) as directory:
+            yield directory
+        raise OSError("cleanup not confirmed")
+
+    monkeypatch.setattr(office_pdf.tempfile, "TemporaryDirectory", failed_cleanup)
+    monkeypatch.setattr(office_pdf, "convert_office_file_to_pdf", lambda *a, **kw: None)
+    with pytest.raises(OSError, match="cleanup not confirmed"):
+        await convert_office_bytes_to_pdf(
+            b"private", suffix=".pptx", strict_cleanup=True
+        )
+    assert await convert_office_bytes_to_pdf(b"private", suffix=".pptx") is None

@@ -82,6 +82,11 @@ class FakeWorkspace(WorkspaceFsPort):
     def __init__(self) -> None:
         self.writes: List[dict] = []
 
+    async def convert_office_to_pdf(
+        self, content: bytes, *, suffix: str
+    ) -> bytes | None:
+        return None
+
     def bind(self, binding) -> None:  # pragma: no cover - not exercised
         raise NotImplementedError
 

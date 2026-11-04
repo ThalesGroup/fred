@@ -48,7 +48,6 @@ from fred_runtime.common.kf_base_client import KfBaseClient
 from fred_runtime.common.outbound_credentials import (
     DelegatedCredentialProvider,
     OutboundCredentialProvider,
-    PersonCredentialProvider,
     static_person_provider,
 )
 from fred_runtime.common.tool_node_utils import (
@@ -58,7 +57,6 @@ from fred_runtime.common.tool_node_utils import (
 from fred_runtime.integrations.v2_runtime.adapters import (
     DocumentSimilarityAdapter,
     FredKnowledgeSearchToolInvoker,
-    FredWorkspaceFs,
     TeamWikiAdapter,
 )
 from fred_runtime.runtime_context import RuntimeConfig, set_runtime_context
@@ -203,16 +201,6 @@ async def knowledge_call(provider: DelegatedCredentialProvider, receiver: Receiv
     await client._request_with_token_refresh("GET", "/documents", phase_name="test")
 
 
-async def workspace_call(provider: DelegatedCredentialProvider, receiver: Receiver):
-    workspace = FredWorkspaceFs(
-        binding=binding(), settings=FakeAgentSettings(), credentials=provider
-    )
-    workspace._workspace_client.client = httpx.AsyncClient(
-        transport=httpx.MockTransport(receiver)
-    )
-    await workspace.write("outputs/notes.md", b"synthetic")
-
-
 async def binding_call(provider: DelegatedCredentialProvider, receiver: Receiver):
     request = agent_app_module._AgentExecuteRequest.model_construct(
         agent_id=None,
@@ -253,11 +241,6 @@ def answering(path: str) -> Receiver:
             return httpx.Response(404, text="unknown instance")
         if path == "team-wiki":
             return httpx.Response(200, json={"pages": []})
-        if path == "workspace":
-            return httpx.Response(
-                200,
-                json={"key": "outputs/notes.md", "file_name": "notes.md", "size": 9},
-            )
         return httpx.Response(200, json={"ok": True})
 
     return _answer
@@ -265,11 +248,10 @@ def answering(path: str) -> Receiver:
 
 PATHS: dict[str, Path] = {
     "knowledge": knowledge_call,
-    "workspace": workspace_call,
     "binding": binding_call,
     "team-wiki": team_wiki_call,
 }
-RUN_PATHS = ("knowledge", "workspace", "team-wiki")
+RUN_PATHS = ("knowledge", "team-wiki")
 
 
 def recording(receiver: Receiver) -> tuple[Receiver, list[httpx.Request]]:
@@ -349,7 +331,6 @@ async def test_a_second_401_ends_the_run_without_the_persons_bearer(monkeypatch,
     identity = MockIdentityProvider(monkeypatch, "workload-token-1", "workload-token-2")
     receiver, seen = recording(refused(401))
 
-    # The workspace client wraps what it raises; the stop is still in its chain.
     with pytest.raises(Exception) as raised:
         await PATHS[path](admitted_provider(identity.provider), receiver)
 
@@ -377,39 +358,6 @@ async def test_a_failed_acquisition_stops_the_run_before_any_request(monkeypatch
     assert [line for line in logs.lines if "workload credential" in line] == [
         "The workload credential could not be obtained (RuntimeError)."
     ]
-
-
-@pytest.mark.asyncio
-async def test_workspace_child_uses_live_person_bearer_without_grant():
-    token = "person-first"
-
-    async def current_token() -> str:
-        return token
-
-    workspace = FredWorkspaceFs(
-        binding=binding("stale-person-token"),
-        settings=FakeAgentSettings(),
-        credentials=PersonCredentialProvider(current_token),
-    )
-    seen: list[httpx.Request] = []
-
-    def handle(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(
-            200, json={"key": "outputs/notes.md", "file_name": "notes.md", "size": 9}
-        )
-
-    workspace._workspace_client.client = httpx.AsyncClient(
-        transport=httpx.MockTransport(handle)
-    )
-    await workspace.write("outputs/notes.md", b"synthetic")
-    token = "person-updated"
-    await workspace.write("outputs/notes.md", b"synthetic")
-    assert [request.headers["Authorization"] for request in seen] == [
-        "Bearer person-first",
-        "Bearer person-updated",
-    ]
-    assert all(GRANT_PARAM_PERSON not in request.url.params for request in seen)
 
 
 def test_no_outbound_path_builds_an_authorization_header_of_its_own():

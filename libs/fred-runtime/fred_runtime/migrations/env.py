@@ -20,7 +20,9 @@ from typing import cast
 from alembic import context
 from fred_core.history.history_models import SessionHistoryRow  # noqa: F401
 from fred_core.sql import make_alembic_env
-from sqlalchemy import MetaData, Table
+from fred_core.sql.alembic_env import _build_url
+from sqlalchemy import Column, Computed, ForeignKey, Index, MetaData, Table, Uuid
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from fred_runtime.app.config_loader import load_agent_pod_config
 from fred_runtime.app.web_research_activity import (
@@ -44,10 +46,61 @@ cast(Table, SessionHistoryRow.__table__).to_metadata(_runtime_metadata)
 cast(Table, WebResearchActivityRow.__table__).to_metadata(_runtime_metadata)
 _turns.to_metadata(_runtime_metadata)
 
+
+def _postgres_config():
+    return load_agent_pod_config().storage.postgres
+
+
+if _build_url(_postgres_config).startswith("postgresql"):
+    from fred_runtime.runtime_support.session_fence import _fences, _writes
+    from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+
+    # Metadata construction never connects. PostgreSQL checkpoint DDL now belongs
+    # to this Alembic tree; SQLite still initializes its standalone tables.
+    checkpoint = FredSqlCheckpointer(create_async_engine("postgresql+asyncpg://"))
+    for table in checkpoint._metadata.tables.values():
+        table.to_metadata(_runtime_metadata)
+    Table(
+        "session_metadata",
+        _runtime_metadata,
+        Column("session_id", Uuid, primary_key=True),
+        schema="control_plane",
+    )
+    for name in (
+        "session_history",
+        "runtime_turn_steering",
+        *checkpoint._metadata.tables,
+    ):
+        table = _runtime_metadata.tables[name]
+        source = (
+            "split_part(thread_id, ':', 1)" if name.startswith("v2_") else "session_id"
+        )
+        table.append_column(
+            Column(
+                "conversation_id",
+                Uuid,
+                Computed(f"{source}::uuid", persisted=True),
+                ForeignKey(
+                    "control_plane.session_metadata.session_id",
+                    ondelete="CASCADE",
+                    name=f"{name}_conversation_fk",
+                ),
+                nullable=False,
+            )
+        )
+        Index(f"{name}_conversation_idx", table.c.conversation_id)
+    _fences.to_metadata(_runtime_metadata)
+    _writes.to_metadata(_runtime_metadata)
+
 run_migrations_offline, run_migrations_online = make_alembic_env(
     target_metadata=_runtime_metadata,
-    get_postgres_config=lambda: load_agent_pod_config().storage.postgres,
+    get_postgres_config=_postgres_config,
     version_table="alembic_version_runtime",
+    owned_tables=[
+        table.name
+        for table in _runtime_metadata.tables.values()
+        if table.schema is None
+    ],
 )
 
 if context.is_offline_mode():

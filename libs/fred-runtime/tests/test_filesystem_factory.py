@@ -253,3 +253,13 @@ async def test_pod_context_keeps_one_filesystem_instance(tmp_path: Path) -> None
 
     assert context.get_filesystem() is context.get_filesystem()
     assert isinstance(context.get_filesystem(), LocalFilesystem)
+
+
+@pytest.mark.asyncio
+async def test_control_plane_erasure_refuses_instance_local_filesystem(tmp_path):
+    config = _config({"type": "local", "root": str(tmp_path / "private")})
+    with pytest.raises(RuntimeError, match="across replicas"):
+        await build_runtime_filesystem(
+            config.storage.object_store, require_erasure=True
+        )
+    assert not (tmp_path / "private").exists()

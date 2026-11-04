@@ -5930,3 +5930,53 @@ def test_steering_lifespan_sweeps_every_minute_and_joins_task(monkeypatch, tmp_p
         assert cleanup.await_count >= 2
     assert sleeps == [60, 60]
     assert cancelled == [True]
+
+
+def test_complete_session_purge_retries_storage_failure(monkeypatch, tmp_path):
+    """The HTTP acknowledgement follows object deletion and its durable ACK."""
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(
+            ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+        ),
+    )
+    app = create_agent_app(registry={}, config=_build_test_config(tmp_path))
+    with TestClient(app) as client:
+        runtime = get_runtime_context().config
+        # Standalone SQLite deliberately cannot promise CP-rooted ownership.
+        assert client.delete("/pod/v1/agents/sessions/erased").status_code == 503
+        fence = SimpleNamespace(close=AsyncMock(), acknowledge_purge=AsyncMock())
+        object.__setattr__(runtime, "session_fence", fence)
+        filesystem = runtime.filesystem
+        assert filesystem is not None
+        service = ConversationFilesystemService(filesystem, "erased")
+        other = ConversationFilesystemService(filesystem, "erased-neighbour")
+        asyncio.run(
+            service.namespace(
+                "retired-capability", max_bytes=100, max_files=5
+            ).write_text("file", "secret")
+        )
+        asyncio.run(service.exports().write_bytes("deck.pptx", b"binary"))
+        asyncio.run(other.scratchpad().write_text("file", "retain"))
+        real_delete = filesystem.delete
+        monkeypatch.setattr(
+            filesystem, "delete", AsyncMock(side_effect=OSError("offline"))
+        )
+        assert client.delete("/pod/v1/agents/sessions/erased").status_code == 503
+        fence.acknowledge_purge.assert_not_awaited()
+        monkeypatch.setattr(filesystem, "delete", real_delete)
+        for _ in range(2):
+            response = client.delete("/pod/v1/agents/sessions/erased")
+            assert response.status_code == 200, response.text
+            assert response.json() == {"purged": True, "sql_cascade": True}
+        assert asyncio.run(filesystem.list("conversations/erased/")) == []
+        assert asyncio.run(other.scratchpad().read_text("file")) == "retain"
+        assert fence.acknowledge_purge.await_count == 2
+        from fred_runtime.runtime_support.session_fence import SessionWritesPending
+
+        fence.close.side_effect = SessionWritesPending()
+        response = client.delete("/pod/v1/agents/sessions/pending")
+        assert response.status_code == 503
+        assert response.json()["detail"] == "session_writes_pending"
+        assert fence.acknowledge_purge.await_count == 2

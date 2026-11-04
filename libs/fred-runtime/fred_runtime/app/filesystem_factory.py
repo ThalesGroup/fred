@@ -33,9 +33,15 @@ from .config import (
 
 async def build_runtime_filesystem(
     config: RuntimeFilesystemConfig,
+    *,
+    require_erasure: bool = False,
 ) -> BaseFilesystem:
     """Build one filesystem without blocking startup's event loop on cloud SDKs."""
     if isinstance(config, LocalRuntimeFilesystemConfig):
+        if require_erasure:
+            raise RuntimeError(
+                "Conversation erasure requires shared MinIO or GCS storage; local filesystems cannot prove deletion across replicas"
+            )
         return await asyncio.to_thread(LocalFilesystem, root=config.root)
     if isinstance(config, MinioRuntimeFilesystemConfig):
         return await asyncio.to_thread(
@@ -45,12 +51,14 @@ async def build_runtime_filesystem(
             secret_key=config.secret_key,
             bucket_name=config.bucket_name,
             secure=config.secure,
+            require_erasure=require_erasure,
         )
     if isinstance(config, GcsRuntimeFilesystemConfig):
         return await asyncio.to_thread(
             GcsFilesystem,
             bucket_name=config.bucket_name,
             project_id=config.project_id,
+            require_erasure=require_erasure,
         )
     # Defend against callers that bypass the annotated configuration union.
     raise TypeError(  # pyright: ignore[reportUnreachable]
