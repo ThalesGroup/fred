@@ -106,13 +106,15 @@ impl Thoughts {
 
 /// Streams the admitted answer. Dropping the stream cancels Rig's run and any search
 /// in flight, and reports only the model responses already received.
-pub fn execute<S, F>(
+pub fn execute<M, S, F>(
     turn: InferenceTurn,
     input: String,
+    memory: Option<(M, String)>,
     search: Option<S>,
     on_usage: impl FnOnce(Usage) + Send,
 ) -> impl Stream<Item = RuntimeEvent> + Send
 where
+    M: rig_memory::AsyncStore + Send + Sync + 'static,
     S: FnOnce(String) -> F + Send + 'static,
     F: Future<Output = Result<Vec<SearchHit>, InferenceError>> + Send + 'static,
 {
@@ -126,7 +128,7 @@ where
             total: None,
         };
         let cited = Arc::new(OnceLock::new());
-        let mut run = turn.run(input, search.map(|search| SearchTool::new(search, cited.clone())));
+        let mut run = turn.run(input, memory, search.map(|search| SearchTool::new(search, cited.clone())));
         let mut started = Instant::now();
         let mut model_calls = 0;
         let mut thoughts = Thoughts::default();
@@ -273,6 +275,25 @@ mod tests {
 
     type UnusedSearch = fn(String) -> std::future::Ready<Result<Vec<SearchHit>, InferenceError>>;
 
+    fn without_memory<S, F>(
+        turn: InferenceTurn,
+        input: String,
+        search: Option<S>,
+        on_usage: impl FnOnce(Usage) + Send,
+    ) -> impl Stream<Item = RuntimeEvent> + Send
+    where
+        S: FnOnce(String) -> F + Send + 'static,
+        F: Future<Output = Result<Vec<SearchHit>, InferenceError>> + Send + 'static,
+    {
+        execute(
+            turn,
+            input,
+            None::<(rig_memory::MemoryStore, String)>,
+            search,
+            on_usage,
+        )
+    }
+
     fn no_search() -> Option<UnusedSearch> {
         None
     }
@@ -290,11 +311,154 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn memory_replays_history_and_allows_a_new_search_each_turn() {
+        let store = rig_memory::MemoryStore::default();
+        let provider = Provider::script(vec![
+            (
+                Duration::ZERO,
+                200,
+                search_response(json!({"query":"first"})),
+            ),
+            (Duration::ZERO, 200, final_response()),
+            (
+                Duration::ZERO,
+                200,
+                search_response(json!({"query":"second"})),
+            ),
+            (Duration::ZERO, 200, final_response()),
+        ])
+        .await;
+        for input in ["first question", "second question"] {
+            let mut events = Box::pin(execute(
+                provider.turn(),
+                input.into(),
+                Some((store.clone(), "chat".into())),
+                Some(|_| async { Ok(vec![]) }),
+                |_| {},
+            ));
+            let mut finals = 0;
+            let mut searches = 0;
+            while let Some(event) = events.next().await {
+                assert!(!matches!(event, RuntimeEvent::Error { .. }));
+                if matches!(event, RuntimeEvent::ToolCall { .. }) {
+                    searches += 1;
+                }
+                if matches!(event, RuntimeEvent::Final { .. }) {
+                    finals += 1;
+                    let saved = rig_memory::load(&store, "chat").unwrap();
+                    assert_eq!(
+                        saved.messages().len(),
+                        if input == "first question" { 4 } else { 8 }
+                    );
+                }
+            }
+            assert_eq!((finals, searches), (1, 1));
+        }
+        let calls = provider.calls.lock().unwrap();
+        let messages = calls[2].1["messages"].as_array().unwrap();
+        let text = serde_json::to_string(messages).unwrap();
+        assert!(text.contains("first question"));
+        assert!(text.contains("Answer [Manual, p. 2]"));
+        assert!(text.contains("second question"));
+        assert_eq!(calls.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn cancelled_turn_does_not_persist_partial_history() {
+        let store = rig_memory::MemoryStore::default();
+        let provider = Provider::start(Duration::ZERO, 200).await;
+        let mut events = Box::pin(execute(
+            provider.turn(),
+            "cancelled".into(),
+            Some((store.clone(), "chat".into())),
+            no_search(),
+            |_| {},
+        ));
+        while let Some(event) = events.next().await {
+            if matches!(event, RuntimeEvent::AssistantDelta { .. }) {
+                break;
+            }
+            assert!(!matches!(
+                event,
+                RuntimeEvent::Final { .. } | RuntimeEvent::Error { .. }
+            ));
+        }
+        drop(events);
+        assert!(
+            rig_memory::load(&store, "chat")
+                .unwrap()
+                .messages()
+                .is_empty()
+        );
+    }
+
+    struct UnwritableMemory(rig_memory::MemoryStore);
+
+    impl rig_memory::AsyncStore for UnwritableMemory {
+        async fn read_log_async(&self, name: &str) -> std::io::Result<Vec<u8>> {
+            rig_memory::AsyncStore::read_log_async(&self.0, name).await
+        }
+        async fn append_log_async(
+            &self,
+            _: &str,
+            _: u64,
+            _: &[u8],
+        ) -> Result<(), rig_memory::LogWriteError> {
+            Err(std::io::Error::other("private database failure").into())
+        }
+        async fn replace_log_async(
+            &self,
+            _: &str,
+            _: u64,
+            _: &[u8],
+        ) -> Result<(), rig_memory::LogWriteError> {
+            Err(std::io::Error::other("private database failure").into())
+        }
+        async fn read_file_async(&self, name: &str) -> std::io::Result<Vec<u8>> {
+            rig_memory::AsyncStore::read_file_async(&self.0, name).await
+        }
+        async fn write_file_async(&self, name: &str, bytes: &[u8]) -> std::io::Result<()> {
+            rig_memory::AsyncStore::write_file_async(&self.0, name, bytes).await
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_save_replaces_final_with_a_fixed_public_error() {
+        let provider = Provider::start(Duration::ZERO, 200).await;
+        let events: Vec<_> = execute(
+            provider.turn(),
+            "question".into(),
+            Some((
+                UnwritableMemory(rig_memory::MemoryStore::default()),
+                "chat".into(),
+            )),
+            no_search(),
+            |_| {},
+        )
+        .collect()
+        .await;
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, RuntimeEvent::AssistantDelta { .. }))
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, RuntimeEvent::Final { .. }))
+        );
+        assert!(
+            matches!(events.last(), Some(RuntimeEvent::Error { message, .. }) if *message == "Conversation history could not be loaded or saved.")
+        );
+    }
+
+    #[tokio::test]
     async fn stream_uses_real_rig_response_and_finishes_once() {
         let provider = Provider::start(Duration::ZERO, 200).await;
-        let events: Vec<_> = execute(provider.turn(), "question".into(), no_search(), |_| {})
-            .collect()
-            .await;
+        let events: Vec<_> =
+            without_memory(provider.turn(), "question".into(), no_search(), |_| {})
+                .collect()
+                .await;
         assert_eq!(
             kinds(&events),
             ["status", "assistant_delta", "assistant_delta", "final"]
@@ -310,7 +474,7 @@ mod tests {
             assert_eq!(calls[0].1["top_p"], 0.8);
         }
         let failing = Provider::start(Duration::ZERO, 401).await;
-        let events: Vec<_> = execute(failing.turn(), "question".into(), no_search(), |_| {
+        let events: Vec<_> = without_memory(failing.turn(), "question".into(), no_search(), |_| {
             panic!("failed inference has no usage")
         })
         .collect()
@@ -327,7 +491,7 @@ mod tests {
         .await;
         let reports = Arc::new(Mutex::new(Vec::new()));
         let captured = reports.clone();
-        let mut events = Box::pin(execute(
+        let mut events = Box::pin(without_memory(
             provider.turn(),
             "question".into(),
             no_search(),
@@ -352,9 +516,10 @@ mod tests {
             "choices":[{"index":0,"message":{"role":"assistant","content":"partial answer"},"finish_reason":"stop"}]
         }))])
         .await;
-        let events: Vec<_> = execute(provider.turn(), "question".into(), no_search(), |_| {})
-            .collect()
-            .await;
+        let events: Vec<_> =
+            without_memory(provider.turn(), "question".into(), no_search(), |_| {})
+                .collect()
+                .await;
         assert!(matches!(events.last(), Some(RuntimeEvent::Error { .. })));
         assert!(!kinds(&events).contains(&"final".to_owned()));
     }
@@ -368,9 +533,10 @@ mod tests {
                 "reasoning_details": [{"type": "reasoning.encrypted", "data": "private-opaque-payload"}]
             }}]
         }))]).await;
-        let events: Vec<_> = execute(provider.turn(), "question".into(), no_search(), |_| {})
-            .collect()
-            .await;
+        let events: Vec<_> =
+            without_memory(provider.turn(), "question".into(), no_search(), |_| {})
+                .collect()
+                .await;
         assert_eq!(
             kinds(&events),
             [
@@ -417,7 +583,7 @@ mod tests {
             let called = searched.clone();
             let reports = Arc::new(Mutex::new(Vec::new()));
             let captured = reports.clone();
-            let mut events = Box::pin(execute(
+            let mut events = Box::pin(without_memory(
                 provider.turn(),
                 "question".into(),
                 Some(move |_| async move {
@@ -463,7 +629,7 @@ mod tests {
         .await;
         let reports = Arc::new(Mutex::new(Vec::new()));
         let captured = reports.clone();
-        let mut events = Box::pin(execute(
+        let mut events = Box::pin(without_memory(
             provider.turn(),
             "question".into(),
             Some(|_| {
@@ -504,7 +670,7 @@ mod tests {
             let provider = Provider::with_response(Duration::ZERO, 200, content, reason).await;
             let reported = Arc::new(Mutex::new(Vec::new()));
             let captured = reported.clone();
-            let mut events = Box::pin(execute(
+            let mut events = Box::pin(without_memory(
                 provider.turn(),
                 "question".into(),
                 no_search(),
@@ -565,7 +731,7 @@ mod tests {
             (Duration::ZERO, 200, final_response()),
         ])
         .await;
-        let events: Vec<_> = execute(
+        let events: Vec<_> = without_memory(
             provider.turn(),
             "question".into(),
             Some(move |_| async move { Ok(hits) }),
@@ -607,7 +773,7 @@ mod tests {
             .await;
             let reports = Arc::new(Mutex::new(Vec::new()));
             let captured = reports.clone();
-            let events: Vec<_> = execute(
+            let events: Vec<_> = without_memory(
                 provider.turn(),
                 "question".into(),
                 Some(move |query| async move {
@@ -696,7 +862,7 @@ mod tests {
             let counted = searches.clone();
             let reports = Arc::new(Mutex::new(Vec::new()));
             let captured = reports.clone();
-            let events: Vec<_> = execute(
+            let events: Vec<_> = without_memory(
                 provider.turn(),
                 "question".into(),
                 Some(move |_| async move {
@@ -767,7 +933,7 @@ mod tests {
             let notified = entered.clone();
             let reports = Arc::new(Mutex::new(Vec::new()));
             let captured = reports.clone();
-            let mut events = Box::pin(execute(
+            let mut events = Box::pin(without_memory(
                 provider.turn(),
                 "question".into(),
                 Some(move |_| async move {
@@ -820,7 +986,7 @@ mod tests {
     #[tokio::test]
     async fn cancellation_and_deadlines_stop_the_provider_call() {
         let provider = Provider::start(Duration::from_secs(60), 200).await;
-        let mut events = Box::pin(execute(
+        let mut events = Box::pin(without_memory(
             provider.turn(),
             "question".into(),
             no_search(),
@@ -832,7 +998,7 @@ mod tests {
         ));
         drop(events);
         assert!(provider.calls.lock().unwrap().is_empty());
-        let mut events = Box::pin(execute(
+        let mut events = Box::pin(without_memory(
             provider.turn(),
             "question".into(),
             no_search(),
@@ -855,14 +1021,14 @@ mod tests {
         assert_eq!(provider.calls.lock().unwrap().len(), 1);
         let mut late = provider.turn();
         late.deadline = Instant::now();
-        let events: Vec<_> = execute(late, "late".into(), no_search(), |_| {})
+        let events: Vec<_> = without_memory(late, "late".into(), no_search(), |_| {})
             .collect()
             .await;
         assert_eq!(kinds(&events), ["status", "execution_error"]);
         assert_eq!(provider.calls.lock().unwrap().len(), 1);
         let mut in_flight = provider.turn();
         in_flight.deadline = Instant::now() + Duration::from_millis(20);
-        let events: Vec<_> = execute(in_flight, "in flight".into(), no_search(), |_| {})
+        let events: Vec<_> = without_memory(in_flight, "in flight".into(), no_search(), |_| {})
             .collect()
             .await;
         assert_eq!(kinds(&events), ["status", "execution_error"]);

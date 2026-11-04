@@ -46,6 +46,8 @@ static HTTP: LazyLock<Result<reqwest::Client, reqwest::Error>> = LazyLock::new(|
 pub enum InferenceError {
     #[error("Inference provisioning is missing or inconsistent.")]
     Provisioning,
+    #[error("Conversation history could not be loaded or saved.")]
+    Memory,
     #[error("Inference credential is unavailable.")]
     Credential,
     #[error("Inference execution has ended or exceeded its deadline.")]
@@ -179,15 +181,24 @@ impl InferenceTurn {
     }
 
     /// The streamed answer: at most one search, and the second model call must answer.
-    pub(crate) fn run<S, F>(&self, input: String, search: Option<SearchTool<S>>) -> StreamingResult
+    pub(crate) fn run<M, S, F>(
+        &self,
+        input: String,
+        memory: Option<(M, String)>,
+        search: Option<SearchTool<S>>,
+    ) -> StreamingResult
     where
+        M: rig_memory::AsyncStore + Send + Sync + 'static,
         S: FnOnce(String) -> F + Send + 'static,
         F: Future<Output = Result<Vec<SearchHit>, InferenceError>> + Send + 'static,
     {
         let _span = self.span.enter();
+        let mut agent = self.agent(self.generation().parallel_tool_calls(false));
+        if let Some((store, log)) = memory {
+            agent = agent.memory(store).conversation(log);
+        }
         match search {
-            Some(search) => self
-                .agent(self.generation().parallel_tool_calls(false))
+            Some(search) => agent
                 .preamble(search::INSTRUCTIONS)
                 .tool(search)
                 .build()
@@ -195,7 +206,7 @@ impl InferenceTurn {
                 .add_hook(search::AnswerAfterSearch)
                 .max_turns(2)
                 .stream(),
-            None => self.agent(self.generation()).build().prompt(input).stream(),
+            None => agent.build().prompt(input).stream(),
         }
     }
 
@@ -211,6 +222,7 @@ impl InferenceTurn {
             Err(_) => Err(InferenceError::Ended),
             Ok(None) => Ok(None),
             Ok(Some(Ok(item))) => Ok(Some(item)),
+            Ok(Some(Err(PromptError::Memory { .. }))) => Err(InferenceError::Memory),
             Ok(Some(Err(PromptError::MaxTurns { .. }))) => Err(InferenceError::ToolCall),
             Ok(Some(Err(_))) => Err(InferenceError::Provider),
         }
@@ -256,6 +268,7 @@ fn clean_title(text: &str) -> Option<String> {
 
 pub(crate) fn public_error(error: &InferenceError) -> &'static str {
     match error {
+        InferenceError::Memory => "Conversation history could not be loaded or saved.",
         InferenceError::Search => "Document search is unavailable or failed.",
         InferenceError::ToolCall => "The model requested an invalid or additional tool call.",
         _ => "Inference failed or exceeded its deadline.",
