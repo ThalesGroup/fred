@@ -87,6 +87,23 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
     .await
     .unwrap();
     sqlx::query("insert into folder (id,space_id,name,path) select gen_random_uuid(),$1,'folder-'||n,'/' from generate_series(1,1001)n").bind(team.id).execute(&e.pool).await.unwrap();
+    let session = Uuid::new_v4();
+    let template = control_plane::agents::template_id(
+        org.id,
+        fred_rust_agent::DEFINITION.provider,
+        fred_rust_agent::AGENT_ID,
+    );
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$3,$4,$5,'Ralph','{}','alice','ralph')")
+        .bind(session).bind(team.id).bind(template).bind(fred_rust_agent::DEFINITION.provider).bind(fred_rust_agent::AGENT_ID).execute(&e.pool).await.unwrap();
+    sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$1,$3,$4,'Ralph',1)")
+        .bind(session).bind(team.id).bind(template).bind(fred_rust_agent::DEFINITION.provider).execute(&e.pool).await.unwrap();
+    sqlx::query("insert into embedded_agent_conversation(session_id,log) values($1,$2)")
+        .bind(session)
+        .bind(b"opaque saved Ralph conversation".as_slice())
+        .execute(&e.pool)
+        .await
+        .unwrap();
+
     let workspace =
         Workspace(std::env::temp_dir().join(format!("fred-lifecycle-{}", Uuid::new_v4())));
     std::fs::create_dir(&workspace.0).unwrap();
@@ -178,6 +195,21 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         .unwrap();
     assert_eq!(done.folders_deleted, 1001);
     assert_eq!(done.spaces_deleted, 1);
+    // The real sweep must discover the child receipt materialized by the parent,
+    // purge its log first, then let the parent finish across process restart.
+    let child: lifecycle::Receipt =
+        sqlx::query_as("select * from deletion where target_kind='session' and target_id=$1")
+            .bind(session)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(child.status, Status::Completed);
+    assert_eq!(child.due_at, done.due_at);
+    assert!(child.completed_at.unwrap() <= done.completed_at.unwrap());
+    let retained: bool = sqlx::query_scalar("select exists(select 1 from session_metadata where session_id=$1) or exists(select 1 from embedded_agent_conversation where session_id=$1)")
+        .bind(session).fetch_one(&e.pool).await.unwrap();
+    assert!(!retained);
+
     assert!(spaces::load(&e.pool, org.id).await.is_ok());
     let handle = client.get_workflow_handle::<SpaceDeletionSweep>(history_id);
     tokio::time::timeout(
@@ -313,7 +345,21 @@ async fn api_worker_restart_schedule_reconciliation_and_replay() {
         assert!(!log.contains("Bearer "));
         assert!(!log.contains("private dependency detail"));
         if name == "first.log" {
-            assert!(!log.contains("deletion.completed"));
+            let completed: Vec<serde_json::Value> = log
+                .lines()
+                .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+                .filter(|event| event["audit_event"] == "deletion.completed")
+                .collect();
+            assert!(
+                completed
+                    .iter()
+                    .any(|event| event["operation_id"] == child.id.to_string())
+            );
+            assert!(
+                completed
+                    .iter()
+                    .all(|event| event["operation_id"] != operation.to_string())
+            );
         } else {
             assert!(log.contains("\"audit_event\":\"deletion.completed\""));
         }
