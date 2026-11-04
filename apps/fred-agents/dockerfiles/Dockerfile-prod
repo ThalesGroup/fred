@@ -85,13 +85,8 @@ ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-# The PPT-filler preview needs Impress at runtime. The headless package keeps
-# PDF export without the full office suite, GUI/media stack or system Python.
-#
-# The fonts stand in for the ones corporate templates use and the image cannot ship
-# (Arial, Calibri, Cambria, Century Gothic): with a narrower or wider substitute the
-# preview breaks one-line titles ("Merc|i"). Liberation, Carlito and Caladea alias
-# themselves; Century Gothic is mapped to URW Gothic, its closest free metrics.
+# Runtime requirements for the PPT capabilities are documented in the package
+# README. Each agent-pod image that installs them needs equivalent packages.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libreoffice-impress-nogui fontconfig \

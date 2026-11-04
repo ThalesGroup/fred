@@ -85,6 +85,21 @@ Optional annotation channels: a shape name from the Selection pane (`title`,
 `body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
 Spec: `openspec/specs/ppt-builder/spec.md`.
 
+## Runtime image requirements
+
+Installing the Python package registers `ppt_filler` and `ppt_builder`, but it
+does not install operating-system packages. Every agent-pod image that uses
+these capabilities must provide headless LibreOffice Impress for PDF previews
+and template analysis. On Ubuntu 24.04, install `libreoffice-impress-nogui`.
+
+For predictable rendering of templates using common Microsoft fonts, install
+`fontconfig`, `fonts-liberation2`, `fonts-crosextra-carlito`,
+`fonts-crosextra-caladea` and `fonts-urw-base35` in that image. Configure a
+Fontconfig alias from Century Gothic to URW Gothic, then refresh the font cache.
+These packages are installed in the `fred-agents` image as one example; other
+agent-pods must include equivalent fonts and configuration in their own images.
+No font files are bundled in this Python package or in the default template.
+
 ## Spec
 
 The current template contract is in
@@ -94,9 +109,9 @@ Author help: [English](../../../apps/frontend/public/ppt-filler-help.md) and
 
 ## Registration
 
-Installing this package _is_ the registration: the fred-agents pod auto-discovers
-the capability at boot via the `fred.capabilities` entry point declared in
-`pyproject.toml` (`ppt_filler = "fred_capability_ppt_filler.capability:PptFillerCapability"`).
+Installing this package _is_ the registration: each agent-pod auto-discovers
+the capabilities at boot via the `fred.capabilities` entry points declared in
+`pyproject.toml`.
 
 ## Validation memory and admission
 

@@ -9,7 +9,7 @@ configuration_reason: "The bundled model catalogue in deploy/charts/fred/values.
 
 Fred deployments upgrading fred-agents, the control plane and the frontend. The
 `ppt_builder` capability ships in the existing `fred-capability-ppt-filler`
-package, so every fred-agents pod that installs that package registers it.
+package, so every agent-pod that installs that package registers it.
 
 ## Prerequisites
 
@@ -21,8 +21,11 @@ package, so every fred-agents pod that installs that package registers it.
   for any release: it now also creates `cap_ppt_builder_analysis` and
   `cap_ppt_builder_deck_plan` under their own version table
   `cap_ppt_builder_alembic_version`.
-- LibreOffice in the fred-agents image (already required by `ppt_filler`
-  previews) renders template thumbnails and the images sent for labelling.
+- Every agent-pod image that installs this package needs headless LibreOffice
+  Impress for previews and template analysis, plus suitable fonts and
+  Fontconfig aliases for its templates. The package README lists the Ubuntu
+  packages used by `fred-agents`; these system dependencies do not come with
+  the Python package.
 
 ## Configuration
 
