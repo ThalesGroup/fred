@@ -2,13 +2,17 @@
 
 **Dossier de reprise du 3 novembre 2026, pour reprendre le travail le 4 novembre.**
 Ce document est demandé explicitement pour garder le fil après la fusion. Il décrit
-les reports et les pistes de portage, pas des fonctionnalités déjà disponibles.
+les reports, les pistes de portage et la clôture des lots intégrés.
 Les pistes proposées restent à concevoir et à valider dans chaque prochain chantier.
 Aucune issue GitHub supplémentaire n'a été créée.
 
-**Mise à jour du 4 novembre 2026 :** le lot auteur DOCX est intégré dans Weaver
-et clôturé pour le portage de code. Voir la section 5 pour le commit, les contrôles
-effectués et la validation fonctionnelle qui reste à faire.
+**Mise à jour du 4 novembre 2026 :** les lots auteur DOCX et titres automatiques
+sont intégrés dans Weaver et clôturés pour le portage de code. Voir les sections
+4 et 5 pour les commits, contrôles et validations fonctionnelles restantes.
+L'isolation des index OpenSearch de Weaver dans k3d est également conservée et
+intégrée par `8134c78a5b363d41e6e3ddf2934d841193509fa2` : ce raccord local ne
+constitue pas une migration des données Swift. La recréation du cluster est menée
+par le développeur, hors de cette intégration Git.
 
 > **À retenir : les commits Swift différés deviennent des ancêtres de Weaver avec
 > cette fusion. Un prochain `git merge` ne les réappliquera pas automatiquement.**
@@ -29,16 +33,15 @@ effectués et la validation fonctionnelle qui reste à faire.
 | Sujet                                                 | Décision de cette fusion                                | Première action utile                                                          |
 | ----------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | [Skills : politique, catalogue et traces](#skills)    | PR #3342 entièrement différée, décision confirmée       | Définir la portée de la politique et sa transmission dans le contexte admis    |
-| [Titres automatiques et modèle configurable](#titles) | PR #3351 entièrement différée, décision confirmée       | Définir le choix autorisé du modèle et la protection serveur du renommage      |
+| [Titres automatiques et modèle configurable](#titles) | Portage intégré le 4 novembre, lot code clôturé | Valider le parcours k3d/intégration, puis les raccords narratifs arc42 |
 | [Nom d'auteur des exports DOCX](#docx)                | Portage intégré le 4 novembre, lot code clôturé         | Validation humaine de l'export Word/Markdown restante                         |
 | [Mistral Large 4](#mistral)                           | Entrée du catalogue local Swift non reprise             | Vérifier le besoin, puis utiliser le catalogue de modèles Weaver               |
 | [Métadonnées e-mail structurées](#mail)               | Partie de #3317 non reprise ; extraction worker reprise | Définir les champs utiles et leur publication par le propriétaire du catalogue |
 | [E-mail joint à une conversation](#mail-chat)         | Parcours intégré non établi par cette revue             | Tracer le parcours Weaver actuel avant de décider s'il manque du code          |
 | [Erreurs MCP brutes et anciens services](#excluded)   | Exclusions volontaires                                  | Conserver les frontières Weaver ; aucun rétablissement à l'identique           |
 
-Ordre pratique proposé, sans priorité produit imposée : Mistral si c'est un besoin
-immédiat de configuration ; auteur DOCX pour un chantier délimité ; titres ensuite ;
-skills comme chantier coordonné plus large. Les métadonnées e-mail méritent une
+Suite proposée : cadrer les skills comme chantier coordonné, après les lots DOCX
+et titres intégrés. Mistral reste un besoin de configuration à confirmer. Les métadonnées e-mail méritent une
 question préalable : quel usage concret, au-delà du texte déjà extrait, les exige ?
 
 ### Repères Git et limites de ce dossier
@@ -186,9 +189,33 @@ Côté Weaver : [résolution runtime Rust](apps/control-plane/src/agent_instance
 
 **Références :** [issue #3346](https://github.com/ThalesGroup/fred/issues/3346), [PR #3351](https://github.com/ThalesGroup/fred/pull/3351), [commit 5ba132152](https://github.com/ThalesGroup/fred/commit/5ba132152b745ef338a7c493a4ec28588ebae5b2).
 
-**État : PR entièrement différée.** Weaver conserve ses titres actuels et le
-renommage manuel ; le sélecteur du modèle, `auto_title` et l'événement `session_title`
-Swift ne sont pas activés par cette fusion.
+**État actuel : intégré, lot de portage de code clôturé le 4 novembre 2026.**
+Commit `d61648f0e875fd77db4d1582ea1264a9c7536340`, intégré sans conflit depuis
+`codex/port-conversation-titles`. Le report lors du merge initial reste expliqué
+ci-dessous pour les prochains portages.
+
+Le Responsable choisit facultativement un modèle autorisé par organisation.
+Sans choix dédié, le titre utilise le modèle admis pour la réponse ; un choix
+dédié inutilisable conserve le titre initial. La migration SQLx additive 0004
+réutilise la politique et les sessions existantes. Une tentative est réservée
+atomiquement au premier tour admis, sans retry ; les anciennes sessions restent
+inéligibles. Tout renommage manuel, même à texte identique, invalide la tentative.
+Python et Ralph génèrent le titre ; le serveur le persiste conditionnellement et
+le navigateur recharge sa valeur canonique. L'usage est comptabilisé par offre.
+
+L'exécutant rapporte 401 tests ciblés réussis et la qualité SDK/runtime/Control
+Plane/frontend réussie. Le maître d'oeuvre a effectué une lecture ciblée des
+contrats et du cycle de vie, vérifié le diff final et les notes opérateur, sans
+relancer ces suites. Le parcours k3d/intégration reste à valider par le développeur.
+Les annexes générées sont actualisées ; les raccords narratifs arc42 proposés
+restent à intégrer après cette validation, sans prétendre un parcours déjà vérifié.
+
+Le déploiement requiert migration et versions coordonnées : voir la
+[note opérateur](deploy/release-notes/changes/weaver-conversation-titles.md).
+Pour les futurs merges, préserver la distinction GET lecture / POST admission,
+la priorité durable du renommage, l'autorité du tour et l'agrégation d'usage.
+Ne pas restaurer le Control Plane Python, le catalogue local Swift ou une
+persistance de titre pilotée par un booléen React.
 
 ### Ce que Swift apporte
 
@@ -229,7 +256,7 @@ Côté Weaver : [décision de modèle](apps/control-plane/src/model_catalog/inst
 [hook de chat](apps/frontend/src/rework/components/pages/ManagedChatPage/useManagedChat.ts),
 [hook SSE](apps/frontend/src/rework/core/hooks/useChatSse.ts).
 
-### Démarche proposée pour Weaver
+### Cadrage historique ayant guidé le portage
 
 1. Définir qui choisit le modèle de titre et comment ce choix s'articule avec les
    offres autorisées. Réutiliser le catalogue et la décision d'inférence actuels ;
@@ -248,7 +275,7 @@ Côté Weaver : [décision de modèle](apps/control-plane/src/model_catalog/inst
    Tout callback tardif reste lié à l'identité, l'espace et la conversation d'origine.
 6. Porter le sélecteur admin et ses erreurs après l'établissement du contrat serveur.
 
-### Critères de fin à vérifier
+### Validation fonctionnelle restante sur installation
 
 - [ ] Première conversation, tours suivants et reprises : aucune génération répétée injustifiée.
 - [ ] Renommage manuel concurrent prioritaire, y compris dans un autre onglet.
