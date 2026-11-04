@@ -19,7 +19,6 @@ from email.message import EmailMessage
 from pathlib import Path
 
 import pytest
-
 from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType
 
 from knowledge_flow_worker.core.processors.input.common.base_input_processor import InputValidationError
