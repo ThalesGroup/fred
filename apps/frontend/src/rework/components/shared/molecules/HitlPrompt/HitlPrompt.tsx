@@ -22,6 +22,7 @@ import TextArea from "@shared/atoms/TextArea/TextArea";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
+import type { HitlRequestPart } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { hitlRendererForTool } from "@rework/features/capabilities/hitlRendererRegistry";
 import styles from "./HitlPrompt.module.css";
@@ -54,6 +55,8 @@ interface HitlPromptProps {
     rememberApproval?: boolean,
   ) => void;
   readonly?: boolean;
+  resumeStatus?: HitlRequestPart["resume_status"];
+  onRetryAvailability?: () => void;
   maxChatInputChars?: number;
   freeTextValue?: string;
   onFreeTextChange?: (value: string) => void;
@@ -87,6 +90,8 @@ export function HitlPrompt({
   onSkipAll,
   onAnswer,
   readonly = false,
+  resumeStatus,
+  onRetryAvailability,
   maxChatInputChars,
   freeTextValue,
   onFreeTextChange,
@@ -256,7 +261,7 @@ export function HitlPrompt({
       ref={cardRef}
       className={`${styles.card} ${!readonly ? styles.active : ""} ${isAgentQuestion && !readonly ? styles.skippable : ""}`}
       role="group"
-      aria-label={t("chatbot.hitlWaitingAria")}
+      aria-label={t(resumeStatus ? `rework.hitlPrompt.${resumeStatus}` : "chatbot.hitlWaitingAria")}
     >
       {hasQuestionTabs && (
         <div ref={questionTabsRef} className={styles.questionTabs}>
@@ -302,6 +307,17 @@ export function HitlPrompt({
         const Renderer = hitlRendererForTool(call.tool_name);
         return Renderer ? <Renderer key={call.tool_call_id || call.tool_name} call={call} /> : null;
       })}
+
+      {resumeStatus && resumeStatus !== "pending" && (
+        <div className={styles.question} role="status">
+          <p>{t(`rework.hitlPrompt.${resumeStatus}`)}</p>
+          {resumeStatus === "unknown" && onRetryAvailability && (
+            <Button color="primary" variant="text" size="small" onClick={onRetryAvailability}>
+              {t("rework.hitlPrompt.retryAvailability")}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Read-only prompts hide choices; answered agent questions show their
           result under the matching tool line instead. */}

@@ -1252,3 +1252,33 @@ security:
 
     assert main(["--login"]) == 1
     assert "Login is not configured." in capsys.readouterr().out
+
+
+def test_platform_skills_command_uses_global_api_without_a_team(capsys) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/control-plane/v1/platform/skills"
+        return httpx.Response(
+            200, json={"skills": [], "unavailable_runtime_ids": ["pod"]}
+        )
+
+    http_client, ctx = _make_cli_context(respond)
+    try:
+        assert run_command("/platform-skills", ctx=ctx) is True
+        assert '"pod"' in capsys.readouterr().out
+    finally:
+        http_client.close()
+
+
+def test_platform_skills_command_updates_one_skill(capsys) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PUT"
+        assert request.url.path == "/control-plane/v1/platform/skills/mermaid"
+        assert json.loads(request.content) == {"enabled": False}
+        return httpx.Response(200, json={"name": "mermaid", "enabled": False})
+
+    http_client, ctx = _make_cli_context(respond)
+    try:
+        assert run_command("/platform-skills mermaid off", ctx=ctx) is True
+        assert '"enabled":false' in capsys.readouterr().out
+    finally:
+        http_client.close()

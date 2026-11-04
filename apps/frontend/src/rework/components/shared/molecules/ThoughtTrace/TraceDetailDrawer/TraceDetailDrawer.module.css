@@ -72,6 +72,12 @@
   color: var(--on-warning-container);
 }
 
+.statusBadge[data-status="unavailable"],
+.statusBadge[data-status="unknown"] {
+  background: var(--surface-container-highest);
+  color: var(--on-surface);
+}
+
 .latencyBadge {
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-s);

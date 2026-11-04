@@ -14,7 +14,7 @@ import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 // limitations under the License.
 
 import { runtimeExecuteStreamPath } from "../utils/runtimeExecutionUrl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -45,16 +45,23 @@ import type {
   TurnPersistedEvent,
 } from "../../../slices/runtime/runtimeOpenApi";
 import { toolResultCallId, upsertOne } from "./chatSseUtils";
+import {
+  detachTurn,
+  updatePendingMessages,
+  readTurnMessages,
+  registerTurn,
+  settleTurn,
+  takeDetachedTurn,
+  turnCallbacks,
+  writeTurnMessages,
+  type LiveTurn,
+  type TurnHost,
+} from "./backgroundTurns";
 import { mergePreparation, parseSseFrames } from "../utils/runtimeStream";
 import { countUnicodeCodePoints } from "../utils/chatInput";
 import { personalTeamId } from "../../components/shared/utils/teamId";
 import { normalizeApiError } from "../errors/normalizeApiError";
 
-// The UI may still carry the bare "personal" placeholder (teamId.ts) in the URL
-// before bootstrap resolves the real per-user id. The control-plane resolves
-// that alias server-side (teams/system.py), but fred-runtime's OpenFGA check
-// does not — it authorizes the raw team_id in runtime_context. Canonicalize
-// before it reaches the runtime, mirroring usePipelineRun.ts.
 function canonicalizeRuntimeTeamId(teamId: string): string {
   return teamId === "personal" ? personalTeamId(KeyCloakService.GetUserId() ?? "") : teamId;
 }
@@ -225,10 +232,11 @@ async function runtimeHttpError(response: Response): Promise<RuntimeHttpError> {
   } catch {
     return new RuntimeHttpError(response.status);
   }
-  const detail = recordValue(recordValue(body)?.detail);
+  const rawDetail = recordValue(body)?.detail;
+  const detail = recordValue(rawDetail);
   return new RuntimeHttpError(
     response.status,
-    typeof detail?.code === "string" ? detail.code : undefined,
+    typeof rawDetail === "string" ? rawDetail : typeof detail?.code === "string" ? detail.code : undefined,
     typeof detail?.limit_chars === "number" ? detail.limit_chars : undefined,
     typeof detail?.actual_chars === "number" ? detail.actual_chars : undefined,
     typeof detail?.message === "string" ? detail.message : undefined,
@@ -262,9 +270,13 @@ export type RuntimeAwaitingHumanEvent = {
 export type ChatSseCallbacks = {
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
   onTurnPersisted?: (sessionId: string) => void;
+  /** A turn that kept streaming after its view left has ended; `messages` is its full thread. */
+  onBackgroundTurnSettled?: (sessionId: string, messages: ChatMessage[]) => void;
   /** The conversation title the runtime generated on the first turn, streamed once ready. */
   onSessionTitle?: (title: string, sessionId: string) => void;
   onSteeredMessage?: (messageId: string, sessionId: string) => void;
+  onStreamInterrupted?: (sessionId: string) => void;
+  onHitlUnavailable?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string) => void;
   /**
@@ -317,12 +329,8 @@ export function useChatSse(
   const {
     agentInstanceId,
     teamId,
-    onBindDraftAgentToSessionId,
-    onTurnPersisted,
-    onSessionTitle,
-    onSteeredMessage,
-    onAwaitingHuman,
     onError,
+    onHitlUnavailable,
     onTurnStarted,
     onTurnRejected,
     isTurnCurrent,
@@ -363,20 +371,49 @@ export function useChatSse(
   const turnSessionRef = useRef<string | null>(null);
   const activeSteeringTurnIdRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
-  const thoughtBufsRef = useRef<
-    Map<
-      string,
-      {
-        rank: number;
-        text: string;
-        phase: string;
-        title: string | null | undefined;
-        source: string | null | undefined;
-      }
-    >
-  >(new Map());
+  // The streamed turn this view renders, if any (see backgroundTurns.ts).
+  const liveTurnRef = useRef<LiveTurn | null>(null);
+  const callbacksRef = useRef<ChatSseCallbacks>(params);
+  callbacksRef.current = params;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [waitResponse, setWaitResponse] = useState(false);
+
+  const host = useMemo<TurnHost>(
+    () => ({
+      read: () => messagesRef.current,
+      write: (next) => {
+        messagesRef.current = next;
+        setMessages([...next]);
+      },
+      callbacks: () => callbacksRef.current,
+      finish: (turn) => {
+        if (activeSteeringTurnIdRef.current === turn.steeringTurnId) activeSteeringTurnIdRef.current = null;
+        if (liveTurnRef.current === turn) liveTurnRef.current = null;
+        // Stop and a replacing send take the slot before aborting. Still owning
+        // it after an abort means abortTurn() on deletion: release the composer here.
+        const owned = abortRef.current === turn.controller;
+        if (owned) abortRef.current = null;
+        if (!turn.controller.signal.aborted || owned) setWaitResponse(false);
+      },
+    }),
+    [],
+  );
+
+  // Leaving the thread: a started turn on a real session keeps streaming in the
+  // background; anything else (a preflight, a draft) is cancelled as before.
+  const releaseCurrentTurn = useCallback(() => {
+    const turn = liveTurnRef.current;
+    liveTurnRef.current = null;
+    turnSessionRef.current = null;
+    if (turn && turn.host === host && abortRef.current === turn.controller && turn.sessionId !== "draft") {
+      detachTurn(turn);
+    } else {
+      abortRef.current?.abort();
+    }
+    abortRef.current = null;
+    activeSteeringTurnIdRef.current = null;
+    preflightOwnerRef.current = null;
+  }, [host]);
   // Chat-turn controls (CAPAB-01 #1976, RFC §3.3/§3.7) — supersedes the retired
   // `effectiveChatOptions`. Populated by prepare-execution; the composer
   // resolves each descriptor's `widget` id against the chat-turn-control
@@ -384,15 +421,7 @@ export function useChatSse(
   const [chatControls, setChatControls] = useState<ChatControlDescriptor[]>([]);
   const [maxChatInputChars, setMaxChatInputChars] = useState<number | undefined>();
 
-  useEffect(
-    () => () => {
-      abortRef.current?.abort();
-      abortRef.current = null;
-      activeSteeringTurnIdRef.current = null;
-      preflightOwnerRef.current = null;
-    },
-    [],
-  );
+  useEffect(() => releaseCurrentTurn, [releaseCurrentTurn]);
 
   const setAll = useCallback((next: ChatMessage[]) => {
     messagesRef.current = next;
@@ -418,20 +447,53 @@ export function useChatSse(
 
   const reset = useCallback(() => {
     console.debug("[useChatSse] reset() called — clearing all state");
-    abortRef.current?.abort();
-    abortRef.current = null;
-    activeSteeringTurnIdRef.current = null;
-    // An explicit reset always cancels whatever attempt currently owns the
-    // lock (if any) and immediately frees the slot for the next send() —
+    // An explicit reset always frees the preflight slot for the next send() —
     // unconditional, unlike releasePreflightLock's ownership-checked release,
     // because this IS the current owner's cancellation, issued from outside.
-    preflightOwnerRef.current = null;
+    releaseCurrentTurn();
     setWaitResponse(false);
-    thoughtBufsRef.current.clear();
     setAll([]);
     setChatControls([]);
     setMaxChatInputChars(undefined);
-  }, [setAll]);
+  }, [setAll, releaseCurrentTurn]);
+
+  const startTurn = useCallback(
+    (sessionId: string, controller: AbortController, steeringTurnId: string): LiveTurn => {
+      const turn: LiveTurn = {
+        sessionId,
+        teamId,
+        agentInstanceId,
+        controller,
+        steeringTurnId,
+        thoughts: new Map(),
+        host,
+        messages: [],
+        detachedCallbacks: {},
+      };
+      liveTurnRef.current = turn;
+      registerTurn(turn);
+      return turn;
+    },
+    [host, teamId, agentInstanceId],
+  );
+
+  // Re-attaches the session's turn that kept streaming while this view was
+  // elsewhere. Returns whether one was adopted.
+  const adoptBackgroundTurn = useCallback(
+    (sessionId: string): boolean => {
+      const turn = takeDetachedTurn(sessionId);
+      if (!turn) return false;
+      turn.host = host;
+      liveTurnRef.current = turn;
+      abortRef.current = turn.controller;
+      activeSteeringTurnIdRef.current = turn.steeringTurnId;
+      turnSessionRef.current = sessionId;
+      setAll(turn.messages);
+      setWaitResponse(true);
+      return true;
+    },
+    [host, setAll],
+  );
   const replaceAllMessages = useCallback((msgs: ChatMessage[]) => setAll(msgs), [setAll]);
   // A turn the runtime refused before running: its optimistic bubble goes away.
   const dropOptimisticTurn = useCallback((exchangeId: string) => {
@@ -450,29 +512,39 @@ export function useChatSse(
     // forever, blocking every subsequent Send. Unconditional for the same
     // reason as in reset() above.
     preflightOwnerRef.current = null;
-    if (turnSessionRef.current) stoppedSessionsRef.current.add(turnSessionRef.current);
+    if (turnSessionRef.current) {
+      stoppedSessionsRef.current.add(turnSessionRef.current);
+      updatePendingMessages(turnSessionRef.current, []);
+    }
     setWaitResponse(false);
   }, []);
 
-  // Parse one SSE block and dispatch to ChatMessage state + callbacks.
-  // Captures stable refs so this function itself stays stable across renders.
+  // Parse one SSE block and dispatch it to the turn's thread + callbacks. Reads
+  // nothing from this hook: the turn may be detached or adopted by another view.
   const processEvent = useCallback(
     (
       event: AnyRuntimeEvent,
       ctx: {
         exchangeId: string;
-        sessionId: string;
+        turn: LiveTurn;
         rankRef: { current: number };
         deltaRankRef: { current: number | null };
       },
     ) => {
-      const { exchangeId, sessionId, rankRef, deltaRankRef } = ctx;
+      const { exchangeId, turn, rankRef, deltaRankRef } = ctx;
+      const { sessionId, thoughts } = turn;
+      const {
+        onAwaitingHuman,
+        onBindDraftAgentToSessionId,
+        onTurnPersisted,
+        onSessionTitle,
+        onSteeredMessage,
+        onTurnRejected,
+        onError,
+      } = turnCallbacks(turn);
       const ts = new Date().toISOString();
 
-      const emit = (msg: ChatMessage) => {
-        messagesRef.current = upsertOne(messagesRef.current, msg);
-        setMessages([...messagesRef.current]);
-      };
+      const emit = (msg: ChatMessage) => writeTurnMessages(turn, upsertOne(readTurnMessages(turn), msg));
 
       // Emit one streaming "thought" trace message. The start/delta/end handlers
       // share the same envelope and differ only in rank, accumulated text, and extras.
@@ -490,6 +562,7 @@ export function useChatSse(
 
       switch (event.kind) {
         case "steered_user_message": {
+          updatePendingMessages(sessionId, (current) => current.filter((message) => message.id !== event.message_id));
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
@@ -521,6 +594,7 @@ export function useChatSse(
         }
 
         case "final": {
+          turn.completed = true;
           // `final` is the only reliable end-of-turn signal on this stream (see
           // agent_app.py's `execute_stream` docstring) — the contract's
           // `turn_persisted` event is defined but never actually emitted, so the
@@ -614,6 +688,7 @@ export function useChatSse(
         }
 
         case "awaiting_human": {
+          turn.awaitingInput = true;
           if (
             event.token_usage ||
             event.sources?.length ||
@@ -642,7 +717,7 @@ export function useChatSse(
           const occurrenceId = event.request.occurrence_id ?? event.request.interrupt_id;
           const alreadyRecorded =
             occurrenceId &&
-            messagesRef.current.some(
+            readTurnMessages(turn).some(
               (message) =>
                 message.session_id === sessionId &&
                 message.exchange_id === exchangeId &&
@@ -701,9 +776,15 @@ export function useChatSse(
         }
 
         case "execution_interrupted": {
+          turn.awaitingInput = true;
           // Nothing ran: drop the optimistic message, give the draft back, and
           // offer the choice on the human-input card.
-          dropOptimisticTurn(exchangeId);
+          writeTurnMessages(
+            turn,
+            readTurnMessages(turn).filter(
+              (message) => !(message.exchange_id === exchangeId && message.metadata?.extras?.optimistic_user === true),
+            ),
+          );
           onTurnRejected?.("", sessionId);
           const step = String(event.request.metadata?.node_title ?? event.request.metadata?.node_id ?? "");
           onAwaitingHuman?.({
@@ -746,7 +827,7 @@ export function useChatSse(
           console.debug(
             `[useChatSse] thought_start id=${event.thought_id} phase=${event.phase} title="${event.title ?? ""}"`,
           );
-          thoughtBufsRef.current.set(event.thought_id, {
+          thoughts.set(event.thought_id, {
             rank,
             text: "",
             phase: event.phase,
@@ -764,7 +845,7 @@ export function useChatSse(
         }
 
         case "thought_delta": {
-          const buf = thoughtBufsRef.current.get(event.thought_id);
+          const buf = thoughts.get(event.thought_id);
           if (!buf) break;
           buf.text += event.delta;
           emitThought(buf.rank, buf.text, {
@@ -778,12 +859,12 @@ export function useChatSse(
         }
 
         case "thought_end": {
-          const buf = thoughtBufsRef.current.get(event.thought_id);
+          const buf = thoughts.get(event.thought_id);
           console.debug(
-            `[useChatSse] thought_end id=${event.thought_id} buf_found=${!!buf} open_ids=[${[...thoughtBufsRef.current.keys()].join(",")}]`,
+            `[useChatSse] thought_end id=${event.thought_id} buf_found=${!!buf} open_ids=[${[...thoughts.keys()].join(",")}]`,
           );
           if (!buf) break;
-          thoughtBufsRef.current.delete(event.thought_id);
+          thoughts.delete(event.thought_id);
           emitThought(buf.rank, buf.text, {
             thought_id: event.thought_id,
             phase: buf.phase,
@@ -796,9 +877,14 @@ export function useChatSse(
         }
 
         case "execution_error": {
+          turn.completed = false;
+          turn.awaitingInput = false;
+          updatePendingMessages(sessionId, (current) =>
+            current.map((message) => (message.status === "offered" ? { ...message, status: "uncertain" } : message)),
+          );
           console.error(`[useChatSse] execution_error received — ${event.message ?? "unknown error"}`);
           // Close any thoughts that are still open so they don't blink forever.
-          for (const [thoughtId, buf] of thoughtBufsRef.current.entries()) {
+          for (const [thoughtId, buf] of thoughts.entries()) {
             emit({
               session_id: sessionId,
               exchange_id: exchangeId,
@@ -818,7 +904,7 @@ export function useChatSse(
               },
             });
           }
-          thoughtBufsRef.current.clear();
+          thoughts.clear();
           // Persist the crash in the chain of thought as an error entry (not
           // just the transient toast): a trailing error row whose raw message is
           // browsable in the trace drawer. The toast still fires for the
@@ -838,7 +924,7 @@ export function useChatSse(
 
         case "status":
           if (event.skill_load) {
-            const alreadyLoaded = messagesRef.current.some(
+            const alreadyLoaded = readTurnMessages(turn).some(
               (message) =>
                 message.exchange_id === exchangeId &&
                 (message.metadata?.extras as Record<string, unknown> | undefined)?.skill_load &&
@@ -861,17 +947,7 @@ export function useChatSse(
           break;
       }
     },
-    [
-      onAwaitingHuman,
-      onBindDraftAgentToSessionId,
-      onTurnPersisted,
-      onSessionTitle,
-      onSteeredMessage,
-      onTurnRejected,
-      onError,
-      dropOptimisticTurn,
-      i18n,
-    ],
+    [i18n],
   );
 
   const streamToMessages = useCallback(
@@ -880,8 +956,7 @@ export function useChatSse(
       executeStreamUrl: string,
       token: string,
       exchangeId: string,
-      sessionId: string,
-      signal: AbortSignal,
+      turn: LiveTurn,
       // Fired once the runtime has ACCEPTED the request (2xx, stream opening).
       // `sendHitlResume` needs to distinguish "the runtime never took this
       // resume" (fetch rejected, or a 401/502/503 response) from "it ran and
@@ -889,6 +964,7 @@ export function useChatSse(
       onAccepted?: () => void,
     ): Promise<void> => {
       const url = runtimeExecuteStreamPath(executeStreamUrl);
+      const { signal } = turn.controller;
       console.debug(`[useChatSse] streamToMessages — resolved URL="${url}" signal.aborted=${signal.aborted}`);
       const response = await fetch(url, {
         method: "POST",
@@ -910,14 +986,29 @@ export function useChatSse(
 
       onAccepted?.();
 
-      const rankRef = { current: messagesRef.current.length + 1 };
+      const rankRef = { current: readTurnMessages(turn).length + 1 };
       const deltaRankRef: { current: number | null } = { current: null };
 
       const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
         console.warn("[useChatSse] Failed to parse SSE frame:", raw),
       );
-      for await (const event of frames) {
-        processEvent(event, { exchangeId, sessionId, rankRef, deltaRankRef });
+      let terminal = false;
+      let ended = false;
+      try {
+        for await (const event of frames) {
+          if (["final", "awaiting_human", "execution_interrupted", "execution_error"].includes(event.kind)) {
+            terminal = true;
+          }
+          processEvent(event, { exchangeId, turn, rankRef, deltaRankRef });
+        }
+        ended = true;
+      } finally {
+        if (!ended || !terminal) {
+          turn.interrupted = true;
+          if (!abortRef.current || abortRef.current.signal === signal) {
+            turnCallbacks(turn).onStreamInterrupted?.(turn.sessionId);
+          }
+        }
       }
     },
     [processEvent],
@@ -1137,6 +1228,7 @@ export function useChatSse(
       }
       turnSessionRef.current = effectiveSessionId;
       activeSteeringTurnIdRef.current = steeringTurnId;
+      const turn = startTurn(effectiveSessionId, ac, steeringTurnId);
       // A continue sends no message: the composer keeps the user's draft.
       if (!continuing) onTurnStarted?.();
 
@@ -1192,8 +1284,7 @@ export function useChatSse(
           prep.execute_stream_url,
           token,
           exchangeId,
-          effectiveSessionId,
-          ac.signal,
+          turn,
           () => {
             accepted = true;
             stoppedSessionsRef.current.delete(effectiveSessionId);
@@ -1201,6 +1292,7 @@ export function useChatSse(
         );
         console.debug(`[useChatSse][${sendId}] streamToMessages completed normally`);
       } catch (err) {
+        turn.interrupted = true;
         const name = (err as Error)?.name;
         const msg = (err as Error)?.message ?? String(err);
         if (ac.signal.aborted || abortRef.current !== ac || isTurnCurrent?.(effectiveSessionId) === false) {
@@ -1227,13 +1319,10 @@ export function useChatSse(
           onError?.(`Streaming failed: ${msg}`);
         }
       } finally {
-        if (activeSteeringTurnIdRef.current === steeringTurnId) activeSteeringTurnIdRef.current = null;
         console.debug(
-          `[useChatSse][${sendId}] finally — ac.signal.aborted=${ac.signal.aborted} → will ${ac.signal.aborted ? "NOT" : ""} clear waitResponse`,
+          `[useChatSse][${sendId}] finally — ac.signal.aborted=${ac.signal.aborted} detached=${turn.host === null}`,
         );
-        if (!ac.signal.aborted) {
-          setWaitResponse(false);
-        }
+        settleTurn(turn);
       }
       return accepted;
     },
@@ -1250,24 +1339,13 @@ export function useChatSse(
       isExecutionAllowed,
       flushPendingWrites,
       applyPreparation,
+      startTurn,
       i18n,
     ],
   );
 
-  /**
-   * Resume a paused HITL turn.
-   *
-   * Resolves `false` whenever the resume never reached the runtime — a token
-   * refusal, a prepare-execution failure, OR an abort/supersession before the
-   * stream was started. `handleHitlAnswer` clears `pendingHitl` before calling
-   * this, and the checkpoint stays paused until somebody answers it, so every
-   * not-reached outcome must offer the prompt back; an aborted attempt that
-   * reported "reached" stranded the interaction exactly like a silent refusal.
-   * Guarding the restore against a newer owner (a different session, a newer
-   * prompt) is the CALLER's job — it has the state to decide; this function
-   * only reports the fact.
-   * Resolves `true` once the resume stream has been started.
-   */
+  // False keeps the card retryable; true removes an accepted or obsolete card.
+  // Only onAccepted reports acceptance. The caller guards restoration against newer UI state.
   const sendHitlResume = useCallback(
     async (
       pending: RuntimeAwaitingHumanEvent,
@@ -1354,50 +1432,6 @@ export function useChatSse(
       const token = KeyCloakService.GetToken() ?? "";
       applyPreparation(prep);
 
-      // Optimistic cancel: flip every tool call this HITL prompt gated from
-      // "running" straight to a cancelled state, without waiting for the resume
-      // round-trip (which may even crash before resolving them). Each error
-      // tool_result flagged `cancelled_by_user` pairs with the dangling
-      // tool_call by call_id; a real result later supersedes it (upsertOne
-      // matches optimistic cancellations by call_id, since their Date.now()
-      // rank can never collide with a backend rank).
-      //
-      // Deliberately AFTER prepare-execution, alongside the token preflight
-      // above: everything before this point can still fail without the backend
-      // ever hearing about the resume, and `handleHitlAnswer` puts the prompt
-      // back when it does. Showing the calls as cancelled first left the retry
-      // facing tool calls already marked cancelled by an attempt that never ran.
-      if (answer === "cancel") {
-        const cancelTs = new Date().toISOString();
-        const rankBase = Date.now();
-        (pending.payload.pending_calls ?? []).forEach((call, i) => {
-          if (!call.tool_call_id) return;
-          // A result already on screen for this call — real (it arrived while
-          // the prompt sat unanswered) or optimistic (a prior cancel attempt
-          // whose stream failed after this point) — must win: inserting
-          // another Date.now()-ranked row would either shadow the real result
-          // or duplicate the cancelled one.
-          const alreadyResolved = messagesRef.current.some(
-            (x) =>
-              x.session_id === pending.session_id &&
-              x.exchange_id === pending.exchange_id &&
-              toolResultCallId(x) === call.tool_call_id,
-          );
-          if (alreadyResolved) return;
-          messagesRef.current = upsertOne(messagesRef.current, {
-            session_id: pending.session_id,
-            exchange_id: pending.exchange_id,
-            rank: rankBase + i,
-            timestamp: cancelTs,
-            role: "tool",
-            channel: "tool_result",
-            parts: [{ type: "tool_result", call_id: call.tool_call_id, ok: false, content: "", latency_ms: null }],
-            metadata: { extras: { cancelled_by_user: true } },
-          });
-        });
-        setMessages([...messagesRef.current]);
-      }
-
       const sessionId = pending.session_id;
       // Reuse the interrupted turn's exchange_id straight from the event that
       // reported it — `pending` is the exact `RuntimeAwaitingHumanEvent` this
@@ -1422,12 +1456,14 @@ export function useChatSse(
 
       setWaitResponse(true);
       activeSteeringTurnIdRef.current = steeringTurnId;
+      const turn = startTurn(sessionId, ac, steeringTurnId);
 
       // Only flipped once the runtime answers 2xx. A fetch rejection or a
       // 401/502/503 means the resume never ran, so the caller must be told
       // "not reached" and put the prompt back — the paused checkpoint is
       // otherwise unanswerable.
       let acceptedByRuntime = false;
+      let obsoletePrompt = false;
 
       try {
         await streamToMessages(
@@ -1487,14 +1523,42 @@ export function useChatSse(
           prep.execute_stream_url,
           token,
           exchangeId,
-          sessionId,
-          ac.signal,
+          turn,
           () => {
             acceptedByRuntime = true;
+            // A refused answer must not leave tool calls falsely marked cancelled.
+            if (answer === "cancel") {
+              let next = readTurnMessages(turn);
+              const cancelTs = new Date().toISOString();
+              const rankBase = Date.now();
+              (pending.payload.pending_calls ?? []).forEach((call, i) => {
+                if (!call.tool_call_id) return;
+                const alreadyResolved = next.some(
+                  (x) =>
+                    x.session_id === pending.session_id &&
+                    x.exchange_id === pending.exchange_id &&
+                    toolResultCallId(x) === call.tool_call_id,
+                );
+                if (alreadyResolved) return;
+                next = upsertOne(next, {
+                  session_id: pending.session_id,
+                  exchange_id: pending.exchange_id,
+                  rank: rankBase + i,
+                  timestamp: cancelTs,
+                  role: "tool",
+                  channel: "tool_result",
+                  parts: [
+                    { type: "tool_result", call_id: call.tool_call_id, ok: false, content: "", latency_ms: null },
+                  ],
+                  metadata: { extras: { cancelled_by_user: true } },
+                });
+              });
+              writeTurnMessages(turn, next);
+            }
             if (agentQuestion || hitlPayload?.stage === "tool_approval") {
               // The SSE resume does not emit HITL history rows. Mirror the accepted
               // answer now; a later history load replaces these with persisted rows.
-              let next = messagesRef.current;
+              let next = readTurnMessages(turn);
               let rank = next.reduce((max, message) => Math.max(max, message.rank), 0) + 1;
               const timestamp = new Date().toISOString();
               for (const item of answersToMirror) {
@@ -1563,8 +1627,7 @@ export function useChatSse(
                   });
                 }
               }
-              messagesRef.current = next;
-              setMessages([...next]);
+              writeTurnMessages(turn, next);
             }
             onAccepted?.();
           },
@@ -1572,17 +1635,29 @@ export function useChatSse(
       } catch (err) {
         const status = (err as { status?: number })?.status;
         const aborted = (err as Error)?.name === "AbortError";
-        // 409 = the runtime says this checkpoint is not waiting for a resume
-        // (already answered, or a stale interrupt_id after a reload). Restoring
-        // the prompt there produces an unanswerable card that re-409s on every
-        // attempt. An abort is the user's own choice and may land AFTER the
-        // resume was delivered, so it must not resurrect a consumed checkpoint
-        // either. Both count as reached.
-        if (status === 409 || aborted) {
-          acceptedByRuntime = true;
-        }
-        if (!aborted) {
-          if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
+        const conflictCode = err instanceof RuntimeHttpError ? err.code : undefined;
+        // Only these existing runtime reasons prove that this card cannot be answered.
+        // Other conflicts leave the answer editable; no conflict counts as approval.
+        obsoletePrompt =
+          status === 409 &&
+          [
+            "No pending checkpoint was found for this session.",
+            "checkpoint is not waiting for resume.",
+            "interrupt_id does not match the pending HITL request for this session.",
+            "occurrence_id does not match the pending HITL request for this session.",
+          ].includes(conflictCode ?? "");
+        // A detached resume has no view to report to; its thread still records the failure.
+        if (!aborted && turn.host === host) {
+          if (status === 409) {
+            const batchChanged =
+              conflictCode === "batch answers must match every pending HITL occurrence" ||
+              conflictCode === "batch answers do not match pending agent questions";
+            onError?.(
+              i18n.t(
+                `chatbot.errors.${obsoletePrompt ? "hitlUnavailable" : batchChanged ? "hitlQuestionsChanged" : "hitlConflict"}`,
+              ),
+            );
+          } else if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
             if (err.limitChars !== undefined) setMaxChatInputChars(err.limitChars);
             onError?.(
               err.limitChars === undefined
@@ -1596,15 +1671,11 @@ export function useChatSse(
           }
         }
       } finally {
-        if (activeSteeringTurnIdRef.current === steeringTurnId) activeSteeringTurnIdRef.current = null;
-        if (!ac.signal.aborted) {
-          setWaitResponse(false);
-        }
+        settleTurn(turn);
       }
-      // Reached only if the runtime accepted the resume. A mid-stream failure
-      // after that point has surfaced its own error and must NOT resurrect the
-      // prompt — the checkpoint was consumed. A failure before it never ran.
-      return acceptedByRuntime;
+      if (obsoletePrompt && turn.host === host) onHitlUnavailable?.(pending.session_id);
+      // Neither an accepted answer nor a proven obsolete card should be offered again.
+      return acceptedByRuntime || obsoletePrompt;
     },
     [
       agentInstanceId,
@@ -1614,7 +1685,10 @@ export function useChatSse(
       isTurnCurrent,
       isExecutionAllowed,
       onError,
+      onHitlUnavailable,
       applyPreparation,
+      startTurn,
+      host,
       i18n,
     ],
   );
@@ -1683,6 +1757,7 @@ export function useChatSse(
     sendHitlResume,
     abort,
     reset,
+    adoptBackgroundTurn,
     replaceAllMessages,
   };
 }

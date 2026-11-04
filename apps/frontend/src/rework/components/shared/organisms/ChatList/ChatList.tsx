@@ -27,6 +27,8 @@ import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import styles from "./ChatList.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
+import { abortTurn } from "@core/hooks/backgroundTurns";
+import { conversationHref } from "@core/hooks/useBackgroundTurnNotifications";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
@@ -98,6 +100,7 @@ export default function ChatList({ teamId }: ChatListProps) {
         confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
         cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
         onConfirm: async () => {
+          abortTurn(sessionId);
           try {
             await deleteSession({ teamId: teamId!, sessionId }).unwrap();
             clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });
@@ -113,7 +116,7 @@ export default function ChatList({ teamId }: ChatListProps) {
     };
 
   const renderItem = (session: Session & { agent_instance_id: string }, showAgentName: boolean) => {
-    const href = `/team/${teamId}/managed-chat/${session.agent_instance_id}?session=${session.session_id}`;
+    const href = conversationHref(teamId, session.agent_instance_id, session.session_id);
     const label = session.title || session.session_id.slice(0, 8) + "…";
     return (
       <ChatListItem

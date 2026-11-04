@@ -62,7 +62,7 @@ from uuid import uuid4
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from fred_core.common.config_loader import get_config
 from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
@@ -72,7 +72,12 @@ from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
 from fred_core.diagnostics import install_gc_diagnostics
-from fred_core.history.history_schema import ChatMessage, CommandDescriptor
+from fred_core.history.history_schema import (
+    ChatMessage,
+    CommandDescriptor,
+    HitlRequestPart,
+    HitlResponsePart,
+)
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -249,6 +254,7 @@ from fred_runtime.runtime_support.hitl_batch import (
 )
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_runtime.runtime_support.turn_steering import turn_steering_mailbox
+from fred_runtime.skills.catalog import PlatformSkills
 
 from ..common.structures import AgentSettingsLike
 from ..integrations.v2_runtime.adapters import (
@@ -792,6 +798,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         pod_chat_fallback_profile_id: str | None = None,
         confirmed_removed_chat_profiles: dict[str, str] | None = None,
         platform_prompt: str | None = None,
+        disabled_platform_skills: tuple[str, ...] = (),
         credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self._registry = registry
@@ -819,6 +826,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
         # including when an admin deliberately saved `""` to suppress the
         # block, which is precisely the state that must not be undone.
         self._platform_prompt = platform_prompt
+        self._disabled_platform_skills = disabled_platform_skills
 
     async def invoke(self, request: AgentInvocationRequest) -> AgentInvocationResult:
         definition = self._registry.get(request.agent_id)
@@ -918,6 +926,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             pod_chat_fallback_profile_id=self._pod_chat_fallback_profile_id,
             confirmed_removed_chat_profiles=self._confirmed_removed_chat_profiles,
             platform_prompt=self._platform_prompt,
+            disabled_platform_skills=self._disabled_platform_skills,
         ):
             kind = payload.get("kind")
             if kind == "final":
@@ -998,15 +1007,22 @@ def _build_runtime_services(
     """
 
     runtime_config = get_runtime_context().config
+    skills = runtime_config.skills
+    if isinstance(skills, PlatformSkills):
+        skills = skills.for_execution(
+            tuple(
+                selection.name for selection in binding.runtime_context.selected_skills
+            ),
+            binding.disabled_platform_skills,
+            resuming=binding.is_resuming,
+        )
     if conversation_filesystem is None:
         conversation_filesystem = _build_conversation_filesystem(binding)
     conversation_port = None
     if conversation_filesystem is not None:
         backend, permissions = build_conversation_filesystem(
             conversation_filesystem,
-            skills=runtime_config.skills
-            if isinstance(definition, DeepAgentDefinition)
-            else None,
+            skills=skills if isinstance(definition, DeepAgentDefinition) else None,
         )
         conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(definition, team_id=team_id)
@@ -1131,6 +1147,7 @@ def _build_runtime_services(
             pod_chat_fallback_profile_id=binding.pod_chat_fallback_profile_id,
             confirmed_removed_chat_profiles=binding.confirmed_removed_chat_profiles,
             platform_prompt=binding.platform_prompt,
+            disabled_platform_skills=binding.disabled_platform_skills,
         )
         if registry is not None
         else None
@@ -1182,7 +1199,7 @@ def _build_runtime_services(
             credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
-        skills=runtime_config.skills,
+        skills=skills,
     )
 
 
@@ -1774,6 +1791,7 @@ class _ResolvedAgentInstance(BaseModel):
     # Models the team disabled, resolved on this same call. Defaults empty so
     # an older control plane that does not send it stays compatible.
     team_disabled_model_ids: list[str] = Field(default_factory=list)
+    disabled_platform_skills: list[str] = Field(default_factory=list)
     # Platform-operator `chat` model binding, resolved fresh by control-plane
     # on this same call — see
     # `_ResolvedExecutionTarget.platform_chat_model_binding` for why this is
@@ -1822,6 +1840,7 @@ class _ResolvedExecutionTarget:
     # Models the team disabled, resolved on the same per-turn call and for the
     # same reason: the pod must not trust a client-forwarded copy.
     team_disabled_model_ids: tuple[str, ...] = field(default_factory=tuple)
+    disabled_platform_skills: tuple[str, ...] = field(default_factory=tuple)
     # Platform-operator `chat` model binding (V1 platform-binding hardening).
     # Resolved by control-plane on the SAME per-turn call as
     # `reasoning_enabled_model_ids` above, for the same reason — never read
@@ -2040,11 +2059,21 @@ async def _resolve_agent_instance(
         # template's MCP servers as capabilities and delivers their
         # `agent_instructions` prompt fragments (#1978 — otherwise the
         # non-negotiable grounding contract would be lost on this path).
+        from fred_runtime.skills.policy import resolve_direct_skill_policy
+
+        disabled_platform_skills = await resolve_direct_skill_policy(
+            control_plane_url=control_plane_url,
+            http_client=http_client,
+            access_token=access_token,
+            credentials=credentials,
+            request_id=request_id,
+        )
         return _ResolvedExecutionTarget(
             definition=definition,
             effective_agent_id=definition.agent_id,
             team_id=team_id,
             tuning=_definition_to_agent_tuning(definition),
+            disabled_platform_skills=disabled_platform_skills,
         )
 
     if control_plane_url is None:
@@ -2073,7 +2102,7 @@ async def _resolve_agent_instance(
     )
     provider = credentials or static_person_provider(access_token)
     call_credentials = await provider.credentials()
-    headers: dict[str, str] = {}
+    headers: dict[str, str] = {"X-Fred-Skill-Policy": "1"}
     if call_credentials.authorization:
         headers["Authorization"] = call_credentials.authorization
     if request_id:
@@ -2161,6 +2190,7 @@ async def _resolve_agent_instance(
         team_settings=resolution.team_capability_settings,
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
         team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
+        disabled_platform_skills=tuple(resolution.disabled_platform_skills),
         platform_chat_model_binding=resolution.platform_chat_model_binding,
         pod_chat_default_profile_id=resolution.pod_chat_default_profile_id,
         platform_chat_model_fallback=resolution.platform_chat_model_fallback,
@@ -2748,12 +2778,17 @@ async def _authorize_and_resolve(
                 raise HTTPException(
                     status_code=422, detail="Platform skills unavailable for this agent"
                 )
-            if not isinstance(target.definition, DeepAgentDefinition):
-                try:
+            try:
+                if isinstance(skills, PlatformSkills):
+                    skills.for_execution(
+                        tuple(selection.name for selection in selections),
+                        target.disabled_platform_skills,
+                    )
+                else:
                     for selection in selections:
                         skills.read(selection.name)
-                except ValueError as exc:
-                    raise HTTPException(status_code=422, detail=str(exc)) from None
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from None
     except BaseException as exc:
         # Nothing past admission got as far as starting the run, so the record
         # it wrote has no owner left to release it.
@@ -2863,30 +2898,114 @@ def _pending_interrupt_occurrences(
     for _task_id, channel, value in pending_writes:
         if channel != _REACT_V2_INTERRUPT_CHANNEL:
             continue
-        candidate: object = value
-        if isinstance(candidate, (list, tuple)):
-            if not candidate:
-                continue
-            candidate = candidate[0]
-        interrupt_id = getattr(candidate, "id", None)
-        if interrupt_id is None and isinstance(candidate, dict):
-            interrupt_id = candidate.get("id")
-        if isinstance(interrupt_id, str) and interrupt_id:
-            payload = getattr(candidate, "value", None)
-            if payload is None and isinstance(candidate, dict):
-                payload = candidate.get("value")
-            occurrence_id = getattr(payload, "occurrence_id", None)
-            if occurrence_id is None and isinstance(payload, dict):
-                occurrence_id = payload.get("occurrence_id")
-            occurrences.add(
-                (
-                    interrupt_id,
-                    occurrence_id
-                    if isinstance(occurrence_id, str) and occurrence_id
-                    else None,
+        for candidate in value if isinstance(value, (list, tuple)) else (value,):
+            interrupt_id = getattr(candidate, "id", None)
+            if interrupt_id is None and isinstance(candidate, dict):
+                interrupt_id = candidate.get("id")
+            if isinstance(interrupt_id, str) and interrupt_id:
+                payload = getattr(candidate, "value", None)
+                if payload is None and isinstance(candidate, dict):
+                    payload = candidate.get("value")
+                occurrence_id = getattr(payload, "occurrence_id", None)
+                if occurrence_id is None and isinstance(payload, dict):
+                    occurrence_id = payload.get("occurrence_id")
+                occurrences.add(
+                    (
+                        interrupt_id,
+                        occurrence_id
+                        if isinstance(occurrence_id, str) and occurrence_id
+                        else None,
+                    )
                 )
-            )
     return frozenset(occurrences)
+
+
+async def _annotate_hitl_availability(messages: list[ChatMessage]) -> list[ChatMessage]:
+    """Reconcile trailing unanswered cards without changing persisted history."""
+    if not messages:
+        return messages
+    trailing = [m for m in messages if m.exchange_id == messages[-1].exchange_id]
+    answered = {
+        p.occurrence_id
+        for m in trailing
+        for p in m.parts
+        if isinstance(p, HitlResponsePart) and p.occurrence_id
+    }
+    legacy_answers = sum(
+        isinstance(p, HitlResponsePart) and not p.occurrence_id
+        for m in trailing
+        for p in m.parts
+    )
+    requests: dict[int, HitlRequestPart] = {}
+    targets: dict[str | None, list[tuple[int, HitlRequestPart]]] = {}
+    for m in trailing:
+        for p in m.parts:
+            if not isinstance(p, HitlRequestPart) or p.occurrence_id in answered:
+                continue
+            if not p.occurrence_id and legacy_answers:
+                legacy_answers -= 1
+                continue
+            part = p.model_copy(update={"resume_status": "unknown"})
+            requests[m.rank] = part
+            if p.interrupt_id and p.occurrence_id:
+                targets.setdefault(m.metadata.agent_id, []).append((m.rank, part))
+    checkpointer = get_runtime_context().config.checkpointer
+
+    async def resolve(
+        agent_id: str | None, parts: list[tuple[int, HitlRequestPart]]
+    ) -> None:
+        if not isinstance(checkpointer, FredSqlCheckpointer):
+            return
+        identities = frozenset(
+            (p.interrupt_id, p.occurrence_id)
+            for _, p in parts
+            if p.interrupt_id and p.occurrence_id
+        )
+        session_id = messages[-1].session_id
+        locations = (
+            _resume_checkpoint_locations(session_id, agent_id=agent_id)
+            if agent_id
+            else ((session_id, ""),)
+        )
+        try:
+            loaded = None
+            # Candidate order must match resume admission: graph first, root fallback.
+            for thread_id, namespace in locations:
+                loaded = await checkpointer.aget_hitl_resume_state(
+                    thread_id=thread_id, checkpoint_ns=namespace, occurrences=identities
+                )
+                if loaded is not None:
+                    break
+            if loaded is None and not agent_id:
+                return
+            writes, blocked = loaded if loaded is not None else ([], frozenset())
+            pending = _pending_interrupt_occurrences(writes)
+            if writes and not pending:
+                return
+            for _, part in parts:
+                identity = (part.interrupt_id, part.occurrence_id)
+                part.resume_status = (
+                    "pending"
+                    if identity in pending and identity not in blocked
+                    else "unavailable"
+                )
+        except Exception:
+            logger.warning("HITL history availability lookup failed", exc_info=True)
+
+    await asyncio.gather(*(resolve(agent, parts) for agent, parts in targets.items()))
+    return [
+        m.model_copy(
+            update={
+                "parts": [
+                    requests[m.rank] if isinstance(p, HitlRequestPart) else p
+                    for p in m.parts
+                ]
+            }
+        )
+        if m.rank in requests
+        else m
+        for m in messages
+    ]
 
 
 async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> bool:
@@ -2903,7 +3022,9 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
         if not session_id or checkpointer is None:
             return False
         for thread_id, checkpoint_ns in _resume_checkpoint_locations(
-            request, session_id
+            session_id,
+            agent_id=request.agent_id,
+            agent_instance_id=request.agent_instance_id,
         ):
             loaded = await load_checkpoint(
                 checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
@@ -2963,7 +3084,11 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
     checkpointer = get_runtime_context().config.checkpointer
     if not session_id or checkpointer is None:
         return False
-    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+        session_id,
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ):
         loaded = await load_checkpoint(
             checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
         )
@@ -3009,7 +3134,7 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
 
 
 def _resume_checkpoint_locations(
-    request: RuntimeExecuteRequest, session_id: str
+    session_id: str, *, agent_id: str | None, agent_instance_id: str | None = None
 ) -> tuple[tuple[str, str], ...]:
     """
     `(thread_id, checkpoint_ns)` pairs a resume may target, best first.
@@ -3022,8 +3147,8 @@ def _resume_checkpoint_locations(
     """
 
     agent_ns = checkpoint_namespace(
-        agent_instance_id=request.agent_instance_id,
-        agent_id=request.agent_id or request.agent_instance_id or "",
+        agent_instance_id=agent_instance_id,
+        agent_id=agent_id or agent_instance_id or "",
     )
     return ((graph_thread_id(session_id, agent_ns), ""), (session_id, ""))
 
@@ -3088,7 +3213,11 @@ async def _validate_session_checkpoint_access(
         return ()
 
     loaded = None
-    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+        session_id,
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ):
         loaded = await load_checkpoint(
             checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
         )
@@ -3978,6 +4107,7 @@ async def _stream(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
+    disabled_platform_skills: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     pod_chat_default_profile_id: str | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
@@ -4064,6 +4194,7 @@ async def _stream(
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
+        disabled_platform_skills=disabled_platform_skills,
         platform_chat_model_binding=platform_chat_model_binding,
         pod_chat_default_profile_id=pod_chat_default_profile_id,
         platform_chat_model_fallback=platform_chat_model_fallback,
@@ -4074,6 +4205,7 @@ async def _stream(
         credential_provider=credential_provider,
         owns_run_record=True,
     )
+    completed = False
     try:
         async for payload in payloads:
             if (
@@ -4084,26 +4216,33 @@ async def _stream(
                 await turn_steering_mailbox.pause(session_id, steering_token)
             collected.append(payload)
             yield _sse(json.dumps(payload, ensure_ascii=False))
+        completed = True
     finally:
-        # Closing this stream closes the run's stream with it, so a dropped
-        # response never leaves the run to garbage collection.
-        try:
-            await payloads.aclose()
-        finally:
-            if steering_heartbeat is not None:
-                steering_heartbeat.cancel()
-                with suppress(asyncio.CancelledError):
-                    await steering_heartbeat
-            if steering_token is not None and session_id is not None:
-                paused = any(
-                    payload.get("kind") == "awaiting_human" for payload in collected
-                )
-                failed = any(
-                    payload.get("kind") == "execution_error" for payload in collected
-                )
-                await turn_steering_mailbox.end(
-                    session_id, steering_token, paused=paused and not failed
-                )
+
+        async def finish_stream() -> None:
+            try:
+                await payloads.aclose()
+            finally:
+                try:
+                    if steering_heartbeat is not None:
+                        steering_heartbeat.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await steering_heartbeat
+                finally:
+                    if steering_token is not None and session_id is not None:
+                        paused = any(
+                            item.get("kind") == "awaiting_human" for item in collected
+                        )
+                        failed = any(
+                            item.get("kind") == "execution_error" for item in collected
+                        )
+                        await turn_steering_mailbox.end(
+                            session_id,
+                            steering_token,
+                            paused=completed and paused and not failed,
+                        )
+
+        await complete_cleanup(finish_stream())
 
     _emit_turn_completed(
         container,
@@ -4710,6 +4849,7 @@ async def _iterate_runtime_event_payloads(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
+    disabled_platform_skills: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     pod_chat_default_profile_id: str | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
@@ -4738,6 +4878,7 @@ async def _iterate_runtime_event_payloads(
         team_settings=team_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
+        disabled_platform_skills=disabled_platform_skills,
         platform_chat_model_binding=platform_chat_model_binding,
         pod_chat_default_profile_id=pod_chat_default_profile_id,
         platform_chat_model_fallback=platform_chat_model_fallback,
@@ -4859,6 +5000,7 @@ async def _iterate_runtime_event_payloads_inner(
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
+    disabled_platform_skills: tuple[str, ...] = (),
     platform_chat_model_binding: ModelBinding | None = None,
     pod_chat_default_profile_id: str | None = None,
     platform_chat_model_fallback: ModelBinding | None = None,
@@ -5054,6 +5196,8 @@ async def _iterate_runtime_event_payloads_inner(
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles or {},
         # TRUSTED, same channel: no ctx.get(...) exists for either field.
         team_disabled_model_ids=tuple(team_disabled_model_ids),
+        disabled_platform_skills=disabled_platform_skills,
+        is_resuming=request.resume_payload is not None,
         recommended_chat_profile_id=(
             tuning.recommended_chat_profile_id if tuning is not None else None
         ),
@@ -5642,6 +5786,36 @@ def _build_agent_router(
         ]
 
     @router.get(
+        "/platform-skills",
+        response_model=SkillCatalog,
+        operation_id="get_runtime_platform_skills",
+    )
+    async def get_platform_skills(
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> SkillCatalog:
+        """Operator inventory of packaged metadata, including disabled entries."""
+        config = get_runtime_context().config
+        rebac = config.rebac_engine
+        if security_enabled:
+            if caller is None or rebac is None or not rebac.enabled:
+                raise HTTPException(
+                    status_code=403, detail="platform_skills_access_denied"
+                )
+            await rebac.check_user_permission_or_raise(
+                caller, OrganizationPermission.CAN_MANAGE_CAPABILITIES, ORGANIZATION_ID
+            )
+        skills = config.skills
+        if skills is None:
+            return SkillCatalog(policy_supported=True)
+        catalog = skills.catalog
+        return catalog.model_copy(
+            update={
+                "skills": tuple(s for s in catalog.skills if s.builtin),
+                "policy_supported": True,
+            }
+        )
+
+    @router.get(
         "/skills",
         response_model=SkillCatalog,
         operation_id="get_runtime_instance_skills",
@@ -5650,19 +5824,24 @@ def _build_agent_router(
         http_request: Request,
         agent_instance_id: str,
         team_id: str,
+        metadata_version: int = Query(default=0, ge=0, le=1),
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> SkillCatalog:
+    ) -> Response:
         """List metadata after the same team-use and target checks as execution."""
         from fred_runtime.skills.api import get_instance_skills
+        from fred_runtime.skills.policy import legacy_skill_metadata_response
 
-        return await get_instance_skills(
+        catalog = await get_instance_skills(
             agent_instance_id,
             team_id,
             caller,
             http_request.headers.get("Authorization"),
             container,
             registry,
+        )
+        return legacy_skill_metadata_response(
+            catalog, metadata_version=metadata_version
         )
 
     @router.get(
@@ -5675,12 +5854,14 @@ def _build_agent_router(
         skill_name: str,
         agent_instance_id: str,
         team_id: str,
+        metadata_version: int = Query(default=0, ge=0, le=1),
         container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> SkillDetail:
+    ) -> Response:
         from fred_runtime.skills.api import get_instance_skill_detail
+        from fred_runtime.skills.policy import legacy_skill_metadata_response
 
-        return await get_instance_skill_detail(
+        detail = await get_instance_skill_detail(
             skill_name,
             agent_instance_id,
             team_id,
@@ -5689,6 +5870,7 @@ def _build_agent_router(
             container,
             registry,
         )
+        return legacy_skill_metadata_response(detail, metadata_version=metadata_version)
 
     @router.get("/mcp-catalog")
     async def get_mcp_catalog() -> _McpCatalogResponse:
@@ -6367,7 +6549,8 @@ def _build_agent_router(
                 detail="No history store configured — session history is unavailable.",
             )
         caller_uid = caller.uid if caller is not None else None
-        return await history_store.get(session_id=session_id, user_id=caller_uid)
+        messages = await history_store.get(session_id=session_id, user_id=caller_uid)
+        return await _annotate_hitl_availability(messages)
 
     @router.delete(
         "/sessions/{session_id}",
@@ -6904,6 +7087,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
+                disabled_platform_skills=target.disabled_platform_skills,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 pod_chat_default_profile_id=target.pod_chat_default_profile_id,
                 platform_chat_model_fallback=target.platform_chat_model_fallback,
@@ -7016,6 +7200,7 @@ def _build_agent_router(
                 team_settings=target.team_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
+                disabled_platform_skills=target.disabled_platform_skills,
                 platform_chat_model_binding=target.platform_chat_model_binding,
                 pod_chat_default_profile_id=target.pod_chat_default_profile_id,
                 platform_chat_model_fallback=target.platform_chat_model_fallback,
@@ -7192,6 +7377,7 @@ def _build_agent_router(
             team_settings=target.team_settings,
             reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
             team_disabled_model_ids=target.team_disabled_model_ids,
+            disabled_platform_skills=target.disabled_platform_skills,
             platform_chat_model_binding=target.platform_chat_model_binding,
             pod_chat_default_profile_id=target.pod_chat_default_profile_id,
             platform_chat_model_fallback=target.platform_chat_model_fallback,
@@ -7395,7 +7581,7 @@ def create_agent_app(
 
                 async def cleanup_expired_steering() -> None:
                     while True:
-                        await asyncio.sleep(24 * 60 * 60)
+                        await asyncio.sleep(60)
                         try:
                             await turn_steering_mailbox.cleanup_expired()
                         except Exception:

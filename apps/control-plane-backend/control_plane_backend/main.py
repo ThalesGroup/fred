@@ -77,6 +77,7 @@ from control_plane_backend.marketplace_settings.api import (
 )
 from control_plane_backend.model_discovery.api import router as model_discovery_router
 from control_plane_backend.platform_prompt.api import router as platform_prompt_router
+from control_plane_backend.platform_skills.api import router as platform_skills_router
 from control_plane_backend.platform_ui_settings.api import (
     router as platform_ui_settings_router,
 )
@@ -460,6 +461,7 @@ def create_app() -> FastAPI:
     router.include_router(routing_policy_router)
     router.include_router(team_wiki_router)
     router.include_router(platform_prompt_router)
+    router.include_router(platform_skills_router)
     router.include_router(platform_ui_settings_router)
     router.include_router(marketplace_settings_router)
     router.include_router(agent_marketplace_router)

@@ -74,8 +74,8 @@
   },
   "app": {
     "loading": {
-      "router": "Fred is starting...",
-      "ui": "Fred is getting the UI ready...",
+      "router": "{{siteDisplayName}} is starting...",
+      "ui": "{{siteDisplayName}} is getting the UI ready...",
       "generic": "Loading, please wait..."
     }
   },
@@ -650,7 +650,6 @@
       "edit": "Edit",
       "remove": "Remove",
       "offered": "Sending...",
-      "uncertain": "Check delivery",
       "retry": "Send again",
       "retryWarning": "Check the conversation first. This may send a duplicate message.",
       "textOnly": "Only plain text can wait during an active turn",
@@ -782,6 +781,9 @@
       "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
       "attachmentUploadFailedDetail": "Could not upload this file. Please try again.",
       "chatInputTooLong": "Your message exceeds the {{limit}}-character limit.",
+      "hitlUnavailable": "This question is no longer awaiting an answer. Your response was not applied. Reopen the conversation to see its current state.",
+      "hitlQuestionsChanged": "The pending questions have changed. Your answers were not applied. Reopen the conversation to load the current questions.",
+      "hitlConflict": "Your answer could not be applied because the conversation is busy or has changed. Please try again, or reopen the conversation if the problem persists.",
       "toolApprovalSaveFailedSummary": "Approval not saved",
       "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved."
     },
@@ -868,12 +870,12 @@
     },
     "skills": {
       "badge": "Skill: {{name}}",
-      "platformProvided": "Skill provided by the platform",
       "requestPlaceholder": "Your request (optional)",
       "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
       "errorTitle": "Skill could not be used",
       "unavailable": "This skill’s content is unavailable.",
       "loaded": "Skill loaded",
+      "partiallyLoaded": "Skill partially loaded",
       "originUser": "Requested by you",
       "originAgent": "Selected by the agent",
       "originChild": "Selected by a sub-agent",
@@ -884,12 +886,51 @@
       "loading": "Loading skill…",
       "retry": "Try again",
       "description": "Description:",
-      "arguments": "Arguments:"
+      "arguments": "Arguments:",
+      "catalog": {
+        "summarize-document": {
+          "title": "Summarize a document",
+          "description": "Summarize documents faithfully, preserving critical conditions, figures and uncertainties."
+        },
+        "grounded-research": {
+          "title": "Source-based research",
+          "description": "Research a question using traceable evidence and explain conflicting or incomplete sources."
+        },
+        "meeting-minutes": {
+          "title": "Meeting minutes",
+          "description": "Prepare meeting minutes with confirmed decisions, actions and missing information."
+        },
+        "compare-options": {
+          "title": "Compare options",
+          "description": "Compare alternatives using explicit criteria, evidence and visible trade-offs."
+        },
+        "verify-answer": {
+          "title": "Verify an answer",
+          "description": "Check an answer against available evidence, correct unsupported claims and explain verification limits."
+        },
+        "graph": {
+          "title": "Visualization",
+          "description": "Create diagrams, data charts or tables suited to the question using available rendering tools."
+        },
+        "grill-me": {
+          "title": "Challenge my thinking",
+          "description": "Clarify an idea or decision through a guided interview with concrete recommendations and explicit trade-offs."
+        },
+        "analyze-data": {
+          "title": "Analyze data",
+          "description": "Analyze accessible data, check calculations and explain assumptions and limitations."
+        },
+        "data-visualization": {
+          "title": "Visualize data",
+          "description": "Choose a useful representation of data and create it using available tools."
+        }
+      }
     }
   },
   "mermaid": {
     "title": "Diagram",
-    "diagram": "Mermaid diagram",
+    "diagram": "Diagram",
+    "generating": "Generating diagram...",
     "copySource": "Copy diagram source",
     "download": "Download diagram as SVG",
     "downloadError": "The diagram could not be downloaded. Please try again.",
@@ -1055,7 +1096,7 @@
     "storageQuotaExceededMessage": "Adding these files will exceed the maximum storage capacity allowed for this team.",
     "storageQuotaExceededTitle": "Storage Quota Exceeded",
     "summary": "Summary",
-    "supportedFormats": "Supported files: PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "supportedFormats": "Supported files: Documents PDF, DOCX, DOC, ODT, PPTX, PPT, TXT, MD · Spreadsheets CSV, XLSX, XLS, XLSM · Emails MSG, EML · Images PNG, JPG, JPEG, WEBP",
     "tooDeepRejected": "Nothing was added: the dropped folder would nest files deeper than {{max}} folder levels.",
     "tooDeepSkipped_one": "{{count}} file was skipped: it would end up nested deeper than {{max}} folder levels.",
     "tooDeepSkipped_other": "{{count}} files were skipped: they would end up nested deeper than {{max}} folder levels.",
@@ -1369,7 +1410,8 @@
           "model": "Models",
           "app": "Apps",
           "knowledge_base": "Knowledge Bases",
-          "aria": "Filter by feature kind"
+          "aria": "Filter by feature kind",
+          "skill": "Skills"
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
         "emptyModels": "No models are advertised by any runtime pod yet.",
@@ -1710,6 +1752,35 @@
           "confirm": "Turn off",
           "cancel": "Cancel"
         }
+      },
+      "skills": {
+        "title": "Platform skills",
+        "scope": "Skills provided by Fred, shared by all users and agents.",
+        "skill": "Skill",
+        "description": "Description",
+        "invocation": "Invocation",
+        "sources": "Sources",
+        "enabled": "Enabled",
+        "on": "Enabled",
+        "off": "Disabled",
+        "userInvocable": "User",
+        "modelInvocable": "Agent",
+        "noInvocation": "No direct invocation",
+        "refresh": "Refresh",
+        "loading": "Loading platform skills...",
+        "loadError": "Could not load platform skills.",
+        "empty": "No packaged skills are currently advertised.",
+        "unavailableSources": "Unavailable sources: {{runtimes}}. Global enforcement cannot be verified for these sources.",
+        "unsupportedSources": "Sources requiring an update: {{runtimes}}. Global skill controls are not supported by these sources.",
+        "toggle": "Enable {{name}} for everyone",
+        "disableBlocked": "Restore all sources and update older runtimes before disabling a skill.",
+        "effect": "Changes apply to new loads from the next turn, including existing conversations. Instructions already loaded remain in the conversation.",
+        "saveUnsupported": "This skill could not be disabled because a source does not support global skill controls. Refresh and update the affected source.",
+        "saveUnavailable": "This skill could not be disabled because a source is unavailable. Restore the source and refresh.",
+        "saveError": "The global skill setting could not be saved. Refresh and try again.",
+        "refreshAfterSaveError": "The setting was saved, but the catalog could not be refreshed. Refresh to confirm its current state.",
+        "absentDisabled": "These globally disabled skills are no longer advertised by a responding source. You can restore their availability for future loads.",
+        "restore": "Re-enable {{name}}"
       }
     },
     "agentCard": {
@@ -2245,7 +2316,9 @@
       "toolStatus": {
         "failure": "Failed",
         "running": "Running",
-        "success": "Success"
+        "success": "Success",
+        "unavailable": "Unavailable",
+        "unknown": "Unknown"
       },
       "toolLabels": {
         "platform": {
@@ -2397,6 +2470,9 @@
       "validate": "Accept the TOS"
     },
     "hitlPrompt": {
+      "unavailable": "This question can no longer accept an answer.",
+      "unknown": "The availability of this question could not be checked.",
+      "retryAvailability": "Check again",
       "answerSummary": "Question and answer",
       "selected": "Selected",
       "skipped": "Skipped",
@@ -2702,7 +2778,7 @@
       }
     },
     "releaseNotes": {
-      "baseRelease": "Base Fred release",
+      "baseRelease": "Base platform release",
       "brandRelease": "{{brand}} release",
       "copied": "Copied!",
       "copy": "Copy",
@@ -2966,6 +3042,9 @@
         "title": "Administration spaces"
       },
       "chatList": {
+        "answerReady": "Answer ready",
+        "answering": "Answer in progress",
+        "awaitingInput": "Awaiting reply",
         "deleteDialog": {
           "title": "Delete this conversation?",
           "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",
@@ -2974,9 +3053,11 @@
         },
         "emptyManaged": "No conversations yet. Start a new chat with a managed {{agentsNicknameSingular}}.",
         "groupByAgent": "Group by {{agentsNicknameSingular}}",
+        "openConversation": "Open",
         "loading": "Loading...",
         "title": "Chat",
-        "unknownAgent": "Unknown {{agentsNicknameSingular}}"
+        "unknownAgent": "Unknown {{agentsNicknameSingular}}",
+        "unread": "Unread"
       },
       "marketplace": {
         "menu": {
@@ -4773,9 +4854,9 @@
       "catalog-loading": "Loading application…",
       "connecting": "Connecting to the application…",
       "unavailable": "This application is unavailable.",
-      "protocol-mismatch": "This application speaks a Fred application protocol this deployment does not support.",
+      "protocol-mismatch": "This application speaks a {{siteDisplayName}} application protocol this deployment does not support.",
       "unreachable": "The application did not respond. It may be starting up or misconfigured.",
-      "render": "The application stopped unexpectedly. Fred is still available."
+      "render": "The application stopped unexpectedly. {{siteDisplayName}} is still available."
     }
   },
   "unauthorized": {

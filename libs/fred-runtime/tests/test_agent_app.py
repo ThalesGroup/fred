@@ -2434,10 +2434,12 @@ async def test_resolve_agent_instance_does_not_leak_headers_between_calls(
 
     first, second = calls
     assert first["headers"] == {
+        "X-Fred-Skill-Policy": "1",
         "Authorization": "Bearer token-alice",
         "X-Request-Id": "req-alice",
     }
     assert second["headers"] == {
+        "X-Fred-Skill-Policy": "1",
         "Authorization": "Bearer token-bob",
         "X-Request-Id": "req-bob",
     }
@@ -7052,3 +7054,52 @@ async def test_web_activity_endpoints_restrict_readers_and_erasers(
     assert result == (
         [] if endpoint_name == "list_web_research_activity" else {"deleted": 0}
     )
+
+
+def test_steering_lifespan_sweeps_every_minute_and_joins_task(monkeypatch, tmp_path):
+    import threading
+
+    swept = threading.Event()
+    sleeps: list[float] = []
+    cancelled: list[bool] = []
+
+    class Clock:
+        def __getattr__(self, name):
+            return getattr(asyncio, name)
+
+        async def sleep(self, seconds):
+            if seconds != 60:
+                await asyncio.sleep(seconds)
+                return
+            sleeps.append(seconds)
+            if len(sleeps) == 1:
+                return
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.append(True)
+
+    async def sweep():
+        if sleeps:
+            swept.set()
+
+    cleanup = AsyncMock(side_effect=sweep)
+    monkeypatch.setattr(agent_app_module, "asyncio", Clock())
+    monkeypatch.setattr(
+        agent_app_module.turn_steering_mailbox, "cleanup_expired", cleanup
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    app = create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=_build_test_config(tmp_path),
+    )
+    with TestClient(app):
+        assert swept.wait(timeout=2)
+        assert cleanup.await_count >= 2
+    assert sleeps == [60, 60]
+    assert cancelled == [True]

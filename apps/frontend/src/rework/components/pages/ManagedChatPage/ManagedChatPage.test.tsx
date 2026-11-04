@@ -21,6 +21,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import type { ThreadMessage } from "../../../types/thread";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
+import type { TraceEntry } from "../../../utils/traceUtils";
+import { toThreadMessages } from "./toThreadMessages";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -276,7 +278,10 @@ vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", (
 }));
 vi.mock("@shared/molecules/DocumentScopePanel/DocumentScopePanel", () => ({ DocumentScopePanel: () => null }));
 vi.mock("@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer", () => ({
-  TraceDetailDrawer: () => null,
+  TraceDetailDrawer: ({ entry }: { entry: TraceEntry | null }) =>
+    entry?.kind === "combo" ? (
+      <div data-testid="trace-detail-status">{String(entry.call.metadata?.extras?.hitl_resume_status)}</div>
+    ) : null,
 }));
 vi.mock("@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog", () => ({
   UploadWarningAckDialog: () => null,
@@ -1224,7 +1229,7 @@ describe("ManagedChatPage skill preview", () => {
       );
       const skill = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]');
       expect(skill).not.toBeNull();
-      expect(skill?.title).toBe("chatbot.skills.platformProvided\nCompare");
+      expect(skill?.title).toBe("compare-options: Compare");
       expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-placeholder")).toBe("[options]");
       act(() => skill!.click());
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
@@ -1264,6 +1269,55 @@ describe("ManagedChatPage skill preview", () => {
       act(() => root.unmount());
       container.remove();
       previewResult.currentData = undefined;
+    }
+  });
+});
+
+describe("ManagedChatPage historical HITL detail", () => {
+  it.each(["unavailable", "unknown"] as const)("retains %s availability when opening the trace", (status) => {
+    const common = { session_id: "session-1", exchange_id: "exchange-1", timestamp: "2026-11-04T10:00:00Z" };
+    const messages: ChatMessage[] = [
+      {
+        ...common,
+        rank: 1,
+        role: "assistant",
+        channel: "tool_call",
+        parts: [{ type: "tool_call", call_id: "question", name: "ask_user", args: {} }],
+      },
+      {
+        ...common,
+        rank: 2,
+        role: "system",
+        channel: "hitl_request",
+        parts: [
+          {
+            type: "hitl_request",
+            question: "Choose",
+            choices: [],
+            stage: "agent_question",
+            occurrence_id: "question",
+            resume_status: status,
+          },
+        ],
+      },
+    ];
+    chatValue = { ...baseChatValue(messages), threadMessages: toThreadMessages(messages, false) };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      const toggle = container.querySelector<HTMLButtonElement>('button[title="rework.chatTrace.show"]');
+      if (toggle) act(() => toggle.click());
+      const row = container.querySelector<HTMLElement>(
+        '[role="button"][aria-label="1. rework.chatTrace.toolLabels.platform.askUser"]',
+      );
+      expect(row).not.toBeNull();
+      act(() => row!.click());
+      expect(container.querySelector('[data-testid="trace-detail-status"]')?.textContent).toBe(status);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
     }
   });
 });

@@ -357,8 +357,13 @@ export default function ManagedChatPage() {
   }, [chat.sessionId, activeCapabilityKey]);
 
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
-  // Re-resolved every render from the live messages so the open drawer streams.
-  const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
+  // Use the rendered traces so the live drawer retains history availability annotations.
+  const selectedTraceEntry = selectedTraceKey
+    ? findTraceEntry(
+        chat.threadMessages.flatMap((message) => message.traceMessages),
+        selectedTraceKey,
+      )
+    : null;
   const fileTraceEntry =
     activePushDrawer?.kind === "skill-file" ? findTraceEntry(chat.messages, activePushDrawer.entryKey) : null;
   const previewFile = fileTraceEntry ? skillFileReadOf(fileTraceEntry) : null;
@@ -766,7 +771,7 @@ export default function ManagedChatPage() {
         onOpenPrompt: openPromptPreview,
         tokens: commands.selectedSkills.map((token) => ({
           ...token,
-          description: commands.skillDescriptions.get(token.name),
+          ...commands.skillSummaries.get(token.name),
           onOpen: openSkill,
         })),
       }}
@@ -987,6 +992,7 @@ export default function ManagedChatPage() {
                     ) : (
                       <ConversationThread
                         readOnly={chat.executionDisabled}
+                        onRetryHitlAvailability={chat.retryHitlAvailability}
                         messages={chat.threadMessages}
                         pendingHitl={chat.pendingHitl}
                         pendingHitlTabs={chat.pendingHitlTabs}
@@ -1007,7 +1013,7 @@ export default function ManagedChatPage() {
                         onHitlFreeTextChange={chat.setHitlFreeText}
                         onOpenCommandPrompt={openCommandPrompt}
                         onOpenSkill={openSkill}
-                        skillDescriptions={commands.skillDescriptions}
+                        skillSummaries={commands.skillSummaries}
                       />
                     )}
                   </div>
@@ -1056,17 +1062,23 @@ export default function ManagedChatPage() {
                         {pendingExpanded && (
                           <ul id={pendingListId} className={styles.pendingList}>
                             {chat.pendingMessages?.map((message) => (
-                              <li className={styles.pendingMessage} key={message.id}>
+                              <li className={styles.pendingMessage} data-status={message.status} key={message.id}>
                                 <span className={styles.pendingMessageText} title={message.text}>
                                   {message.text}
                                 </span>
                                 {message.status === "offered" ? (
-                                  <span className={styles.pendingStatus}>{t("chatbot.pendingMessages.offered")}</span>
+                                  <Button
+                                    type="button"
+                                    color="secondary"
+                                    variant="tonal"
+                                    size="2xs"
+                                    disabled
+                                    aria-label={`${t("chatbot.pendingMessages.offered")}: ${message.text}`}
+                                  >
+                                    {t("chatbot.pendingMessages.offered")}
+                                  </Button>
                                 ) : message.status === "uncertain" ? (
                                   <>
-                                    <span className={styles.pendingStatus}>
-                                      {t("chatbot.pendingMessages.uncertain")}
-                                    </span>
                                     <button
                                       type="button"
                                       className={styles.pendingAction}
@@ -1077,6 +1089,14 @@ export default function ManagedChatPage() {
                                     >
                                       {t("chatbot.pendingMessages.retry")}
                                     </button>
+                                    <button
+                                      type="button"
+                                      className={styles.pendingAction}
+                                      disabled={chat.waitResponse}
+                                      onClick={() => void chat.removePendingMessage(message.id)}
+                                    >
+                                      {t("chatbot.pendingMessages.remove")}
+                                    </button>
                                   </>
                                 ) : (
                                   <>
@@ -1086,6 +1106,7 @@ export default function ManagedChatPage() {
                                         color="secondary"
                                         variant="tonal"
                                         size="2xs"
+                                        icon={{ category: "outlined", type: "subdirectory_arrow_right" }}
                                         aria-label={`${t("chatbot.pendingMessages.send")}: ${message.text}`}
                                         onClick={() => void chat.forcePendingMessage(message.id)}
                                       >

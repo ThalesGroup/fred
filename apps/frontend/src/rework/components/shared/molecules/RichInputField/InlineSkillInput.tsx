@@ -3,10 +3,21 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction, Prec } from "@codemirror/state";
+import {
+  Annotation,
+  Compartment,
+  EditorState,
+  StateEffect,
+  StateField,
+  Transaction,
+  Prec,
+  type ChangeDesc,
+} from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, invertedEffects } from "@codemirror/commands";
 import { Decoration, EditorView, keymap, WidgetType } from "@codemirror/view";
 import type { CommandChoice, CommandKeyEvent, CommandTriggerBinding, DraftEdit } from "./RichInputField";
+import { skillPresentation, skillTooltip } from "@rework/utils/skillPresentation";
+import { isCommandTokenAt } from "@rework/utils/skillInvocation";
 import badgeStyles from "../SkillBadge/SkillBadge.module.css";
 import iconStyles from "../../atoms/Icon/Icon.module.scss";
 import styles from "./InlineSkillInput.module.css";
@@ -33,6 +44,7 @@ export interface InlineSkillToken {
   to: number;
   name: string;
   description?: string;
+  builtin?: boolean;
   onOpen: (name: string) => void;
 }
 
@@ -41,6 +53,7 @@ class SkillWidget extends WidgetType {
     readonly token: InlineSkillToken,
     readonly hint: string,
     readonly label: string,
+    readonly title: string,
   ) {
     super();
   }
@@ -49,6 +62,7 @@ class SkillWidget extends WidgetType {
       this.token.name === other.token.name &&
       this.hint === other.hint &&
       this.label === other.label &&
+      this.title === other.title &&
       this.token.onOpen === other.token.onOpen
     );
   }
@@ -66,7 +80,7 @@ class SkillWidget extends WidgetType {
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
-    name.textContent = `/${this.token.name}`;
+    name.textContent = this.title;
     button.append(icon, name);
     button.onclick = () => this.token.onOpen(this.token.name);
     return button;
@@ -145,15 +159,29 @@ function deleteToken(view: EditorView, tokens: readonly TokenRange[], forward: b
   return true;
 }
 
-const rememberChoices = StateEffect.define<readonly CommandChoice[]>({
-  map: (choices, changes) =>
-    choices.map((choice) => ({ ...choice, from: changes.mapPos(choice.from), to: changes.mapPos(choice.to) })),
-});
+function mapChoices(choices: readonly CommandChoice[], changes: ChangeDesc): CommandChoice[] {
+  return choices.flatMap((choice) => {
+    const from = changes.mapPos(choice.from, 1);
+    const to = changes.mapPos(choice.to, -1);
+    return to > from ? [{ ...choice, from, to }] : [];
+  });
+}
+
+const rememberChoices = StateEffect.define<readonly CommandChoice[]>({ map: mapChoices });
 const choiceHistory = StateField.define<readonly CommandChoice[]>({
   create: () => [],
   update: (choices, transaction) => {
+    // A second editor transaction may precede the controlled parent's render.
+    // History snapshots must already refer to that transaction's document.
+    if (transaction.docChanged) choices = mapChoices(choices, transaction.changes);
     for (const effect of transaction.effects) if (effect.is(rememberChoices)) choices = effect.value;
-    return choices;
+    const text = transaction.newDoc.toString();
+    // The parent keeps choices while clearing/restoring a rejected draft.
+    // Remember only identities belonging to the current text, never old offsets.
+    return choices.filter(
+      (choice) =>
+        choice.to === choice.from + choice.name.length + 1 && isCommandTokenAt(text, choice.from, choice.name),
+    );
   },
 });
 
@@ -268,7 +296,7 @@ export function InlineSkillInput(props: Props) {
 
   const choicesKey = JSON.stringify(props.commandTrigger?.choices ?? []);
   const tokenKey = JSON.stringify(
-    props.tokens.map(({ from, to, name, description }) => ({ from, to, name, description })),
+    props.tokens.map(({ from, to, name, description, builtin }) => ({ from, to, name, description, builtin })),
   );
   const callbacksRef = useRef<InlineSkillToken["onOpen"][]>([]);
   if (
@@ -345,8 +373,9 @@ export function InlineSkillInput(props: Props) {
           Decoration.replace({
             widget: new SkillWidget(
               token,
-              [t("chatbot.skills.platformProvided"), token.description?.trim()].filter(Boolean).join("\n"),
-              t("chatbot.skills.open", { name: token.name }),
+              skillTooltip(skillPresentation(t, token).title, skillPresentation(t, token).description),
+              t("chatbot.skills.open", { name: skillPresentation(t, token).title }),
+              skillPresentation(t, token).title,
             ),
           }).range(token.from, token.to),
           ...(props.tokens.length === 1 && props.value.trim() === `/${token.name}` && props.placeholder

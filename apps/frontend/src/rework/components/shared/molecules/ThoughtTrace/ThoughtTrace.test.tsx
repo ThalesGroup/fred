@@ -193,6 +193,20 @@ describe("ThoughtTrace", () => {
     expect(html).toContain("rework.chatTrace.summaryReasoning");
   });
 
+  it("exposes a partial skill read in both its visible and accessible labels", () => {
+    const load = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: {
+        extras: { skill_load: { name: "graph", origin: "agent", load_id: "partial", partial: true } },
+      },
+    });
+    const html = render([load], false);
+    expect(html).toContain(">chatbot.skills.partiallyLoaded<");
+    expect(html).toContain('aria-label="1. chatbot.skills.partiallyLoaded:');
+    expect(html).not.toContain("chatbot.skills.loaded");
+  });
+
   // A HITL-gated tool call streams as a `tool_call` with no result, exactly
   // like a genuinely in-flight one, well before the human answers the
   // "Confirm tool execution" prompt (the backend commits the model's

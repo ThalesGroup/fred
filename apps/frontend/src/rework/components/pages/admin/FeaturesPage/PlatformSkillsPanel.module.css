@@ -1,0 +1,57 @@
+/* Copyright Thales 2026. Licensed under the Apache License, Version 2.0. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.toolbar p {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.identity code {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.warning {
+  margin: 0;
+  color: var(--warning);
+  font: var(--font-body-medium);
+}
+
+.effect {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.recovery p {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.recovery li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+  margin-block: var(--spacing-s);
+}

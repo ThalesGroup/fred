@@ -306,6 +306,10 @@ class HitlRequestPart(BaseModel):
     interrupt_id: Optional[str] = None
     occurrence_id: Optional[str] = None
     pending_calls: List[HitlPendingCallRecord] = Field(default_factory=list)
+    resume_status: Optional[Literal["pending", "unavailable", "unknown"]] = Field(
+        default=None,
+        description="Read-time availability; absent in stored history and older runtimes.",
+    )
 
 
 class HitlResponsePart(BaseModel):

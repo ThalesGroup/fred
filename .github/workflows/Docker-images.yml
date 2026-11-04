@@ -101,6 +101,11 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v5
 
+      - name: Read frontend Node version
+        if: matrix.name == 'frontend'
+        id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
       # Only the pre-merge path needs it: the gha cache exporter requires the
       # docker-container driver, and the publish path keeps the plain default
       # builder it has always released from.
@@ -137,7 +142,9 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          build-args: ${{ matrix.build_args }}
+          build-args: |
+            ${{ matrix.build_args }}
+            ${{ matrix.name == 'frontend' && format('NODE_VERSION={0}', steps.node.outputs.version) || '' }}
           push: ${{ inputs.publish }}
           outputs: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan && 'type=docker,dest=/tmp/pr-image.tar' || '' }}
           tags: ${{ inputs.publish && steps.meta.outputs.tags || format('fred-pr/{0}:scan', matrix.name) }}
@@ -214,10 +221,13 @@ jobs:
           name: scan-image-${{ matrix.name }}
           path: /tmp
 
+      - name: Install Trivy
+        uses: ./.github/actions/setup-trivy
+
       - name: Scan built image for CVEs
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          version: v0.75.0
+          skip-setup-trivy: true
           input: /tmp/pr-image.tar
           scanners: vuln
           vuln-type: os,library
@@ -225,7 +235,7 @@ jobs:
           list-all-pkgs: true
           format: json
           output: trivy-results.json
-          exit-code: '0'
+          exit-code: "0"
 
       - name: Record image licenses and SBOM
         if: ${{ startsWith(matrix.name, 'knowledge-flow-backend') }}
@@ -294,10 +304,13 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v5
 
+      - name: Install Trivy
+        uses: ./.github/actions/setup-trivy
+
       - name: Scan frontend dependencies
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          version: v0.75.0
+          skip-setup-trivy: true
           scan-type: fs
           scan-ref: apps/frontend
           trivy-config: .github/trivy-frontend.yaml
@@ -307,7 +320,7 @@ jobs:
           list-all-pkgs: true
           format: json
           output: trivy-frontend-dependencies.json
-          exit-code: '0'
+          exit-code: "0"
 
       - name: Upload frontend dependency report
         uses: actions/upload-artifact@v4

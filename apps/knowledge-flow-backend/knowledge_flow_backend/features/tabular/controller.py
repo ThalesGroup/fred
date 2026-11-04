@@ -19,6 +19,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import OwnerFilter
 
+from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound, log_description_failure
 from knowledge_flow_backend.features.tabular.execution import (
     TabularCapacityExceededError,
     TabularExecutionTimeoutError,
@@ -201,6 +202,9 @@ class TabularController:
                 raise HTTPException(status_code=400, detail=str(e))
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
+            except TabularDescriptionNotFound as e:
+                log_description_failure(e)
+                raise HTTPException(status_code=404, detail=str(e))
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
             except (TabularCapacityExceededError, TabularExecutionTimeoutError):

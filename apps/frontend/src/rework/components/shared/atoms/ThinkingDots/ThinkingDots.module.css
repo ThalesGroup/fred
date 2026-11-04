@@ -38,6 +38,19 @@
   animation-delay: 0.3s;
 }
 
+/* Inline variant for dense rows: no vertical padding, smaller and tinted. */
+.dots[data-size="small"] {
+  --wave-height: -3px;
+  gap: 3px;
+  padding: 0;
+}
+
+.dots[data-size="small"] .dot {
+  background: var(--primary);
+  width: 4px;
+  height: 4px;
+}
+
 @keyframes wave {
   0%,
   60%,
@@ -46,7 +59,7 @@
     opacity: 0.4;
   }
   30% {
-    transform: translateY(-5px);
+    transform: translateY(var(--wave-height, -5px));
     opacity: 1;
   }
 }
