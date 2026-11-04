@@ -99,6 +99,9 @@ Fontconfig alias from Century Gothic to URW Gothic, then refresh the font cache.
 These packages are installed in the `fred-agents` image as one example; other
 agent-pods must include equivalent fonts and configuration in their own images.
 No font files are bundled in this Python package or in the default template.
+If an image includes `fonts-urw-base35`, it must retain that package's AGPL 3
+notice and provide access to its matching source; see the
+[`fred-agents` font notice](../../../apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md).
 
 ## Spec
 

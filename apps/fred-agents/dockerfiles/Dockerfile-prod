@@ -92,6 +92,10 @@ RUN apt-get update && \
         libreoffice-impress-nogui fontconfig \
         fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35 && \
     rm -rf /var/lib/apt/lists/* && \
+    for package in fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35; do \
+        test -s "/usr/share/doc/${package}/copyright" || exit 1; \
+    done && \
+    grep -q '^License: AGPL-3 with Font exception$' /usr/share/doc/fonts-urw-base35/copyright && \
     printf '%s\n' \
         '<?xml version="1.0"?>' \
         '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
@@ -108,6 +112,8 @@ COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
 WORKDIR /app
+COPY apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md /app/THIRD_PARTY_FONT_NOTICES.md
+LABEL org.opencontainers.image.documentation="https://github.com/ThalesGroup/fred/blob/swift/apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md"
 
 # The local packages, installed in editable mode from their source roots under
 # the same `/workspace/...` paths, which the image keeps. A change there only
