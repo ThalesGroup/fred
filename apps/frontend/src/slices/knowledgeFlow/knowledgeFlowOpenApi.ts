@@ -2193,7 +2193,7 @@ export type ListTabularDocumentsApiArg = {
 export type DescribeTabularDocumentsApiResponse =
   /** status 200 Successful Response */ TabularDocumentDescriptionResponse[];
 export type DescribeTabularDocumentsApiArg = {
-  /** Document UIDs to describe (repeat the parameter for several documents). */
+  /** Document UIDs copied exactly from list_tabular_documents or authorized attachments, not filenames or SQL table aliases. Repeat the parameter for several documents. */
   documentUids: string[];
   /** Optional library tag IDs used to keep documents inside selected libraries. */
   documentLibraryTagsIds?: string[] | null;
@@ -3287,11 +3287,15 @@ export type RawSqlResponse = {
     [key: string]: any;
   }[];
   error?: string | null;
+  /** Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information. */
+  message?: string | null;
   dataset_uids?: string[];
   query_aliases?: string[];
 };
 export type TabularQueryRequest = {
+  /** One read-only DuckDB SELECT using exact tables[].query_alias values from describe_tabular_documents. These aliases are SQL table names, not document UIDs or filenames. */
   sql: string;
+  /** Document UIDs copied exactly from authorized discovery. One workbook UID selects all its tables. Do not pass filenames, SQL aliases or shortened identifiers. */
   dataset_uids?: string[] | null;
   /** Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory. */
   attachment_uids?: string[] | null;
@@ -3331,6 +3335,7 @@ export type TabularSearchResponse = {
 export type TabularSearchRequest = {
   /** Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate. */
   keyword: string;
+  /** Document UIDs copied exactly from authorized discovery. Do not pass filenames or SQL table aliases. One workbook UID selects all its tables. */
   dataset_uids?: string[] | null;
   /** Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory. */
   attachment_uids?: string[] | null;

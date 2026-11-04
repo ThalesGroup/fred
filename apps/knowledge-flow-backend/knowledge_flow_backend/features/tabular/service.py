@@ -690,6 +690,7 @@ class TabularService:
             sql_query=sql_query,
             rows=rows,
             error=None,
+            message="Requête exécutée avec succès : 0 ligne correspondant aux conditions." if not rows else None,
             dataset_uids=[dataset.metadata.document_uid for dataset in mounted_datasets],
             query_aliases=[dataset.query_alias for dataset in mounted_datasets],
         )

@@ -46,6 +46,12 @@ async def test_enabled_mcp_catalog_exposes_selected_tools(app_context, monkeypat
         assert set(catalogs[0]["write_report"].parameters["required"]) == {"title", "markdown", "tag_id"}
         assert catalogs[2]["read_query"].parameters["required"] == ["sql"]
         assert "max_rows" in catalogs[2]["read_query"].parameters["properties"]
+        query_properties = catalogs[2]["read_query"].parameters["properties"]
+        assert "DuckDB SELECT" in query_properties["sql"]["description"]
+        assert "query_alias" in query_properties["sql"]["description"]
+        assert "document uids" in query_properties["dataset_uids"]["description"].lower()
+        assert "filenames" in query_properties["dataset_uids"]["description"]
         assert catalogs[2]["describe_tabular_documents"].parameters["required"] == ["document_uids"]
+        assert "document uids" in catalogs[2]["describe_tabular_documents"].parameters["properties"]["document_uids"]["description"].lower()
     finally:
         ApplicationContext.reset_instance()

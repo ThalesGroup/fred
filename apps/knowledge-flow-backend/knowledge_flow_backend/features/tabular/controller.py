@@ -142,7 +142,10 @@ class TabularController:
         async def describe_documents(
             document_uids: Annotated[
                 list[str],
-                Query(min_length=1, description="Document UIDs to describe (repeat the parameter for several documents)."),
+                Query(
+                    min_length=1,
+                    description="Document UIDs copied exactly from list_tabular_documents or authorized attachments, not filenames or SQL table aliases. Repeat the parameter for several documents.",
+                ),
             ],
             document_library_tags_ids: Annotated[
                 list[str] | None,

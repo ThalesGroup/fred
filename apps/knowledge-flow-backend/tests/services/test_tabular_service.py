@@ -813,6 +813,20 @@ async def test_tabular_service_lists_context_and_queries_datasets(tmp_path):
 
     count_query = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT COUNT(*) AS total_rows FROM {sales_alias}"))
     assert count_query.rows == [{"total_rows": 2}]
+    assert query_response.message is None
+    assert count_query.message is None
+
+    empty_sql = f"SELECT * FROM {sales_alias} WHERE 1 = 0"
+    empty = await service.query_read(_user(), request=TabularQueryRequest(sql=empty_sql))
+    assert empty.rows == []
+    assert empty.error is None
+    assert empty.sql_query == empty_sql
+    assert empty.message == "Requête exécutée avec succès : 0 ligne correspondant aux conditions."
+
+    for expression, expected in [("COUNT(*)", 0), ("SUM(amount)", None)]:
+        aggregate = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT {expression} AS value FROM {sales_alias} WHERE 1 = 0"))
+        assert aggregate.rows == [{"value": expected}]
+        assert aggregate.message is None
 
     with pytest.raises(ValueError, match="Only SELECT or WITH statements are allowed"):
         await service.query_read(

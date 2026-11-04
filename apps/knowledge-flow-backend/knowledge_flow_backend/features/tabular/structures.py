@@ -211,8 +211,14 @@ class TabularQueryRequest(BaseModel):
     ```
     """
 
-    sql: str = Field(..., min_length=1)
-    dataset_uids: Optional[list[str]] = None
+    sql: str = Field(
+        ...,
+        min_length=1,
+        description="One read-only DuckDB SELECT using exact tables[].query_alias values from describe_tabular_documents. These aliases are SQL table names, not document UIDs or filenames.",
+    )
+    dataset_uids: Optional[list[str]] = Field(
+        default=None, description="Document UIDs copied exactly from authorized discovery. One workbook UID selects all its tables. Do not pass filenames, SQL aliases or shortened identifiers."
+    )
     attachment_uids: list[str] | None = Field(default=None, max_length=1000, description="Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory.")
     include_session_scope: bool = True
     include_corpus_scope: bool = True
@@ -251,6 +257,9 @@ class RawSQLResponse(BaseModel):
     sql_query: str
     rows: list[dict] = Field(default_factory=list)
     error: Optional[str] = None
+    message: str | None = Field(
+        default=None, description="Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information."
+    )
     dataset_uids: list[str] = Field(default_factory=list)
     query_aliases: list[str] = Field(default_factory=list)
 
@@ -290,7 +299,9 @@ class TabularSearchRequest(BaseModel):
         min_length=1,
         description="Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate.",
     )
-    dataset_uids: Optional[list[str]] = None
+    dataset_uids: Optional[list[str]] = Field(
+        default=None, description="Document UIDs copied exactly from authorized discovery. Do not pass filenames or SQL table aliases. One workbook UID selects all its tables."
+    )
     attachment_uids: list[str] | None = Field(default=None, max_length=1000, description="Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory.")
     include_session_scope: bool = True
     include_corpus_scope: bool = True
