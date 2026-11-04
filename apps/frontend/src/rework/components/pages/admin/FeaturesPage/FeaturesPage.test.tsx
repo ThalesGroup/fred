@@ -1000,12 +1000,30 @@ describe("FeaturesPage reasoning column (REASON-01, MODEL-REASONING-ENABLEMENT-R
 });
 
 describe("FeaturesPage platform settings action", () => {
-  it("shows the settings action only on capabilities with a platform panel", () => {
-    h.list = { data: { items: [cap({ id: "ppt_builder" })] }, isLoading: false, isError: false };
-    expect(render()).toContain('aria-label="rework.admin.capabilities.platformSettings"');
+  it("reserves the rightmost settings column and shows a gear only for registered panels", () => {
+    h.list = {
+      data: { items: [cap({ id: "ppt_builder" }), cap({ id: "web_search" })] },
+      isLoading: false,
+      isError: false,
+    };
+    const table = document.createElement("div");
+    table.innerHTML = render();
+    const headers = table.querySelector('[class*="datatable-header"]');
+    const headerLabels = Array.from(headers?.children ?? [], (cell) => cell.textContent);
+    expect(headerLabels.slice(-2)).toEqual([
+      "rework.admin.capabilities.col.actions",
+      "rework.admin.capabilities.col.settings",
+    ]);
 
-    h.list = { data: { items: [cap({ id: "web_search" })] }, isLoading: false, isError: false };
-    expect(render()).not.toContain("rework.admin.capabilities.platformSettings");
+    const rows = Array.from(table.querySelectorAll('[class*="datatable-row"]'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0].children[rows[0].children.length - 2].textContent).toContain(
+      "rework.admin.capabilities.manageTeams",
+    );
+    expect(
+      rows[0].lastElementChild?.querySelectorAll('button[aria-label="rework.admin.capabilities.platformSettings"]'),
+    ).toHaveLength(1);
+    expect(rows[1].lastElementChild?.querySelector("button")).toBeNull();
   });
 });
 

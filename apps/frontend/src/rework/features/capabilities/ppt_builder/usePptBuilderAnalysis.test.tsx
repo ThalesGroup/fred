@@ -36,6 +36,9 @@ const analysis = vi.hoisted(() => ({
   builtinOptions: [] as { skip?: boolean }[],
   builtin: undefined as unknown,
   configValues: { template_sha256: "abc" } as Record<string, unknown>,
+  assetFiles: {} as Record<string, File | undefined>,
+  configChange: vi.fn(),
+  assetChange: vi.fn(),
   agentInstanceId: "agent",
 }));
 
@@ -93,9 +96,9 @@ function Harness() {
     teamId: "team",
     agentInstanceId: analysis.agentInstanceId,
     configValues: analysis.configValues,
-    onConfigChange: () => {},
-    assetFiles: {},
-    onAssetFileChange: () => {},
+    onConfigChange: analysis.configChange,
+    assetFiles: analysis.assetFiles,
+    onAssetFileChange: analysis.assetChange,
   });
   return null;
 }
@@ -113,6 +116,9 @@ beforeEach(() => {
   analysis.builtin = undefined;
   analysis.platform = { data: undefined, isLoading: false };
   analysis.configValues = { template_sha256: SHA };
+  analysis.assetFiles = {};
+  analysis.configChange.mockReset();
+  analysis.assetChange.mockReset();
   analysis.readinessCheck.mockReset().mockReturnValue({ unwrap: () => Promise.resolve() });
   analysis.agentInstanceId = "agent";
   analysis.refetch.mockReset();
@@ -127,6 +133,49 @@ afterEach(() => {
 });
 
 describe("usePptBuilderAnalysis", () => {
+  it("removes a saved template and staged replacement without changing other settings", () => {
+    const stagedFile = new File(["deck"], "replacement.pptx");
+    analysis.configValues = {
+      template_sha256: SHA,
+      template_key: `template:${SHA}`,
+      overrides: [{ pattern_id: "slide:1", label: "My slide" }],
+      use_vision: false,
+      validate_plan: true,
+    };
+    analysis.assetFiles = { template: stagedFile };
+    show({});
+    expect(result.phase).toBe("staged");
+
+    act(() => result.handleUsePlatformTemplate());
+    expect(analysis.assetChange).toHaveBeenCalledWith("template", null);
+    expect(analysis.configChange.mock.calls).toEqual([
+      ["template_sha256", null],
+      ["template_key", null],
+      ["overrides", []],
+    ]);
+
+    analysis.configValues = {
+      ...analysis.configValues,
+      template_sha256: null,
+      template_key: null,
+      overrides: [],
+    };
+    analysis.assetFiles = {};
+    show({});
+    expect(result.phase).toBe("builtin");
+    expect(result.hasPersistedTemplate).toBe(false);
+    expect(analysis.configValues.use_vision).toBe(false);
+    expect(analysis.configValues.validate_plan).toBe(true);
+  });
+
+  it("clears only the selected file while keeping the saved template", () => {
+    analysis.assetFiles = { template: new File(["deck"], "replacement.pptx") };
+    show({});
+    act(() => result.handleClear());
+    expect(analysis.assetChange).toHaveBeenCalledWith("template", null);
+    expect(analysis.configChange).not.toHaveBeenCalled();
+  });
+
   it("polls while the analysis runs and stops once it has ended", () => {
     show({ data: status({ status: "pending" }) });
     expect(polling()).toBe(3000);

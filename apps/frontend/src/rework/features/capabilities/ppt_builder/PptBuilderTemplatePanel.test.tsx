@@ -107,6 +107,7 @@ function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> =
     updateOverride: () => {},
     handlePick: () => {},
     handleClear: () => {},
+    handleUsePlatformTemplate: () => {},
     ...overrides,
   };
 }
@@ -317,6 +318,25 @@ describe("PptBuilderTemplatePanel", () => {
 
     renderPanel(analysis("builtin", { hasPersistedTemplate: false }));
     expect(container.textContent).toContain("capability.ppt_builder.form.builtInTemplate");
+  });
+
+  it("offers a distinct action for a saved template, even while a replacement is staged", () => {
+    const reset = vi.fn();
+    renderPanel(
+      analysis("staged", {
+        stagedFile: new File(["deck"], "replacement.pptx"),
+        handleUsePlatformTemplate: reset,
+      }),
+    );
+    const button = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "capability.ppt_builder.form.usePlatformTemplate",
+    );
+    expect(button).toBeDefined();
+    act(() => button?.click());
+    expect(reset).toHaveBeenCalledOnce();
+
+    renderPanel(analysis("builtin", { hasPersistedTemplate: false }));
+    expect(container.textContent).not.toContain("capability.ppt_builder.form.usePlatformTemplate");
   });
 
   it("brings the slide review up when the analysis set slides aside", () => {

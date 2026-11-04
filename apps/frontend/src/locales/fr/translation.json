@@ -432,6 +432,7 @@
         "uploadAria": "Fichier de template PowerPoint",
         "clearAria": "Retirer le fichier sélectionné",
         "currentTemplate": "Un template est configuré pour cet agent.",
+        "usePlatformTemplate": "Revenir au template de la plateforme",
         "builtInTemplate": "Template intégré (aucun template téléversé)",
         "summary": "{{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté.",
         "summaryBuiltin": "Template intégré : {{patterns}} slides prêtes à l'emploi.",
@@ -1452,7 +1453,8 @@
           "defaultOn": "Activé pour tous",
           "health": "État",
           "reasoning": "Raisonnement",
-          "actions": "Actions"
+          "actions": "Actions",
+          "settings": "Réglages"
         },
         "enabledTeams": {
           "teams_one": "{{count}} équipe",

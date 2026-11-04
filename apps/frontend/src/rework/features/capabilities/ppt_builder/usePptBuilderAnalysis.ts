@@ -30,6 +30,7 @@ import { useCapabilityRouted } from "../useCapabilityRouted";
 import type { PreviewSource } from "./usePatternsPreview";
 import {
   OVERRIDES_KEY,
+  TEMPLATE_SHA_KEY,
   effectiveInventory,
   readOverrides,
   readTemplateSha,
@@ -109,6 +110,7 @@ export interface PptBuilderAnalysis {
   updateOverride: (patternId: string, patch: OverridePatch) => void;
   handlePick: (file: File) => void;
   handleClear: () => void;
+  handleUsePlatformTemplate: () => void;
 }
 
 export function usePptBuilderAnalysis({
@@ -213,5 +215,11 @@ export function usePptBuilderAnalysis({
     updateOverride: (patternId, patch) => onConfigChange(OVERRIDES_KEY, upsertOverride(overrides, patternId, patch)),
     handlePick: (file) => onAssetFileChange(TEMPLATE_SLOT, file),
     handleClear: () => onAssetFileChange(TEMPLATE_SLOT, null),
+    handleUsePlatformTemplate: () => {
+      onAssetFileChange(TEMPLATE_SLOT, null);
+      onConfigChange(TEMPLATE_SHA_KEY, null);
+      onConfigChange("template_key", null);
+      onConfigChange(OVERRIDES_KEY, []);
+    },
   };
 }

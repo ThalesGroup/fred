@@ -731,7 +731,7 @@ export default function FeaturesPage() {
     {
       label: t("rework.admin.capabilities.col.actions"),
       // Keep the icon and label clear of the outline at desktop widths.
-      size: "1.55fr",
+      size: "1.35fr",
       cellRenderer: (cap) => (
         // Dimmed but never disabled: an unused capability is exactly the one an
         // admin opens to grant its first team.
@@ -748,6 +748,14 @@ export default function FeaturesPage() {
           >
             {t("rework.admin.capabilities.manageTeams")}
           </Button>
+        </div>
+      ),
+    },
+    {
+      label: t("rework.admin.capabilities.col.settings"),
+      size: "5rem",
+      cellRenderer: (cap) => (
+        <div className={styles.centered}>
           {platformPanelFor(cap.id) && (
             <Tooltip text={t("rework.admin.capabilities.platformSettings")}>
               <IconButton

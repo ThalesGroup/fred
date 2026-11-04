@@ -432,6 +432,7 @@
         "uploadAria": "PowerPoint template file",
         "clearAria": "Remove the selected file",
         "currentTemplate": "A template is configured for this agent.",
+        "usePlatformTemplate": "Use platform template",
         "builtInTemplate": "Built-in template (no template uploaded)",
         "summary": "{{patterns}} slides ready to use, {{excluded}} set aside.",
         "summaryBuiltin": "Built-in template: {{patterns}} slides ready to use.",
@@ -1452,7 +1453,8 @@
           "defaultOn": "Enabled for all",
           "health": "Health",
           "reasoning": "Reasoning",
-          "actions": "Actions"
+          "actions": "Actions",
+          "settings": "Settings"
         },
         "enabledTeams": {
           "teams_one": "{{count}} team",

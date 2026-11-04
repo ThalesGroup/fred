@@ -82,6 +82,11 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleUsePlatformTemplate = () => {
+    analysis.handleUsePlatformTemplate();
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   return (
     <div className={styles.root}>
       <div className={`${styles.settingCard} ${styles.template}`}>
@@ -136,6 +141,18 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
               label={t("capability.ppt_builder.form.builtInTemplate")}
               leading={<Icon category="outlined" type="palette" />}
             />
+          )}
+          {hasPersistedTemplate && (
+            <Button
+              type="button"
+              color="on-surface"
+              variant="text"
+              size="small"
+              disabled={disabled}
+              onClick={handleUsePlatformTemplate}
+            >
+              {t("capability.ppt_builder.form.usePlatformTemplate")}
+            </Button>
           )}
         </div>
 

@@ -313,7 +313,8 @@ The system SHALL ship a real `.pptx` Fred template with example slides and its p
 - A capability manager SHALL review and edit (rename, include/exclude, re-kind) the patterns of the default in effect, the Fred template included; edits apply to every agent on it within the propagation bound; a re-analysis of the same file keeps edits whose patterns exist, another file starts without; the Fred template's edits are kept but not applied while a replacement is in effect.
 - Pattern edits SHALL apply only to the template they were made on: an agent without its own template has no edits of its own, and one that removes its template drops its edits.
 - The agent form SHALL show the default in effect with a read-only review; with a replacement, "Template set by the administrator" (fr: "Template défini par l'administrateur") with its file name.
-- Only capabilities with a platform panel SHALL show a settings action in Admin > Features.
+- Admin > Features SHALL put the settings action in its own rightmost table column for every capability kind; a row SHALL show the gear only when that capability exposes a platform settings panel, and leave the cell empty otherwise.
+- Both agent form layouts SHALL offer an explicit action to return from a saved agent template to the platform default. The pending form SHALL clear any staged replacement and template-specific edits, show the default immediately, and persist the choice only on Save. Other `ppt_builder` settings SHALL remain unchanged.
 
 #### Scenario: Built-in deck read by the rules
 
@@ -324,6 +325,29 @@ The system SHALL ship a real `.pptx` Fred template with example slides and its p
 
 - **WHEN** a replacement default's analysis fails
 - **THEN** agents keep building on the previous default and stay ready, and the drawer shows the failure with a re-run action
+
+#### Scenario: Settings action belongs to supported rows
+
+- **WHEN** Admin > Features lists capabilities with and without a platform settings panel
+- **THEN** the rightmost Settings column shows a gear for each supported row, no gear for other rows, and the team-management action remains in its own column
+
+#### Scenario: Return a saved agent to the platform template
+
+- **GIVEN** an agent with its own saved template and pattern edits
+- **WHEN** its author chooses the return-to-platform action and saves the agent
+- **THEN** the agent no longer selects its own template, its template-specific edits are removed, and it builds on the current platform default (or the built-in template when no replacement is active)
+
+#### Scenario: Cancel a pending return to the platform template
+
+- **GIVEN** an agent with its own saved template
+- **WHEN** its author chooses the return-to-platform action but closes the form without saving
+- **THEN** the saved agent keeps its own template
+
+#### Scenario: Unsaved replacement is distinct from saved override
+
+- **GIVEN** an agent with its own saved template and another file selected in the form
+- **WHEN** its author clears only the selected file
+- **THEN** the saved template remains selected in the form; choosing the return-to-platform action instead clears both the selected file and the saved override in the pending form
 
 ### Requirement: Delivery
 

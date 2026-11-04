@@ -1229,7 +1229,10 @@ built-in template.
   (`admin_panel_settings`, when the platform template is in effect, its slides
   and the administrator's edits shown read only), or "Built-in template"
   (`palette`). A staged file is only
-  analysed after the save: the status line says so.
+  analysed after the save: the status line says so. With a saved agent template,
+  a separate "Use platform template" action clears any staged file and the
+  agent's template edits in the draft. The platform or built-in template appears
+  immediately; Save persists the choice, while closing the form discards it.
 - **Analysis status** (Body Small, `on-surface-retreat`), read from
   `GET /analysis/{instance_id}` and polled every 3 s while pending/running
   (a failed poll keeps the last answer on screen and polling goes on):
@@ -1303,8 +1306,8 @@ hosted by `FeaturesPage/CapabilityPlatformDrawer.tsx`
 **Status:** `Functional`
 
 Opened from a `settings` `IconButton` (medium, `on-surface-retreat`, tooltip
-"Platform settings") after "Manage by team" on the rows whose UI plugin declares
-a `platformPanel`; an `InlineDrawer` (480px) titled "{capability}: platform
+"Platform settings") in the rightmost Settings column, only on rows whose UI
+plugin declares a `platformPanel`; an `InlineDrawer` (480px) titled "{capability}: platform
 settings".
 
 - **Template card** (same outlined setting card as the agent form): a `Chip`
