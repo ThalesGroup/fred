@@ -6,22 +6,22 @@ Defines the operator-facing commands that advance or reverse the packaged fred-r
 
 ## Requirements
 
-### Requirement: Selected-tree one-step downgrade
-The fred-runtime operational CLI SHALL accept `downgrade <tree> -1`, where `<tree>` is `runtime` or `capability:<id>` for an installed capability with migrations. It SHALL downgrade only that tree by one revision, using its own Alembic version table and the same database configuration as the upgrade command.
+### Requirement: Exact selected-tree downgrade
+The fred-runtime operational CLI SHALL require a complete revision ID or `base` as the target of `downgrade <tree> <revision>`. It SHALL move only the selected installed runtime or capability tree to that target using its own version table and configured database. Relative targets such as `-1` SHALL be rejected.
 
-#### Scenario: Runtime tree is selected
-- **WHEN** an operator runs `python -m fred_runtime downgrade runtime -1`
-- **THEN** the runtime tree moves back one revision and every capability tree retains its revision
+#### Scenario: Runtime is downgraded across several revisions
+- **WHEN** an operator selects `runtime` and supplies an older complete revision ID from that tree
+- **THEN** the runtime tree reaches that revision without changing any capability version table
 
-#### Scenario: Capability tree is selected
-- **WHEN** an operator runs `python -m fred_runtime downgrade capability:writable_document -1`
-- **THEN** only the writable-document tree moves back one revision
+#### Scenario: New capability returns to base
+- **WHEN** an operator selects an installed capability tree and supplies `base`
+- **THEN** that capability tree returns to base without changing the runtime or other capability trees
 
 ### Requirement: Explicit target and failure visibility
-The downgrade command SHALL require an explicit tree and accept only the one-revision target `-1`. Missing or invalid targets and capability IDs without an installed migration tree SHALL fail before changing the database. An Alembic downgrade failure SHALL produce a nonzero result.
+The downgrade command SHALL require an explicit tree and a target of `base` or a complete revision ID from that selected tree. Missing trees or targets, relative targets, partial or unknown IDs, and capability IDs without an installed migration tree SHALL fail before changing the database. An Alembic downgrade failure SHALL produce a nonzero result.
 
 #### Scenario: Unsupported target
-- **WHEN** an operator omits the tree, supplies a missing capability, or supplies a target other than `-1`
+- **WHEN** an operator omits the tree or target, supplies a missing capability, a partial or unknown revision ID, or a relative target such as `-1`
 - **THEN** the CLI rejects the invocation without running a migration
 
 #### Scenario: Selected tree fails
@@ -29,11 +29,15 @@ The downgrade command SHALL require an explicit tree and accept only the one-rev
 - **THEN** the CLI reports failure and no other tree is changed
 
 ### Requirement: Makefile parity with other backends
-The `fred-agents` project SHALL provide `make db-downgrade MIGRATION_TREE=<tree>` to invoke the selected tree's one-revision downgrade, matching the one-step convention of the other backend projects. Its existing database upgrade path SHALL continue to upgrade fred-runtime and installed capability trees.
+The `fred-agents` project SHALL require both `MIGRATION_TREE=<tree>` and `MIGRATION_REVISION=<revision>` for `make db-downgrade`. Its existing database upgrade path SHALL continue to upgrade fred-runtime and installed capability trees.
 
 #### Scenario: Operator uses the Make target
-- **WHEN** an operator runs `make db-downgrade MIGRATION_TREE=runtime` from `apps/fred-agents`
-- **THEN** the runtime tree moves back one revision in the configured database and capability trees are unchanged
+- **WHEN** an operator runs `make db-downgrade MIGRATION_TREE=runtime` without `MIGRATION_REVISION`
+- **THEN** the Make target rejects the command without running a migration
+
+#### Scenario: Operator supplies an exact target
+- **WHEN** an operator runs `make db-downgrade MIGRATION_TREE=runtime MIGRATION_REVISION=<older-runtime-revision>`
+- **THEN** only the runtime tree reaches that revision
 
 #### Scenario: Deployment applies migrations
 - **WHEN** the existing deployment migration command runs
