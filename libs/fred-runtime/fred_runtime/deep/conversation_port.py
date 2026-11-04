@@ -66,10 +66,12 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
             and "/skills/" in self._backend.routes
         ):
             raise ConversationFilesystemPermissionError("Skills are read-only")
-        if origin == "system":
+        if origin == "system" and not (
+            path == "/skills" or path.startswith("/skills/")
+        ):
             return
         # Literal annotations do not validate values supplied at runtime.
-        if origin != "agent":
+        if origin not in ("agent", "system"):
             raise ValueError(  # pyright: ignore[reportUnreachable]
                 "Filesystem origin must be 'agent' or 'system'"
             )

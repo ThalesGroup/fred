@@ -243,7 +243,6 @@ const promptPreviewResult = vi.hoisted(() => ({
   isError: false,
   originalArgs: undefined as { promptId: string; spaceId: string } | undefined,
 }));
-const skillQueries = vi.hoisted(() => vi.fn());
 let personalCommands: PromptSummary[] = [];
 const skillPreviewQuery = vi.hoisted(() => vi.fn());
 const previewResult = vi.hoisted(() => ({
@@ -252,20 +251,8 @@ const previewResult = vi.hoisted(() => ({
   error: undefined as unknown,
   refetch: vi.fn(),
 }));
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetAgentInstanceSkillsQuery: (_args: unknown, options: { skip: boolean }) => {
-    skillQueries(options);
-    return {
-      currentData: {
-        supported: true,
-        skills: [
-          { name: "compare-options", description: "Compare", argument_hint: "[options]" },
-          { name: "review", description: "Review" },
-        ],
-      },
-    };
-  },
-  useGetAgentInstanceSkillDetailQuery: (args: unknown, options: unknown) => {
+vi.mock("../../../../slices/runtime/skillPreview", () => ({
+  useWeaverSkillDetailQuery: (args: unknown, options: unknown) => {
     skillPreviewQuery(args, options);
     return previewResult;
   },
@@ -411,6 +398,15 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
     attachmentsUploading: false,
     capabilityIds: [],
     chatControls: [],
+    skillsSupported: true,
+    skillDetailUrlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+    skills: {
+      supported: true,
+      skills: [
+        { name: "review", description: "Review" },
+        { name: "compare-options", description: "Compare", user_invocable: false },
+      ],
+    },
     commitTitle: noop,
     deletePersistedAttachment: noop,
     handleAbort: noop,
@@ -1192,8 +1188,13 @@ describe("ManagedChatPage skill preview", () => {
       expect(skill?.type).toBe("button");
       act(() => skill!.click());
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
-        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "meeting-minutes" },
-        { skip: true },
+        {
+          spaceId: "team-1",
+          agentInstanceId: "agent-1",
+          skillName: "meeting-minutes",
+          urlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+        },
+        { skip: false, refetchOnMountOrArgChange: true },
       );
       expect(container.querySelector('aside[data-open="true"]')?.textContent).toContain("Prepare meeting minutes");
       expect(container.querySelector("strong")?.textContent).toBe("notes");
@@ -1229,8 +1230,13 @@ describe("ManagedChatPage skill preview", () => {
     try {
       act(() => root.render(<ManagedChatPage />));
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
-        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "" },
-        { skip: true },
+        {
+          spaceId: "team-1",
+          agentInstanceId: "agent-1",
+          skillName: "",
+          urlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+        },
+        { skip: true, refetchOnMountOrArgChange: true },
       );
       const skill = container.querySelector<HTMLButtonElement>(
         '[aria-label="1. chatbot.skills.loaded: compare-options"]',
@@ -1238,8 +1244,13 @@ describe("ManagedChatPage skill preview", () => {
       expect(skill).not.toBeNull();
       act(() => skill!.click());
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
-        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "compare-options" },
-        { skip: true },
+        {
+          spaceId: "team-1",
+          agentInstanceId: "agent-1",
+          skillName: "compare-options",
+          urlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+        },
+        { skip: false, refetchOnMountOrArgChange: true },
       );
       expect(container.textContent).not.toContain("chatbot.skills.currentVersion");
       expect(container.querySelector('aside[data-open="true"]')?.getAttribute("data-title-size")).toBe("large");
@@ -1251,8 +1262,13 @@ describe("ManagedChatPage skill preview", () => {
       act(() => skill!.click());
       expect(container.textContent).not.toContain("Compare alternatives");
       expect(skillPreviewQuery).toHaveBeenLastCalledWith(
-        { teamId: "team-1", agentInstanceId: "agent-1", skillName: "" },
-        { skip: true },
+        {
+          spaceId: "team-1",
+          agentInstanceId: "agent-1",
+          skillName: "",
+          urlTemplate: "/fixture-pod/agents/skills/{skill_name}",
+        },
+        { skip: true, refetchOnMountOrArgChange: true },
       );
       act(() => skill!.click());
       expect(container.textContent).toContain("Compare alternatives");
@@ -1261,7 +1277,7 @@ describe("ManagedChatPage skill preview", () => {
       chatValue.input = "/review ";
       act(() => root.render(<ManagedChatPage />));
       expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-placeholder")).toBe(
-        "chatbot.composerPlaceholder",
+        "chatbot.skills.requestPlaceholder",
       );
       chatValue.input = "";
       act(() => root.render(<ManagedChatPage />));
@@ -1358,7 +1374,7 @@ describe("ManagedChatPage skill reference preview", () => {
 });
 
 describe("ManagedChatPage slash prompt sources", () => {
-  it("resolves personal prompts in the conversation organization and skips skills", () => {
+  it("resolves personal prompts in the conversation organization", () => {
     spaces = [
       { ...SPACES[0], id: "team-1", name: "Finance" },
       { ...SPACES[1], id: "wrong-org", organization_id: "other" },
@@ -1366,12 +1382,10 @@ describe("ManagedChatPage slash prompt sources", () => {
     ];
     chatValue = baseChatValue([]);
     commandQueries.mockClear();
-    skillQueries.mockClear();
     renderToStaticMarkup(<ManagedChatPage />);
     expect(commandQueries.mock.calls).toContainEqual([{ spaceId: "team-1" }, { skip: false }]);
     expect(commandQueries.mock.calls).toContainEqual([{ spaceId: "personal-1" }, { skip: false }]);
     expect(commandQueries.mock.calls.some(([args]) => args.spaceId === "wrong-org")).toBe(false);
-    expect(skillQueries.mock.calls.every(([options]) => options.skip)).toBe(true);
     spaces = [{ ...SPACES[0], id: "team-1", name: "Finance" }];
   });
 });

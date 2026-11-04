@@ -5433,6 +5433,10 @@ async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
     )
 
     async def _fake_resolve(**kwargs):
+        from fred_runtime.model_routing.turn import TurnAuthority
+        from weaver_fixtures import turn_binding
+
+        kwargs["request"]._turn_authority = TurnAuthority(turn_binding("test"), None)
         return target
 
     monkeypatch.setattr(agent_app_module, "_validate_session_checkpoint_access", _noop)
@@ -5442,7 +5446,9 @@ async def test_identity_is_stamped_from_jwt_and_body_tokens_neutralized(
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(control_plane_url=None)),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(control_plane_url=None, skills=None)
+        ),
     )
 
     request = RuntimeExecuteRequest.model_validate(
@@ -5510,6 +5516,10 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
 
     async def _fake_resolve(**kwargs):
         resolve_calls.append(kwargs)
+        from fred_runtime.model_routing.turn import TurnAuthority
+        from weaver_fixtures import turn_binding
+
+        kwargs["request"]._turn_authority = TurnAuthority(turn_binding("test"), None)
         return target
 
     monkeypatch.setattr(agent_app_module, "_validate_session_checkpoint_access", _noop)
@@ -5519,7 +5529,9 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(control_plane_url=None)),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(control_plane_url=None, skills=None)
+        ),
     )
 
     request = RuntimeExecuteRequest.model_validate(

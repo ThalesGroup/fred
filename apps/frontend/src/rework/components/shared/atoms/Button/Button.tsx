@@ -16,6 +16,7 @@ import styles from "./Button.module.scss";
 import { ButtonSize, ButtonVariant, ColorTheme } from "../../utils/Type.ts";
 import React, { ComponentPropsWithoutRef } from "react";
 import Icon, { IconProps } from "../Icon/Icon.tsx";
+import { Tooltip } from "../Tooltip/Tooltip.tsx";
 
 export interface ButtonProps extends ComponentPropsWithoutRef<"button"> {
   children: React.ReactNode;
@@ -23,13 +24,23 @@ export interface ButtonProps extends ComponentPropsWithoutRef<"button"> {
   variant: ButtonVariant;
   size: ButtonSize;
   icon?: IconProps;
+  disabledReason?: string;
 }
-export default function Button({ children, color, variant, size, icon, className, ...props }: ButtonProps) {
+export default function Button({
+  children,
+  color,
+  variant,
+  size,
+  icon,
+  className,
+  disabledReason,
+  ...props
+}: ButtonProps) {
   const buttonClasses = [styles.btn, styles[`btn-${color}`], styles[`btn-${size}`], styles[`btn-${variant}`]];
   if (className) buttonClasses.push(className);
   const layerClasses = [styles["state-layer"], styles[`icon-${icon ? "left" : "none"}`]];
 
-  return (
+  const button = (
     <button className={buttonClasses.join(" ")} {...props}>
       <div className={layerClasses.join(" ")}>
         {icon && (
@@ -40,5 +51,12 @@ export default function Button({ children, color, variant, size, icon, className
         {children}
       </div>
     </button>
+  );
+  return props.disabled && disabledReason ? (
+    <Tooltip content={disabledReason}>
+      <span tabIndex={0}>{button}</span>
+    </Tooltip>
+  ) : (
+    button
   );
 }

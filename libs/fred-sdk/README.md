@@ -473,3 +473,18 @@ model fallback or authoring-time title configuration.
 not an assistant message or a title string to apply. Runtime consumers must keep
 its original session/identity association. See the
 [owner contract](../../apps/control-plane/README.md#automatic-conversation-titles).
+
+### Admitted skill contracts
+
+`WeaverRuntimeResolution` is the public, person-authenticated metadata projection;
+it has no inference admission. `WeaverRuntimeBinding` extends it with the required
+private inference decision. Their optional `skills` catalog contains an admitted
+pod subset and revision, not content or a browser-supplied grant. The runtime
+verifies it against its immutable source. Missing admission permits no new loads.
+
+`SkillSummary` carries `builtin`, `user_invocable` and `disable_model_invocation`;
+`SkillCatalog` distinguishes availability and policy support. Selected names in
+`RuntimeContext` remain untrusted. `BoundRuntimeContext.is_resuming` preserves
+resume semantics; existing instructions need not be discarded when further
+loads become forbidden. `SkillLoadMetadata` attributes actual partial/full reads
+to the invocation and resource, including provenance for safe UI presentation.

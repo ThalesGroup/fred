@@ -20,12 +20,14 @@ import { IconType } from "@shared/utils/Type.ts";
 interface TeamAgentEmptyStateProps {
   canManageAgents: boolean;
   templatesUnavailable: boolean;
+  disabledReason?: string;
   onCreateAgent: () => void;
 }
 
 export default function TeamAgentEmptyState({
   canManageAgents,
   templatesUnavailable,
+  disabledReason,
   onCreateAgent,
 }: TeamAgentEmptyStateProps) {
   const { agentIconName, agentsNicknameSingular } = useFrontendProperties();
@@ -41,6 +43,7 @@ export default function TeamAgentEmptyState({
               label: t("rework.teams.agents.firstCreate", { agentsNicknameSingular }),
               onClick: onCreateAgent,
               disabled: templatesUnavailable,
+              disabledReason,
             }
           : undefined
       }

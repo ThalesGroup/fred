@@ -146,6 +146,8 @@ pub struct ExecutionPreparation {
     pub max_chat_input_chars: Option<u64>,
     pub chat_controls: Vec<ChatControlDescriptor>,
     pub models: PreparationModels,
+    pub skills: Option<crate::agents::skills::SkillCatalog>,
+    pub skill_detail_url_template: Option<String>,
     /// Echo of the requested choice; binds this diagnostic to the current composer selection.
     #[schema(required = true)]
     pub model_choice: Option<ModelOfferKey>,
@@ -265,7 +267,7 @@ async fn prepare_execution(
             "The configured runtime no longer advertises this template.",
         )
     })?;
-    if !embedded && !matches!(template.category.as_str(), "react" | "graph") {
+    if !embedded && !matches!(template.category.as_str(), "react" | "deep" | "graph") {
         return Err(AppError::problem(
             StatusCode::CONFLICT,
             "agent_execution_not_connected",
@@ -284,8 +286,24 @@ async fn prepare_execution(
     }
     super::require_executable(&s, &space, &current)?;
     let selected = require_available_capabilities(&current.tuning.0, &template)?;
-    let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
+    let policy = enablement::Policy::load_for_space(&mut *tx, &space).await?;
     enablement::require_usable(&policy, &space, &current.source_runtime_id, &selected)?;
+    let supports_skills = !embedded && matches!(template.category.as_str(), "react" | "deep");
+    let skills = if supports_skills {
+        Some(
+            crate::agents::skills::resolve(&mut tx, &space, &current.source_runtime_id, &policy)
+                .await?
+                .unwrap_or(crate::agents::skills::SkillCatalog {
+                    availability: crate::agents::skills::SkillAvailability::Unavailable,
+                    supported: false,
+                    policy_supported: false,
+                    revision: String::new(),
+                    skills: vec![],
+                }),
+        )
+    } else {
+        None
+    };
     let model_choice = query.model_choice()?;
     let models = models::resolve(&mut tx, space.organization, &current.tuning.0).await?;
     let decision = models::decide(&models, model_choice.as_ref(), query.reasoning);
@@ -334,6 +352,9 @@ async fn prepare_execution(
         max_chat_input_chars: template.max_chat_input_chars,
         chat_controls,
         models,
+        skills,
+        skill_detail_url_template: supports_skills
+            .then(|| format!("{base}/agents/skills/{{skill_name}}")),
         model_choice,
         model_error,
         inference,

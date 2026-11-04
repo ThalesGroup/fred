@@ -21,6 +21,7 @@ export interface PageEmptyStateAction {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  disabledReason?: string;
 }
 
 export interface PageEmptyStateProps {
@@ -68,6 +69,7 @@ export default function PageEmptyState({ icon, message, description, action }: P
           icon={{ category: "outlined", type: "add" }}
           onClick={action.onClick}
           disabled={action.disabled}
+          disabledReason={action.disabledReason}
         >
           {action.label}
         </Button>

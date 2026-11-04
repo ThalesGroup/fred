@@ -700,7 +700,7 @@ def test_compose_system_prompt_omits_a_blank_block_entirely() -> None:
     assert prompt.count("<tools>") == 1 and prompt.count("</tools>") == 1
 
 
-def test_compose_system_prompt_advertises_mermaid_without_injecting_its_body() -> None:
+def test_compose_system_prompt_advertises_graph_without_injecting_its_body() -> None:
     skills = PlatformSkills.from_directory("package")
     prompt = compose_system_prompt(
         "BASE-TEMPLATE",
@@ -713,16 +713,16 @@ def test_compose_system_prompt_advertises_mermaid_without_injecting_its_body() -
     tools = prompt[prompt.index("<tools>") : prompt.index("</tools>")]
     assert "TOOL-LIST" in tools
     assert "FILESYSTEM-NOTICE" in tools
-    assert "mermaid" in tools
-    assert "Skill `mermaid` (not a tool)" in tools
-    assert 'load_skill(name="mermaid")' in tools
+    assert "graph" in tools
+    assert "Skill `graph` (not a tool)" in tools
+    assert 'load_skill(name="graph")' in tools
     assert 'load_skill(name="meeting-minutes")' in tools
     assert "Before answering or choosing a task tool, check the catalog" in tools
     assert (
         "you MUST call load_skill(name) before answering or using task tools" in tools
     )
     assert "even without a skill name or slash" in tools
-    assert "[diagram goal or source] [constraints]" in tools
+    assert "[goal, source or data] [constraints]" in tools
     assert _EXPECTED_MERMAID_FRAGMENT not in prompt
     assert "That viewer displays static HTML" not in prompt
     assert "subgraph SUBGRAPH_ID" not in prompt

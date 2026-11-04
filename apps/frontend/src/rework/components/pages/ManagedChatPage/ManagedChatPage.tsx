@@ -76,7 +76,7 @@ import { useMySpacesQuery, useLazyGetPromptQuery } from "../../../../slices/cont
 import type { MySpace, PromptSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
-import { useGetAgentInstanceSkillDetailQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useWeaverSkillDetailQuery } from "../../../../slices/runtime/skillPreview";
 import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import Chip from "@shared/atoms/Chip/Chip";
@@ -212,10 +212,6 @@ function ManagedChatContent({
   const promptPreviewDrawer = activePushDrawer?.kind === "prompt-preview" ? activePushDrawer : null;
   const previewPromptIdRef = useRef<string | null>(null);
   previewPromptIdRef.current = promptPreviewDrawer?.promptId ?? null;
-  const skillPreview = useGetAgentInstanceSkillDetailQuery(
-    { teamId, agentInstanceId, skillName: previewSkillName ?? "" },
-    { skip: true },
-  );
   const previewScope = useRef({ teamId, agentInstanceId });
   useEffect(() => {
     if (previewScope.current.teamId !== teamId || previewScope.current.agentInstanceId !== agentInstanceId) {
@@ -260,6 +256,15 @@ function ManagedChatContent({
   const isAdmin =
     space.kind === "personal" || space.roles.some((role) => role === "owner" || role === "organization_admin");
   const chat = useManagedChat({ teamId, spaceId: space.id, agentInstanceId });
+  const skillPreview = useWeaverSkillDetailQuery(
+    {
+      spaceId: teamId,
+      agentInstanceId,
+      skillName: previewSkillName ?? "",
+      urlTemplate: chat.skillDetailUrlTemplate ?? "",
+    },
+    { skip: !previewSkillName || !chat.skillDetailUrlTemplate, refetchOnMountOrArgChange: true },
+  );
 
   // Opening a push drawer is a statement about ONE conversation, so switching
   // conversations closes it: the panels (capability, attachments, document
@@ -680,7 +685,12 @@ function ManagedChatContent({
   // menu reach the same send.
   const commands = useComposerCommands({
     enabled: !chat.executionDisabled,
-    skillsEnabled: false,
+    skillsEnabled: chat.skillsSupported,
+    promptsEnabled: space.kind !== "project",
+    skillCatalog: chat.skills,
+    skillsLoading: chat.modelPreparationPending,
+    skillsFailed: chat.preparationUnavailable || chat.skillState === "unavailable",
+    refreshSkills: chat.refreshSkills,
     sessionId: chat.sessionId,
     teamId,
     agentInstanceId,
@@ -774,6 +784,9 @@ function ManagedChatContent({
           />
         </div>
       )}
+      {chat.skillState && chat.skillState !== "available" && (
+        <p role="status">{t(`chatbot.skills.state.${chat.skillState}`)}</p>
+      )}
       <RichInputField
         value={commands.composerValue}
         onChange={commands.onComposerChange}
@@ -816,7 +829,8 @@ function ManagedChatContent({
           onOpenPrompt: openPromptPreview,
           tokens: commands.selectedSkills.map((token) => ({
             ...token,
-            description: commands.skillDescriptions.get(token.name),
+            description: commands.skillSummaries.get(token.name)?.description,
+            builtin: commands.skillSummaries.get(token.name)?.builtin,
             onOpen: openSkill,
           })),
         }}
@@ -1093,7 +1107,7 @@ function ManagedChatContent({
                         onHitlFreeTextChange={chat.setHitlFreeText}
                         onOpenCommandPrompt={openCommandPrompt}
                         onOpenSkill={openSkill}
-                        skillDescriptions={commands.skillDescriptions}
+                        skillSummaries={commands.skillSummaries}
                       />
                     )}
                   </div>

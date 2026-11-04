@@ -5,7 +5,7 @@ use control_plane::{db, domain::Space};
 use sqlx::PgPool;
 use uuid::Uuid;
 #[path = "database.rs"]
-mod database;
+pub(super) mod database;
 
 pub struct Env {
     pub pool: PgPool,

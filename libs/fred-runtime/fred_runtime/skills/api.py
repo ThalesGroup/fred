@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from fred_core.security.structure import KeycloakUser, is_service_agent
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
-from fred_sdk.contracts.weaver import WeaverRuntimeBinding
+from fred_sdk.contracts.weaver import WeaverRuntimeResolution
 from pydantic import ValidationError
 
 from fred_runtime.app.context import PodApplicationContext
@@ -45,8 +45,13 @@ async def get_instance_skills(
             follow_redirects=False,
         )
         if response.status_code != 200:
-            raise HTTPException(status_code=403, detail="Weaver metadata refused")
-        binding = WeaverRuntimeBinding.model_validate(response.json())
+            raise HTTPException(
+                status_code=response.status_code
+                if response.status_code in (401, 403, 404, 409, 422)
+                else 503,
+                detail="Weaver metadata refused",
+            )
+        binding = WeaverRuntimeResolution.model_validate(response.json())
     except (httpx.HTTPError, ValueError):
         raise HTTPException(
             status_code=503, detail="Weaver metadata unavailable"
@@ -64,7 +69,15 @@ async def get_instance_skills(
     if isinstance(definition, GraphAgentDefinition):
         return SkillCatalog(supported=False)
     skills = get_runtime_context().config.skills
-    return skills.catalog if skills is not None else SkillCatalog()
+    from fred_runtime.skills.catalog import admitted_skills
+
+    try:
+        scoped = admitted_skills(skills, binding.skills)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return (
+        scoped.catalog if scoped is not None else SkillCatalog(availability="disabled")
+    )
 
 
 async def get_instance_skill_detail(

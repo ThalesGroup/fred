@@ -533,6 +533,19 @@ const injectedRtkApi = api.injectEndpoints({
     spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
     }),
+    spaceCapabilityPolicies: build.query<SpaceCapabilityPoliciesApiResponse, SpaceCapabilityPoliciesApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/capability-policies` }),
+    }),
+    replaceSpaceCapabilityPolicy: build.mutation<
+      ReplaceSpaceCapabilityPolicyApiResponse,
+      ReplaceSpaceCapabilityPolicyApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/capability-policies/${queryArg.runtimeId}`,
+        method: "PUT",
+        body: queryArg.replaceSpaceCapabilityPolicy,
+      }),
+    }),
     listPromptCategories: build.query<ListPromptCategoriesApiResponse, ListPromptCategoriesApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/prompt-categories`,
@@ -1153,6 +1166,16 @@ export type AdmitRuntimeApiArg = {
 export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
 export type SpaceAgentTemplatesApiArg = {
   spaceId: string;
+};
+export type SpaceCapabilityPoliciesApiResponse = /** status 200 undefined */ SpaceCapabilityPolicy[];
+export type SpaceCapabilityPoliciesApiArg = {
+  spaceId: string;
+};
+export type ReplaceSpaceCapabilityPolicyApiResponse = unknown;
+export type ReplaceSpaceCapabilityPolicyApiArg = {
+  spaceId: string;
+  runtimeId: string;
+  replaceSpaceCapabilityPolicy: ReplaceSpaceCapabilityPolicy;
 };
 export type ListPromptCategoriesApiResponse = /** status 200 undefined */ PromptCategoryPage;
 export type ListPromptCategoriesApiArg = {
@@ -1881,7 +1904,15 @@ export type CapabilityFieldDescription = {
   type: CapabilityFieldType;
 };
 export type CapabilityExecutionModel = "react" | "graph";
-export type PodCapabilityKind = "tool";
+export type PodCapabilityKind = "tool" | "skill";
+export type SkillSummary = {
+  argument_hint?: string | null;
+  builtin: boolean;
+  description: string;
+  disable_model_invocation: boolean;
+  name: string;
+  user_invocable: boolean;
+};
 export type PodCapabilityDescriptor = {
   config_fields?: CapabilityFieldDescription[];
   description: string;
@@ -1892,6 +1923,7 @@ export type PodCapabilityDescriptor = {
   name: string;
   public_version?: string | null;
   runtime_id?: string | null;
+  skill?: SkillSummary | null;
   source_id?: string | null;
   team_settings_fields?: CapabilityFieldDescription[];
   version: string;
@@ -1930,6 +1962,8 @@ export type PodCapabilityInventory = {
   observation: CatalogObservationState;
   observed_at?: string | null;
   runtime_id: string;
+  skills_availability?: string | null;
+  skills_supported: boolean;
   /** Links from the last successful snapshot, all scoped to this runtime. */
   template_capabilities: PodTemplateCapability[];
 };
@@ -2348,6 +2382,14 @@ export type PreparationModels = {
   recommendation: ModelOfferKey | null;
   requires_reselection: boolean;
 };
+export type SkillAvailability = "available" | "disabled" | "unavailable";
+export type SkillCatalog = {
+  availability: SkillAvailability;
+  policy_supported: boolean;
+  revision: string;
+  skills: SkillSummary[];
+  supported: boolean;
+};
 export type ExecutionPreparation = {
   agent_configuration_revision: number;
   agent_instance_id: string;
@@ -2367,6 +2409,8 @@ export type ExecutionPreparation = {
   model_error: ModelPreparationError | null;
   models: PreparationModels;
   runtime_id: string;
+  skill_detail_url_template?: string | null;
+  skills?: SkillCatalog | null;
   space_id: string;
   /** False until the managed Weaver HITL journey is connected. */
   supports_hitl: boolean;
@@ -2439,6 +2483,7 @@ export type RuntimeBinding = {
   inference?: InferenceAdmission | null;
   models: RuntimeModels;
   run_id: string | null;
+  skills?: SkillCatalog | null;
   space: RuntimeSpace;
   subject_id: string;
   title?: TitleAdmission | null;
@@ -2475,6 +2520,29 @@ export type AgentTemplateSummary = {
   tags: string[];
   team_instantiable: boolean;
   template_id: string;
+};
+export type LocalOffer = {
+  advertised: boolean;
+  capability_id: string;
+  descriptor: PodCapabilityDescriptor;
+  parent_permitted: boolean;
+  permitted: boolean;
+};
+export type SpaceCapabilityPolicy = {
+  offers: LocalOffer[];
+  permitted_ids: string[];
+  reachable: boolean;
+  restricted: boolean;
+  revision: number;
+  runtime_id: string;
+  skills_availability?: string | null;
+  skills_supported: boolean;
+  source_enabled: boolean;
+};
+export type ReplaceSpaceCapabilityPolicy = {
+  expected_revision: number;
+  permitted_ids: string[];
+  restricted: boolean;
 };
 export type PromptCategory = {
   id: string;
@@ -2736,6 +2804,9 @@ export const {
   useAdmitRuntimeMutation,
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
+  useSpaceCapabilityPoliciesQuery,
+  useLazySpaceCapabilityPoliciesQuery,
+  useReplaceSpaceCapabilityPolicyMutation,
   useListPromptCategoriesQuery,
   useLazyListPromptCategoriesQuery,
   useCreatePromptCategoryMutation,

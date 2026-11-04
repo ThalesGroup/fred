@@ -36,8 +36,13 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const presentationTranslations = vi.hoisted(() => ({}) as Record<string, string>);
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) =>
+      presentationTranslations[key] ?? options?.defaultValue ?? key,
+    i18n: { language: "en" },
+  }),
 }));
 
 // Complete catalog payloads; pagination itself is covered with the real RTK store.
@@ -76,18 +81,6 @@ const NO_SKILLS = { supported: false, skills: [] };
 let skillsPending = false;
 let skillsFailed = false;
 
-const skillQueries = vi.fn();
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetAgentInstanceSkillsQuery: (_args: unknown, options: { skip: boolean }) => {
-    skillQueries(options);
-    return {
-      currentData: options.skip || skillsPending ? undefined : (skillCatalog ?? NO_SKILLS),
-      isFetching: !options.skip && skillsPending,
-      isError: !options.skip && skillsFailed,
-      refetch: refetchSkills,
-    };
-  },
-}));
 const abortRead = vi.fn();
 // Build full generated payloads from each scenario's text/error. Abort deliberately
 // does not resolve held responses, so the late-response guard is exercised too.
@@ -129,7 +122,17 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
 }));
 
 let skillCatalog:
-  | { supported: boolean; skills: { name: string; description: string; argument_hint?: string | null }[] }
+  | {
+      supported: boolean;
+      skills: {
+        name: string;
+        description: string;
+        user_invocable?: boolean;
+        disable_model_invocation?: boolean;
+        builtin?: boolean;
+        argument_hint?: string | null;
+      }[];
+    }
   | undefined;
 const onRunSkill = vi.fn();
 const onSkillError = vi.fn();
@@ -145,6 +148,7 @@ function Host({
   agentInstanceId = "instance-1",
   personalTeamId,
   skillsEnabled = false,
+  promptsEnabled = true,
   sessionId = "session-1",
 }: {
   inlineEditor?: boolean;
@@ -152,6 +156,7 @@ function Host({
   agentInstanceId?: string;
   personalTeamId?: string;
   skillsEnabled?: boolean;
+  promptsEnabled?: boolean;
   sessionId?: string;
 }) {
   const [input, setInput] = useState("");
@@ -159,6 +164,11 @@ function Host({
   const commands = useComposerCommands({
     teamId,
     skillsEnabled,
+    promptsEnabled,
+    skillCatalog: skillsEnabled && !skillsPending ? (skillCatalog ?? NO_SKILLS) : undefined,
+    skillsLoading: skillsEnabled && skillsPending,
+    skillsFailed: skillsEnabled && skillsFailed,
+    refreshSkills: refetchSkills,
     sessionId,
     agentInstanceId,
     personalTeamId,
@@ -183,7 +193,11 @@ function Host({
         inlineEditor
           ? {
               promptTokens: commands.selectedPrompts,
-              tokens: commands.selectedSkills.map((token) => ({ ...token, onOpen: () => {} })),
+              tokens: commands.selectedSkills.map((token) => ({
+                ...token,
+                ...commands.skillSummaries.get(token.name),
+                onOpen: () => {},
+              })),
             }
           : undefined
       }
@@ -201,6 +215,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  for (const key of Object.keys(presentationTranslations)) delete presentationTranslations[key];
   skillCatalog = undefined;
   listResult = { data: PROMPTS };
   personalResult = { data: [] };
@@ -392,7 +407,7 @@ describe("the command menu", () => {
     expect(sections()).toEqual([
       ["chatbot.commandMenu.sections.teamFallback", ["/pre-sum", "/big-sum"]],
       ["chatbot.commandMenu.sections.personal", ["/sum-up", "/sum", "/my-sum"]],
-      ["chatbot.commandMenu.sections.platform", ["/summarize", "/resume"]],
+      ["chatbot.commandMenu.sections.platform", ["summarize", "resume"]],
     ]);
     // The first row keeps the focus even though a later section starts with the text.
     expect(focusedLabel()).toBe("/pre-sum");
@@ -773,7 +788,7 @@ describe("platform skills", () => {
         selection: { anchor: prefix.length },
       }),
     );
-    expect(labels()).toEqual(["/review"]);
+    expect(labels()).toEqual(["review"]);
     if (method === "click")
       act(() => options()[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })));
     else cmPress(method);
@@ -893,6 +908,26 @@ describe("platform skills", () => {
     expect(onSend).not.toHaveBeenCalled();
     expect(onSkillError).toHaveBeenCalledWith("unavailable");
   });
+  it.each(["analyze-data", "compare-options", "summarize-document", "data-visualization", "verify-answer"])(
+    "preserves a stale draft when %s becomes model-only or is retired",
+    (name) => {
+      activateSkills(true);
+      skillCatalog = {
+        supported: true,
+        skills: [...skillCatalog!.skills, { name, description: "Previous catalog entry" }],
+      };
+      act(() => root.render(<Host inlineEditor />));
+      const draft = `/${name} Notes`;
+      cmType(draft);
+      skillCatalog = { supported: true, skills: skillCatalog.skills.filter((skill) => skill.name !== name) };
+      act(() => root.render(<Host inlineEditor />));
+      act(() => renders[renders.length - 1]!.submit());
+      expect(onRunSkill).not.toHaveBeenCalled();
+      expect(onSend).not.toHaveBeenCalled();
+      expect(onSkillError).toHaveBeenCalledWith("unavailable");
+      expect(cm().state.doc.toString()).toBe(draft);
+    },
+  );
   it("resolves available inline prompt commands outside ReAct with surrounding text", async () => {
     activateSkills(true);
     cmType("Explain how /summary works");
@@ -1040,7 +1075,7 @@ describe("platform skills", () => {
 
     // A new slash further on is a new command: the menu is for it alone.
     cmTypeByHand(" /re");
-    expect(labels()).toEqual(["/review"]);
+    expect(labels()).toEqual(["review"]);
     expect(promptShown()).toBe(true);
   });
   it("deletes one of two adjacent tokens without touching the other", () => {
@@ -1098,9 +1133,9 @@ describe("platform skills", () => {
   it("lists all runtime skills with descriptions and platform identity, without their argument hint", () => {
     activateSkills();
     type("/");
-    expect(labels()).toEqual(["/search", "/summary", "/meeting-minutes", "/review"]);
+    expect(labels()).toEqual(["/search", "/summary", "meeting-minutes", "review"]);
     // The native tooltip gives the full description, which the row may cut.
-    expect(options()[2].title).toBe("Meeting minutes");
+    expect(options()[2].title).toBe("meeting-minutes: Meeting minutes");
     expect(options()[2].querySelector("[class*=customIcon]")).not.toBeNull();
     expect(options()[2].querySelector("em")?.textContent).toContain("Meeting minutes");
   });
@@ -1213,7 +1248,7 @@ describe("platform skills", () => {
     expect(onRunCommand).toHaveBeenCalledOnce();
     expect(onRunSkill).not.toHaveBeenCalled();
     type("/rev");
-    expect(labels()).toEqual(["/review", "/review"]);
+    expect(labels()).toEqual(["/review", "review"]);
     press("ArrowDown");
     press("Tab");
     expect(selected()).toEqual({ name: "review" });
@@ -1247,7 +1282,7 @@ describe("platform skills", () => {
     skillCatalog = { supported: true, skills: [...skillCatalog!.skills, { name: "skillet", description: "Cooking" }] };
     act(() => root.render(<Host skillsEnabled />));
     type("/ski");
-    expect(labels()).toEqual(["/skillet"]);
+    expect(labels()).toEqual(["skillet"]);
     press("Tab");
     expect(selected()).toEqual({ name: "skillet" });
   });
@@ -1274,7 +1309,7 @@ describe("platform skills", () => {
   it("keeps named legacy completion available without a dispatcher row", () => {
     activateSkills();
     type("/skill");
-    expect(labels()).toEqual(["/meeting-minutes", "/review"]);
+    expect(labels()).toEqual(["meeting-minutes", "review"]);
     press("Tab");
     expect(textarea().value).toBe("/meeting-minutes ");
     expect(selected()).toEqual({ name: "meeting-minutes" });
@@ -1497,7 +1532,7 @@ describe("platform skills", () => {
     activateSkills(true);
     cmType("/s existing notes");
     act(() => cm().dispatch({ selection: { anchor: 2 } }));
-    expect(labels()).toEqual(["/search", "/summary", "/meeting-minutes"]);
+    expect(labels()).toEqual(["/search", "/summary", "meeting-minutes"]);
     cmPress("Tab");
     expect(cm().state.doc.toString()).toBe("/search existing notes");
     expect(cm().state.selection.main.head).toBe(8);
@@ -1596,7 +1631,7 @@ describe("personal and team prompt commands", () => {
     skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
     mountReact();
     type("/");
-    expect(labels()).toEqual(["/search", "/summary", "/summary", "/review"]);
+    expect(labels()).toEqual(["/search", "/summary", "/summary", "review"]);
     expect(options()[0].querySelector("[class*=rowIcon]")?.textContent).toBe("edit_note");
     expect(options()[0].querySelector("em")?.textContent).toBe("Chercher");
     expect(options()[3].querySelector("[class*=rowIcon]")?.textContent).not.toBe("edit_note");
@@ -1604,7 +1639,7 @@ describe("personal and team prompt commands", () => {
     expect(sections()).toEqual([
       ["chatbot.commandMenu.sections.teamFallback", ["/search", "/summary"]],
       ["chatbot.commandMenu.sections.personal", ["/summary"]],
-      ["chatbot.commandMenu.sections.platform", ["/review"]],
+      ["chatbot.commandMenu.sections.platform", ["review"]],
     ]);
     expect(container.textContent).not.toContain("chatbot.commandMenu.sources.");
     type("/sea");
@@ -1612,7 +1647,7 @@ describe("personal and team prompt commands", () => {
     // The arrows cross section boundaries and stop on the last row.
     type("/");
     for (let step = 0; step < 4; step += 1) press("ArrowDown");
-    expect(focusedLabel()).toBe("/review");
+    expect(focusedLabel()).toBe("review");
     press("ArrowUp");
     expect(options()[2].getAttribute("aria-selected")).toBe("true");
   });
@@ -1991,7 +2026,7 @@ describe("sending while a catalog has not answered", () => {
       skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
       act(() => root.render(<Host skillsEnabled />));
       type("/");
-      expect(labels()).toEqual(["/review"]);
+      expect(labels()).toEqual(["review"]);
       expect(container.textContent).not.toContain("chatbot.commandMenu.error");
     });
   });
@@ -2134,7 +2169,7 @@ describe("several prompt commands in one message", () => {
     expect(sections().filter(([heading]) => heading)).toEqual([
       ["chatbot.commandMenu.sections.teamFallback", ["/search", "/summary"]],
       ["chatbot.commandMenu.sections.personal", ["/tone"]],
-      ["chatbot.commandMenu.sections.platform", ["/verify-answer"]],
+      ["chatbot.commandMenu.sections.platform", ["verify-answer"]],
     ]);
   });
 
@@ -2412,6 +2447,56 @@ describe("several prompt commands in one message", () => {
     expect(onRunCommand.mock.calls[0][0]).not.toHaveProperty("skills");
   });
 
+  it.each([0, 2])(
+    "keeps a picked prompt's identity through consecutive edits before rendering (second edit at %i)",
+    async (secondAt) => {
+      mount([{ ...TONE, prompt_id: "p-review", logical_name: "review", display_name: "Review prompt" }], ["review"]);
+      cmAppend("/rev");
+      cmPress("Tab");
+      cmAppend("Notes");
+      expect(latest().selectedPrompts.map((prompt) => prompt.promptId)).toEqual(["p-review"]);
+      act(() => cm().dispatch({ selection: { anchor: 0 } }));
+      act(() => {
+        cm().dispatch({ changes: { from: 0, insert: "a " }, userEvent: "input.type" });
+        cm().dispatch({ changes: { from: secondAt, insert: "b " }, userEvent: "input.type" });
+      });
+      const draft = `${secondAt === 0 ? "b a" : "a b"} /review Notes`;
+      expect(cm().state.doc.toString()).toBe(draft);
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["p-review", 4]]);
+      expect(latest().selectedSkills).toEqual([]);
+      await submit();
+      expect(onRunCommand.mock.calls[0][0].command).toMatchObject({
+        prompt_id: "p-review",
+        draft_text: draft,
+        draft_command_offset: 4,
+      });
+      expect(onRunCommand.mock.calls[0][0]).not.toHaveProperty("skills");
+      expect(onRunSkill).not.toHaveBeenCalled();
+      act(() => undo(cm()));
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["p-review", 0]]);
+      act(() => redo(cm()));
+      expect(latest().selectedPrompts.map((prompt) => [prompt.promptId, prompt.from])).toEqual([["p-review", 4]]);
+    },
+  );
+
+  it("submits the latest draft and prompt identity before the controlled parent renders", async () => {
+    mount([{ ...TONE, prompt_id: "p-review", logical_name: "review", display_name: "Review prompt" }], ["review"]);
+    cmAppend("/rev");
+    cmPress("Tab");
+    cmAppend("Notes");
+    await act(async () => {
+      cm().dispatch({ changes: { from: 0, insert: "a " }, userEvent: "input.type" });
+      cm().dispatch({ changes: { from: 0, insert: "b " }, userEvent: "input.type" });
+      latest().submit();
+    });
+    expect(onRunCommand.mock.calls[0][0].command).toMatchObject({
+      prompt_id: "p-review",
+      draft_text: "b a /review Notes",
+      draft_command_offset: 4,
+    });
+    expect(onRunSkill).not.toHaveBeenCalled();
+  });
+
   it("keeps hand-typed tokens while the text around them is edited", () => {
     mount();
     cmAppend("/summary and /tone now");
@@ -2667,11 +2752,9 @@ describe("several prompt commands in one message", () => {
 describe("Weaver resolution lifecycle", () => {
   it("does not request or refetch skills when skillsEnabled is false", async () => {
     skillCatalog = { supported: true, skills: [{ name: "review", description: "Review" }] };
-    skillQueries.mockClear();
     act(() => root.render(<Host skillsEnabled={false} />));
     type("/review notes");
     await act(async () => renders[renders.length - 1]!.submit());
-    expect(skillQueries.mock.calls.every(([options]) => options.skip)).toBe(true);
     expect(refetchSkills).not.toHaveBeenCalled();
     expect(onRunSkill).not.toHaveBeenCalled();
     expect(onSend).toHaveBeenCalledOnce();
@@ -2742,4 +2825,48 @@ describe("Weaver resolution lifecycle", () => {
     const entry = sent.command.prompts[0];
     expect(sent.text.slice(entry.text_offset, entry.text_offset + entry.text_length)).toBe(sent.text);
   });
+});
+
+describe("Weaver invocation eligibility", () => {
+  it("keeps model-only procedures out of completion and blocks a stale explicit invocation", async () => {
+    skillCatalog = {
+      supported: true,
+      skills: [
+        { name: "internal", description: "Automatic procedure", user_invocable: false },
+        { name: "graph", description: "Draw", user_invocable: true },
+      ],
+    };
+    act(() => root.render(<Host skillsEnabled />));
+    type("/");
+    expect(labels()).not.toContain("internal");
+    type("/internal notes");
+    await pressAsync("Enter");
+    expect(onSkillError).toHaveBeenCalledWith("unavailable");
+    expect(onSend).not.toHaveBeenCalled();
+    expect(textarea().value).toBe("/internal notes");
+  });
+  it.each(["mermaid", "data-visualization", "verify-answer", "graph"])(
+    "retains unavailable /%s as an editable draft",
+    async (name) => {
+      skillCatalog = { supported: true, skills: [] };
+      act(() => root.render(<Host skillsEnabled />));
+      type(`/${name} notes`);
+      await pressAsync("Enter");
+      expect(onSkillError).toHaveBeenCalledWith("unavailable");
+      expect(onSend).not.toHaveBeenCalled();
+      expect(textarea().value).toBe(`/${name} notes`);
+    },
+  );
+});
+
+it("runs an authorized project skill without waiting for the unsupported project prompt catalog", async () => {
+  commandsFetching = true;
+  commandsFailed = true;
+  skillCatalog = { supported: true, skills: [{ name: "graph", description: "Draw" }] };
+  act(() => root.render(<Host teamId="project" skillsEnabled promptsEnabled={false} />));
+  type("/graph explain");
+  await pressAsync("Enter");
+  expect(onRunSkill).toHaveBeenCalledWith(expect.objectContaining({ skills: [{ name: "graph" }] }));
+  expect(onSkillError).not.toHaveBeenCalled();
+  expect(listCommands).toHaveBeenCalledWith({ spaceId: "project" }, expect.objectContaining({ skip: true }));
 });

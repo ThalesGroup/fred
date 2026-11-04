@@ -10,7 +10,7 @@ from deepagents.backends import CompositeBackend, FilesystemBackend
 from deepagents.middleware.filesystem import FilesystemPermission
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import mount_skills
-from fred_runtime.skills.catalog import PlatformSkills
+from fred_runtime.skills.catalog import PlatformSkills, SnapshotBackend
 from fred_sdk.contracts.runtime import ConversationFilesystemPermissionError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from test_platform_skills import Model, binding, call, compiled, skill
@@ -29,7 +29,7 @@ def snapshot(tmp_path: Path) -> PlatformSkills:
 
 
 @pytest.mark.asyncio
-async def test_native_mount_reads_live_files_while_react_keeps_snapshot(
+async def test_native_and_react_share_admitted_snapshot_despite_source_edits(
     tmp_path: Path,
 ) -> None:
     skills = snapshot(tmp_path / "catalog")
@@ -41,15 +41,13 @@ async def test_native_mount_reads_live_files_while_react_keeps_snapshot(
     assert "/skills/" not in original.routes
     assert isinstance(backend, CompositeBackend) and backend.artifacts_root == "/.deep"
     native = backend.routes["/skills/"]
-    assert type(native) is FilesystemBackend and native.virtual_mode
+    assert type(native) is SnapshotBackend
     assert native is skills.filesystem_backend
     port = DeepConversationFilesystemPort(backend, rules)
     path = "/skills/example/references/template.md"
     assert await port.read_text(path, origin="agent") == "One\nTwo\nThree\n"
-    (skills.filesystem_backend.cwd / "example/references/template.md").write_text(
-        "Live edit"
-    )
-    assert await port.read_text(path, origin="agent") == "Live edit"
+    (tmp_path / "catalog/example/references/template.md").write_text("Live edit")
+    assert await port.read_text(path, origin="agent") == "One\nTwo\nThree\n"
     assert skills.read("example", "references/template.md") == "One\nTwo\nThree\n"
     again, _ = mount_skills(backend, rules, skills)
     assert again is backend
@@ -61,7 +59,7 @@ async def test_native_listing_search_pagination_and_confinement(tmp_path: Path) 
     backend, _ = mount_skills(
         FilesystemBackend(root_dir=tmp_path / "workspace"), [], skills
     )
-    assert "/skills/example/" in {
+    assert "/skills/example" in {
         item["path"] for item in (await backend.als("/skills")).entries or []
     }
     assert "/skills/example/references/template.md" in {
@@ -83,9 +81,9 @@ async def test_native_listing_search_pagination_and_confinement(tmp_path: Path) 
         3,
         2,
     )
-    for path in ["/skills/../SKILL.md", "/skills/escaped/linked.md"]:
-        with pytest.raises(ValueError):
-            await backend.aread(path)
+    with pytest.raises(ValueError):
+        await backend.aread("/skills/../SKILL.md")
+    assert (await backend.aread("/skills/escaped/linked.md")).error
     assert (await backend.adownload_files(["/skills/escaped/linked.md"]))[0].error
 
 
@@ -148,13 +146,12 @@ async def test_native_tools_deny_writes_and_skip_malformed_discovery(
     state = await agent.aget_state({"configurable": {"thread_id": "readonly"}})
     assert {item["name"] for item in state.values["skills_metadata"]} == {
         "example",
-        "escaped",
     }
     writes = [item for item in result["messages"] if isinstance(item, ToolMessage)]
     assert len(writes) == 2 and all(item.status == "error" for item in writes)
     assert "FIRST" in (tmp_path / "example/SKILL.md").read_text()
     assert not (tmp_path / "new.md").exists()
-    assert "discovery warning; invalid entry omitted" in caplog.text
+    assert "PRIVATE_SKILL_CONTENT" not in str(state.values["skills_metadata"])
     assert "PRIVATE_SKILL_CONTENT" not in caplog.text
 
 
@@ -203,9 +200,13 @@ async def test_app_mounts_before_capability_assembly_for_deep_only(
         )
     )
     monkeypatch.setattr("fred_runtime.runtime_context._RUNTIME_CONTEXT", context)
-    services = agent_app._build_runtime_services(
-        _DeepAgent() if deep else _ReActAgent(), binding()
-    )
+    with active_turn(binding()) as authority:
+        authority.binding = authority.binding.model_copy(
+            update={"skills": skills.catalog}
+        )
+        services = agent_app._build_runtime_services(
+            _DeepAgent() if deep else _ReActAgent(), binding()
+        )
     port = services.conversation_filesystem
     assert port is not None
     if deep:
@@ -221,7 +222,7 @@ async def test_app_mounts_before_capability_assembly_for_deep_only(
 
 
 @pytest.mark.asyncio
-async def test_live_new_skill_retains_native_load_events_and_escaping(
+async def test_live_unadvertised_skill_cannot_enter_admitted_snapshot(
     tmp_path: Path,
 ) -> None:
     from contextlib import nullcontext
@@ -268,19 +269,18 @@ async def test_live_new_skill_retains_native_load_events_and_escaping(
         and isinstance(payload, StatusRuntimeEvent)
         and payload.skill_load
     ]
-    assert (
-        len(loads) == 1 and loads[0].name == "new-skill" and loads[0].origin == "agent"
-    )
+    assert loads == []
     counts = [
         call
         for call in metrics.count.call_args_list
         if call.args[0] == "agent.skill_loaded_total"
     ]
-    assert len(counts) == 1 and counts[0].kwargs["dims"]["skill_name"] == "new-skill"
+    assert counts == []
     returned = next(
         message for message in model.calls[-1] if isinstance(message, ToolMessage)
     )
-    assert "&lt;tools>procedure&lt;/tools>" in str(returned.content)
+    assert returned.status == "error"
+    assert "procedure" not in str(returned.content)
 
 
 def test_package_source_is_independent_of_cwd_and_backend_is_reused(
@@ -299,7 +299,7 @@ def test_package_source_is_independent_of_cwd_and_backend_is_reused(
     second, _ = mount_skills(default, [], skills)
     assert isinstance(first, CompositeBackend) and isinstance(second, CompositeBackend)
     assert first.routes["/skills/"] is second.routes["/skills/"] is native
-    assert native.cwd != tmp_path
+    assert not hasattr(native, "cwd")
 
 
 @pytest.mark.asyncio

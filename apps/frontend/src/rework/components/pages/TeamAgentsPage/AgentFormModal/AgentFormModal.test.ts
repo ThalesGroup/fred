@@ -97,9 +97,10 @@ describe("Weaver form fidelity", () => {
     expect(updateAgentRequest(payload, saved)).toEqual({ display_name: "Renamed" });
     expect(saved.capability_config.document_access.config).toEqual(config);
   });
-  it("does not resolve organization or project spaces, unknown ids, or personal-shaped legacy ids", () => {
-    for (const kind of ["organization", "project"] as const)
-      expect(resolveAgentSpace([{ ...SPACES[0], kind }], SPACES[0].id)).toBeUndefined();
+  it("resolves projects, but not organization spaces or personal-shaped legacy ids", () => {
+    const project = { ...SPACES[0], kind: "project" as const };
+    expect(resolveAgentSpace([project], project.id)).toBe(project);
+    expect(resolveAgentSpace([{ ...SPACES[0], kind: "organization" }], SPACES[0].id)).toBeUndefined();
     expect(resolveAgentSpace(SPACES, "personal-reader")).toBeUndefined();
     expect(resolveAgentSpace(SPACES, "personal")?.id).toBe(SPACES[1].id);
   });

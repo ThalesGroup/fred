@@ -2,8 +2,8 @@
 # Licensed under the Apache License, Version 2.0.
 """Bounded startup discovery through DeepAgents' public SkillsMiddleware hook.
 
-ReAct and web loaders use immutable bytes; Deep mounts the physical directory.
-Installing resources does not activate them: configuration opts in.
+ReAct, previews and native Deep reads use the same bounded immutable bytes.
+Packaged resources are the default; explicit null configuration opts out.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import os
 import re
 import stat
 from collections import Counter
+from copy import copy
 from importlib.resources import as_file, files
 from itertools import islice
 from pathlib import Path, PurePosixPath
@@ -21,14 +22,23 @@ from types import MappingProxyType
 from typing import cast
 
 import yaml
-from deepagents.backends import FilesystemBackend
 from deepagents.backends.protocol import (
     BackendProtocol,
     EditResult,
     FileDownloadResponse,
     FileUploadResponse,
+    GlobResult,
+    GrepResult,
     LsResult,
+    ReadResult,
     WriteResult,
+)
+from deepagents.backends.utils import (
+    compile_grep_include_glob,
+    create_file_data,
+    grep_matches_from_files,
+    slice_read_response,
+    validate_path,
 )
 from deepagents.middleware.skills import (
     SkillMetadata,
@@ -163,6 +173,47 @@ class SnapshotBackend(BackendProtocol):
             for p in paths
         ]
 
+    def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
+        content = self.contents.get(validate_path(file_path))
+        if content is None:
+            return ReadResult(error="Skill file unavailable in the admitted snapshot")
+        return slice_read_response(
+            create_file_data(content.decode("utf-8")), offset, limit
+        )
+
+    def grep(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        *,
+        max_count: int | None = None,
+    ) -> GrepResult:
+        return grep_matches_from_files(
+            {
+                key: create_file_data(value.decode("utf-8"))
+                for key, value in self.contents.items()
+            },
+            pattern,
+            path,
+            glob,
+            max_count=max_count,
+        )
+
+    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
+        try:
+            prefix = validate_path(path or "/").rstrip("/") + "/"
+            matches = compile_grep_include_glob(pattern)
+            return GlobResult(
+                matches=[
+                    {"path": key, "is_dir": False, "size": len(value)}
+                    for key, value in self.contents.items()
+                    if key.startswith(prefix) and matches(key[len(prefix) :])
+                ]
+            )
+        except ValueError:
+            return GlobResult(error="Invalid skill search path or pattern")
+
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
         return [
             FileUploadResponse(path=path, error="permission_denied")
@@ -242,8 +293,7 @@ def _snapshot(root: Path) -> dict[str, bytes]:
         root = root.resolve(strict=True)
         directories = _bounded_children(root)
     except (OSError, ValueError, RuntimeError):
-        logger.warning("Platform skills directory unavailable; catalog is empty")
-        return contents
+        raise ValueError("Skill source directory unavailable") from None
     count = 0
     for directory in directories:
         if not _NAME.fullmatch(directory.name) or len(directory.name) > 64:
@@ -299,8 +349,7 @@ def _snapshot(root: Path) -> dict[str, bytes]:
 class PlatformSkills:
     """Pod-owned catalogue and bytes. Rebuilding at restart changes revision."""
 
-    def __init__(self, contents: dict[str, bytes]) -> None:
-        self._filesystem_backend: FilesystemBackend | None = None
+    def __init__(self, contents: dict[str, bytes], *, builtin: bool = False) -> None:
         backend = SnapshotBackend(contents)
         metadata: list[SkillMetadata] = []
         # Discover separately: upstream merges by name, hiding duplicates.
@@ -334,6 +383,7 @@ class PlatformSkills:
                 )
         counts = Counter(item["name"] for item in metadata)
         accepted: list[SkillMetadata] = []
+        controls: dict[str, tuple[bool, bool]] = {}
         for item in metadata:
             name = item["name"]
             if counts[name] != 1 or len(name) > 64 or not _NAME.fullmatch(name):
@@ -342,7 +392,28 @@ class PlatformSkills:
                     PurePosixPath(item["path"]).parent.name,
                 )
                 continue
+            try:
+                frontmatter = next(
+                    yaml.safe_load_all(contents[item["path"]].decode("utf-8"))
+                )
+                user = frontmatter.get("user-invocable", True)
+                model = frontmatter.get("disable-model-invocation", False)
+                if not isinstance(user, bool) or not isinstance(model, bool):
+                    raise ValueError("Invalid invocation controls")
+            except (
+                yaml.YAMLError,
+                RecursionError,
+                ValueError,
+                TypeError,
+                AttributeError,
+            ):
+                logger.warning(
+                    "Platform skill %s skipped: invalid invocation controls", name
+                )
+                continue
+            controls[name] = (user, model)
             accepted.append(item)
+        self._native_metadata = tuple(accepted)
         self._paths = MappingProxyType(
             {item["name"]: str(PurePosixPath(item["path"]).parent) for item in accepted}
         )
@@ -355,10 +426,14 @@ class PlatformSkills:
             digest.update(b"\0")
         self._catalog = SkillCatalog(
             revision=digest.hexdigest(),
+            policy_supported=True,
             skills=tuple(
                 SkillSummary(
                     name=item["name"],
                     description=item["description"],
+                    builtin=builtin,
+                    user_invocable=controls[item["name"]][0],
+                    disable_model_invocation=controls[item["name"]][1],
                     argument_hint=_argument_hint(
                         contents[item["path"]],
                         PurePosixPath(item["path"]).parent.name,
@@ -368,28 +443,106 @@ class PlatformSkills:
             ),
         )
         self._prompt = render_skills_prompt(self._catalog)
+        self._refresh_native_snapshot()
 
     @classmethod
-    def from_directory(cls, directory: str) -> PlatformSkills:
+    def from_directory(cls, directory: str, *, builtin: bool = False) -> PlatformSkills:
         if directory == "package":
             with as_file(files("fred_runtime.skills")) as root:
-                return cls.from_directory(str(root))
-        root = Path(directory)
-        skills = cls(_snapshot(root))
+                return cls.from_directory(str(root), builtin=True)
         try:
-            # Bootstrap already runs off-thread; native constructor resolves disk paths.
-            skills._filesystem_backend = FilesystemBackend(
-                root_dir=root, virtual_mode=True
+            return cls(_snapshot(Path(directory)), builtin=builtin)
+        except ValueError:
+            logger.warning(
+                "Skill source unavailable; discovery records an explicit error"
             )
-        except (OSError, RuntimeError, ValueError):
-            logger.warning("Native skills source directory unavailable")
-        return skills
+            skills = cls({}, builtin=builtin)
+            skills._catalog = skills.catalog.model_copy(
+                update={"availability": "unavailable"}
+            )
+            return skills
+
+    def _refresh_native_snapshot(self) -> None:
+        prefixes = tuple(root + "/" for root in self._paths.values())
+        self._filesystem_backend = SnapshotBackend(
+            {
+                path.removeprefix("/skills"): content
+                for path, content in self._backend.contents.items()
+                if path.startswith(prefixes)
+            }
+        )
+
+    def for_catalog(self, disabled_names: tuple[str, ...] = ()) -> PlatformSkills:
+        """Immutable admitted view; every pod source obeys the same ceiling."""
+        disabled = frozenset(disabled_names)
+        allowed = tuple(s for s in self.catalog.skills if s.name not in disabled)
+        if allowed == self.catalog.skills:
+            return self
+        view = copy(self)
+        view._catalog = self.catalog.model_copy(update={"skills": allowed})
+        names = {s.name for s in allowed}
+        view._paths = MappingProxyType(
+            {n: p for n, p in self._paths.items() if n in names}
+        )
+        view._native_metadata = tuple(
+            m for m in self._native_metadata if m["name"] in names
+        )
+        view._prompt = render_skills_prompt(view.catalog)
+        view._refresh_native_snapshot()
+        return view
+
+    def for_execution(
+        self,
+        selected_names: tuple[str, ...] = (),
+        disabled_names: tuple[str, ...] = (),
+        *,
+        resuming: bool = False,
+    ) -> PlatformSkills:
+        view = self.for_catalog(disabled_names)
+        by_name = {s.name: s for s in view.catalog.skills}
+        if resuming:
+            # Preserve trusted same-exchange selection intent without allowing
+            # disappeared, disabled or newly user-ineligible names to block a
+            # resume or grant fresh access. Pin/preload suppression is separate.
+            selected_names = tuple(
+                n for n in selected_names if n in by_name and by_name[n].user_invocable
+            )
+        for name in selected_names:
+            summary = by_name.get(name)
+            if summary is None:
+                raise ValueError("Skill unavailable in this runtime catalog")
+            if not summary.user_invocable:
+                raise ValueError("Skill is not user-invocable")
+        names = tuple(
+            s.name
+            for s in view.catalog.skills
+            if not s.disable_model_invocation or s.name in selected_names
+        )
+        excluded = tuple(s.name for s in view.catalog.skills if s.name not in names)
+        if not excluded:
+            return view
+        view = copy(view)
+        # Invocation eligibility never expands the admitted source ceiling.
+        view._catalog = view.catalog.model_copy(
+            update={"skills": tuple(s for s in view.catalog.skills if s.name in names)}
+        )
+        view._paths = MappingProxyType(
+            {n: p for n, p in view._paths.items() if n not in excluded}
+        )
+        view._native_metadata = tuple(
+            m for m in view._native_metadata if m["name"] in names
+        )
+        view._prompt = render_skills_prompt(view.catalog)
+        view._refresh_native_snapshot()
+        return view
 
     @property
-    def filesystem_backend(self) -> FilesystemBackend:
-        """Unmodified native backend created once during offloaded pod bootstrap."""
-        if self._filesystem_backend is None:
-            raise ValueError("Deep skills require a physical source directory")
+    def native_metadata(self) -> list[SkillMetadata]:
+        return [cast(SkillMetadata, dict(item)) for item in self._native_metadata]
+
+    @property
+    def filesystem_backend(self) -> SnapshotBackend:
+        """Native filesystem view of the same admitted immutable bytes."""
         return self._filesystem_backend
 
     @property
@@ -460,3 +613,29 @@ def build_skills_middleware(skills: SkillsPort | None) -> list[AgentMiddleware]:
     return [
         cast(AgentMiddleware, SnapshotSkillsMiddleware(SnapshotBackend({}), metadata))
     ]
+
+
+def admitted_skills(
+    source: SkillsPort | None, admitted: SkillCatalog | None
+) -> SkillsPort | None:
+    """Narrow a pod snapshot with server facts, never a browser-supplied selection."""
+    if source is None:
+        if admitted is not None and admitted.skills:
+            raise ValueError("Admitted skills are unavailable on this runtime")
+        return None
+    names = {s.name for s in admitted.skills} if admitted is not None else set()
+    if names and (
+        admitted is None
+        or not admitted.policy_supported
+        or admitted.revision != source.catalog.revision
+        or source.catalog.availability != "available"
+    ):
+        raise ValueError(
+            "Skill source changed or is unavailable; refresh the pod inventory"
+        )
+    actual = {s.name: s for s in source.catalog.skills}
+    if admitted is not None and any(actual.get(s.name) != s for s in admitted.skills):
+        raise ValueError("Admitted skill metadata does not match this pod snapshot")
+    if not isinstance(source, PlatformSkills):
+        raise ValueError("Weaver requires a governed skill snapshot")
+    return source.for_catalog(tuple(name for name in actual if name not in names))

@@ -168,6 +168,44 @@ if any source fails, without printing a partial catalog. It does not start the A
 connect to SQL, persist definitions or enroll instances. `serve` does not
 poll runtimes. This command does not enroll or execute agents.
 
+## Pod skills and local offer ceilings
+
+Skills are pod-owned offers in the existing capability inventory (`kind: skill`,
+ID `skill:<canonical-name>`). Instructions are never stored in Control Plane or
+accepted from the browser. Organization authorizations remain in the existing
+capability policy. New skill offers are initially denied. Skill refresh uses the
+same source configuration, observation transaction and diagnostic path as tools.
+Unreachable/unavailable sources retain the last known offers and decisions;
+a successful complete catalog marks removed offers as withdrawn.
+
+Migration `0005_pod_skills_and_local_offers.sql` adds source skill diagnostics and
+the shared team/project restriction tables. No local policy means inheritance;
+`restricted=true` with no permissions means deny all. Every ancestor ceiling
+must allow an offer. Reset preserves a monotonically increasing revision, so a
+stale PUT cannot undo a later decision. SQL uniqueness/FKs retain source identity; space
+cascades own local cleanup; mutations use the existing organization lock.
+No runtime call is made inside the policy mutation transaction.
+
+`GET /spaces/{space_id}/capability-policies` and revision-checked
+`PUT /spaces/{space_id}/capability-policies/{runtime_id}` require direct Manage in
+the team/project, without requiring Read or granting rights in a child. Personal
+spaces follow the organization ceiling. Tools and skills use the same
+`agents::enablement::usable` rule. Admission loads only the target ancestry.
+Project agents/chat use the existing direct roles; organization authorization
+is still a ceiling. No prompt publication/editor behavior is added to projects.
+
+Preparation projects only eligible ReAct/Deep skills and the source preview URL.
+Public runtime GET provides metadata without inference/title allocation. Private
+execution POST carries the admitted skill snapshot alongside inference. Runtime
+checks source revision and summary identity before loading; replicas must serve
+matching content. A new turn or resume observes current policy while history
+remains intact. Embedded Ralph and graph agents cannot load skills.
+
+See the [operator note](../../deploy/release-notes/changes/weaver-pod-skills-and-space-ceilings.md)
+for rollout/rollback and `tests/support/pod_skills.rs` for disposable SQL upgrade,
+concurrency, isolation and execution-preparation proofs. These tests do not
+replace a deployed k3d acceptance journey.
+
 ## Platform model inventory and organization administration
 
 `platform.model_sources` defaults to `[]` in the schema. The host development

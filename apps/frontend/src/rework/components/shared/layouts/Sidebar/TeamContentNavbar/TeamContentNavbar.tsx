@@ -250,6 +250,12 @@ export default function TeamContentNavbar() {
   const settingsItems: NavigationMenuItemProps[] = [
     {
       type: "link",
+      label: t("rework.skillGovernance.title"),
+      icon: { category: "outlined", type: "tune" },
+      linkProps: { to: `${settingsBase}/offers` },
+    },
+    {
+      type: "link",
       label: t("rework.teamSettings.navigation.members"),
       icon: { category: "outlined", type: "people", filled: true },
       linkProps: { to: `${settingsBase}/members` },

@@ -41,6 +41,7 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -931,13 +932,25 @@ def _build_runtime_services(
     """
 
     runtime_config = get_runtime_context().config
+    from fred_runtime.skills.catalog import PlatformSkills, admitted_skills
+
+    governed_skills = (
+        None
+        if runtime_config.skills is None or isinstance(definition, GraphAgentDefinition)
+        else admitted_skills(runtime_config.skills, current_turn().binding.skills)
+    )
+    if isinstance(governed_skills, PlatformSkills):
+        governed_skills = governed_skills.for_execution(
+            tuple(s.name for s in binding.runtime_context.selected_skills),
+            resuming=binding.is_resuming,
+        )
     if conversation_filesystem is None:
         conversation_filesystem = _build_conversation_filesystem(binding)
     conversation_port = None
     if conversation_filesystem is not None:
         backend, permissions = build_conversation_filesystem(
             conversation_filesystem,
-            skills=runtime_config.skills
+            skills=governed_skills
             if isinstance(definition, DeepAgentDefinition)
             else None,
         )
@@ -1141,7 +1154,7 @@ def _build_runtime_services(
             credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
-        skills=runtime_config.skills,
+        skills=governed_skills,
     )
 
 
@@ -1348,6 +1361,7 @@ class _PodCapabilityInventory(BaseModel):
     complete: Literal[True]
     capabilities: list[CapabilityCatalogEntry]
     template_capabilities: list[_PodTemplateCapability]
+    skills: SkillCatalog
 
 
 class _McpCatalogEntry(BaseModel):
@@ -2159,18 +2173,29 @@ async def _authorize_and_resolve(
         selections = (
             request.runtime_context.selected_skills if request.runtime_context else ()
         )
-        if selections and request.resume_payload is None:
-            skills = get_runtime_context().config.skills
-            if isinstance(target.definition, GraphAgentDefinition) or skills is None:
-                raise HTTPException(
-                    status_code=422, detail="Platform skills unavailable for this agent"
+        from fred_runtime.skills.catalog import PlatformSkills, admitted_skills
+
+        authority = internal_req._turn_authority
+        if authority is None:
+            raise HTTPException(status_code=503, detail="Skill admission unavailable")
+        try:
+            # Graph has no skill loader; an unused pod snapshot cannot block it.
+            skills = (
+                None
+                if isinstance(target.definition, GraphAgentDefinition)
+                else admitted_skills(
+                    get_runtime_context().config.skills, authority.binding.skills
                 )
-            if not isinstance(target.definition, DeepAgentDefinition):
-                try:
-                    for selection in selections:
-                        skills.read(selection.name)
-                except ValueError as exc:
-                    raise HTTPException(status_code=422, detail=str(exc)) from None
+            )
+            if selections and request.resume_payload is None and skills is None:
+                raise ValueError("Skills unavailable for this agent")
+            if isinstance(skills, PlatformSkills):
+                skills.for_execution(
+                    tuple(s.name for s in selections),
+                    resuming=request.resume_payload is not None,
+                )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
     except BaseException as exc:
         # Nothing past admission got as far as starting the run, so the record
         # it wrote has no owner left to release it.
@@ -4367,6 +4392,7 @@ async def _iterate_runtime_event_payloads_inner(
         runtime_context=runtime_context,
         portable_context=portable_context,
         platform_prompt=platform_prompt,
+        is_resuming=request.resume_payload is not None,
     )
 
     current_turn().check_context(runtime_context, definition.agent_id)
@@ -4887,9 +4913,19 @@ def _build_agent_router(
                 spec.enum = None
                 spec.pattern = None
                 spec.ui = type(spec.ui)()
+        installed_skills = get_runtime_context().config.skills
         return _PodCapabilityInventory(
             complete=True,
             capabilities=entries,
+            skills=(
+                installed_skills.catalog
+                if installed_skills is not None
+                else SkillCatalog(
+                    policy_supported=True,
+                    revision=hashlib.sha256(b"").hexdigest(),
+                    availability="disabled",
+                )
+            ),
             template_capabilities=[
                 _PodTemplateCapability(
                     source_agent_id=definition.agent_id,

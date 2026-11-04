@@ -670,12 +670,12 @@
     },
     "skills": {
       "badge": "Skill: {{name}}",
-      "platformProvided": "Skill provided by the platform",
       "requestPlaceholder": "Your request (optional)",
       "usage": "Use /<skill-name> [request]. Select a skill; the request is optional.",
       "errorTitle": "Skill could not be used",
       "unavailable": "This skill’s content is unavailable.",
       "loaded": "Skill loaded",
+      "partiallyLoaded": "Skill partially loaded",
       "originUser": "Requested by you",
       "originAgent": "Selected by the agent",
       "originChild": "Selected by a sub-agent",
@@ -686,7 +686,52 @@
       "loading": "Loading skill…",
       "retry": "Try again",
       "description": "Description:",
-      "arguments": "Arguments:"
+      "arguments": "Arguments:",
+      "catalog": {
+        "summarize-document": {
+          "title": "Summarize a document",
+          "description": "Summarize documents faithfully, preserving critical conditions, figures and uncertainties."
+        },
+        "grounded-research": {
+          "title": "Source-based research",
+          "description": "Research a question using traceable evidence and explain conflicting or incomplete sources."
+        },
+        "meeting-minutes": {
+          "title": "Meeting minutes",
+          "description": "Prepare meeting minutes with confirmed decisions, actions and missing information."
+        },
+        "compare-options": {
+          "title": "Compare options",
+          "description": "Compare alternatives using explicit criteria, evidence and visible trade-offs."
+        },
+        "verify-answer": {
+          "title": "Verify an answer",
+          "description": "Check an answer against available evidence, correct unsupported claims and explain verification limits."
+        },
+        "graph": {
+          "title": "Visualization",
+          "description": "Create diagrams, data charts or tables suited to the question using available rendering tools."
+        },
+        "grill-me": {
+          "title": "Challenge my thinking",
+          "description": "Clarify an idea or decision through a guided interview with concrete recommendations and explicit trade-offs."
+        },
+        "analyze-data": {
+          "title": "Analyze data",
+          "description": "Analyze accessible data, check calculations and explain assumptions and limitations."
+        },
+        "data-visualization": {
+          "title": "Visualize data",
+          "description": "Choose a useful representation of data and create it using available tools."
+        }
+      },
+      "state": {
+        "unsupported": "This agent does not support skills.",
+        "incompatible": "Skills are not yet available on this agent.",
+        "unavailable": "The skill catalog is unavailable. Retry before selecting a skill.",
+        "disabled": "Skills are disabled on this agent.",
+        "empty": "No skills are authorized in this space."
+      }
     }
   },
   "mermaid": {
@@ -1271,7 +1316,8 @@
           "model": "Models",
           "app": "Apps",
           "knowledge_base": "Knowledge Bases",
-          "aria": "Filter by feature kind"
+          "aria": "Filter by feature kind",
+          "skill": "Skills"
         },
         "emptyAgents": "No agent templates are registered by any runtime pod yet.",
         "emptyModels": "No models are advertised by any runtime pod yet.",
@@ -4937,6 +4983,27 @@
       "forbidden": "Managing this space requires its Owner role.",
       "conflict": "This change is not allowed. Keep at least one owner and preserve the parent membership required by roles in child spaces. Refresh the list before retrying.",
       "failed": "The change could not be confirmed. Refresh the list before retrying."
+    },
+    "skillGovernance": {
+      "title": "Capabilities and skills",
+      "ceiling": "Organization and team permissions are ceilings. A local restriction grants no access to another space and does not load a skill.",
+      "restrict": "Restrict offers in this space",
+      "inherit": "Without a local restriction, this space follows its parent permissions.",
+      "denyAll": "Allow no offers in this space",
+      "offer": "Pod offer",
+      "parent": "Parent ceiling",
+      "local": "Local choice",
+      "effective": "Effective decision",
+      "allowed": "Allowed",
+      "denied": "Denied",
+      "withdrawn": "Withdrawn from source",
+      "conflict": "The configuration changed. Current choices were reloaded; review them before retrying.",
+      "failed": "The change was not saved.",
+      "source": {
+        "disabled": "The source is disabled.",
+        "unavailable": "The source is unavailable; saved choices are retained.",
+        "incompatible": "This pod does not provide the skill governance contract. Upgrade its replicas."
+      }
     }
   },
   "runtime": {

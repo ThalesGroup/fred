@@ -198,11 +198,14 @@ fn record_to_summary(record: AgentInstance) -> AppResult<ManagedAgentInstanceSum
 }
 
 pub(crate) fn require_instance_space(kind: SpaceKind) -> AppResult<()> {
-    if matches!(kind, SpaceKind::Team | SpaceKind::Personal) {
+    if matches!(
+        kind,
+        SpaceKind::Team | SpaceKind::Project | SpaceKind::Personal
+    ) {
         Ok(())
     } else {
         Err(AppError::BadRequest(
-            "agent instances require a team or personal space".into(),
+            "agent instances require a team, project or personal space".into(),
         ))
     }
 }

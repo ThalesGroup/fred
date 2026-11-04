@@ -94,6 +94,7 @@ pub struct RuntimeBinding {
     pub space: RuntimeSpace,
     pub agent: RuntimeAgent,
     pub models: RuntimeModels,
+    pub skills: Option<crate::agents::skills::SkillCatalog>,
     /// Present only for trusted delegated or in-process admission.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference: Option<fred_rust_sdk::inference::InferenceAdmission>,
@@ -318,13 +319,15 @@ async fn resolve_runtime_binding(
     };
     require_executable(state, &space, &record)?;
     // Organization revocation is observed here, at the next turn, never during one.
-    let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
+    let policy = enablement::Policy::load_for_space(&mut *tx, &space).await?;
     enablement::require_usable(
         &policy,
         &space,
         &record.source_runtime_id,
         &super::tuning::saved_selection(&record.tuning.0)?,
     )?;
+    let skills =
+        crate::agents::skills::resolve(&mut tx, &space, &record.source_runtime_id, &policy).await?;
     record
         .tuning
         .0
@@ -429,6 +432,7 @@ async fn resolve_runtime_binding(
         None
     };
     Ok(RuntimeBinding {
+        skills,
         title,
         models,
         inference,
@@ -440,8 +444,12 @@ async fn resolve_runtime_binding(
             id: space.id,
             kind: space.kind,
             organization_id: Some(space.organization),
-            team_id: (space.kind == SpaceKind::Team).then_some(space.id),
-            project_id: None,
+            team_id: match space.kind {
+                SpaceKind::Team => Some(space.id),
+                SpaceKind::Project => space.parent_id,
+                _ => None,
+            },
+            project_id: (space.kind == SpaceKind::Project).then_some(space.id),
         },
         agent: RuntimeAgent {
             instance_id: record.agent_instance_id,

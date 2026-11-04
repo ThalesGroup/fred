@@ -119,7 +119,13 @@ INSTANCE_ID = "00000000-0000-0000-0000-000000000003"
 
 
 def turn_binding(
-    template, *, user="alice", session=None, run="run", tuning=None, attachments=()
+    template,
+    *,
+    user="alice",
+    session=None,
+    run: str | None = "run",
+    tuning=None,
+    attachments=(),
 ):
     """A complete trusted response for a test's registered template."""
     data = resolved_binding().model_dump(mode="json")
@@ -186,18 +192,24 @@ def create_managed_app(
         assert request.url.path.endswith(
             f"/spaces/{space_id}/agent-instances/{INSTANCE_ID}/runtime"
         )
-        assert request.headers["Authorization"] == "Bearer workload-token"
+        metadata = request.method == "GET"
+        assert request.headers["Authorization"] == (
+            "Bearer test-person-token" if metadata else "Bearer workload-token"
+        )
         params = dict(request.url.params)
-        assert params["person"] == user_id
-        assert params["agent"] == INSTANCE_ID
+        if not metadata:
+            assert params["person"] == user_id
+            assert params["agent"] == INSTANCE_ID
         binding = turn_binding(
             definition.agent_id,
-            user=params["person"],
+            user=user_id if metadata else params["person"],
             session=params.get("conversation"),
-            run=params["run"],
+            run=None if metadata else params["run"],
             tuning=tuning,
         )
         data = binding.model_dump(mode="json")
+        if metadata:
+            data.pop("inference")
         data["space"]["id"] = space_id
         if binding_transform is not None:
             binding_transform(data)

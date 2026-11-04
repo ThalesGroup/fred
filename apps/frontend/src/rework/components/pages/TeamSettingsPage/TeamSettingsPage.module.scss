@@ -29,3 +29,16 @@
   gap: var(--spacing-s);
   margin-block: var(--spacing-m);
 }
+
+.offerSource {
+  margin-block: var(--spacing-m);
+  min-width: 0;
+
+  h2 {
+    overflow-wrap: anywhere;
+  }
+}
+
+.offerName {
+  overflow-wrap: anywhere;
+}

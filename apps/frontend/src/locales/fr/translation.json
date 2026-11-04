@@ -670,12 +670,12 @@
     },
     "skills": {
       "badge": "Skill : {{name}}",
-      "platformProvided": "Skill fourni par la plateforme",
       "requestPlaceholder": "Votre demande (facultative)",
       "usage": "Utilisez /<nom-du-skill> [demande]. Sélectionnez un skill ; la demande est facultative.",
       "errorTitle": "Le skill ne peut pas être utilisé",
       "unavailable": "Le contenu de ce skill est indisponible.",
       "loaded": "Skill chargé",
+      "partiallyLoaded": "Skill partiellement chargé",
       "originUser": "Demandé par vous",
       "originAgent": "Choisi par l’agent",
       "originChild": "Choisi par un sous-agent",
@@ -686,7 +686,52 @@
       "loading": "Chargement du skill…",
       "retry": "Réessayer",
       "description": "Description :",
-      "arguments": "Arguments :"
+      "arguments": "Arguments :",
+      "catalog": {
+        "summarize-document": {
+          "title": "Résumer un document",
+          "description": "Résumer fidèlement des documents en préservant les conditions essentielles, les chiffres et les incertitudes."
+        },
+        "grounded-research": {
+          "title": "Recherche sourcée",
+          "description": "Étudier une question à partir de sources vérifiables et expliquer leurs contradictions ou leurs lacunes."
+        },
+        "meeting-minutes": {
+          "title": "Compte rendu de réunion",
+          "description": "Préparer un compte rendu avec les décisions confirmées, les actions et les informations manquantes."
+        },
+        "compare-options": {
+          "title": "Comparer des options",
+          "description": "Comparer des alternatives selon des critères explicites, des éléments vérifiables et leurs compromis."
+        },
+        "verify-answer": {
+          "title": "Vérifier une réponse",
+          "description": "Vérifier une réponse à partir des sources disponibles, corriger les affirmations non étayées et expliquer les limites de la vérification."
+        },
+        "graph": {
+          "title": "Visualisation",
+          "description": "Créer des diagrammes, des graphiques de données ou des tableaux adaptés au besoin avec les outils de rendu disponibles."
+        },
+        "grill-me": {
+          "title": "Mettre mon idée à l'épreuve",
+          "description": "Clarifier une idée ou une décision par un entretien guidé, avec des recommandations concrètes et des compromis explicites."
+        },
+        "analyze-data": {
+          "title": "Analyser des données",
+          "description": "Analyser les données accessibles, vérifier les calculs et expliquer les hypothèses et les limites."
+        },
+        "data-visualization": {
+          "title": "Visualiser des données",
+          "description": "Choisir une représentation utile des données et la produire avec les outils disponibles."
+        }
+      },
+      "state": {
+        "unsupported": "Cet agent ne prend pas en charge les skills.",
+        "incompatible": "Les skills ne sont pas encore disponibles sur cet agent.",
+        "unavailable": "Le catalogue des skills est indisponible. Réessayez avant de sélectionner un skill.",
+        "disabled": "Les skills sont désactivés sur cet agent.",
+        "empty": "Aucun skill n’est autorisé dans cet espace."
+      }
     }
   },
   "mermaid": {
@@ -1271,7 +1316,8 @@
           "model": "Modèles",
           "app": "Apps",
           "knowledge_base": "Bases de connaissances",
-          "aria": "Filtrer par type de fonctionnalité"
+          "aria": "Filtrer par type de fonctionnalité",
+          "skill": "Skills"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
@@ -4937,6 +4983,27 @@
       "forbidden": "La gestion de cet espace nécessite son rôle Responsable.",
       "conflict": "Cette modification est refusée. Conservez au moins un responsable et le rattachement parent requis par les rôles dans les espaces enfants. Actualisez la liste avant de réessayer.",
       "failed": "La modification n'a pas pu être confirmée. Actualisez la liste avant de réessayer."
+    },
+    "skillGovernance": {
+      "title": "Capabilities et skills",
+      "ceiling": "Les autorisations de l'organisation et de l'équipe sont des plafonds. Une restriction locale ne donne aucun droit dans un autre espace et ne charge aucun skill.",
+      "restrict": "Restreindre les offres dans cet espace",
+      "inherit": "Sans restriction locale, cet espace suit les autorisations de ses parents.",
+      "denyAll": "Ne rien autoriser dans cet espace",
+      "offer": "Offre du pod",
+      "parent": "Plafond parent",
+      "local": "Choix local",
+      "effective": "Décision effective",
+      "allowed": "Autorisé",
+      "denied": "Refusé",
+      "withdrawn": "Retiré de la source",
+      "conflict": "La configuration a changé. Les choix actuels ont été rechargés ; vérifiez-les avant de réessayer.",
+      "failed": "La modification n'a pas été enregistrée.",
+      "source": {
+        "disabled": "La source est désactivée.",
+        "unavailable": "La source est indisponible ; les choix enregistrés sont conservés.",
+        "incompatible": "Ce pod ne fournit pas le contrat de gouvernance des skills. Mettez à jour ses replicas."
+      }
     }
   },
   "runtime": {

@@ -17,6 +17,8 @@
 pub mod catalog;
 pub mod enablement;
 mod inventory;
+mod local_policy;
+pub mod skills;
 
 use std::{collections::BTreeMap, time::Duration};
 
@@ -424,9 +426,12 @@ async fn space_agent_templates(
     crate::extract::ApiPath(space_id): crate::extract::ApiPath<Uuid>,
 ) -> AppResult<axum::Json<Vec<AgentTemplateSummary>>> {
     let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
-    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Personal) {
+    if !matches!(
+        space.kind,
+        SpaceKind::Team | SpaceKind::Project | SpaceKind::Personal
+    ) {
         return Err(AppError::BadRequest(
-            "agent templates require a team or personal space".into(),
+            "agent templates require a team, project or personal space".into(),
         ));
     }
     // Discovery uses the pod's public catalog; no caller can opt into hidden agents.

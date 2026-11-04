@@ -47,6 +47,7 @@ import type {
   CapabilityInventoryOffer,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
+import { skillPresentation } from "@rework/utils/skillPresentation";
 import { OrganizationCapabilities } from "./OrganizationCapabilities";
 import { OrganizationModels } from "./OrganizationModels";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
@@ -60,8 +61,8 @@ import {
 
 // Tabs: "tool" lists pod capability offers, "agent" agent templates, "model" the organization models;
 // "knowledge_base" and "app" (behind the deployment flag) list the legacy enablement catalog.
-type CapabilityKind = "tool" | "agent" | "model" | "app" | "knowledge_base";
-const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "knowledge_base"];
+type CapabilityKind = "skill" | "tool" | "agent" | "model" | "app" | "knowledge_base";
+const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "skill", "agent", "model", "knowledge_base"];
 
 // A pod offer shares the default-on switch; (pod, capability) is its identity.
 type DefaultOnRow = CapabilityEnablementItem | CapabilityInventoryOffer;
@@ -73,13 +74,13 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   // Keyed on the selected tab, not the active one: the active tab depends on this flag.
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag(
     "enableApplications",
-    kindFilter === "agent" || kindFilter === "model" || kindFilter === "tool",
+    kindFilter === "agent" || kindFilter === "model" || kindFilter === "tool" || kindFilter === "skill",
   );
   const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
   const activeKindFilter: CapabilityKind = !applicationsEnabled && kindFilter === "app" ? "tool" : kindFilter;
   const discoveringAgents = activeKindFilter === "agent";
   const discoveringModels = activeKindFilter === "model";
-  const discoveringCapabilities = activeKindFilter === "tool";
+  const discoveringCapabilities = activeKindFilter === "tool" || activeKindFilter === "skill";
   // Models and capabilities render their own organization panel below the tabs.
   const organizationPanel = discoveringModels || discoveringCapabilities;
   const organizationCatalog = discoveringAgents || organizationPanel;
@@ -153,7 +154,9 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       ? [t("rework.sidebar.team.userTeam"), instance.owner_name].filter(Boolean).join(" - ")
       : instance.space_name;
   const offerName = (offer: CapabilityInventoryOffer) =>
-    t(offer.descriptor.name, { defaultValue: offer.descriptor.name });
+    offer.descriptor.skill
+      ? skillPresentation(t, offer.descriptor.skill).title
+      : t(offer.descriptor.name, { defaultValue: offer.descriptor.name });
   const pendingOffer = pendingDefaultOff && isOffer(pendingDefaultOff) ? pendingDefaultOff : null;
   // Agent templates name what the organization loses; pod offers keep the generic copy.
   const defaultOffCopyVariant = discoveringAgents ? "organization" : "generic";
@@ -390,7 +393,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       },
     },
     // Agents and pod offers render their own health cell under this header.
-    ...(hasAgentInstanceLifecycle(activeKindFilter)
+    ...(discoveringCapabilities || hasAgentInstanceLifecycle(activeKindFilter)
       ? [{ field: "health" as const, label: t("rework.admin.capabilities.col.health"), size: "1fr" }]
       : []),
     {
@@ -497,6 +500,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
           key={organizationId}
           organizationId={organizationId}
           capabilityColumns={offerColumns}
+          kind={activeKindFilter === "skill" ? "skill" : "tool"}
         />
       )}
 

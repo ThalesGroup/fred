@@ -601,6 +601,21 @@ export type CapabilityCatalogEntry = {
   team_settings_fields?: FieldSpec[];
   version: string;
 };
+export type SkillSummary = {
+  argument_hint?: string | null;
+  builtin?: boolean;
+  description: string;
+  disable_model_invocation?: boolean;
+  name: string;
+  user_invocable?: boolean;
+};
+export type SkillCatalog = {
+  availability?: "available" | "disabled" | "unavailable";
+  policy_supported?: boolean;
+  revision?: string;
+  skills?: SkillSummary[];
+  supported?: boolean;
+};
 export type PodTemplateCapability = {
   capability_id: string;
   default_selected: boolean;
@@ -609,6 +624,7 @@ export type PodTemplateCapability = {
 export type PodCapabilityInventory = {
   capabilities: CapabilityCatalogEntry[];
   complete: true;
+  skills: SkillCatalog;
   template_capabilities: PodTemplateCapability[];
 };
 export type ChatControlItem = {
@@ -1087,11 +1103,14 @@ export type SessionTitleRuntimeEvent = {
 };
 export type SkillLoadAttribution = {
   agent_id: string;
+  builtin?: boolean;
   child?: boolean;
   child_id?: string | null;
   load_id: string;
   name: string;
   origin: "user" | "agent";
+  /** The actual instruction read did not prove full-file coverage. */
+  partial?: boolean;
   revision: string;
 };
 export type StatusRuntimeEvent = {
@@ -1339,16 +1358,6 @@ export type ChatMessage = {
   role: Role;
   session_id: string;
   timestamp: string;
-};
-export type SkillSummary = {
-  argument_hint?: string | null;
-  description: string;
-  name: string;
-};
-export type SkillCatalog = {
-  revision?: string;
-  skills?: SkillSummary[];
-  supported?: boolean;
 };
 export type SkillDetail = {
   content: string;

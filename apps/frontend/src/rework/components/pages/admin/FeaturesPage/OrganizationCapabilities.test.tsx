@@ -69,6 +69,7 @@ const pod = (over: Partial<PodCapabilityInventory> & Pick<PodCapabilityInventory
     observed_at: "2026-10-28T08:00:00Z",
     capabilities: [],
     template_capabilities: [],
+    skills_supported: false,
     ...over,
   }) satisfies PodCapabilityInventory;
 
@@ -79,7 +80,14 @@ const offer = (capability_id: string, advertised = true): CapabilityInventoryOff
   advertised,
   default_on: false,
   unusable_instances: [],
-  descriptor: { id: capability_id, name: capability_id, description: "", icon: "description", version: "1" },
+  descriptor: {
+    kind: "tool",
+    id: capability_id,
+    name: capability_id,
+    description: "",
+    icon: "description",
+    version: "1",
+  },
 });
 
 // The real columns belong to FeaturesPage; this stub shows which offers reach the table.

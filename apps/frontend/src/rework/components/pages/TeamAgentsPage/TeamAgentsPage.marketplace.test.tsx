@@ -276,8 +276,15 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     catalogEmpty = true;
     await mount();
     expect(host.textContent).toContain("Saved Agent");
-    expect(host.textContent).toContain("rework.teams.formAgent.noTemplates");
+    expect(host.textContent).not.toContain("rework.teams.formAgent.noTemplates");
     expect(button("rework.teams.agents.create").disabled).toBe(true);
+    const trigger = button("rework.teams.agents.create").parentElement!;
+    expect(trigger.tabIndex).toBe(0);
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+      trigger.focus();
+    });
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("rework.teams.formAgent.noTemplates");
   });
   it("shows the existing empty state with a working create action", async () => {
     rows = [];

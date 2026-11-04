@@ -144,6 +144,36 @@ workload restart, while already-admitted clients retain their context.
 
 ---
 
+### Pod skills and admitted loading
+
+Missing `skills` or `skills: {}` defaults to the packaged directory; explicit
+`skills: null` disables it. Custom directories retain the same admission rules.
+The pod inventories a bounded immutable snapshot, including invocation modes and
+builtin provenance. ReAct `load_skill`, native reads and Deep's read-only backend
+use that snapshot; a later filesystem edit requires a restart and inventory refresh.
+
+Control Plane owns authorization, using the same pod offers as capabilities with
+organization/team/project ceilings. `WeaverRuntimeBinding.skills` admits a subset
+and its source revision. Missing admission denies new loads; mismatching nonempty
+revisions or metadata fail explicitly. Runtime configuration cannot grant a skill.
+An available empty source, disabled source and unavailable source are distinct.
+
+The packaged set is `analyze-data`, `compare-options`, `grounded-research`,
+`summarize-document` (model-only), `meeting-minutes`, `grill-me` (user-selected),
+and `graph` (both). The graph skill can use tables, charts or Mermaid and loads
+its Mermaid reference only when needed. Retired names have no aliases. Custom
+skills retain their own presentation; only trusted package entries get translated
+builtin labels. Graph agents and embedded Ralph are unsupported.
+
+Each managed team, personal or project turn/resume receives a fresh server
+admission. A running admitted turn may finish; revocation prevents later loads,
+without deleting historical instructions/checkpoints. Partial/full load traces
+come from actual reads, including referenced files, not from plain name mentions.
+Public catalog/detail GETs use the person's resolver projection and never obtain
+inference/title admission. See the [operator note](../../deploy/release-notes/changes/weaver-pod-skills-and-space-ceilings.md).
+
+---
+
 ### Managed conversation titles
 
 Managed execution now uses the workload-delegated **POST** runtime resolver. Its
