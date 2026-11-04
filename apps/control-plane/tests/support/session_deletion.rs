@@ -76,49 +76,36 @@ async fn embedded_session_purge_observes_retention_and_is_idempotent() {
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
 async fn session_deletion_audit_has_runtime_independent_provenance() {
+    use tracing::instrument::WithSubscriber;
     use tracing_subscriber::prelude::*;
     let e = env().await;
     let (_, team) = org_and_team(&e).await;
     let capture = AuditCapture::default();
-    let _thread =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(capture.clone()));
-    for runtime in [fred_rust_agent::DEFINITION.provider, "python"] {
-        let id = session(&e, &team, runtime).await;
-        let receipt = lifecycle("PT0S")
-            .accept_session(&e.pool, "alice", team.id, id)
-            .await
-            .unwrap();
-        cleanup::batch(&e.pool, receipt.id).await.unwrap();
-        let events = capture.0.lock().unwrap();
-        let accepted = events
-            .iter()
-            .find(|event| {
-                event["audit_event"] == "deletion.accepted" && event["session_id"] == id.to_string()
-            })
-            .unwrap();
-        for field in [
-            "operation_id",
-            "session_id",
-            "space_id",
-            "organization_id",
-            "actor_uid",
-            "runtime_id",
-            "rule_id",
-            "requested_at",
-            "due_at",
-        ] {
-            assert!(accepted.get(field).is_some(), "missing {field}: {accepted}");
-        }
-        assert_eq!(accepted["space_id"], team.id.to_string());
-        assert_eq!(accepted["runtime_id"], runtime);
-        if runtime == fred_rust_agent::DEFINITION.provider {
-            let completed = events
+    let subscriber = tracing_subscriber::registry().with(capture.clone());
+    async {
+        for runtime in [fred_rust_agent::DEFINITION.provider, "python"] {
+            let id = session(&e, &team, runtime).await;
+            let receipt = lifecycle("PT0S")
+                .accept_session(&e.pool, "alice", team.id, id)
+                .await
+                .unwrap();
+            cleanup::batch(&e.pool, receipt.id).await.unwrap();
+            if runtime == fred_rust_agent::DEFINITION.provider {
+                let status: Status = sqlx::query_scalar("select status from deletion where id=$1")
+                    .bind(receipt.id)
+                    .fetch_one(&e.pool)
+                    .await
+                    .unwrap();
+                assert_eq!(status, Status::Completed);
+            }
+            let events = capture.0.lock().unwrap();
+            let accepted = events
                 .iter()
                 .find(|event| {
-                    event["audit_event"] == "deletion.completed"
+                    event["audit_event"] == "deletion.accepted"
                         && event["session_id"] == id.to_string()
                 })
-                .unwrap();
+                .unwrap_or_else(|| panic!("missing acceptance: {events:?}"));
             for field in [
                 "operation_id",
                 "session_id",
@@ -130,11 +117,37 @@ async fn session_deletion_audit_has_runtime_independent_provenance() {
                 "requested_at",
                 "due_at",
             ] {
-                assert_eq!(accepted[field], completed[field]);
+                assert!(accepted.get(field).is_some(), "missing {field}: {accepted}");
             }
-            assert!(completed.get("completed_at").is_some());
+            assert_eq!(accepted["space_id"], team.id.to_string());
+            assert_eq!(accepted["runtime_id"], runtime);
+            if runtime == fred_rust_agent::DEFINITION.provider {
+                let completed = events
+                    .iter()
+                    .find(|event| {
+                        event["audit_event"] == "deletion.completed"
+                            && event["session_id"] == id.to_string()
+                    })
+                    .unwrap_or_else(|| panic!("missing completion: {events:?}"));
+                for field in [
+                    "operation_id",
+                    "session_id",
+                    "space_id",
+                    "organization_id",
+                    "actor_uid",
+                    "runtime_id",
+                    "rule_id",
+                    "requested_at",
+                    "due_at",
+                ] {
+                    assert_eq!(accepted[field], completed[field]);
+                }
+                assert!(completed.get("completed_at").is_some());
+            }
         }
     }
+    .with_subscriber(subscriber)
+    .await;
 }
 
 #[tokio::test]
