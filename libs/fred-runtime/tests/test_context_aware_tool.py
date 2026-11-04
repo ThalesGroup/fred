@@ -182,7 +182,9 @@ async def test_read_query_untrusted_failures_keep_only_the_generic_artifact(
 
     assert artifact is not None
     assert artifact.is_error is True
-    assert artifact.blocks == ()
+    assert len(artifact.blocks) == 1
+    assert "internal provider secret" not in (artifact.blocks[0].text or "")
+    assert (artifact.blocks[0].text or "").strip()
 
 
 def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> None:
@@ -334,6 +336,35 @@ def tabular_wrapper(monkeypatch):
         agent_context=agent,
     )
     return wrapper, tool, agent, requests
+
+
+@pytest.mark.asyncio
+async def test_tabular_inventory_401_has_safe_feedback_before_invocation(
+    tabular_wrapper, monkeypatch
+):
+    import fred_runtime.common.context_aware_tool as module
+    import httpx
+
+    wrapper, tool, _, _ = tabular_wrapper
+    wrapper.response_format = "content_and_artifact"
+
+    async def expired_inventory(*_args, **_kwargs):
+        response = httpx.Response(
+            401,
+            json={"detail": "private token expired"},
+            request=httpx.Request("GET", "https://cp.invalid/private?token=secret"),
+        )
+        response.raise_for_status()
+
+    monkeypatch.setattr(
+        module.KfBaseClient, "_request_with_token_refresh", expired_inventory
+    )
+    _, artifact = await wrapper._arun()
+    assert not tool.calls
+    assert artifact.is_error
+    assert artifact.blocks[0].text.startswith("AUTHENTICATION_REQUIRED: ")
+    assert "private" not in artifact.blocks[0].text
+    assert "secret" not in artifact.blocks[0].text
 
 
 @pytest.mark.asyncio
