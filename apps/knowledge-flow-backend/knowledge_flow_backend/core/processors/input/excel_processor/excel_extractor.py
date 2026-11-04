@@ -305,6 +305,27 @@ def _looks_numeric(v: Any) -> bool:
         return False
 
 
+def _coerce_datetime_column(series: pd.Series) -> Optional[pd.Series]:
+    """Type a complete date column without discarding or guessing cell values.
+
+    B4 uses this for native Excel dates and dates stored as text. Both day/month
+    interpretations must agree, and every non-empty cell must survive parsing.
+    Incompatible timezones remain text rather than being silently normalized.
+    """
+    cleaned = series.map(lambda value: None if pd.isna(value) or not _nonempty(value) else value)
+    values = cleaned.dropna()
+    if values.empty or not all(isinstance(value, (str, dt.date, dt.datetime)) for value in values):
+        return None
+    try:
+        parsed = pd.to_datetime(cleaned, errors="coerce", format="mixed", dayfirst=False)
+        if not pd.api.types.is_datetime64_any_dtype(parsed.dtype) or not parsed.notna().equals(cleaned.notna()):
+            return None
+        dayfirst = pd.to_datetime(cleaned, errors="coerce", format="mixed", dayfirst=True)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return parsed if parsed.equals(dayfirst) else None
+
+
 class ExcelExtractor:
     """Processing rules of the specification (phases A and B).
 
@@ -1045,6 +1066,9 @@ class ExcelExtractor:
         whitespace grouping thousands is stripped (currency, %, decimal comma are
         kept, the value stays a string).
 
+        Dates retain a temporal dtype only when all non-empty values parse
+        without an ambiguous day/month interpretation or incompatible timezone.
+
         Can be disabled with `coerce_types=False`: the columns then stay as raw
         values (no typing, no conversion), exactly as read from the sheet."""
         df = table.df
@@ -1065,14 +1089,7 @@ class ExcelExtractor:
                 report.append(f"{name}=bool")
                 continue
 
-            # 2) Already dates (openpyxl returns datetimes for date-formatted cells)
-            if any(isinstance(v, (dt.date, dt.datetime)) for v in s if _nonempty(v)):
-                parsed_dt = pd.to_datetime(s, errors="coerce")
-                df[col] = pd.Series([v if pd.notna(v) else None for v in parsed_dt], index=s.index, dtype=object)
-                report.append(f"{name}=date")
-                continue
-
-            # 3) Numeric: column RECOGNISED but values NOT converted — only the
+            # 2) Numeric: column RECOGNISED but values NOT converted — only the
             #    thousands-grouping whitespace is stripped (currency, %, decimal
             #    comma kept). Non-numeric values in the column are left as-is.
             non_null = sum(1 for v in s if _nonempty(v))
@@ -1082,16 +1099,15 @@ class ExcelExtractor:
                 report.append(f"{name}=num")
                 continue
 
-            # 4) Dates stored as text. format="mixed" parses each value on its own
-            #    (formats are heterogeneous) without the "Could not infer format"
-            #    warning.
-            dt_parsed = pd.to_datetime(s, errors="coerce", dayfirst=True, format="mixed")
-            if non_null and dt_parsed.notna().sum() / non_null >= 0.7:
-                df[col] = pd.Series([v if pd.notna(v) else None for v in dt_parsed], index=s.index, dtype=object)
-                report.append(f"{name}=date(txt)")
+            # 3) Native or text dates: retain a temporal dtype through Parquet,
+            #    but never replace invalid or ambiguous non-empty cells with null.
+            dt_parsed = _coerce_datetime_column(s)
+            if dt_parsed is not None:
+                df[col] = dt_parsed
+                report.append(f"{name}=date")
                 continue
 
-            # 5) Otherwise: cleaned text (raw data kept, including 0)
+            # 4) Otherwise: cleaned text (raw data kept, including 0)
             df[col] = s.map(lambda v: str(v).strip() if _nonempty(v) else None)
             report.append(f"{name}=str")
 
