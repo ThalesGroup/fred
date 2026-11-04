@@ -21,12 +21,16 @@ configured HTTP mount, without an external runtime source entry. The existing
 chat's `steering_turn_id` and `language` are accepted as inert metadata; they do
 not enable steering or change the inference prompt.
 
-Ralph has no memory: every message is an independent turn. Preparation returns
-null synchronous-execution and history URLs, and false
-HITL/UI-parts support. The existing shared chat keeps only this
-visit's live messages; leaving/reloading does not restore them. Session metadata
-still uses the common ownership and instance-association checks. The browser
-input limit is 16,384 Unicode scalars, fitting the 65,536-byte runtime ceiling.
+Ralph uses Rig's conversation memory across successful turns. The Control Plane
+supplies its PostgreSQL store and the authorized session ID as Rig's log name;
+this library has no database access. Rig loads the log before inference and appends
+the completed turn before Fred emits `final`. Preparation exposes the shared
+`GET {base_url}/agents/sessions/{session_id}/messages` contract, so the existing
+chat restores questions, answers, tool traces and sources after reloading. Unknown,
+foreign and withdrawn sessions receive the same 404. Synchronous execution and
+HITL/UI-parts remain unsupported. Session metadata retains the common ownership
+and instance-association checks. The browser input limit is 16,384 Unicode scalars,
+fitting the 65,536-byte runtime ceiling.
 
 The library checks `platform.inference_credentials` against the admitted source,
 source revision, destination and credential binding before reading the named local
@@ -113,7 +117,8 @@ treats excerpts as untrusted data and asks for textual title/page references. Th
 shared chat receives `tool_call` before search starts and a correlated `tool_result`
 with elapsed time and an error flag. An expired turn closes that tool row before the
 terminal `execution_error`.
-Only in-turn messages are retained, until the stream completes or is dropped.
+Each successful run saves its user question, model replies and tool results together.
+A failed or cancelled run saves none of its new messages.
 
 ## Consumption
 
@@ -146,6 +151,7 @@ call, with independent bounded options and an organization-selected offer, or th
 answer's admitted offer when no dedicated choice exists. No database or model
 policy is introduced in the agent crate.
 
+The title agent has no conversation memory and cannot write the answer log.
 The title request reads at most 600 characters, targets 3–8 words and cleans plain
 text to 80 characters. Generation times out after 10 seconds. The host waits at
 most 2 seconds before yielding the final event; dropping the stream drops unfinished
@@ -156,6 +162,37 @@ the text is invalid; it is not included a second time in the answer aggregate.
 The host conditionally persists the result with its admitted attempt and provenance
 before emitting `session_title`. Manual renames and deletion win at the database
 boundary. See the [owner contract](../../apps/control-plane/README.md#automatic-conversation-titles).
+
+## Deliberately limited
+
+Rig is pinned to 0.46 and evolving quickly. Ralph uses its memory and concurrency
+contracts directly; it does not implement a second history engine.
+
+- The whole log is read each turn, and PostgreSQL rewrites the `bytea` value on
+  every append. There is no history window or compaction: a sufficiently long
+  conversation exceeds the provider's context limit and fails the turn.
+- An interrupted or failed turn saves nothing. Closing the browser during the
+  answer loses that question and its partial reply on reload.
+- Concurrent runs from two tabs may both consume model tokens. Rig's optimistic
+  append accepts the first save; the other run ends with a fixed public history
+  error after its model call, without overwriting the saved conversation.
+- A failed save can follow already streamed answer text. There is no `final`, and
+  the reply is absent after reload. The consumed tokens are still reported.
+- Reloaded sources come from the bounded tool result: excerpts are truncated and
+  operational fields are absent. Citation filtering uses the saved hits, so its
+  threshold can differ from live filtering when a higher-scoring dataset pointer
+  was excluded from the tool result. Reasoning, token badges and model metadata
+  are deliberately not reconstructed.
+- The `rig-session` format belongs to a pre-1.0 library. A Rig upgrade may reject
+  an older conversation as unreadable; the reader then fails without rewriting it.
+- The store supports conversation logs only, with no images or auxiliary files.
+
+Conversation removal and retention belong to the Control Plane lifecycle, not to
+Rig. Removing access hides history immediately; physical deletion follows the
+retention receipt and attachment cleanup. The stored log follows the session row's
+foreign-key cascade only at physical deletion. `model_usage` is independent and
+survives. Python history cleanup is also coordinated by the Control Plane, through
+the runtime's own purge routes; the Control Plane never accesses Python's schema.
 
 ## Direct demonstration
 
@@ -175,6 +212,8 @@ the last event, tool-call correlation, single-search bounds, partial failures an
 cancellation between model calls.
 The same fixtures cover native reasoning, opaque-data exclusion, event ordering,
 terminal errors, and cancellation or deadline expiry between trace deliveries.
+Memory tests cover second-turn replay and renewed search, cancellation without a
+save, persistence before `final`, fixed save errors and the shared history fixture.
 Control Plane's `agent_instances::model_catalog` integration tests additionally
 cover HTTP instance/session creation, preparation under a custom router mount,
 the browser execution envelope, delegated admission, browser projection,
