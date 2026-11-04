@@ -17,6 +17,7 @@
 import duckdb
 import pytest
 
+from knowledge_flow_backend.features.tabular.diagnostics import VisibleQueryRelation
 from knowledge_flow_backend.features.tabular.service import (
     TabularDatasetReadError,
     TabularQueryError,
@@ -24,7 +25,6 @@ from knowledge_flow_backend.features.tabular.service import (
     _redacting_dataset_read_errors,
     _redacting_query_execution_errors,
 )
-from knowledge_flow_backend.features.tabular.diagnostics import VisibleQueryRelation
 
 _GCS_SIGNED_URL = (
     "https://storage.googleapis.com/fred-objects/tabular/datasets/d/r/data.parquet?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=signer%40p.iam.gserviceaccount.com&X-Goog-Signature=deadbeefcafe"

@@ -1079,7 +1079,7 @@ class ExcelExtractor:
             return
         report = []
         for col in df.columns:
-            s = df[col]
+            s = cast(pd.Series, df[col])
             name = str(col)
 
             # 1) Native Excel booleans, including columns with blank cells.
