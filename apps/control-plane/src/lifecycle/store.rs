@@ -313,7 +313,7 @@ impl Lifecycle {
         require_active(&mut *tx, id).await?;
         let target_kind = TargetKind::try_from(root.kind)?;
 
-        let overlaps: bool = sqlx::query_scalar(concat!("select exists(select 1 from deletion where status <> 'completed' and organization_id = $1 and ($2 = 'organization' or (", space_target!(), " and target_id = $3) or target_parent_id = $3))"))
+        let overlaps: bool = sqlx::query_scalar(concat!("select exists(select 1 from deletion where status <> 'completed' and target_kind <> 'session' and organization_id = $1 and ($2 = 'organization' or (", space_target!(), " and target_id = $3) or target_parent_id = $3))"))
             .bind(root.organization).bind(match root.kind { SpaceKind::Organization => "organization", _ => "child" }).bind(id).fetch_one(&mut *tx).await?;
         if overlaps {
             return Err(AppError::Conflict("overlapping space deletion".into()));
@@ -342,7 +342,7 @@ impl Lifecycle {
 async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> AppResult<()> {
     require_active(&mut **tx, id).await?;
     let has_documents: bool =
-        sqlx::query_scalar("select exists(select 1 from document where space_id = $1) or exists(select 1 from document_upload where space_id = $1 and status = 'pending')")
+        sqlx::query_scalar("select exists(select 1 from document where space_id = $1 and session_id is null) or exists(select 1 from document_upload where space_id = $1 and status = 'pending')")
             .bind(id)
             .fetch_one(&mut **tx)
             .await?;
@@ -351,6 +351,10 @@ async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> 
             "document-bearing scopes cannot be deleted".into(),
         ));
     }
+    // Attachments retire with the space and release quota immediately. Existing
+    // document/session receipts keep their own retention and cleanup ownership.
+    sqlx::query("update document set deletion_id = $1, purge_after = clock_timestamp() where space_id = $2 and session_id is not null and deletion_id is null")
+        .bind(operation).bind(id).execute(&mut **tx).await?;
     sqlx::query("update space set deletion_id = $1 where id = $2")
         .bind(operation)
         .bind(id)

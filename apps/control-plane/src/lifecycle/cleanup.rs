@@ -55,7 +55,7 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
     });
     spaces::lock_organization(&mut tx, &organization).await?;
     sqlx::query("update deletion set status = 'running', last_visit = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
-    let docs: bool = sqlx::query_scalar("select exists(select 1 from document where deletion_id is distinct from $1 and space_id in (select id from space where deletion_id = $1)) or exists(select 1 from document_upload where status = 'pending' and space_id in (select id from space where deletion_id = $1))").bind(id).fetch_one(&mut *tx).await?;
+    let docs: bool = sqlx::query_scalar("select exists(select 1 from document where deletion_id is distinct from $1 and (session_id is null or deletion_id is null) and space_id in (select id from space where deletion_id = $1)) or exists(select 1 from document_upload where status = 'pending' and space_id in (select id from space where deletion_id = $1))").bind(id).fetch_one(&mut *tx).await?;
     if docs {
         sqlx::query("update deletion set status = 'blocked', error_code = 'unsupported_documents' where id = $1")
             .bind(id).execute(&mut *tx).await?;
@@ -153,6 +153,44 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
         if !remaining {
             tracing::info!(target: "fred.security.audit", audit_event="deletion.completed", target_kind="document", operation_id=%id, document_id=%receipt.target_id, space_id=?receipt.target_parent_id, actor_uid=receipt.actor_subject, "Document deletion completed");
         }
+        return Ok(());
+    }
+    // The retired space already rejects admission and history reads. Materialize
+    // its child receipts in bounded visits, retaining the original request clock.
+    let children: Vec<Receipt> = sqlx::query_as(
+        "insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id)
+         select gen_random_uuid(),s.session_id,'session',s.space_id,$2,$3,$4,$5,$6
+         from session_metadata s join space p on p.id=s.space_id
+         where p.deletion_id=$1 and s.deletion_id is null
+         order by s.session_id limit 100 returning *",
+    ).bind(id).bind(receipt.organization_id).bind(&receipt.actor_subject)
+        .bind(receipt.requested_at).bind(receipt.due_at).bind(&receipt.rule_id)
+        .fetch_all(&mut *tx).await?;
+    if !children.is_empty() {
+        let ids: Vec<Uuid> = children.iter().map(|child| child.id).collect();
+        let runtimes: Vec<(Uuid, String)> = sqlx::query_as(
+            "update session_metadata s set deletion_id=d.id from deletion d
+             where d.id=any($1) and s.session_id=d.target_id returning s.session_id,s.runtime_id",
+        )
+        .bind(ids)
+        .fetch_all(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        for child in children {
+            if let Some((_, runtime)) = runtimes
+                .iter()
+                .find(|(session, _)| *session == child.target_id)
+            {
+                super::audit::session(&child, runtime);
+            }
+        }
+        return Ok(());
+    }
+    let conversations: bool = sqlx::query_scalar(
+        "select exists(select 1 from session_metadata s join space p on p.id=s.space_id where p.deletion_id=$1)",
+    ).bind(id).fetch_one(&mut *tx).await?;
+    if conversations {
+        tx.commit().await?;
         return Ok(());
     }
     let row: Option<(Uuid, SpaceKind)> = sqlx::query_as(
