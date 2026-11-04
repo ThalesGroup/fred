@@ -6,6 +6,7 @@
 pub mod answer;
 pub mod demo;
 mod events;
+pub mod history;
 mod request;
 pub mod search;
 #[cfg(test)]
@@ -32,5 +33,5 @@ pub const DEFINITION: AgentDefinition = AgentDefinition {
     title: "Ralph",
     version: env!("CARGO_PKG_VERSION"),
     provider: "control-plane",
-    description: "Rust chat agent with optional document search. Each message is independent; no saved history.",
+    description: "Rust chat agent with saved conversations and optional document search.",
 };

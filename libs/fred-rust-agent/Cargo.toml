@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 async-stream = "0.3"
 fred-rust-sdk.workspace = true
 reqwest.workspace = true

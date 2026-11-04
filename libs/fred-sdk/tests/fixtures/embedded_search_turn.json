@@ -11,7 +11,9 @@
       "file_name": "manual.pdf",
       "chunk_kind": null,
       "repository": null,
-      "tag_names": ["guide"],
+      "tag_names": [
+        "guide"
+      ],
       "citation_url": "/documents/doc-1"
     },
     {
@@ -51,10 +53,98 @@
         "section": "Install",
         "file_name": "manual.pdf",
         "repository": null,
-        "tag_names": ["guide"],
+        "tag_names": [
+          "guide"
+        ],
         "citation_url": "/documents/doc-1"
       }
     ],
     "finish_reason": "stop"
-  }
+  },
+  "history": [
+    {
+      "session_id": "session",
+      "exchange_id": "exchange",
+      "rank": 0,
+      "timestamp": "2026-11-04T12:00:00.000Z",
+      "role": "user",
+      "channel": "final",
+      "parts": [
+        {
+          "type": "text",
+          "text": "manual question"
+        }
+      ],
+      "metadata": {
+        "sources": []
+      }
+    },
+    {
+      "session_id": "session",
+      "exchange_id": "exchange",
+      "rank": 1,
+      "timestamp": "2026-11-04T12:00:00.000Z",
+      "role": "assistant",
+      "channel": "tool_call",
+      "parts": [
+        {
+          "type": "tool_call",
+          "call_id": "call-search",
+          "name": "search_documents",
+          "args": {
+            "query": "manual question"
+          }
+        }
+      ],
+      "metadata": {
+        "sources": []
+      }
+    },
+    {
+      "session_id": "session",
+      "exchange_id": "exchange",
+      "rank": 2,
+      "timestamp": "2026-11-04T12:00:00.000Z",
+      "role": "tool",
+      "channel": "tool_result",
+      "parts": [
+        {
+          "type": "tool_result",
+          "call_id": "call-search",
+          "ok": true,
+          "content": "{\"query\":\"manual question\",\"hits\":[{\"uid\":\"doc-1\",\"title\":\"Manual\",\"content\":\"Evidence\",\"file_name\":\"manual.pdf\",\"page\":2,\"section\":\"Install\",\"score\":0.8},{\"uid\":\"doc-2\",\"title\":\"Annex\",\"content\":\"Unrelated\",\"file_name\":null,\"page\":null,\"section\":null,\"score\":0.2}]}"
+        }
+      ],
+      "metadata": {
+        "sources": []
+      }
+    },
+    {
+      "session_id": "session",
+      "exchange_id": "exchange",
+      "rank": 3,
+      "timestamp": "2026-11-04T12:00:00.000Z",
+      "role": "assistant",
+      "channel": "final",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Answer [Manual, p. 2]"
+        }
+      ],
+      "metadata": {
+        "sources": [
+          {
+            "uid": "doc-1",
+            "title": "Manual",
+            "content": "Evidence",
+            "file_name": "manual.pdf",
+            "page": 2,
+            "section": "Install",
+            "score": 0.8
+          }
+        ]
+      }
+    }
+  ]
 }

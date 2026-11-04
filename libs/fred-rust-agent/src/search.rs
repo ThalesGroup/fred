@@ -113,31 +113,36 @@ impl Evidence {
             query: &'a str,
             hits: Vec<ModelHit<'a>>,
         }
-        // As fred_core's select_citable_sources: relative to the best hit of this call.
-        let threshold = hits
-            .iter()
-            .map(|hit| hit.score)
-            .fold(f64::NEG_INFINITY, f64::max)
-            * MIN_SOURCE_SCORE_RATIO;
-        let hits: Vec<_> = hits
-            .into_iter()
-            .filter(|hit| hit.chunk_kind.as_deref() != Some(DATASET_POINTER))
-            .take(usize::from(TOP_K))
-            .collect();
         let tool_content = serde_json::to_string(&ToolContent {
             query,
-            hits: hits.iter().map(ModelHit::from).collect(),
+            hits: hits
+                .iter()
+                .filter(|hit| hit.chunk_kind.as_deref() != Some(DATASET_POINTER))
+                .take(usize::from(TOP_K))
+                .map(ModelHit::from)
+                .collect(),
         })
         .map_err(|_| InferenceError::Search)?;
-        let sources = hits
-            .into_iter()
-            .filter(|hit| hit.score >= threshold)
-            .collect();
+        let sources = citable_sources(hits);
         Ok(Self {
             tool_content,
             sources,
         })
     }
+}
+
+/// As fred_core's select_citable_sources, over the evidence available to this reader.
+pub(crate) fn citable_sources(hits: Vec<SearchHit>) -> Vec<SearchHit> {
+    let threshold = hits
+        .iter()
+        .map(|hit| hit.score)
+        .fold(f64::NEG_INFINITY, f64::max)
+        * MIN_SOURCE_SCORE_RATIO;
+    hits.into_iter()
+        .filter(|hit| hit.chunk_kind.as_deref() != Some(DATASET_POINTER))
+        .take(usize::from(TOP_K))
+        .filter(|hit| hit.score >= threshold)
+        .collect()
 }
 
 #[derive(Deserialize, JsonSchema)]
