@@ -345,7 +345,7 @@ class WritableDocumentCapability(AgentCapability[EmptyModel, EmptyModel, EmptyMo
 
     manifest = CapabilityManifest(
         id=WRITABLE_DOCUMENT_CAPABILITY_ID,
-        version="0.1.0",
+        version="0.1.1",
         name="capability.writable_document.name",
         description="capability.writable_document.description",
         icon="edit_note",

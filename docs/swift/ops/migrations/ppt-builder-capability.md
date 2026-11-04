@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [platform-skills-evolution]
 title: "Add the ppt_builder capability with background template analysis, agent readiness and a platform default template"
 impact: minor
 configuration: production
@@ -34,8 +35,11 @@ package, so every agent-pod that installs that package registers it.
   Azure and Mistral Medium profiles. Operators with a private catalogue overlay
   add `supports_vision: true` to their multimodal profiles; without it, template
   slides are labelled by rules only and the agent form says so.
-- Add `supports_vision` to an overlay only once the new fred-agents image is
-  rolled out: older pods reject unknown model profile keys and fail to boot.
+- While any older runtime can read the catalogue, omit `supports_vision`
+  entirely, including the keys supplied by the new chart and private overlays.
+  Older pods reject unknown model profile keys and fail to boot. After all
+  runtime replicas use the new image, enable the intended flags and restart
+  those replicas. Without these flags, template analysis uses rules only.
 - No new secret or permission: labelling goes through the agent's own routed
   chat model, within the team's usable models. The platform default template
   is labelled through the pod's default chat model, or the model a capability
@@ -46,15 +50,18 @@ package, so every agent-pod that installs that package registers it.
 
 ## Upgrade
 
-1. Deploy normally; the migration hook applies the schema changes before the
-   pods roll: the control-plane column `agent_instance.suspension_detail`
-   (nullable text) and the fred-agents tables `cap_ppt_builder_analysis` and
-   `cap_ppt_builder_deck_plan` (the last deck plan per conversation, a few KB
-   per row).
-2. Roll fred-agents before the control plane where possible. The control plane
-   now asks the agent pod for capability readiness (`POST
-   /capabilities/readiness`) after a save and when listing agents; an older pod
-   gives no answer and nothing changes.
+1. Back up the databases and apply the complete release migration chains as
+   described in the discovery note. The control-plane head is
+   `b8e1f4a2c6d9`; its parent is `d7b24ef08361`. The runtime head remains
+   `f6a7b8c9d0e1`, and the independent `capability:ppt_builder` tree advances
+   from base to `r9d3f4a5b6c7`. Its migration creates the analysis and deck-plan
+   tables under `cap_ppt_builder_alembic_version`.
+2. Deploy the control plane before all runtime replicas, then the frontend,
+   following the release's skill-policy rollout. Avoid agent writes while old
+   and new control-plane replicas coexist: new replicas can persist
+   `capability_pending`, which old replicas cannot read. The new control plane
+   treats an older runtime's readiness endpoint returning 404 as ready; other
+   readiness failures can leave an agent suspended until a successful check.
 3. Cost: each template upload (or vision setting change) makes one vision call
    per example slide, at most four at a time, once per template hash. A
    20-slide template is about 20 calls. The built-in template ships analysed.
@@ -78,19 +85,25 @@ package, so every agent-pod that installs that package registers it.
 
 ## Rollback
 
-1. Downgrade the control-plane schema first, while the new code still runs:
-   `alembic downgrade b5d2e8f7c031` in the control-plane backend. The
-   downgrade lifts every `capability_pending` suspension and drops
-   `agent_instance.suspension_detail`. An older control plane does not know
-   `capability_pending` and fails listing a team's agents if one row still
-   carries it.
-2. Then roll back the code and chart normally. The fred-agents tables
-   `cap_ppt_builder_analysis` and `cap_ppt_builder_deck_plan` are unread by
-   older versions; leave them in place. To drop them anyway (stored templates,
-   analyses and deck plans are lost), run from `apps/fred-agents`, before the
-   rollback, `make db-downgrade MIGRATION_TREE=capability:ppt_builder
-   ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml` once to revert the
-   capability's single schema revision.
+1. Follow the release's skill-policy rollback precautions. Keep the new control
+   plane available while rolling back every runtime replica: new runtimes need
+   its skill-policy endpoint for direct turns. Remove `supports_vision` from
+   retained catalogue overlays before starting any old runtime.
+2. Once all new runtimes have stopped, drain and stop every new control-plane
+   replica before removing its mapped column. Using the new image and the
+   deployment's database configuration, execute
+   `alembic downgrade d7b24ef08361` for the control-plane tree. This reverts
+   only the PPT revision, clears `capability_pending` suspensions and drops
+   `agent_instance.suspension_detail`, preserving global skill policies.
+   Verify that no agent retains `capability_pending`, then start the prior
+   control-plane version and roll back the frontend. Do not run new replicas
+   against the downgraded schema.
+3. Keep the additive PPT analysis and deck-plan tables; older versions do not
+   read them. If removal is required, stop all replicas that can analyse
+   templates or save decks, then use the new image's migration tooling and the
+   deployment's database configuration to downgrade the independent
+   `capability:ppt_builder` tree to base. This permanently deletes stored
+   templates, analyses and plans.
 
 Agents configured with `ppt_builder` stop working on an older release, which
 does not know the capability; their stored configs are kept.
