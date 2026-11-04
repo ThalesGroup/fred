@@ -5012,5 +5012,8 @@ async fn owner_only_team_membership_governance() {
     );
 }
 
+#[path = "support/session_deletion.rs"]
+mod session_deletion;
+
 #[path = "support/embedded_conversations.rs"]
 mod embedded_conversations;

@@ -867,6 +867,13 @@ async fn usage_requires_a_trusted_workload_and_uses_session_provenance_after_ret
         .await
         .unwrap();
     assert_eq!(retained, 4);
+    f.admit("alice").await;
+    let (status, retained_usage) = f
+        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
+        .await;
+    assert_eq!(status, 200, "{retained_usage}");
+    assert_eq!(retained_usage["totals"]["input_tokens"], 400);
+    assert_eq!(retained_usage["totals"]["turns"], 1);
 }
 
 #[tokio::test]

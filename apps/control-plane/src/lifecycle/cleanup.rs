@@ -117,12 +117,28 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
         }
     }
     if receipt.target_kind == TargetKind::Session {
-        // Its attachments are purged; the conversation stays retired, nothing purges runtime history yet.
-        sqlx::query("update deletion set status = 'blocked', error_code = 'session_purge_unavailable' where id = $1")
-            .bind(id).execute(&mut *tx).await?;
+        let (runtime_id, template_id): (String, Uuid) = sqlx::query_as(
+            "select runtime_id, template_id from session_metadata where session_id = $1 and deletion_id = $2",
+        ).bind(receipt.target_id).bind(id).fetch_one(&mut *tx).await?;
+        let embedded = crate::embedded_agent::serves(&runtime_id, fred_rust_agent::AGENT_ID)
+            && template_id
+                == crate::agents::template_id(
+                    receipt.organization_id,
+                    &runtime_id,
+                    fred_rust_agent::AGENT_ID,
+                );
+        if !embedded {
+            sqlx::query("update deletion set status = 'blocked', error_code = 'session_purge_unavailable' where id = $1")
+                .bind(id).execute(&mut *tx).await?;
+            tx.commit().await?;
+            return Ok(());
+        }
+        complete_session(&mut tx, &receipt).await?;
         tx.commit().await?;
+        tracing::info!(target: "fred.security.audit", audit_event="deletion.completed", target_kind="session", operation_id=%id, session_id=%receipt.target_id, space_id=?receipt.target_parent_id, actor_uid=receipt.actor_subject, "Session deletion completed");
         return Ok(());
     }
+
     if receipt.target_kind == TargetKind::Document {
         let remaining: bool =
             sqlx::query_scalar("select exists(select 1 from document where deletion_id = $1)")
@@ -195,5 +211,19 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
     if completed {
         tracing::info!(target:"fred.security.audit", audit_event="deletion.completed", operation_id=%id, space_id=%receipt.target_id, actor_uid=receipt.actor_subject, "Space deletion completed");
     }
+    Ok(())
+}
+
+async fn complete_session(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    receipt: &Receipt,
+) -> AppResult<()> {
+    sqlx::query("delete from session_metadata where session_id = $1 and deletion_id = $2")
+        .bind(receipt.target_id)
+        .bind(receipt.id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query("update deletion set status = 'completed', completed_at = now(), error_code = null where id = $1")
+        .bind(receipt.id).execute(&mut **tx).await?;
     Ok(())
 }
