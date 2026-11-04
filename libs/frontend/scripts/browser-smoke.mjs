@@ -1563,6 +1563,7 @@ async function verifyProductionHostDownload(browser) {
   ];
   const mockedImports = new Set([
     "../../../../hooks/useSelectedTeam.ts",
+    "../../../../hooks/useFrontendProperties.ts",
     "../../../../app/ApplicationContextProvider.tsx",
     "../../../../slices/controlPlane/controlPlaneOpenApi.ts",
   ]);
@@ -1723,7 +1724,13 @@ export async function runBrowserSmoke({
     "target/staged-consumers/iframe-sdk",
   ),
   checks = ["tokens", "fonts", "ui", "iframeSdk"],
+  productionHostCompatibility = true,
 } = {}) {
+  assert.equal(
+    typeof productionHostCompatibility,
+    "boolean",
+    "productionHostCompatibility must be boolean",
+  );
   await assertBrowserPrerequisites({
     tokenOutput,
     reactOutput,
@@ -1782,7 +1789,7 @@ export async function runBrowserSmoke({
             iframeAttackerServer.origin,
           )
         : undefined,
-      selected.has("iframeSdk")
+      selected.has("iframeSdk") && productionHostCompatibility
         ? verifyProductionHostDownload(browser)
         : undefined,
     ]);

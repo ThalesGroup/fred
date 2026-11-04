@@ -702,6 +702,32 @@ Control-plane  (target state)
 - [ ] `agent.llm_call` KPI event emitted per model invocation via `KPIWriter.log_llm()` (currently defined but never called)
 - [ ] CLI `/kpi session <session_id>` command renders per-turn KPI table
 
+### Global platform skills
+
+`GET /platform/skills` and `PUT /platform/skills/{name}` require
+`organization#can_manage_capabilities`. The global Features > Skills tab and
+CLI `/platform-skills` and `/platform-skills <name> on|off` use these contracts.
+Inventory aggregates metadata-only packaged entries from configured runtime
+sources concurrently with bounded timeouts. It identifies source runtime IDs,
+invocation controls, effective enablement, unavailable and unsupported sources,
+and persisted disabled names even when no source currently advertises them.
+Custom-directory skills are excluded using runtime-provided provenance.
+
+All skills default to enabled. Atomic per-name upserts store operator identity
+and time in the control-plane database, shared by replicas; runtime pods never
+write local policy. Disabling requires a known packaged name and verified runtime
+sources (unsupported returns 409, unavailable returns 503). Re-enabling a stored
+disabled name is possible during a complete source outage. Successful changes
+use the existing audit mechanism.
+
+Authenticated `GET /platform/skills/policy` returns only disabled names for direct
+runtime executions. Managed runtime bindings carry fresh `disabled_platform_skills`
+from the same shared store on every turn. When opt-outs exist, managed resolution
+requires `X-Fred-Skill-Policy: 1`. New runtimes filter discovery and all new reads
+at the next turn/resume. Ongoing turns and already-read context are retained.
+See the [rollout note](../ops/migrations/platform-skills-evolution.md) for mixed
+version deployment ordering and its raw-template limitation.
+
 ### 3.6 Prompt library
 
 Freeze prompt management as a first-class control-plane contract separate from
@@ -5175,3 +5201,75 @@ personal localStorage values do not seed the row or serve as a fallback; the
 frontend applies the database response or defaults to in-memory controls and
 does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
+
+### Conversation title model (2026-10-30)
+
+`GET`/`PUT /admin/platform/creation-assistant` carry an optional
+`title_model_profile_id`, stored on `creation_assistant_settings` and validated
+against `model_options`. `ManagedAgentRuntimeBinding.title_model_profile_id`
+delivers it on the per-turn runtime binding, because the team settings endpoint
+requires `CAN_UPDATE_AGENTS` and a plain member must get the same title model.
+`None` follows the platform chat binding, then the pod default; a profile unknown
+to the pod falls back to the pod default.
+
+## 70. Contract Notes — capability readiness and vision flags (2026-10-05)
+
+**Readiness suspension.** `SuspensionReason` gains `capability_pending`: a selected
+capability reports, through its pod's `POST /agents/capabilities/readiness`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.121), that its saved configuration is still
+being prepared, or that preparing it failed. `ManagedAgentInstanceSummary` gains
+`suspension_detail` (nullable; Alembic `b8e1f4a2c6d9` adds the column), set only
+with `capability_pending` to carry the failure message. The existing suspension
+guards apply unchanged (prepare-execution 409, locked toggle, hidden from chat
+pickers, recents and search).
+
+Control-plane asks the pod after an enrol, after a copy and after a save touching
+capabilities, on
+`POST /teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check`
+(`CAN_UPDATE_AGENTS`, returns the summary), which the agent form polls, and on
+`GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances
+without a failure detail (a random subset over the cap; a failure only changes on a
+save, a re-run or a re-check), concurrently on the shared runtime HTTP client, with
+the caller's token and a 2 s bound (the sweep has no production host). Readiness verdicts alone set and clear `capability_pending`; every other
+reason outranks it. An older pod without the route (404) reads as ready.
+
+After an enrol, a copy or a capability save, the instance gets one suspension write: none
+when the pod answers ready (the save resolves any earlier reason), else
+`capability_pending`. No answer (timeout, unreachable pod, error) fails closed to
+`capability_pending` without detail, lifted by the next listing, re-check or sweep
+that gets an answer. An availability reason that clears (capability back, access
+re-granted) also leaves `capability_pending` without detail, since it may have
+overwritten one. Elsewhere, no answer changes nothing. Readiness writes are
+compare-and-set on the reason read before the pod call, so they never overwrite a
+suspension written meanwhile.
+
+**Save-time routing.** The pod `validate-config` call carries query parameters
+`template_agent_id`, `chat_default_profile_id` (the team default) and
+`recommended_chat_profile_id` (the instance recommendation, when set): the levels a
+new conversation of this agent starts from, so a capability can call the agent's
+model during its save. No platform binding is sent. The pod
+`copy-config` call carries the same parameters for the destination team.
+
+**Vision flags.** `AvailableModelProfile.supports_vision` and
+`EffectiveChatModel.supports_vision` (default false) report whether the profile
+declares `supports_vision` in the pod catalog. A platform binding reports false.
+
+## 71. Contract Notes — capability platform settings fields (2026-10-22)
+
+`CapabilityEnablementItem` (`GET /admin/capabilities`, `can_manage_capabilities`)
+gains `route_base_url` (nullable): the ingress-relative base URL of the capability's
+own routes (`CapabilityCatalogEntry.route_base_url`), so Admin > Features can open a
+capability's platform settings panel against its pod, as the agent form does.
+
+`GET /routing-policy/available-models` (`can_manage_capabilities`) returns the
+`AvailableModelProfileList` of `GET /teams/{team_id}/routing-policy/available-models`
+for a platform-wide choice, from the same service function called without a team:
+no `can_use` check, but the model must hold the org `default_on` marker, the
+profile must be a chat profile available on every enabled pod, and
+`effective_default_profile_id` is the pods' common default. A capability's platform
+panel filters it on `supports_vision`, as the agent form filters the team list.
+
+The capability routes those panels call (ppt_builder `/platform*`) live on the pod
+and are gated by the pod's capability-manager check
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.122). Acceptance scenarios:
+`openspec/specs/ppt-builder/spec.md`.

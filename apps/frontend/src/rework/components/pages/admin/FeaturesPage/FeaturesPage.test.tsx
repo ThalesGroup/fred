@@ -74,6 +74,18 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../../slices/controlPlane/controlPlaneOpenApi")>()),
+  useGetPlatformSkillsQuery: () => ({
+    data: { skills: [], unavailable_runtime_ids: [], unsupported_runtime_ids: [], disabled_skill_names: [] },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+  useSetPlatformSkillEnabledMutation: () => [vi.fn(), { isLoading: false }],
+}));
+
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => ({ ...h.list, refetch: h.refetch }),
   useModelDiscoveryQuery: () => ({
@@ -136,6 +148,12 @@ vi.mock("./CapabilityTeamMatrixDrawer", () => ({
 vi.mock("./SandboxSettingsPanel", () => ({
   SandboxSettingsPanel: ({ visible }: { visible: boolean }) => (visible ? <div>Sandbox settings</div> : null),
 }));
+
+// Only ppt_builder declares a platform panel here; the drawer is exercised by its panel's own tests.
+vi.mock("../../../../features/capabilities/platformPanelRegistry", () => ({
+  platformPanelFor: (id: string) => (id === "ppt_builder" ? () => null : undefined),
+}));
+vi.mock("./CapabilityPlatformDrawer", () => ({ CapabilityPlatformDrawer: () => null }));
 
 import FeaturesPage from "./FeaturesPage";
 
@@ -982,4 +1000,52 @@ describe("FeaturesPage reasoning column (REASON-01, MODEL-REASONING-ENABLEMENT-R
     };
     expect(render()).not.toContain("rework.admin.capabilities.col.reasoning");
   });
+});
+
+describe("FeaturesPage platform settings action", () => {
+  it("reserves the rightmost settings column and shows a gear only for registered panels", () => {
+    h.list = {
+      data: { items: [cap({ id: "ppt_builder" }), cap({ id: "web_search" })] },
+      isLoading: false,
+      isError: false,
+    };
+    const table = document.createElement("div");
+    table.innerHTML = render();
+    const headers = table.querySelector('[class*="datatable-header"]');
+    const headerLabels = Array.from(headers?.children ?? [], (cell) => cell.textContent);
+    expect(headerLabels.slice(-2)).toEqual([
+      "rework.admin.capabilities.col.actions",
+      "rework.admin.capabilities.col.settings",
+    ]);
+
+    const rows = Array.from(table.querySelectorAll('[class*="datatable-row"]'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0].children[rows[0].children.length - 2].textContent).toContain(
+      "rework.admin.capabilities.manageTeams",
+    );
+    expect(
+      rows[0].lastElementChild?.querySelectorAll('button[aria-label="rework.admin.capabilities.platformSettings"]'),
+    ).toHaveLength(1);
+    expect(rows[1].lastElementChild?.querySelector("button")).toBeNull();
+  });
+});
+
+it("opens the global Skills inventory without choosing a team or agent", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<FeaturesPage />));
+    const tab = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent === "rework.admin.capabilities.kindFilter.skill",
+    )!;
+    expect(tab).toBeDefined();
+    await act(async () => tab.click());
+    expect(container.querySelector('section[aria-label="rework.admin.skills.title"]')).not.toBeNull();
+    expect(container.textContent).toContain("rework.admin.skills.scope");
+    expect(container.textContent).not.toContain("rework.admin.capabilities.empty");
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+  }
 });

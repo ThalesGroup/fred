@@ -29,7 +29,9 @@ from fred_core.history.history_schema import (
     ChatMetadata,
     CommandDescriptor,
     CommandPromptDescriptor,
+    HitlRequestPart,
     make_assistant_final,
+    make_hitl_request,
     make_user_text,
 )
 from fred_core.history.postgres_history_store import (
@@ -143,3 +145,19 @@ async def test_a_stored_list_over_the_bound_reads_back_without_failing(
     row = (await store.get("s1", user_id="u1"))[0]
     assert row.metadata.command is None
     assert [part.model_dump()["text"] for part in row.parts] == ["assembled text"]
+
+
+@pytest.mark.asyncio
+async def test_hitl_read_exposes_persisted_target_without_modifying_stored_metadata(
+    tmp_path,
+) -> None:
+    store = await _store(tmp_path)
+    message = make_hitl_request("s1", "e1", 0, question="Choose", choices=[])
+    await store.save("s1", [message], user_id="u1", agent_instance_id="instance")
+    loaded = await store.get("s1", user_id="u1")
+    assert loaded[0].metadata.agent_id == "instance"
+    assert message.metadata.agent_id is None
+    part = loaded[0].parts[0]
+    assert isinstance(part, HitlRequestPart)
+    assert part.resume_status is None
+    assert await store.get("s1", user_id="another") == []

@@ -732,8 +732,9 @@ async def test_preview_revoke_includes_agent_template_instances(monkeypatch) -> 
 
 @pytest.mark.asyncio
 async def test_revive_clears_suspension_when_all_capabilities_return() -> None:
-    """A grant that makes EVERY selected capability usable clears the
-    suspension — the re-enable path that previously left agents stranded."""
+    """A grant that makes EVERY selected capability usable lifts the access
+    suspension — the re-enable path that previously left agents stranded. The
+    agent waits in `capability_pending` until the next readiness answer."""
 
     record = _record_with(
         agent_instance_id="inst",
@@ -752,7 +753,7 @@ async def test_revive_clears_suspension_when_all_capabilities_return() -> None:
     )
 
     assert revived == 1
-    assert record.suspension_reason is None
+    assert record.suspension_reason == SuspensionReason.CAPABILITY_PENDING.value
 
 
 @pytest.mark.asyncio

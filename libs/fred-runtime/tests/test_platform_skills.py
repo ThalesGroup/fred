@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from importlib.resources import files
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -101,13 +102,14 @@ def binding(selection: str | None = None) -> BoundRuntimeContext:
 def test_package_discovery_and_read_only_reference() -> None:
     catalog = PlatformSkills.from_directory("package")
     assert [entry.name for entry in catalog.catalog.skills] == [
+        "analyze-data",
         "compare-options",
+        "graph",
+        "grill-me",
         "grounded-research",
         "meeting-minutes",
-        "mermaid",
         "summarize-document",
         "tabular-evidence",
-        "verify-answer",
     ]
     template = catalog.read("meeting-minutes", "references/meeting-minutes-template.md")
     assert "Not specified" in template
@@ -122,23 +124,20 @@ def test_package_discovery_and_read_only_reference() -> None:
     assert upload_results[0].error == "permission_denied"
 
 
-def test_mermaid_skill_retains_renderer_syntax_guards() -> None:
-    contract = PlatformSkills.from_directory("package").read("mermaid")
-    assert "in the chat as a fenced `mermaid` block" in contract
-    assert "Do not send Mermaid source to `render_html_artifact`" in contract
-    assert "it does not run Mermaid" in contract
-    assert "```mermaid" not in contract
-    assert "placeholder Mermaid fences" in contract
-    assert "never nest a `mermaid` fence inside another" in contract
-    assert "echo the fence's own opening/closing backticks inside its body" in contract
-    assert (
-        "The fence body starts directly with `flowchart TD` or `graph TD`" in contract
-    )
-    assert "never with backticks, `subgraph`, a node, or an edge" in contract
-    assert "there is no four-backtick wrapping" in contract
-    assert "do not write subgraph titles with node-label syntax" in contract
-    assert 'subgraph SUBGRAPH_ID["Title"]' in contract
-    assert "Markdown list or table instead of Mermaid" in contract
+def test_graph_core_and_reference_match_react_and_native_deep_resources() -> None:
+    skills = PlatformSkills.from_directory("package")
+    resource = files("fred_runtime.skills").joinpath("graph")
+    assert {entry.name for entry in resource.iterdir()} == {"SKILL.md", "references"}
+    core = skills.read("graph")
+    assert "references/mermaid.md" in core
+    assert "flowchart TD" not in core
+    for path in ["SKILL.md", "references/mermaid.md"]:
+        snapshot_content = skills.read("graph", path)
+        native_result = skills.filesystem_backend.download_files([f"/graph/{path}"])
+        assert len(native_result) == 1
+        assert native_result[0].error is None
+        assert native_result[0].content == snapshot_content.encode()
+    assert "flowchart TD" in skills.read("graph", "references/mermaid.md")
 
 
 @pytest.mark.asyncio
@@ -182,11 +181,11 @@ async def test_deep_delegates_skills_discovery_to_native_constructor(
     )
     state = await agent.aget_state({"configurable": {"thread_id": "native-discovery"}})
     assert {item["name"] for item in state.values["skills_metadata"]} == {
-        entry.name for entry in skills.catalog.skills
+        entry.name for entry in skills.for_execution().catalog.skills
     }
     for messages in model.calls:
         prompt = str(messages[0].content)
-        assert "/skills/meeting-minutes/SKILL.md" in prompt
+        assert "/skills/graph/SKILL.md" in prompt
         assert prompt.count("## Skills") == 1
         assert "# Available platform skills" not in prompt
         assert "## Decisions" not in prompt
@@ -486,17 +485,17 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
     skills = PlatformSkills.from_directory("package")
     model = Model(
         script=[
-            load_call("meeting-minutes", "load", deep),
+            load_call("graph", "load", deep),
             call(
                 "read_file" if deep else "read_skill_file",
                 {
-                    "file_path": "/skills/meeting-minutes/references/meeting-minutes-template.md",
+                    "file_path": "/skills/graph/references/mermaid.md",
                     "limit": 1000,
                 }
                 if deep
                 else {
-                    "name": "meeting-minutes",
-                    "path": "references/meeting-minutes-template.md",
+                    "name": "graph",
+                    "path": "references/mermaid.md",
                 },
                 "reference",
             ),
@@ -520,7 +519,7 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
     ]
     assert len(loads) == 1
     assert loads[0].skill_load is not None and loads[0].skill_load.origin == "agent"
-    assert "Not specified" in str(model.calls[-1])
+    assert "flowchart TD" in str(model.calls[-1])
     assert any(
         isinstance(message, ToolMessage) and message.tool_call_id == "load"
         for message in model.calls[-1]
@@ -531,16 +530,14 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
         if isinstance(message, ToolMessage) and message.tool_call_id == "load"
     )
     if not deep:
-        assert "meeting-minutes is a skill name, not an executable tool" in str(
-            loaded.content
-        )
+        assert "graph is a skill name, not an executable tool" in str(loaded.content)
         assert "not a tool schema" in str(loaded.content)
     if not deep:
         assert "Never invent a tool call using a skill's catalog name" in str(
             model.calls[0][0].content
         )
     else:
-        assert "/skills/meeting-minutes/SKILL.md" in str(model.calls[0][0].content)
+        assert "/skills/graph/SKILL.md" in str(model.calls[0][0].content)
     if deep:
         assert "read_file" in model.bound_tool_names
         assert not {"load_skill", "read_skill_file"} & set(model.bound_tool_names)
@@ -555,7 +552,7 @@ async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
         {"messages": [HumanMessage(content="follow up")]},
         {"configurable": {"thread_id": "session"}},
     )
-    assert "Not specified" in str(model.calls[-1])
+    assert "flowchart TD" in str(model.calls[-1])
     counts = [
         c
         for c in metrics.count.call_args_list
@@ -641,7 +638,7 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
                 exchange_id="exchange",
                 skills=[
                     SkillInvocation(name="meeting-minutes"),
-                    SkillInvocation(name="mermaid"),
+                    SkillInvocation(name="graph"),
                     SkillInvocation(name="meeting-minutes"),
                 ],
             )
@@ -655,7 +652,7 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
         services=RuntimeServices(skills=skills, kpi_writer=metrics),
         runtime_class_name="ReActRuntime",
     )
-    draft = "Before /meeting-minutes middle /mermaid after"
+    draft = "Before /meeting-minutes middle /graph after"
     input_model = ReActInput(
         messages=(ReActMessage(role=ReActMessageRole.USER, content=draft),)
     )
@@ -667,17 +664,17 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
             for event in events
             if isinstance(event, StatusRuntimeEvent) and event.skill_load
         ]
-        assert [load.name for load in loads] == ["meeting-minutes", "mermaid"]
+        assert [load.name for load in loads] == ["meeting-minutes", "graph"]
         assert all(load.origin == "user" for load in loads)
     else:
         await executor.invoke(input_model, config)
     messages = model.calls[0]
     assert [
         message.id for message in messages if str(message.id).startswith("skill:")
-    ] == ["skill:exchange:meeting-minutes", "skill:exchange:mermaid"]
+    ] == ["skill:exchange:meeting-minutes", "skill:exchange:graph"]
     assert all(
         any(skills.read(name) in str(message.content) for message in messages)
-        for name in ["meeting-minutes", "mermaid"]
+        for name in ["meeting-minutes", "graph"]
     )
     assert messages[-1].content == draft
     counts = [
@@ -687,7 +684,7 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
     ]
     assert [call.kwargs["dims"]["skill_name"] for call in counts] == [
         "meeting-minutes",
-        "mermaid",
+        "graph",
     ]
     assert all(call.kwargs["dims"]["skill_origin"] == "user" for call in counts)
     before = len(model.calls)
@@ -711,7 +708,7 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
 
 
 @pytest.mark.asyncio
-async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> None:
+async def test_deep_pins_user_selections_and_attributes_actual_native_reads() -> None:
     skills = PlatformSkills.from_directory("package")
     bound = binding().model_copy(
         update={
@@ -720,7 +717,7 @@ async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> 
                 exchange_id="exchange",
                 skills=[
                     SkillInvocation(name="meeting-minutes"),
-                    SkillInvocation(name="mermaid"),
+                    SkillInvocation(name="graph"),
                 ],
             )
         }
@@ -728,7 +725,7 @@ async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> 
     model = Model(
         script=[
             load_call("meeting-minutes", "load-one", True),
-            load_call("mermaid", "load-two", True),
+            load_call("graph", "load-two", True),
             load_call("compare-options", "load-auto", True),
             AIMessage(content="done"),
         ]
@@ -747,7 +744,7 @@ async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> 
                 messages=(
                     ReActMessage(
                         role=ReActMessageRole.USER,
-                        content="Before /meeting-minutes /mermaid after",
+                        content="Before /meeting-minutes /graph after",
                     ),
                 )
             ),
@@ -761,7 +758,9 @@ async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> 
     ]
     assert [(load.name, load.origin) for load in loads] == [
         ("meeting-minutes", "user"),
-        ("mermaid", "user"),
+        ("graph", "user"),
+        ("meeting-minutes", "user"),
+        ("graph", "user"),
         ("compare-options", "agent"),
     ]
     assert "Loaded platform skill:" not in str(model.calls[0])
@@ -769,22 +768,33 @@ async def test_deep_multiple_native_reads_keep_user_origin_without_preload() -> 
         message.content
         for message in model.calls[0]
         if isinstance(message, HumanMessage)
-    ] == ["Before /meeting-minutes /mermaid after"]
+        and message.additional_kwargs.get("lc_source") != "pinned_skill"
+    ] == ["Before /meeting-minutes /graph after"]
+    assert (
+        len(
+            [
+                m
+                for m in model.calls[0]
+                if m.additional_kwargs.get("lc_source") == "pinned_skill"
+            ]
+        )
+        == 2
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("deep", [False, True])
 @pytest.mark.parametrize("origin", ["user", "agent"])
-async def test_packaged_mermaid_loads_through_shared_paths(
+async def test_packaged_graph_loads_through_shared_paths(
     deep: bool, origin: str
 ) -> None:
     skills = PlatformSkills.from_directory("package")
-    bound = binding("mermaid" if origin == "user" else None)
+    bound = binding("graph" if origin == "user" else None)
     model = Model(
         script=[]
-        if origin == "user" and not deep
+        if origin == "user"
         else [
-            load_call("mermaid", "mermaid-load", deep),
+            load_call("graph", "graph-load", deep),
             AIMessage(content="done"),
         ]
     )
@@ -804,7 +814,7 @@ async def test_packaged_mermaid_loads_through_shared_paths(
                 messages=(
                     ReActMessage(
                         role=ReActMessageRole.USER,
-                        content="/mermaid" if origin == "user" else "Draw the workflow",
+                        content="/graph" if origin == "user" else "Draw the workflow",
                     ),
                 )
             ),
@@ -818,12 +828,14 @@ async def test_packaged_mermaid_loads_through_shared_paths(
     ]
     expected_origin = origin
     assert len(loads) == 1 and loads[0].origin == expected_origin
-    assert loads[0].name == "mermaid"
-    assert "mermaid" not in model.bound_tool_names
-    body = skills.read("mermaid")
+    assert loads[0].name == "graph"
+    assert "graph" not in model.bound_tool_names
+    body = skills.read("graph")
+    if deep and origin == "user":
+        body = body.split("---", 2)[2].strip()
     returned = "\n".join(str(message.content) for message in model.calls[-1])
     assert all(line in returned for line in body.splitlines() if line.strip())
-    if deep or expected_origin == "agent":
+    if expected_origin == "agent":
         assert all(body not in str(message.content) for message in model.calls[0])
     counts = [
         c
@@ -831,8 +843,68 @@ async def test_packaged_mermaid_loads_through_shared_paths(
         if c.args[0] == "agent.skill_loaded_total"
     ]
     assert len(counts) == 1
-    assert counts[0].kwargs["dims"]["skill_name"] == "mermaid"
+    assert counts[0].kwargs["dims"]["skill_name"] == "graph"
     assert counts[0].kwargs["dims"]["skill_origin"] == expected_origin
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_deep_keeps_prior_turn_and_adds_one_canonical_skill_request(
+    streaming: bool,
+) -> None:
+    skills = PlatformSkills.from_directory("package")
+    bound = binding()
+    model = Model(
+        script=[
+            AIMessage(content="previous answer"),
+            AIMessage(content="current answer"),
+        ]
+    )
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=compiled(model, skills, bound, True),
+        binding=bound,
+        services=RuntimeServices(skills=skills),
+        runtime_class_name="DeepAgentRuntime",
+        preload_selected_skill=False,
+    )
+    config = ExecutionConfig(session_id="canonical-skill-history")
+    question = "Draw the same workflow"
+    for selected in (False, True):
+        bound.runtime_context.skills = (
+            [SkillInvocation(name="graph")] if selected else []
+        )
+        request = ReActInput(
+            messages=(
+                ReActMessage(
+                    role=ReActMessageRole.USER,
+                    content=f"/graph {question}" if selected else question,
+                ),
+            )
+        )
+        if streaming:
+            _ = [event async for event in executor.stream(request, config)]
+        else:
+            await executor.invoke(request, config)
+
+    assert len(model.calls) == 2
+    messages = model.calls[-1]
+    user_requests = [
+        message.content
+        for message in messages
+        if isinstance(message, HumanMessage)
+        and message.additional_kwargs.get("lc_source") != "pinned_skill"
+    ]
+    assert user_requests == [question, f"/graph {question}"]
+    pins = [
+        message
+        for message in messages
+        if message.additional_kwargs.get("lc_source") == "pinned_skill"
+    ]
+    assert len(pins) == 1
+    assert str(pins[0].content).startswith('<skill name="graph" ')
+    assert [
+        message.content for message in messages if isinstance(message, AIMessage)
+    ] == ["previous answer"]
 
 
 @pytest.mark.asyncio
@@ -842,10 +914,10 @@ async def test_native_child_load_has_attribution() -> None:
         script=[
             call(
                 "task",
-                {"description": "Write minutes", "subagent_type": "general-purpose"},
+                {"description": "Draw a workflow", "subagent_type": "general-purpose"},
                 "delegate",
             ),
-            load_call("meeting-minutes", "child-load", True),
+            load_call("graph", "child-load", True),
             AIMessage(content="child done"),
             AIMessage(content="done"),
         ]
@@ -1029,7 +1101,7 @@ async def test_trimmed_skill_can_reload_and_restart_refreshes_existing_checkpoin
     if not deep:
         assert state.values["skills_metadata"][0]["description"] == "Changed"
     if deep:
-        assert "- **example**: Test skill" in str(restarted.calls[0][0].content)
+        assert "- **example**: Changed" in str(restarted.calls[0][0].content)
     else:
         assert "Skill `example` (not a tool): Changed" in str(
             restarted.calls[0][0].content
@@ -1110,7 +1182,7 @@ async def test_manual_selection_is_not_preloaded_during_resume() -> None:
                 "runtime_context": RuntimeContext(
                     skills=[
                         SkillInvocation(name="meeting-minutes"),
-                        SkillInvocation(name="mermaid"),
+                        SkillInvocation(name="graph"),
                     ]
                 )
             }
@@ -1126,7 +1198,7 @@ async def test_manual_selection_is_not_preloaded_during_resume() -> None:
 async def test_skill_context_survives_hitl_without_duplicate_load(deep: bool) -> None:
     from langgraph.types import Command
 
-    bound = binding()
+    bound = binding("meeting-minutes")
     bound.runtime_context.ask_user = True
     model = Model(
         script=[
@@ -1270,7 +1342,9 @@ async def test_runtime_catalog_reuses_admission_gate_and_selected_instance(
     definition = _PingAgent()
     gate = AsyncMock(side_effect=HTTPException(status_code=403) if denied else None)
     resolve = AsyncMock(
-        return_value=SimpleNamespace(definition=definition, team_id="team")
+        return_value=SimpleNamespace(
+            definition=definition, team_id="team", disabled_platform_skills=()
+        )
     )
     monkeypatch.setattr(agent_app, "_authorize_execution_or_raise", gate)
     monkeypatch.setattr(agent_app, "_resolve_agent_instance", resolve)
@@ -1306,7 +1380,11 @@ async def test_runtime_catalog_reuses_admission_gate_and_selected_instance(
             container,
             {definition.agent_id: definition},
         )
-        assert result == catalog.catalog
+        assert result == catalog.catalog.model_copy(
+            update={
+                "skills": tuple(s for s in catalog.catalog.skills if s.user_invocable)
+            }
+        )
         assert resolve.await_args is not None
         assert resolve.await_args.kwargs["team_id"] == "team"
         assert resolve.await_args.kwargs["access_token"] == "verified"
@@ -1336,7 +1414,9 @@ async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
     definition = _PingAgent()
     gate = AsyncMock(side_effect=HTTPException(status_code=403) if denied else None)
     resolve = AsyncMock(
-        return_value=SimpleNamespace(definition=definition, team_id="team")
+        return_value=SimpleNamespace(
+            definition=definition, team_id="team", disabled_platform_skills=()
+        )
     )
     monkeypatch.setattr(agent_app, "_authorize_execution_or_raise", gate)
     monkeypatch.setattr(agent_app, "_resolve_agent_instance", resolve)
@@ -1379,6 +1459,101 @@ async def test_skill_preview_reuses_catalog_authorization_and_snapshot(
                     name, "selected", "team", None, None, container, {}
                 )
             assert exc.value.status_code == status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("name", "heading"),
+    [
+        ("compare-options", "# Evidence-based option comparison"),
+        ("grounded-research", "# Grounded research"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("disabled", "denied", "source_status", "preview_status"),
+    [
+        pytest.param(False, False, None, None, id="available-agent-only"),
+        pytest.param(True, False, None, 404, id="globally-disabled"),
+        pytest.param(False, True, None, 403, id="unauthorized"),
+        pytest.param(False, False, 404, 404, id="unknown-instance"),
+        pytest.param(False, False, 503, 503, id="unavailable-source"),
+    ],
+)
+async def test_agent_only_skill_preview_retains_selection_and_access_rules(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    heading: str,
+    disabled: bool,
+    denied: bool,
+    source_status: int | None,
+    preview_status: int | None,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from fastapi import HTTPException
+    from fred_runtime.app import agent_app
+    from fred_runtime.skills import api
+    from fred_runtime.skills.tools import load_skill
+    from test_history import _PingAgent
+
+    snapshot = PlatformSkills.from_directory("package")
+    definition = _PingAgent()
+    _, attribution = load_skill(
+        snapshot,
+        name,
+        origin="agent",
+        load_id="agent-read",
+        agent_id=definition.agent_id,
+    )
+    assert attribution.origin == "agent"
+    monkeypatch.setattr(
+        agent_app,
+        "_authorize_execution_or_raise",
+        AsyncMock(side_effect=HTTPException(status_code=403) if denied else None),
+    )
+    monkeypatch.setattr(
+        agent_app,
+        "_resolve_agent_instance",
+        AsyncMock(
+            side_effect=HTTPException(status_code=source_status)
+            if source_status is not None
+            else None,
+            return_value=SimpleNamespace(
+                definition=definition,
+                team_id="team",
+                disabled_platform_skills=(name,) if disabled else (),
+            ),
+        ),
+    )
+    monkeypatch.setattr(agent_app, "_validate_resolved_team", lambda *args: None)
+    monkeypatch.setattr(
+        api,
+        "get_runtime_context",
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                control_plane_url="https://control.invalid", skills=snapshot
+            )
+        ),
+    )
+    container = cast(Any, SimpleNamespace(get_control_plane_http_client=lambda: None))
+    if not denied and source_status is None:
+        catalog = await api.get_instance_skills(
+            "selected", "team", None, None, container, {}
+        )
+        assert name not in {skill.name for skill in catalog.skills}
+    if preview_status is not None:
+        with pytest.raises(HTTPException) as exc:
+            await api.get_instance_skill_detail(
+                name, "selected", "team", None, None, container, {}
+            )
+        assert exc.value.status_code == preview_status
+    else:
+        detail = await api.get_instance_skill_detail(
+            name, "selected", "team", None, None, container, {}
+        )
+        assert detail.skill.name == name
+        assert detail.skill.user_invocable is False
+        assert heading in detail.content
 
 
 class RecordingSkillKPIStore(BaseKPIStore):
@@ -1609,20 +1784,20 @@ async def test_native_child_reads_share_mount_and_trusted_attribution() -> None:
             call(
                 "task",
                 {
-                    "description": "Use meeting-minutes",
+                    "description": "Use graph",
                     "subagent_type": "general-purpose",
                 },
                 "child",
             ),
             call(
                 "read_file",
-                {"file_path": "/skills/meeting-minutes/SKILL.md", "limit": 1000},
+                {"file_path": "/skills/graph/SKILL.md", "limit": 1000},
                 "child-load",
             ),
             call(
                 "read_file",
                 {
-                    "file_path": "/skills/meeting-minutes/references/meeting-minutes-template.md",
+                    "file_path": "/skills/graph/references/mermaid.md",
                     "limit": 1000,
                 },
                 "child-reference",
@@ -1650,7 +1825,7 @@ async def test_native_child_reads_share_mount_and_trusted_attribution() -> None:
     ]
     assert len(loads) == 1 and loads[0].child and loads[0].child_id
     assert loads[0].agent_id == "general-purpose" and loads[0].origin == "agent"
-    assert "Not specified" in str(model.calls[-2])
+    assert "flowchart TD" in str(model.calls[-2])
     assert (
         len(
             [
@@ -1673,7 +1848,7 @@ async def test_native_read_uses_existing_best_effort_kpi_writer(fail: bool) -> N
         script=[
             call(
                 "read_file",
-                {"file_path": "/skills/meeting-minutes/SKILL.md", "limit": 1000},
+                {"file_path": "/skills/graph/SKILL.md", "limit": 1000},
                 "native-load",
             ),
             AIMessage(content="done"),
@@ -1706,7 +1881,7 @@ async def test_native_read_uses_existing_best_effort_kpi_writer(fail: bool) -> N
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("selection", [None, "meeting-minutes", "missing"])
+@pytest.mark.parametrize("selection", [None, "graph", "missing"])
 @pytest.mark.parametrize("stream", [False, True])
 async def test_real_deep_runtime_exposes_only_native_skill_tools(
     tmp_path: Path, selection: str | None, stream: bool
@@ -1729,20 +1904,20 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
     skills = PlatformSkills.from_directory("package")
     model = Model(
         script=[
-            load_call("meeting-minutes", "parent-load", True),
+            load_call("graph", "parent-load", True),
             call(
                 "task",
                 {
-                    "description": "Read the minutes skill and template",
+                    "description": "Read the visualization skill and Mermaid reference",
                     "subagent_type": "general-purpose",
                 },
                 "delegate",
             ),
-            load_call("meeting-minutes", "child-load", True),
+            load_call("graph", "child-load", True),
             call(
                 "read_file",
                 {
-                    "file_path": "/skills/meeting-minutes/references/meeting-minutes-template.md",
+                    "file_path": "/skills/graph/references/mermaid.md",
                     "limit": 1000,
                 },
                 "reference",
@@ -1759,6 +1934,11 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
         ),
     )
     runtime._model = model
+    if selection == "missing":
+        with pytest.raises(ValueError, match="unavailable"):
+            await runtime.build_executor(binding(selection))
+        assert model.calls == []
+        return
     executor = await runtime.build_executor(binding(selection))
     user_text = f"/{selection} Prepare minutes" if selection else "Prepare minutes"
     input_model = ReActInput(
@@ -1776,10 +1956,18 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
         message.content
         for message in first_messages
         if isinstance(message, HumanMessage)
+        and message.additional_kwargs.get("lc_source") != "pinned_skill"
     ] == [user_text]
     assert "Loaded platform skill:" not in str(first_messages)
-    assert skills.read("meeting-minutes") not in str(first_messages)
-    assert "/skills/meeting-minutes/SKILL.md" in str(first_messages[0].content)
+    assert skills.read("graph") not in str(first_messages)
+    assert bool(
+        [
+            m
+            for m in first_messages
+            if m.additional_kwargs.get("lc_source") == "pinned_skill"
+        ]
+    ) == bool(selection)
+    assert "/skills/graph/SKILL.md" in str(first_messages[0].content)
     assert not {"load_skill", "read_skill_file"} & set(model.bound_tool_names)
     assert "read_file" in model.bound_tool_names
     assert all(
@@ -1787,14 +1975,16 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
         and "read_skill_file" not in str(messages[0].content)
         for messages in model.calls
     )
-    assert "Not specified" in str(model.calls[-2])
+    assert "flowchart TD" in str(model.calls[-2])
     loads = [
         event.skill_load
         for event in events
         if isinstance(event, StatusRuntimeEvent) and event.skill_load
     ]
     if stream:
-        assert len(loads) == 2
-        expected_origin = "user" if selection == "meeting-minutes" else "agent"
+        assert len(loads) == (3 if selection else 2)
+        expected_origin = "user" if selection else "agent"
         assert any(load.child and load.origin == expected_origin for load in loads)
+        if selection:
+            assert loads[0].origin == "user" and not loads[0].child
         assert any(not load.child and load.origin == expected_origin for load in loads)

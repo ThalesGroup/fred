@@ -1,0 +1,226 @@
+{
+ "slides": [
+  {
+   "title": "Valtéris Systèmes",
+   "subtitle": "Situation financière au 30 septembre 2026 – CODIR 22 octobre",
+   "kind": "cover",
+   "file_name": "Valteris_Situation_financiere_CODIR_22oct2026"
+  },
+  {
+   "title": "Sommaire",
+   "kind": "agenda",
+   "items": [
+    {
+     "number": "01",
+     "heading": "Chiffres clés"
+    },
+    {
+     "number": "02",
+     "heading": "CA et marge par activité"
+    },
+    {
+     "number": "03",
+     "heading": "Charges et EBITDA"
+    },
+    {
+     "number": "04",
+     "heading": "Trésorerie, BFR, capex"
+    },
+    {
+     "number": "05",
+     "heading": "Atterrissage 2026 vs objectifs"
+    },
+    {
+     "number": "06",
+     "heading": "Risques et opportunités"
+    },
+    {
+     "number": "07",
+     "heading": "Plan d’actions et décisions"
+    }
+   ]
+  },
+  {
+   "title": "CA cumulé : -3,0 % vs budget",
+   "takeaway": "Le CA à fin septembre atteint 124 412 k€, en retrait de 3 838 k€ par rapport au budget, principalement à cause des Systèmes embarqués (Ferovia et pénurie FPGA).",
+   "kind": "figures",
+   "source": "Valteris_Situation_financiere_septembre_2026.docx",
+   "items": [
+    {
+     "number": "124 412",
+     "label": "CA réel cumul sept. (k€)",
+     "trend": "down"
+    },
+    {
+     "number": "128 250",
+     "label": "CA budget cumul sept. (k€)"
+    },
+    {
+     "number": "-3 838",
+     "label": "Écart (k€)",
+     "trend": "down"
+    },
+    {
+     "number": "-3,0 %",
+     "label": "Écart %"
+    }
+   ]
+  },
+  {
+   "title": "CA par activité : Systèmes embarqués en retrait",
+   "takeaway": "Les Systèmes embarqués accusent -6,7 % vs budget, tandis que les Services dépassent de +3,2 % grâce à un bon taux de renouvellement.",
+   "kind": "chart",
+   "source": "Valteris_Situation_financiere_septembre_2026.docx",
+   "chart": {
+    "type": "column",
+    "title": "CA cumul sept. 2026 : réel vs budget",
+    "unit": "k€",
+    "categories": [
+     "Systèmes embarqués",
+     "Services & maintenance",
+     "Logiciels & abonnements"
+    ],
+    "series": [
+     {
+      "name": "Réel",
+      "values": [
+       59088,
+       40979,
+       24345
+      ]
+     },
+     {
+      "name": "Budget",
+      "values": [
+       63360,
+       39690,
+       25200
+      ]
+     }
+    ],
+    "highlight": "Systèmes embarqués"
+   }
+  },
+  {
+   "title": "Marge brute : 42,0 % vs 42,6 % budgété",
+   "takeaway": "La marge brute globale recule de 0,6 point, tirée par les Systèmes embarqués (30,5 % vs 32,0 % budget) à cause de la hausse des composants.",
+   "kind": "chart",
+   "source": "Valteris_Situation_financiere_septembre_2026.docx",
+   "chart": {
+    "type": "bar",
+    "title": "Taux de marge brute par activité",
+    "unit": "%",
+    "categories": [
+     "Systèmes embarqués",
+     "Services & maintenance",
+     "Logiciels & abonnements"
+    ],
+    "series": [
+     {
+      "name": "Réel",
+      "values": [
+       30.5,
+       41.5,
+       71.0
+      ]
+     },
+     {
+      "name": "Budget",
+      "values": [
+       32.0,
+       41.0,
+       72.0
+      ]
+     }
+    ],
+    "highlight": "Systèmes embarqués"
+   }
+  },
+  {
+   "title": "Charges opérationnelles : +0,6 % vs budget",
+   "takeaway": "Les charges dépassent de 267 k€, portées par IT & télécoms (+10,7 %) et honoraires (+25,6 %), partiellement compensées par les économies commercial & marketing.",
+   "kind": "table",
+   "source": "Valteris_Situation_financiere_septembre_2026.docx",
+   "table": {
+    "header": [
+     "Nature",
+     "Réel (k€)",
+     "Budget (k€)",
+     "Écart (k€)",
+     "Écart %"
+    ],
+    "rows": [
+     [
+      "Frais de structure & support\", "
+     ],
+     [
+      6,
+      ", "
+     ],
+     [
+      16
+     ],
+     [
+      16
+     ],
+     [
+      ", "
+     ],
+     [
+      -144,
+      0,
+      9
+     ],
+     [
+      [
+       "Commercial & marketing",
+       "6 584",
+       "7 200",
+       "-616",
+       "-8,6 %"
+      ],
+      [
+       "R&D (net CIR)",
+       "10 956",
+       "10 800",
+       "+156",
+       "+1,4 %"
+      ],
+      [
+       "IT & télécoms",
+       "3 984",
+       "3 600",
+       "+384",
+       "+10,7 %"
+      ],
+      [
+       "Locaux & services généraux",
+       "2 727",
+       "2 700",
+       "+27",
+       "+1,0 %"
+      ],
+      [
+       "Honoraires & divers",
+       "2 260",
+       "1 800",
+       "+460",
+       "+25,6 %"
+      ],
+      [
+       "**Total**",
+       "**42 567**",
+       "**42 300**",
+       "+267",
+       "+0,6 %"
+      ]
+     ],
+     "highlight_row\": 5, ",
+     "}: "
+    ]
+   }
+  },
+  {}
+ ],
+ "notes": "IT & télécoms : licences cloud Valtéris Cloud v3 facturées dès le pilote + double run ERP. Honoraires : contentieux fournisseur FPGA + missions conseil."
+}

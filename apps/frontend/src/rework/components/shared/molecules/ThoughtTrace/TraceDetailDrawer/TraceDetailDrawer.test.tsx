@@ -23,7 +23,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (
       key: string,
-      options?: { answer?: string; code?: number; count?: number; duration?: string; name?: string; number?: number },
+      options?: { answer?: string; count?: number; duration?: string; name?: string; number?: number },
     ) => {
       if (key === "chatbot.hitlOtherAnswerWithText") return `Other: ${options?.answer ?? ""}`;
       if (key === "rework.chatTrace.sqlQuery") return "Query";
@@ -36,8 +36,6 @@ vi.mock("react-i18next", () => ({
       if (key === "rework.chatTrace.tables")
         return `${options?.count ?? 0} ${options?.count === 1 ? "table" : "tables"}`;
       if (key === "rework.chatTrace.tabular.tableNumber") return `Table ${options?.number ?? 0}`;
-      if (key === "rework.chatTrace.toolLabels.codeSandbox") return "Running code in an isolated space";
-      if (key === "rework.chatTrace.sandbox.exitCode") return `Exit code: ${options?.code}`;
       if (key === "rework.chatTrace.toolLabels.mcp.tabular.readQuery") return "Reading data";
       if (key === "rework.chatTrace.toolLabels.mcp.tabular.documents") return "Listing data files";
       if (key === "rework.chatTrace.toolLabels.mcp.tabular.markdown") return "Reading the workbook catalog";
@@ -147,7 +145,7 @@ describe("TraceDetailDrawer sandbox execution", () => {
       truncated: false,
     });
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("<header>Running code in an isolated space");
+    expect(html).toContain("<header>rework.chatTrace.toolLabels.codeSandbox");
     expect(html).toContain("rework.chatTrace.sandbox.code");
     expect(html).toContain('data-language="bash"');
     expect(html).toContain("python -c &#x27;print(42)&#x27;");
@@ -155,7 +153,7 @@ describe("TraceDetailDrawer sandbox execution", () => {
     expect(html).toContain("rework.chatTrace.sandbox.result");
     expect(html).toContain("rework.chatTrace.sandbox.output");
     expect(html).toContain("hello\n");
-    expect(html).toContain("Exit code: 0");
+    expect(html).toContain("rework.chatTrace.sandbox.exitCode");
     expect(html).not.toContain("&quot;action&quot;");
   });
 
@@ -172,7 +170,7 @@ describe("TraceDetailDrawer sandbox execution", () => {
     expect(html).toContain("echo failed &gt;&amp;2");
     expect(html).toContain("failed\n");
     expect(html).toContain("rework.chatTrace.sandbox.errors");
-    expect(html).toContain("Exit code: 2");
+    expect(html).toContain("rework.chatTrace.sandbox.exitCode");
     expect(html).toContain("rework.chatTrace.sandbox.timedOut");
     expect(html).toContain("rework.chatTrace.sandbox.truncated");
   });
@@ -219,9 +217,27 @@ describe("TraceDetailDrawer sandbox execution", () => {
     };
 
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
-    expect(html).toContain("&quot;action&quot;: &quot;Running code in an isolated space&quot;");
+    expect(html).toContain("&quot;action&quot;: &quot;rework.chatTrace.toolLabels.codeSandbox&quot;");
     expect(html).not.toContain("secret code");
     expect(html).not.toContain("secret output");
+  });
+});
+
+describe("TraceDetailDrawer inactive HITL", () => {
+  it.each(["unavailable", "unknown"])("does not show %s questions as running", (status) => {
+    const entry: TraceEntry = {
+      kind: "combo",
+      call: message({
+        channel: "tool_call",
+        metadata: { extras: { hitl_resume_status: status } },
+        parts: [{ type: "tool_call", call_id: "question", name: "ask_user", args: { question: "Choose" } }],
+      }),
+    };
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain(`data-status="${status}"`);
+    expect(html).toContain(`rework.chatTrace.toolStatus.${status}`);
+    expect(html).not.toContain('data-status="running"');
+    expect(html).not.toContain("running");
   });
 });
 
@@ -448,6 +464,32 @@ describe("TraceDetailDrawer free-text question answer", () => {
 });
 
 describe("TraceDetailDrawer tabular tools", () => {
+  it.each(["Audit", 'Sales "Q1"', "Sales\nQ1"])(
+    "renders MCP-wrapped results with identifiers hidden for %s",
+    (sheet) => {
+      const documents = [
+        {
+          document_uid: "private-uid",
+          document_name: "Audit.xlsx",
+          kind: "spreadsheet",
+          markdown: `# Audit\n- "${sheet}.t1"  query_alias="d_private_alias"  range=A1:B10`,
+          tables: [{ query_alias: "d_private_alias", sheet: "Audit", columns: [{ name: "Amount", dtype: "float" }] }],
+        },
+      ];
+      for (const name of ["list_tabular_documents", "describe_tabular_documents"]) {
+        const entry = tabularEntry(name, { result: documents });
+        const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+        expect(html).toContain("Audit.xlsx");
+        if (name === "describe_tabular_documents") expect(html).toContain("Amount");
+        expect(html).not.toContain("private-uid");
+        expect(html).not.toContain("d_private_alias");
+        expect(html).not.toContain("query_alias");
+        if (name === "describe_tabular_documents") expect(html).toContain("range=A1:B10");
+        expect(html).not.toContain("&quot;action&quot;");
+      }
+    },
+  );
+
   it("groups CSV and workbook tables under readable document names", () => {
     const entry = tabularEntry("mcp__knowledge_flow__list_tabular_documents", [
       {

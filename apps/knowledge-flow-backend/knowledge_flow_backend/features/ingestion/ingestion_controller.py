@@ -74,6 +74,7 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_
     FastTextOptions,
     FastTextResult,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_email_processor import FastEmailProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor import (
     FastLiteCsvProcessor,
 )
@@ -586,6 +587,8 @@ class IngestionController:
             registry[".svg"] = FastLiteImageProcessor
             registry[".webp"] = FastLiteImageProcessor
             registry[".ico"] = FastLiteImageProcessor
+            registry[".msg"] = FastEmailProcessor
+            registry[".eml"] = FastEmailProcessor
         logger.info(f"[INGESTION][FAST TEXT] Fast text processor registry: {registry}")
         return registry
 
@@ -1497,7 +1500,7 @@ class IngestionController:
             # Extract
             try:
                 logger.debug("[FAST TEXT] Extracting text for %s with options %s", filename, opts)
-                result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
+                result = await asyncio.to_thread(self._get_fast_text_processor(filename).extract, raw_path, options=opts)
                 logger.info(
                     "[FAST TEXT] user=%s file=%s format=%s chars=%s pages=%s  truncated=%s",
                     user.uid,
@@ -1674,7 +1677,7 @@ class IngestionController:
                 # Extract fast text
                 result: FastTextResult
                 try:
-                    result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
+                    result = await asyncio.to_thread(self._get_fast_text_processor(filename).extract, raw_path, options=opts)
                     logger.info(
                         "[FAST TEXT][INGEST] user=%s file=%s chars=%s pages=%s truncated=%s",
                         user.uid,

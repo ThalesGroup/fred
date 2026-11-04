@@ -583,7 +583,9 @@ def test_shared_output_preserves_legacy_arguments_and_structured_fields(
 
 
 @pytest.mark.parametrize("delegation", [False, True])
-@pytest.mark.parametrize("logger_name", ["httpx.transport", "httpx2._client"])
+@pytest.mark.parametrize(
+    "logger_name", ["httpx.transport", "httpx2._client", "fastmcp.server"]
+)
 def test_dependency_child_diagnostics_remain_sanitized(
     capsys: pytest.CaptureFixture[str],
     delegation: bool,

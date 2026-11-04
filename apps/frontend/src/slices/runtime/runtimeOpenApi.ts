@@ -25,6 +25,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.chatControlsRequest,
       }),
     }),
+    evaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPost: build.mutation<
+      EvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostApiResponse,
+      EvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/readiness`,
+        method: "POST",
+        body: queryArg.readinessRequest,
+      }),
+    }),
     copyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPost: build.mutation<
       CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiResponse,
       CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiArg
@@ -180,6 +190,9 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/pod/v1/agents/platform-prompt` }),
     }),
+    getRuntimePlatformSkills: build.query<GetRuntimePlatformSkillsApiResponse, GetRuntimePlatformSkillsApiArg>({
+      query: () => ({ url: `/pod/v1/agents/platform-skills` }),
+    }),
     listSessionsPodV1AgentsSessionsGet: build.query<
       ListSessionsPodV1AgentsSessionsGetApiResponse,
       ListSessionsPodV1AgentsSessionsGetApiArg
@@ -209,12 +222,26 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/messages` }),
     }),
+    steerActiveTurnPodV1AgentsSessionsSessionIdSteerPost: build.mutation<
+      SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiResponse,
+      SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/steer`,
+        method: "POST",
+        body: queryArg.runtimeExecuteRequest,
+        params: {
+          message_id: queryArg.messageId,
+        },
+      }),
+    }),
     getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/skills`,
         params: {
           agent_instance_id: queryArg.agentInstanceId,
           team_id: queryArg.teamId,
+          metadata_version: queryArg.metadataVersion,
         },
       }),
     }),
@@ -227,6 +254,7 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           agent_instance_id: queryArg.agentInstanceId,
           team_id: queryArg.teamId,
+          metadata_version: queryArg.metadataVersion,
         },
       }),
     }),
@@ -274,6 +302,11 @@ export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiRespon
   /** status 200 Successful Response */ ChatControlsResponse;
 export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg = {
   chatControlsRequest: ChatControlsRequest;
+};
+export type EvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostApiResponse =
+  /** status 200 Successful Response */ ReadinessResponse;
+export type EvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostApiArg = {
+  readinessRequest: ReadinessRequest;
 };
 export type CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiResponse =
   /** status 200 Successful Response */ CapabilityConfigCopyResult;
@@ -345,8 +378,14 @@ export type ExecuteAgentApiResponse = /** status 200 Successful Response */
           kind: "node_error";
         } & NodeErrorRuntimeEvent)
       | ({
+          kind: "session_title";
+        } & SessionTitleRuntimeEvent)
+      | ({
           kind: "status";
         } & StatusRuntimeEvent)
+      | ({
+          kind: "steered_user_message";
+        } & SteeredUserMessageRuntimeEvent)
       | ({
           kind: "thought_delta";
         } & ThoughtDeltaEvent)
@@ -405,6 +444,8 @@ export type RefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostApiArg = {
 export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiResponse =
   /** status 200 Successful Response */ PlatformPromptFileResponse;
 export type GetPlatformPromptFilePodV1AgentsPlatformPromptGetApiArg = void;
+export type GetRuntimePlatformSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetRuntimePlatformSkillsApiArg = void;
 export type ListSessionsPodV1AgentsSessionsGetApiResponse = /** status 200 Successful Response */ string[];
 export type ListSessionsPodV1AgentsSessionsGetApiArg = {
   userId?: string | null;
@@ -425,16 +466,26 @@ export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
   sessionId: string;
 };
+export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiResponse = /** status 202 Successful Response */ {
+  [key: string]: string;
+};
+export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg = {
+  sessionId: string;
+  messageId: string;
+  runtimeExecuteRequest: RuntimeExecuteRequest;
+};
 export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
 export type GetRuntimeInstanceSkillsApiArg = {
   agentInstanceId: string;
   teamId: string;
+  metadataVersion?: number;
 };
 export type GetRuntimeInstanceSkillDetailApiResponse = /** status 200 Successful Response */ SkillDetail;
 export type GetRuntimeInstanceSkillDetailApiArg = {
   skillName: string;
   agentInstanceId: string;
   teamId: string;
+  metadataVersion?: number;
 };
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
@@ -499,6 +550,23 @@ export type ChatControlsRequestItem = {
 };
 export type ChatControlsRequest = {
   items?: ChatControlsRequestItem[];
+};
+export type ReadinessResult = {
+  capability_id: string;
+  detail?: string | null;
+  state: "ready" | "pending" | "failed";
+};
+export type ReadinessResponse = {
+  results?: ReadinessResult[];
+};
+export type ReadinessRequestItem = {
+  capability_id: string;
+  stored: StoredCapabilityConfig;
+};
+export type ReadinessRequest = {
+  agent_instance_id: string;
+  items?: ReadinessRequestItem[];
+  team_id?: string | null;
 };
 export type CapabilityConfigCopyResult = {
   config?: {
@@ -652,6 +720,8 @@ export type RuntimeContext = {
   /** Whether this interactive conversation offers the agent's ask_user tool. True mounts it, False disables it for new turns, and None means no interactive control was offered. */
   ask_user?: boolean | null;
   attachments_markdown?: string | null;
+  /** Set on a conversation's first turn: the runtime then generates a short title from this turn's input and streams it as a `session_title` event. Later renames belong to the user. */
+  auto_title?: boolean | null;
   /** Team-chosen default chat model profile id, resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml agent_profile_overrides entry matches — the static YAML override remains an ops-level override this can never beat. */
   chat_default_profile_id?: string | null;
   /** The user's per-conversation chat model choice: a chat profile id picked in the composer and sent on every turn. Client-forwarded, so the pod accepts it only if the profile is a known chat profile whose model is in `usable_model_ids` and not in `team_disabled_model_ids`; otherwise it is ignored and logged. Ranks below the platform binding and the pod's per-agent override, above the instance recommendation and the team default. */
@@ -725,6 +795,8 @@ export type RuntimeExecuteRequest =
       runtime_context: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;
+      /** Identity of the active chat turn for mid-turn message delivery. */
+      steering_turn_id?: string | null;
       /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
       turn_options?: {
         [key: string]: {
@@ -767,6 +839,8 @@ export type RuntimeExecuteRequest =
       runtime_context?: RuntimeContext | null;
       /** Session identifier for multi-turn continuity. Keep stable across turns. */
       session_id?: string | null;
+      /** Identity of the active chat turn for mid-turn message delivery. */
+      steering_turn_id?: string | null;
       /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
       turn_options?: {
         [key: string]: {
@@ -930,13 +1004,21 @@ export type NodeErrorRuntimeEvent = {
   routed_to: string;
   sequence?: number;
 };
+export type SessionTitleRuntimeEvent = {
+  kind?: "session_title";
+  sequence?: number;
+  title: string;
+};
 export type SkillLoadAttribution = {
   agent_id: string;
+  builtin?: boolean;
   child?: boolean;
   child_id?: string | null;
   load_id: string;
   name: string;
   origin: "user" | "agent";
+  /** The actual instruction read did not prove full-file coverage. */
+  partial?: boolean;
   revision: string;
 };
 export type StatusRuntimeEvent = {
@@ -945,6 +1027,12 @@ export type StatusRuntimeEvent = {
   sequence?: number;
   skill_load?: SkillLoadAttribution | null;
   status: string;
+};
+export type SteeredUserMessageRuntimeEvent = {
+  content: string;
+  kind?: "steered_user_message";
+  message_id: string;
+  sequence?: number;
 };
 export type ThoughtDeltaEvent = {
   delta: string;
@@ -1079,6 +1167,7 @@ export type ModelCatalogEntry = {
     [key: string]: ("low" | "medium" | "high")[];
   };
   thinking_profile_ids?: string[];
+  vision_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
   active_revision?: number;
@@ -1107,6 +1196,20 @@ export type PlatformPromptFileResponse = {
   creation_assistant_prompt_revised_at: string;
   platform_instructions: string;
   platform_prompt: string;
+};
+export type SkillSummary = {
+  argument_hint?: string | null;
+  builtin?: boolean;
+  description: string;
+  disable_model_invocation?: boolean;
+  name: string;
+  user_invocable?: boolean;
+};
+export type SkillCatalog = {
+  policy_supported?: boolean;
+  revision?: string;
+  skills?: SkillSummary[];
+  supported?: boolean;
 };
 export type ConversationFilesystemPurgeResponse = {
   purged: boolean;
@@ -1183,6 +1286,8 @@ export type HitlRequestPart = {
   occurrence_id?: string | null;
   pending_calls?: HitlPendingCallRecord[];
   question: string;
+  /** Read-time availability; absent in stored history and older runtimes. */
+  resume_status?: ("pending" | "unavailable" | "unknown") | null;
   stage?: string | null;
   title?: string | null;
   type?: "hitl_request";
@@ -1251,16 +1356,6 @@ export type ChatMessage = {
   role: Role;
   session_id: string;
   timestamp: string;
-};
-export type SkillSummary = {
-  argument_hint?: string | null;
-  description: string;
-  name: string;
-};
-export type SkillCatalog = {
-  revision?: string;
-  skills?: SkillSummary[];
-  supported?: boolean;
 };
 export type SkillDetail = {
   content: string;
@@ -1372,6 +1467,7 @@ export type CapabilityCatalogEntry = {
   };
   model_runtime_ids?: string[];
   model_thinking_profile_ids?: string[];
+  model_vision_profile_ids?: string[];
   /** i18n key */
   name: string;
   public_version?: string | null;
@@ -1484,6 +1580,7 @@ export const {
   useGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useEvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostMutation,
+  useEvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostMutation,
   useCopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostMutation,
   useExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostMutation,
   useValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostMutation,
@@ -1509,12 +1606,15 @@ export const {
   useRefreshModelsCatalogPodV1AgentsModelsCatalogRefreshPostMutation,
   useGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
   useLazyGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
+  useGetRuntimePlatformSkillsQuery,
+  useLazyGetRuntimePlatformSkillsQuery,
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
+  useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
   useGetRuntimeInstanceSkillsQuery,
   useLazyGetRuntimeInstanceSkillsQuery,
   useGetRuntimeInstanceSkillDetailQuery,

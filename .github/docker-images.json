@@ -87,9 +87,9 @@
         "reason": "Documentation only: no image copies docs/, openspec/ or root Markdown files. Markdown under apps/ or libs/ is code (a README can be package metadata)."
       },
       {
-        "paths": ["apps/frontend/**"],
+        "paths": ["apps/frontend/**", ".nvmrc"],
         "images": ["frontend"],
-        "reason": "No other image copies the frontend application."
+        "reason": "Only the frontend image consumes the application and repository Node baseline."
       },
       {
         "paths": ["libs/frontend/**"],
@@ -101,7 +101,7 @@
   "excluded": [
     {
       "dockerfile": ".devcontainer/Dockerfile-devcontainer",
-      "reason": "Copies nothing from the repo but .devcontainer/scripts/, so no change under apps/ or libs/ can break it. Its build time is dominated by third-party downloads (nodesource, github releases, astral.sh) that would make a required PR gate slow and flaky."
+      "reason": "Prepared locally from .nvmrc and copies only .devcontainer/scripts/, so no change under apps/ or libs/ can break it. Its build time is dominated by third-party downloads (nodesource, github releases, astral.sh) that would make a required PR gate slow and flaky."
     },
     {
       "dockerfile": "apps/frontend/dockerfiles/Dockerfile-dev",

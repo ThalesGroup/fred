@@ -108,6 +108,8 @@ test("UI candidate and exact cached token registry dependency remain distinct of
       integrity:
         "sha512-+3UeYRe4Qhgtx+U1T/QQqu9172N+7c+DbuSo8G/2mvp5nbrjgLJj1VDdcOv4AYsuaYEvpNzERHo7Z6GTFNenqw==",
       registry: contract.registry,
+      tarball:
+        "https://registry.npmjs.org/@fred-oss/design-tokens/-/design-tokens-0.1.0-alpha.1.tgz",
     },
   ];
   value.manifest.dependencies[token.name] = token.version;
@@ -139,7 +141,16 @@ test("UI candidate and exact cached token registry dependency remain distinct of
       `file:${value.filename}`,
       /cached registry cannot use local fallback/,
     ],
-    ["resolved", "https://other.example/token.tgz", /cached registry differs/],
+    [
+      "resolved",
+      "https://other.example/token.tgz",
+      /cached registry tarball differs/,
+    ],
+    [
+      "resolved",
+      "https://registry.npmjs.org/@fred-oss/design-tokens/-/other-0.1.0-alpha.1.tgz",
+      /cached registry tarball differs/,
+    ],
     ["link", true, /must not be linked/],
   ]) {
     const entry = value.lockfile.packages[`node_modules/${token.name}`];

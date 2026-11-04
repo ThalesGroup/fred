@@ -209,12 +209,46 @@ async def test_get_agent_instances_requires_can_use_team_agents(
     monkeypatch.setattr(product_api, "attach_marketplace_states", AsyncMock())
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
-    await product_api.get_team_agent_instances(TeamId("t"), deps, _user())
+    request = cast(Any, SimpleNamespace(headers={}))
+    await product_api.get_team_agent_instances(TeamId("t"), deps, request, _user())
 
     assert get_team.await_args is not None
     assert get_team.await_args.kwargs["required_permissions"] == [
         TeamPermission.CAN_USE_TEAM_AGENTS
     ]
+
+
+@pytest.mark.asyncio
+async def test_readiness_check_requires_can_update_agents_and_own_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import inspect
+
+    from fred_core.security.oidc import require_own_credential
+
+    get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", get_team)
+    monkeypatch.setattr(
+        product_api,
+        "recheck_agent_instance_readiness",
+        AsyncMock(return_value=object()),
+    )
+
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+    request = cast(Any, SimpleNamespace(headers={}))
+    await product_api.post_team_agent_instance_readiness_check(
+        TeamId("t"), "agent-1", deps, request, _user()
+    )
+
+    assert get_team.await_args is not None
+    assert get_team.await_args.kwargs["required_permissions"] == [
+        TeamPermission.CAN_UPDATE_AGENTS
+    ]
+    # An asserted person (no credential of their own) is refused at the door.
+    user_param = inspect.signature(
+        product_api.post_team_agent_instance_readiness_check
+    ).parameters["user"]
+    assert user_param.default.dependency is require_own_credential
 
 
 @pytest.mark.asyncio
@@ -390,7 +424,7 @@ async def test_runtime_binding_correlates_via_x_request_id_header(
     monkeypatch.setattr(
         product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
     )
-    fake_binding = SimpleNamespace(enabled=True)
+    fake_binding = SimpleNamespace(enabled=True, disabled_platform_skills=[])
     monkeypatch.setattr(
         product_api,
         "get_runtime_binding_for_team",
@@ -431,7 +465,9 @@ async def test_runtime_binding_omits_trace_without_the_header(
     monkeypatch.setattr(
         product_api,
         "get_runtime_binding_for_team",
-        AsyncMock(return_value=SimpleNamespace(enabled=True)),
+        AsyncMock(
+            return_value=SimpleNamespace(enabled=True, disabled_platform_skills=[])
+        ),
     )
     writer = _RecordingKPIWriter()
     deps = cast(
@@ -481,3 +517,41 @@ async def test_marketplace_reserved_command_keeps_per_target_error_code(
         _user(),
     )
     assert result.results[0].error_code == "prompt_command_reserved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "disabled,header,expected",
+    [([], None, 200), (["mermaid"], None, 409), (["mermaid"], "1", 200)],
+)
+async def test_runtime_binding_requires_policy_support_only_with_active_restrictions(
+    monkeypatch: pytest.MonkeyPatch,
+    disabled: list[str],
+    header: str | None,
+    expected: int,
+) -> None:
+    monkeypatch.setattr(
+        product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
+    )
+    binding = SimpleNamespace(enabled=True, disabled_platform_skills=disabled)
+    monkeypatch.setattr(
+        product_api, "get_runtime_binding_for_team", AsyncMock(return_value=binding)
+    )
+    deps = cast(
+        Any,
+        SimpleNamespace(team_dependencies=object(), get_kpi_writer=NoOpKPIWriter),
+    )
+    request = cast(Any, _FakeRequest({"X-Fred-Skill-Policy": header} if header else {}))
+    if expected == 409:
+        with pytest.raises(HTTPException) as exc:
+            await product_api.get_team_agent_instance_runtime(
+                TeamId("team"), "instance", request, deps, _user()
+            )
+        assert exc.value.status_code == 409
+    else:
+        assert (
+            await product_api.get_team_agent_instance_runtime(
+                TeamId("team"), "instance", request, deps, _user()
+            )
+            is binding
+        )

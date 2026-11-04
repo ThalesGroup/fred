@@ -1,7 +1,7 @@
 """add sandbox settings
 
 Revision ID: d0a1b2c3d4e5
-Revises: f28c3e9ab641
+Revises: b8e1f4a2c6d9
 """
 
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ from alembic import op
 
 revision: str = "d0a1b2c3d4e5"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "f28c3e9ab641"  # pragma: allowlist secret
+    "b8e1f4a2c6d9"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

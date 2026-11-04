@@ -26,7 +26,6 @@ issues (params model, analyze endpoint, fill tool) import.
 
 from __future__ import annotations
 
-import io
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,6 +37,7 @@ from pptx.oxml.ns import qn
 from pptx.presentation import Presentation as PresentationObject
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 from fred_capability_ppt_filler.traversal import (
     KEY_MARKER_PATTERN,
     KEY_PATTERN,
@@ -475,7 +475,7 @@ def parse(pptx_source: Union[bytes, str, Path]) -> ParseResult:
     descriptions); the same key multiple times on one slide is one (deduped) field.
     """
     if isinstance(pptx_source, bytes):
-        presentation = Presentation(io.BytesIO(pptx_source))
+        presentation = open_presentation(pptx_source)
     else:
         presentation = Presentation(str(pptx_source))
 

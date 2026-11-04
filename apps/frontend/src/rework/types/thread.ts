@@ -18,6 +18,7 @@
 
 import type {
   ChatMessage,
+  HitlRequestPart,
   CommandDescriptor,
   SkillInvocation,
   VectorSearchHit,
@@ -56,6 +57,7 @@ export interface ThreadMessage {
   marginalTokenUsage?: TokenUsage | null;
   hitlChoices?: Array<{ id: string; label: string }>;
   hitlTitle?: string | null;
+  hitlResumeStatus?: HitlRequestPart["resume_status"];
   hitlSkipped?: boolean;
   hitlAnswerSummary?: HitlAnswerSummary;
   hitlAnswerSummariesByCallId?: Record<string, HitlAnswerSummary>;
@@ -66,4 +68,6 @@ export interface ThreadMessage {
   /** Explicit user selection, from a live hint or the exchange's persisted load. */
   skillName?: SkillInvocation["name"] | null;
   skillNames?: SkillInvocation["name"][];
+  /** Trusted provenance from successful loads; absent on older history. */
+  builtinSkillNames?: string[];
 }

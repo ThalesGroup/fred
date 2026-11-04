@@ -322,7 +322,18 @@ class ManagedAgentInstanceSummary(BaseModel):
             "editor's enable/disable toggle): a suspended instance is hidden "
             "from chat-only members and shows editors a warning with a locked "
             "enable toggle. One of capability_unavailable / "
-            "capability_access_revoked / capability_config_invalid."
+            "capability_access_revoked / capability_config_invalid / "
+            "capability_pending (a capability is still preparing its saved "
+            "configuration, or failed to)."
+        ),
+    )
+    suspension_detail: str | None = Field(
+        default=None,
+        description=(
+            "Plain-language failure message carried with "
+            "`suspension_reason=capability_pending` when a capability "
+            "reported that preparing its configuration failed; null while it "
+            "is still pending and for every other reason."
         ),
     )
     created_at: datetime | None = None
@@ -1142,6 +1153,9 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # above, so adding this list costs one extra cheap store read, not a new
     # round trip.
     reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
+    # Fresh shared packaged-skill opt-outs. Only server resolution can supply
+    # this restriction set; browsers never choose execution policy.
+    disabled_platform_skills: list[str] = Field(default_factory=list)
     # Model capability ids the team disabled, resolved on this same per-turn
     # call: the pod ignores a user choice or recommendation naming one.
     team_disabled_model_ids: list[str] = Field(default_factory=list)
@@ -1167,3 +1181,5 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # `config/platform_prompt.json`; `""` is an admin deliberately suppressing
     # the block, and the two are NOT interchangeable.
     platform_prompt: str | None = None
+    # Admin-chosen chat profile for generated conversation titles.
+    title_model_profile_id: str | None = None

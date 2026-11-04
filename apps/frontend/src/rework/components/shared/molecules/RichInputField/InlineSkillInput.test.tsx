@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 // Copyright Thales 2026 — Licensed under the Apache License, Version 2.0.
-import { act, useState } from "react";
+import { act, useCallback, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { EditorView } from "@codemirror/view";
-import { cursorCharLeft, cursorCharRight, selectCharLeft, undo } from "@codemirror/commands";
+import { cursorCharLeft, cursorCharRight, selectCharLeft, undo, redo } from "@codemirror/commands";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { usePastedFiles } from "@rework/components/pages/ManagedChatPage/usePastedFiles";
+import { useComposerCommands } from "@rework/components/pages/ManagedChatPage/useComposerCommands";
+import { CommandMenu } from "../CommandMenu/CommandMenu";
 import { RichInputField } from "./RichInputField";
 import { findSkillInvocation } from "@rework/utils/skillInvocation";
 
@@ -14,6 +16,15 @@ vi.mock("react-i18next", () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };
 });
+const commandCatalog = vi.hoisted(() => ({
+  supported: true,
+  skills: [{ name: "graph", description: "Create diagrams" }],
+}));
+vi.mock("src/slices/controlPlane/controlPlaneOpenApi", () => ({
+  useGetAgentInstanceSkillsQuery: () => ({ currentData: commandCatalog }),
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ currentData: [] }),
+  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [vi.fn()],
+}));
 // jsdom has no layout engine; interaction assertions do not use geometry.
 beforeAll(() => {
   Element.prototype.scrollIntoView = () => {};
@@ -112,6 +123,7 @@ function Host({
 const editor = () => EditorView.findFromDOM(container.querySelector(".cm-content")!)!;
 beforeEach(() => {
   vi.clearAllMocks();
+  commandCatalog.skills = [{ name: "graph", description: "Create diagrams" }];
   claimKey.mockReset().mockReturnValue(false);
   recallKey.mockReset().mockReturnValue(false);
   container = document.createElement("div");
@@ -127,9 +139,9 @@ afterEach(() => {
 it("keeps canonical text in the editor while placing the clickable token between surrounding words", () => {
   expect(editor().state.doc.toString()).toBe("Before /meeting-minutes after\nAction");
   expect(editor().contentDOM.getAttribute("aria-label")).toBe("chatbot.composerPlaceholder");
-  expect(container.querySelector(".cm-line")?.textContent).toBe("Before /meeting-minutes after");
+  expect(container.querySelector(".cm-line")?.textContent).toBe("Before meeting-minutes after");
   const badge = container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!;
-  expect(badge.title).toBe("chatbot.skills.platformProvided\nMeeting minutes");
+  expect(badge.title).toBe("meeting-minutes: Meeting minutes");
   // A skill container; the hairline is for sent messages only.
   expect(badge.dataset).toMatchObject({ kind: "skill" });
   expect(badge.dataset.surface).toBeUndefined();
@@ -447,4 +459,112 @@ it("shows the placeholder outside the editable line while the field is empty", (
   expect(editor().contentDOM.getAttribute("aria-placeholder")).toBe("[notes]");
   act(() => editor().dispatch({ changes: { from: 0, insert: "a" } }));
   expect(container.querySelector("[class*=placeholder]")).toBeNull();
+});
+
+function mountResetComposer() {
+  const runSkill = vi.fn();
+  const skillError = vi.fn();
+  let rejectRun: () => void;
+  let latest: ReturnType<typeof useComposerCommands>;
+  function ComposerHost() {
+    const [input, setInput] = useState("");
+    const [preview, setPreview] = useState(false);
+    const openPreview = useCallback(() => setPreview((open) => !open), []);
+    const commands = useComposerCommands({
+      teamId: "team-1",
+      agentInstanceId: "instance-1",
+      input,
+      setInput,
+      onRunSkill: (run) => {
+        runSkill(run);
+        // useManagedChat clears the draft optimistically, then restores it
+        // when admission rejects a stale selection from the cached catalog.
+        setInput("");
+        rejectRun = () => setInput(run.text);
+      },
+      onSkillError: skillError,
+      onRunCommand: vi.fn(),
+      onSend: vi.fn(),
+      onResolveError: vi.fn(),
+    });
+    latest = commands;
+    return (
+      <>
+        {preview && <aside>Skill preview</aside>}
+        <RichInputField
+          value={commands.composerValue}
+          onChange={commands.onComposerChange}
+          onSend={commands.submit}
+          commandTrigger={commands.trigger}
+          aboveFieldSlot={commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
+          showSendButton
+          inlineSkills={{ tokens: commands.selectedSkills.map((token) => ({ ...token, onOpen: openPreview })) }}
+        />
+      </>
+    );
+  }
+  act(() => {
+    root.unmount();
+    root = createRoot(container);
+    root.render(<ComposerHost />);
+  });
+  const fill = (text: string) => {
+    act(() => editor().dispatch({ selection: { anchor: 0, head: editor().state.doc.length } }));
+    act(() =>
+      editor().dispatch({
+        changes: { from: 0, to: editor().state.doc.length, insert: text },
+        selection: { anchor: text.length },
+        userEvent: "input.type",
+      }),
+    );
+  };
+  return { fill, runSkill, skillError, latest: () => latest, rejectRun: () => rejectRun() };
+}
+
+it("restores a rejected skill draft through the controlled composer reset without corrupting command history", () => {
+  const { fill, runSkill, skillError, rejectRun, latest } = mountResetComposer();
+  fill("/");
+  expect(container.querySelector('[role="option"]')).not.toBeNull();
+  fill("/graph Test d\u2019aperçu");
+  const draft = "/graph Test d'aperçu";
+  fill(draft);
+  const badge = container.querySelector<HTMLButtonElement>("[data-kind=skill]")!;
+  act(() => badge.click());
+  expect(container.querySelector("aside")?.textContent).toBe("Skill preview");
+  act(() => badge.click());
+  expect(container.querySelector("aside")).toBeNull();
+  pressKey("Enter");
+  expect(runSkill).toHaveBeenCalledExactlyOnceWith({ text: draft, skills: [{ name: "graph" }] });
+  expect(editor().state.doc.toString()).toBe("");
+  expect(latest().trigger.choices).toEqual([{ kind: "skill", name: "graph", from: 0, to: 6, scope: 0 }]);
+
+  // The refreshed catalog now reflects the administrator's opt-out. The
+  // failed turn restores canonical text while its old choice is still held.
+  commandCatalog.skills = [];
+  act(() => rejectRun());
+  expect(editor().state.doc.toString()).toBe(draft);
+  expect(container.querySelector("[data-kind=skill]")).toBeNull();
+  pressKey("Enter");
+  expect(skillError).toHaveBeenCalledExactlyOnceWith("unavailable");
+  expect(runSkill).toHaveBeenCalledTimes(1);
+  expect(editor().state.doc.toString()).toBe(draft);
+  act(() => undo(editor()));
+  act(() => redo(editor()));
+  expect(editor().state.doc.toString()).toBe(draft);
+});
+
+it("keeps command-history ranges valid across successive local edits before the controlled parent renders", () => {
+  const { fill } = mountResetComposer();
+  fill("/graph Explain the process");
+  act(() => editor().dispatch({ selection: { anchor: 0, head: editor().state.doc.length } }));
+  act(() => {
+    editor().dispatch({ changes: { from: 0, to: editor().state.doc.length }, userEvent: "delete.selection" });
+    editor().dispatch({ changes: { from: 0, insert: "New draft" }, userEvent: "input.type" });
+  });
+  expect(editor().state.doc.toString()).toBe("New draft");
+  expect(container.querySelector("[data-kind=skill]")).toBeNull();
+  act(() => undo(editor()));
+  expect(editor().state.doc.toString()).toBe("/graph Explain the process");
+  act(() => redo(editor()));
+  expect(editor().state.doc.toString()).toBe("New draft");
 });

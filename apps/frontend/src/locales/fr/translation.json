@@ -74,8 +74,8 @@
   },
   "app": {
     "loading": {
-      "router": "Fred démarre...",
-      "ui": "Fred prépare l'interface...",
+      "router": "{{siteDisplayName}} démarre...",
+      "ui": "{{siteDisplayName}} prépare l'interface...",
       "generic": "Chargement, veuillez patienter..."
     }
   },
@@ -348,12 +348,12 @@
         "close": "Fermer l'aperçu",
         "loadError": "Impossible de charger l'aperçu.",
         "loading": "Chargement de l'aperçu…",
-        "empty": "Pas encore d'aperçu. Demandez à l'assistant de remplir une présentation."
+        "empty": "Pas encore de présentation. Demandez à l'assistant d'en créer une."
       },
       "panel": {
         "ppt_preview_pane": {
           "title": "Aperçu de la présentation",
-          "launcher": "Viewer PPT"
+          "launcher": "Présentation"
         }
       }
     },
@@ -387,6 +387,230 @@
             "read_write": "Lecture et proposition"
           }
         }
+      }
+    },
+    "ppt_builder": {
+      "preparing": "lecture du template PowerPoint en cours.",
+      "name": "Générer une présentation",
+      "description": "Génère une présentation PowerPoint à partir d'une demande, sur le template de l'équipe ou un thème intégré.",
+      "fields": {
+        "template": {
+          "title": "Template PowerPoint",
+          "description": "Le template sur lequel l'agent construit ses présentations."
+        },
+        "overrides": {
+          "title": "Corrections des slides",
+          "description": "Vos corrections aux slides trouvées dans le template."
+        },
+        "use_vision": {
+          "title": "Utiliser un modèle de vision",
+          "description": "Un modèle d'IA capable de lire les images regarde chaque slide du template pour la nommer et comprendre à quoi elle sert.",
+          "unavailable": "Aucun modèle d'IA capable de lire les images n'est disponible pour cet agent ; les slides sont nommées par des règles."
+        },
+        "labelling_model": {
+          "title": "Modèle d'IA qui lit les slides",
+          "description": "Gardez le modèle de l'agent pour utiliser celui avec lequel il répond.",
+          "agentDefault": "Le modèle d'IA de l'agent",
+          "rereadOnSave": "Changer de modèle relit le template à l'enregistrement de l'agent."
+        },
+        "variety_check": {
+          "title": "Forcer de la variété",
+          "atMost": "au plus",
+          "times": "fois chacune",
+          "modeAria": "Ce qui doit varier",
+          "maxAria": "Nombre maximal de fois",
+          "description": "Évite qu'une même slide revienne trop souvent, autant que le template le permet.",
+          "options": {
+            "template_slide": "Par nom de slide",
+            "kind": "Par type de slide identifié"
+          }
+        },
+        "validate_plan": {
+          "title": "Valider le plan avant de construire",
+          "description": "Avant de construire la première présentation d'une conversation, l'agent montre son plan (public, message principal, une ligne par slide) et attend votre réponse. Les modifications d'une présentation déjà livrée n'attendent jamais."
+        }
+      },
+      "form": {
+        "uploadTemplate": "Téléverser un template .pptx",
+        "replaceTemplate": "Remplacer le template",
+        "uploadAria": "Fichier de template PowerPoint",
+        "clearAria": "Retirer le fichier sélectionné",
+        "currentTemplate": "Un template est configuré pour cet agent.",
+        "usePlatformTemplate": "Revenir au template de la plateforme",
+        "builtInTemplate": "Template intégré (aucun template téléversé)",
+        "summary": "{{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté.",
+        "summaryBuiltin": "Template intégré : {{patterns}} slides prêtes à l'emploi.",
+        "review": "Vérifier les slides",
+        "templateGuide": "Comment préparer son template ?",
+        "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce template et seront abandonnées au prochain enregistrement.",
+        "adminTemplate": "Template défini par l'administrateur : {{name}}",
+        "adminTemplateUnnamed": "Template défini par l'administrateur",
+        "summaryPlatform": "Template de l'administrateur : {{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté."
+      },
+      "analysis": {
+        "staged": "Le template sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
+        "inProgress": "Lecture du template en cours… L'agent devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
+        "unknown": "L'état du template n'est pas disponible pour le moment.",
+        "failed": "Le template n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas ; enregistrez l'agent pour le relire.",
+        "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible jusqu'à ce que vous l'enregistriez pour relancer la lecture.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire et profiter des dernières améliorations.",
+        "refreshing": "Nouvelle lecture du template… L'agent garde la lecture précédente jusqu'à la fin."
+      },
+      "review": {
+        "title": "Slides du template",
+        "done": "Terminé",
+        "labelFor": "Nom de {{label}}",
+        "include": "Utiliser {{label}}",
+        "kindFor": "Type de {{label}}",
+        "labelledByRules": "Nommée par des règles",
+        "slides": "Slides ({{count}})",
+        "layouts": "Masques ({{count}})",
+        "layoutsHint": "Utilisés seulement quand aucune slide du template ne convient.",
+        "excluded": "Slides mises de côté ({{count}})",
+        "loadingThumbnails": "Chargement des vignettes…",
+        "thumbnailsUnavailable": "Les vignettes ne sont pas disponibles pour ce template.",
+        "source": {
+          "layout": "Masque {{index}}",
+          "slide": "Slide {{index}}"
+        },
+        "exclusion": {
+          "chart": "Graphique",
+          "table": "Tableau",
+          "library": "Planche de ressources",
+          "icon_bank": "Banque d'icônes",
+          "no_placeholder": "Aucun espace réservé",
+          "unsupported_parts": "Non copiable",
+          "author": "Exclu par vous"
+        }
+      },
+      "kinds": {
+        "cover": "Couverture",
+        "agenda": "Sommaire",
+        "section": "Section",
+        "bullets": "Liste à puces",
+        "two_columns": "Deux colonnes",
+        "comparison": "Comparaison",
+        "cards": "Cartes",
+        "figures": "Chiffres clés",
+        "process": "Processus",
+        "timeline": "Frise chronologique",
+        "team": "Équipe",
+        "quote": "Citation",
+        "image_text": "Image et texte",
+        "table": "Tableau",
+        "chart": "Graphique",
+        "closing": "Conclusion",
+        "other": "Autre"
+      },
+      "chartTypes": {
+        "column": "histogramme",
+        "bar": "barres",
+        "line": "courbe",
+        "pie": "secteurs",
+        "doughnut": "anneau",
+        "stacked_column": "histogramme empilé",
+        "area": "aires",
+        "stacked_bar": "barres empilées",
+        "radar": "radar",
+        "scatter": "nuage de points",
+        "bubble": "bulles",
+        "waterfall": "cascade",
+        "funnel": "entonnoir",
+        "treemap": "carte proportionnelle",
+        "gantt": "Gantt",
+        "heatmap": "carte de chaleur",
+        "gauge": "jauge"
+      },
+      "panel": {
+        "ppt_preview_pane": {
+          "title": "Aperçu de la présentation",
+          "launcher": "Présentation"
+        }
+      },
+      "summary": {
+        "open": "Ce qui a été construit",
+        "title": "Ce qui a été construit",
+        "close": "Fermer",
+        "count_one": "Cette présentation compte {{count}} slide.",
+        "count_other": "Cette présentation compte {{count}} slides.",
+        "untitled": "Slide sans titre",
+        "notes": {
+          "text_shortened": "Un texte a été raccourci pour tenir sur la slide.",
+          "content_left_out": "Une partie du contenu n'avait pas de place sur cette slide et a été laissée de côté.",
+          "items_left_out_one": "{{count}} élément a été laissé de côté : la slide n'a pas de place pour plus.",
+          "items_left_out_other": "{{count}} éléments ont été laissés de côté : la slide n'a pas de place pour plus.",
+          "image_unusable_one": "{{count}} image n'a pas pu être utilisée.",
+          "image_unusable_other": "{{count}} images n'ont pas pu être utilisées.",
+          "table_left_out": "Le tableau ne tenait pas et a été laissé de côté.",
+          "table_text_smaller": "Le texte du tableau a été réduit pour tenir.",
+          "text_overflows": "Un titre est trop long pour une ligne et peut déborder sur le texte en dessous.",
+          "left_empty": "Cette slide reste vide : elle attend une liste et aucune n'a été fournie.",
+          "fixed_slide": "Cette slide est reprise telle quelle du template, son contenu a donc été laissé de côté.",
+          "list_continues": "La liste continue sur la slide suivante.",
+          "list_continuation": "Suite de la liste de la slide précédente.",
+          "other_kind": "Construite en « {{built}} » au lieu de « {{asked}} ».",
+          "chart_type_changed": "Le graphique « {{asked}} » n'est pas disponible : les données sont affichées en histogramme.",
+          "chart_type_changed_unnamed": "Ce type de graphique n'est pas disponible : les données sont affichées en histogramme.",
+          "chart_shows_shares": "Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés.",
+          "layout_repeated": "Même mise en page que la slide précédente, comme demandé.",
+          "layout_not_repeated": "La mise en page de la slide précédente n'a pas pu être gardée : ce contenu n'y tient pas.",
+          "intent_not_shown": "Une mise en avant demandée n'a pas pu être affichée.",
+          "intent_not_shown_highlight": "La mise en avant demandée sur une partie du graphique n'a pas pu être affichée.",
+          "intent_not_shown_sort": "Le graphique garde l'ordre donné : il n'a pas pu être trié comme demandé.",
+          "intent_not_shown_stacked_as": "Le graphique n'a pas pu afficher ses colonnes en pourcentages.",
+          "intent_not_shown_total_row": "La dernière ligne du tableau n'a pas pu être affichée comme un total.",
+          "intent_not_shown_highlight_row": "La mise en avant demandée sur une ligne du tableau n'a pas pu être affichée.",
+          "intent_not_shown_highlight_column": "La mise en avant demandée sur une colonne du tableau n'a pas pu être affichée.",
+          "intent_not_shown_trend": "Les flèches de hausse ou de baisse demandées sur les chiffres n'ont pas pu être affichées.",
+          "intent_not_shown_takeaway": "Le message clé n'a pas pu être affiché sur cette slide : il reste dans les notes de l'orateur.",
+          "intent_shown_otherwise": "Une mise en avant demandée est affichée en gras à la place.",
+          "intent_shown_otherwise_total_row": "La ligne de total est affichée en gras : le style du tableau n'a pas de mise en forme de total.",
+          "intent_shown_otherwise_highlight_row": "La ligne mise en avant est affichée en gras seulement, pour rester lisible sur les couleurs sombres du tableau.",
+          "intent_shown_otherwise_highlight_column": "La colonne mise en avant est affichée en gras seulement, pour rester lisible sur les couleurs sombres du tableau.",
+          "illustrative_data": "Les chiffres de cette slide sont illustratifs : ils ne viennent pas de vos documents."
+        }
+      },
+      "platform": {
+        "intro": "Les agents qui n'ont pas de template à eux construisent leurs présentations sur celui-ci.",
+        "loading": "Chargement du template de la plateforme…",
+        "loadError": "Le template de la plateforme n'a pas pu être chargé.",
+        "unavailable": "Les réglages des présentations ne sont pas disponibles pour le moment : le service qui construit les présentations est injoignable.",
+        "current": "Template de la plateforme : {{name}}",
+        "fredTemplate": "Template Fred (intégré)",
+        "upload": "Téléverser un template .pptx",
+        "replace": "Remplacer le template",
+        "uploadAria": "Fichier de template PowerPoint de la plateforme",
+        "uploaded": "Template envoyé : sa lecture a commencé.",
+        "uploadError": "Le template n'a pas été accepté.",
+        "uploadFailed": "Un problème est survenu pendant l'envoi du fichier. Réessayez dans un instant.",
+        "analysing": {
+          "keepCurrent": "Lecture de {{name}} en cours… Les agents gardent le template actuel jusqu'à la fin.",
+          "keepFred": "Lecture de {{name}} en cours… Les agents gardent le template Fred jusqu'à la fin."
+        },
+        "failed": {
+          "keepCurrent": "{{name}} n'a pas pu être lu. Les agents gardent le template actuel ; relancez la lecture ou téléversez un autre fichier.",
+          "keepFred": "{{name}} n'a pas pu être lu. Les agents gardent le template Fred ; relancez la lecture ou téléversez un autre fichier."
+        },
+        "refreshing": "Nouvelle lecture du template… Les agents gardent la lecture précédente jusqu'à la fin.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. Les agents continuent de l'utiliser ; relancez la lecture pour profiter des dernières améliorations.",
+        "defaultModel": "Le modèle d'IA par défaut de la plateforme",
+        "visionRereads": "Un nouveau modèle sert à la prochaine lecture du template.",
+        "rerun": "Relancer la lecture",
+        "rerunStarted": "Nouvelle lecture lancée.",
+        "rerunError": "La lecture n'a pas pu être relancée.",
+        "reset": "Réinitialiser au template Fred",
+        "resetDone": "Le template Fred est de nouveau utilisé.",
+        "resetError": "Le template n'a pas pu être réinitialisé.",
+        "resetConfirm": {
+          "title": "Revenir au template Fred ?",
+          "message": "Le template de la plateforme et toutes vos corrections de slides, y compris celles du template Fred, seront supprimés. Les agents sans template à eux reviendront au template Fred.",
+          "confirm": "Réinitialiser",
+          "cancel": "Annuler"
+        },
+        "overridesSaved": "Corrections des slides enregistrées.",
+        "overridesError": "Les corrections des slides n'ont pas pu être enregistrées.",
+        "patternsPdf": "PDF des slides",
+        "pdfError": "Le PDF des slides n'a pas pu être téléchargé."
       }
     }
   },
@@ -424,6 +648,18 @@
       "runErrorTooMany": "Un message peut contenir au plus {{limit}} commandes de prompt. Retirez-en quelques-unes, puis envoyez à nouveau."
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
+    "pendingMessages": {
+      "label": "À envoyer",
+      "send": "Envoyer",
+      "actions": "Actions du message",
+      "edit": "Modifier",
+      "remove": "Supprimer",
+      "offered": "Envoi...",
+      "retry": "Renvoyer",
+      "retryWarning": "Vérifiez d'abord la conversation. Le message pourrait être envoyé deux fois.",
+      "textOnly": "Seul un message texte simple peut attendre pendant ce tour",
+      "forceUnavailable": "Envoi impossible pendant ce tour. Le message reste en attente."
+    },
     "newConversation": "Nouvelle conversation",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
@@ -550,6 +786,9 @@
       "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
       "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer.",
       "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères.",
+      "hitlUnavailable": "Cette demande n'attend plus de réponse. Votre réponse n'a pas été appliquée. Rouvrez la conversation pour voir son état actuel.",
+      "hitlQuestionsChanged": "Les questions en attente ont changé. Vos réponses n'ont pas été appliquées. Rouvrez la conversation pour charger les questions actuelles.",
+      "hitlConflict": "Votre réponse n'a pas pu être appliquée car la conversation est occupée ou a changé. Réessayez, ou rouvrez la conversation si le problème persiste.",
       "toolApprovalSaveFailedSummary": "Approbation non enregistrée",
       "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée."
     },
@@ -636,12 +875,12 @@
     },
     "skills": {
       "badge": "Skill : {{name}}",
-      "platformProvided": "Skill fourni par la plateforme",
       "requestPlaceholder": "Votre demande (facultative)",
       "usage": "Utilisez /<nom-du-skill> [demande]. Sélectionnez un skill ; la demande est facultative.",
       "errorTitle": "Le skill ne peut pas être utilisé",
       "unavailable": "Le contenu de ce skill est indisponible.",
       "loaded": "Skill chargé",
+      "partiallyLoaded": "Skill partiellement chargé",
       "originUser": "Demandé par vous",
       "originAgent": "Choisi par l’agent",
       "originChild": "Choisi par un sous-agent",
@@ -652,12 +891,51 @@
       "loading": "Chargement du skill…",
       "retry": "Réessayer",
       "description": "Description :",
-      "arguments": "Arguments :"
+      "arguments": "Arguments :",
+      "catalog": {
+        "summarize-document": {
+          "title": "Résumer un document",
+          "description": "Résumer fidèlement des documents en préservant les conditions essentielles, les chiffres et les incertitudes."
+        },
+        "grounded-research": {
+          "title": "Recherche sourcée",
+          "description": "Étudier une question à partir de sources vérifiables et expliquer leurs contradictions ou leurs lacunes."
+        },
+        "meeting-minutes": {
+          "title": "Compte rendu de réunion",
+          "description": "Préparer un compte rendu avec les décisions confirmées, les actions et les informations manquantes."
+        },
+        "compare-options": {
+          "title": "Comparer des options",
+          "description": "Comparer des alternatives selon des critères explicites, des éléments vérifiables et leurs compromis."
+        },
+        "verify-answer": {
+          "title": "Vérifier une réponse",
+          "description": "Vérifier une réponse à partir des sources disponibles, corriger les affirmations non étayées et expliquer les limites de la vérification."
+        },
+        "graph": {
+          "title": "Visualisation",
+          "description": "Créer des diagrammes, des graphiques de données ou des tableaux adaptés au besoin avec les outils de rendu disponibles."
+        },
+        "grill-me": {
+          "title": "Mettre mon idée à l'épreuve",
+          "description": "Clarifier une idée ou une décision par un entretien guidé, avec des recommandations concrètes et des compromis explicites."
+        },
+        "analyze-data": {
+          "title": "Analyser des données",
+          "description": "Analyser les données accessibles, vérifier les calculs et expliquer les hypothèses et les limites."
+        },
+        "data-visualization": {
+          "title": "Visualiser des données",
+          "description": "Choisir une représentation utile des données et la produire avec les outils disponibles."
+        }
+      }
     }
   },
   "mermaid": {
     "title": "Diagramme",
-    "diagram": "Diagramme Mermaid",
+    "diagram": "Diagramme",
+    "generating": "Génération du diagramme...",
     "copySource": "Copier le code du diagramme",
     "download": "Télécharger le diagramme en SVG",
     "downloadError": "Le diagramme n'a pas pu être téléchargé. Réessayez.",
@@ -823,7 +1101,7 @@
     "storageQuotaExceededMessage": "L'ajout de ces fichiers dépassera la capacité maximale autorisée pour cette équipe.",
     "storageQuotaExceededTitle": "Quota de stockage dépassé",
     "summary": "Résumé",
-    "supportedFormats": "Formats pris en charge : PDF, DOCX, DOC, ODT, TXT, MD, PPTX, PPT, CSV, XLSX, XLS",
+    "supportedFormats": "Formats pris en charge : Documents PDF, DOCX, DOC, ODT, PPTX, PPT, TXT, MD · Tableurs CSV, XLSX, XLS, XLSM · Mails MSG, EML · Images PNG, JPG, JPEG, WEBP",
     "tooDeepRejected": "Rien n'a été ajouté : le dossier déposé imbriquerait des fichiers au-delà de {{max}} niveaux de dossiers.",
     "tooDeepSkipped_one": "{{count}} fichier a été ignoré : il serait imbriqué au-delà de {{max}} niveaux de dossiers.",
     "tooDeepSkipped_other": "{{count}} fichiers ont été ignorés : ils seraient imbriqués au-delà de {{max}} niveaux de dossiers.",
@@ -1153,7 +1431,8 @@
           "model": "Modèles",
           "app": "Apps",
           "knowledge_base": "Bases de connaissances",
-          "aria": "Filtrer par type de fonctionnalité"
+          "aria": "Filtrer par type de fonctionnalité",
+          "skill": "Skills"
         },
         "emptyAgents": "Aucun template d'agent n'est encore enregistré par un pod runtime.",
         "emptyModels": "Aucun modèle n'est encore publié par un pod runtime.",
@@ -1194,7 +1473,8 @@
           "defaultOn": "Activé pour tous",
           "health": "État",
           "reasoning": "Raisonnement",
-          "actions": "Actions"
+          "actions": "Actions",
+          "settings": "Réglages"
         },
         "enabledTeams": {
           "teams_one": "{{count}} équipe",
@@ -1337,9 +1617,20 @@
           "depNeedsSettings": "{{dep}} nécessite ses propres paramètres pour cette équipe — activez-la d'abord depuis sa propre ligne.",
           "thenSettingsForm": "Il vous sera ensuite demandé de renseigner les paramètres de {{agent}} avant son activation."
         },
-        "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement."
+        "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement.",
+        "platformSettings": "Réglages de la plateforme",
+        "platformDrawer": {
+          "title": "{{name}} : réglages de la plateforme"
+        }
       },
       "platformModelBindings": {
+        "titleModel": {
+          "label": "Modèle des titres de conversation",
+          "default": "Modèle par défaut de la plateforme",
+          "saved": "Modèle des titres enregistré.",
+          "saveError": "Impossible d'enregistrer le modèle des titres.",
+          "loadError": "Le modèle des titres de conversation demande le droit de modifier le prompt plateforme."
+        },
         "openButton": "Modèles par défaut",
         "title": "Modèles par défaut",
         "tabAria": "Portée des modèles par défaut",
@@ -1483,6 +1774,35 @@
           "confirm": "Désactiver",
           "cancel": "Annuler"
         }
+      },
+      "skills": {
+        "title": "Skills plateforme",
+        "scope": "Skills fournis par Fred, communs à tous les utilisateurs et agents.",
+        "skill": "Skill",
+        "description": "Description",
+        "invocation": "Invocation",
+        "sources": "Sources",
+        "enabled": "Activé",
+        "on": "Activé",
+        "off": "Désactivé",
+        "userInvocable": "Utilisateur",
+        "modelInvocable": "Agent",
+        "noInvocation": "Aucune invocation directe",
+        "refresh": "Actualiser",
+        "loading": "Chargement des skills plateforme...",
+        "loadError": "Impossible de charger les skills plateforme.",
+        "empty": "Aucun skill fourni avec Fred n'est actuellement annoncé.",
+        "unavailableSources": "Sources indisponibles : {{runtimes}}. L'application de la politique globale ne peut pas être vérifiée sur ces sources.",
+        "unsupportedSources": "Sources à mettre à jour : {{runtimes}}. Ces sources ne prennent pas en charge les contrôles globaux des skills.",
+        "toggle": "Activer {{name}} pour tous",
+        "disableBlocked": "Rétablissez les sources et mettez à jour les anciens runtimes avant de désactiver un skill.",
+        "effect": "Les changements s'appliquent aux nouveaux chargements dès le prochain tour, y compris dans les conversations existantes. Les instructions déjà chargées restent dans la conversation.",
+        "saveUnsupported": "Ce skill n'a pas pu être désactivé car une source ne prend pas en charge les contrôles globaux. Actualisez et mettez à jour la source concernée.",
+        "saveUnavailable": "Ce skill n'a pas pu être désactivé car une source est indisponible. Rétablissez la source puis actualisez.",
+        "saveError": "Impossible d'enregistrer le réglage global du skill. Actualisez puis réessayez.",
+        "refreshAfterSaveError": "Le réglage a été enregistré mais le catalogue n'a pas pu être actualisé. Actualisez pour confirmer son état actuel.",
+        "absentDisabled": "Ces skills désactivés globalement ne sont plus annoncés par une source disponible. Vous pouvez rétablir leur disponibilité pour les prochains chargements.",
+        "restore": "Réactiver {{name}}"
       }
     },
     "agentCard": {
@@ -1499,6 +1819,10 @@
       "noDescription": "Pas encore de description.",
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
       "suspendedToggleLocked": "Suspendu",
+      "preparing": "En préparation — l'agent redeviendra disponible automatiquement dans quelques minutes. Rien à faire de votre côté.",
+      "preparingDetail": "En préparation — {{detail}} L'agent redeviendra disponible automatiquement dans quelques minutes.",
+      "preparationFailed": "Indisponible — une capacité utilisée par cet agent n'a pas pu préparer sa configuration : {{detail}} Modifiez l'agent pour corriger le problème.",
+      "pendingToggleLocked": "En préparation",
       "duplicate": "Dupliquer",
       "copyTo": "Copier dans…",
       "copyDialog": {
@@ -2014,7 +2338,9 @@
       "toolStatus": {
         "failure": "Échec",
         "running": "En cours",
-        "success": "Succès"
+        "success": "Succès",
+        "unavailable": "Indisponible",
+        "unknown": "Inconnu"
       },
       "toolGroups": {
         "commands_one": "{{count}} commande",
@@ -2106,7 +2432,8 @@
           },
           "pptFiller": {
             "list_images_in_folder": "Recherche d'images pour une présentation PowerPoint",
-            "fill_ppt_template": "Création d'une présentation PowerPoint"
+            "fill_ppt_template": "Création d'une présentation PowerPoint",
+            "build_presentation": "Création d'une présentation PowerPoint"
           },
           "platformOps": {
             "postgres_list_tables": "Consultation des données disponibles",
@@ -2191,6 +2518,9 @@
       "validate": "Accepter les CGU"
     },
     "hitlPrompt": {
+      "unavailable": "Cette question ne peut plus recevoir de réponse.",
+      "unknown": "La disponibilité de cette question n'a pas pu être vérifiée.",
+      "retryAvailability": "Vérifier à nouveau",
       "answerSummary": "Question et réponse",
       "selected": "Choisi",
       "skipped": "Passé",
@@ -2428,7 +2758,8 @@
         }
       },
       "recentAgents": {
-        "title": "Derniers agents consultés"
+        "title": "Derniers agents consultés",
+        "suggestedTitle": "Agents disponibles pour vous"
       },
       "topAgents": {
         "title": "Les agents que vous avez le plus utilisés",
@@ -2495,7 +2826,7 @@
       }
     },
     "releaseNotes": {
-      "baseRelease": "Version de base Fred",
+      "baseRelease": "Version de base de la plateforme",
       "brandRelease": "Version {{brand}}",
       "copied": "Copié !",
       "copy": "Copier",
@@ -2759,6 +3090,9 @@
         "title": "Espace administration"
       },
       "chatList": {
+        "answerReady": "Réponse prête",
+        "answering": "Réponse en cours",
+        "awaitingInput": "Réponse attendue",
         "deleteDialog": {
           "title": "Supprimer cette conversation ?",
           "message": "« {{name}} » sera définitivement supprimée. Cette action est irréversible.",
@@ -2767,9 +3101,11 @@
         },
         "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un {{agentsNicknameSingular}} géré.",
         "groupByAgent": "Grouper par {{agentsNicknameSingular}}",
+        "openConversation": "Ouvrir",
         "loading": "Chargement...",
         "title": "Conversations",
-        "unknownAgent": "{{agentsNicknameSingular}} inconnu"
+        "unknownAgent": "{{agentsNicknameSingular}} inconnu",
+        "unread": "Non lue"
       },
       "marketplace": {
         "menu": {
@@ -3406,6 +3742,10 @@
             "webPage": {
               "title": "Générer une page web (HTML/CSS)",
               "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat."
+            },
+            "presentationBuilder": {
+              "title": "Générer une présentation",
+              "description": "Capacité de construire une présentation PowerPoint à partir d'une demande, sur un modèle d'entreprise optionnel."
             }
           }
         },
@@ -3505,7 +3845,11 @@
           "title": "Cet agent est suspendu.",
           "unavailable": "Une capacité qu'il utilise n'est plus disponible ({{capabilities}}). Décochez-la et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme.",
           "accessRevoked": "L'accès de votre équipe à une capacité qu'il utilise a été révoqué ({{capabilities}}). Décochez-la et réenregistrez l'agent, ou contactez un administrateur de la plateforme.",
-          "configInvalid": "Les paramètres d'une capacité qu'il utilise ne sont plus valides. Réinitialisez-les et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme."
+          "configInvalid": "Les paramètres d'une capacité qu'il utilise ne sont plus valides. Réinitialisez-les et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme.",
+          "pendingTitle": "Cet agent est temporairement indisponible.",
+          "pending": "En préparation — l'agent redeviendra disponible automatiquement dans quelques minutes. Rien à faire de votre côté.",
+          "pendingDetail": "En préparation — {{detail}} L'agent redeviendra disponible automatiquement dans quelques minutes.",
+          "pendingFailed": "Une capacité qu'il utilise n'a pas pu préparer sa configuration : {{detail}} Corrigez ses paramètres et réenregistrez l'agent."
         },
         "subtitle": "Équipe : {{team}}",
         "subtitleWithTemplate": "Équipe : {{team}} · Template : {{template}}",
@@ -4558,9 +4902,9 @@
       "catalog-loading": "Chargement de l'application…",
       "connecting": "Connexion à l'application…",
       "unavailable": "Cette application n'est pas disponible.",
-      "protocol-mismatch": "Cette application utilise une version du protocole applicatif Fred non prise en charge par ce déploiement.",
+      "protocol-mismatch": "Cette application utilise une version du protocole applicatif {{siteDisplayName}} non prise en charge par ce déploiement.",
       "unreachable": "L'application n'a pas répondu. Elle est peut-être en cours de démarrage ou mal configurée.",
-      "render": "L'application s'est arrêtée de manière inattendue. Fred reste disponible."
+      "render": "L'application s'est arrêtée de manière inattendue. {{siteDisplayName}} reste disponible."
     }
   },
   "unauthorized": {

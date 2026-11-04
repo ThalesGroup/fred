@@ -51,6 +51,7 @@ from fred_runtime.react.middleware.tool_call_recovery import (
     ToolCallTextRecoveryMiddleware,
 )
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
+from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 from fred_runtime.support.thinking import RECALLED_REASONING_PREFIX
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -382,6 +383,7 @@ def test_frame_order_is_fixed() -> None:
     assert [type(m) for m in frame] == [
         CheckpointHygieneMiddleware,
         DynamicPromptMiddleware,
+        TurnSteeringMiddleware,
         RateLimitRetryMiddleware,
         ToolCallTextRecoveryMiddleware,
         TracingKpiMiddleware,
@@ -399,6 +401,7 @@ def test_frame_reserves_the_capability_slot() -> None:
     assert [type(m) for m in frame] == [
         CheckpointHygieneMiddleware,
         DynamicPromptMiddleware,
+        TurnSteeringMiddleware,
         _DummyCapabilityMiddleware,
         RateLimitRetryMiddleware,
         ToolCallTextRecoveryMiddleware,
@@ -419,5 +422,5 @@ def test_frame_appends_tool_call_limit_after_hitl() -> None:
         FredHitlMiddleware,
         ToolCallLimitMiddleware,
     ]
-    assert isinstance(frame[3], ToolCallTextRecoveryMiddleware)
-    assert isinstance(frame[4], TracingKpiMiddleware)
+    assert isinstance(frame[4], ToolCallTextRecoveryMiddleware)
+    assert isinstance(frame[5], TracingKpiMiddleware)

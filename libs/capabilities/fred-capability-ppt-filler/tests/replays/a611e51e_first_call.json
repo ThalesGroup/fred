@@ -1,0 +1,174 @@
+{
+ "slides": [
+  {
+   "kind": "cover",
+   "title": "La Seconde Guerre mondiale",
+   "subtitle": "1939 - 1945 : une guerre qui a changé le monde",
+   "file_name": "Seconde_Guerre_mondiale_ados"
+  },
+  {
+   "kind": "agenda",
+   "title": "Au programme",
+   "items": [
+    {
+     "number": "01",
+     "heading": "Pourquoi cette guerre ?"
+    },
+    {
+     "number": "02",
+     "heading": "Les grandes étapes"
+    },
+    {
+     "number": "03",
+     "heading": "Qui était impliqué ?"
+    },
+    {
+     "number": "04",
+     "heading": "La vie pendant la guerre"
+    },
+    {
+     "number": "05",
+     "heading": "Comment ça s’est terminé ?"
+    },
+    {
+     "number": "06",
+     "heading": "Ce qu’il faut retenir"
+    }
+   ]
+  },
+  {
+   "kind": "bullets",
+   "title": "Pourquoi la guerre a commencé ?",
+   "takeaway": "La Seconde Guerre mondiale a éclaté à cause de tensions non résolues après 1918, de la montée des dictatures et de l’invasion de la Pologne par l’Allemagne.",
+   "bullets": [
+    "Fin de la 1ère Guerre mondiale (1918) : l’Allemagne est punie et appauvrie",
+    "Montée d’Hitler en Allemagne : il veut agrandir son territoire",
+    "L’Italie et le Japon veulent aussi dominer d’autres pays",
+    "**1er septembre 1939** : l’Allemagne envahit la Pologne → la France et le Royaume-Uni déclarent la guerre"
+   ],
+   "source": "user"
+  },
+  {
+   "kind": "timeline",
+   "title": "Les grandes dates",
+   "takeaway": "La guerre a duré 6 ans, avec des moments clés comme l’invasion de la France, Pearl Harbor et le Débarquement.",
+   "items": [
+    {
+     "number": "1939",
+     "heading": "Début de la guerre",
+     "text": "L’Allemagne envahit la Pologne. La France et le Royaume-Uni réagissent."
+    },
+    {
+     "number": "1940",
+     "heading": "La France vaincue",
+     "text": "L’Allemagne envahit la France en quelques semaines. Le pays est occupé."
+    },
+    {
+     "number": "1941",
+     "heading": "Pearl Harbor",
+     "text": "Le Japon attaque les États-Unis. Les USA entrent en guerre."
+    },
+    {
+     "number": "1942",
+     "heading": "Tournant de la guerre",
+     "text": "Les Alliés commencent à gagner des batailles importantes."
+    },
+    {
+     "number": "1944",
+     "heading": "Débarquement en Normandie",
+     "text": "**6 juin 1944** : les Alliés libèrent la France."
+    },
+    {
+     "number": "1945",
+     "heading": "Fin de la guerre",
+     "text": "L’Allemagne capitule en mai, puis le Japon en août après les bombes atomiques."
+    }
+   ],
+   "source": "user"
+  },
+  {
+   "kind": "cards",
+   "title": "Les deux camps",
+   "takeaway": "La guerre opposait l’Axe (Allemagne, Italie, Japon) aux Alliés (France, Royaume-Uni, USA, URSS et bien d’autres).",
+   "items": [
+    {
+     "heading": "L’Axe",
+     "text": "Allemagne, Italie, Japon. Dirigés par des dictateurs (Hitler, Mussolini)."
+    },
+    {
+     "heading": "Les Alliés",
+     "text": "France, Royaume-Uni, États-Unis, URSS, Chine et 50 autres pays. Veulent arrêter l’Axe."
+    },
+    {
+     "heading": "La Résistance",
+     "text": "Des civils et soldats qui luttent contre l’occupant, comme en France avec Jean Moulin."
+    }
+   ],
+   "source": "user"
+  },
+  {
+   "kind": "bullets",
+   "title": "La vie pendant la guerre",
+   "takeaway": "La guerre a été très dure pour les civils : rationnement, bombardements, et pour les Juifs, la Shoah.",
+   "bullets": [
+    "**Rationnement** : pas assez de nourriture, des tickets pour acheter",
+    "Bombardements : les villes sont détruites, les familles se cachent",
+    "**La Shoah** : 6 millions de Juifs exterminés par les Nazis dans des camps",
+    "Les enfants sont évacués ou cachés pour les protéger"
+   ],
+   "source": "user"
+  },
+  {
+   "kind": "image_text",
+   "title": "Le Débarquement",
+   "takeaway": "Le 6 juin 1944, les Alliés débarquent en Normandie pour libérer l’Europe, c’est un moment décisif.",
+   "bullets": [
+    "Plus de 150 000 soldats débarquent sur 5 plages",
+    "Opération secrète pour surprendre les Allemands",
+    "Début de la libération de la France et de l’Europe"
+   ],
+   "notes": "Montrer une carte du Débarquement ou une photo des plages (ex: Omaha Beach).",
+   "source": "user"
+  },
+  {
+   "kind": "bullets",
+   "title": "Comment ça s’est terminé ?",
+   "takeaway": "La guerre se termine en 1945 avec la capitulation de l’Allemagne et du Japon, mais le monde est profondément changé.",
+   "bullets": [
+    "**Mai 1945** : l’Allemagne capitule, Hitler se suicide",
+    "Août 1945 : les États-Unis lancent **2 bombes atomiques** sur le Japon",
+    "Le Japon capitule : fin officielle de la guerre le **2 septembre 1945**",
+    "Bilan : **60 millions de morts**, des villes détruites, des familles brisées"
+   ],
+   "source": "user"
+  },
+  {
+   "kind": "cards",
+   "title": "Ce qu’il faut retenir",
+   "takeaway": "La Seconde Guerre mondiale a été la guerre la plus meurtrière de l’histoire, mais elle a aussi permis de créer l’ONU pour éviter de nouvelles guerres.",
+   "items": [
+    {
+     "heading": "Une guerre mondiale",
+     "text": "Presque tous les pays ont été touchés, sur tous les continents."
+    },
+    {
+     "heading": "Des crimes contre l’humanité",
+     "text": "La Shoah et les camps de concentration ne doivent jamais être oubliés."
+    },
+    {
+     "heading": "Un monde qui change",
+     "text": "Naissance de l’ONU, début de la guerre froide entre les USA et l’URSS."
+    }
+   ],
+   "source": "user"
+  },
+  {
+   "kind": "closing",
+   "title": "Merci !",
+   "subtitle": "Des questions ?",
+   "notes": "Encourager l’ado à poser des questions ou à approfondir un point qui l’intéresse (ex : la Résistance, la vie quotidienne, etc.)."
+  }
+ ],
+ "audience": "jeune adolescent (12-15 ans)",
+ "main_message": "La Seconde Guerre mondiale (1939-1945) a opposé les dictatures de l’Axe aux Alliés, causant des millions de morts et changeant à jamais le monde, mais elle nous rappelle aussi l’importance de la paix et du respect."
+}

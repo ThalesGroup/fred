@@ -26,6 +26,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { packDesignTokens } from "../scripts/pack-design-tokens.mjs";
+import { packUi } from "../scripts/pack-ui.mjs";
+import { loadReleaseContract } from "../scripts/release-contract.mjs";
+import { sha512Integrity } from "../scripts/release-evidence.mjs";
 import {
   assertReactConsumerFixture,
   assertNoLinks,
@@ -107,6 +111,28 @@ test("an incomplete cache fails actionably without a network fallback", async (c
   await mkdir(path.join(temporary, "_cacache"));
   await assert.rejects(
     stageIsolatedReactConsumer({ cachePath: temporary }),
-    /lockfile-pinned cache may be incomplete.*consumer:provision/s,
+    /lockfile-pinned cache may be incomplete.*consumer-provision-react/s,
   );
+});
+
+test("published token validation consumes the already verified archive offline", async () => {
+  const contract = await loadReleaseContract();
+  const [{ archivePath: tokenArchivePath }, { archivePath: uiArchivePath }] =
+    await Promise.all([packDesignTokens({ contract }), packUi({ contract })]);
+  const result = await stageIsolatedReactConsumer({
+    contract,
+    publishedToken: {
+      coordinate: `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
+      integrity: await sha512Integrity(tokenArchivePath),
+      registry: contract.registry,
+      tarball: `${contract.registry}@fred-oss/design-tokens/-/design-tokens-${contract.packages.designTokens.version}.tgz`,
+    },
+    publishedTokenArchivePath: tokenArchivePath,
+    uiArchivePath,
+  });
+  assert.equal(
+    result.evidence.compatibleToken.coordinate,
+    `${contract.packages.designTokens.name}@${contract.packages.designTokens.version}`,
+  );
+  assert.equal(result.evidence.compatibleToken.registry, contract.registry);
 });

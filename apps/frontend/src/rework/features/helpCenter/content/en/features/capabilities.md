@@ -114,6 +114,101 @@ copied to another team takes its own copy of the template.
 **An example** — a five-slide monthly review template, which the agent fills
 each month from the period's documents.
 
+### Generate a presentation
+
+**What it does** — the agent builds a PowerPoint presentation from your
+request, on your company template or, without one, on the platform template. It
+picks, for each slide, the template slide that fits the content best and fills
+it. When the template has a slide that can hold a chart, numbers become
+editable charts in the template's colours, from bars and pies to radar,
+scatter and bubble charts; a pie shows percentages unless you give a unit
+(M€, people…), then it shows the values. The deck appears in a preview beside the conversation and downloads as
+`.pptx`. The info button next to the download shows **What was built**: each
+slide, its kind, and what was shortened, left out or continued on another
+slide.
+
+**How to set it up** — upload a `.pptx` template on the agent and save. The
+template is then read in the background: meanwhile the agent shows
+**Preparing — reading the PowerPoint template** and is not available; it will
+be available again on its own in a few minutes, when the reading is done, and
+you can close the window in the meantime. Then
+**Review slides** shows each slide found, with its name and kind: rename a
+slide, change its kind, or set it aside. Nothing is mandatory.
+The template and **Validate the plan before building** are shown first;
+**Review slides**, the vision model and variety sit under **Advanced
+settings**. **Review slides** also appears under the template when the reading
+set slides aside.
+To prepare a template the agent understands well, see
+[Prepare your PowerPoint template](/help/en/guides/prepare-powerpoint-template).
+
+**Without a template on the agent** — the agent uses the one the
+administrator chose for the whole platform (the form shows **Template set by
+the administrator** and the file name, see
+[Administration](/help/en/features/administration#the-platform-presentation-template));
+without one, the built-in Fred template. Uploading a template on the agent
+always takes over.
+
+**Use a vision model** — when a model that can read images is available, it
+looks at each template slide to name it and understand what it is for. You
+can choose which model does this, or keep the agent's own. Without such a
+model, the switch is locked and slides are named by rules, which works but
+names them less precisely.
+
+**Enforce variety** — limits how many times the same slide comes back in a
+presentation. **By slide name** (the default): each template slide is used at
+most the chosen number of times. **By identified slide type**: each type
+(bullet lists, for instance) comes back at most that many times, even on
+different slides. With **1**, every slide is different; with **2** (the
+default), a slide may come back once. The limit counts within each section: a
+section (a country, for instance) may reuse the same slides as another.
+Identical slides in a row are only made when you ask for them.
+When the template holds too few slides
+for the presentation asked, the agent does its best. On the first presentation
+of a conversation, the agent is asked to revise the slides that repeat too
+much. Switch off: no limit. A change applies from the next presentation,
+without reading the template again.
+
+**The thread of the presentation** — for each slide, the agent first decides
+what the audience should take away, in one sentence, then chooses what to show
+to prove it. That sentence opens the speaker notes, and the title sums it up
+in a few words. It is shown on the slides only when you ask for the key
+messages on the slides, and only on slides whose template has a place for
+it. When content comes from your
+documents or from what you wrote in the conversation, the notes say where it
+comes from; general knowledge has no source. The agent only
+makes figures up when you ask for sample or made-up data; the chart then says
+so ("illustrative"). The agent does not check the figures: check them before
+presenting.
+
+**Validate the plan before building** — off by default. When on, the agent
+first shows its plan for the first presentation of a conversation: the
+audience, the main message, one line per slide and what the build would
+change (a slide built as another kind, for instance). It waits for your answer:
+approve it or say what to change, and it builds. To skip this step once, ask it
+to build directly, without a plan. Once you approve the plan, the slides stay
+as agreed: the agent is not asked to revise the ones that repeat. Changes to a
+presentation already delivered never wait.
+
+**Changing a delivered presentation** — ask in the same conversation: the
+agent changes the last presentation it delivered there, never an older one.
+Name the slides by their number in the file: change the text of slide 4, add
+a slide after slide 2, move slide 6 after slide 3, remove slide 5. To give a
+slide the look of another, ask for "the same layout as slide 3". The other
+slides stay as they were.
+
+**Pictures** — the agent takes pictures from a folder of your team's
+resources: name the folder in your request ("the pictures in Images/Sites").
+Only template slides with a picture area show one. A file that is not a usable
+picture is left out, and **What was built** says so.
+
+**Its limits** — the agent only uses slides the template holds: it does not
+draw new ones. When the content does not fit any slide (too many items, for
+instance), it splits or shortens it. If reading the template fails, the agent
+stays unavailable: the form shows why; save the agent to read it again.
+
+**An example** — "Prepare a ten-slide presentation of our quarterly results for
+the executive committee."
+
 ### Generate a web page (HTML/CSS)
 
 **What it does** — the agent produces a web page or component, shown in a

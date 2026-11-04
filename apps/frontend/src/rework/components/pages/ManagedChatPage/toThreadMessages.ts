@@ -105,24 +105,7 @@ function groupByExchange(messages: ChatMessage[]): { order: string[]; groups: Ma
   return { order, groups };
 }
 
-/**
- * Reconstructs the live `pendingHitl` state from persisted history, for the
- * "reload while a HITL gate is still open" case (#2286-ish — reported live:
- * refreshing the page while a confirmation was pending made the prompt vanish
- * and left the gated tool stuck showing "running").
- *
- * Why this is possible at all: the SSE stream that reaches an `awaiting_human`
- * pause ENDS there (the resume is a separate stream/call), so history — written
- * fire-and-forget right after the stream closes — already contains the
- * `hitl_request` row for a still-open gate by the time any refresh could race
- * it. The gap was purely that nothing reconstructed the interactive prompt
- * from it, AND (fixed alongside this) `HitlRequestPart` didn't persist the
- * resume identity (`interrupt_id`/`pending_calls`) needed to
- * actually answer it — only enough to display it read-only.
- *
- * Returns `null` when the last exchange's `hitl_request` (if any) already has
- * a matching `hitl_response` — i.e. nothing is actually still pending.
- */
+// Only confirmed pending questions (or legacy unannotated history) offer actions.
 export function reconstructPendingHitls(messages: ChatMessage[]): RuntimeAwaitingHumanEvent[] {
   const { order, groups } = groupByExchange(messages);
   const lastEid = order[order.length - 1];
@@ -132,7 +115,7 @@ export function reconstructPendingHitls(messages: ChatMessage[]): RuntimeAwaitin
     .filter(({ response }) => response === undefined)
     .flatMap(({ request }) => {
       const part = hitlRequestPart(request);
-      if (!part) return [];
+      if (!part || (part.resume_status && part.resume_status !== "pending")) return [];
       return [
         {
           type: "awaiting_human" as const,
@@ -267,7 +250,26 @@ export function conversationTokenTotals(messages: ThreadMessage[]): TokenUsage {
 }
 
 export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
-  const { order, groups } = groupByExchange(messages);
+  const exchanges = groupByExchange(messages);
+  // A steered user message starts a new display segment inside its persisted exchange.
+  const order: string[] = [];
+  const groups = new Map<string, ChatMessage[]>();
+  const segmentOrigins = new Map<string, string>();
+  for (const eid of exchanges.order) {
+    let segmentId = eid;
+    let hasUser = false;
+    for (const message of exchanges.groups.get(eid)!) {
+      const isUserMessage = message.role === "user" && (message.channel as string) !== "hitl_response";
+      if (isUserMessage && hasUser) segmentId = `${eid}:steer:${message.rank}`;
+      if (isUserMessage) hasUser = true;
+      if (!groups.has(segmentId)) {
+        order.push(segmentId);
+        groups.set(segmentId, []);
+        segmentOrigins.set(segmentId, eid);
+      }
+      groups.get(segmentId)!.push(message);
+    }
+  }
 
   const result: ThreadMessage[] = [];
   const lastEid = order[order.length - 1] as string | undefined;
@@ -282,7 +284,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
   // of 0, or pass null to fall back to the billed total.
   let previousContextTokens: number | null = 0;
 
-  for (const eid of order) {
+  for (const [segmentIndex, eid] of order.entries()) {
     const msgs = groups.get(eid)!;
     const isLast = eid === lastEid;
 
@@ -318,10 +320,14 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         command: userMsg.metadata?.command ?? null,
         skillName: skillNames[0] ?? null,
         skillNames,
+        builtinSkillNames: msgs.flatMap((message) => {
+          const load = skillLoadOf(message);
+          return load?.origin === "user" && !load.child && load.builtin ? [load.name] : [];
+        }),
       });
     }
 
-    const traceMessages = msgs.filter((m) => isTraceChannel(m.channel) && !isPauseMetadata(m));
+    let traceMessages = msgs.filter((m) => isTraceChannel(m.channel) && !isPauseMetadata(m));
     const resolvedCallIds = new Set(
       traceMessages.flatMap((m) => m.parts.flatMap((p) => (p.type === "tool_result" ? [p.call_id] : []))),
     );
@@ -330,6 +336,25 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
     for (const { request: hitlReqMsg, response: hitlRespMsg } of pairHitlHistory(msgs)) {
       const requestPart = hitlRequestPart(hitlReqMsg);
       const pairId = requestPart?.occurrence_id ?? String(hitlReqMsg.rank);
+      const resumeStatus = !hitlRespMsg ? requestPart?.resume_status : undefined;
+      const inactive = resumeStatus === "unavailable" || resumeStatus === "unknown";
+      if (inactive) {
+        const callIds = new Set((requestPart?.pending_calls ?? []).map((call) => call.tool_call_id));
+        if (requestPart?.stage === "agent_question" && requestPart.occurrence_id) {
+          callIds.add(requestPart.occurrence_id);
+        }
+        traceMessages = traceMessages.map((message) =>
+          message.channel === "tool_call" && callIds.has(toolCallId(message))
+            ? {
+                ...message,
+                metadata: {
+                  ...message.metadata,
+                  extras: { ...message.metadata?.extras, hitl_resume_status: resumeStatus },
+                },
+              }
+            : message,
+        );
+      }
       if (
         requestPart?.stage === "agent_question" &&
         hitlRespMsg &&
@@ -344,7 +369,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       }
       // An unanswered trailing request is live state reconstructed below the
       // thread, not a second read-only copy of the same prompt.
-      if (!(isLast && !hitlRespMsg) && !(requestPart?.stage === "agent_question" && hitlRespMsg)) {
+      if (!(isLast && !hitlRespMsg && !inactive) && !(requestPart?.stage === "agent_question" && hitlRespMsg)) {
         result.push({
           id: `${eid}:hitl_req:${pairId}`,
           role: "hitl_request",
@@ -355,6 +380,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
           uiParts: [],
           hitlChoices: requestPart?.choices ?? [],
           hitlTitle: requestPart?.title,
+          hitlResumeStatus: inactive ? resumeStatus : undefined,
         });
       }
 
@@ -437,7 +463,10 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         if (meta?.sources?.length) sources.push(...meta.sources);
       }
       const marginal = marginalTokenUsage(contextTokens, tokenUsage, previousContextTokens);
-      previousContextTokens = contextTokens;
+      const nextSegmentId = order[segmentIndex + 1];
+      if (contextTokens !== null || !nextSegmentId || segmentOrigins.get(nextSegmentId) !== segmentOrigins.get(eid)) {
+        previousContextTokens = contextTokens;
+      }
       // Raw retention (#1977): every ui_part — link, geo, capability kinds,
       // and kinds this build does not know — survives into the view model.
       const uiParts: RawUiPart[] = metadataMessages.flatMap((m) => uiPartsOf(m));

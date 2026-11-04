@@ -409,6 +409,7 @@ describe("categorized tool labels", () => {
     ["list_document_tree", "Consultation de l'arborescence des documents"],
     ["write_document", "Rédaction d'un document Word"],
     ["fill_ppt_template", "Création d'une présentation PowerPoint"],
+    ["build_presentation", "Création d'une présentation PowerPoint"],
     ["wiki_read_page", "Lecture d'une page du wiki"],
     ["mcp__knowledge_flow__os_health", "État de santé d'OpenSearch"],
     ["mcp__knowledge_flow__prometheus_query_range_2", "Exécution d'une requête Prometheus sur une période"],
@@ -423,6 +424,7 @@ describe("categorized tool labels", () => {
     ["prometheus_targets", "mcp.prometheusOps.prometheus_targets"],
     ["list_document_tree", "capabilities.documentAccess.list_document_tree"],
     ["write_document", "capabilities.writableDocument.write_document"],
+    ["build_presentation", "capabilities.pptFiller.build_presentation"],
     ["ls", "deep.ls"],
   ])("uses the source category for %s", (name, path) => {
     const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };
@@ -1529,6 +1531,26 @@ it("redacts historical tag ids and document ids without losing bracketed names",
 });
 
 describe("skill load history", () => {
+  it.each([
+    ["fr", fr, "Skill partiellement chargé"],
+    ["en", en, "Skill partially loaded"],
+  ] as const)("discloses partial persisted reads in %s", async (language, resources, label) => {
+    const locale = i18next.createInstance();
+    await locale.init({ lng: language, resources: { [language]: { translation: resources } } });
+    const step = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: {
+        extras: {
+          skill_load: { name: "graph", origin: "agent", load_id: "read", child: true, partial: true },
+        },
+      },
+    });
+    const [entry] = groupTraceEntries([JSON.parse(JSON.stringify(step))]);
+    expect(skillLoadOf(step)).toMatchObject({ partial: true, child: true });
+    expect(entryLabel(entry, (key) => locale.t(key))).toBe(label);
+  });
+
   it.each(["user", "agent"] as const)("retains compact %s attribution and hides successful body traces", (origin) => {
     const step = msg({
       role: "system",

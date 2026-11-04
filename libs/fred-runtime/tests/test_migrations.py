@@ -41,6 +41,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
         "b2f3a4e5c6d7_add_exchange_id.py",  # pragma: allowlist secret
         "c3d4b5a6f7e8_add_team_and_instance.py",  # pragma: allowlist secret
         "e5f6a7b8c9d0_web_research_activity.py",  # pragma: allowlist secret
+        "f6a7b8c9d0e1_shared_turn_steering.py",  # pragma: allowlist secret
         "d4e5c6b7a8f9_drop_demo_echo_tables.py",  # pragma: allowlist secret
     }
 
@@ -49,6 +50,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+        ("f6a7b8c9d0e1", "e5f6a7b8c9d0"),  # pragma: allowlist secret
         ("e5f6a7b8c9d0", "d4e5c6b7a8f9"),  # pragma: allowlist secret
         ("d4e5c6b7a8f9", "c3d4b5a6f7e8"),  # pragma: allowlist secret
         ("c3d4b5a6f7e8", "b2f3a4e5c6d7"),  # pragma: allowlist secret
@@ -71,6 +73,7 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         assert connection.execute(
             "PRAGMA table_info(runtime_web_research_activity)"
         ).fetchall()
+        assert connection.execute("PRAGMA table_info(runtime_turn_steering)").fetchall()
         revision = connection.execute(
             "SELECT version_num FROM alembic_version_runtime"
         ).fetchone()
@@ -88,7 +91,7 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "team_id",
         "agent_instance_id",
     }
-    assert revision == ("e5f6a7b8c9d0",)  # pragma: allowlist secret
+    assert revision == ("f6a7b8c9d0e1",)  # pragma: allowlist secret
 
 
 def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> None:

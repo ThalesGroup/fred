@@ -431,9 +431,9 @@ class PodPlatformConfig(BaseModel):
 
 
 class PodSkillsConfig(BaseModel):
-    """Opt-in startup snapshot: package or a directory relative to configuration.yaml."""
+    """Packaged skills by default; custom paths resolve beside configuration.yaml."""
 
-    directory: str = Field(min_length=1)
+    directory: str = Field(default="package", min_length=1)
 
 
 class AgentPodConfig(BaseModel):
@@ -473,7 +473,7 @@ class AgentPodConfig(BaseModel):
     web_research: WebResearchDeploymentConfig = Field(
         default_factory=WebResearchDeploymentConfig
     )
-    skills: PodSkillsConfig | None = None
+    skills: PodSkillsConfig | None = Field(default_factory=PodSkillsConfig)
 
     def set_platform_prompt_file(self, file: Any) -> None:
         """

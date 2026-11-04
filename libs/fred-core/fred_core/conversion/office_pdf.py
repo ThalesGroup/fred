@@ -39,7 +39,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
+import signal
 import subprocess  # nosec: controlled command arguments, shell=False
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -55,6 +57,11 @@ logger = logging.getLogger(__name__)
 MAX_CONCURRENT_CONVERSIONS = 4
 _conversion_executor = ThreadPoolExecutor(
     max_workers=MAX_CONCURRENT_CONVERSIONS, thread_name_prefix="office2pdf"
+)
+# Work nobody waits on (a template analysis) runs on its own single worker, so
+# a burst of it never takes the slots of the conversions a user waits for.
+_background_executor = ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="office2pdf-background"
 )
 
 # LibreOffice can occasionally hang (font server, first-run profile init). A bounded
@@ -81,6 +88,34 @@ _PDF_EXPORT_FILTERS = {
 def _export_filter_for(suffix: str) -> str:
     app_filter = _PDF_EXPORT_FILTERS.get(suffix.lower())
     return f"pdf:{app_filter}:{_PDF_EXPORT_OPTIONS}" if app_filter else "pdf"
+
+
+def _run_soffice(command: list[str], *, timeout: float) -> None:
+    """``subprocess.run(check=True)`` in a process group of its own: on a timeout
+    the whole group is killed (soffice.bin and its helpers), then reaped."""
+    # Its own group but the caller's session: Knowledge Flow's extraction child
+    # sweeps its session on cancellation, and a new session would escape it.
+    process = subprocess.Popen(  # nosec: controlled command arguments, shell=False
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        process_group=0,
+    )
+    try:
+        _, stderr = process.communicate(timeout=timeout)
+    except BaseException:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # the whole group already exited, which is the outcome we wanted
+        # Not communicate(): a helper that left the group could hold the pipes open.
+        process.wait()
+        for pipe in (process.stdout, process.stderr):
+            if pipe is not None:
+                pipe.close()
+        raise
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode, command, stderr=stderr)
 
 
 def convert_office_file_to_pdf(
@@ -112,7 +147,7 @@ def convert_office_file_to_pdf(
         with tempfile.TemporaryDirectory(
             prefix="soffice-profile-", ignore_cleanup_errors=True
         ) as profile_dir:
-            subprocess.run(  # nosec: controlled command arguments, shell=False
+            _run_soffice(
                 [
                     soffice_path,
                     f"-env:UserInstallation={Path(profile_dir).as_uri()}",
@@ -125,9 +160,6 @@ def convert_office_file_to_pdf(
                     str(source_path.parent),
                     str(source_path),
                 ],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
                 timeout=timeout_seconds,
             )
     except subprocess.TimeoutExpired:
@@ -156,6 +188,7 @@ async def convert_office_bytes_to_pdf(
     *,
     suffix: str,
     timeout_seconds: float = DEFAULT_OFFICE_PDF_TIMEOUT_SECONDS,
+    background: bool = False,
 ) -> bytes | None:
     """Convert in-memory office-document bytes to PDF bytes, off the event loop and bounded.
 
@@ -163,7 +196,7 @@ async def convert_office_bytes_to_pdf(
     LibreOffice selects its import filter from it, so passing the wrong one fails the
     conversion. Returns the PDF bytes, or ``None`` when the conversion is unavailable or
     fails. Never raises for a conversion problem, so a caller can treat the result as
-    best-effort.
+    best-effort. ``background``: no user waits on it; it queues on its own worker.
 
     Example:
     ```python
@@ -186,7 +219,8 @@ async def convert_office_bytes_to_pdf(
 
     try:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(_conversion_executor, _run)
+        executor = _background_executor if background else _conversion_executor
+        return await loop.run_in_executor(executor, _run)
     except (
         Exception
     ):  # pragma: no cover - defensive: never let conversion break the caller

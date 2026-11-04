@@ -660,6 +660,16 @@ const injectedRtkApi = api.injectEndpoints({
           body: queryArg.bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch,
         }),
       }),
+    postTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPost:
+      build.mutation<
+        PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiResponse,
+        PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/readiness-check`,
+          method: "POST",
+        }),
+      }),
     getAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGet: build.query<
       GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse,
       GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg
@@ -1271,6 +1281,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
     }),
+    getPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGet: build.query<
+      GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiResponse,
+      GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/routing-policy/available-models` }),
+    }),
     getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: build.query<
       GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse,
       GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg
@@ -1498,6 +1514,19 @@ const injectedRtkApi = api.injectEndpoints({
       DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant`, method: "DELETE" }),
+    }),
+    getPlatformSkills: build.query<GetPlatformSkillsApiResponse, GetPlatformSkillsApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills` }),
+    }),
+    getPlatformSkillPolicy: build.query<GetPlatformSkillPolicyApiResponse, GetPlatformSkillPolicyApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills/policy` }),
+    }),
+    setPlatformSkillEnabled: build.mutation<SetPlatformSkillEnabledApiResponse, SetPlatformSkillEnabledApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/skills/${queryArg.skillName}`,
+        method: "PUT",
+        body: queryArg.setPlatformSkillEnabledRequest,
+      }),
     }),
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: build.query<
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse,
@@ -2688,6 +2717,13 @@ export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstan
     agentInstanceId: string;
     bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch;
   };
+export type PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary;
+export type PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiArg =
+  {
+    teamId: string;
+    agentInstanceId: string;
+  };
 export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse =
   /** status 200 Successful Response */ AgentCopyTargetsResponse;
 export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg = {
@@ -3083,6 +3119,9 @@ export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvail
 export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
   teamId: string;
 };
+export type GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiResponse =
+  /** status 200 Successful Response */ AvailableModelProfileList;
+export type GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiArg = void;
 export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse =
   /** status 200 Successful Response */ EffectiveChatModel;
 export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg = {
@@ -3226,6 +3265,15 @@ export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssis
 export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse =
   /** status 200 Successful Response */ CreationAssistantSettings;
 export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg = void;
+export type GetPlatformSkillsApiResponse = /** status 200 Successful Response */ PlatformSkillInventory;
+export type GetPlatformSkillsApiArg = void;
+export type GetPlatformSkillPolicyApiResponse = /** status 200 Successful Response */ PlatformSkillPolicy;
+export type GetPlatformSkillPolicyApiArg = void;
+export type SetPlatformSkillEnabledApiResponse = /** status 200 Successful Response */ PlatformSkillEnabled;
+export type SetPlatformSkillEnabledApiArg = {
+  skillName: string;
+  setPlatformSkillEnabledRequest: SetPlatformSkillEnabledRequest;
+};
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse =
   /** status 200 Successful Response */ PlatformUiSettings;
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg = void;
@@ -4458,6 +4506,7 @@ export type CapabilityCatalogEntry = {
   model_chat_profile_ids?: string[];
   model_platform_binding?: ModelBinding | null;
   model_thinking_profile_ids?: string[];
+  model_vision_profile_ids?: string[];
   model_reasoning_efforts?: {
     [key: string]: ("low" | "medium" | "high")[];
   };
@@ -4491,7 +4540,11 @@ export type AgentTemplateSummary = {
     Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
   default_capability_ids?: string[];
 };
-export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
+export type SuspensionReason =
+  | "capability_unavailable"
+  | "capability_access_revoked"
+  | "capability_config_invalid"
+  | "capability_pending";
 export type AgentMarketplaceState = {
   /** `removed` after an automatic or platform admin removal (shown until hidden); `dismissed` after a removal by the team or Hide. */
   state: "published" | "removed" | "dismissed";
@@ -4521,8 +4574,10 @@ export type ManagedAgentInstanceSummary = {
   /** Chat profile this agent's new conversations start on. Null follows the team default. */
   recommended_chat_profile_id?: string | null;
   status: "enabled" | "disabled";
-  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
+  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid / capability_pending (a capability is still preparing its saved configuration, or failed to). */
   suspension_reason?: SuspensionReason | null;
+  /** Plain-language failure message carried with `suspension_reason=capability_pending` when a capability reported that preparing its configuration failed; null while it is still pending and for every other reason. */
+  suspension_detail?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -4906,6 +4961,7 @@ export type ManagedAgentRuntimeBinding = {
     };
   };
   reasoning_enabled_model_ids?: string[];
+  disabled_platform_skills?: string[];
   team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
   pod_chat_default_profile_id?: string | null;
@@ -4921,6 +4977,7 @@ export type ManagedAgentRuntimeBinding = {
     [key: string]: string;
   };
   platform_prompt?: string | null;
+  title_model_profile_id?: string | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -5015,11 +5072,15 @@ export type SkillSummary = {
   name: string;
   description: string;
   argument_hint?: string | null;
+  builtin?: boolean;
+  user_invocable?: boolean;
+  disable_model_invocation?: boolean;
 };
 export type SkillCatalog = {
   supported?: boolean;
   revision?: string;
   skills?: SkillSummary[];
+  policy_supported?: boolean;
 };
 export type SkillDetail = {
   skill: SkillSummary;
@@ -5146,6 +5207,8 @@ export type CapabilityEnablementItem = {
   model_context_window_tokens?: number | null;
   model_max_input_tokens?: number | null;
   model_max_output_tokens?: number | null;
+  /** Ingress-relative base URL of the capability's own routes on its pod, for its platform settings panel; null when it has none. */
+  route_base_url?: string | null;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
@@ -5371,6 +5434,8 @@ export type AvailableModelProfile = {
   display_name?: string | null;
   /** Whether a platform admin enabled reasoning for this model: only then can the team set a reasoning default for it. */
   reasoning_available?: boolean;
+  /** Whether this profile declares `supports_vision` in the pod model catalog, so a capability form can offer image reading. */
+  supports_vision?: boolean;
 };
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
@@ -5401,6 +5466,8 @@ export type EffectiveChatModel = {
     
     Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
   reasoning_enabled?: boolean;
+  /** Whether the resolved profile declares `supports_vision`. Always False for a platform binding, which carries no such declaration: image reading then fails closed. */
+  supports_vision?: boolean;
   /** Models a member may pick for this agent: chat models served by the instance's pod, `can_use` for the team and not team-disabled. Empty when the choice is locked or the pod is unreachable. */
   selectable_models?: SelectableChatModel[];
   /** True when a platform binding or a pod per-agent override fixes the model, so no choice is offered. */
@@ -5573,6 +5640,8 @@ export type CreationAssistantSettings = {
   missing_language_placeholder?: boolean;
   /** Chat profile the creation assistant uses; None = the pod default. */
   model_profile_id?: string | null;
+  /** Chat profile of generated conversation titles; None = the platform default. */
+  title_model_profile_id?: string | null;
   /** Reasoning of the assistant's own call. Any non-'off' value means on for an on/off profile; a level the profile does not offer is clamped by the pod to the nearest one. */
   reasoning_effort?: "off" | "low" | "medium" | "high";
   /** The pods' default chat profile, when every reachable pod names the same one; tells the UI which reasoning control the platform default offers. */
@@ -5587,8 +5656,31 @@ export type SetCreationAssistantSettingsRequest = {
   text?: string | null;
   /** One of `model_options`; None uses the pod default. */
   model_profile_id?: string | null;
+  /** One of `model_options`; None follows the platform default. */
+  title_model_profile_id?: string | null;
   /** Reasoning of the assistant's call; clamped to the model by the pod. */
   reasoning_effort?: "off" | "low" | "medium" | "high";
+};
+export type PlatformSkillEntry = {
+  skill: SkillSummary;
+  enabled?: boolean;
+  runtime_ids?: string[];
+};
+export type PlatformSkillInventory = {
+  skills?: PlatformSkillEntry[];
+  disabled_skill_names?: string[];
+  unavailable_runtime_ids?: string[];
+  unsupported_runtime_ids?: string[];
+};
+export type PlatformSkillPolicy = {
+  disabled_skill_names?: string[];
+};
+export type PlatformSkillEnabled = {
+  name: string;
+  enabled: boolean;
+};
+export type SetPlatformSkillEnabledRequest = {
+  enabled: boolean;
 };
 export type PlatformUiSettings = {
   /** Theme new users get, or null to use the frontend's own default. */
@@ -6320,6 +6412,7 @@ export const {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
   usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
+  usePostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostMutation,
   useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
   useLazyGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
   usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
@@ -6416,6 +6509,8 @@ export const {
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useGetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetQuery,
+  useLazyGetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetQuery,
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useLazyGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery,
@@ -6455,6 +6550,11 @@ export const {
   useLazyGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
   usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation,
   useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation,
+  useGetPlatformSkillsQuery,
+  useLazyGetPlatformSkillsQuery,
+  useGetPlatformSkillPolicyQuery,
+  useLazyGetPlatformSkillPolicyQuery,
+  useSetPlatformSkillEnabledMutation,
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
