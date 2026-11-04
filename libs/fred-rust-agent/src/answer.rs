@@ -469,6 +469,7 @@ mod tests {
             assert_eq!(calls[0].1["stream"], true);
             assert_eq!(calls[0].1["temperature"], 0.2);
             assert_eq!(calls[0].1["top_p"], 0.8);
+            assert!(calls[0].1.get("parallel_tool_calls").is_none());
         }
         let failing = Provider::start(Duration::ZERO, 401).await;
         let events: Vec<_> = without_memory(failing.turn(), "question".into(), no_search(), |_| {

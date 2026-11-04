@@ -219,9 +219,12 @@ impl InferenceTurn {
         F: Future<Output = Result<Vec<SearchHit>, InferenceError>> + Send + 'static,
     {
         let _span = self.span.enter();
-        let mut agent = self
-            .agent(self.generation().parallel_tool_calls(false))
-            .add_hook(NonemptyAnswer);
+        let generation = if search.is_some() {
+            self.generation().parallel_tool_calls(false)
+        } else {
+            self.generation()
+        };
+        let mut agent = self.agent(generation).add_hook(NonemptyAnswer);
         if let Some((store, log)) = memory {
             agent = agent.memory(store).conversation(log);
         }
