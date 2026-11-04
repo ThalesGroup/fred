@@ -170,7 +170,7 @@ def test_export_docx(
     expected_author: str,
 ):
     client, fake, app = app_client
-    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+    app.dependency_overrides[authenticate_request] = lambda: KeycloakUser(
         uid="u-1",
         username=username,
         first_name=first_name,
