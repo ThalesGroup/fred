@@ -31,7 +31,7 @@ from fastapi.testclient import TestClient
 from fred_capability_writable_document import store as store_module
 from fred_capability_writable_document.router import build_router
 from fred_capability_writable_document.store import WritableDocumentRecord
-from fred_core import KeycloakUser
+from fred_core import AssertedUser, KeycloakUser
 from fred_core.security.oidc import authenticate_request
 from port_fakes import FakeWritableDocumentStore
 
@@ -191,6 +191,20 @@ def test_export_docx(
     doc = Document(io.BytesIO(resp.content))
     assert doc.core_properties.author == expected_author
     assert doc.core_properties.last_modified_by == expected_author
+
+
+def test_export_docx_uses_asserted_user_id_without_profile(app_client):
+    client, fake, app = app_client
+    app.dependency_overrides[authenticate_request] = lambda: AssertedUser(
+        uid="u-1", client_id="worker", run_id="run-1", agent_id="agent-1"
+    )
+    _seed(fake)
+
+    resp = client.get(f"{_PREFIX}/sessions/s-1/documents/doc-1/export", params={"format": "docx"})
+
+    assert resp.status_code == 200
+    doc = Document(io.BytesIO(resp.content))
+    assert doc.core_properties.author == "u-1"
 
 
 def test_export_md_passthrough(app_client):
