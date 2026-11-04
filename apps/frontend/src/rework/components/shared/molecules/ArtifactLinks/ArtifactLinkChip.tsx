@@ -24,8 +24,8 @@ interface ArtifactLinkChipProps {
 }
 
 /**
- * One downloadable artifact chip (LinkPart). The `/fs/download` route is
- * session-authenticated, so a click runs an authenticated fetch (live Bearer
+ * One downloadable artifact chip (LinkPart). Its backend-provided URL is
+ * authenticated, so a click runs an authenticated fetch (live Bearer
  * token) → blob → save rather than a plain anchor navigation, which would fail
  * without a token. Extracted from ArtifactLinks so the part-renderer registry
  * (#1977) can render one part per dispatch.

@@ -35,8 +35,7 @@ export const downloadFile = (blob: Blob, filename: string) => {
  * `downloadAuthed` (single file) and `downloadManyAsZip` (bulk: every file
  * needs its own blob before they can be zipped together).
  *
- * Workspace files are proxied through Knowledge Flow and the `/fs/download` route
- * requires authentication — a plain anchor navigation carries no token and fails.
+ * Artifact URLs are provided by their owning backend and require authentication — a plain anchor navigation carries no token and fails.
  */
 export const fetchAuthedBlob = async (url: string): Promise<Blob> => {
   const response = await fetch(url, {

@@ -166,9 +166,9 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    deleteSessionHistoryPodV1AgentsSessionsSessionIdDelete: build.mutation<
-      DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiResponse,
-      DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiArg
+    purgeSessionPodV1AgentsSessionsSessionIdDelete: build.mutation<
+      PurgeSessionPodV1AgentsSessionsSessionIdDeleteApiResponse,
+      PurgeSessionPodV1AgentsSessionsSessionIdDeleteApiArg
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}`, method: "DELETE" }),
     }),
@@ -177,6 +177,14 @@ const injectedRtkApi = api.injectEndpoints({
       DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem`, method: "DELETE" }),
+    }),
+    downloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGet: build.query<
+      DownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetApiResponse,
+      DownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem/exports/${queryArg.path}`,
+      }),
     }),
     getSessionMessagesPodV1AgentsSessionsSessionIdMessagesGet: build.query<
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse,
@@ -389,16 +397,21 @@ export type ListSessionsPodV1AgentsSessionsGetApiResponse = /** status 200 Succe
 export type ListSessionsPodV1AgentsSessionsGetApiArg = {
   userId?: string | null;
 };
-export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiResponse = /** status 200 Successful Response */ {
-  [key: string]: number;
-};
-export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiArg = {
+export type PurgeSessionPodV1AgentsSessionsSessionIdDeleteApiResponse =
+  /** status 200 Successful Response */ SessionPurgeResponse;
+export type PurgeSessionPodV1AgentsSessionsSessionIdDeleteApiArg = {
   sessionId: string;
 };
 export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiResponse =
   /** status 200 Successful Response */ ConversationFilesystemPurgeResponse;
 export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg = {
   sessionId: string;
+};
+export type DownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type DownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetApiArg = {
+  sessionId: string;
+  path: string;
 };
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse =
   /** status 200 Successful Response */ ChatMessage[];
@@ -1215,6 +1228,10 @@ export type PlatformPromptFileResponse = {
   platform_instructions: string;
   platform_prompt: string;
 };
+export type SessionPurgeResponse = {
+  purged: boolean;
+  sql_cascade: boolean;
+};
 export type ConversationFilesystemPurgeResponse = {
   purged: boolean;
 };
@@ -1492,8 +1509,10 @@ export const {
   useLazyGetPlatformPromptFilePodV1AgentsPlatformPromptGetQuery,
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
-  useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,
+  usePurgeSessionPodV1AgentsSessionsSessionIdDeleteMutation,
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
+  useDownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetQuery,
+  useLazyDownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetQuery,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,

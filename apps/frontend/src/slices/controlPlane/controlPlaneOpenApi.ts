@@ -172,6 +172,13 @@ const injectedRtkApi = api.injectEndpoints({
     work: build.query<WorkApiResponse, WorkApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/document-processing/${queryArg.id}/work` }),
     }),
+    writes: build.mutation<WritesApiResponse, WritesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/document-processing/${queryArg.id}/writes`,
+        method: "POST",
+        body: queryArg.writeReceipt,
+      }),
+    }),
     receipt: build.query<ReceiptApiResponse, ReceiptApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/document-uploads/${queryArg.id}` }),
     }),
@@ -855,6 +862,11 @@ export type VectorsApiArg = {
 export type WorkApiResponse = /** status 200 undefined */ Work;
 export type WorkApiArg = {
   id: string;
+};
+export type WritesApiResponse = unknown;
+export type WritesApiArg = {
+  id: string;
+  writeReceipt: WriteReceipt;
 };
 export type ReceiptApiResponse = /** status 200 undefined */ UploadReceipt;
 export type ReceiptApiArg = {
@@ -1722,6 +1734,13 @@ export type VectorPlan = {
   count: number;
   generation: string;
   work: Work;
+};
+export type WriteReceipt = {
+  completed: boolean;
+  generation: string;
+  work: Work;
+  workspace?: boolean;
+  write_id: string;
 };
 export type UploadStatus = "pending" | "stored" | "failed";
 export type UploadReceipt = {
@@ -2828,6 +2847,7 @@ export const {
   useVectorsMutation,
   useWorkQuery,
   useLazyWorkQuery,
+  useWritesMutation,
   useReceiptQuery,
   useLazyReceiptQuery,
   useAcknowledgeMutation,

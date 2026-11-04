@@ -15,7 +15,7 @@
 // usePptPreview
 // -------------
 // Fetches the preview PDF for the side panel. The `ppt_preview` part carries a
-// durable, bearer-protected KF `/fs/download` href (`pdf_download_url`); react-pdf
+// durable, bearer-protected runtime href (`pdf_download_url`); react-pdf
 // cannot attach an Authorization header itself, so this hook fetches the bytes WITH
 // the live bearer (same token source as `downloadAuthed`) and hands react-pdf a
 // blob object URL instead of the raw href.

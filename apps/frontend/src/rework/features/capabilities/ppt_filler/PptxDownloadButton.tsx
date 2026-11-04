@@ -16,7 +16,7 @@
 // in-chat preview card and the preview pane header so the two stay DRY.
 //
 // Why not a plain `<a href download>`: the deck lives behind the bearer-protected
-// Knowledge Flow `/fs/download` route. A bare anchor sends no Authorization header,
+// runtime export route. A bare anchor sends no Authorization header,
 // so the navigation 401s. `downloadAuthed` fetches the bytes WITH the live bearer,
 // then triggers a client-side blob save — the sanctioned pattern (ArtifactLinkChip).
 
@@ -31,7 +31,7 @@ export default function PptxDownloadButton({
   href,
   fileName,
 }: {
-  /** Bearer-protected KF href for the `.pptx` (the part's `pptx_download_url`). */
+  /** Bearer-protected runtime href for the `.pptx` (the part's `pptx_download_url`). */
   href: string;
   /** Suggested download file name (the part's `file_name`). */
   fileName?: string;
