@@ -159,6 +159,14 @@ This contribution consolidates the release inputs and corrects unpublished migra
 
 See the source note for applicability, validation and rollback.
 
+## Keep Trivy CVE reports when image SBOM generation takes longer
+
+Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v3.10.0/docs/swift/ops/migrations/3469-trivy-sbom-timeout.md)
+
+CI retains the vulnerability report before generating license and SBOM evidence; deployed Fred components are unchanged.
+
+See the source note for applicability, validation and rollback.
+
 ## Announce a finished chat answer on every page, including admin and settings
 
 Impact: **none** - [Source](https://github.com/ThalesGroup/fred/blob/code/v3.10.0/docs/swift/ops/migrations/answer-toast-on-every-page.md)
