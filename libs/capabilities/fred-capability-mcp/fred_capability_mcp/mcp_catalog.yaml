@@ -14,6 +14,18 @@ servers:
     auth_mode: "delegated"
     prompt_file: pkg://fred_capability_mcp/prompts/tabular.md
 
+  - id: "mcp-knowledge-flow-similarity"
+    name: "mcp.servers.similarity.name"
+    description: "mcp.servers.similarity.description"
+    prompt_group_title: "document comparison"
+    transport: "streamable_http"
+    service: knowledge_flow
+    path: mcp/similarity
+    sse_read_timeout: 2000
+    enabled: true
+    auth_mode: "delegated"
+    prompt_file: pkg://fred_capability_mcp/prompts/similarity.md
+
   - id: "mcp-knowledge-flow-opensearch-ops"
     name: "mcp.servers.search_opensearch.name"
     description: "mcp.servers.search_opensearch.description"

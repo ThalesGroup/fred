@@ -432,6 +432,23 @@ def create_app() -> FastAPI:
     else:
         logger.info("%s MCP Resources disabled via configuration.mcp.resources_enabled=false", LOG_PREFIX)
 
+    if configuration.mcp.similarity_enabled:
+        mount_fastapi_tools(
+            app,
+            path=f"{mcp_prefix}/mcp/similarity",
+            name="Knowledge Flow Similarity MCP",
+            description=(
+                "Compare text against named documents or library folders. "
+                "find_similar_passages returns the passages most similar to an anchor text, "
+                "ranked best-first, within the targets the caller can read. "
+                "Give at least one target (document_uids or document_library_tags_ids)."
+            ),
+            tags={"Document Similarity"},
+            timeout=configuration.mcp.similarity_timeout_seconds,
+        )
+    else:
+        logger.info("%s MCP Similarity disabled via configuration.mcp.similarity_enabled=false", LOG_PREFIX)
+
     return app
 
 

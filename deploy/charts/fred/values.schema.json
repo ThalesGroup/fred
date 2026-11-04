@@ -8615,6 +8615,19 @@
                       "title": "Text Enabled",
                       "type": "boolean"
                     },
+                    "similarity_enabled": {
+                      "default": true,
+                      "description": "Expose the Similarity MCP server (find_similar_passages within named documents or folders).",
+                      "title": "Similarity Enabled",
+                      "type": "boolean"
+                    },
+                    "similarity_timeout_seconds": {
+                      "default": 30.0,
+                      "description": "Time limit, in seconds, for one Similarity MCP tool call, reranking included. The agent runtime stops waiting after 30 seconds.",
+                      "exclusiveMinimum": 0,
+                      "title": "Similarity Timeout Seconds",
+                      "type": "number"
+                    },
                     "templates_enabled": {
                       "default": true,
                       "description": "Expose the Template MCP server for prompts/templates.",
@@ -13675,6 +13688,19 @@
                       "title": "Text Enabled",
                       "type": "boolean"
                     },
+                    "similarity_enabled": {
+                      "default": true,
+                      "description": "Expose the Similarity MCP server (find_similar_passages within named documents or folders).",
+                      "title": "Similarity Enabled",
+                      "type": "boolean"
+                    },
+                    "similarity_timeout_seconds": {
+                      "default": 30.0,
+                      "description": "Time limit, in seconds, for one Similarity MCP tool call, reranking included. The agent runtime stops waiting after 30 seconds.",
+                      "exclusiveMinimum": 0,
+                      "title": "Similarity Timeout Seconds",
+                      "type": "number"
+                    },
                     "templates_enabled": {
                       "default": true,
                       "description": "Expose the Template MCP server for prompts/templates.",
@@ -18539,6 +18565,19 @@
                       "title": "Text Enabled",
                       "type": "boolean"
                     },
+                    "similarity_enabled": {
+                      "default": true,
+                      "description": "Expose the Similarity MCP server (find_similar_passages within named documents or folders).",
+                      "title": "Similarity Enabled",
+                      "type": "boolean"
+                    },
+                    "similarity_timeout_seconds": {
+                      "default": 30.0,
+                      "description": "Time limit, in seconds, for one Similarity MCP tool call, reranking included. The agent runtime stops waiting after 30 seconds.",
+                      "exclusiveMinimum": 0,
+                      "title": "Similarity Timeout Seconds",
+                      "type": "number"
+                    },
                     "templates_enabled": {
                       "default": true,
                       "description": "Expose the Template MCP server for prompts/templates.",
@@ -23389,6 +23428,19 @@
                       "title": "Text Enabled",
                       "type": "boolean"
                     },
+                    "similarity_enabled": {
+                      "default": true,
+                      "description": "Expose the Similarity MCP server (find_similar_passages within named documents or folders).",
+                      "title": "Similarity Enabled",
+                      "type": "boolean"
+                    },
+                    "similarity_timeout_seconds": {
+                      "default": 30.0,
+                      "description": "Time limit, in seconds, for one Similarity MCP tool call, reranking included. The agent runtime stops waiting after 30 seconds.",
+                      "exclusiveMinimum": 0,
+                      "title": "Similarity Timeout Seconds",
+                      "type": "number"
+                    },
                     "templates_enabled": {
                       "default": true,
                       "description": "Expose the Template MCP server for prompts/templates.",
@@ -28238,6 +28290,19 @@
                       "description": "Expose the Text MCP server for semantic vector search.",
                       "title": "Text Enabled",
                       "type": "boolean"
+                    },
+                    "similarity_enabled": {
+                      "default": true,
+                      "description": "Expose the Similarity MCP server (find_similar_passages within named documents or folders).",
+                      "title": "Similarity Enabled",
+                      "type": "boolean"
+                    },
+                    "similarity_timeout_seconds": {
+                      "default": 30.0,
+                      "description": "Time limit, in seconds, for one Similarity MCP tool call, reranking included. The agent runtime stops waiting after 30 seconds.",
+                      "exclusiveMinimum": 0,
+                      "title": "Similarity Timeout Seconds",
+                      "type": "number"
                     },
                     "templates_enabled": {
                       "default": true,

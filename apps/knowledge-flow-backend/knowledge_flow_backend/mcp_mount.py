@@ -197,11 +197,11 @@ class _ToolErrorPolicy(Middleware):
             )
 
 
-def _mcp_http_client(app: FastAPI) -> httpx2.AsyncClient:
+def _mcp_http_client(app: FastAPI, timeout: float = 10.0) -> httpx2.AsyncClient:
     return httpx2.AsyncClient(
         transport=_DelegatedMCPTransport(app),
         base_url="http://fastapi",
-        timeout=10.0,
+        timeout=timeout,
         follow_redirects=False,
         event_hooks={"response": [_inner_response]},
     )
@@ -214,10 +214,14 @@ def mount_fastapi_tools(
     name: str,
     description: str,
     tags: set[str],
+    timeout: float = 10.0,
 ) -> FastMCP:
-    """Project selected routes using FastMCP's maintained FastAPI integration."""
+    """Project selected routes using FastMCP's maintained FastAPI integration.
 
-    client = _mcp_http_client(app)
+    `timeout` bounds each projected route call, in seconds.
+    """
+
+    client = _mcp_http_client(app, timeout)
     client.event_hooks["request"].append(_forward_verified_identity)
 
     @asynccontextmanager

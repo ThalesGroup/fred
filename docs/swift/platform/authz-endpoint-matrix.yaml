@@ -1402,6 +1402,11 @@ operations:
     required_permission: tag.update
   - service: knowledge-flow
     method: POST
+    path: /knowledge-flow/v1/documents/similar-passages
+    review_status: approved
+    required_permission: tag.read + document.read # On every named target; at least one target is required. Same check as /vector/similarity-search, published alone as the similarity MCP tool.
+  - service: knowledge-flow
+    method: POST
     path: /knowledge-flow/v1/documents/tree
     review_status: pending_review
     required_permission: pending_review

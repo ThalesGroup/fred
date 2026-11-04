@@ -30,7 +30,7 @@ async def test_enabled_mcp_catalog_exposes_selected_tools(app_context, monkeypat
     ApplicationContext.reset_instance()
     try:
         main_module.create_app()
-        assert len(captured) == 6
+        assert len(captured) == 7
         catalogs = [{tool.name: tool for tool in await mcp.list_tools()} for mcp in captured]
         assert set(catalogs[0]) == {"write_report"}
         assert "os_health" in catalogs[1]
@@ -43,6 +43,9 @@ async def test_enabled_mcp_catalog_exposes_selected_tools(app_context, monkeypat
         assert "similarity_search" in catalogs[3]
         assert catalogs[4] == {}
         assert {"list_tags", "get_resource_creation_schema"} <= set(catalogs[5])
+        assert set(catalogs[6]) == {"find_similar_passages"}
+        assert "find_similar_passages" not in catalogs[3]
+        assert catalogs[6]["find_similar_passages"].parameters["required"] == ["anchor"]
         assert set(catalogs[0]["write_report"].parameters["required"]) == {"title", "markdown", "tag_id"}
         assert catalogs[2]["read_query"].parameters["required"] == ["sql"]
         assert "max_rows" in catalogs[2]["read_query"].parameters["properties"]

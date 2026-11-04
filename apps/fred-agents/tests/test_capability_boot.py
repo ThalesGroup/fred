@@ -193,9 +193,13 @@ def test_default_mcp_catalog_loads_packaged_instructions(
     assert "## Tabular data access" in (
         by_id["mcp-knowledge-flow-mcp-tabular"].agent_instructions or ""
     )
+    assert "## Document comparison" in (
+        by_id["mcp-knowledge-flow-similarity"].agent_instructions or ""
+    )
 
     expected_paths = {
         "mcp-knowledge-flow-mcp-tabular": "mcp-tabular",
+        "mcp-knowledge-flow-similarity": "mcp/similarity",
         "mcp-knowledge-flow-opensearch-ops": "mcp-opensearch-ops",
         "mcp-knowledge-flow-prometheus-ops": "mcp-prometheus-ops",
     }

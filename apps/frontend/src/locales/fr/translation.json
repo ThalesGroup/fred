@@ -980,6 +980,10 @@
         "description": "Permet à votre agent de rechercher dans les indices opensearch",
         "name": "Rechercher dans opensearch"
       },
+      "similarity": {
+        "description": "Retrouver les passages les plus proches d'un texte donné dans des documents ou dossiers choisis.",
+        "name": "Comparer avec des documents"
+      },
       "tabular": {
         "description": "Capacité d'exploiter les données issues des fichiers tabulaires présents dans les ressources (CSV, Excel...).",
         "name": "Exploiter les fichiers tabulaires"

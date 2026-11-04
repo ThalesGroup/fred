@@ -118,31 +118,29 @@ class VectorSearchController:
             request: SimilaritySearchRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            # AUTHZ-05 §27: team-scoped via the request's own targets (at least
-            # one of document_uids/document_library_tags_ids is required by the
-            # request's own validator) instead of the org-level CAN_READ_CONTENT
-            # gate.
-            rebac = get_rebac_engine()
-            for tag_id in request.document_library_tags_ids:
-                await rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
-            for document_uid in request.document_uids:
-                await rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
-            try:
-                async with phase_timer(self.kpi, "vector_similarity_search"):
-                    return await self.service.similarity_search(
-                        anchor=request.anchor,
-                        user=user,
-                        document_uids=request.document_uids or None,
-                        document_library_tags_ids=request.document_library_tags_ids or None,
-                        top_k=request.top_k,
-                        rerank=request.rerank,
-                        min_score=request.min_score,
-                    )
-            except ValueError as e:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-            except Exception as e:
-                logger.exception("[VECTOR][SIMILARITY] Unexpected error during similarity search")
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+            return await self._similarity_search(request, user)
+
+        @router.post(
+            "/documents/similar-passages",
+            tags=["Document Similarity"],
+            summary="Find the passages most similar to an anchor text in named documents or folders",
+            description=(
+                "Returns up to top_k passages most similar to the anchor, ranked best-first, "
+                "restricted to the named target documents and/or library folders. "
+                "At least one target is required; the caller must be able to read every target. "
+                "A comparison primitive, not corpus-wide question answering. "
+                "Scores depend on the search policy and are not probabilities."
+            ),
+            response_model=list[VectorSearchHit],
+            operation_id="find_similar_passages",
+        )
+        async def find_similar_passages(
+            request: SimilaritySearchRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> List[VectorSearchHit]:
+            # Published alone on the similarity MCP mount; /vector/similarity-search
+            # stays for the SDK capability until it moves here.
+            return await self._similarity_search(request, user)
 
         @router.get(
             "/vector/visual-evidence-artifact",
@@ -260,3 +258,30 @@ class VectorSearchController:
                     top_r=request.top_r,
                 )
             return documents
+
+    async def _similarity_search(self, request: SimilaritySearchRequest, user: KeycloakUser) -> List[VectorSearchHit]:
+        # AUTHZ-05 §27: team-scoped via the request's own targets (at least
+        # one of document_uids/document_library_tags_ids is required by the
+        # request's own validator) instead of the org-level CAN_READ_CONTENT
+        # gate.
+        rebac = get_rebac_engine()
+        for tag_id in request.document_library_tags_ids:
+            await rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
+        for document_uid in request.document_uids:
+            await rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+        try:
+            async with phase_timer(self.kpi, "vector_similarity_search"):
+                return await self.service.similarity_search(
+                    anchor=request.anchor,
+                    user=user,
+                    document_uids=request.document_uids or None,
+                    document_library_tags_ids=request.document_library_tags_ids or None,
+                    top_k=request.top_k,
+                    rerank=request.rerank,
+                    min_score=request.min_score,
+                )
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        except Exception as e:
+            logger.exception("[VECTOR][SIMILARITY] Unexpected error during similarity search")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
