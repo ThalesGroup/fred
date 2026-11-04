@@ -168,6 +168,44 @@ if any source fails, without printing a partial catalog. It does not start the A
 connect to SQL, persist definitions or enroll instances. `serve` does not
 poll runtimes. This command does not enroll or execute agents.
 
+## Pod skills and local offer ceilings
+
+Skills are pod-owned offers in the existing capability inventory (`kind: skill`,
+ID `skill:<canonical-name>`). Instructions are never stored in Control Plane or
+accepted from the browser. Organization authorizations remain in the existing
+capability policy. New skill offers are initially denied. Skill refresh uses the
+same source configuration, observation transaction and diagnostic path as tools.
+Unreachable/unavailable sources retain the last known offers and decisions;
+a successful complete catalog marks removed offers as withdrawn.
+
+Migration `0005_pod_skills_and_local_offers.sql` adds source skill diagnostics and
+the shared team/project restriction tables. No local policy means inheritance;
+`restricted=true` with no permissions means deny all. Every ancestor ceiling
+must allow an offer. Reset preserves a monotonically increasing revision, so a
+stale PUT cannot undo a later decision. SQL uniqueness/FKs retain source identity; space
+cascades own local cleanup; mutations use the existing organization lock.
+No runtime call is made inside the policy mutation transaction.
+
+`GET /spaces/{space_id}/capability-policies` and revision-checked
+`PUT /spaces/{space_id}/capability-policies/{runtime_id}` require direct Manage in
+the team/project, without requiring Read or granting rights in a child. Personal
+spaces follow the organization ceiling. Tools and skills use the same
+`agents::enablement::usable` rule. Admission loads only the target ancestry.
+Project agents/chat use the existing direct roles; organization authorization
+is still a ceiling. No prompt publication/editor behavior is added to projects.
+
+Preparation projects only eligible ReAct/Deep skills and the source preview URL.
+Public runtime GET provides metadata without inference/title allocation. Private
+execution POST carries the admitted skill snapshot alongside inference. Runtime
+checks source revision and summary identity before loading; replicas must serve
+matching content. A new turn or resume observes current policy while history
+remains intact. Embedded Ralph and graph agents cannot load skills.
+
+See the [operator note](../../deploy/release-notes/changes/weaver-pod-skills-and-space-ceilings.md)
+for rollout/rollback and `tests/support/pod_skills.rs` for disposable SQL upgrade,
+concurrency, isolation and execution-preparation proofs. These tests do not
+replace a deployed k3d acceptance journey.
+
 ## Platform model inventory and organization administration
 
 `platform.model_sources` defaults to `[]` in the schema. The host development
@@ -526,10 +564,63 @@ adapters with simulated providers, and disposable SQL for host admission. These
 checks do not establish k3d, provider or selector availability for Ralph.
 
 
+## Automatic conversation titles
+
+Newly registered conversations keep their initial title until one cosmetic title
+attempt succeeds. Migration `0004_conversation_titles.sql` leaves every existing
+session ineligible; it does not rewrite titles or histories. Registration replays
+retain the original row and its eligibility. Run `control-plane init-schema` before
+starting this version, using the normal schema-owner deployment procedure.
+
+An organization **Owner** can optionally select a title model in its existing
+Models settings. The choice is a pair `(source_id, upstream_model_id)` in the same
+organization's permitted offers. It is persisted with the revisioned model policy,
+whose complete replacement now requires `title` (use `null` for no dedicated
+choice). Inventory `selectable` and write validation use the same calculation.
+There is no platform-wide override, additional role or per-pod title setting.
+
+With no dedicated choice, title inference uses the offer admitted for the answer,
+with separate bounded settings: at most 128 output tokens (capped by known model
+limits), no reasoning, no inherited answer temperature/top-p. With a dedicated
+choice, an unusable offer leaves the initial title; it never falls back to another
+organization's model or bypasses permission. Workload credentials for that source
+must already be provisioned by the existing inference contract. Unchanged choices
+can remain visible when unavailable, but newly selected offers must be selectable.
+
+The read-only `GET .../agent-instances/{id}/runtime` never reserves a title.
+Execution uses workload-delegated `POST` on the same path; the embedded Rust host
+uses its private equivalent. After normal admission and association checks, an
+atomic session update consumes `title_pending` and returns a unique attempt only
+to one execution. A first resume or unavailable title model also consumes the
+opportunity. Failures and retries do not schedule later attempts. No transaction
+spans a provider call, and no extra queue or service is involved.
+
+`POST /spaces/{space}/sessions/{session}/generated-title` is workload-only. Its
+conditional write checks admitted subject, space, instance, session, attempt and
+absence of deletion. Any manual non-null `PATCH` title clears the attempt, even
+when its text equals the initial title; an activity-only patch does not. A late
+result then receives 409 without changing the row. Deleted sessions are never
+recreated. Successful persistence emits `session_title` with the original session
+ID so the browser reloads canonical metadata instead of applying a stale string.
+
+Python managed agent turns and embedded Rust Ralph implement the same envelope:
+first 600 input characters, a prompt for 3–8 words in the input language, plain
+text bounded to 80 characters, 10-second generation budget and at most 2 seconds
+of grace before the final answer event. Closing/cancelling the stream cancels the
+title work; failure or invalid output leaves the answer intact. The title is not
+an assistant message. Existing inference observation and usage reporting count
+consumption under its actual offer, including output rejected as an invalid title.
+A provider's unreturned usage cannot be inferred after cancellation.
+
+These contracts are covered by focused simulated-provider, SQL-upgrade and UI
+component tests. They do not certify a local k3d or integration-platform journey.
+Deploy Control Plane, SDK/runtime and frontend coherently; see the
+[operator note](../../deploy/release-notes/changes/weaver-conversation-titles.md).
+
 ## Conversation metadata and browser preparation (M5a)
 
-These are backend APIs with generated clients, not a connected or functionally
-validated chat journey. All paths below are relative to the configured CP prefix.
+These backend APIs and generated clients back managed chat. Focused tests do not
+establish a k3d/integration-validated journey. Paths below are relative to the CP prefix.
 
 | Method / path | Behavior |
 | --- | --- |
@@ -808,6 +899,25 @@ The service and binary are named `control-plane`; the image remains
 The frontend's `controlPlane` client targets this Rust API. `legacyControlPlane`
 retains the previous API types and clients for screens not yet migrated; the
 Python backend is no longer shipped.
+
+### Email facts in document previews
+
+The existing preview endpoint serves the published generation's `metadata.json`
+with the same document read checks as its Markdown. The API schema describes the
+subset used by the viewer; other metadata extensions retain their existing
+contracts. Email facts are bounded and validated before final publication, outside
+SQL locks, alongside the existing immutable-byte/hash and identity checks.
+Publication never derives identity, uniqueness or access from an email address or
+message reference. No SQL migration or catalog filter is introduced.
+
+A conversation attachment requires `session_id` on the preview request. Control
+Plane verifies the document's actual association, current space read access and
+ownership of that live conversation. Without this context the drive route still
+excludes attachments. The email preview in the existing conversation attachment
+panel supplies it; this does not make an attachment a shared library document.
+Metadata and text modes each read one published artifact, without combining fields
+from different generations in one view. Missing metadata on older documents has
+an explicit empty state. See the [operator note](../../deploy/release-notes/changes/weaver-email-metadata.md).
 
 ### Document search inclusion
 

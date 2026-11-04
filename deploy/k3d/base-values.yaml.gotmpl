@@ -2,6 +2,12 @@
 The control plane configuration is owned by values.yaml.gotmpl. */ -}}
 {{- $base := readFile (printf "%s/k3d-apps/fred/values.yaml" (requiredEnv "K3D_FACTORY_ROOT")) | fromYaml -}}
 {{- $_ := unset (index $base.applications "fred-agents") "models_catalog" -}}
+{{- /* The agent runtime writes its logs and KPI with its own scoped OpenSearch identity. */ -}}
+{{- range (index $base.applications "fred-agents").extraEnvVars -}}
+  {{- if eq .name "OPENSEARCH_PASSWORD" -}}
+    {{- $_ := set . "valueFrom" (dict "secretKeyRef" (dict "name" "fred-ingestion" "key" "agents-opensearch-password")) -}}
+  {{- end -}}
+{{- end -}}
 {{- /* Knowledge Flow API reads the corpus with its own scoped OpenSearch identity. */ -}}
 {{- range (index $base.applications "knowledge-flow-backend").extraEnvVars -}}
   {{- if eq .name "OPENSEARCH_PASSWORD" -}}

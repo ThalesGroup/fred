@@ -943,7 +943,7 @@ class BoundRuntimeContext(FrozenModel):
       `portable_context` instead of expanding direct `runtime_context` usage
     """
 
-    disabled_platform_skills: tuple[str, ...] = ()
+    unavailable_skill_names: tuple[str, ...] = ()
     is_resuming: bool = False
     runtime_context: RuntimeContext = Field(
         ...,

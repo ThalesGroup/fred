@@ -32,6 +32,7 @@ export interface ChatAttachment {
 }
 
 export interface SessionAttachment {
+  sessionId?: string;
   attachmentId: string;
   name: string;
   mime?: string;

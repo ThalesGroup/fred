@@ -14,6 +14,7 @@ from fred_core.model.factory import get_embeddings, get_model
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import AgentDefinition
 from fred_sdk.contracts.runtime import ChatModelFactoryPort
+from fred_sdk.contracts.weaver import InferenceAdmission
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
@@ -27,7 +28,7 @@ from .contracts import (
     ModelSelectionSource,
 )
 from .guard import checked_clients, guarded_model
-from .turn import current_turn
+from .turn import TurnAuthority, current_turn
 
 if TYPE_CHECKING:
     from fred_runtime.app.config import InferenceCredentialBinding
@@ -74,7 +75,18 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             raise ModelRoutingError(
                 "Legacy model profile requires explicit offer re-selection"
             )
-        admission = authority.binding.inference
+        return self._build_admitted(authority, authority.binding.inference)
+
+    def build_for_title(self) -> BaseChatModel:
+        authority = current_turn()
+        title = authority.binding.title
+        if title is None:
+            raise ModelRoutingError("No title inference was admitted")
+        return self._build_admitted(authority, title.inference)[0]
+
+    def _build_admitted(
+        self, authority: TurnAuthority, admission: InferenceAdmission
+    ) -> tuple[BaseChatModel, ModelSelection]:
         selection = admission.selection
         connection = admission.connection
         local = self._credentials.get(selection.key.source_id)
@@ -105,7 +117,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             capability_id=identity,
             model=config,
         )
-        model = authority.models.get(selection.key)
+        model = authority.models.get(selection)
         if model is None:
             secret = os.environ.get(local.api_key_env)
             if not secret:
@@ -115,12 +127,12 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             built = get_model(
                 config,
                 inference_api_key=SecretStr(secret),
-                wrap_clients=checked_clients(authority, secret),
+                wrap_clients=checked_clients(authority, secret, admission),
             )
             if type(built) is not ChatOpenAI:
                 raise TypeError("Expected the connected OpenAI-compatible client")
             model = guarded_model(with_mistral_reasoning_replay(built), authority.check)
-            authority.models[selection.key] = model
+            authority.models[selection] = model
         logger.info(
             "Inference source=%s requested=%s model=%s policy_revision=%s source_revision=%s snapshot_revision=%s",
             selection.source,

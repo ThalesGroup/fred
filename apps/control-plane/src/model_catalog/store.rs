@@ -41,6 +41,9 @@ pub struct StoredModelOffer {
     pub first_seen_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,
     pub advertised: bool,
+    /// Server-calculated eligibility for a new administrative selection.
+    #[sqlx(skip)]
+    pub selectable: bool,
     pub withdrawn_at: Option<DateTime<Utc>>,
 }
 
@@ -270,9 +273,21 @@ pub(super) async fn read_inventory(
     }
     Ok(observations
         .into_iter()
-        .map(|observation| ModelInventory {
-            offers: by_source.remove(&observation.source_id).unwrap_or_default(),
-            observation,
+        .map(|observation| {
+            let mut offers = by_source.remove(&observation.source_id).unwrap_or_default();
+            for offer in &mut offers {
+                offer.selectable = super::policy::selectable(
+                    observation.enabled,
+                    observation.state == "ok",
+                    observation.snapshot_source_revision == Some(observation.source_revision),
+                    offer.advertised,
+                    offer.metadata.chat == Some(true),
+                );
+            }
+            ModelInventory {
+                offers,
+                observation,
+            }
         })
         .collect())
 }

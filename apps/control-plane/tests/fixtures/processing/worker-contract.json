@@ -376,6 +376,16 @@
       },
       "input_processors": [
         {
+          "suffix": ".eml",
+          "class_path": "knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".msg",
+          "class_path": "knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor",
+          "description": null
+        },
+        {
           "suffix": ".pdf",
           "class_path": "knowledge_flow_worker.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor",
           "description": null
@@ -507,6 +517,16 @@
       },
       "input_processors": [
         {
+          "suffix": ".eml",
+          "class_path": "knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".msg",
+          "class_path": "knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor",
+          "description": null
+        },
+        {
           "suffix": ".pdf",
           "class_path": "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",
           "description": null
@@ -637,6 +657,16 @@
         "preserve_tables": true
       },
       "input_processors": [
+        {
+          "suffix": ".eml",
+          "class_path": "knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor",
+          "description": null
+        },
+        {
+          "suffix": ".msg",
+          "class_path": "knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor",
+          "description": null
+        },
         {
           "suffix": ".pdf",
           "class_path": "knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor",

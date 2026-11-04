@@ -21,7 +21,7 @@ import {
   DocumentViewerModeToggle,
   type ViewMode,
 } from "@shared/organisms/DocumentViewer/DocumentViewer";
-import { extractH1, hasNativePreview } from "../../../utils/documentViewerUtils";
+import { extractH1, hasNativePreview, isEmailFile } from "../../../utils/documentViewerUtils";
 import styles from "./DocumentViewerPage.module.css";
 
 export default function DocumentViewerPage() {
@@ -49,7 +49,7 @@ export default function DocumentViewerPage() {
 
   if (!uid) return null;
 
-  const title = paramTitle ?? derivedTitle ?? paramFile ?? uid;
+  const title = (isEmailFile(paramFile) ? paramFile : null) ?? paramTitle ?? derivedTitle ?? paramFile ?? uid;
 
   const handleBack = () => {
     if (window.history.length <= 1) {
@@ -75,7 +75,9 @@ export default function DocumentViewerPage() {
         {/* A citation opens the document itself, but the cited text lives in the
             markdown extraction — so the reader always needs a way back to it,
             including when the render endpoint is unavailable. */}
-        {hasNativePreview(paramFile) && <DocumentViewerModeToggle view={view} onChange={setView} />}
+        {(hasNativePreview(paramFile) || isEmailFile(paramFile)) && (
+          <DocumentViewerModeToggle view={view} onChange={setView} fileName={paramFile} />
+        )}
         {hasInfo && (
           <IconButton
             variant="icon"
@@ -92,7 +94,7 @@ export default function DocumentViewerPage() {
           <DocumentViewer
             documentUid={uid}
             fileName={paramFile}
-            view={hasNativePreview(paramFile) ? view : undefined}
+            view={hasNativePreview(paramFile) || isEmailFile(paramFile) ? view : undefined}
             onMarkdownLoaded={(c) => setDerivedTitle(extractH1(c))}
           />
         </main>

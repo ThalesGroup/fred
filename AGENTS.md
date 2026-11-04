@@ -203,6 +203,13 @@ end-to-end validation that did not happen.
 
 ## Optional planning and external delivery
 
+For Swift-to-Weaver integration work, read the
+[merge method](docs/SWIFT_WEAVER_MERGES.md) and the
+[porting status](WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md). Keep newly arrived Swift
+commits distinct from previously deferred behavior; record pinned references and
+actual integration/validation evidence. These documents do not authorize agents,
+merges, pushes or deployments by themselves.
+
 OpenSpec is optional for an increment that needs explicit acceptance criteria or
 coordination. Use it when requested or when the team agrees it is needed for the
 specific increment. Ordinary discussion, fixes and implementation requests do not

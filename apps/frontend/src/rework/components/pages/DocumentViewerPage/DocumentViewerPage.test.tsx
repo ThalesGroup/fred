@@ -88,3 +88,12 @@ describe("DocumentViewerPage", () => {
     expect(container.querySelector('[data-testid="viewer"]')?.getAttribute("data-view")).toBe("none");
   });
 });
+
+it("keeps the email filename in the header and exposes the existing mode control", () => {
+  renderFor("mail-001.eml");
+  searchParams.current.set("title", "Offre Atlas");
+  act(() => root.render(<DocumentViewerPage />));
+  expect(container.querySelector("header")?.textContent).toContain("mail-001.eml");
+  expect(container.querySelector("header")?.textContent).not.toContain("Offre Atlas");
+  expect(container.querySelector('[data-testid="mode-toggle"]')).not.toBeNull();
+});

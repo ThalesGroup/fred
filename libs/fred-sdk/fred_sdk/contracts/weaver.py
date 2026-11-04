@@ -8,10 +8,12 @@ These are non-secret facts, never a persisted or caller-supplied execution grant
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .skills import SkillCatalog
 
 
 class ResolverFact(BaseModel):
@@ -88,6 +90,7 @@ class OrganizationModelPolicy(ResolverFact):
     reasoning_enabled: tuple[ModelOfferKey, ...]
     default: ModelOfferKey | None
     fallback: ModelOfferKey | None
+    title: ModelOfferKey | None = None
     created_by: str | None
     created_at: datetime | None
     updated_by: str | None
@@ -183,19 +186,27 @@ class RuntimeAttachment(ResolverFact):
     mime: str
 
 
-class WeaverRuntimeBinding(ResolverFact):
+class TitleAdmission(ResolverFact):
+    attempt_id: UUID
+    inference: InferenceAdmission
+
+
+class WeaverRuntimeResolution(ResolverFact):
     subject_id: str
     run_id: str | None
     conversation_id: str | None
     space: RuntimeSpace
     agent: RuntimeAgent
     models: RuntimeModels
-    inference: InferenceAdmission
+    skills: SkillCatalog | None = None
+    title: TitleAdmission | None = None
     attachments: tuple[RuntimeAttachment, ...]
     disabled_platform_skills: tuple[str, ...] = ()
 
     @model_validator(mode="after")
-    def owning_organization(self) -> WeaverRuntimeBinding:
+    def owning_organization(self) -> Self:
+        if self.title and not self.conversation_id:
+            raise ValueError("Title requires a conversation")
         if self.attachments and not self.conversation_id:
             raise ValueError("Attachments require a conversation")
         if self.attachments:
@@ -206,3 +217,9 @@ class WeaverRuntimeBinding(ResolverFact):
         if self.space.organization_id != self.models.policy.organization_id:
             raise ValueError("Model policy belongs to another organization")
         return self
+
+
+class WeaverRuntimeBinding(WeaverRuntimeResolution):
+    """Actual execution requires the private inference admission."""
+
+    inference: InferenceAdmission

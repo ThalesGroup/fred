@@ -581,6 +581,9 @@
       "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
       "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer.",
       "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères.",
+      "hitlUnavailable": "Cette demande n'attend plus de réponse. Votre réponse n'a pas été appliquée. Rouvrez la conversation pour voir son état actuel.",
+      "hitlQuestionsChanged": "Les questions en attente ont changé. Vos réponses n'ont pas été appliquées. Rouvrez la conversation pour charger les questions actuelles.",
+      "hitlConflict": "Votre réponse n'a pas pu être appliquée car la conversation est occupée ou a changé. Réessayez, ou rouvrez la conversation si le problème persiste.",
       "toolApprovalSaveFailedSummary": "Approbation non enregistrée",
       "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée."
     },
@@ -658,7 +661,6 @@
     "deletedAgentSuffix": "(supprimé)",
     "modelPreparationErrorTitle": "Envoi indisponible",
     "historyUnavailable": "L'historique de la conversation est indisponible. Réessayez plus tard.",
-    "historyUnsupported": "Cet agent répond à chaque message indépendamment. Les messages ne sont pas sauvegardés et disparaîtront en quittant ce chat.",
     "preparationUnavailable": "Impossible de préparer la conversation. Vérifiez votre connexion puis réessayez.",
     "savedModelChoiceInvalid": "Le modèle enregistré doit être sélectionné à nouveau dans le menu Modèles.",
     "skipAllHitlQuestions": "Tout passer",
@@ -729,8 +731,7 @@
   },
   "mermaid": {
     "title": "Diagramme",
-    "diagram": "Diagramme",
-    "generating": "Génération du diagramme...",
+    "diagram": "Diagramme Mermaid",
     "copySource": "Copier le code du diagramme",
     "download": "Télécharger le diagramme en SVG",
     "downloadError": "Le diagramme n'a pas pu être téléchargé. Réessayez.",
@@ -1501,6 +1502,8 @@
         },
         "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement.",
         "organizationModels": {
+          "title": "Modèle des titres de conversation",
+          "titleHint": "Facultatif. Sans choix dédié, les titres utilisent le modèle admis pour la réponse. Si le modèle dédié est indisponible, le titre initial est conservé.",
           "permitted": "Autorisé",
           "permitAria": "Autoriser {{name}}",
           "saved": "Politique des modèles enregistrée.",
@@ -1510,7 +1513,7 @@
           "none": "Aucun",
           "policyHint": "Ces choix s'appliquent à votre organisation. Choisissez parmi les modèles autorisés. Les réglages par pod ne sont pas disponibles dans ce catalogue.",
           "revokeTitle": "Retirer l'autorisation ?",
-          "revokeMessage": "Retirer {{name}} des modèles autorisés ? S'il est sélectionné par défaut ou en secours, ce choix sera aussi effacé.",
+          "revokeMessage": "Retirer {{name}} des modèles autorisés ? Si ce modèle est choisi par défaut, en repli ou pour les titres de conversation, ce choix sera aussi effacé.",
           "withdrawn": "Retiré de la source",
           "chat": "Chat confirmé",
           "notChat": "Sans aptitude chat",
@@ -1686,35 +1689,6 @@
           "confirm": "Désactiver",
           "cancel": "Annuler"
         }
-      },
-      "skills": {
-        "title": "Skills plateforme",
-        "scope": "Skills fournis par Fred, communs à tous les utilisateurs et agents.",
-        "skill": "Skill",
-        "description": "Description",
-        "invocation": "Invocation",
-        "sources": "Sources",
-        "enabled": "Activé",
-        "on": "Activé",
-        "off": "Désactivé",
-        "userInvocable": "Utilisateur",
-        "modelInvocable": "Agent",
-        "noInvocation": "Aucune invocation directe",
-        "refresh": "Actualiser",
-        "loading": "Chargement des skills plateforme...",
-        "loadError": "Impossible de charger les skills plateforme.",
-        "empty": "Aucun skill fourni avec Fred n'est actuellement annoncé.",
-        "unavailableSources": "Sources indisponibles : {{runtimes}}. L'application de la politique globale ne peut pas être vérifiée sur ces sources.",
-        "unsupportedSources": "Sources à mettre à jour : {{runtimes}}. Ces sources ne prennent pas en charge les contrôles globaux des skills.",
-        "toggle": "Activer {{name}} pour tous",
-        "disableBlocked": "Rétablissez les sources et mettez à jour les anciens runtimes avant de désactiver un skill.",
-        "effect": "Les changements s'appliquent aux nouveaux chargements dès le prochain tour, y compris dans les conversations existantes. Les instructions déjà chargées restent dans la conversation.",
-        "saveUnsupported": "Ce skill n'a pas pu être désactivé car une source ne prend pas en charge les contrôles globaux. Actualisez et mettez à jour la source concernée.",
-        "saveUnavailable": "Ce skill n'a pas pu être désactivé car une source est indisponible. Rétablissez la source puis actualisez.",
-        "saveError": "Impossible d'enregistrer le réglage global du skill. Actualisez puis réessayez.",
-        "refreshAfterSaveError": "Le réglage a été enregistré mais le catalogue n'a pas pu être actualisé. Actualisez pour confirmer son état actuel.",
-        "absentDisabled": "Ces skills désactivés globalement ne sont plus annoncés par une source disponible. Vous pouvez rétablir leur disponibilité pour les prochains chargements.",
-        "restore": "Réactiver {{name}}"
       }
     },
     "agentCard": {
@@ -2248,7 +2222,9 @@
       "toolStatus": {
         "failure": "Échec",
         "running": "En cours",
-        "success": "Succès"
+        "success": "Succès",
+        "unavailable": "Indisponible",
+        "unknown": "Inconnu"
       },
       "toolLabels": {
         "platform": {
@@ -2375,6 +2351,9 @@
       "unavailable": "Les CGU ne peuvent pas être chargées. Rechargez la page pour réessayer."
     },
     "hitlPrompt": {
+      "unavailable": "Cette question ne peut plus recevoir de réponse.",
+      "unknown": "La disponibilité de cette question n'a pas pu être vérifiée.",
+      "retryAvailability": "Vérifier à nouveau",
       "answerSummary": "Question et réponse",
       "selected": "Choisi",
       "skipped": "Passé",
@@ -2761,6 +2740,18 @@
         "newFolder": "Nouveau dossier",
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
         "preview": "Aperçu",
+        "email": {
+          "subject": "Sujet",
+          "sender": "Expéditeur",
+          "sent": "Date du message",
+          "to": "À",
+          "cc": "Cc",
+          "messageId": "Identifiant du message",
+          "inReplyTo": "En réponse à",
+          "missing": "Non renseigné",
+          "unavailable": "Aucun détail structuré du mail disponible pour cette génération.",
+          "description": "Faits extraits du message principal. Ils ne désignent pas l’auteur de l’import et n’accordent aucun accès. Les longs en-têtes et listes de destinataires peuvent être raccourcis."
+        },
         "process": "Traiter",
         "refresh": "Rafraîchir cette vue",
         "relaunchIngestion": "Relancer l'ingestion",
@@ -2849,6 +2840,7 @@
         "title": "Aperçu du document",
         "tabsAria": "Mode d'affichage",
         "tabs": {
+          "metadata": "Détails du mail",
           "file": "Fichier",
           "raw": "Raw"
         },
@@ -5004,6 +4996,27 @@
       "forbidden": "La gestion de cet espace nécessite son rôle Responsable.",
       "conflict": "Cette modification est refusée. Conservez au moins un responsable et le rattachement parent requis par les rôles dans les espaces enfants. Actualisez la liste avant de réessayer.",
       "failed": "La modification n'a pas pu être confirmée. Actualisez la liste avant de réessayer."
+    },
+    "skillGovernance": {
+      "title": "Capabilities et skills",
+      "ceiling": "Les autorisations de l'organisation et de l'équipe sont des plafonds. Une restriction locale ne donne aucun droit dans un autre espace et ne charge aucun skill.",
+      "restrict": "Restreindre les offres dans cet espace",
+      "inherit": "Sans restriction locale, cet espace suit les autorisations de ses parents.",
+      "denyAll": "Ne rien autoriser dans cet espace",
+      "offer": "Offre du pod",
+      "parent": "Plafond parent",
+      "local": "Choix local",
+      "effective": "Décision effective",
+      "allowed": "Autorisé",
+      "denied": "Refusé",
+      "withdrawn": "Retiré de la source",
+      "conflict": "La configuration a changé. Les choix actuels ont été rechargés ; vérifiez-les avant de réessayer.",
+      "failed": "La modification n'a pas été enregistrée.",
+      "source": {
+        "disabled": "La source est désactivée.",
+        "unavailable": "La source est indisponible ; les choix enregistrés sont conservés.",
+        "incompatible": "Ce pod ne fournit pas le contrat de gouvernance des skills. Mettez à jour ses replicas."
+      }
     }
   },
   "runtime": {

@@ -41,6 +41,8 @@ struct RuntimeQuery {
     model_upstream_id: Option<String>,
     #[serde(default)]
     reasoning: bool,
+    #[serde(default)]
+    resume: bool,
 }
 
 impl RuntimeQuery {
@@ -92,11 +94,21 @@ pub struct RuntimeBinding {
     pub space: RuntimeSpace,
     pub agent: RuntimeAgent,
     pub models: RuntimeModels,
+    pub skills: Option<crate::agents::skills::SkillCatalog>,
     /// Present only for trusted delegated or in-process admission.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference: Option<fred_rust_sdk::inference::InferenceAdmission>,
+    /// Single server-reserved cosmetic attempt, only on execution admission.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<TitleAdmission>,
     pub attachments: Vec<RuntimeAttachment>,
     pub disabled_platform_skills: Vec<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct TitleAdmission {
+    pub attempt_id: Uuid,
+    pub inference: fred_rust_sdk::inference::InferenceAdmission,
 }
 
 #[derive(Serialize, sqlx::FromRow, ToSchema)]
@@ -134,7 +146,8 @@ pub struct RuntimeAgent {
 }
 
 pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
-    utoipa_axum::router::OpenApiRouter::new().routes(utoipa_axum::routes!(resolve_runtime))
+    utoipa_axum::router::OpenApiRouter::new()
+        .routes(utoipa_axum::routes!(resolve_runtime, admit_runtime))
 }
 
 #[utoipa::path(
@@ -169,9 +182,51 @@ async fn resolve_runtime(
     ApiQuery(query): ApiQuery<RuntimeQuery>,
 ) -> AppResult<impl IntoResponse> {
     let private = query.person.is_some() && state.auth.accepts_runtime_delegation(&caller);
-    let binding =
-        resolve_runtime_binding(&state, &caller, space_id, instance_id, &query, private).await?;
+    let binding = resolve_runtime_binding(
+        &state,
+        &caller,
+        space_id,
+        instance_id,
+        &query,
+        private,
+        None,
+    )
+    .await?;
     // Current configuration and rights only; this response is no authorization lease.
+    Ok(([(header::CACHE_CONTROL, "no-store")], Json(binding)))
+}
+
+/// A trusted runtime admits an actual execution; read-only resolution never claims a title.
+#[utoipa::path(post, path = "/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime",
+    params(("space_id" = Uuid, Path), ("agent_instance_id" = Uuid, Path),
+        ("person" = String, Query), ("run" = String, Query), ("agent" = String, Query),
+        ("conversation" = Option<String>, Query), ("model_source_id" = Option<String>, Query),
+        ("model_upstream_id" = Option<String>, Query), ("reasoning" = Option<bool>, Query),
+        ("resume" = Option<bool>, Query)),
+    responses((status = 200, body = RuntimeBinding),
+        (status = 400, body = crate::error::ErrorBody), (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody), (status = 404, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody), (status = 422, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody), (status = 503, body = crate::error::ErrorBody))) ]
+async fn admit_runtime(
+    State(state): State<AppState>,
+    RuntimeCaller(caller): RuntimeCaller,
+    ApiPath((space_id, instance_id)): ApiPath<(Uuid, Uuid)>,
+    ApiQuery(query): ApiQuery<RuntimeQuery>,
+) -> AppResult<impl IntoResponse> {
+    if query.person.is_none() || !state.auth.accepts_runtime_delegation(&caller) {
+        return Err(AppError::Forbidden);
+    }
+    let binding = resolve_runtime_binding(
+        &state,
+        &caller,
+        space_id,
+        instance_id,
+        &query,
+        true,
+        Some(!query.resume),
+    )
+    .await?;
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(binding)))
 }
 
@@ -193,8 +248,18 @@ pub(crate) async fn resolve_person_runtime_binding(
         model_source_id: choice.map(|k| k.source_id.clone()),
         model_upstream_id: choice.map(|k| k.upstream_model_id.clone()),
         reasoning,
+        resume: false,
     };
-    resolve_runtime_binding(state, caller, space_id, instance_id, &query, true).await
+    resolve_runtime_binding(
+        state,
+        caller,
+        space_id,
+        instance_id,
+        &query,
+        true,
+        Some(true),
+    )
+    .await
 }
 
 /// Resolve from an authenticated caller; query assertions still require validation.
@@ -205,6 +270,7 @@ async fn resolve_runtime_binding(
     instance_id: Uuid,
     query: &RuntimeQuery,
     private: bool,
+    title_attempt: Option<bool>,
 ) -> AppResult<RuntimeBinding> {
     let subject = query.subject(state, caller, instance_id)?;
     if query
@@ -254,13 +320,15 @@ async fn resolve_runtime_binding(
     };
     require_executable(state, &space, &record)?;
     // Organization revocation is observed here, at the next turn, never during one.
-    let policy = enablement::Policy::load(&mut *tx, space.organization).await?;
+    let policy = enablement::Policy::load_for_space(&mut *tx, &space).await?;
     enablement::require_usable(
         &policy,
         &space,
         &record.source_runtime_id,
         &super::tuning::saved_selection(&record.tuning.0)?,
     )?;
+    let skills =
+        crate::agents::skills::resolve(&mut tx, &space, &record.source_runtime_id, &policy).await?;
     record
         .tuning
         .0
@@ -289,6 +357,28 @@ async fn resolve_runtime_binding(
     } else {
         None
     };
+    let title_inference = if title_attempt == Some(true) {
+        if let Some(selection) = inference
+            .as_ref()
+            .and_then(|main| models::decide_title(&models, &main.selection))
+        {
+            match models::admit(&mut tx, space.organization, selection).await {
+                Ok(admission) => Some(admission),
+                Err(_) => {
+                    tracing::warn!(
+                        event = "session_title",
+                        outcome = "skipped",
+                        reason = "admission_unavailable"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     tx.commit().await?;
     // Recheck authority after reading; the response still grants no continuing lease.
     onboarding::require_accepted(
@@ -304,7 +394,48 @@ async fn resolve_runtime_binding(
     if let Some(configuration) = record.tuning.0.as_object_mut() {
         configuration.remove("recommended_chat_profile_id");
     }
+    let title = if title_attempt.is_some() {
+        if let Some(session) = query
+            .conversation
+            .as_deref()
+            .and_then(|id| Uuid::parse_str(id).ok())
+        {
+            match crate::sessions::title::claim(
+                &state.pool,
+                subject,
+                space.id,
+                session,
+                instance_id,
+                title_inference.is_some(),
+            )
+            .await
+            {
+                Ok(attempt) => {
+                    attempt
+                        .zip(title_inference)
+                        .map(|(attempt_id, inference)| TitleAdmission {
+                            attempt_id,
+                            inference,
+                        })
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        event = "session_title",
+                        outcome = "skipped",
+                        reason = "claim_failed"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     Ok(RuntimeBinding {
+        skills,
+        title,
         models,
         inference,
         attachments,
@@ -316,8 +447,12 @@ async fn resolve_runtime_binding(
             id: space.id,
             kind: space.kind,
             organization_id: Some(space.organization),
-            team_id: (space.kind == SpaceKind::Team).then_some(space.id),
-            project_id: None,
+            team_id: match space.kind {
+                SpaceKind::Team => Some(space.id),
+                SpaceKind::Project => space.parent_id,
+                _ => None,
+            },
+            project_id: (space.kind == SpaceKind::Project).then_some(space.id),
         },
         agent: RuntimeAgent {
             instance_id: record.agent_instance_id,

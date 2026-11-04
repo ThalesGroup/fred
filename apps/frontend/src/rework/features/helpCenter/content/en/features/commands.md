@@ -79,8 +79,8 @@ each prompt's text takes the place of its own command and all the chosen
 skills are requested together. Each command has its own label, and you can use
 the same command more than once.
 
-For example, `First /summary then /tone please /graph` sends "First",
-the summary prompt, "then", the tone prompt, and "please /graph", in
+For example, `First /summary then /tone please /verify-answer` sends "First",
+the summary prompt, "then", the tone prompt, and "please /verify-answer", in
 that order.
 
 A message can hold up to 16 prompt commands. If one of them can no longer be
@@ -120,10 +120,10 @@ pasting uses the same format. Copying the whole message or selecting only the
 skill's name keeps `/skill-name`. If a prompt has the same name as a skill,
 pick the row you want in the list: their icon tells them apart.
 
-The skills offered depend on the chosen agent. The instructions of a selected
-skill are loaded before the agent answers. Some skills can only be selected
-by you; others can only be chosen by the agent and do not appear in the list.
-The agent may also use eligible skills on an ordinary request. A line in the details of its answer
+The skills offered depend on the chosen agent. Depending on the agent, the
+instructions of a requested skill are read before answering, or only if the
+agent finds it useful. The agent may also decide by itself to use one or
+several skills on an ordinary request. A line in the details of its answer
 then shows the skill's name and who asked for it: you, the agent or an agent
 it handed part of the work to. It stays visible when you reopen the
 conversation.

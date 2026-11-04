@@ -5,6 +5,7 @@
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from fred_runtime.skills.catalog import PlatformSkills
 
 
@@ -87,11 +88,12 @@ def test_packaged_policy_is_scoped_without_mutating_the_shared_catalog() -> None
     assert skills.for_execution().read("graph")
 
 
-def test_packaged_policy_does_not_disable_a_custom_homonym(tmp_path: Path) -> None:
+def test_pod_policy_also_disables_a_custom_homonym(tmp_path: Path) -> None:
     publish(tmp_path, "graph")
     skills = PlatformSkills.from_directory(str(tmp_path))
     assert not skills.catalog.skills[0].builtin
-    assert skills.for_execution(disabled_names=("graph",)).read("graph")
+    with pytest.raises(ValueError, match="unavailable"):
+        skills.for_execution(disabled_names=("graph",)).read("graph")
 
 
 def test_runtime_rebinding_uses_original_catalog_after_selection_and_policy_changes() -> (
@@ -111,7 +113,17 @@ def test_runtime_rebinding_uses_original_catalog_after_selection_and_policy_chan
     assert "grill-me" not in {s.name for s in runtime.services.skills.catalog.skills}
     runtime.bind(binding("grill-me"))
     assert runtime.services.skills.read("grill-me")
-    runtime.bind(binding().model_copy(update={"disabled_platform_skills": ("graph",)}))
+    runtime.bind(binding().model_copy(update={"unavailable_skill_names": ("graph",)}))
     assert "graph" not in {s.name for s in runtime.services.skills.catalog.skills}
     runtime.bind(binding())
     assert runtime.services.skills.read("graph")
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def admitted_unit_turn():
+    """Compiled-loop proofs run under a synthetic Weaver turn authority."""
+    from test_platform_skills import binding
+    from weaver_fixtures import active_turn
+
+    with active_turn(binding()):
+        yield

@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 import httpx
+from fred_sdk.contracts.weaver import InferenceAdmission
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
@@ -127,8 +128,15 @@ class _CheckedAsyncClient(httpx.AsyncClient):
         return await self._shared.send(request, **kwargs)
 
 
-def checked_clients(authority: TurnAuthority, api_key: str):
-    admission = authority.binding.inference
+def checked_clients(
+    authority: TurnAuthority, api_key: str, admission: InferenceAdmission | None = None
+):
+    admission = admission or authority.binding.inference
+    if admission != authority.binding.inference and (
+        authority.binding.title is None
+        or admission != authority.binding.title.inference
+    ):
+        raise AuthorityLostError()
     selection = admission.selection
     connection = admission.connection
     allowed_urls = {

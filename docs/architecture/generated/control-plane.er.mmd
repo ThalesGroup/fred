@@ -25,6 +25,7 @@ erDiagram
 "control_plane.organization_model_policy" |o--|| "control_plane.space" : "organization_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, title_source_id, title_upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_policy" : "organization_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
@@ -297,6 +298,8 @@ erDiagram
   timestamp_with_time_zone created_at
   text updated_by
   timestamp_with_time_zone updated_at
+  text title_source_id FK
+  text title_upstream_model_id FK
 }
 "control_plane.organization_model_permission" {
   uuid organization_id FK
@@ -318,6 +321,23 @@ erDiagram
   uuid deletion_id FK
   bigint agent_configuration_revision
   uuid agent_space_id
+  boolean title_pending
+  uuid title_attempt
+}
+"control_plane.model_usage" {
+  uuid report_id
+  uuid session_id
+  text exchange_id
+  timestamp_with_time_zone occurred_at
+  uuid space_id
+  text user_id
+  uuid agent_instance_id
+  text model_source_id
+  text upstream_model_id
+  bigint input_tokens
+  bigint output_tokens
+  bigint cache_read_tokens
+  bigint cache_creation_tokens
 }
 "control_plane.organization_capability" {
   uuid organization_id FK
@@ -403,6 +423,8 @@ erDiagram
   text source_revision
   boolean visible
   text__ rejection_reasons
+  text mime
+  timestamp_with_time_zone created_at
 }
 "cp_read.published_artifact" {
   uuid document_id
@@ -414,11 +436,13 @@ erDiagram
 "cp_read.space_state" {
   uuid id
   boolean retired
+  text name
 }
 "cp_read.folder_path" {
   uuid id
   uuid space_id
   text path
+  text name
 }
 "cp_read.conversation" {
   uuid conversation_id

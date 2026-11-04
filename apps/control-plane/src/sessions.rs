@@ -6,6 +6,7 @@
 //! A deleted session is retired at once and absent from every read below.
 
 mod attachments;
+pub(crate) mod title;
 mod usage;
 
 pub(crate) use usage::{ModelUsage, UsageReport, persist_usage};
@@ -226,6 +227,7 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(update_session))
         .routes(utoipa_axum::routes!(delete_session))
         .merge(attachments::routes())
+        .merge(title::routes())
         .merge(usage::routes())
 }
 
@@ -267,8 +269,8 @@ async fn create_session(
         agent_instances::require_executable(&s, &space, &instance)?;
 
         let inserted = sqlx::query("insert into session_metadata
-            (session_id, user_id, space_id, agent_instance_id, template_id, runtime_id, agent_display_name, title, agent_configuration_revision)
-            values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (session_id) do nothing")
+            (session_id, user_id, space_id, agent_instance_id, template_id, runtime_id, agent_display_name, title, agent_configuration_revision, title_pending)
+            values ($1,$2,$3,$4,$5,$6,$7,$8,$9,true) on conflict (session_id) do nothing")
             .bind(body.session_id).bind(&user.uid).bind(space_id).bind(instance.agent_instance_id)
             .bind(instance.template_id).bind(&instance.source_runtime_id).bind(&instance.display_name)
             .bind(&body.title).bind(instance.configuration_revision).execute(&mut *tx).await?;
@@ -362,8 +364,10 @@ async fn update_session(
 
     sqlx::query(
         "update session_metadata set title = coalesce($4, title),
+        title_pending = title_pending and $4::text is null,
+        title_attempt = case when $4::text is null then title_attempt else null end,
         updated_at = greatest(updated_at, least(coalesce($5, updated_at), clock_timestamp()))
-        where space_id = $1 and user_id = $2 and session_id = $3",
+        where space_id = $1 and user_id = $2 and session_id = $3 and deletion_id is null",
     )
     .bind(space_id)
     .bind(&user.uid)

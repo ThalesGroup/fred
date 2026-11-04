@@ -67,6 +67,9 @@ class SelectionTest(unittest.TestCase):
     def test_node_baseline_builds_only_frontend(self):
         self.assertEqual(built(".nvmrc"), {"frontend"})
 
+    def test_shared_scanner_change_includes_knowledge_flow_images(self):
+        self.assertEqual(built(".github/actions/setup-trivy/action.yml"), ALL)
+
     def test_npm_package_producer_builds_nothing(self):
         self.assertEqual(built("libs/frontend/ui/src/index.tsx"), set())
 

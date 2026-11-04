@@ -87,9 +87,9 @@ la place de sa propre commande et tous les skills choisis sont demandés
 ensemble. Chaque commande a sa propre étiquette, et vous pouvez utiliser la
 même commande plusieurs fois.
 
-Par exemple, `D'abord /resume puis /ton merci /graph` envoie
+Par exemple, `D'abord /resume puis /ton merci /verify-answer` envoie
 "D'abord", le prompt de résumé, "puis", le prompt de ton et
-"merci /graph", dans cet ordre.
+"merci /verify-answer", dans cet ordre.
 
 Un message peut contenir jusqu'à 16 commandes de prompt. Si l'une d'elles
 n'est plus utilisable, par exemple parce que son prompt a été supprimé, rien
@@ -132,11 +132,10 @@ ou sélectionner seulement le nom du skill conserve `/nom-du-skill`. Si un
 prompt porte le même nom qu'un skill, choisissez la ligne voulue dans la
 liste : leur icône les distingue.
 
-Les skills proposés dépendent de l'agent choisi. Les instructions d'un skill
-sélectionné sont chargées avant que l'agent réponde. Certains skills sont
-réservés à votre sélection ; d'autres sont réservés au modèle et n'apparaissent
-pas dans la liste. L'agent peut aussi utiliser les skills autorisés pour une
-demande ordinaire. Une ligne dans le détail de sa
+Les skills proposés dépendent de l'agent choisi. Selon l'agent, les
+instructions d'un skill demandé sont lues avant de répondre, ou seulement s'il
+le juge utile. L'agent peut aussi décider de lui-même d'utiliser un ou
+plusieurs skills pour une demande ordinaire. Une ligne dans le détail de sa
 réponse indique alors le nom du skill et qui l'a demandé : vous, l'agent ou un
 agent auquel il a confié une partie du travail. Elle reste visible quand vous
 rouvrez la conversation.

@@ -41,6 +41,7 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -78,7 +79,12 @@ from fred_core.common.fastapi_handlers import (
 )
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.documents.selection import DocumentScope
-from fred_core.history.history_schema import ChatMessage, CommandDescriptor
+from fred_core.history.history_schema import (
+    ChatMessage,
+    CommandDescriptor,
+    HitlRequestPart,
+    HitlResponsePart,
+)
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -159,6 +165,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeEventKind,
     RuntimeServices,
+    SessionTitleRuntimeEvent,
     parse_human_input_answer,
 )
 from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
@@ -188,6 +195,7 @@ from fred_runtime.app.history_access import (
     require_history_person,
 )
 from fred_runtime.app.security import prepare_authorization
+from fred_runtime.app.session_title import generate_session_title
 from fred_runtime.app.usage import report_run_usage
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
@@ -236,7 +244,6 @@ from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.model_routing import ModelProvider, RoutedChatModelFactory
 from fred_runtime.model_routing.turn import TurnAuthority, current_turn
 from fred_runtime.react.react_runtime import ReActRuntime
-from fred_runtime.skills.catalog import PlatformSkills
 from fred_runtime.runtime_support.authority import (
     AuthorityLostError,
     DelegationUnavailableError,
@@ -930,13 +937,16 @@ def _build_runtime_services(
     """
 
     runtime_config = get_runtime_context().config
-    skills = runtime_config.skills
-    if isinstance(skills, PlatformSkills):
-        skills = skills.for_execution(
-            tuple(
-                selection.name for selection in binding.runtime_context.selected_skills
-            ),
-            binding.disabled_platform_skills,
+    from fred_runtime.skills.catalog import PlatformSkills, admitted_skills
+
+    governed_skills = (
+        None
+        if runtime_config.skills is None or isinstance(definition, GraphAgentDefinition)
+        else admitted_skills(runtime_config.skills, current_turn().binding.skills)
+    )
+    if isinstance(governed_skills, PlatformSkills):
+        governed_skills = governed_skills.for_execution(
+            tuple(s.name for s in binding.runtime_context.selected_skills),
             resuming=binding.is_resuming,
         )
     if conversation_filesystem is None:
@@ -945,7 +955,9 @@ def _build_runtime_services(
     if conversation_filesystem is not None:
         backend, permissions = build_conversation_filesystem(
             conversation_filesystem,
-            skills=skills if isinstance(definition, DeepAgentDefinition) else None,
+            skills=governed_skills
+            if isinstance(definition, DeepAgentDefinition)
+            else None,
         )
         conversation_port = DeepConversationFilesystemPort(backend, permissions)
     settings = _build_agent_settings(
@@ -1147,7 +1159,7 @@ def _build_runtime_services(
             credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
-        skills=skills,
+        skills=governed_skills,
     )
 
 
@@ -1204,6 +1216,7 @@ class _AgentExecuteRequest(BaseModel):
     _document_scope: DocumentScope = PrivateAttr(default_factory=DocumentScope)
 
     _turn_authority: TurnAuthority | None = PrivateAttr(default=None)
+    _title_task: asyncio.Task[str | None] | None = PrivateAttr(default=None)
     """
     Input payload for the agent execution endpoints.
 
@@ -1353,6 +1366,7 @@ class _PodCapabilityInventory(BaseModel):
     complete: Literal[True]
     capabilities: list[CapabilityCatalogEntry]
     template_capabilities: list[_PodTemplateCapability]
+    skills: SkillCatalog
 
 
 class _McpCatalogEntry(BaseModel):
@@ -1629,6 +1643,7 @@ async def _resolve_agent_instance(
         params["model_source_id"] = choice.source_id
         params["model_upstream_id"] = choice.upstream_model_id
     params["reasoning"] = "true" if ctx.get("reasoning") is True else "false"
+    params["resume"] = "true" if request.resume_payload is not None else "false"
     # UUID validation prevents URL path interpolation from changing the target.
     try:
         space_id = str(UUID(space_id))
@@ -1645,11 +1660,11 @@ async def _resolve_agent_instance(
     if request_id:
         headers["X-Request-Id"] = request_id
     try:
-        response = await http_client.get(
+        response = await http_client.post(
             f"{control_plane_url.rstrip('/')}/spaces/{space_id}/agent-instances/{instance_id}/runtime",
             headers=headers,
             params=params,
-            auth=None,  # Never inherit client auth or a transparent resolver retry.
+            auth=httpx.Auth(),  # Disable inherited auth and transparent resolver retries.
             follow_redirects=False,
         )
         if response.status_code == 409:
@@ -2163,18 +2178,29 @@ async def _authorize_and_resolve(
         selections = (
             request.runtime_context.selected_skills if request.runtime_context else ()
         )
-        if selections and request.resume_payload is None:
-            skills = get_runtime_context().config.skills
-            if isinstance(target.definition, GraphAgentDefinition) or skills is None:
-                raise HTTPException(
-                    status_code=422, detail="Platform skills unavailable for this agent"
+        from fred_runtime.skills.catalog import PlatformSkills, admitted_skills
+
+        authority = internal_req._turn_authority
+        if authority is None:
+            raise HTTPException(status_code=503, detail="Skill admission unavailable")
+        try:
+            # Graph has no skill loader; an unused pod snapshot cannot block it.
+            skills = (
+                None
+                if isinstance(target.definition, GraphAgentDefinition)
+                else admitted_skills(
+                    get_runtime_context().config.skills, authority.binding.skills
                 )
-            if not isinstance(target.definition, DeepAgentDefinition):
-                try:
-                    for selection in selections:
-                        skills.read(selection.name)
-                except ValueError as exc:
-                    raise HTTPException(status_code=422, detail=str(exc)) from None
+            )
+            if selections and request.resume_payload is None and skills is None:
+                raise ValueError("Skills unavailable for this agent")
+            if isinstance(skills, PlatformSkills):
+                skills.for_execution(
+                    tuple(s.name for s in selections),
+                    resuming=request.resume_payload is not None,
+                )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
     except BaseException as exc:
         # Nothing past admission got as far as starting the run, so the record
         # it wrote has no owner left to release it.
@@ -2253,30 +2279,114 @@ def _pending_interrupt_occurrences(
     for _task_id, channel, value in pending_writes:
         if channel != _REACT_V2_INTERRUPT_CHANNEL:
             continue
-        candidate: object = value
-        if isinstance(candidate, (list, tuple)):
-            if not candidate:
-                continue
-            candidate = candidate[0]
-        interrupt_id = getattr(candidate, "id", None)
-        if interrupt_id is None and isinstance(candidate, dict):
-            interrupt_id = candidate.get("id")
-        if isinstance(interrupt_id, str) and interrupt_id:
-            payload = getattr(candidate, "value", None)
-            if payload is None and isinstance(candidate, dict):
-                payload = candidate.get("value")
-            occurrence_id = getattr(payload, "occurrence_id", None)
-            if occurrence_id is None and isinstance(payload, dict):
-                occurrence_id = payload.get("occurrence_id")
-            occurrences.add(
-                (
-                    interrupt_id,
-                    occurrence_id
-                    if isinstance(occurrence_id, str) and occurrence_id
-                    else None,
+        for candidate in value if isinstance(value, (list, tuple)) else (value,):
+            interrupt_id = getattr(candidate, "id", None)
+            if interrupt_id is None and isinstance(candidate, dict):
+                interrupt_id = candidate.get("id")
+            if isinstance(interrupt_id, str) and interrupt_id:
+                payload = getattr(candidate, "value", None)
+                if payload is None and isinstance(candidate, dict):
+                    payload = candidate.get("value")
+                occurrence_id = getattr(payload, "occurrence_id", None)
+                if occurrence_id is None and isinstance(payload, dict):
+                    occurrence_id = payload.get("occurrence_id")
+                occurrences.add(
+                    (
+                        interrupt_id,
+                        occurrence_id
+                        if isinstance(occurrence_id, str) and occurrence_id
+                        else None,
+                    )
                 )
-            )
     return frozenset(occurrences)
+
+
+async def _annotate_hitl_availability(messages: list[ChatMessage]) -> list[ChatMessage]:
+    """Reconcile trailing unanswered cards without changing persisted history."""
+    if not messages:
+        return messages
+    trailing = [m for m in messages if m.exchange_id == messages[-1].exchange_id]
+    answered = {
+        p.occurrence_id
+        for m in trailing
+        for p in m.parts
+        if isinstance(p, HitlResponsePart) and p.occurrence_id
+    }
+    legacy_answers = sum(
+        isinstance(p, HitlResponsePart) and not p.occurrence_id
+        for m in trailing
+        for p in m.parts
+    )
+    requests: dict[int, HitlRequestPart] = {}
+    targets: dict[str | None, list[tuple[int, HitlRequestPart]]] = {}
+    for m in trailing:
+        for p in m.parts:
+            if not isinstance(p, HitlRequestPart) or p.occurrence_id in answered:
+                continue
+            if not p.occurrence_id and legacy_answers:
+                legacy_answers -= 1
+                continue
+            part = p.model_copy(update={"resume_status": "unknown"})
+            requests[m.rank] = part
+            if p.interrupt_id and p.occurrence_id:
+                targets.setdefault(m.metadata.agent_id, []).append((m.rank, part))
+    checkpointer = get_runtime_context().config.checkpointer
+
+    async def resolve(
+        agent_id: str | None, parts: list[tuple[int, HitlRequestPart]]
+    ) -> None:
+        if not isinstance(checkpointer, FredSqlCheckpointer):
+            return
+        identities = frozenset(
+            (p.interrupt_id, p.occurrence_id)
+            for _, p in parts
+            if p.interrupt_id and p.occurrence_id
+        )
+        session_id = messages[-1].session_id
+        locations = (
+            _resume_checkpoint_locations(session_id, agent_id=agent_id)
+            if agent_id
+            else ((session_id, ""),)
+        )
+        try:
+            loaded = None
+            # Candidate order must match resume admission: graph first, root fallback.
+            for thread_id, namespace in locations:
+                loaded = await checkpointer.aget_hitl_resume_state(
+                    thread_id=thread_id, checkpoint_ns=namespace, occurrences=identities
+                )
+                if loaded is not None:
+                    break
+            if loaded is None and not agent_id:
+                return
+            writes, blocked = loaded if loaded is not None else ([], frozenset())
+            pending = _pending_interrupt_occurrences(writes)
+            if writes and not pending:
+                return
+            for _, part in parts:
+                identity = (part.interrupt_id, part.occurrence_id)
+                part.resume_status = (
+                    "pending"
+                    if identity in pending and identity not in blocked
+                    else "unavailable"
+                )
+        except Exception:
+            logger.warning("HITL history availability lookup failed", exc_info=True)
+
+    await asyncio.gather(*(resolve(agent, parts) for agent, parts in targets.items()))
+    return [
+        m.model_copy(
+            update={
+                "parts": [
+                    requests[m.rank] if isinstance(p, HitlRequestPart) else p
+                    for p in m.parts
+                ]
+            }
+        )
+        if m.rank in requests
+        else m
+        for m in messages
+    ]
 
 
 async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> bool:
@@ -2293,7 +2403,9 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
         if not session_id or checkpointer is None:
             return False
         for thread_id, checkpoint_ns in _resume_checkpoint_locations(
-            request, session_id
+            session_id,
+            agent_id=request.agent_id,
+            agent_instance_id=request.agent_instance_id,
         ):
             loaded = await load_checkpoint(
                 checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
@@ -2353,7 +2465,11 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
     checkpointer = get_runtime_context().config.checkpointer
     if not session_id or checkpointer is None:
         return False
-    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+        session_id,
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ):
         loaded = await load_checkpoint(
             checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
         )
@@ -2399,7 +2515,7 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
 
 
 def _resume_checkpoint_locations(
-    request: RuntimeExecuteRequest, session_id: str
+    session_id: str, *, agent_id: str | None, agent_instance_id: str | None = None
 ) -> tuple[tuple[str, str], ...]:
     """
     `(thread_id, checkpoint_ns)` pairs a resume may target, best first.
@@ -2412,8 +2528,8 @@ def _resume_checkpoint_locations(
     """
 
     agent_ns = checkpoint_namespace(
-        agent_instance_id=request.agent_instance_id,
-        agent_id=request.agent_id or request.agent_instance_id or "",
+        agent_instance_id=agent_instance_id,
+        agent_id=agent_id or agent_instance_id or "",
     )
     return ((graph_thread_id(session_id, agent_ns), ""), (session_id, ""))
 
@@ -2478,7 +2594,11 @@ async def _validate_session_checkpoint_access(
         return ()
 
     loaded = None
-    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+        session_id,
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ):
         loaded = await load_checkpoint(
             checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
         )
@@ -4154,6 +4274,22 @@ async def _iterate_runtime_event_payloads(
 
                 scope.set_owner_authority_end(end_turn_authority)
             async for payload in iterator:
+                title_task = request._title_task
+                if title_task is not None and (
+                    title_task.done() or payload.get("kind") == "final"
+                ):
+                    await asyncio.wait({title_task}, timeout=2.0)
+                    if title_task.done() and not title_task.cancelled():
+                        titled_session = title_task.result()
+                        if titled_session:
+                            yield SessionTitleRuntimeEvent(
+                                session_id=titled_session
+                            ).model_dump(mode="json")
+                    title_task.cancel()
+                    await complete_cleanup(
+                        asyncio.gather(title_task, return_exceptions=True)
+                    )
+                    request._title_task = None
                 if payload.get("kind") == "execution_error":
                     outcome = "failed"
                 elif payload.get("kind") == "awaiting_human" and outcome != "failed":
@@ -4377,6 +4513,11 @@ async def _iterate_runtime_event_payloads_inner(
             capability_registry, tuning, definition
         ),
     )
+    if owns_run_record and current_turn().binding.title is not None:
+        request._title_task = asyncio.create_task(
+            generate_session_title(request.message, binding=binding, services=services)
+        )
+        register_run_child(request._title_task)
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
     # LangGraph's checkpointer invariant (thread_id required internally) is met.
@@ -4872,9 +5013,19 @@ def _build_agent_router(
                 spec.enum = None
                 spec.pattern = None
                 spec.ui = type(spec.ui)()
+        installed_skills = get_runtime_context().config.skills
         return _PodCapabilityInventory(
             complete=True,
             capabilities=entries,
+            skills=(
+                installed_skills.catalog
+                if installed_skills is not None
+                else SkillCatalog(
+                    policy_supported=True,
+                    revision=hashlib.sha256(b"").hexdigest(),
+                    availability="disabled",
+                )
+            ),
             template_capabilities=[
                 _PodTemplateCapability(
                     source_agent_id=definition.agent_id,
@@ -5411,7 +5562,8 @@ def _build_agent_router(
         if history_store is None:
             raise HTTPException(status_code=503, detail="History storage unavailable")
         response.headers["Cache-Control"] = "no-store"
-        return await history_store.get(session_id=session_id, user_id=person.uid)
+        messages = await history_store.get(session_id=session_id, user_id=person.uid)
+        return await _annotate_hitl_availability(messages)
 
     @router.delete(
         "/sessions/{session_id}",

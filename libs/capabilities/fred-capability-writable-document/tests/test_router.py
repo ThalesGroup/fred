@@ -21,15 +21,17 @@ The auth dependency and the store are both overridden so the routes run offline:
 from __future__ import annotations
 
 import asyncio
+import io
 from datetime import datetime, timezone
 
 import pytest
+from docx import Document
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_capability_writable_document import store as store_module
 from fred_capability_writable_document.router import build_router
 from fred_capability_writable_document.store import WritableDocumentRecord
-from fred_core import KeycloakUser
+from fred_core import AssertedUser, KeycloakUser
 from fred_core.security.oidc import authenticate_request
 from port_fakes import FakeWritableDocumentStore
 
@@ -142,11 +144,42 @@ def test_put_foreign_user_is_403(app_client):
     assert resp.status_code == 403
 
 
-def test_export_docx(app_client):
-    client, fake, _app = app_client
+@pytest.mark.parametrize(
+    "first_name,last_name,username,expected_author",
+    [
+        ("Jane", "Doe", "jdoe", "Jane Doe"),
+        (None, None, "jdoe", "jdoe"),
+        ("Jane", None, "jdoe", "jdoe"),
+        (None, "Doe", "jdoe", "jdoe"),
+        ("  Jane  ", " Doe\t", "jdoe", "Jane Doe"),
+        ("Élodie", "Dùpont", "edupont", "Élodie Dùpont"),
+        ("Jane", " \t", " jdoe\n", "jdoe"),
+        (" \t", "Doe", " jdoe ", "jdoe"),
+        (None, None, "", ""),  # Missing username claim is normalized to empty.
+        ("Jane", None, " \t", ""),
+        ("Jane", "Doe", "", "Jane Doe"),
+        (None, None, "é" * 256, "é" * 255),
+    ],
+)
+def test_export_docx(
+    app_client,
+    first_name: str | None,
+    last_name: str | None,
+    username: str,
+    expected_author: str,
+) -> None:
+    client, fake, app = app_client
+    app.dependency_overrides[authenticate_request] = lambda: KeycloakUser(
+        uid="u-1",
+        username=username,
+        roles=[],
+        first_name=first_name,
+        last_name=last_name,
+    )
     _seed(fake, content_md="# Title\n\nBody", title="My Doc")
     resp = client.get(
-        f"{_PREFIX}/sessions/s-1/documents/doc-1/export", params={"format": "docx"}
+        f"{_PREFIX}/sessions/s-1/documents/doc-1/export",
+        params={"format": "docx", "author": "Untrusted browser name"},
     )
     assert resp.status_code == 200
     assert (
@@ -155,6 +188,45 @@ def test_export_docx(app_client):
     )
     assert "My_Doc.docx" in resp.headers["content-disposition"]
     assert resp.content[:2] == b"PK"  # docx is a zip
+    doc = Document(io.BytesIO(resp.content))
+    assert doc.core_properties.author == expected_author
+    assert doc.core_properties.last_modified_by == expected_author
+    assert [p.text for p in doc.paragraphs] == ["My Doc", "Title", "Body"]
+    stored = asyncio.run(fake.get("s-1", "doc-1"))
+    assert stored is not None
+    assert (stored.user_id, stored.updated_by, stored.content_md) == (
+        "u-1",
+        "agent",
+        "# Title\n\nBody",
+    )
+
+
+@pytest.mark.parametrize("format", ["docx", "md"])
+@pytest.mark.parametrize("owner", ["u-1", "u-2", None])
+@pytest.mark.parametrize("delegated", [False, True])
+def test_export_identity_and_access(
+    app_client, format: str, owner: str | None, delegated: bool
+) -> None:
+    client, fake, app = app_client
+    if delegated:
+        app.dependency_overrides[authenticate_request] = lambda: AssertedUser(
+            uid="u-1", client_id="workload", run_id="run-1", agent_id="agent-1"
+        )
+    if owner is not None:
+        _seed(fake, user_id=owner)
+    resp = client.get(
+        f"{_PREFIX}/sessions/s-1/documents/doc-1/export", params={"format": format}
+    )
+    expected_status = 404 if owner is None else 403 if owner != "u-1" else 200
+    assert resp.status_code == expected_status
+    if expected_status != 200:
+        return
+    if format == "md":
+        assert resp.text == "# Report\n\nBody"
+    else:
+        doc = Document(io.BytesIO(resp.content))
+        assert doc.core_properties.author == ("" if delegated else "u-1")
+        assert doc.core_properties.last_modified_by == ("" if delegated else "u-1")
 
 
 def test_export_md_passthrough(app_client):

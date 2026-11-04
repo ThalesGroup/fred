@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import pytest_asyncio
 from fred_core.kpi import BaseKPIWriter
 from fred_runtime.skills.catalog import PlatformSkills
 from fred_sdk.contracts.runtime import StatusRuntimeEvent
@@ -211,3 +212,13 @@ async def test_failed_model_keeps_transient_observation_out_of_checkpoint(
         )
         == 1
     )
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def admitted_unit_turn():
+    """Compiled-loop proofs run under a synthetic Weaver turn authority."""
+    from test_platform_skills import binding
+    from weaver_fixtures import active_turn
+
+    with active_turn(binding()):
+        yield

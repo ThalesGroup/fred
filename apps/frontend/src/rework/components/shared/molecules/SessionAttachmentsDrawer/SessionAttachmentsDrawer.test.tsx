@@ -44,6 +44,12 @@ vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({
   default: () => null,
 }));
 
+vi.mock("../DocumentPreviewDrawer/DocumentPreviewDrawer", () => ({
+  default: ({ target }: { target: { documentUid: string; sessionId: string } }) => (
+    <div data-email-document={target.documentUid} data-email-session={target.sessionId} />
+  ),
+}));
+
 import { SessionAttachmentsDrawer } from "./SessionAttachmentsDrawer";
 
 const attachment: SessionAttachment = {
@@ -128,4 +134,16 @@ describe("SessionAttachmentsDrawer - attachment row markup", () => {
     expect(previewOpen()).toBe("true");
     expect(onDelete).not.toHaveBeenCalled();
   });
+});
+
+it("opens mail details through the existing viewer with its owning conversation", () => {
+  renderDrawer(vi.fn(), false, {
+    ...attachment,
+    name: "message.eml",
+    documentUid: "document",
+    sessionId: "conversation",
+  });
+  click(container.querySelector("button"));
+  expect(container.querySelector("[data-email-document]")?.getAttribute("data-email-document")).toBe("document");
+  expect(container.querySelector("[data-email-session]")?.getAttribute("data-email-session")).toBe("conversation");
 });

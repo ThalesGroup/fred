@@ -416,6 +416,51 @@ pub(crate) fn decide(
     })
 }
 
+/// Cosmetic call: the admitted answer model by default, otherwise the explicit
+/// organization choice. Never substitute a withdrawn dedicated choice.
+pub(crate) fn decide_title(
+    models: &RuntimeModels,
+    main: &InferenceSelection,
+) -> Option<InferenceSelection> {
+    let key = models.policy.title.as_ref().unwrap_or(&main.key);
+    let offer = models.offers.iter().find(|o| &o.key == key)?;
+    if !offer.permitted
+        || offer.diagnostics.iter().any(|d| {
+            !matches!(
+                d,
+                ModelDiagnostic::DiscoveryUnavailable | ModelDiagnostic::OptionsExceedKnownLimit
+            )
+        })
+    {
+        return None;
+    }
+    let observation = offer.observation.as_ref()?;
+    let metadata = offer.metadata.as_ref()?;
+    Some(InferenceSelection {
+        key: key.clone(),
+        source: if models.policy.title.is_some() {
+            ModelSelectionSource::Default
+        } else {
+            main.source
+        },
+        options: EffectiveModelOptions {
+            max_tokens: [
+                Some(128),
+                metadata.max_output_tokens,
+                metadata.context_window_tokens,
+            ]
+            .into_iter()
+            .flatten()
+            .min()
+            .and_then(|n| u64::try_from(n).ok()),
+            ..Default::default()
+        },
+        source_revision: observation.source_revision,
+        snapshot_revision: observation.snapshot_revision,
+        policy_revision: models.policy.revision,
+    })
+}
+
 /// Connection projection is explicit, separate from the browser-safe decision.
 pub(crate) async fn admit(
     conn: &mut PgConnection,
@@ -450,6 +495,33 @@ pub(crate) async fn admit(
 #[cfg(test)]
 mod preparation_tests {
     use super::*;
+
+    #[test]
+    fn title_selection_uses_the_admitted_model_or_explicit_permitted_choice() {
+        let mut models = models();
+        let main = decide(&models, Some(&key("model")), true).unwrap();
+        let title = decide_title(&models, &main).unwrap();
+        assert_eq!(title.key, main.key);
+        assert!(title.options.reasoning_effort.is_none());
+        assert!(title.options.max_tokens.unwrap() <= 128);
+        models.policy.title = Some(key("fallback"));
+        assert_eq!(decide_title(&models, &main).unwrap().key, key("fallback"));
+        // Answer-specific options do not constrain the independent title task.
+        models.offers[1].diagnostics = vec![ModelDiagnostic::OptionsExceedKnownLimit];
+        assert!(decide_title(&models, &main).is_some());
+        for diagnostic in [
+            ModelDiagnostic::Withdrawn,
+            ModelDiagnostic::SourceDisabled,
+            ModelDiagnostic::SourceRevisionUnobserved,
+            ModelDiagnostic::UnknownOffer,
+        ] {
+            models.offers[1].diagnostics = vec![diagnostic];
+            assert!(decide_title(&models, &main).is_none());
+        }
+        models.offers[1].diagnostics.clear();
+        models.offers[1].permitted = false;
+        assert!(decide_title(&models, &main).is_none());
+    }
 
     fn key(name: &str) -> ModelOfferKey {
         ModelOfferKey {
@@ -491,6 +563,7 @@ mod preparation_tests {
     fn models() -> RuntimeModels {
         RuntimeModels {
             policy: OrganizationModelPolicy {
+                title: None,
                 organization_id: Uuid::nil(),
                 revision: 1,
                 permitted: vec![key("model"), key("fallback")],

@@ -67,7 +67,7 @@ class NativeSkillPolicyMiddleware(AgentMiddleware[NativeSkillState, Any]):
     ) -> None:
         self.skills = skills.for_execution(
             tuple(s.name for s in binding.runtime_context.selected_skills),
-            binding.disabled_platform_skills,
+            binding.unavailable_skill_names,
             resuming=binding.is_resuming,
         )
         self.binding = binding

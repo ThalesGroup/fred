@@ -34,7 +34,7 @@ def prepare() -> None:
         or os.environ.get("K3D_NAMESPACE") != "fred-weaver"
         or os.environ.get("K3D_DATABASE") != "fred_weaver"
     ):
-        raise RuntimeError("Run make k3d-up-weaver or make k3d-up-migration from the factory")
+        raise RuntimeError("Run make k3d-up or make k3d-up-weaver from the factory")
     here = Path(__file__).resolve().parent
     output = Path(os.environ["K3D_APP_OUT"])
     namespace = os.environ.get("K3D_NAMESPACE", "fred")
@@ -84,6 +84,13 @@ def prepare() -> None:
             "This profile requires manager_processing configuration for the KF worker"
         )
     corpus_index, api_indexes = corpus_settings(worker_config, api_config)
+    agents_indexes = observability_indexes(
+        yaml.safe_load(configs["fred-agents-back"]["data"]["configuration.yaml"])
+    )
+    if corpus_index in agents_indexes:
+        raise RuntimeError(
+            "The corpus index must be separate from the agent runtime's observability indexes"
+        )
     indexes = [corpus_index]
     kpi = worker_config["observability"]["kpi"]["opensearch"]
     if kpi["enabled"]:
@@ -190,6 +197,8 @@ def prepare() -> None:
         indexes,
         application["kf-api-opensearch-password"],
         api_indexes,
+        application["agents-opensearch-password"],
+        agents_indexes,
     )
     run([*kube, "apply", "-f", "-"], body=json.dumps(resource))
     generated.write_text(
@@ -227,19 +236,25 @@ def corpus_settings(worker_config: dict, api_config: dict) -> tuple[str, list[st
     corpus_index = concrete_index(vector.get("index"))
     if api_config["storage"].get("vector_store", {}).get("index") != corpus_index:
         raise RuntimeError("Knowledge Flow API must search the index the worker writes")
-    api_indexes = []
-    log_store = api_config["storage"].get("log_store") or {}
-    if log_store.get("type") == "opensearch":
-        api_indexes.append(concrete_index(log_store.get("index")))
-    # KpiOpenSearchSinkConfig enables this sink and index by default.
-    api_kpi = api_config.get("observability", {}).get("kpi", {}).get("opensearch", {})
-    if api_kpi.get("enabled", True):
-        api_indexes.append(concrete_index(api_kpi.get("index", "kpi-index")))
+    api_indexes = observability_indexes(api_config)
     if corpus_index in api_indexes:
         raise RuntimeError(
             "The corpus index must be separate from writable API observability indexes"
         )
     return corpus_index, api_indexes
+
+
+def observability_indexes(config: dict) -> list[str]:
+    """Return the log and KPI indexes one process writes."""
+    indexes = []
+    log_store = config["storage"].get("log_store") or {}
+    if log_store.get("type") == "opensearch":
+        indexes.append(concrete_index(log_store.get("index")))
+    # KpiOpenSearchSinkConfig enables this sink and index by default.
+    kpi = config.get("observability", {}).get("kpi", {}).get("opensearch", {})
+    if kpi.get("enabled", True):
+        indexes.append(concrete_index(kpi.get("index", "kpi-index")))
+    return indexes
 
 
 def provision_search(
@@ -250,6 +265,8 @@ def provision_search(
     indexes: list[str],
     api_password: str,
     api_indexes: list[str],
+    agents_password: str,
+    agents_indexes: list[str],
 ) -> None:
     # The existing adapter checks a cluster-wide hybrid pipeline at startup.
     # Provision it as operator; the application only needs to read it.
@@ -327,6 +344,30 @@ def provision_search(
             ),
         ]
     ]
+    # The agent runtime only writes its logs and KPI: no corpus, no pipeline.
+    agents_role = {
+        "cluster_permissions": ["cluster_monitor", "cluster_composite_ops"],
+        "index_permissions": [
+            {
+                "index_patterns": sorted(set(agents_indexes)),
+                "allowed_actions": ["crud", "create_index", "manage"],
+            }
+        ],
+    }
+    resources += [
+        (endpoint + "/" + suffix, payload)
+        for suffix, payload in [
+            ("roles/fred-agents", agents_role),
+            (
+                "internalusers/fred-agents",
+                {"password": agents_password, "backend_roles": ["fred-agents"]},
+            ),
+            (
+                "rolesmapping/fred-agents",
+                {"backend_roles": ["fred-agents"], "users": []},
+            ),
+        ]
+    ]
     for url, payload in resources:
         if "/_search/pipeline/" in url:
             try:
@@ -379,6 +420,7 @@ def provision_storage(
         "kf-api-s3-secret",
         "opensearch-password",
         "kf-api-opensearch-password",
+        "agents-opensearch-password",
     ):
         credentials[key] = (
             base64.b64decode(data[key]).decode()

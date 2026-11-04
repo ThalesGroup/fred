@@ -1261,7 +1261,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
                 self.services,
                 skills=self._skill_source.for_execution(
                     tuple(s.name for s in binding.runtime_context.selected_skills),
-                    binding.disabled_platform_skills,
+                    binding.unavailable_skill_names,
                     resuming=binding.is_resuming,
                 ),
             )

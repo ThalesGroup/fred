@@ -1,41 +1,48 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Dossier de reprise du 3 novembre 2026, pour reprendre le travail le 4 novembre.**
-Ce document est demandé explicitement pour garder le fil après la fusion. Il décrit
-les reports et les pistes de portage, pas des fonctionnalités déjà disponibles.
-Les pistes proposées restent à concevoir et à valider dans chaque prochain chantier.
-Aucune issue GitHub supplémentaire n'a été créée.
+**Dernière tranche intégrée : Swift `059ae1c91b959692f6a0fb61ddc9824c67c90355`.**
+Le merge suivant part de Weaver `6adc65bf41d10e56202797a529443a67f8dbe191` et
+reprend deux nouveaux commits ; voir la section 11. Cette borne est celle à utiliser
+pour inventorier les prochaines arrivées Swift. Les repères `53e39f6f7` ci-dessous
+restent ceux de la tranche initiale et de ses portages différés.
 
-> **À retenir : les commits Swift différés deviennent des ancêtres de Weaver avec
-> cette fusion. Un prochain `git merge` ne les réappliquera pas automatiquement.**
-> Il faudra porter explicitement les comportements ci-dessous. Ne pas lancer un
-> cherry-pick global de ces PR : certaines touchent le control plane Python retiré,
-> d'autres réécriraient les adaptations Weaver du chat et de l'ingestion.
+**Etat consolidé de la tranche initiale, le 4 novembre 2026.** Les portages DOCX, titres, skills et
+métadonnées e-mail de la tranche initiale sont intégrés. Mistral #3321 est mis de
+côté à la demande de l'utilisateur, sans validation fournisseur. Les réceptions
+k3d/plateforme et les raccords arc42 correspondants restent à effectuer.
 
-## 1. Reprendre demain en cinq minutes
+La [méthode de merge](docs/SWIFT_WEAVER_MERGES.md) décrit la procédure réutilisable.
+Ce dossier conserve les sources Swift, les décisions et les preuves de la tranche
+initiale ; ce n'est pas une liste de missions à relancer intégralement.
 
-1. Lire le tableau ci-dessous et choisir **un seul sujet**.
-2. Lire sa fiche : apport Swift, frontière Weaver, sources et critères de fin.
-3. Examiner le diff du commit Swift indiqué et les sources Weaver actuelles.
-4. Définir le comportement voulu, puis réutiliser le propriétaire existant de la
-   donnée ou de la décision avant de modifier les contrats, le backend et l'UI.
-5. Mettre à jour ce document avec le commit de portage et la validation effective.
-   Une case cochée doit désigner un comportement intégré, pas seulement un helper.
+> Un comportement différé peut déjà avoir son commit Swift dans l'ascendance.
+> Un nouveau merge ne le réapplique pas. Les portages intégrés ci-dessous ne
+> déplacent pas la borne Swift fusionnée : `53e39f6f7`.
 
-| Sujet                                                 | Décision de cette fusion                                | Première action utile                                                          |
-| ----------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [Skills : politique, catalogue et traces](#skills)    | PR #3342 entièrement différée, décision confirmée       | Définir la portée de la politique et sa transmission dans le contexte admis    |
-| [Titres automatiques et modèle configurable](#titles) | PR #3351 entièrement différée, décision confirmée       | Définir le choix autorisé du modèle et la protection serveur du renommage      |
-| [Nom d'auteur des exports DOCX](#docx)                | PR #3422 entièrement différée, décision confirmée       | Examiner l'annuaire Rust et le contrat de profil vers la capability            |
-| [Mistral Large 4](#mistral)                           | Entrée du catalogue local Swift non reprise             | Vérifier le besoin, puis utiliser le catalogue de modèles Weaver               |
-| [Métadonnées e-mail structurées](#mail)               | Partie de #3317 non reprise ; extraction worker reprise | Définir les champs utiles et leur publication par le propriétaire du catalogue |
-| [E-mail joint à une conversation](#mail-chat)         | Parcours intégré non établi par cette revue             | Tracer le parcours Weaver actuel avant de décider s'il manque du code          |
-| [Erreurs MCP brutes et anciens services](#excluded)   | Exclusions volontaires                                  | Conserver les frontières Weaver ; aucun rétablissement à l'identique           |
+## 1. Reprendre en cinq minutes
 
-Ordre pratique proposé, sans priorité produit imposée : Mistral si c'est un besoin
-immédiat de configuration ; auteur DOCX pour un chantier délimité ; titres ensuite ;
-skills comme chantier coordonné plus large. Les métadonnées e-mail méritent une
-question préalable : quel usage concret, au-delà du texte déjà extrait, les exige ?
+1. Lire cet état et la méthode ; vérifier branche, statut et travail concurrent.
+2. Actualiser les références Swift sans merge automatique et figer la nouvelle cible.
+3. Inventorier les nouveaux changements depuis la borne intégrée, séparément des
+   validations restantes et des décisions mises de côté.
+4. Expliquer les apports produit puis attribuer des lots bornés, avec propriétaires
+   Weaver, dépendances et contrôles proportionnés.
+5. Mettre à jour ce dossier après chaque intégration, sans présenter du code isolé
+   ou des tests simulés comme une validation déployée.
+
+| Sujet | Etat courant | Suite |
+| --- | --- | --- |
+| [Skills](#skills) | Intégrés en `3fae108e4`, revue favorable après corrections | Réception déployée ; cible future de contenus par espace à discuter séparément |
+| [Titres](#titles) | Intégrés en `d61648f0e`, lot code clôturé | Réception k3d/plateforme puis arc42 |
+| [Auteur DOCX](#docx) | Intégré en `c784b3b71`, lot code clôturé | Validation humaine de l'export |
+| [Mistral](#mistral) | Mis de côté, ne pas relancer sans demande | Ne bloque pas la suite ; aucune activation validée |
+| [Métadonnées e-mail](#mail) | Intégrées en `276026917`, revue favorable | Réception bibliothèque/conversation ; aucun backfill |
+| [E-mail joint au chat](#mail-chat) | Parcours tracé ; détails raccordés par le lot e-mail | Valider le parcours déployé complet |
+| [Exclusions](#excluded) | Décisions maintenues | Ne pas restaurer les anciennes autorités |
+
+L'isolation des index OpenSearch Swift/Weaver est intégrée en `8134c78a5` ; elle
+ne constitue pas une migration des données Swift. La recréation du cluster et sa
+validation sont pilotées par le développeur.
 
 ### Repères Git et limites de ce dossier
 
@@ -82,99 +89,47 @@ Références maintenues : [instructions](AGENTS.md), [architecture actuelle](doc
 
 <a id="skills"></a>
 
-## 3. Skills : politique globale, nouveau catalogue et traces de chargement
+## 3. Skills : nouveau catalogue, gouvernance locale et traces de chargement
 
 **Références :** [issue #3299](https://github.com/ThalesGroup/fred/issues/3299), [PR #3342](https://github.com/ThalesGroup/fred/pull/3342), [commit 29c01c681](https://github.com/ThalesGroup/fred/commit/29c01c68131a31309b659842f22d4637dd215075).
 
-**État : report intégral confirmé.** Ce n'est pas seulement un panneau d'administration
-retiré de la fusion. Les règles d'invocation, le catalogue, les défauts de configuration,
-les contrats runtime et les affichages associés sont différés ensemble.
+**Etat actuel : portage adapté intégré en `3fae108e47c02e491a1ce3411feeac96c39baf8d`.**
+Le report initial était intégral parce que Swift utilisait le Control Plane Python.
+Le besoin a été repris dans la gouvernance Weaver, sans restaurer cette autorité.
 
-### Ce que Swift apporte
+Les skills de ce premier lot sont fournis par les pods et gouvernés comme les
+capabilities. Les plafonds organisation, équipe et projet se composent sans
+héritage des rôles. La préparation et l'exécution utilisent le contexte admis,
+avec aperçus, sélection et traces. ReAct et Deep portent les skills ; Graph
+s'exécute indépendamment du catalogue inutilisé et refuse une sélection explicite.
+Ralph ne reçoit pas de projection de skills.
 
-- Une politique globale d'activation/désactivation des skills empaquetés, gérée dans
-  le control plane Python et persistée dans une table dédiée. Absence de ligne = actif.
-- Un inventaire indiquant les runtimes disponibles, indisponibles ou incompatibles
-  avec la politique, et une administration qui peut réactiver un nom même si sa
-  source de métadonnées est hors ligne.
-- Une configuration absente ou `{}` qui active le catalogue empaqueté ; `skills: null`
-  le désactive explicitement ; les répertoires personnalisés gardent leur sens.
-- Un catalogue de sept skills : `analyze-data`, `compare-options`, `grounded-research`,
-  `summarize-document`, `meeting-minutes`, `grill-me`, `graph`.
-- Les quatre premiers sont chargeables par le modèle mais ne sont plus des commandes
-  directement sélectionnables par l'utilisateur. `meeting-minutes` et `grill-me`
-  demandent une sélection explicite pour un nouveau chargement. `graph` autorise les
-  deux voies.
-- `graph` réunit diagrammes, graphiques de données et tableaux ; les exemples Mermaid
-  deviennent une référence conditionnelle. L'ancien nom empaqueté `mermaid` n'est
-  plus annoncé. `data-visualization` et `verify-answer` sont retirés sans alias.
-- Titres/descriptions localisés à partir d'une provenance empaquetée fiable, affichage
-  du chargement réel des skills et adaptation des sélecteurs/commandes/traces.
-- Les anciens messages gardent leurs noms historiques. Les anciennes exclusions
-  `mermaid`/`data-visualization` ne sont pas transférées automatiquement à `graph`.
+Le catalogue reprend `analyze-data`, `compare-options`, `grounded-research`,
+`summarize-document`, `meeting-minutes`, `grill-me` et `graph`, avec leurs règles
+d'invocation. Les anciens noms restent lisibles dans l'historique. Ni l'ancienne
+politique Python ni ses migrations ne sont des dépendances de cette réalisation.
 
-Swift coordonne ces couches avec `X-Fred-Skill-Policy: 1`, une lecture
-`/platform/skills/policy` pour l'exécution directe et une version de métadonnées du
-catalogue. Sa note exige un déploiement coordonné des replicas ; l'inventaire d'une
-URL derrière un répartiteur ne prouve pas que chaque replica est à jour.
+La revue a demandé puis constaté deux corrections : admission Deep dans sa propre
+famille et absence de dépendance Graph à une source de skills non utilisée.
+L'exécutant rapporte notamment 5 tests SQL et 7 HTTP après ces corrections, ainsi
+que la qualité des composants concernés ; ces suites n'ont pas été relancées par
+le maître d'oeuvre. La validation k3d/plateforme reste ouverte.
 
-### Pourquoi ne pas le fusionner tel quel
+Le modèle « fourni par un pod » clôt ce premier lot ; il ne fige pas la cible.
+La réflexion sur des skills possédés par organisation/équipe/projet, analogues aux
+prompts, est un chantier produit distinct et n'est pas du code oublié du merge.
 
-Les endpoints, la table et les mécanismes de résolution de cette politique ciblent
-le control plane Python supprimé. Importer seulement le runtime activerait des
-lectures de politique sans propriétaire Rust correspondant. Importer seulement les
-nouveaux noms/menu laisserait catalogue, commandes et exécution incohérents.
-Le comportement actuel des skills Weaver est donc conservé dans cette fusion.
+La politique globale par nom et son administration, présentes dans Swift #3342,
+ne sont pas couvertes par les plafonds Weaver par organisation et espace. Le
+suivi de ce comportement différé est la draft #3448, reconstruite sur le merge
+Weaver `e71bc96ac` ; son API, son inventaire et ses raccords restent à valider
+avant toute activation. Le changement Swift #3426 sur `grounded-research`
+est déjà inclus dans #3342 et dans le catalogue Weaver intégré.
 
-### Sources à ouvrir
-
-- [docs/swift/ops/migrations/platform-skills-evolution.md](https://github.com/ThalesGroup/fred/blob/29c01c68131a31309b659842f22d4637dd215075/docs/swift/ops/migrations/platform-skills-evolution.md)
-- [apps/control-plane-backend/control_plane_backend/platform_skills/service.py](https://github.com/ThalesGroup/fred/blob/29c01c68131a31309b659842f22d4637dd215075/apps/control-plane-backend/control_plane_backend/platform_skills/service.py)
-- [apps/control-plane-backend/control_plane_backend/platform_skills/schemas.py](https://github.com/ThalesGroup/fred/blob/29c01c68131a31309b659842f22d4637dd215075/apps/control-plane-backend/control_plane_backend/platform_skills/schemas.py)
-- [libs/fred-sdk/fred_sdk/contracts/skills.py](https://github.com/ThalesGroup/fred/blob/29c01c68131a31309b659842f22d4637dd215075/libs/fred-sdk/fred_sdk/contracts/skills.py)
-- [libs/fred-runtime/fred_runtime/skills/native.py](https://github.com/ThalesGroup/fred/blob/29c01c68131a31309b659842f22d4637dd215075/libs/fred-runtime/fred_runtime/skills/native.py)
-- [libs/fred-runtime/tests/test_skill_policy.py](https://github.com/ThalesGroup/fred/blob/29c01c68131a31309b659842f22d4637dd215075/libs/fred-runtime/tests/test_skill_policy.py)
-
-Côté Weaver : [résolution runtime Rust](apps/control-plane/src/agent_instances/runtime.rs),
-[catalogue des agents](apps/control-plane/src/agents/catalog.rs),
-[contrats des skills](libs/fred-sdk/fred_sdk/contracts/skills.py),
-[catalogue runtime](libs/fred-runtime/fred_runtime/skills/catalog.py),
-[chargements natifs](libs/fred-runtime/fred_runtime/skills/native_reads.py),
-[commandes du composeur](apps/frontend/src/rework/components/pages/ManagedChatPage/useComposerCommands.ts).
-
-### Démarche proposée pour Weaver
-
-1. Confirmer le besoin et la portée : politique plateforme sur le catalogue empaqueté,
-   traitement des répertoires personnalisés, droits d'administration et diagnostic
-   quand un runtime manque. Ne pas déduire une nouvelle politique par organisation
-   du seul fait que Weaver possède des organisations.
-2. Chercher le support de configuration existant approprié. Si une persistance
-   nouvelle est nécessaire, la concevoir côté Rust/PostgreSQL avec contraintes et
-   migration immuable. Garder un seul propriétaire des décisions.
-3. Relier cette politique au contexte serveur admis et couvrir tous les points
-   d'entrée encore actifs, y compris les reprises. Ne pas copier un appel HTTP
-   supplémentaire vers un endpoint Swift inexistant.
-4. Définir la fraîcheur à la nouvelle admission, le comportement en cas de source
-   indisponible et la compatibilité des replicas. Ne pas retirer rétrospectivement
-   des instructions déjà chargées dans un tour ou un checkpoint.
-5. Porter ensemble le catalogue, ses règles d'invocation, les validations du SDK,
-   le chargement runtime et les commandes UI. Documenter explicitement les noms
-   retirés et le devenir des anciennes exclusions ; ne pas migrer silencieusement
-   une préférence vers un skill dont le périmètre est plus large.
-6. Porter la trace du chargement réel et les traductions ; régénérer les contrats.
-   Préserver les vieux messages même si le skill n'existe plus dans le catalogue.
-7. Définir un ordre de déploiement et un retour arrière propres aux composants Rust
-   et runtime. La migration Alembic Swift n'est pas une procédure Weaver.
-
-### Critères de fin à vérifier
-
-- [ ] Activation/désactivation cohérente entre inventaire, menu et nouveau chargement.
-- [ ] Invocation utilisateur/modèle conforme pour les sept skills ; refus des vieux brouillons incompatibles sans perte du texte.
-- [ ] Comportement explicite si la source de politique manque ; pas de catalogue vide inventé.
-- [ ] Même décision sur les replicas et à la reprise selon les règles d'admission convenues.
-- [ ] Historique et anciens noms lisibles ; exclusion historique de visualisation traitée explicitement.
-- [ ] Les traces correspondent à un chargement effectif, pas à une simple mention dans le texte.
-- [ ] Configuration absente, vide, nulle et personnalisée testée ; contrats et deux locales cohérents.
+Pour retrouver les sources historiques, lire le commit Swift ci-dessus et sa note
+`docs/swift/ops/migrations/platform-skills-evolution.md` via Git. Pour les preuves
+actuelles, examiner le commit Weaver et ses tests. Ne pas réappliquer les patches
+Swift sur le lot intégré.
 
 <a id="titles"></a>
 
@@ -182,9 +137,33 @@ Côté Weaver : [résolution runtime Rust](apps/control-plane/src/agent_instance
 
 **Références :** [issue #3346](https://github.com/ThalesGroup/fred/issues/3346), [PR #3351](https://github.com/ThalesGroup/fred/pull/3351), [commit 5ba132152](https://github.com/ThalesGroup/fred/commit/5ba132152b745ef338a7c493a4ec28588ebae5b2).
 
-**État : PR entièrement différée.** Weaver conserve ses titres actuels et le
-renommage manuel ; le sélecteur du modèle, `auto_title` et l'événement `session_title`
-Swift ne sont pas activés par cette fusion.
+**État actuel : intégré, lot de portage de code clôturé le 4 novembre 2026.**
+Commit `d61648f0e875fd77db4d1582ea1264a9c7536340`, intégré sans conflit depuis
+`codex/port-conversation-titles`. Le report lors du merge initial reste expliqué
+ci-dessous pour les prochains portages.
+
+Le Responsable choisit facultativement un modèle autorisé par organisation.
+Sans choix dédié, le titre utilise le modèle admis pour la réponse ; un choix
+dédié inutilisable conserve le titre initial. La migration SQLx additive 0004
+réutilise la politique et les sessions existantes. Une tentative est réservée
+atomiquement au premier tour admis, sans retry ; les anciennes sessions restent
+inéligibles. Tout renommage manuel, même à texte identique, invalide la tentative.
+Python et Ralph génèrent le titre ; le serveur le persiste conditionnellement et
+le navigateur recharge sa valeur canonique. L'usage est comptabilisé par offre.
+
+L'exécutant rapporte 401 tests ciblés réussis et la qualité SDK/runtime/Control
+Plane/frontend réussie. Le maître d'oeuvre a effectué une lecture ciblée des
+contrats et du cycle de vie, vérifié le diff final et les notes opérateur, sans
+relancer ces suites. Le parcours k3d/intégration reste à valider par le développeur.
+Les annexes générées sont actualisées ; les raccords narratifs arc42 proposés
+restent à intégrer après cette validation, sans prétendre un parcours déjà vérifié.
+
+Le déploiement requiert migration et versions coordonnées : voir la
+[note opérateur](deploy/release-notes/changes/weaver-conversation-titles.md).
+Pour les futurs merges, préserver la distinction GET lecture / POST admission,
+la priorité durable du renommage, l'autorité du tour et l'agrégation d'usage.
+Ne pas restaurer le Control Plane Python, le catalogue local Swift ou une
+persistance de titre pilotée par un booléen React.
 
 ### Ce que Swift apporte
 
@@ -225,7 +204,7 @@ Côté Weaver : [décision de modèle](apps/control-plane/src/model_catalog/inst
 [hook de chat](apps/frontend/src/rework/components/pages/ManagedChatPage/useManagedChat.ts),
 [hook SSE](apps/frontend/src/rework/core/hooks/useChatSse.ts).
 
-### Démarche proposée pour Weaver
+### Cadrage historique ayant guidé le portage
 
 1. Définir qui choisit le modèle de titre et comment ce choix s'articule avec les
    offres autorisées. Réutiliser le catalogue et la décision d'inférence actuels ;
@@ -244,7 +223,7 @@ Côté Weaver : [décision de modèle](apps/control-plane/src/model_catalog/inst
    Tout callback tardif reste lié à l'identité, l'espace et la conversation d'origine.
 6. Porter le sélecteur admin et ses erreurs après l'établissement du contrat serveur.
 
-### Critères de fin à vérifier
+### Validation fonctionnelle restante sur installation
 
 - [ ] Première conversation, tours suivants et reprises : aucune génération répétée injustifiée.
 - [ ] Renommage manuel concurrent prioritaire, y compris dans un autre onglet.
@@ -259,8 +238,34 @@ Côté Weaver : [décision de modèle](apps/control-plane/src/model_catalog/inst
 
 **Références :** [issue #3421](https://github.com/ThalesGroup/fred/issues/3421), [PR #3422](https://github.com/ThalesGroup/fred/pull/3422), [commit 55de29845](https://github.com/ThalesGroup/fred/commit/55de298455ffabf3a14b8eadc946553a4045a725).
 
-**État : report intégral confirmé.** Cela concerne les métadonnées d'export DOCX,
-pas la correction de validation des DOCX importés, qui est bien reprise.
+**État actuel : intégré, lot de portage clôturé le 4 novembre 2026.** Commit
+`c784b3b71fae2a5a8d055e159450387fd38bdf73`, intégré sans conflit depuis
+`codex/port-docx-author`. Le report intégral décidé lors de la fusion du 3 novembre
+est conservé ci-dessous comme contexte historique. Ce lot concerne les propriétés
+d'export Word, pas la validation des DOCX importés déjà reprise.
+
+Le routeur utilise le prénom et le nom vérifiés de l'exportateur si tous deux sont
+non vides après nettoyage, sinon son username vérifié nettoyé. Sans nom fiable,
+notamment pour `AssertedUser`, `author` et `last_modified_by` sont explicitement
+vides. Les deux propriétés sont limitées à 255 caractères. Aucun uid ou nom de
+workload ne remplace la personne ; aucun appel annuaire ni enrichissement de claims.
+Cette divergence volontaire du backport doit être conservée aux prochains merges.
+
+Le routeur, le convertisseur et leurs tests existants ont été adaptés. Les droits,
+le contenu enregistré et l'export Markdown sont conservés. Aucun changement de
+Rust, de schéma, d'API publique ou de client généré. Le README de la capability et
+la [note opérateur](deploy/release-notes/changes/weaver-docx-export-author.md)
+décrivent le comportement. Les raccords arc42 ont été approuvés séparément par
+l'utilisateur : vue d'ensemble, parcours de Bob, distinction drive/conversation
+et repères d'implémentation dans l'annexe A9.
+
+Contrôles réalisés : qualité du package réussie ; **57 tests offline ciblés**
+réussis dans `test_router.py` et `test_docx_export.py` ; note opérateur, liens et
+ancres documentaires contrôlés. Le contrôle Git d'espacement est également passé.
+Les tests remplacent l'authentification et le stockage par leurs fixtures : ils
+ne prouvent pas l'export depuis un pod vivant. La validation humaine carte/panneau,
+Word/LibreOffice et Markdown, ainsi que le parcours local k3d et plateforme
+d'intégration, restent à faire. La clôture du portage ne les déclare pas réalisés.
 
 ### Ce que Swift apporte
 
@@ -269,7 +274,7 @@ authentifié. Il utilise prénom + nom quand les deux existent, sinon le usernam
 Le convertisseur renseigne `core_properties.author` et `last_modified_by`, avec
 une limite de 255 caractères. Les tests couvrent l'auteur transmis et l'export.
 
-### Pourquoi le report et ce qui existe déjà dans Weaver
+### Pourquoi le report initial
 
 La capability accepte notamment un `AssertedUser` qui ne possède pas ces champs de
 profil. Copier l'accès aux attributs casserait ce chemin ou pousserait à fabriquer
@@ -292,7 +297,7 @@ Côté Weaver : [identité assertée](libs/fred-core/fred_core/security/delegati
 [route d'export](libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/router.py),
 [convertisseur DOCX](libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/docx_export.py).
 
-### Démarche proposée pour Weaver
+### Démarche initialement proposée (historique)
 
 1. Confirmer la sémantique : auteur = personne qui exporte, comme Swift, ou autre
    besoin explicite. Définir nom incomplet, utilisateur sans profil et annuaire
@@ -305,13 +310,14 @@ Côté Weaver : [identité assertée](libs/fred-core/fred_core/security/delegati
 4. Porter les deux propriétés Word, la borne de longueur et les tests. Garder les
    contrôles actuels d'accès au document et à la conversation.
 
-### Critères de fin à vérifier
+### Critères du portage vérifiés
 
-- [ ] Chemin `AssertedUser` réellement couvert, pas uniquement un mock `KeycloakUser` enrichi.
-- [ ] Noms accentués, nom incomplet, absence de profil et chaîne trop longue.
-- [ ] Auteur et dernière modification cohérents ; pas de nom hérité du modèle DOCX.
-- [ ] Refus d'accès au document inchangé ; nom fourni par le client ignoré.
-- [ ] Fallback documenté et testé lorsque la source de profil ne répond pas.
+- [x] Vraie classe `AssertedUser` couverte dans les tests offline du routeur.
+- [x] Noms accentués, nom incomplet, absence de profil et chaîne trop longue.
+- [x] Auteur et dernière modification cohérents ; propriétés du modèle effacées.
+- [x] Refus d'accès préservé dans les tests ; nom fourni par le client ignoré.
+- [x] Fallback vide documenté et testé sans profil ; aucun service de profil ajouté.
+- [ ] Validation fonctionnelle humaine de l'export depuis l'interface et du déploiement.
 
 <a id="mistral"></a>
 
@@ -319,7 +325,9 @@ Côté Weaver : [identité assertée](libs/fred-core/fred_core/security/delegati
 
 **Références :** [issue #3320](https://github.com/ThalesGroup/fred/issues/3320), [PR #3321](https://github.com/ThalesGroup/fred/pull/3321), [commit 2ddc6870b](https://github.com/ThalesGroup/fred/commit/2ddc6870b44485573bed693c51420158a7c8303e).
 
-**État : entrée du catalogue local Swift non reprise.** Ce n'est pas une suppression
+**Etat : mis de côté à la demande de l'utilisateur le 4 novembre 2026.**
+Ne pas lancer de portage ni activer une offre sans nouvelle demande.
+L'entrée du catalogue local Swift reste non reprise. Ce n'est pas une suppression
 d'un modèle configuré dans une installation Weaver, ni un changement du modèle par
 défaut. Aucun appel au fournisseur n'a été effectué durant cette revue.
 
@@ -378,76 +386,58 @@ ou trop lentes peuvent être omises alors que le mail produit une extraction
 partielle. Le délai par pièce jointe borne l'attente du thread, pas un arrêt forcé
 de ce thread ; le superviseur du processus d'extraction reste l'enveloppe de durée.
 
-### 7.1 Métadonnées structurées non reportées
+### 7.1 Métadonnées structurées : portage intégré
 
-Swift enrichit `title`, `author`, `created` à partir du sujet, de l'expéditeur et de
-la date du mail. Son override `process_metadata` ajoute `extensions.email` avec
-`to`, `cc`, `message_id`, `in_reply_to` ; pas de `bcc`. Cette écriture utilise l'ancien
-chemin d'enrichissement des métadonnées pendant l'ingestion.
+Commit Weaver `276026917f8ad5de206cc0980d9ba49f02f62faf`. Ce commit commun contient
+également du travail runtime/chat hors de la revue e-mail ; la réception favorable
+porte uniquement sur les 29 fichiers attribués au lot #3317 et leur diff.
 
-Dans Weaver, les helpers de parsing ne constituent pas une publication de ces
-champs dans le catalogue. L'override Swift n'est pas restauré : le manager et le
-control plane possèdent l'identité, le placement, les métadonnées et la publication.
-**Avoir le sujet dans le Markdown ne signifie pas qu'il existe comme champ filtrable
-ou interrogeable dans le catalogue.**
+Le processeur écrit les faits du mail parent dans l'artefact de sortie. Le manager
+reprend seulement le sujet (`title`), l'expéditeur (`author`), la date (`created`)
+et `extensions.email` : `to`, `cc`, `message_id`, `in_reply_to`, sans `bcc`.
+Les faits survivent au passage entre processus et à la restauration pour indexation.
+Le Control Plane valide l'artefact avant publication ; l'aperçu partagé propose
+les détails depuis la génération publiée, sous les droits courants.
 
-- [apps/knowledge-flow-backend/knowledge_flow_backend/core/processors/input/email_processor/email_markdown_processor.py](https://github.com/ThalesGroup/fred/blob/2b6bf4e168bad2216dd614c5d2a6fd3ef147a54e/apps/knowledge-flow-backend/knowledge_flow_backend/core/processors/input/email_processor/email_markdown_processor.py)
-- [apps/knowledge-flow-backend/knowledge_flow_backend/core/processors/input/fast_text_processor/fast_email_processor.py](https://github.com/ThalesGroup/fred/blob/2b6bf4e168bad2216dd614c5d2a6fd3ef147a54e/apps/knowledge-flow-backend/knowledge_flow_backend/core/processors/input/fast_text_processor/fast_email_processor.py)
-- [apps/knowledge-flow-backend/knowledge_flow_backend/features/ingestion/ingestion_controller.py](https://github.com/ThalesGroup/fred/blob/2b6bf4e168bad2216dd614c5d2a6fd3ef147a54e/apps/knowledge-flow-backend/knowledge_flow_backend/features/ingestion/ingestion_controller.py)
-- [docs/swift/ops/migrations/3306-email-file-ingestion.md](https://github.com/ThalesGroup/fred/blob/2b6bf4e168bad2216dd614c5d2a6fd3ef147a54e/docs/swift/ops/migrations/3306-email-file-ingestion.md)
+Le nom de fichier, l'identité, l'espace, l'auteur et la date d'import restent
+ceux du catalogue. Les en-têtes ne sont pas des identités authentifiées, ne
+confèrent aucun droit et ne créent ni unicité ni regroupement de documents.
+Les destinataires ne deviennent pas un nouveau filtre ou moteur de fils.
 
-Côté Weaver : [processeur e-mail](apps/knowledge-flow-worker/knowledge_flow_worker/core/processors/input/email_processor/email_markdown_processor.py),
-[parseur et helpers](apps/knowledge-flow-worker/knowledge_flow_worker/core/processors/input/email_processor/email_message_parser.py),
-[modèles documentaires](apps/control-plane/src/documents/models.rs),
-[publication](apps/control-plane/src/processing/publication.rs),
-[enregistrements de traitement](apps/control-plane/src/processing/models.rs).
+`DocumentMetadata`, metadata.json et la publication existante suffisent : pas de
+migration SQL, table ou nouvelle voie d'ingestion. Les valeurs absentes du résultat
+remplacent les anciens faits extraits ; aucune valeur métier utilisateur n'est
+éditée par ce lot. Les documents déjà publiés gardent leurs artefacts et un état
+vide explicite pour les détails absents. **Le retraitement après succès et le
+remplacement de l'original restent indisponibles sur cette base ; aucun backfill.**
 
-Démarche proposée :
+L'exécutant rapporte 131 tests worker, 44 UI et 5 Rust (2 unitaires, 3 scénarios
+d'intégration), ainsi que la qualité des trois composants. La revue ciblée a
+examiné les raccords, le périmètre, la note opérateur et la restauration de la
+sauvegarde ; elle n'a pas relancé les tests. Le scénario Rust appelle le vrai
+processeur puis publie sur PostgreSQL/S3 jetables ; Temporal et le transport du
+worker sont pilotés/simulés. Ce n'est pas une validation du déploiement.
 
-1. Définir les usages : affichage, filtrage, recherche, regroupement par fil ?
-   Ne pas créer un schéma métier complet de messagerie si le besoin est seulement
-   de lire les en-têtes déjà présents dans le texte.
-2. Séparer les faits extraits du mail et les faits de gouvernance du document.
-   Un expéditeur ou destinataire de mail n'accorde aucun droit d'accès Weaver.
-   Un `message_id` externe n'est ni l'identité du document ni une clé de tenant.
-3. Examiner le contrat de sortie d'extraction et le propriétaire actuel des
-   métadonnées. Ajouter les champs nécessaires dans ce contrat et leur publication
-   autorisée, avec bornes et validation ; ne pas laisser le parseur écrire le catalogue.
-4. Décider de la provenance et des conflits : métadonnée extraite face à une valeur
-   métier existante, réingestion, remplacement, donnée manquante ou malformée.
-5. Adapter les projections/recherches seulement si le besoin les exige, sous les
-   mêmes contrôles de document publié. Toute évolution de schéma doit être additive.
-
-- [ ] Extraction et publication reliées dans un cas réel, pas seulement un test de helper.
-- [ ] Valeurs absentes/malformées et listes longues bornées ; Cci exclus des champs dédiés.
-- [ ] Identité, espace, droits et publication du document inchangés.
-- [ ] Remplacement et réingestion ne restaurent pas des champs obsolètes.
-- [ ] Les champs annoncés dans l'UI ou les recherches existent effectivement dans le catalogue.
+Sources : [extraction](apps/knowledge-flow-worker/knowledge_flow_worker/core/processors/input/email_processor/email_markdown_processor.py),
+[manager](apps/knowledge-flow-worker/knowledge_flow_worker/features/manager_processing/service.py),
+[validation](apps/control-plane/src/processing/retrievable.rs),
+[aperçu et droits](apps/control-plane/src/processing/preview.rs),
+[note opérateur](deploy/release-notes/changes/weaver-email-metadata.md).
 
 <a id="mail-chat"></a>
 
-### 7.2 E-mail directement joint à une conversation : parcours à établir
+### 7.2 E-mail joint à une conversation : parcours tracé, réception déployée restante
 
-Swift ajoute également `FastEmailProcessor` et adapte son ancien contrôleur
-d'ingestion pour les extensions e-mail. Le helper est disponible dans le worker
-Weaver, mais l'API d'ingestion synchrone retirée n'est pas restaurée.
+Le traçage a relié l'upload conversation, le profil fast, EmailMarkdownProcessor,
+la publication et le périmètre documentaire du runtime sans identifier de manque
+nécessitant l'ancien FastEmailProcessor synchrone. Le lot métadonnées raccorde
+également le panneau des pièces jointes à l'aperçu partagé pour les mails.
 
-**Ce point est une incertitude d'intégration, pas la preuve que le parcours est
-absent ou cassé.** Les tests de processeurs ne suffisent pas à conclure. L'aide a été
-limitée au parcours bibliothèque pour ne pas présenter ce chemin comme établi.
-
-Commencer par [les pièces jointes de session](apps/control-plane/src/sessions/attachments.rs),
-[la préparation de conversation](apps/control-plane/src/agent_instances/preparation.rs)
-et [le helper e-mail](apps/knowledge-flow-worker/knowledge_flow_worker/core/processors/input/fast_text_processor/fast_email_processor.py).
-Tracer le dépôt, l'admission, le stockage, la sélection du processeur, le résultat
-visible par le runtime et le nettoyage. Selon ce constat, terminer soit par une
-validation du parcours existant, soit par une adaptation minimale de ce parcours.
-Ne pas recréer l'ancien endpoint Python pour brancher le helper.
-
-- [ ] `.eml` et `.msg` atteignent le bon extracteur via la voie de pièces jointes actuelle.
-- [ ] Les droits de conversation sont contrôlés ; aucune pièce jointe ne devient un document partagé implicitement.
-- [ ] Les attentes, annulations et erreurs suivent les états existants ; pas de nouvelle file parallèle.
-- [ ] L'agent reçoit le contenu attendu ; la documentation ne promet que le parcours validé.
+Le lecteur reçoit la session explicitement, vérifie son association au document,
+son propriétaire et les droits d'espace. La voie bibliothèque sans session exclut
+les pièces jointes de conversation. Les tests couvrent les refus et les lectures
+avant/après publication. L'exécution déployée complète avec l'agent, le contrat
+worker installé et l'interface reste à valider sur k3d/plateforme.
 
 ### 7.3 Activation opérationnelle à ne pas oublier
 
@@ -565,15 +555,15 @@ commits Swift séparés. Utiliser le diff du premier parent pour les retrouver.
 Les liens ci-dessous permettent aussi de lire les commits complets sur GitHub,
 sans confondre leur appartenance à l'ascendance et leur adoption fonctionnelle.
 
-### Matrice des 25 commits entrants
+### Matrice des 25 commits entrants, actualisée après portages
 
 | Commit Swift                                                                                     | Sujet du commit                                                                                                              | Traitement dans Weaver                                                   |
 | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | [7a2bbcbc5](https://github.com/ThalesGroup/fred/commit/7a2bbcbc5c8cc34f0eb7d9472715d57ca7faf35f) | fix(tabular): restore tabular SQL compatibility and trace panels (#3365)                                                     | Repris et adapté aux publications/droits Weaver                          |
-| [5ba132152](https://github.com/ThalesGroup/fred/commit/5ba132152b745ef338a7c493a4ec28588ebae5b2) | feat(#3346): name new conversations with a generated title and choose its model (#3351)                                      | Différé intégralement : titres                                           |
+| [5ba132152](https://github.com/ThalesGroup/fred/commit/5ba132152b745ef338a7c493a4ec28588ebae5b2) | feat(#3346): name new conversations with a generated title and choose its model (#3351)                                      | Portage intégré : `d61648f0e`                                           |
 | [fa363690e](https://github.com/ThalesGroup/fred/commit/fa363690ebac5d438904d1538450cacff3c48d56) | fix(#3344): show the agent description on the chat welcome card (#3345)                                                      | Repris : description de bienvenue                                        |
 | [c05b1a590](https://github.com/ThalesGroup/fred/commit/c05b1a59086ef91f3653e4100d7cf0494ff4f986) | fix(#3403): raise the per-turn tool call limit to 100 (#3404)                                                                | Repris : plafond 100                                                     |
-| [2ddc6870b](https://github.com/ThalesGroup/fred/commit/2ddc6870b44485573bed693c51420158a7c8303e) | chore(#3320): add Mistral Large 4 to local text models (#3321)                                                               | Non repris : catalogue local retiré                                      |
+| [2ddc6870b](https://github.com/ThalesGroup/fred/commit/2ddc6870b44485573bed693c51420158a7c8303e) | chore(#3320): add Mistral Large 4 to local text models (#3321)                                                               | Mis de côté : catalogue local retiré                                      |
 | [df0e1993d](https://github.com/ThalesGroup/fred/commit/df0e1993d423c24a494ef062df6b7edd41d14d46) | fix(#3397): upgrade temporalio to 1.35.0 (#3398)                                                                             | Repris : Temporal 1.35, locks Weaver                                     |
 | [f437d97f7](https://github.com/ThalesGroup/fred/commit/f437d97f7910211bdb8b221146b732b335e32cec) | fix(#3400): patch Vite across frontend and isolated consumers (#3405)                                                        | Repris : Vite                                                            |
 | [b8ea24385](https://github.com/ThalesGroup/fred/commit/b8ea24385ca55b3cb139d77770b0793e37aaaef1) | fix(#3338): validate DOCX during metadata extraction (#3341)                                                                 | Adapté : validation DOCX dans le worker, retry corrigé                   |
@@ -586,28 +576,73 @@ sans confondre leur appartenance à l'ascendance et leur adoption fonctionnelle.
 | [e6b471f70](https://github.com/ThalesGroup/fred/commit/e6b471f70a76ab3a05ee20f2629a1466376d076b) | fix(#3419): reuse the uv cache across worktrees                                                                              | Repris : cache uv partagé                                                |
 | [3a8324432](https://github.com/ThalesGroup/fred/commit/3a83244325f0f527f9789ace494eaf0e0854b345) | chore(deps): bump the npm_and_yarn group across 2 directories with 3 updates (#3298)                                         | Repris : dépendances npm                                                 |
 | [c6741cde4](https://github.com/ThalesGroup/fred/commit/c6741cde480188e94ffdf70bde4b6c55a91eaac7) | fix(#3196): preserve Knowledge Flow MCP failure diagnostics (#3197)                                                          | Adapté : diagnostics internes, erreurs publiques filtrées                |
-| [2b6bf4e16](https://github.com/ThalesGroup/fred/commit/2b6bf4e168bad2216dd614c5d2a6fd3ef147a54e) | feat(#3306): ingest Outlook .msg and .eml mail files (#3317)                                                                 | Partiel : extraction worker reprise ; métadonnées/parcours chat à suivre |
+| [2b6bf4e16](https://github.com/ThalesGroup/fred/commit/2b6bf4e168bad2216dd614c5d2a6fd3ef147a54e) | feat(#3306): ingest Outlook .msg and .eml mail files (#3317)                                                                 | Extraction adaptée ; métadonnées intégrées en `276026917` ; réception déployée restante |
 | [a997ee4b3](https://github.com/ThalesGroup/fred/commit/a997ee4b3f8ff3053477c0d2399c2f79abadd580) | chore(deps-dev): bump minimatch from 10.2.4 to 10.2.6 in /apps/frontend in the npm_and_yarn group across 1 directory (#3423) | Repris : minimatch                                                       |
-| [55de29845](https://github.com/ThalesGroup/fred/commit/55de298455ffabf3a14b8eadc946553a4045a725) | fix(#3421): use the authenticated user in generated docx metadata (#3422)                                                    | Différé intégralement : auteur DOCX                                      |
+| [55de29845](https://github.com/ThalesGroup/fred/commit/55de298455ffabf3a14b8eadc946553a4045a725) | fix(#3421): use the authenticated user in generated docx metadata (#3422)                                                    | Portage intégré : `c784b3b71`                                      |
 | [bcc65f39b](https://github.com/ThalesGroup/fred/commit/bcc65f39b5ca47c9b74d3cbd08e8ec2b11808b29) | chore(#3424): centralize the Node.js toolchain in .nvmrc (#3425)                                                             | Repris : baseline Node centralisée                                       |
-| [29c01c681](https://github.com/ThalesGroup/fred/commit/29c01c68131a31309b659842f22d4637dd215075) | feat(#3299): evolve platform skills and native load visibility (#3342)                                                       | Différé intégralement : skills                                           |
+| [29c01c681](https://github.com/ThalesGroup/fred/commit/29c01c68131a31309b659842f22d4637dd215075) | feat(#3299): evolve platform skills and native load visibility (#3342)                                                       | Portage intégré : `3fae108e4`                                           |
 | [8c5faa604](https://github.com/ThalesGroup/fred/commit/8c5faa6049d105f880304acdb4d5b5ade76a8936) | fix(#2603): keep a streamed chat turn running across in-app navigation (#3418)                                               | Adapté : arrière-plan, autorisation de l'historique avant adoption       |
 | [d93037008](https://github.com/ThalesGroup/fred/commit/d93037008bfcdc225cfc206b42002ed041ccdb38) | fix(#3322): show the deployment's site name instead of "Fred" in user-facing text (#3323)                                    | Repris : nom du site                                                     |
 | [53e39f6f7](https://github.com/ThalesGroup/fred/commit/53e39f6f77e63bbc8238b881df38686df5be452e) | fix(#3427): preserve queues and clarify background chat status (#3429)                                                       | Adapté : files/statut arrière-plan, événements liés à l'identité         |
 
-## 10. Suivi à compléter lors des prochains portages
+## 10. Clôture de la tranche et reprise suivante
 
-| Sujet                      | État après cette fusion                                | Commit Weaver de réalisation / validation |
-| -------------------------- | ------------------------------------------------------ | ----------------------------------------- |
-| Skills #3342               | Différé intégralement                                  | À renseigner                              |
-| Titres #3351               | Différé intégralement                                  | À renseigner                              |
-| Auteur DOCX #3422          | Différé intégralement                                  | À renseigner                              |
-| Mistral #3321              | Configuration non reprise ; besoin à confirmer         | À renseigner                              |
-| Métadonnées e-mail #3317   | Extraction reprise, publication structurée non reprise | À renseigner                              |
-| E-mail joint au chat #3317 | Parcours à établir avant de conclure à un manque       | À renseigner                              |
+Les portages identifiés sont intégrés, sauf Mistral volontairement mis de côté.
+La borne Swift de cette tranche reste `53e39f6f77e63bbc8238b881df38686df5be452e`.
+La référence locale observée `0773ff95d` lui succède, mais n'a pas été rafraîchie lors
+de cette consolidation : ne pas la présenter comme le dernier état distant.
 
-Pour chaque réalisation, noter le comportement effectivement intégré, les sources
-modifiées, les contrats éventuellement régénérés, les vérifications exécutées et
-les limites restantes. Garder la référence Swift et la décision initiale même après
-réalisation. Une mise à jour de ce document suffit ; ne pas multiplier les tableaux
-de suivi concurrents.
+La tranche suivante est décrite en section 11. Pour les arrivées ultérieures,
+actualiser les références et inventorier les nouveaux commits selon la
+[méthode](docs/SWIFT_WEAVER_MERGES.md), depuis la dernière borne intégrée. Les réceptions DOCX, titres,
+skills, e-mails et isolation k3d restent distinctes. Mettre à jour arc42 après leur
+validation réelle ; ne pas ajouter les plans ou bilans de merge dans son récit.
+
+A chaque intégration, actualiser les états de ce dossier et les preuves concernées,
+sans créer un second tableau de suivi dans les skills. Les notes et métriques de
+la fusion initiale en section 8 restent historiques ; les sections de chaque lot
+portent les résultats ultérieurs. Les choix de cible futurs ne réouvrent pas
+implicitement les portages clôturés.
+
+## 11. Deuxième tranche : Swift 059ae1c91
+
+Base Weaver : `6adc65bf41d10e56202797a529443a67f8dbe191`.
+Borne précédente : `53e39f6f77e63bbc8238b881df38686df5be452e`.
+Cible : `059ae1c91b959692f6a0fb61ddc9824c67c90355`.
+Le commit de merge contenant cette section a pour parents la base et la cible.
+
+| Commit Swift | Apport produit | Traitement Weaver |
+| --- | --- | --- |
+| `0773ff95d2dcde7c810e88c67cdbfed1e0d078a9` (#3428) | Notification d'une réponse terminée ou d'une demande humaine depuis toute page | Abonnement unique dans App, routes et catalogue de sessions par espace, identité vérifiée à l'émission et au clic ; pas de notification durable après fermeture/rechargement |
+| `059ae1c91b959692f6a0fb61ddc9824c67c90355` (#3431) | Demandes humaines historiques périmées identifiées ; refus de reprise et détails d'outils cohérents | Indication facultative calculée après autorisation de lecture, état/checkpoints existants, refus sémantiques et relecture de l'historique ; droits et événements runtime Weaver préservés |
+
+Le champ `resume_status` (`pending`, `unavailable`, `unknown`) est une indication
+au moment de la lecture, pas une réservation ou une autorisation d'exécution.
+Une reprise reste soumise à l'admission actuelle. Les requêtes sans réponse des
+anciens runtimes restent compatibles ; l'annotation ne modifie pas l'historique
+stocké ou les checkpoints. Aucun schéma SQL ni migration des données n'est ajouté.
+Le client runtime est régénéré depuis le contrat source résolu.
+
+La même tranche Swift introduit l'installation partagée de Trivy pour les scans
+Docker. La matrice Weaver est conservée. Un raccord supplémentaire assure que
+modifier cette action sélectionne aussi les trois images Knowledge Flow concernées.
+La syntaxe et la sélection sont contrôlées localement ; aucun build, téléchargement
+du scanner ou run GitHub Actions n'est présenté comme exécuté.
+
+Les évolutions des corpus docs/swift/OpenSpec supprimés ne sont pas restaurées.
+Leurs sources restent disponibles dans le commit Swift ; les conséquences opérateur
+sont adaptées dans les [notes HITL](deploy/release-notes/changes/2337-hitl-resume-rejections.md)
+et [notifications](deploy/release-notes/changes/answer-toast-on-every-page.md).
+Les nouvelles explications arc42 restent à intégrer après réception déployée.
+
+Contrôles de cette tranche : tests ciblés core/runtime, historique et admission,
+frontend et sélection d'images ; qualité des composants applicatifs modifiés ;
+notes opérateur et diff. Les suites d'historique se recouvrent : ne pas additionner
+leurs résultats comme une campagne unique. Les anciens tests Swift qui contournaient
+l'admission sont adaptés au véritable contrat Weaver, sans retirer les refus d'accès.
+
+Réception restante : notification depuis une autre page et retour dans le bon
+espace ; changement d'identité ; demande humaine pending/unavailable/unknown après
+reload ; refus avant acceptation et absence de fausse annulation d'outil ; détails
+de traces. Aucune validation navigateur k3d/plateforme ni appel fournisseur ici.
+Les lots DOCX, titres, skills et e-mails précédents ne sont pas réouverts par ce merge.

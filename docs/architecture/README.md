@@ -13,15 +13,15 @@ follow the relevant domain chapter.
 | [2. Journeys](02-journeys.md) | How do the architectural rules work together in practice? |
 | [2.1. User journeys](02.1-user-journeys.md) | How does a user go from first login to creating a folder? |
 | [2.2. Document journey](02.2-document-journey.md) | How does a user import a document and read the result? |
-| [2.3. Models and first chat](02.3-agent-administration.md) | How does Alice authorize models for Acme, and how does Bob get his first answer? |
+| [2.3. Models and assistant use](02.3-agent-administration.md) | How does Alice authorize models, and how does Bob use an assistant to answer questions and prepare a document? |
 | [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |
 | [4. Organizations and spaces](04-organizations.md) | How are people, spaces and their relationships organized? |
-| [5. Documents and knowledge](05-documents.md) | How does knowledge enter, circulate and leave Fred? |
+| [5. Documents and knowledge](05-documents.md) | How do drive documents and conversation documents differ, and how are they used? |
 | [8. Operations](08-operations.md) | How is Fred configured, deployed and observed? |
 | [9. Quality and invariants](09-quality.md) | Which guarantees are proved, and what do they cost? |
 
-Chapter 2 follows people through access, document ingestion and a first assistant
-exchange. The main chapters explain who acts, which component is responsible and
+Chapter 2 follows people through access, document ingestion and working with an
+assistant. The main chapters explain who acts, which component is responsible and
 what the user experiences. Technical contracts and source references belong in
 the annexes. Validation records live in each lot's PR; remaining work in GitHub issues.
 
@@ -41,6 +41,7 @@ the annexes. Validation records live in each lot's PR; remaining work in GitHub 
 | Startup, schema initialization or local deployment | [Operations](08-operations.md), [SQLx procedure](A3-manager-operations.md#sqlx-schema-initialization) | Source map rows schema initialization and local profile |
 | Upload/process a PDF | [Document journey](02.2-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
 | Assistant answering from a space's documents | [Journey](02.3-agent-administration.md#bobs-assistant-answers-from-researchs-documents), [Security](03-security.md#36-documents-used-by-an-assistant) | [Document search annex](A6-security.md#document-search-within-a-turn) |
+| Draft, revise and export a conversation document | [Bob's report](02.3-agent-administration.md#bob-prepares-a-report-with-his-assistant), [Document concepts](05-documents.md#55-documents-authored-in-a-conversation) | [Conversation-document implementation](A9-documents.md#documents-authored-in-a-conversation) |
 
 Follow this map to locate current behavior and its implementation.
 For an audit, trace the named UI consumer through the handler, authorization and

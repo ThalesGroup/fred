@@ -38,7 +38,8 @@ export function SessionTitleEditor({ title, onCommit, maxLength = 120 }: Session
   const commit = () => {
     const trimmed = draft.trim();
     setOpen(false);
-    if (trimmed && trimmed !== title) onCommit(trimmed);
+    // Confirming the existing text is also a manual choice: fence late generation.
+    if (trimmed) onCommit(trimmed);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {

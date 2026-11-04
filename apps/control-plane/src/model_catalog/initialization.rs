@@ -37,6 +37,7 @@ pub struct OrganizationModels {
 impl OrganizationModels {
     fn policy(&self) -> ReplaceModelPolicy {
         ReplaceModelPolicy {
+            title: None,
             expected_revision: 0,
             permitted: self.permitted.clone(),
             reasoning_enabled: self.reasoning_enabled.clone(),

@@ -581,6 +581,9 @@
       "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
       "attachmentUploadFailedDetail": "Could not upload this file. Please try again.",
       "chatInputTooLong": "Your message exceeds the {{limit}}-character limit.",
+      "hitlUnavailable": "This question is no longer awaiting an answer. Your response was not applied. Reopen the conversation to see its current state.",
+      "hitlQuestionsChanged": "The pending questions have changed. Your answers were not applied. Reopen the conversation to load the current questions.",
+      "hitlConflict": "Your answer could not be applied because the conversation is busy or has changed. Please try again, or reopen the conversation if the problem persists.",
       "toolApprovalSaveFailedSummary": "Approval not saved",
       "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved."
     },
@@ -658,7 +661,6 @@
     "deletedAgentSuffix": "(deleted)",
     "modelPreparationErrorTitle": "Sending unavailable",
     "historyUnavailable": "Conversation history is unavailable. Please try again later.",
-    "historyUnsupported": "This agent answers each message independently. Messages are not saved and will disappear when you leave this chat.",
     "preparationUnavailable": "The conversation could not be prepared. Check your connection and try again.",
     "savedModelChoiceInvalid": "The saved model choice must be selected again in the Models menu.",
     "skipAllHitlQuestions": "Skip all",
@@ -729,8 +731,7 @@
   },
   "mermaid": {
     "title": "Diagram",
-    "diagram": "Diagram",
-    "generating": "Generating diagram...",
+    "diagram": "Mermaid diagram",
     "copySource": "Copy diagram source",
     "download": "Download diagram as SVG",
     "downloadError": "The diagram could not be downloaded. Please try again.",
@@ -1501,6 +1502,8 @@
         },
         "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet.",
         "organizationModels": {
+          "title": "Conversation title model",
+          "titleHint": "Optional. Without a dedicated choice, titles use the model admitted for the answer. If the dedicated model is unavailable, the initial title is kept.",
           "permitted": "Permitted",
           "permitAria": "Permit {{name}}",
           "saved": "Model policy saved.",
@@ -1510,7 +1513,7 @@
           "none": "None",
           "policyHint": "These choices apply to your organization. Choose from permitted models. Per-pod settings are unavailable in this catalog.",
           "revokeTitle": "Remove permission?",
-          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default or fallback, that choice will also be cleared.",
+          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default, fallback or conversation title model, that choice will also be cleared.",
           "withdrawn": "Withdrawn from source",
           "chat": "Chat confirmed",
           "notChat": "Not chat capable",
@@ -1686,35 +1689,6 @@
           "confirm": "Turn off",
           "cancel": "Cancel"
         }
-      },
-      "skills": {
-        "title": "Platform skills",
-        "scope": "Skills provided by Fred, shared by all users and agents.",
-        "skill": "Skill",
-        "description": "Description",
-        "invocation": "Invocation",
-        "sources": "Sources",
-        "enabled": "Enabled",
-        "on": "Enabled",
-        "off": "Disabled",
-        "userInvocable": "User",
-        "modelInvocable": "Agent",
-        "noInvocation": "No direct invocation",
-        "refresh": "Refresh",
-        "loading": "Loading platform skills...",
-        "loadError": "Could not load platform skills.",
-        "empty": "No packaged skills are currently advertised.",
-        "unavailableSources": "Unavailable sources: {{runtimes}}. Global enforcement cannot be verified for these sources.",
-        "unsupportedSources": "Sources requiring an update: {{runtimes}}. Global skill controls are not supported by these sources.",
-        "toggle": "Enable {{name}} for everyone",
-        "disableBlocked": "Restore all sources and update older runtimes before disabling a skill.",
-        "effect": "Changes apply to new loads from the next turn, including existing conversations. Instructions already loaded remain in the conversation.",
-        "saveUnsupported": "This skill could not be disabled because a source does not support global skill controls. Refresh and update the affected source.",
-        "saveUnavailable": "This skill could not be disabled because a source is unavailable. Restore the source and refresh.",
-        "saveError": "The global skill setting could not be saved. Refresh and try again.",
-        "refreshAfterSaveError": "The setting was saved, but the catalog could not be refreshed. Refresh to confirm its current state.",
-        "absentDisabled": "These globally disabled skills are no longer advertised by a responding source. You can restore their availability for future loads.",
-        "restore": "Re-enable {{name}}"
       }
     },
     "agentCard": {
@@ -2248,7 +2222,9 @@
       "toolStatus": {
         "failure": "Failed",
         "running": "Running",
-        "success": "Success"
+        "success": "Success",
+        "unavailable": "Unavailable",
+        "unknown": "Unknown"
       },
       "toolLabels": {
         "platform": {
@@ -2375,6 +2351,9 @@
       "unavailable": "The terms could not be loaded. Reload the page to retry."
     },
     "hitlPrompt": {
+      "unavailable": "This question can no longer accept an answer.",
+      "unknown": "The availability of this question could not be checked.",
+      "retryAvailability": "Check again",
       "answerSummary": "Question and answer",
       "selected": "Selected",
       "skipped": "Skipped",
@@ -2761,6 +2740,18 @@
         "newFolder": "New folder",
         "newSubfolder": "New subfolder in \"{{name}}\"",
         "preview": "Preview",
+        "email": {
+          "subject": "Subject",
+          "sender": "Sender",
+          "sent": "Message date",
+          "to": "To",
+          "cc": "Cc",
+          "messageId": "Message ID",
+          "inReplyTo": "In reply to",
+          "missing": "Not provided",
+          "unavailable": "No structured email details are available for this generation.",
+          "description": "Facts extracted from the main message. They do not identify the uploader or grant access. Long headers and recipient lists may be shortened."
+        },
         "process": "Process",
         "refresh": "Refresh this view",
         "relaunchIngestion": "Relaunch ingestion",
@@ -2849,6 +2840,7 @@
         "title": "Document preview",
         "tabsAria": "Display mode",
         "tabs": {
+          "metadata": "Email details",
           "file": "File",
           "raw": "Raw"
         },
@@ -5004,6 +4996,27 @@
       "forbidden": "Managing this space requires its Owner role.",
       "conflict": "This change is not allowed. Keep at least one owner and preserve the parent membership required by roles in child spaces. Refresh the list before retrying.",
       "failed": "The change could not be confirmed. Refresh the list before retrying."
+    },
+    "skillGovernance": {
+      "title": "Capabilities and skills",
+      "ceiling": "Organization and team permissions are ceilings. A local restriction grants no access to another space and does not load a skill.",
+      "restrict": "Restrict offers in this space",
+      "inherit": "Without a local restriction, this space follows its parent permissions.",
+      "denyAll": "Allow no offers in this space",
+      "offer": "Pod offer",
+      "parent": "Parent ceiling",
+      "local": "Local choice",
+      "effective": "Effective decision",
+      "allowed": "Allowed",
+      "denied": "Denied",
+      "withdrawn": "Withdrawn from source",
+      "conflict": "The configuration changed. Current choices were reloaded; review them before retrying.",
+      "failed": "The change was not saved.",
+      "source": {
+        "disabled": "The source is disabled.",
+        "unavailable": "The source is unavailable; saved choices are retained.",
+        "incompatible": "This pod does not provide the skill governance contract. Upgrade its replicas."
+      }
     }
   },
   "runtime": {

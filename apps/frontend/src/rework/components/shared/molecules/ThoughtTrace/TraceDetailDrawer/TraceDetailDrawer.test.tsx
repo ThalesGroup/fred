@@ -108,6 +108,24 @@ function message(overrides: Partial<ChatMessage>): ChatMessage {
   };
 }
 
+describe("TraceDetailDrawer inactive HITL", () => {
+  it.each(["unavailable", "unknown"])("does not show %s questions as running", (status) => {
+    const entry: TraceEntry = {
+      kind: "combo",
+      call: message({
+        channel: "tool_call",
+        metadata: { extras: { hitl_resume_status: status } },
+        parts: [{ type: "tool_call", call_id: "question", name: "ask_user", args: { question: "Choose" } }],
+      }),
+    };
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain(`data-status="${status}"`);
+    expect(html).toContain(`rework.chatTrace.toolStatus.${status}`);
+    expect(html).not.toContain('data-status="running"');
+    expect(html).not.toContain("running");
+  });
+});
+
 describe("TraceDetailDrawer query_tabular_documents failure", () => {
   it("shows the submitted SQL and engine error without HTTP transport details", () => {
     const entry: TraceEntry = {

@@ -24,6 +24,7 @@
         "alembic.ini",
         ".dockerignore",
         ".github/docker-images.json",
+        ".github/actions/setup-trivy/**",
         ".github/workflows/Docker-images.yml",
         ".github/workflows/Check-docker-images.yml",
         "libs/fred-knowledge/**"
@@ -46,6 +47,7 @@
         "alembic.ini",
         ".dockerignore",
         ".github/docker-images.json",
+        ".github/actions/setup-trivy/**",
         ".github/workflows/Docker-images.yml",
         ".github/workflows/Check-docker-images.yml",
         "libs/fred-knowledge/**"
@@ -68,6 +70,7 @@
         "alembic.ini",
         ".dockerignore",
         ".github/docker-images.json",
+        ".github/actions/setup-trivy/**",
         ".github/workflows/Docker-images.yml",
         ".github/workflows/Check-docker-images.yml",
         "libs/fred-knowledge/**"

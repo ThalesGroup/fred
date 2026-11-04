@@ -607,7 +607,7 @@ def test_skill_selection_reaches_model_without_body_or_followup_leak(
     if legacy:
         bound.runtime_context.skill = selections[0]
     else:
-        bound.runtime_context.skills = [*selections, SkillInvocation(name="graph")]
+        bound.runtime_context.skills = [*selections, SkillInvocation(name="mermaid")]
 
     def compose() -> str:
         return compose_system_prompt(
@@ -620,7 +620,7 @@ def test_skill_selection_reaches_model_without_body_or_followup_leak(
         "the user explicitly requested these platform skills: `meeting-minutes`"
         in prompt
     )
-    assert ("`graph`" in prompt) is not legacy
+    assert ("`mermaid`" in prompt) is not legacy
     assert "names are skills, not tool or subagent names" in prompt
     assert "unless already loaded" in prompt
     assert "absent from the catalog, report it as unavailable" in prompt

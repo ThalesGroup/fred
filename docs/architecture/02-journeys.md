@@ -8,9 +8,9 @@ domain chapters for the underlying rules.
 | --- | --- |
 | [2.1. User journeys](02.1-user-journeys.md) | How does a user go from first login to creating a folder? |
 | [2.2. Document journey](02.2-document-journey.md) | How does a user import a PDF, follow processing and read the result? |
-| [2.3. Models and first chat](02.3-agent-administration.md) | How does Alice authorize models for Acme, and how does Bob get answers, including from Research's documents? |
+| [2.3. Models and assistant use](02.3-agent-administration.md) | How does Alice authorize models, and how does Bob use an assistant to answer questions and prepare a document? |
 
-Follow chapter 2.3 from the organization's model choices to Bob's first exchange.
+Follow chapter 2.3 from the organization's model choices to Bob's questions and report.
 Each journey explains its own scope; a conversation does not imply document search
 or use of external tools.
 

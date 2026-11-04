@@ -103,9 +103,30 @@ class ManagedIngestionService:
         with ManagerClient(self.settings) as client:
             client.original(d, source)
         self.artifacts.restore(d, target_dir / "output")
+        if d.stage == "indexing":
+            self._read_email_facts(metadata, target_dir / "output")
         return target_dir
 
+    def _read_email_facts(self, metadata: DocumentMetadata, output_dir: Path):
+        if Path(self.descriptor.name).suffix.lower() not in {".eml", ".msg"}:
+            return
+        artifact = output_dir / "metadata.json"
+        if not artifact.exists():
+            return  # A predecessor produced by a worker predating email metadata.
+        if artifact.stat().st_size > 2_097_152:
+            raise ManagerError("integrity_failure", permanent=True)
+        extracted = json.loads(artifact.read_text(encoding="utf-8"))
+        email = (extracted.get("extensions") or {}).get("email")
+        if email is None:
+            return
+        # Never restore identity/placement from extractor-owned bytes. These
+        # three fields are generation facts, with no catalog editing API.
+        facts = extracted.get("identity") or {}
+        metadata.identity = Identity.model_validate({**metadata.identity.model_dump(), **{key: facts.get(key) for key in ("title", "author", "created")}})
+        metadata.extensions = {**(metadata.extensions or {}), "email": email}
+
     def save_output(self, user, metadata, output_dir):
+        self._read_email_facts(metadata, output_dir)
         self._commit(output_dir, metadata)
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
 

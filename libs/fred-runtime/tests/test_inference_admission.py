@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -20,7 +21,7 @@ from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_runtime.runtime_support.run_scope import RunScope
 from fred_sdk.contracts.context import BoundRuntimeContext, RuntimeContext
 from fred_sdk.contracts.models import AgentDefinition
-from fred_sdk.contracts.weaver import WeaverRuntimeBinding
+from fred_sdk.contracts.weaver import TitleAdmission, WeaverRuntimeBinding
 from weaver_fixtures import resolved_binding
 
 
@@ -61,8 +62,9 @@ def build(factory, binding):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("title_model", ["model", "title-model"])
 async def test_real_python_adapter_uses_shared_decision_for_every_call(
-    monkeypatch, caplog
+    monkeypatch, caplog, title_model
 ):
     caplog.set_level("INFO")
     calls = []
@@ -103,6 +105,36 @@ async def test_real_python_adapter_uses_shared_decision_for_every_call(
             )
             monkeypatch.setenv("FRED_TEST_INFERENCE_KEY", "synthetic-inference-key")
             binding = admitted()
+            selection = binding.inference.selection
+            title_admission = TitleAdmission(
+                attempt_id=uuid4(),
+                inference=binding.inference.model_copy(
+                    update={
+                        "selection": selection.model_copy(
+                            update={
+                                "key": selection.key.model_copy(
+                                    update={"upstream_model_id": title_model}
+                                ),
+                                "options": selection.options.model_copy(
+                                    update={
+                                        "max_tokens": 128,
+                                        "temperature": None,
+                                        "top_p": None,
+                                        "reasoning_effort": None,
+                                    }
+                                ),
+                            }
+                        )
+                    }
+                ),
+            )
+            binding = WeaverRuntimeBinding.model_validate(
+                {
+                    **binding.model_dump(),
+                    "title": title_admission,
+                    "conversation_id": str(uuid4()),
+                }
+            )
             authority = TurnAuthority(binding, None)
             factory = RoutedChatModelFactory(credentials=(provision(),))
             with RunScope.open() as scope:
@@ -112,6 +144,12 @@ async def test_real_python_adapter_uses_shared_decision_for_every_call(
                 assert (
                     await model.ainvoke("fixture question")
                 ).content == "simulated answer"
+                title = factory.build_for_title()
+                assert title is not model
+                assert (
+                    await title.ainvoke("fixture title")
+                ).content == "simulated answer"
+                assert factory.build_for_title() is title
                 # Rotation affects future processes/admissions, not the admitted client.
                 monkeypatch.setenv("FRED_TEST_INFERENCE_KEY", "rotated-fixture-key")
                 assert build(factory, binding) is model
@@ -121,8 +159,21 @@ async def test_real_python_adapter_uses_shared_decision_for_every_call(
                 authority.close()
                 with pytest.raises(AuthorityLostError):
                     await model.ainvoke("after termination")
-            assert len(calls) == 2
-            for request in calls:
+                with pytest.raises(AuthorityLostError):
+                    await title.ainvoke("after termination")
+            assert len(calls) == 3
+            title_body = json.loads(calls[1].content)
+            assert title_body["model"] == title_model
+            assert (
+                title_body.get("max_tokens", title_body.get("max_completion_tokens"))
+                == 128
+            )
+            assert (
+                "reasoning_effort" not in title_body
+                and "temperature" not in title_body
+                and "top_p" not in title_body
+            )
+            for request in (calls[0], calls[2]):
                 assert str(request.url) == "https://source.invalid/v1/chat/completions"
                 assert (
                     request.headers["authorization"] == "Bearer synthetic-inference-key"

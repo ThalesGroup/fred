@@ -80,6 +80,10 @@ export function isPdfFile(fileName: string | null | undefined): boolean {
   return !!fileName && fileName.toLowerCase().endsWith(".pdf");
 }
 
+export function isEmailFile(fileName: string | null | undefined): boolean {
+  return !!fileName && /\.(eml|msg)$/i.test(fileName);
+}
+
 /** Word and PowerPoint extensions the backend can render as PDF for the viewer. */
 const OFFICE_DOCUMENT_SUFFIXES = [".docx", ".doc", ".odt", ".pptx", ".ppt"];
 

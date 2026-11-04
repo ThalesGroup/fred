@@ -160,6 +160,7 @@ class RuntimeEventKind(str, Enum):
     ASSISTANT_DELTA = "assistant_delta"
     NODE_ERROR = "node_error"
     FINAL = "final"
+    SESSION_TITLE = "session_title"
     TURN_PERSISTED = "turn_persisted"
     EXECUTION_ERROR = "execution_error"
     EXECUTION_INTERRUPTED = "execution_interrupted"
@@ -494,6 +495,13 @@ class FinalRuntimeEvent(RuntimeEventBase):
         return coerce_finish_reason(v)
 
 
+class SessionTitleRuntimeEvent(RuntimeEventBase):
+    """The server persisted a title; clients reload canonical session metadata."""
+
+    kind: Literal[RuntimeEventKind.SESSION_TITLE] = RuntimeEventKind.SESSION_TITLE
+    session_id: str
+
+
 class TurnPersistedEvent(RuntimeEventBase):
     """
     Signals that a completed turn's history has been durably persisted.
@@ -554,6 +562,7 @@ RuntimeEvent: TypeAlias = Annotated[
     | AssistantDeltaRuntimeEvent
     | NodeErrorRuntimeEvent
     | FinalRuntimeEvent
+    | SessionTitleRuntimeEvent
     | TurnPersistedEvent
     | RuntimeErrorEvent
     | ExecutionInterruptedRuntimeEvent,

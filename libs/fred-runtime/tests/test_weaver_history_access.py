@@ -316,3 +316,50 @@ async def test_checkpoint_index_includes_only_authorized_graph_threads(
         case.store.get.assert_not_called()
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("authority_status", [200, 403])
+async def test_history_hitl_availability_follows_weaver_authorization(
+    case, monkeypatch, tmp_path, authority_status
+):
+    from fred_core.history.history_schema import ChatMetadata
+    from test_hitl_history_availability import availability, request, seed
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'hitl.sqlite3'}")
+    cp = FredSqlCheckpointer(engine, prefix="v2_")
+    try:
+        assert await cp.abind_conversation(SESSION, dict(BINDING), allow_create=True)
+        thread = graph_thread_id(SESSION, BINDING["instance_id"])
+        await seed(cp, thread=thread)
+        await seed(cp, thread=thread, identities=())
+        original = request().model_copy(
+            update={
+                "session_id": SESSION,
+                "metadata": ChatMetadata(agent_id=BINDING["instance_id"]),
+            }
+        )
+        case.store.get.return_value = [original]
+        case.status = authority_status
+        runtime = RuntimeContext(
+            replace(agent_app.get_runtime_context().config, checkpointer=cp)
+        )
+        monkeypatch.setattr(agent_app, "get_runtime_context", lambda: runtime)
+        monkeypatch.setattr(history_access, "get_runtime_context", lambda: runtime)
+        lookup = AsyncMock(wraps=cp.aget_hitl_resume_state)
+        monkeypatch.setattr(cp, "aget_hitl_resume_state", lookup)
+        response = await case.client.get(f"/agents/sessions/{SESSION}/messages")
+        if authority_status == 200:
+            assert response.status_code == 200
+            assert response.headers["Cache-Control"] == "no-store"
+            assert response.json()[0]["parts"][0]["resume_status"] == "unavailable"
+            case.store.get.assert_awaited_once_with(session_id=SESSION, user_id="alice")
+            lookup.assert_awaited_once()
+        else:
+            assert response.status_code == 404
+            case.store.get.assert_not_called()
+            lookup.assert_not_awaited()
+        assert availability(original) is None
+        case.store.save.assert_not_called()
+    finally:
+        await engine.dispose()

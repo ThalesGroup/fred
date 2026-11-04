@@ -20,21 +20,8 @@ const commandCatalog = vi.hoisted(() => ({
   supported: true,
   skills: [{ name: "graph", description: "Create diagrams" }],
 }));
-vi.mock("src/slices/legacyControlPlane/legacyControlPlaneOpenApi", () => ({
-  useGetAgentInstanceSkillsQuery: () => ({
-    currentData: commandCatalog,
-    isFetching: false,
-    isError: false,
-    refetch: async () => ({ data: commandCatalog }),
-  }),
-}));
 vi.mock("src/slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePromptCatalogQuery: () => ({
-    currentData: { items: [] },
-    isFetching: false,
-    isError: false,
-    refetch: async () => ({ data: { items: [] } }),
-  }),
+  usePromptCatalogQuery: () => ({ currentData: { items: [] }, refetch: vi.fn() }),
   useLazyGetPromptQuery: () => [vi.fn()],
 }));
 // jsdom has no layout engine; interaction assertions do not use geometry.
@@ -486,6 +473,7 @@ function mountResetComposer() {
       teamId: "team-1",
       agentInstanceId: "instance-1",
       skillsEnabled: true,
+      skillCatalog: commandCatalog,
       input,
       setInput,
       onRunSkill: (run) => {

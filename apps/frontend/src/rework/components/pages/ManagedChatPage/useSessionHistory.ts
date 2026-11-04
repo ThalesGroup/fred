@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
@@ -39,6 +39,8 @@ export function useSessionHistory({
   isTurnActive,
   getCurrentMessages,
 }: UseSessionHistoryArgs) {
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const reload = useCallback(() => setReloadVersion((version) => version + 1), []);
   const actor = KeyCloakService.GetSessionIdentity();
   const key = JSON.stringify([actor, spaceId, sessionId]);
   const loadedKey = useRef<string | null>(null);
@@ -53,6 +55,8 @@ export function useSessionHistory({
 
   useEffect(() => {
     if (!sessionId) return;
+    const displayed = getCurrentMessages?.() ?? [];
+    const hasCurrentMessages = displayed.length > 0 && displayed.every((message) => message.session_id === sessionId);
     const controller = new AbortController();
     const current = () =>
       !controller.signal.aborted && activeKey.current === key && KeyCloakService.GetSessionIdentity() === actor;
@@ -80,12 +84,14 @@ export function useSessionHistory({
       return;
     }
     if (messagesUrl === undefined) {
-      if (!isTurnActive()) onLoaded([]);
+      // Metadata can arrive after the first SSE final. Loading is not a refusal
+      // and must not erase the admitted exchange already received in this visit.
+      if (!isTurnActive() && !hasCurrentMessages) onLoaded([]);
       setResult({ key, status: "loading" });
       return;
     }
     if (loadedKey.current !== key && !isTurnActive()) {
-      onLoaded([]);
+      if (!hasCurrentMessages) onLoaded([]);
       setResult({ key, status: "loading" });
     }
     const load = async () => {
@@ -124,10 +130,22 @@ export function useSessionHistory({
     };
     void load();
     return () => controller.abort();
-  }, [actor, key, sessionId, messagesUrl, historySupported, revision, onLoaded, isTurnActive, getCurrentMessages]);
+  }, [
+    actor,
+    key,
+    sessionId,
+    messagesUrl,
+    historySupported,
+    revision,
+    reloadVersion,
+    onLoaded,
+    isTurnActive,
+    getCurrentMessages,
+  ]);
 
   const status = result.key === key ? result.status : "loading";
   return {
+    reload,
     // Only a successful current history read authorizes restoring a detached transcript.
     // A runtime declaring no history can be ready without granting that access.
     isAuthorized: result.key === key && status === "ready" && loadedKey.current === key,

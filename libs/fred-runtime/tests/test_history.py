@@ -1162,6 +1162,7 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
     monkeypatch, tmp_path, deep
 ) -> None:
     from fred_runtime.app.config import LocalRuntimeFilesystemConfig, PodSkillsConfig
+    from fred_runtime.skills.catalog import PlatformSkills
     from fred_sdk.contracts.models import DeepAgentDefinition, ReActPolicy
     from langchain_core.messages import HumanMessage
     from test_platform_skills import Model
@@ -1190,13 +1191,20 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
     )
     definition = DeepDefinition() if deep else _PingAgent()
     app = create_managed_app(
-        monkeypatch, registry={definition.agent_id: definition}, config=config
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=config,
+        binding_transform=lambda data: data.update(
+            skills=PlatformSkills.from_directory("package").catalog.model_dump(
+                mode="json"
+            )
+        ),
     )
-    selections = [{"name": "meeting-minutes"}, {"name": "mermaid"}]
+    selections = [{"name": "meeting-minutes"}, {"name": "graph"}]
     command = {
         "command": "summary",
         "prompt_id": "prompt",
-        "draft_text": "Before /summary /meeting-minutes /mermaid after",
+        "draft_text": "Before /summary /meeting-minutes /graph after",
         "draft_command_offset": 7,
     }
     with TestClient(
@@ -1207,7 +1215,7 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
             json=managed_payload(
                 {
                     "agent_id": definition.agent_id,
-                    "input": "Before\n\nPrompt instructions\n\n/meeting-minutes /mermaid after",
+                    "input": "Before\n\nPrompt instructions\n\n/meeting-minutes /graph after",
                     "runtime_context": {
                         "session_id": "multiple-history",
                         "skills": selections + selections[:1],
@@ -1242,8 +1250,8 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
                 }
             ),
         )
-        assert invalid.status_code == (200 if deep else 422), invalid.text
-        assert len(model.calls) == before + (1 if deep else 0)
+        assert invalid.status_code == 422, invalid.text
+        assert len(model.calls) == before
         forged = client.post(
             "/pod/v1/agents/execute",
             json=managed_payload(
@@ -1251,7 +1259,7 @@ def test_multiple_selected_skills_and_prompt_survive_admission_and_history(
                     "agent_id": definition.agent_id,
                     "input": "notes",
                     "runtime_context": {
-                        "skills": [{"name": "mermaid", "body": "FORGED"}]
+                        "skills": [{"name": "graph", "body": "FORGED"}]
                     },
                 }
             ),
@@ -1322,6 +1330,7 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
     monkeypatch, tmp_path, selection
 ) -> None:
     from fred_runtime.app.config import LocalRuntimeFilesystemConfig, PodSkillsConfig
+    from fred_runtime.skills.catalog import PlatformSkills
     from fred_sdk.contracts.models import DeepAgentDefinition, ReActPolicy
     from langchain_core.messages import HumanMessage
     from test_platform_skills import Model
@@ -1350,7 +1359,14 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
     )
     definition = Definition()
     app = create_managed_app(
-        monkeypatch, registry={definition.agent_id: definition}, config=config
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=config,
+        binding_transform=lambda data: data.update(
+            skills=PlatformSkills.from_directory("package").catalog.model_dump(
+                mode="json"
+            )
+        ),
     )
     text = f"/{selection} notes"
     with TestClient(
@@ -1369,9 +1385,18 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
                 }
             ),
         )
+        if selection == "missing":
+            assert response.status_code == 422, response.text
+            assert model.calls == []
+            return
         assert response.status_code == 200, response.text
         messages = model.calls[0]
-        assert [m.content for m in messages if isinstance(m, HumanMessage)] == [text]
+        assert [
+            m.content
+            for m in messages
+            if isinstance(m, HumanMessage)
+            and m.additional_kwargs.get("lc_source") != "pinned_skill"
+        ] == [text]
         assert "Loaded platform skill:" not in str(messages)
         assert "/skills/meeting-minutes/SKILL.md" in str(messages[0].content)
         assert "read_file" in model.bound_tool_names
@@ -1380,6 +1405,13 @@ def test_deep_selection_reaches_native_inference_without_snapshot_preload(
         rows = history.json()
         user_row = next(row for row in rows if row["role"] == "user")
         assert user_row["metadata"]["extras"]["skill_invocation"] == {"name": selection}
-        assert not any(
-            row.get("metadata", {}).get("extras", {}).get("skill_load") for row in rows
+        loads = [
+            row["metadata"]["extras"]["skill_load"]
+            for row in rows
+            if row.get("metadata", {}).get("extras", {}).get("skill_load")
+        ]
+        assert (
+            len(loads) == 1
+            and loads[0]["name"] == selection
+            and loads[0]["origin"] == "user"
         )

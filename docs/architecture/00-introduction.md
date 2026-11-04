@@ -5,7 +5,11 @@ with AI while retaining control over data and its use. It brings together data
 lifecycle management, access security and usage governance.
 
 Fred provides a ready-to-use workspace for documents, AI assistants and
-administration. Its [SDK](../../libs/fred-sdk/README.md) lets teams extend the platform with agents, knowledge
+administration. With a document-writing capability, an assistant can help users
+[draft, revise and download a deliverable](02.3-agent-administration.md#bob-prepares-a-report-with-his-assistant)
+within their conversation.
+
+Its [SDK](../../libs/fred-sdk/README.md) lets teams extend the platform with agents, knowledge
 bases and complete business applications, including their own UI, backend
 services and data, with or without agents. The platform and its extensions
 follow a cloud-native deployment model based on Kubernetes.

@@ -61,18 +61,6 @@ export function OrganizationModels({
   const offers = inventory?.sources.flatMap((source) => source.offers) ?? [];
   const busy = isFetching || isError || isRefreshingModels || saving.isLoading;
   const permitted = (offer: ModelOfferKey) => policy?.permitted.some((key) => sameOffer(key, offer)) ?? false;
-  const selectable = (offer: StoredModelOffer) => {
-    const observation = inventory?.sources.find(
-      (source) => source.observation.source_id === offer.source_id,
-    )?.observation;
-    return Boolean(
-      offer.advertised &&
-        offer.metadata.chat === true &&
-        observation?.enabled &&
-        observation.state === "ok" &&
-        observation.snapshot_source_revision === observation.source_revision,
-    );
-  };
   const save = async (change: Partial<Omit<ReplaceModelPolicy, "expected_revision">>) => {
     if (!policy || busy) return;
     try {
@@ -84,6 +72,7 @@ export function OrganizationModels({
           reasoning_enabled: policy.reasoning_enabled,
           default: policy.default ?? null,
           fallback: policy.fallback ?? null,
+          title: policy.title ?? null,
           ...change,
         },
       }).unwrap();
@@ -102,6 +91,7 @@ export function OrganizationModels({
       reasoning_enabled: policy.reasoning_enabled.filter((key) => !sameOffer(key, offer)),
       default: sameOffer(policy.default, offer) ? null : (policy.default ?? null),
       fallback: sameOffer(policy.fallback, offer) ? null : (policy.fallback ?? null),
+      title: sameOffer(policy.title, offer) ? null : (policy.title ?? null),
     });
   };
   const refreshModels = useCallback(
@@ -147,8 +137,8 @@ export function OrganizationModels({
           <Switch
             size="small"
             checked={permitted(offer)}
-            disabled={!permitted(offer) && !selectable(offer)}
-            aria-disabled={busy || (!permitted(offer) && !selectable(offer))}
+            disabled={!permitted(offer) && !offer.selectable}
+            aria-disabled={busy || (!permitted(offer) && !offer.selectable)}
             aria-label={t("rework.admin.capabilities.organizationModels.permitAria", {
               name: `${offer.source_id} / ${offer.upstream_model_id}`,
             })}
@@ -217,7 +207,7 @@ export function OrganizationModels({
                 size="small"
                 checked={enabled}
                 disabled={
-                  busy || (!enabled && (!permitted(offer) || !selectable(offer) || offer.metadata.reasoning !== true))
+                  busy || (!enabled && (!permitted(offer) || !offer.selectable || offer.metadata.reasoning !== true))
                 }
                 aria-label={t("rework.admin.capabilities.col.reasoning")}
                 onChange={() =>
@@ -269,7 +259,7 @@ export function OrganizationModels({
         key: offerId(key),
         value: offerId(key),
         label: `${key.source_id} / ${key.upstream_model_id}`,
-        disabled: !sameOffer(choice, key) && (!offer || !selectable(offer)),
+        disabled: !sameOffer(choice, key) && (!offer || !offer.selectable),
       };
     }),
   ];
@@ -341,7 +331,7 @@ export function OrganizationModels({
       >
         <div className={panelStyles.body}>
           <p className={panelStyles.hint}>{t("rework.admin.capabilities.organizationModels.policyHint")}</p>
-          {(["default", "fallback"] as const).map((field) => (
+          {(["default", "fallback", "title"] as const).map((field) => (
             <Select
               key={field}
               size="small"
@@ -354,6 +344,7 @@ export function OrganizationModels({
               }
             />
           ))}
+          <p className={panelStyles.hint}>{t("rework.admin.capabilities.organizationModels.titleHint")}</p>
         </div>
       </InlineDrawer>
       <ConfirmationDialog

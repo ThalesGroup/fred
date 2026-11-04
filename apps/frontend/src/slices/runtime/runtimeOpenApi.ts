@@ -335,6 +335,9 @@ export type ExecuteAgentApiResponse = /** status 200 Successful Response */
           kind: "node_error";
         } & NodeErrorRuntimeEvent)
       | ({
+          kind: "session_title";
+        } & SessionTitleRuntimeEvent)
+      | ({
           kind: "status";
         } & StatusRuntimeEvent)
       | ({
@@ -598,6 +601,21 @@ export type CapabilityCatalogEntry = {
   team_settings_fields?: FieldSpec[];
   version: string;
 };
+export type SkillSummary = {
+  argument_hint?: string | null;
+  builtin?: boolean;
+  description: string;
+  disable_model_invocation?: boolean;
+  name: string;
+  user_invocable?: boolean;
+};
+export type SkillCatalog = {
+  availability?: "available" | "disabled" | "unavailable";
+  policy_supported?: boolean;
+  revision?: string;
+  skills?: SkillSummary[];
+  supported?: boolean;
+};
 export type PodTemplateCapability = {
   capability_id: string;
   default_selected: boolean;
@@ -606,6 +624,7 @@ export type PodTemplateCapability = {
 export type PodCapabilityInventory = {
   capabilities: CapabilityCatalogEntry[];
   complete: true;
+  skills: SkillCatalog;
   template_capabilities: PodTemplateCapability[];
 };
 export type ChatControlItem = {
@@ -1077,6 +1096,11 @@ export type NodeErrorRuntimeEvent = {
   routed_to: string;
   sequence?: number;
 };
+export type SessionTitleRuntimeEvent = {
+  kind?: "session_title";
+  sequence?: number;
+  session_id: string;
+};
 export type SkillLoadAttribution = {
   agent_id: string;
   builtin?: boolean;
@@ -1266,6 +1290,8 @@ export type HitlRequestPart = {
   occurrence_id?: string | null;
   pending_calls?: HitlPendingCallRecord[];
   question: string;
+  /** Read-time availability; absent in stored history and older runtimes. */
+  resume_status?: ("pending" | "unavailable" | "unknown") | null;
   stage?: string | null;
   title?: string | null;
   type?: "hitl_request";
@@ -1334,20 +1360,6 @@ export type ChatMessage = {
   role: Role;
   session_id: string;
   timestamp: string;
-};
-export type SkillSummary = {
-  argument_hint?: string | null;
-  builtin?: boolean;
-  description: string;
-  disable_model_invocation?: boolean;
-  name: string;
-  user_invocable?: boolean;
-};
-export type SkillCatalog = {
-  policy_supported?: boolean;
-  revision?: string;
-  skills?: SkillSummary[];
-  supported?: boolean;
 };
 export type SkillDetail = {
   content: string;

@@ -317,8 +317,22 @@ async def authorize_and_resolve(
         set_runtime_context(None)
 
 
-def resolved_target(team_id: str) -> Any:
+def resolved_target(
+    team_id: str,
+    *,
+    request: agent_app_module._AgentExecuteRequest,
+    credentials: DelegatedCredentialProvider,
+) -> Any:
     definition = _Definition()
+    # The real resolver binds private authority before returning the target.
+    request._turn_authority = TurnAuthority(
+        turn_binding(
+            definition.agent_id,
+            run=credentials.run_id,
+            session=(request.context or {}).get("session_id"),
+        ),
+        None,
+    )
     return agent_app_module._ResolvedExecutionTarget(
         definition=definition,
         effective_agent_id=definition.agent_id,
@@ -331,7 +345,9 @@ async def test_an_admitted_run_keeps_its_record_for_the_turn_to_use(monkeypatch)
     runtime = install_delegation()
 
     async def _resolve(**kwargs: Any) -> Any:
-        return resolved_target("team-1")
+        return resolved_target(
+            "team-1", request=kwargs["request"], credentials=kwargs["credentials"]
+        )
 
     _, target = await authorize_and_resolve(monkeypatch, resolve=_resolve)
 
@@ -347,10 +363,13 @@ async def test_binding_and_execution_use_the_same_workload_provider(monkeypatch)
 
     async def _resolve(**kwargs: Any) -> Any:
         captured["binding"] = kwargs["credentials"]
-        return resolved_target("team-1")
+        return resolved_target(
+            "team-1", request=kwargs["request"], credentials=kwargs["credentials"]
+        )
 
     _, target = await authorize_and_resolve(monkeypatch, resolve=_resolve)
 
+    assert target.credential_provider is captured["binding"]
     for provider in (captured["binding"], target.credential_provider):
         assert isinstance(provider, DelegatedCredentialProvider)
         assert (await provider.get_token_lease()).token == "workload-token"
@@ -883,10 +902,10 @@ def test_a_grant_admission_audit_names_neither_the_person_nor_the_caller(
 
 
 @pytest.mark.asyncio
-async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_get(
+async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_post(
     monkeypatch,
 ):
-    """The read-only lookup carries the workload bearer and the grant."""
+    """The single execution admission carries the workload bearer and grant."""
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
@@ -934,7 +953,7 @@ async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_get(
 
     assert [(request.method, request.url.path) for request in sent] == [
         (
-            "GET",
+            "POST",
             f"/control-plane/v1/spaces/{SPACE_ID}/agent-instances/{INSTANCE_ID}/runtime",
         )
     ]
@@ -945,6 +964,7 @@ async def test_a_delegated_managed_run_resolves_its_binding_with_one_grant_get(
         "model_source_id": "a",
         "model_upstream_id": "first",
         "reasoning": "true",
+        "resume": "false",
     }
     assert sent[0].headers["Authorization"] == "Bearer workload-token"
     assert target.effective_agent_id == INSTANCE_ID

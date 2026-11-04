@@ -32,7 +32,7 @@ from dataclasses import replace
 from pathlib import PurePosixPath
 from typing import cast
 
-from deepagents.backends import CompositeBackend, FilesystemBackend
+from deepagents.backends import CompositeBackend
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
 from deepagents.middleware.skills import SkillsMiddleware
@@ -460,9 +460,9 @@ def build_conversation_filesystem(
     return backend, permissions
 
 
-def _native_skills_backend(skills: SkillsPort) -> FilesystemBackend:
+def _native_skills_backend(skills: SkillsPort) -> BackendProtocol:
     if not isinstance(skills, PlatformSkills):
-        raise ValueError("Deep skills require a physical platform skills directory")
+        raise ValueError("Deep skills require an admitted platform snapshot")
     return skills.filesystem_backend
 
 
@@ -471,7 +471,7 @@ def mount_skills(
     permissions: list[FilesystemPermission],
     skills: SkillsPort | None,
 ) -> tuple[BackendProtocol, list[FilesystemPermission]]:
-    """Add the native directory to capability backends without changing their routes."""
+    """Mount the admitted snapshot without changing capability routes."""
     if skills is None:
         return backend, permissions
     routes = dict(backend.routes) if isinstance(backend, CompositeBackend) else {}

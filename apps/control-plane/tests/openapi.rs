@@ -105,7 +105,10 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
                 assert_eq!(operation["security"], json!([{}]));
             } else {
                 assert!(operation.get("security").is_none());
-                assert!(operation["responses"].get("401").is_some());
+                assert!(
+                    operation["responses"].get("401").is_some(),
+                    "{method} {path} must declare a 401 response"
+                );
             }
         }
     }
@@ -179,6 +182,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "put /organizations/{organization_id}/model-policy",
         "post /organizations/{organization_id}/model-sources/{source_id}/refresh",
         "get /spaces/{space_id}/agent-templates",
+        "get /spaces/{space_id}/capability-policies",
+        "put /spaces/{space_id}/capability-policies/{runtime_id}",
         "get /spaces/{space_id}/prompt-categories",
         "post /spaces/{space_id}/prompt-categories",
         "patch /spaces/{space_id}/prompt-categories/{category_id}",
@@ -199,6 +204,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /spaces/{space_id}/agent-instances",
         "get /spaces/{space_id}/agent-instances/{agent_instance_id}",
         "get /spaces/{space_id}/agent-instances/{agent_instance_id}/runtime",
+        "post /spaces/{space_id}/agent-instances/{agent_instance_id}/runtime",
         "post /spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution",
         "patch /spaces/{space_id}/agent-instances/{agent_instance_id}",
         "delete /spaces/{space_id}/agent-instances/{agent_instance_id}",
@@ -207,6 +213,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /spaces/{space_id}/sessions/{session_id}",
         "patch /spaces/{space_id}/sessions/{session_id}",
         "delete /spaces/{space_id}/sessions/{session_id}",
+        "post /spaces/{space_id}/sessions/{session_id}/generated-title",
         "post /spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage",
         "post /spaces/{space_id}/sessions/{session_id}/attachments",
         "get /spaces/{space_id}/sessions/{session_id}/attachments",

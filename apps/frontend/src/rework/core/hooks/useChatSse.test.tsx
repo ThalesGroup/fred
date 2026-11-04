@@ -160,11 +160,13 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     spaceId: "space-1",
     flushPendingWrites,
     onError: (msg) => onErrorMock(msg),
+    onHitlUnavailable: (sid) => onHitlUnavailableMock(sid),
     onTurnStarted: () => onTurnStartedMock(),
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
     onSteeredMessage: (messageId, sessionId) => onSteeredMessageMock(messageId, sessionId),
     onStreamInterrupted: (sessionId) => onStreamInterruptedMock(sessionId),
+    onSessionTitle: (sessionId) => onSessionTitleMock(sessionId),
     onBackgroundTurnSettled: (sessionId, messages) => onBackgroundTurnSettledMock(sessionId, messages),
     isTurnCurrent,
     isExecutionAllowed,
@@ -177,12 +179,14 @@ let flushPendingWrites: ((sessionId: string) => Promise<boolean>) | undefined;
 let isTurnCurrent: ((sessionId: string) => boolean) | undefined;
 let isExecutionAllowed: (() => boolean) | undefined;
 const onErrorMock = vi.fn();
+const onHitlUnavailableMock = vi.fn();
 const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
 const onAwaitingHumanMock = vi.fn();
 const onSteeredMessageMock = vi.fn();
 const onStreamInterruptedMock = vi.fn();
 const onBackgroundTurnSettledMock = vi.fn();
+const onSessionTitleMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -207,12 +211,14 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     isTurnCurrent = undefined;
     isExecutionAllowed = undefined;
     onErrorMock.mockClear();
+    onHitlUnavailableMock.mockClear();
     onTurnStartedMock.mockClear();
     onTurnRejectedMock.mockClear();
     onAwaitingHumanMock.mockClear();
     onSteeredMessageMock.mockClear();
     onStreamInterruptedMock.mockClear();
     onBackgroundTurnSettledMock.mockClear();
+    onSessionTitleMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -488,11 +494,9 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it.each(
-    (["user", "agent", "child"] as const).flatMap((source) => [false, true].map((partial) => ({ source, partial }))),
-  )(
-    "projects one compact $source skill load from repeated live statuses (partial: $partial)",
-    async ({ source, partial }) => {
+  it.each(["user", "agent", "child"] as const)(
+    "projects one compact %s skill load from repeated live statuses",
+    async (source) => {
       const load = {
         name: "meeting-minutes",
         origin: source === "user" ? "user" : "agent",
@@ -501,7 +505,6 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         agent_id: "test",
         child: source === "child",
         child_id: source === "child" ? "child" : null,
-        partial,
       };
       const status = { kind: "status", status: "skill_loaded", skill_load: load };
       const fetchSpy = vi
@@ -1521,35 +1524,32 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it("sendHitlResume() applies the optimistic cancellation once preparation has succeeded", async () => {
+  it("sendHitlResume() leaves no false cancellation when the network fails after preparation", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
     mount();
-
     await act(async () => {
-      await latest.sendHitlResume(hitlEvent, "cancel");
+      expect(await latest.sendHitlResume(hitlEvent, "cancel")).toBe(false);
     });
-
-    expect(latest.messages).toHaveLength(1);
-    expect(latest.messages[0].channel).toBe("tool_result");
-    expect((latest.messages[0].metadata?.extras as { cancelled_by_user?: boolean })?.cancelled_by_user).toBe(true);
+    expect(latest.messages).toHaveLength(0);
     fetchSpy.mockRestore();
   });
 
-  it("a second cancel for the same calls does not duplicate the optimistic cancellation", async () => {
-    // First resume reaches the backend but its stream fails; the user answers
-    // cancel again. The retry must not add a second Date.now()-ranked
-    // cancelled row for the same call_id — the existing one already tells the
-    // story, and a duplicate would outrank a real result arriving later.
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+  it("a second accepted cancel for the same calls does not duplicate the cancellation", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error("connection reset"));
+            },
+          }),
+        ),
+    );
     mount();
-
     await act(async () => {
-      await latest.sendHitlResume(hitlEvent, "cancel");
+      expect(await latest.sendHitlResume(hitlEvent, "cancel")).toBe(true);
+      expect(await latest.sendHitlResume(hitlEvent, "cancel")).toBe(true);
     });
-    await act(async () => {
-      await latest.sendHitlResume(hitlEvent, "cancel");
-    });
-
     expect(latest.messages.filter((m) => m.channel === "tool_result")).toHaveLength(1);
     fetchSpy.mockRestore();
   });
@@ -1574,6 +1574,68 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(reached).toBe(false);
     expect(onErrorMock).toHaveBeenCalledTimes(1);
     expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(0);
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    ["No pending checkpoint was found for this session.", true, "hitlUnavailable"],
+    ["checkpoint is not waiting for resume.", true, "hitlUnavailable"],
+    ["interrupt_id does not match the pending HITL request for this session.", true, "hitlUnavailable"],
+    ["occurrence_id does not match the pending HITL request for this session.", true, "hitlUnavailable"],
+    ["batch answers must match every pending HITL occurrence", false, "hitlQuestionsChanged"],
+    ["batch answers do not match pending agent questions", false, "hitlQuestionsChanged"],
+    ["run_already_admitted", false, "hitlConflict"],
+    ["unknown conflict", false, "hitlConflict"],
+  ])("handles a HITL conflict without inventing acceptance: %s", async (detail, discard, messageKey) => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ detail }), { status: 409 }));
+    const accepted = vi.fn();
+    mount();
+    let result: boolean | undefined;
+    await act(async () => {
+      result = await latest.sendHitlResume(hitlEvent, "cancel", undefined, undefined, undefined, false, accepted);
+    });
+    expect(result).toBe(discard);
+    expect(onHitlUnavailableMock).toHaveBeenCalledTimes(discard ? 1 : 0);
+    if (discard) expect(onHitlUnavailableMock).toHaveBeenCalledWith(hitlEvent.session_id);
+    expect(accepted).not.toHaveBeenCalled();
+    expect(latest.messages).toHaveLength(0);
+    expect(onErrorMock).toHaveBeenCalledWith(`chatbot.errors.${messageKey}:`);
+    expect(latest.waitResponse).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
+  it.each([false, true])("preserves actual acceptance when a HITL fetch is aborted (accepted=%s)", async (accepted) => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      if (!accepted) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("Stopped", "AbortError")));
+        });
+      }
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            init?.signal?.addEventListener("abort", () => controller.error(new DOMException("Stopped", "AbortError")));
+          },
+        }),
+      );
+    });
+    const onAccepted = vi.fn();
+    mount();
+    let result!: Promise<boolean>;
+    await act(async () => {
+      result = latest.sendHitlResume(hitlEvent, "cancel", undefined, undefined, undefined, false, onAccepted);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      latest.abort();
+      await result;
+    });
+    await expect(result).resolves.toBe(accepted);
+    expect(onAccepted).toHaveBeenCalledTimes(accepted ? 1 : 0);
+    expect(latest.messages.filter((message) => message.channel === "tool_result")).toHaveLength(accepted ? 1 : 0);
+    expect(onErrorMock).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });
 
@@ -2055,6 +2117,24 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       return { stream, fetchSpy, signal, sendPromise };
     };
 
+    it("refreshes only the original session title, including while detached", async () => {
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      await act(async () => stream.push({ kind: "session_title", session_id: "wrong-session" }));
+      expect(onSessionTitleMock).not.toHaveBeenCalled();
+      act(() => latest.reset());
+      await act(async () => stream.push({ kind: "session_title", session_id: "session-1" }));
+      expect(onSessionTitleMock).toHaveBeenCalledExactlyOnceWith("session-1");
+      expect(latest.messages).toEqual([]);
+      const identity = vi.spyOn(KeyCloakService, "GetSessionIdentity").mockReturnValue("different-login");
+      await act(async () => stream.push({ kind: "session_title", session_id: "session-1" }));
+      expect(onSessionTitleMock).toHaveBeenCalledTimes(1);
+      identity.mockRestore();
+      stream.close();
+      await act(async () => sendPromise);
+      fetchSpy.mockRestore();
+    });
+
     const text = (message: { parts: unknown[] }) => (message.parts[0] as { text?: string }).text;
 
     it.each(["final", "execution_error", "EOF", "cancel", "cut_after_final", "error_after_final"])(
@@ -2080,6 +2160,14 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         });
         expect(unread).toBe(outcome === "final");
         expect(settled).toHaveBeenCalledTimes(outcome === "final" ? 1 : 0);
+        if (outcome === "final")
+          expect(settled).toHaveBeenCalledWith(
+            expect.objectContaining({
+              sessionId: "session-1",
+              scope: { actor: "user-1-session", spaceId: "space-1", agentInstanceId: "agent-1" },
+              completed: true,
+            }),
+          );
         act(() => probeRoot.unmount());
         unsubscribe();
         fetchSpy.mockRestore();
@@ -2219,6 +2307,40 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         stream.close();
         await sendPromise;
       });
+      act(() => probeRoot.unmount());
+      fetchSpy.mockRestore();
+    });
+
+    it("discards a detached queue when the stream connection fails before a response", async () => {
+      let queue: ReturnType<typeof usePendingMessages>[0] = [];
+      function Queue() {
+        [queue] = usePendingMessages("session-1");
+        return null;
+      }
+      const probeRoot = createRoot(document.createElement("div"));
+      act(() => probeRoot.render(<Queue />));
+      let rejectFetch!: (reason: Error) => void;
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementationOnce(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            rejectFetch = reject;
+          }),
+      );
+      mount();
+      let sendPromise!: Promise<boolean>;
+      await act(async () => {
+        sendPromise = latest.send("hello", "session-1");
+        await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      });
+      act(() => {
+        updatePendingMessages("session-1", [{ id: "queued", text: "discard", status: "waiting" }]);
+        latest.reset();
+      });
+      await act(async () => {
+        rejectFetch(new Error("no connection"));
+        await sendPromise;
+      });
+      expect(queue).toEqual([]);
       act(() => probeRoot.unmount());
       fetchSpy.mockRestore();
     });

@@ -16,12 +16,91 @@ use axum::{
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
+/// The descriptive subset of metadata.json consumed by the document viewer.
+/// Extra fields in the artifact belong to their existing owners.
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+pub struct MetadataPreview {
+    pub identity: ExtractedFacts,
+    pub extensions: Option<PreviewExtensions>,
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+pub struct ExtractedFacts {
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub created: Option<chrono::DateTime<chrono::FixedOffset>>,
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+pub struct PreviewExtensions {
+    pub email: Option<EmailHeaders>,
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EmailHeaders {
+    pub to: Vec<String>,
+    pub cc: Vec<String>,
+    pub message_id: Option<String>,
+    pub in_reply_to: Option<String>,
+}
+
+/// Only newly emitted email facts have this contract. Old/non-email artifacts
+/// remain readable. Validation occurs before publication, outside the SQL lock.
+pub(super) fn validate_email_metadata(value: &serde_json::Value) -> AppResult<()> {
+    let email = &value["extensions"]["email"];
+    if email.is_null() {
+        return Ok(());
+    }
+    let preview: MetadataPreview = serde_json::from_value(value.clone()).map_err(|_| invalid())?;
+    let headers = preview
+        .extensions
+        .and_then(|e| e.email)
+        .ok_or_else(invalid)?;
+    fn bounded(value: &str, limit: usize) -> bool {
+        !value.is_empty()
+            && value.len() <= limit
+            && value.trim() == value
+            && !value.chars().any(char::is_control)
+    }
+    let facts = preview.identity;
+    let valid = facts.title.as_deref().is_none_or(|s| bounded(s, 2048))
+        && facts.author.as_deref().is_none_or(|s| bounded(s, 512))
+        && headers
+            .message_id
+            .as_deref()
+            .is_none_or(|s| bounded(s, 512))
+        && headers
+            .in_reply_to
+            .as_deref()
+            .is_none_or(|s| bounded(s, 512))
+        && [&headers.to, &headers.cc].into_iter().all(|values| {
+            values.len() <= 25
+                && values.iter().all(|s| bounded(s, 512))
+                && values
+                    .iter()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    == values.len()
+        });
+    let facts_size =
+        serde_json::to_vec(&serde_json::json!({"identity": value["identity"], "email": email}))
+            .map_err(|_| invalid())?
+            .len();
+    if !valid || facts_size > 65_536 {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 #[derive(Default, serde::Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct PreviewQuery {
     /// native, raw, metadata, or a relative path from the published manifest.
     #[serde(default = "raw")]
     pub artifact: String,
+    /// Required for a conversation attachment; ownership is checked server-side.
+    pub session_id: Option<Uuid>,
 }
 fn raw() -> String {
     "raw".into()
@@ -34,10 +113,22 @@ pub async fn preview(
     query: PreviewQuery,
     headers: HeaderMap,
 ) -> AppResult<Response> {
-    let document = db::document(&state.pool, id).await?;
-    crate::authorization::authorize(&state.pool, actor, document.space_id, Permission::Read)
-        .await
-        .map_err(crate::documents::dependency_error)?;
+    let document = if let Some(session_id) = query.session_id {
+        let document = db::pipeline_document(&state.pool, id).await?;
+        let belongs: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1 and session_id=$2 and deletion_id is null)")
+            .bind(id).bind(session_id).fetch_one(&state.pool).await?;
+        if !belongs {
+            return Err(AppError::NotFound);
+        }
+        crate::sessions::require_owner(&state.pool, actor, document.space_id, session_id).await?;
+        document
+    } else {
+        let document = db::document(&state.pool, id).await?;
+        crate::authorization::authorize(&state.pool, actor, document.space_id, Permission::Read)
+            .await
+            .map_err(crate::documents::dependency_error)?;
+        document
+    };
     let storage = state.content.as_ref().ok_or_else(unavailable)?;
     if query.artifact == "native" && document.name.to_lowercase().ends_with(".pdf") {
         let key: String = sqlx::query_scalar(
@@ -241,6 +332,33 @@ impl Drop for Abort {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn email_facts_are_optional_bounded_and_never_include_bcc() {
+        use serde_json::json;
+        let valid = json!({"identity":{"title":"Offre Atlas", "author":"Paul", "created":"2026-10-27T10:30:00+01:00"},
+            "extensions":{"email":{"to":["Alice"],"cc":[],"message_id":"<same@example.test>","in_reply_to":null}}});
+        assert!(validate_email_metadata(&valid).is_ok());
+        assert!(validate_email_metadata(&json!({"identity": {}})).is_ok());
+        for (pointer, value) in [
+            ("/identity/title", json!("é".repeat(1025))),
+            ("/identity/author", json!("bad\nheader")),
+            ("/identity/created", json!("not-a-date")),
+            ("/extensions/email/to", json!(["Alice", "Alice"])),
+            ("/extensions/email/cc", json!(vec!["recipient"; 26])),
+            ("/extensions/email/message_id", json!("x".repeat(513))),
+        ] {
+            let mut changed = valid.clone();
+            *changed.pointer_mut(pointer).unwrap() = value;
+            assert!(validate_email_metadata(&changed).is_err(), "{pointer}");
+        }
+        let mut changed = valid.clone();
+        changed["extensions"]["email"]["bcc"] = json!(["private"]);
+        assert!(validate_email_metadata(&changed).is_err());
+        let empty = json!({"identity":{"title":null,"author":null,"created":null},
+            "extensions":{"email":{"to":[],"cc":[],"message_id":null,"in_reply_to":null}}});
+        assert!(validate_email_metadata(&empty).is_ok());
+    }
+
     #[test]
     fn bounded_pdf_ranges() {
         for (value, expected) in [

@@ -115,10 +115,12 @@ async def test_resolver_uses_workload_lease_and_grant_once(
     assert len(requests) == 1
     sent = requests[0]
     assert sent.headers["Authorization"] == "Bearer synthetic-workload-token"
+    assert sent.method == "POST"
     assert dict(sent.url.params) == {
         "person": admission.binding.subject_id,
         "run": "run",
         "reasoning": "false",
+        "resume": "false",
         "agent": str(admission.binding.agent.instance_id),
     }
     assert sent.url.path == (

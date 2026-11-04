@@ -171,7 +171,7 @@ describe("ChatListItem deleted agent presentation", () => {
     act(() => registerTurn(turn));
     act(() => settleTurn(turn));
     unsubscribe();
-    expect(settled).toHaveBeenCalledWith("saved", false);
+    expect(settled).toHaveBeenCalledWith(turn);
     expect(container.querySelector('[data-unread="true"]')!.textContent).toContain("Unread");
     expect(container.querySelector('[class*="unreadDot"]')).not.toBeNull();
     expect(container.querySelector('[title="Answer ready"]')).not.toBeNull();

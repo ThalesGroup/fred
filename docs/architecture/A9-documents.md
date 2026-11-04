@@ -4,7 +4,8 @@ Technical companion to [Documents and knowledge](05-documents.md), for Fred
 developers and coding assistants. It preserves storage layout, upload and retry
 contracts, processing states, publication and cleanup mechanisms for the
 Control Plane document path. The [document journey trace](A4-document-journey.md)
-provides a concrete example and read-only inspection commands.
+provides a concrete example and read-only inspection commands. The final section
+maps the separate [conversation-document implementation](#documents-authored-in-a-conversation).
 
 ## Classification and content ownership
 
@@ -277,3 +278,16 @@ Existing File/Raw preview modes read authenticated manager endpoints, with nativ
 PDF range support. Raw previews cap browser text at 8 MiB; protected local images
 use authenticated Blob URLs. Remote images, active HTML, diagrams and local links
 cannot bypass those controls. Published previews require current read authority.
+
+## Documents authored in a conversation
+
+Implementation references for [conversation documents](05-documents.md#55-documents-authored-in-a-conversation).
+These components belong to the Agent Pod capability and its frontend integration,
+separately from the Control Plane drive path described above.
+
+| Concern | Implementation entry |
+| --- | --- |
+| Agent writing and revision; stored content | [`capability.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/capability.py) and [`store.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/store.py) in `fred-capability-writable-document` |
+| Authorized download and Word conversion | [`router.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/router.py) and [`docx_export.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/docx_export.py) in the same package |
+| Editor and download controls | Frontend [`features/capabilities/writable_document/`](../../apps/frontend/src/rework/features/capabilities/writable_document/) |
+| Export behavior and profile fallback | [Capability package README](../../libs/capabilities/fred-capability-writable-document/README.md) |

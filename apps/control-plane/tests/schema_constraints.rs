@@ -781,3 +781,50 @@ async fn model_usage_constrains_facts_without_foreign_keys() {
     .unwrap();
     assert_eq!(foreign_keys, 0);
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn conversation_titles_upgrade_preserves_old_titles_and_checks_policy_membership() {
+    let mut baseline = sqlx::migrate!();
+    baseline.migrations = std::borrow::Cow::Owned(
+        baseline
+            .iter()
+            .filter(|m| m.version <= 3)
+            .cloned()
+            .collect(),
+    );
+    let pool = database::database_with_migrator(baseline).await;
+    let session = Uuid::new_v4();
+    sqlx::query("insert into space(id,kind,name,organization_id) values($1,'organization','Old organization',$1)").bind(session).execute(&pool).await.unwrap();
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$1,$1,'fixture','template','Fixture','{}','alice','fixture')")
+        .bind(session).execute(&pool).await.unwrap();
+    sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,title,agent_configuration_revision) values($1,'alice',$1,$1,$1,'fixture','Fixture','Old title',1)")
+        .bind(session).execute(&pool).await.unwrap();
+    let history: Vec<(i64, Vec<u8>)> =
+        sqlx::query_as("select version,checksum from _sqlx_migrations order by version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    control_plane::db::require_initialized(&pool).await.unwrap();
+    let row: (String, bool, Option<Uuid>) = sqlx::query_as(
+        "select title,title_pending,title_attempt from session_metadata where session_id=$1",
+    )
+    .bind(session)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row, ("Old title".into(), false, None));
+    let after: Vec<(i64, Vec<u8>)> = sqlx::query_as(
+        "select version,checksum from _sqlx_migrations where version<=3 order by version",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(history, after);
+    let org = organization(&pool, "Title organization").await;
+    sqlx::query("insert into organization_model_policy(organization_id,revision,created_by,updated_by) values($1,1,'alice','alice')")
+        .bind(org).execute(&pool).await.unwrap();
+    check_violation(sqlx::query("update organization_model_policy set title_source_id='missing' where organization_id=$1").bind(org).execute(&pool).await.unwrap_err());
+    violation(sqlx::query("update organization_model_policy set title_source_id='missing', title_upstream_model_id='model' where organization_id=$1").bind(org).execute(&pool).await.unwrap_err(), "23503");
+}

@@ -22,7 +22,7 @@ not enable steering or change the inference prompt.
 
 Ralph has no memory: every message is an independent turn. Preparation returns
 null synchronous-execution and history URLs, and false
-HITL/UI-parts support. The existing chat displays a notice and keeps only this
+HITL/UI-parts support. The existing shared chat keeps only this
 visit's live messages; leaving/reloading does not restore them. Session metadata
 still uses the common ownership and instance-association checks. The browser
 input limit is 16,384 Unicode scalars, fitting the 65,536-byte runtime ceiling.
@@ -40,14 +40,21 @@ connect and 60-second HTTP timeouts). Its request builder consumes the admitted
 model, temperature, token ceiling, top-p and reasoning. Official versioned API:
 [completion request builder](https://docs.rs/rig-core/0.42.0/rig_core/completion/request/struct.CompletionRequestBuilder.html).
 The 120-second turn deadline starts at local admission and covers model and search
-calls. A turn makes at most two model calls and one document search, retaining the
+calls. The answer makes at most two model calls and one document search, retaining the
 same model credential, offer and options throughout.
 
-The Fred SSE sequence is `status`, one `assistant_delta` with the completed provider
-text, then `final`. This buffers the final answer; it is not token streaming
+The Fred answer SSE starts with `status`, followed by any native reasoning and
+document-search events, one `assistant_delta` with the completed provider text,
+then `final`. Native reasoning uses the shared `thought_start`, `thought_delta`
+and `thought_end` events with `source: model_native`. Only displayable provider
+text is forwarded, never signatures, encrypted or redacted payloads. An answer
+without provider reasoning produces no reasoning block.
+A successful title may add `session_title` before `final`; the host sequences
+the combined stream monotonically. The answer remains buffered, not token-streamed
 from the upstream provider. The provider's finish reason is retained in Fred's
 normalized vocabulary. A failed/timed-out completion emits terminal
 `execution_error`, with a fixed public message and no provider body or credential.
+The polled `async-stream` generator yields tool events as work progresses.
 Dropping the stream cancels the in-flight future; no detached producer remains.
 No call can run after the turn closes. Attribution and revisions are logged through
 the host's tracing context; the host's existing logger strips dependency payloads.
@@ -82,7 +89,10 @@ transport, authorization and invalid-response failures end the turn explicitly.
 
 The second model call receives the correlated tool result and cannot request
 another search. The prompt treats excerpts as untrusted data and asks for textual
-title/page references. There is no new source panel or tool event in the browser.
+title/page references. The shared chat receives `tool_call` before search starts
+and a correlated `tool_result` with bounded content, elapsed time and an error
+flag. A search failure closes that tool row before the terminal `execution_error`.
+No separate Rust UI or trace endpoint is involved.
 Only in-turn messages are retained, until the stream completes or is dropped.
 
 ## Consumption
@@ -105,6 +115,26 @@ cancellable. A failed write is logged without content or secrets and does not
 change the reply. This is best effort: there is no retry, outbox or recovery after
 a process crash. The shared transaction preserves atomicity and report idempotency.
 
+## Managed title attempt
+
+Control Plane may reserve one optional title admission for a new session. The host
+owns the title future alongside the answer stream, using this crate's existing
+`InferenceTurn` transport, credential checks and inference spans. It is an extra
+call, with independent bounded options and an organization-selected offer, or the
+answer's admitted offer when no dedicated choice exists. No database or model
+policy is introduced in the agent crate.
+
+The title request reads at most 600 characters, targets 3–8 words and cleans plain
+text to 80 characters. Generation times out after 10 seconds. The host waits at
+most 2 seconds before yielding the final event; dropping the stream drops unfinished
+title work. Title errors never fail the answer. Decoded title usage goes through
+the existing usage callback as a separate report for its actual offer, even when
+the text is invalid; it is not included a second time in the answer aggregate.
+
+The host conditionally persists the result with its admitted attempt and provenance
+before emitting `session_title`. Manual renames and deletion win at the database
+boundary. See the [owner contract](../README.md#automatic-conversation-titles).
+
 ## Direct demonstration
 
 The existing direct request `{"agent_id":"fred.github.ralph","input":"Bonjour"}`
@@ -120,6 +150,8 @@ loopback provider: destination, model, options, fictitious credential, repeated
 calls, missing/mismatched provisioning, errors, deadlines, stream cancellation
 usage before the response event, tool-call correlation, single-search bounds,
 partial failures and cancellation between model calls.
+The same fixtures cover native reasoning, opaque-data exclusion, event ordering,
+terminal errors, and cancellation or deadline expiry between trace deliveries.
 Control Plane's `agent_instances::model_catalog` integration tests additionally
 cover HTTP instance/session creation, preparation under a custom router mount,
 the browser execution envelope, delegated admission, browser projection,

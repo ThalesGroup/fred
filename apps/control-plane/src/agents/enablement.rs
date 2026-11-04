@@ -19,6 +19,7 @@ use crate::{
 pub struct Policy {
     /// Capability ids enabled for every space, by runtime_id.
     enabled: HashMap<String, HashSet<String>>,
+    local: HashMap<Uuid, HashMap<String, HashSet<String>>>,
 }
 
 impl Policy {
@@ -26,17 +27,47 @@ impl Policy {
         ex: impl sqlx::PgExecutor<'e>,
         organization_id: Uuid,
     ) -> sqlx::Result<Self> {
-        let rows: Vec<(String, String)> = sqlx::query_as(
-            "select runtime_id, capability_id from organization_capability where organization_id = $1",
+        Self::load_scoped(ex, organization_id, None).await
+    }
+
+    /// Admission needs only its own ancestors, never every team's restrictions.
+    pub async fn load_for_space<'e>(
+        ex: impl sqlx::PgExecutor<'e>,
+        space: &Space,
+    ) -> sqlx::Result<Self> {
+        Self::load_scoped(ex, space.organization, Some(&space.path)).await
+    }
+
+    async fn load_scoped<'e>(
+        ex: impl sqlx::PgExecutor<'e>,
+        organization_id: Uuid,
+        path: Option<&[Uuid]>,
+    ) -> sqlx::Result<Self> {
+        let rows: Vec<(String, Option<String>, Option<Uuid>)> = sqlx::query_as(
+            "select runtime_id, capability_id, null::uuid as space_id
+             from organization_capability where organization_id = $1
+             union all
+             select p.runtime_id, a.capability_id, p.space_id
+             from space_capability_policy p join space s on s.id=p.space_id
+             left join space_capability_permission a using (space_id, runtime_id)
+             where s.organization_id=$1 and p.restricted and ($2::uuid[] is null or p.space_id=any($2))",
         )
         .bind(organization_id)
+        .bind(path)
         .fetch_all(ex)
         .await?;
         let mut enabled: HashMap<String, HashSet<String>> = HashMap::new();
-        for (runtime_id, capability_id) in rows {
-            enabled.entry(runtime_id).or_default().insert(capability_id);
+        let mut local: HashMap<Uuid, HashMap<String, HashSet<String>>> = HashMap::new();
+        for (runtime, capability, space) in rows {
+            let entries = match space {
+                Some(space) => local.entry(space).or_default().entry(runtime).or_default(),
+                None => enabled.entry(runtime).or_default(),
+            };
+            if let Some(capability) = capability {
+                entries.insert(capability);
+            }
         }
-        Ok(Self { enabled })
+        Ok(Self { enabled, local })
     }
 
     /// The organization's "enabled for all" decision, as stored.
@@ -58,8 +89,15 @@ impl Policy {
 
 /// The single rule deciding whether `space` may use an offer. Team exceptions
 /// and the personal-space class belong here and in `Policy`, nowhere else.
-pub fn usable(policy: &Policy, _space: &Space, runtime_id: &str, capability_id: &str) -> bool {
+pub fn usable(policy: &Policy, space: &Space, runtime_id: &str, capability_id: &str) -> bool {
     policy.default_on(runtime_id, capability_id)
+        && space.path.iter().all(|id| {
+            policy
+                .local
+                .get(id)
+                .and_then(|runtimes| runtimes.get(runtime_id))
+                .is_none_or(|allowed| allowed.contains(capability_id))
+        })
 }
 
 /// The first selected capability `space` may no longer use.

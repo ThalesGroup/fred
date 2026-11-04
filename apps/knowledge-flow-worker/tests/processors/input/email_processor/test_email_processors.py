@@ -349,3 +349,55 @@ def test_attachment_path_cap_covers_the_attached_messages(tmp_path):
     assert capped.truncated is True
     assert "short parent body" in capped.text
     assert len(capped.text) <= 402
+
+
+@pytest.mark.parametrize("date,expected", [("invalid", None), ("Tue, 27 Oct 2026 10:30:00 -0000", "2026-10-27T10:30:00+00:00"), ("Tue, 27 Oct 2026 10:30:00 +0530", "2026-10-27T10:30:00+05:30")])
+def test_generation_metadata_dates_and_empty_headers(tmp_path, date, expected):
+    import json
+
+    source = tmp_path / "mail.eml"
+    source.write_text(f"Date: {date}\nSubject:   \nBcc: private@example.test\n\nBody")
+    EmailMarkdownProcessor().convert_file_to_markdown(source, tmp_path / "out", None)
+    facts = json.loads((tmp_path / "out/metadata.json").read_text())
+    assert facts["identity"] == {"title": None, "author": None, "created": expected}
+    assert facts["extensions"]["email"] == {"to": [], "cc": [], "message_id": None, "in_reply_to": None}
+
+
+def test_structured_headers_are_bounded_without_failing_document():
+    import json
+
+    from knowledge_flow_worker.core.processors.input.email_processor.email_message_parser import ParsedEmail, email_extension, email_metadata
+
+    parsed = ParsedEmail(
+        subject="é" * 2000,
+        sender="  Alice\n <alice@example.test> ",
+        to=["same", "same", " "] + [str(i) + "界" * 1000 for i in range(40)],
+        cc=['quoted "' * 1000] * 50,
+        message_id="x" * 800,
+        in_reply_to="\x00",
+    )
+    identity, email = email_metadata(parsed), email_extension(parsed)
+    assert len(identity["title"].encode()) == 2048
+    assert identity["author"] == "Alice <alice@example.test>"
+    assert len(email["to"]) == 25
+    assert len(set(email["to"])) == 25
+    assert len(email["cc"]) == 1
+    assert all(len(v.encode()) <= 512 for v in email["to"] + email["cc"])
+    assert len(email["message_id"]) == 512
+    assert email["in_reply_to"] is None
+    assert len(json.dumps({"identity": identity, "extensions": {"email": email}}, ensure_ascii=False).encode()) < 65536
+
+
+@pytest.mark.parametrize("headers", ["", "From: <>\r\nDate: invalid\r\nSubject: \r\nBcc: private@example.test"])
+def test_msg_missing_or_malformed_optional_headers(tmp_path, headers):
+    import json
+
+    from tests.processors.input.email_processor.fixtures.build_msg_fixtures import PT_STRING, message, write_cfb
+
+    source = tmp_path / "optional.msg"
+    write_cfb(source, message([(0x001A, PT_STRING, "IPM.Note"), (0x1000, PT_STRING, "Readable body"), (0x007D, PT_STRING, headers)]))
+    EmailMarkdownProcessor().convert_file_to_markdown(source, tmp_path / "out", None)
+    facts = json.loads((tmp_path / "out/metadata.json").read_text())
+    assert facts["identity"] == {"title": None, "author": None, "created": None}
+    assert facts["extensions"]["email"] == {"to": [], "cc": [], "message_id": None, "in_reply_to": None}
+    assert "Readable body" in (tmp_path / "out/output.md").read_text()

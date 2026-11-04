@@ -140,7 +140,7 @@ export const CommandMenu = memo(function CommandMenu({
               aria-selected={index === activeIndex}
               data-active={index === activeIndex}
               title={
-                entry.kind === "skill" && entry.name !== entry.command
+                entry.kind === "skill"
                   ? skillTooltip(entry.name, entry.description)
                   : entry.description?.trim() || entry.name
               }
@@ -158,8 +158,8 @@ export const CommandMenu = memo(function CommandMenu({
                 <span className={styles.rowLabel}>
                   {entry.kind === "skill"
                     ? entry.name !== entry.command
-                      ? `${entry.name} (/${entry.command})`
-                      : `/${entry.command}`
+                      ? `${entry.name} (${entry.command})`
+                      : entry.command
                     : `/${entry.command}`}
                 </span>
                 <em className={styles.rowDescription}>{entry.description?.trim() || entry.name}</em>

@@ -21,6 +21,7 @@ class SkillSummary(BaseModel):
 class SkillCatalog(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    availability: Literal["available", "disabled", "unavailable"] = "available"
     supported: bool = True
     revision: str = ""
     skills: tuple[SkillSummary, ...] = ()

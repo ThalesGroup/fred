@@ -60,7 +60,7 @@ def load_skill(
         )
         skills = skills.for_execution(
             selections,
-            binding.disabled_platform_skills if binding is not None else (),
+            binding.unavailable_skill_names if binding is not None else (),
             resuming=binding.is_resuming if binding is not None else False,
         )
     content = escape_reserved_prompt_tags(skills.read(name))
@@ -165,7 +165,7 @@ def build_skill_tools(
     if isinstance(skills, PlatformSkills):
         skills = skills.for_execution(
             tuple(s.name for s in binding.runtime_context.selected_skills),
-            binding.disabled_platform_skills,
+            binding.unavailable_skill_names,
             resuming=binding.is_resuming,
         )
 

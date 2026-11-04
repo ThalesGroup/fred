@@ -127,8 +127,8 @@ describe("CommandMenu sections", () => {
     expect(host.querySelector('[role="option"]')?.textContent).toBe("edit_note/searchsearch");
     const rows = host.querySelectorAll<HTMLElement>('[role="option"]');
     expect(rows[3]?.title).toBe("review");
-    expect(rows[3]?.textContent).toBe("/reviewreview");
+    expect(rows[3]?.textContent).toBe("reviewreview");
     expect(rows[4]?.title).toBe("Analyser des données: Vérifier les calculs.");
-    expect(rows[4]?.textContent).toBe("Analyser des données (/analyze-data)Vérifier les calculs.");
+    expect(rows[4]?.textContent).toBe("Analyser des données (analyze-data)Vérifier les calculs.");
   });
 });

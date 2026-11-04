@@ -30,7 +30,7 @@ import threading
 import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from email import message_from_bytes, policy
 from email.message import EmailMessage, Message, MIMEPart
 from email.utils import getaddresses, parsedate_to_datetime
@@ -304,13 +304,40 @@ def _render_attached(messages: list[AttachedMessage], prefix: str, budget: _Body
 
 
 def email_metadata(parsed: ParsedEmail) -> dict:
-    """Flat enrichment dict for `BaseInputProcessor._apply_enrichment`."""
-    return {"title": parsed.subject, "author": parsed.sender, "created": parsed.sent_at}
+    """Descriptive facts only; never the document name, uploader or import time."""
+    sent_at = parsed.sent_at
+    if sent_at is not None and sent_at.tzinfo is None:
+        sent_at = sent_at.replace(tzinfo=timezone.utc)
+    return {"title": _bounded_header(parsed.subject, 2048), "author": _bounded_header(parsed.sender), "created": sent_at}
 
 
 def email_extension(parsed: ParsedEmail) -> dict:
     """`extensions.email` payload; Bcc is deliberately absent."""
-    return {"to": parsed.to, "cc": parsed.cc, "message_id": parsed.message_id, "in_reply_to": parsed.in_reply_to}
+    return {
+        "to": _bounded_recipients(parsed.to),
+        "cc": _bounded_recipients(parsed.cc),
+        "message_id": _bounded_header(parsed.message_id),
+        "in_reply_to": _bounded_header(parsed.in_reply_to),
+    }
+
+
+def _bounded_header(value: str | None, limit: int = 512) -> str | None:
+    # Preserve Unicode and case. Fold whitespace/controls; optional malformed
+    # or oversized headers must not fail the whole document.
+    text = " ".join("".join(c if c.isprintable() else " " for c in (value or "")).split())
+    return text.encode("utf-8")[:limit].decode("utf-8", errors="ignore").strip() or None
+
+
+def _bounded_recipients(values: list[str]) -> list[str]:
+    # Exact display-value deduplication: external addresses are not identities.
+    result: list[str] = []
+    for value in values:
+        bounded = _bounded_header(value)
+        if bounded and bounded not in result:
+            result.append(bounded)
+        if len(result) == 25:
+            break
+    return result
 
 
 def html_to_markdown(html: str) -> str:

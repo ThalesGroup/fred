@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+async-stream = "0.3"
 fred-rust-sdk.workspace = true
 reqwest.workspace = true
 tracing.workspace = true

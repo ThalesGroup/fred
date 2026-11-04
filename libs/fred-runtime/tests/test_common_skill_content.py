@@ -9,6 +9,7 @@ import re
 from importlib.resources import files
 
 import pytest
+import pytest_asyncio
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.skills.catalog import PlatformSkills
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
@@ -312,3 +313,12 @@ async def test_conditional_references_reach_the_model_only_after_a_reference_rea
         if isinstance(m, ToolMessage) and m.tool_call_id == "reference"
     ]
     assert len(references) == 1 and marker in str(references[0].content)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def admitted_unit_turn():
+    from test_platform_skills import binding
+    from weaver_fixtures import active_turn
+
+    with active_turn(binding()):
+        yield

@@ -8,6 +8,7 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+import pytest_asyncio
 from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
 from fred_runtime.react.react_model_adapter import CompiledReActAgent
@@ -306,3 +307,13 @@ async def test_native_context_clipping_does_not_replay_tool_execution() -> None:
     span.set_usage.assert_called_once_with(
         model="offline-model", usage={"input": 11, "output": 7, "total": 18}
     )
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def admitted_unit_turn():
+    """Compiled-loop proofs run under a synthetic Weaver turn authority."""
+    from test_platform_skills import binding
+    from weaver_fixtures import active_turn
+
+    with active_turn(binding()):
+        yield

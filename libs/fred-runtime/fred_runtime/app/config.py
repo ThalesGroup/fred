@@ -428,7 +428,7 @@ class PodPlatformConfig(BaseModel):
 
 
 class PodSkillsConfig(BaseModel):
-    """Packaged skills by default; custom paths resolve beside configuration.yaml."""
+    """Pod skill source; permissions are supplied by Weaver at admission."""
 
     directory: str = Field(default="package", min_length=1)
 

@@ -13,7 +13,7 @@ import type { AgentFormPayload } from "./AgentFormModal/AgentFormModal";
 export function resolveAgentSpace(spaces: MySpace[] | undefined, routeId: string | undefined) {
   // Navigation uses canonical ids. Only the established personal alias is resolved by context.
   const space = spaces?.find((item) => (routeId === "personal" ? item.kind === "personal" : item.id === routeId));
-  return space && (space.kind === "team" || space.kind === "personal") ? space : undefined;
+  return space && (space.kind === "team" || space.kind === "project" || space.kind === "personal") ? space : undefined;
 }
 
 export function agentErrorText(error: unknown, t: TFunction): string {

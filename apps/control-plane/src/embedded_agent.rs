@@ -15,7 +15,7 @@ use axum::{
 };
 use fred_rust_agent::{ExecuteError, ExecuteRequest, RequestedTarget, RuntimeEvent, Usage};
 use fred_rust_sdk::inference::ModelOfferKey;
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use sqlx::PgPool;
 use tracing::{Instrument, Span};
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -122,6 +122,59 @@ async fn execute_stream(
                     "Document search provisioning is unavailable.",
                 )
             })?;
+        let title_input = request.input.clone();
+        let title = binding.title.map(|title| {
+            let pool = state.pool.clone();
+            let span = span.clone();
+            let credentials = state.agent_catalog.inference_credentials.clone();
+            let subject_id = binding.subject_id.clone();
+            async move {
+                let offer = title.inference.selection.key.clone();
+                let turn = match fred_rust_agent::inference::InferenceTurn::admit(
+                    title.inference,
+                    &credentials,
+                ) {
+                    Ok(turn) => turn,
+                    Err(_) => {
+                        tracing::warn!(
+                            event = "session_title",
+                            outcome = "skipped",
+                            reason = "provisioning"
+                        );
+                        return None;
+                    }
+                };
+                let usage_pool = pool.clone();
+                let generated = turn
+                    .title(&title_input, move |usage| {
+                        report_usage(usage_pool, span, space_id, session_id, offer, usage)
+                    })
+                    .await?;
+                let body = crate::sessions::title::GeneratedTitle {
+                    subject_id,
+                    agent_instance_id: instance_id,
+                    attempt_id: title.attempt_id,
+                    title: generated,
+                };
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(2),
+                    crate::sessions::title::persist(&pool, space_id, session_id, &body),
+                )
+                .await
+                {
+                    Ok(Ok(true)) => Some(session_id.to_string()),
+                    _ => {
+                        tracing::info!(
+                            event = "session_title",
+                            outcome = "skipped",
+                            reason = "not_persisted"
+                        );
+                        None
+                    }
+                }
+            }
+            .boxed()
+        });
         let admission = binding.inference.ok_or_else(|| {
             AppError::problem(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -146,13 +199,14 @@ async fn execute_stream(
             })?;
         let pool = state.pool.clone();
         let space_id = binding.space.id;
-        fred_rust_agent::inference::execute(
+        let events = fred_rust_agent::inference::execute(
             turn,
             request.input,
             search.map(|search| move |query| async move { search.run(query).await }),
             move |usage| report_usage(pool, span, space_id, session_id, offer, usage),
         )
-        .boxed()
+        .boxed();
+        crate::sessions::title::stream(events, title)
     } else {
         fred_rust_agent::execute().boxed()
     };

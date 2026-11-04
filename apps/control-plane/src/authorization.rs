@@ -515,7 +515,10 @@ pub async fn can_use_agent<'e>(
     template: Uuid,
     space: &Space,
 ) -> sqlx::Result<bool> {
-    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Personal) {
+    if !matches!(
+        space.kind,
+        SpaceKind::Team | SpaceKind::Project | SpaceKind::Personal
+    ) {
         return Ok(false);
     }
     agent_default_on(ex, space.organization, template).await

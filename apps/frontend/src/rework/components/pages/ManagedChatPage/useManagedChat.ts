@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { useDispatch } from "react-redux";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
+import { enhancedControlPlaneApi } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { ExecutionPreparation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useComposerSettings } from "./useComposerSettings";
 import { documentSelectionTurnOptions } from "./documentSelectionTurnOptions";
@@ -299,6 +300,18 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
 
   const [registerSession] = useCreateSessionMutation();
   const [refreshSession] = useUpdateSessionMutation();
+  const refreshSessionTitle = useCallback(
+    (sid: string) => {
+      if (!isScopeCurrent()) return;
+      dispatch(
+        enhancedControlPlaneApi.util.invalidateTags([
+          { type: "Sessions", id: spaceId },
+          { type: "Sessions", id: `${spaceId}:${sid}` },
+        ]),
+      );
+    },
+    [dispatch, spaceId, isScopeCurrent],
+  );
   // Bumps the session's activity timestamp (tile date + chat-list ordering) —
   // called both at send time (so the tile jumps to the top the moment the
   // user hits Enter) and again when the turn completes.
@@ -486,6 +499,11 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     [setPendingMessages],
   );
 
+  const reloadHitlHistoryRef = useRef<() => void>(() => {});
+  const handleHitlUnavailable = useCallback((sid: string) => {
+    if (activeSessionIdRef.current === sid) reloadHitlHistoryRef.current();
+  }, []);
+
   const {
     messages,
     waitResponse,
@@ -508,6 +526,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     spaceId,
     flushPendingWrites: flushSessionWrites,
     onBindDraftAgentToSessionId: bindSessionId,
+    onSessionTitle: refreshSessionTitle,
     onTurnPersisted: useCallback(
       (sid: string) => {
         touchSessionActivity(sid);
@@ -518,6 +537,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     onSteeredMessage: handleSteeredMessage,
     onStreamInterrupted: handleStreamInterrupted,
     onAwaitingHuman: handleAwaitingHuman,
+    onHitlUnavailable: handleHitlUnavailable,
     onError: handleChatError,
     onPreparation: acceptPreparation,
     onTurnStarted: handleTurnStarted,
@@ -673,6 +693,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     isSettled: isHistorySettled,
     isUnavailable: historyUnavailable,
     errorKey: historyErrorKey,
+    reload: retryHitlAvailability,
   } = useSessionHistory({
     sessionId: locallyCreatingSession && !sessionData ? null : sessionId,
     spaceId,
@@ -716,6 +737,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     canUpload: chatControls.some((control) => control.widget === "attach_files"),
     sentBefore,
   });
+  reloadHitlHistoryRef.current = retryHitlAvailability;
 
   const notifySessionSaveFailed = useCallback(
     (error: unknown) => {
@@ -944,7 +966,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
           // and not from the prompt body (which would give every run of one
           // command the same name). The prompt's name reads best; any text
           // typed after the command is what makes this conversation its own.
-          // Nothing retitles a session afterwards, so this is the only shot.
+          // The server may replace this initial title after the first admitted turn.
           const titleSource = turnCommand
             ? [turnCommand.prompt_name || `/${turnCommand.command}`, turnCommand.appended_text]
                 .filter(Boolean)
@@ -1530,11 +1552,21 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     modelPreparationPending,
     historyErrorKey: sessionErrorKey ?? historyErrorKey,
     historyUnavailable,
-    historyUnsupported: preparation?.messages_url_template === null,
+    retryHitlAvailability,
     agentInstance,
     capabilityIds,
     chatControls,
     models: preparation?.models,
+    skills: preparation?.skills?.availability === "unavailable" ? undefined : (preparation?.skills ?? undefined),
+    skillsUnavailable:
+      !!preparation?.skill_detail_url_template &&
+      preparation.skills?.supported === true &&
+      preparation.skills.availability === "unavailable",
+    skillsSupported: !!preparation?.skill_detail_url_template,
+    skillDetailUrlTemplate: preparation?.skill_detail_url_template,
+    refreshSkills: async () => ({
+      data: (await prepareChatControls(sessionId, requestedModel.choice, composer.reasoning)).skills ?? undefined,
+    }),
     supportsHitl: preparation?.supports_hitl === true,
     input,
     pendingMessages,

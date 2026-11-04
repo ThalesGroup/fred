@@ -57,7 +57,7 @@ export type LiveTurn = {
   completed?: boolean;
   interrupted?: boolean;
   /** Session-keyed side effects that stay meaningful with no view attached. */
-  detachedCallbacks: Pick<ChatSseCallbacks, "onTurnPersisted" | "onBackgroundTurnSettled">;
+  detachedCallbacks: Pick<ChatSseCallbacks, "onTurnPersisted" | "onBackgroundTurnSettled" | "onSessionTitle">;
 };
 
 const INDICATOR_STORAGE_KEY = "chat.background-indicators";
@@ -84,7 +84,7 @@ const awaitingInput = restoreIndicator("awaitingInput");
 // Sessions whose turn ended while no view showed it; opening one marks it read.
 const unread = restoreIndicator("unread");
 const runningListeners = new Set<() => void>();
-const settledListeners = new Set<(sessionId: string, awaitingInput: boolean) => void>();
+const settledListeners = new Set<(turn: LiveTurn) => void>();
 
 function notifyRunning(): void {
   for (const listener of runningListeners) listener();
@@ -174,7 +174,7 @@ export function markSessionRead(sessionId: string): void {
 }
 
 /** Notified when a turn ends while no view shows its conversation. */
-export function subscribeBackgroundSettled(listener: (sessionId: string, awaitingInput: boolean) => void): () => void {
+export function subscribeBackgroundSettled(listener: (turn: LiveTurn) => void): () => void {
   settledListeners.add(listener);
   return () => settledListeners.delete(listener);
 }
@@ -207,9 +207,9 @@ export function turnCallbacks(turn: LiveTurn): ChatSseCallbacks {
 
 export function detachTurn(turn: LiveTurn): void {
   if (!turn.host) return;
-  const { onTurnPersisted, onBackgroundTurnSettled } = turn.host.callbacks();
+  const { onTurnPersisted, onBackgroundTurnSettled, onSessionTitle } = turn.host.callbacks();
   turn.messages = turn.host.read();
-  turn.detachedCallbacks = { onTurnPersisted, onBackgroundTurnSettled };
+  turn.detachedCallbacks = { onTurnPersisted, onBackgroundTurnSettled, onSessionTitle };
   turn.host = null;
   detached.set(turn.sessionId, turn);
 }
@@ -227,7 +227,7 @@ export function settleTurn(turn: LiveTurn): void {
   if (running.get(turn.sessionId) === turn) {
     if (turn.interrupted || turn.controller.signal.aborted) updatePendingMessages(turn.sessionId, [], turn.scope.actor);
     running.delete(turn.sessionId);
-    if (turn.awaitingInput && !turn.controller.signal.aborted) awaitingInput.add(turn.sessionId);
+    if (turn.awaitingInput && !turn.interrupted && !turn.controller.signal.aborted) awaitingInput.add(turn.sessionId);
     notifyIndicatorsChanged();
   }
   if (turn.host) {
@@ -238,9 +238,9 @@ export function settleTurn(turn: LiveTurn): void {
   // Only deletion aborts a detached turn: its thread must not be cached again.
   if (!turn.controller.signal.aborted) {
     turn.detachedCallbacks.onBackgroundTurnSettled?.(turn.sessionId, turn.messages);
-    if (!turn.awaitingInput && (!turn.completed || turn.interrupted)) return;
+    if (turn.interrupted || (!turn.awaitingInput && !turn.completed)) return;
     unread.add(turn.sessionId);
     notifyIndicatorsChanged();
-    for (const listener of settledListeners) listener(turn.sessionId, Boolean(turn.awaitingInput));
+    for (const listener of settledListeners) listener(turn);
   }
 }

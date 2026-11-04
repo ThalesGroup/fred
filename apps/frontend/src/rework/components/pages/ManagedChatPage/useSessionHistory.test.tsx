@@ -111,6 +111,38 @@ describe("useSessionHistory authorized reads", () => {
     });
   };
 
+  it("explicit retry revalidates without restoring cached questions and ignores a late response after navigation", async () => {
+    fetchImpl = async () => okResponse([msg("old")]);
+    mount("A");
+    await act(async () => {});
+    onLoaded.mockClear();
+    const pending = deferred<ReturnType<typeof okResponse>>();
+    fetchImpl = () => pending.promise;
+    await act(async () => latest.reload());
+    expect(onLoaded).not.toHaveBeenCalled();
+    fetchImpl = async () => okResponse([msg("B")]);
+    render("B");
+    await act(async () => {});
+    onLoaded.mockClear();
+    await act(async () => pending.resolve(okResponse([msg("late-A")])));
+    expect(onLoaded).not.toHaveBeenCalled();
+  });
+
+  it("does not authorize another session from its cache after an explicit retry", async () => {
+    fetchImpl = async () => okResponse([msg("A")]);
+    mount("A");
+    await act(async () => {});
+    await act(async () => latest.reload());
+    setCachedSessionHistory(historyKey("B"), [msg("cached-B")]);
+    onLoaded.mockClear();
+    routeOverride = null;
+    render("B");
+    await act(async () => {});
+    expect(onLoaded).not.toHaveBeenCalledWith([msg("cached-B")]);
+    expect(latest.isAuthorized).toBe(false);
+    expect(latest.isUnavailable).toBe(true);
+  });
+
   const mount = (sessionId: string | null) => {
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -146,6 +178,34 @@ describe("useSessionHistory authorized reads", () => {
     container.remove();
     vi.unstubAllGlobals();
   });
+
+  it.each([null, "/runtime/sessions/session-a/messages"])(
+    "preserves the first completed exchange while session metadata resolves to %s",
+    async (route) => {
+      routeOverride = undefined;
+      currentMessages = [{ ...msg("first-answer"), session_id: "session-a", exchange_id: "first" }];
+      fetchImpl = async () => okResponse([]);
+      mount("session-a");
+      await settle();
+      expect(latest.isLoading).toBe(true);
+      expect(onLoaded).not.toHaveBeenCalled();
+      expect(latest.isAuthorized).toBe(false);
+
+      routeOverride = route;
+      historySupported = route !== null;
+      render("session-a");
+      await settle();
+      expect(onLoaded).not.toHaveBeenCalled();
+      expect(latest.isSettled).toBe(true);
+
+      // Preserving this visit never authorizes another conversation's transcript.
+      routeOverride = undefined;
+      render("session-b");
+      await settle();
+      expect(onLoaded).toHaveBeenLastCalledWith([]);
+      expect(latest.isAuthorized).toBe(false);
+    },
+  );
 
   it("keeps this visit's completed response when the admitted runtime has no history", async () => {
     routeOverride = null;

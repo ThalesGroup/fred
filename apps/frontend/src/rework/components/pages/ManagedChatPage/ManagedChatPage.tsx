@@ -76,7 +76,7 @@ import { useMySpacesQuery, useLazyGetPromptQuery } from "../../../../slices/cont
 import type { MySpace, PromptSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
-import { useGetAgentInstanceSkillDetailQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useWeaverSkillDetailQuery } from "../../../../slices/runtime/skillPreview";
 import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import Chip from "@shared/atoms/Chip/Chip";
@@ -212,10 +212,6 @@ function ManagedChatContent({
   const promptPreviewDrawer = activePushDrawer?.kind === "prompt-preview" ? activePushDrawer : null;
   const previewPromptIdRef = useRef<string | null>(null);
   previewPromptIdRef.current = promptPreviewDrawer?.promptId ?? null;
-  const skillPreview = useGetAgentInstanceSkillDetailQuery(
-    { teamId, agentInstanceId, skillName: previewSkillName ?? "" },
-    { skip: true },
-  );
   const previewScope = useRef({ teamId, agentInstanceId });
   useEffect(() => {
     if (previewScope.current.teamId !== teamId || previewScope.current.agentInstanceId !== agentInstanceId) {
@@ -260,6 +256,15 @@ function ManagedChatContent({
   const isAdmin =
     space.kind === "personal" || space.roles.some((role) => role === "owner" || role === "organization_admin");
   const chat = useManagedChat({ teamId, spaceId: space.id, agentInstanceId });
+  const skillPreview = useWeaverSkillDetailQuery(
+    {
+      spaceId: teamId,
+      agentInstanceId,
+      skillName: previewSkillName ?? "",
+      urlTemplate: chat.skillDetailUrlTemplate ?? "",
+    },
+    { skip: !previewSkillName || !chat.skillDetailUrlTemplate, refetchOnMountOrArgChange: true },
+  );
 
   // Opening a push drawer is a statement about ONE conversation, so switching
   // conversations closes it: the panels (capability, attachments, document
@@ -344,8 +349,13 @@ function ManagedChatContent({
     recordedPanelKeyRef.current = activeCapabilityKey;
   }, [chat.sessionId, activeCapabilityKey]);
 
-  // Re-resolved every render from the live messages so the open drawer streams.
-  const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
+  // Use the rendered traces so the live drawer retains history availability annotations.
+  const selectedTraceEntry = selectedTraceKey
+    ? findTraceEntry(
+        chat.threadMessages.flatMap((message) => message.traceMessages),
+        selectedTraceKey,
+      )
+    : null;
   const fileTraceEntry =
     activePushDrawer?.kind === "skill-file" ? findTraceEntry(chat.messages, activePushDrawer.entryKey) : null;
   const previewFile = fileTraceEntry ? skillFileReadOf(fileTraceEntry) : null;
@@ -357,16 +367,11 @@ function ManagedChatContent({
     !chat.executionDisabled &&
     !chat.historyUnavailable;
 
-  const conversationNotice = (chat.historyUnavailable ||
-    chat.sessionUnavailable ||
-    chat.preparationUnavailable ||
-    chat.historyUnsupported) && (
+  const conversationNotice = (chat.historyUnavailable || chat.sessionUnavailable || chat.preparationUnavailable) && (
     <p className={styles.conversationNotice} role="status">
       {chat.historyUnavailable || chat.sessionUnavailable
         ? t(chat.historyErrorKey ?? "chatbot.historyUnavailable")
-        : chat.preparationUnavailable
-          ? chat.preparationErrorDetail || t("chatbot.preparationUnavailable")
-          : t("chatbot.historyUnsupported")}
+        : chat.preparationErrorDetail || t("chatbot.preparationUnavailable")}
     </p>
   );
 
@@ -680,7 +685,12 @@ function ManagedChatContent({
   // menu reach the same send.
   const commands = useComposerCommands({
     enabled: !chat.executionDisabled,
-    skillsEnabled: false,
+    skillsEnabled: chat.skillsSupported,
+    promptsEnabled: space.kind !== "project",
+    skillCatalog: chat.skills,
+    skillsLoading: chat.modelPreparationPending,
+    skillsFailed: chat.preparationUnavailable || chat.skillsUnavailable,
+    refreshSkills: chat.refreshSkills,
     sessionId: chat.sessionId,
     teamId,
     agentInstanceId,
@@ -816,7 +826,8 @@ function ManagedChatContent({
           onOpenPrompt: openPromptPreview,
           tokens: commands.selectedSkills.map((token) => ({
             ...token,
-            ...commands.skillSummaries.get(token.name),
+            description: commands.skillSummaries.get(token.name)?.description,
+            builtin: commands.skillSummaries.get(token.name)?.builtin,
             onOpen: openSkill,
           })),
         }}
@@ -1073,6 +1084,7 @@ function ManagedChatContent({
                     ) : (
                       <ConversationThread
                         readOnly={chat.executionDisabled || !chat.supportsHitl}
+                        onRetryHitlAvailability={chat.retryHitlAvailability}
                         messages={chat.threadMessages}
                         pendingHitl={chat.pendingHitl}
                         pendingHitlTabs={chat.pendingHitlTabs}

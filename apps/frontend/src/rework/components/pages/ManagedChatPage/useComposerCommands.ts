@@ -22,7 +22,6 @@ import {
   type CommandTriggerBinding,
   type DraftEdit,
 } from "@shared/molecules/RichInputField/RichInputField";
-import { useGetAgentInstanceSkillsQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { useTranslation } from "react-i18next";
 import { skillPresentation } from "@rework/utils/skillPresentation";
 import {
@@ -38,7 +37,12 @@ import {
   useLazyGetPromptQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Prompt, PromptSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import type { SkillInvocation, SkillSummary, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
+import type {
+  SkillCatalog,
+  SkillSummary,
+  SkillInvocation,
+  TurnCommand,
+} from "../../../../slices/runtime/runtimeOpenApi";
 
 /**
  * The composer's command trigger: the menu `/` opens, and the resolution of a
@@ -161,6 +165,11 @@ export interface ComposerCommandsMenu {
 export function useComposerCommands(params: {
   enabled?: boolean;
   skillsEnabled?: boolean;
+  promptsEnabled?: boolean;
+  skillCatalog?: SkillCatalog;
+  skillsLoading?: boolean;
+  skillsFailed?: boolean;
+  refreshSkills?: () => Promise<{ data?: SkillCatalog }>;
   /** Invalidates pending resolutions on a conversation change. */
   sessionId?: string | null;
   teamId: string;
@@ -222,16 +231,12 @@ export function useComposerCommands(params: {
   const lastEditRef = useRef<{ old: string; value: string; edits: readonly DraftEdit[] } | null>(null);
   const restoredChoicesRef = useRef<readonly Choice[] | null>(null);
   const skillsQueried = Boolean(enabled && params.skillsEnabled && teamId && agentInstanceId);
-  const {
-    currentData: catalog,
-    isFetching: skillsFetching,
-    isError: skillsFailed,
-    refetch: refetchSkills,
-  } = useGetAgentInstanceSkillsQuery(
-    { teamId, agentInstanceId: agentInstanceId ?? "" },
-    { skip: !skillsQueried, refetchOnMountOrArgChange: true },
-  );
-  const skills = skillsQueried && catalog?.supported ? (catalog.skills ?? []) : [];
+  const catalog = params.skillCatalog;
+  const skillsFetching = params.skillsLoading ?? false;
+  const skillsFailed = params.skillsFailed ?? false;
+  const refetchSkills = params.refreshSkills ?? (() => Promise.resolve({ data: catalog }));
+  const skills =
+    skillsQueried && catalog?.supported ? (catalog.skills ?? []).filter((skill) => skill.user_invocable !== false) : [];
   const skillsRef = useRef(skills);
   skillsRef.current = skills;
   const skillNames = useMemo(() => skills.map((skill) => skill.name), [skills]);
@@ -248,9 +253,20 @@ export function useComposerCommands(params: {
   // reporting is keyed on the callback it was handed.
   const paramsRef = useRef(params);
   paramsRef.current = params;
+  const updateDraft = useCallback((value: string, nextChoices: Choice[]) => {
+    choicesRef.current = nextChoices;
+    paramsRef.current = { ...paramsRef.current, input: value };
+    setChoices(nextChoices);
+    paramsRef.current.setInput(value);
+  }, []);
 
-  const teamCatalog = usePromptCatalogQuery({ spaceId: teamId }, { skip: !enabled || !teamId });
-  const prompts = teamCatalog.isError || teamCatalog.isFetching ? undefined : teamCatalog.currentData?.items;
+  const teamQueried = enabled && !!teamId && params.promptsEnabled !== false;
+  const teamCatalog = usePromptCatalogQuery({ spaceId: teamId }, { skip: !teamQueried });
+  const prompts = !teamQueried
+    ? []
+    : teamCatalog.isError || teamCatalog.isFetching
+      ? undefined
+      : teamCatalog.currentData?.items;
   const { isFetching: teamCommandsFetching, isError: teamCommandsFailed } = teamCatalog;
   const refetchTeamCommands = async () => {
     const result = await teamCatalog.refetch();
@@ -272,13 +288,13 @@ export function useComposerCommands(params: {
   promptCatalogsReadyRef.current = prompts !== undefined && (!personalQueried || personalPrompts !== undefined);
   const catalogsLoading =
     (teamCommandsFetching && prompts === undefined) ||
-    (personalCommandsFetching && personalPrompts === undefined) ||
-    (skillsFetching && catalog === undefined);
+    (personalQueried && personalCommandsFetching && personalPrompts === undefined) ||
+    (skillsQueried && skillsFetching && catalog === undefined);
   // A catalog is `missing` until it has answered once: still loading, or failed.
   const catalogSources = {
     team: {
       data: prompts,
-      missing: enabled && Boolean(teamId) && prompts === undefined,
+      missing: teamQueried && prompts === undefined,
       failed: teamCommandsFailed,
       refetch: refetchTeamCommands,
     },
@@ -408,10 +424,9 @@ export function useComposerCommands(params: {
       const edits = pendingEditsRef.current;
       pendingEditsRef.current = null;
       const mapped = mapChoices(value, edits);
-      setChoices(restored ? [...restored] : mapped);
-      paramsRef.current.setInput(value);
+      updateDraft(value, restored ? [...restored] : mapped);
     },
-    [mapChoices],
+    [mapChoices, updateDraft],
   );
   const skillEntries = useMemo<CommandMenuEntry[]>(
     () =>
@@ -569,14 +584,13 @@ export function useComposerCommands(params: {
           ? { kind: "prompt", promptId: entry.promptId, promptTeamId: entry.promptTeamId }
           : { kind: "skill" }),
       };
-      setChoices([...preserved, choice]);
-      paramsRef.current.setInput(value);
+      updateDraft(value, [...preserved, choice]);
       setSelectionRequest((previous) => ({
         id: (previous?.id ?? 0) + 1,
         caret: range.start + token.length + (separator.length || (/^\s/.test(trailing) ? 1 : 0)),
       }));
     },
-    [mapChoices],
+    [mapChoices, updateDraft],
   );
 
   const resolvingRef = useRef(false);
@@ -679,6 +693,31 @@ export function useComposerCommands(params: {
         paramsRef.current.onSkillError?.("unavailable");
         return;
       }
+      const rejected = findCommandWords(input).find(
+        (word) =>
+          ([
+            "mermaid",
+            "data-visualization",
+            "verify-answer",
+            "analyze-data",
+            "compare-options",
+            "graph",
+            "grill-me",
+            "grounded-research",
+            "meeting-minutes",
+            "summarize-document",
+          ].includes(word.name) &&
+            !catalogs.skillNames.includes(word.name)) ||
+          (skillSummaries.has(word.name) && !catalogs.skillNames.includes(word.name)),
+      );
+      if (
+        rejected &&
+        !catalogs.commands.some((entry) => entry.command === rejected.name) &&
+        !active.some((choice) => choice.kind === "prompt" && choice.from === rejected.from)
+      ) {
+        paramsRef.current.onSkillError?.("unavailable");
+        return;
+      }
       const skillRanges = findSkillInvocations(input, catalogs.skillNames);
       // A typed name that is also a skill is a skill, unless it ends the line
       // undelimited and was not picked as one: then the prompt gets it.
@@ -748,7 +787,7 @@ export function useComposerCommands(params: {
       }
       paramsRef.current.onSend();
     },
-    [run],
+    [run, skillSummaries],
   );
 
   // Sending never races the catalogs. A draft holding a `/name` nobody picked
@@ -799,7 +838,11 @@ export function useComposerCommands(params: {
         }
         resolve(draft, choices, {
           commands: promptCommands(answered.team, answered.personal, teamId, personalTeamId),
-          skillNames: answered.skills?.supported ? (answered.skills.skills ?? []).map((skill) => skill.name) : [],
+          skillNames: answered.skills?.supported
+            ? (answered.skills.skills ?? [])
+                .filter((skill) => skill.user_invocable !== false)
+                .map((skill) => skill.name)
+            : [],
           teamReady: true,
           promptsReady: true,
         });

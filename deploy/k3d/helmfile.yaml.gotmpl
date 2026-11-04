@@ -1,6 +1,6 @@
 # The checkout owns its topology; the factory owns infrastructure and browser URLs.
 {{- if or (ne (env "KUBE_CONTEXT") "k3d-fred") (ne (env "K3D_NAMESPACE") "fred-weaver") }}
-{{- fail "Run make k3d-up-weaver or make k3d-up-migration from fred-deployment-factory" }}
+{{- fail "Run make k3d-up or make k3d-up-weaver from fred-deployment-factory" }}
 {{- end }}
 releases:
   - name: fred-app

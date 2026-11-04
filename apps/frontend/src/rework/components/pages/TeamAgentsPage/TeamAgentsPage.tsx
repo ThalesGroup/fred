@@ -167,6 +167,10 @@ function SpaceAgents({ space }: { space: MySpace }) {
     });
   };
   const canCreate = offersManagement && !catalog.isFetching && !catalog.isError && templates.length > 0;
+  const disabledReason =
+    !catalog.isFetching && !catalog.isError && catalog.currentData?.length === 0
+      ? t("rework.teams.formAgent.noTemplates")
+      : undefined;
   const searched = sortAgents(filterAgents(managedInstances, search), sort);
   const names = new Set([...takenAgentNames(managedInstances, editingId), ...refusedNames]);
   return (
@@ -182,6 +186,7 @@ function SpaceAgents({ space }: { space: MySpace }) {
                 size="small"
                 icon={{ category: "outlined", type: "add" }}
                 disabled={!canCreate}
+                disabledReason={disabledReason}
                 onClick={() => setIsEnrollOpen(true)}
               >
                 {t("rework.teams.agents.create", { agentsNicknameSingular })}
@@ -215,9 +220,6 @@ function SpaceAgents({ space }: { space: MySpace }) {
       />
       {access.error != null && <AgentNotice error={access.error} />}
       {offersManagement && catalog.isError && <AgentNotice error={catalog.error} />}
-      {offersManagement && !catalog.isFetching && !catalog.isError && catalog.currentData?.length === 0 && (
-        <ServiceNotice icon="info" title={t("rework.teams.formAgent.noTemplates")} />
-      )}
       {instances.isError ? (
         <AgentNotice error={instances.error} />
       ) : !instances.currentData ? (
@@ -229,6 +231,7 @@ function SpaceAgents({ space }: { space: MySpace }) {
         <TeamAgentEmptyState
           canManageAgents={offersManagement}
           templatesUnavailable={!canCreate}
+          disabledReason={disabledReason}
           onCreateAgent={() => setIsEnrollOpen(true)}
         />
       ) : searched.length === 0 ? (

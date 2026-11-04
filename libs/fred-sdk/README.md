@@ -458,3 +458,33 @@ cannot. `baggage` no longer transports the space and has no scope fallback.
 removed. `to_legacy_context()` still projects both explicit fields. History
 ports now accept `space_id` instead of `team_id`; callers must supply an admitted
 space, never rename their ancestry value.
+
+
+### Managed title contracts
+
+`WeaverRuntimeBinding.title` optionally carries a single `TitleAdmission` with an
+attempt UUID and independent `InferenceAdmission`. Only execution admission may
+supply it; a binding with a title must include its conversation ID. Organization
+model policy exposes its nullable `title` offer. These contracts grant no local
+model fallback or authoring-time title configuration.
+
+`SessionTitleRuntimeEvent` (`kind: session_title`) carries the originating
+`session_id` after canonical persistence. It is a metadata invalidation signal,
+not an assistant message or a title string to apply. Runtime consumers must keep
+its original session/identity association. See the
+[owner contract](../../apps/control-plane/README.md#automatic-conversation-titles).
+
+### Admitted skill contracts
+
+`WeaverRuntimeResolution` is the public, person-authenticated metadata projection;
+it has no inference admission. `WeaverRuntimeBinding` extends it with the required
+private inference decision. Their optional `skills` catalog contains an admitted
+pod subset and revision, not content or a browser-supplied grant. The runtime
+verifies it against its immutable source. Missing admission permits no new loads.
+
+`SkillSummary` carries `builtin`, `user_invocable` and `disable_model_invocation`;
+`SkillCatalog` distinguishes availability and policy support. Selected names in
+`RuntimeContext` remain untrusted. `BoundRuntimeContext.is_resuming` preserves
+resume semantics; existing instructions need not be discarded when further
+loads become forbidden. `SkillLoadMetadata` attributes actual partial/full reads
+to the invocation and resource, including provenance for safe UI presentation.

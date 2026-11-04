@@ -162,7 +162,7 @@ async fn original(
         .stream_original(crate::db::pipeline_document(&p.pool, r.summary.document_id).await?)
         .await
 }
-#[utoipa::path(get,path="/documents/{id}/preview",params(("id"=Uuid,Path),super::preview::PreviewQuery),responses((status=200,body=String,content_type="text/plain"),(status=206,body=String,content_type="text/plain"),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody),(status=416,body=crate::error::ErrorBody)))]
+#[utoipa::path(get,path="/documents/{id}/preview",params(("id"=Uuid,Path),super::preview::PreviewQuery),responses((status=200,content((super::preview::MetadataPreview = "application/json"),(String = "text/plain"))),(status=206,body=String,content_type="text/plain"),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody),(status=416,body=crate::error::ErrorBody)))]
 async fn preview(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,

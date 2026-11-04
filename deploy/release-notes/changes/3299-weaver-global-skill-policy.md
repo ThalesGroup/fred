@@ -11,7 +11,7 @@ Deployments that use the packaged platform skill catalog.
 
 ## Prerequisites
 
-Apply control-plane migration `0004_platform_skill_policy` before starting the updated control plane. Complete the runtime rollout before disabling a skill.
+Apply control-plane migration `0006_platform_skill_policy` after the current `0005` baseline before starting the updated control plane. Complete the runtime rollout before disabling a skill.
 
 ## Configuration
 

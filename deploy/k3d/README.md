@@ -2,16 +2,16 @@
 
 ## Local installation
 
-Use the factory's single command interface: `make k3d-up-weaver` for Weaver alone,
-`make k3d-up-migration` for Swift and Weaver together. The factory's
+Use the factory's single command interface: `make k3d-up` for Swift and Weaver
+together, `make k3d-up-weaver` for Weaver alone. The factory's
 `local-checkouts.json` holds the two source paths; the factory never changes Git
 branches. Do not pass ENV, INSTANCE, DIR or a second profile selector.
 
 Weaver always uses context `k3d-fred`, namespace `fred-weaver`, database
 `fred_weaver`, Temporal namespace `fred-weaver`, and <http://weaver.localhost:8088>.
 Infrastructure is in namespace `fred`. Swift, when selected, keeps its own namespace,
-database and corpus index. Login accounts and the S3 document bucket are shared;
-no users, grants, documents or conversations are migrated by deployment.
+database and OpenSearch indexes (Weaver: `document-vectors`, `weaver-app-logs`,
+`weaver-kpi`). Login accounts and the S3 document bucket are shared; no users, grants, documents or conversations are migrated by deployment.
 
 The factory and these hooks must be updated together. `make k3d-validate-weaver`
 renders first without building or changing the cluster. `make k3d-up-weaver` prepares
@@ -194,7 +194,7 @@ PostgreSQL remains `postgres:5432/fred_weaver`, with login `fred_kf` and schema 
 ## Prepare and deploy
 
 From the factory, use `make k3d-validate-weaver` to render or `make k3d-up-weaver` to
-build and deploy. Use the migration counterpart when Swift is also installed.
+build and deploy. Use `make k3d-validate` and `make k3d-up` when Swift is also installed.
 The factory exports the fixed placement and `K3D_FACTORY_ROOT` to the hooks;
 there is no secondary environment. The model key must already exist in the
 `fred-weaver` namespace's `fred-model-credentials/OPENAI_API_KEY`. The hook never
@@ -218,6 +218,7 @@ The generic identity hook provisions `knowledge-flow-worker`. The checkout's
   rollout; creates `app-content-documents` if absent;
 - configures the worker's OIDC audience/claims and scoped OpenSearch identity;
 - provisions the Knowledge Flow API corpus reader and its logs/KPI permissions;
+- provisions the agent runtime's `fred-agents` account, limited to its logs/KPI indexes;
 - creates the contract ConfigMap and a digest annotation to restart manager
   when the worker image or contract changes.
 

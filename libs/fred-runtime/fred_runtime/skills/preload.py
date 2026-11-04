@@ -34,7 +34,7 @@ async def preload_skills(
         raise ValueError("Platform skills are unavailable on this runtime")
     if isinstance(skills, PlatformSkills):
         skills = skills.for_execution(
-            tuple(s.name for s in selections), binding.disabled_platform_skills
+            tuple(s.name for s in selections), binding.unavailable_skill_names
         )
 
     # Direct executor callers also fail the whole selection before any load event.

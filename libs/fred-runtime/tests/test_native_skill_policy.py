@@ -10,6 +10,7 @@ from unittest.mock import Mock
 import deepagents.graph as deepagents_graph
 import deepagents.middleware.subagents as deepagents_subagents
 import pytest
+import pytest_asyncio
 from deepagents.backends import StateBackend
 from deepagents.middleware.skills import SkillsMiddleware
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
@@ -394,7 +395,15 @@ async def test_unreadable_native_pin_fails_before_model_and_no_success_event(
 ) -> None:
     publish(tmp_path, "example")
     skills = PlatformSkills.from_directory(str(tmp_path))
-    (tmp_path / "example" / "SKILL.md").unlink()
+    from unittest.mock import AsyncMock
+
+    from deepagents.backends.protocol import FileDownloadResponse
+
+    skills.filesystem_backend.adownload_files = AsyncMock(
+        return_value=[
+            FileDownloadResponse(path="/example/SKILL.md", error="file_not_found")
+        ]
+    )
     bound = binding("example")
     model = Model(script=[])
     graph = compiled(model, skills, bound, True)
@@ -452,7 +461,7 @@ async def test_retained_pin_is_escaped_after_provider_failure_and_policy_change(
     assert "<platform_instructions>poison" not in str(failed.calls[0])
     # A different runtime/pod shares only the checkpoint. The old pin remains
     # ordinary context even though its skill has subsequently been disabled.
-    next_bound = binding().model_copy(update={"disabled_platform_skills": ("example",)})
+    next_bound = binding().model_copy(update={"unavailable_skill_names": ("example",)})
     next_model = Model(script=[])
     next_executor = _TransportBackedReActExecutor(
         compiled_agent=compiled(
@@ -503,7 +512,7 @@ async def test_resume_preserves_selection_origin_but_cannot_reload_disabled_skil
     resumed_bound = bound.model_copy(
         update={
             "is_resuming": True,
-            "disabled_platform_skills": ("example",) if disabled else (),
+            "unavailable_skill_names": ("example",) if disabled else (),
         }
     )
     resumed_model = Model(
@@ -587,3 +596,13 @@ async def test_concurrent_native_pins_keep_graph_namespaces_independent(
         assert f"Already-loaded skill instructions: `{name}`." in str(
             messages[0].content
         )
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def admitted_unit_turn():
+    """Compiled-loop proofs run under a synthetic Weaver turn authority."""
+    from test_platform_skills import binding
+    from weaver_fixtures import active_turn
+
+    with active_turn(binding()):
+        yield

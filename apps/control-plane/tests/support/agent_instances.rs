@@ -21,6 +21,7 @@ use tower::ServiceExt;
 
 struct CatalogState {
     templates: Value,
+    inventory: Value,
     status: u16,
     calls: usize,
     control_requests: Vec<(Option<String>, Value)>,
@@ -40,6 +41,7 @@ impl Catalog {
     async fn start() -> Self {
         let state = Arc::new(Mutex::new(CatalogState {
             templates: json!([definition()]),
+            inventory: json!({"complete": true, "capabilities": [], "template_capabilities": []}),
             status: 200,
             calls: 0,
             control_requests: Vec::new(),
@@ -47,6 +49,7 @@ impl Catalog {
         }));
         let shared = state.clone();
         let controls = state.clone();
+        let inventory = state.clone();
         let app = Router::new().route(
             "/agents/templates",
             get(move || {
@@ -64,6 +67,19 @@ impl Catalog {
                     (
                         axum::http::StatusCode::from_u16(status).unwrap(),
                         Json(templates),
+                    )
+                }
+            }),
+        );
+        let app = app.route(
+            "/agents/capabilities",
+            get(move || {
+                let inventory = inventory.clone();
+                async move {
+                    let state = inventory.lock().await;
+                    (
+                        axum::http::StatusCode::from_u16(state.status).unwrap(),
+                        Json(state.inventory.clone()),
                     )
                 }
             }),
@@ -1913,3 +1929,70 @@ async fn instances_logical_identity_and_authorized_catalog_pagination() {
         json!({"items":[],"next_cursor":null})
     );
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn manual_session_title_write_cancels_attempt_even_when_text_is_identical() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let instance = create(&app, &identity, team.id, creation(template, "Title")).await;
+    let sid = Uuid::new_v4();
+    let path = format!("/spaces/{}/sessions", team.id);
+    let (status, _) = request(&app, &identity, Some("alice"), "POST", &path,
+        json!({"session_id":sid,"agent_instance_id":instance["agent_instance_id"],"agent_configuration_revision":1,"title":"Initial"})).await;
+    assert_eq!(status, 201);
+    sqlx::query(
+        "update session_metadata set title_pending=false,title_attempt=$2 where session_id=$1",
+    )
+    .bind(sid)
+    .bind(Uuid::new_v4())
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    let path = format!("{path}/{sid}");
+    let (status, _) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PATCH",
+        &path,
+        json!({"updated_at":chrono::Utc::now()}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert!(
+        sqlx::query_scalar::<_, bool>(
+            "select title_attempt is not null from session_metadata where session_id=$1"
+        )
+        .bind(sid)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap()
+    );
+    let (status, body) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PATCH",
+        &path,
+        json!({"title":"Initial"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let row: (String, bool, Option<Uuid>) = sqlx::query_as(
+        "select title,title_pending,title_attempt from session_metadata where session_id=$1",
+    )
+    .bind(sid)
+    .fetch_one(&e.pool)
+    .await
+    .unwrap();
+    assert_eq!(row, ("Initial".into(), false, None));
+}
+
+#[path = "pod_skills.rs"]
+mod pod_skills;

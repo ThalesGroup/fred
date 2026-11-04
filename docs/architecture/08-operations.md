@@ -26,7 +26,8 @@ before any provisioning. The document index name is independent of the backend n
 
 The hook does not infer resources from a component-name prefix. The worker uses the
 same rendered configuration as the permission setup. The local profile selects
-`document-vectors`, separately from Swift's retrieval index.
+`document-vectors`, `weaver-app-logs` and `weaver-kpi`: Swift can share the
+OpenSearch instance, never these indexes.
 
 ## PostgreSQL ownership
 
