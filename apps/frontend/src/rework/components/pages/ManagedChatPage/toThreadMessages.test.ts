@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
-import { groupTraceEntries, isCancelledByUser, traceSummary } from "../../../utils/traceUtils";
+import { groupTraceEntries, isCancelledByUser, statusForEntry, traceSummary } from "../../../utils/traceUtils";
 import { hitlResponseKey, reconstructPendingHitl, reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 
 function msg(overrides: Partial<ChatMessage>): ChatMessage {
@@ -739,5 +739,75 @@ describe("persisted tool refusals", () => {
     expect(assistants).toHaveLength(1);
     expect(assistants[0].id).toBe("e1:assistant");
     expect(reconstructPendingHitl(messages)?.payload.pending_calls?.[0].tool_call_id).toBe("call-1");
+  });
+});
+
+describe("HITL runtime availability", () => {
+  const question = (status: "pending" | "unavailable" | "unknown" | undefined, id = "call"): ChatMessage =>
+    msg({
+      role: "system",
+      channel: "hitl_request",
+      rank: 2,
+      parts: [
+        {
+          type: "hitl_request",
+          stage: "agent_question",
+          question: "Choose a style",
+          choices: [],
+          occurrence_id: id,
+          interrupt_id: `pause-${id}`,
+          resume_status: status,
+        },
+      ],
+    });
+  const call = msg({
+    channel: "tool_call",
+    rank: 1,
+    parts: [{ type: "tool_call", name: "ask_user", call_id: "call", args: {} }],
+  });
+
+  it.each(["unavailable", "unknown"] as const)(
+    "keeps %s questions readable without live controls or running trace",
+    (status) => {
+      const history = [call, question(status)];
+      expect(reconstructPendingHitls(history)).toEqual([]);
+      const thread = toThreadMessages(history, false);
+      expect(thread.find((m) => m.role === "hitl_request")).toMatchObject({
+        text: "Choose a style",
+        hitlResumeStatus: status,
+      });
+      const entries = groupTraceEntries(thread.find((m) => m.role === "assistant")!.traceMessages);
+      expect(statusForEntry(entries[0])).toBe("unavailable");
+      expect(traceSummary(entries).running).toBe(false);
+      expect(history[0].metadata?.extras?.hitl_resume_status).toBeUndefined();
+    },
+  );
+
+  it.each([undefined, "pending"] as const)(
+    "preserves pending controls for status %s and distinct siblings",
+    (status) => {
+      expect(
+        reconstructPendingHitls([question("unavailable"), question(status, "other")]).map(
+          (e) => e.payload.occurrence_id,
+        ),
+      ).toEqual(["other"]);
+    },
+  );
+
+  it("gives a real tool result precedence over a stale display annotation", () => {
+    const history = [
+      call,
+      question("unavailable"),
+      msg({
+        role: "tool",
+        channel: "tool_result",
+        rank: 3,
+        parts: [{ type: "tool_result", call_id: "call", ok: true, content: "answered" }],
+      }),
+    ];
+    const entries = groupTraceEntries(
+      toThreadMessages(history, false).find((m) => m.role === "assistant")!.traceMessages,
+    );
+    expect(statusForEntry(entries[0])).toBe("ok");
   });
 });

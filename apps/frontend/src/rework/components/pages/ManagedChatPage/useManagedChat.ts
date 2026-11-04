@@ -485,6 +485,11 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     [setPendingMessages],
   );
 
+  const reloadHitlHistoryRef = useRef<() => void>(() => {});
+  const handleHitlUnavailable = useCallback((sid: string) => {
+    if (activeSessionIdRef.current === sid) reloadHitlHistoryRef.current();
+  }, []);
+
   const {
     messages,
     waitResponse,
@@ -509,6 +514,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     onSteeredMessage: handleSteeredMessage,
     onStreamInterrupted: handleStreamInterrupted,
     onAwaitingHuman: handleAwaitingHuman,
+    onHitlUnavailable: handleHitlUnavailable,
     onError: handleChatError,
     onTurnStarted: handleTurnStarted,
     onTurnRejected: handleTurnRejected,
@@ -674,6 +680,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     isLoading: isLoadingHistory,
     isSettled: isHistorySettled,
     isUnavailable: historyUnavailable,
+    reload: retryHitlAvailability,
   } = useSessionHistory({
     sessionId: locallyCreatingSession && !sessionData ? null : sessionId,
     messagesUrl: sessionData ? (sessionData.messages_url ?? null) : sessionUnavailable ? null : undefined,
@@ -681,6 +688,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     isTurnActive,
   });
   isLoadingHistoryRef.current = isLoadingHistory;
+  reloadHitlHistoryRef.current = retryHitlAvailability;
 
   const notifySessionSaveFailed = useCallback(
     (error: unknown) =>
@@ -1517,6 +1525,7 @@ export function useManagedChat({ teamId, agentInstanceId, effectiveChatModel }: 
     executionDisabled,
     sessionUnavailable,
     historyUnavailable,
+    retryHitlAvailability,
     agentInstance,
     capabilityIds,
     chatControls,

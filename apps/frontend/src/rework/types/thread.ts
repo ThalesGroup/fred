@@ -18,6 +18,7 @@
 
 import type {
   ChatMessage,
+  HitlRequestPart,
   CommandDescriptor,
   SkillInvocation,
   VectorSearchHit,
@@ -56,6 +57,7 @@ export interface ThreadMessage {
   marginalTokenUsage?: TokenUsage | null;
   hitlChoices?: Array<{ id: string; label: string }>;
   hitlTitle?: string | null;
+  hitlResumeStatus?: HitlRequestPart["resume_status"];
   hitlSkipped?: boolean;
   hitlAnswerSummary?: HitlAnswerSummary;
   hitlAnswerSummariesByCallId?: Record<string, HitlAnswerSummary>;

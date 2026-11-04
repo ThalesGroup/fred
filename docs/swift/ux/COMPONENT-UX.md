@@ -906,7 +906,7 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   no shadow and a bold title until opening. Errors, cancellation and premature
   EOF do not imply a ready answer. Completed answers and pending questions still
   raise the existing localized info toast with the cached title when available
-  and an "Open" action from `useBackgroundTurnNotifications` in `MainLayout`,
+  and an "Open" action from `useBackgroundTurnNotifications` in `App`,
   on every page including those without the chat list.
   Waiting and unread indicators survive refresh in the same tab through a
   best-effort `sessionStorage` mirror, bounded to 100 ids per indicator. Restoring
@@ -2002,7 +2002,29 @@ _(none yet)_
 
 #### Resolved
 
+- **Resume rejection recovery (2026-11-03)** - An obsolete-card conflict explains
+  that the response was not applied and asks the user to reopen the conversation.
+  Batch mismatches and other conflicts keep answers editable. Cancelling a request
+  before acceptance restores the card without displaying false cancelled tools.
+  Only an accepted resume records the answer or a conversation approval preference.
+
 - **Focus management (2026-10-10)** — closed without autofocus (owner decision): the card never takes focus, and number keys, Enter and Escape answer it instead (see the visual refresh below).
+
+- **History availability (2026-11-04):** unanswered questions with runtime
+  `resume_status: unavailable` remain readable with "This question can no longer
+  accept an answer." and no choice, send or skip controls. Their unresolved tool
+  trace, detail badge and generic detail payload share the same neutral
+  unavailable state, never a fabricated failed result or running status.
+  `unknown` shows a lookup failure with "Check again"; `pending` and legacy
+  unannotated history retain actions. Known obsolete 409s refresh the same
+  conversation's availability without replaying the answer. Actual tool results
+  take precedence. Refresh does not resume an interrupted generation.
+- **Background notifications outside chat (2026-11-04):** the application host above the router
+  subscribes to completed/awaiting-input background turns, including on admin
+  pages where ChatList is absent. Toast actions retain the originating team,
+  agent and session; titles use existing query cache without additional fetches.
+  This remains a browser-tab notification for live detached turns, not a server
+  notification service or a replay of old questions on page reload.
 
 - **Visual refresh, design tokens only (2026-10-10)** — OpenSpec `refresh-hitl-card-visuals`.
   - **Tokens:** no hard-coded font size, spacing or colour mix remains. Only layout widths stay literal, and the glow shared with `RichInputField`.

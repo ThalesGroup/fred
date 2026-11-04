@@ -213,3 +213,7 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.dot_unavailable {
+  background: var(--on-surface-muted);
+}

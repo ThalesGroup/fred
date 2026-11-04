@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
@@ -29,6 +29,8 @@ interface UseSessionHistoryArgs {
 }
 
 export function useSessionHistory({ sessionId, messagesUrl, onLoaded, isTurnActive }: UseSessionHistoryArgs) {
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const reload = useCallback(() => setReloadVersion((version) => version + 1), []);
   const [isLoading, setIsLoading] = useState(false);
   const [unavailableFor, setUnavailableFor] = useState<string | null>(null);
   const requestVersionRef = useRef(0);
@@ -53,7 +55,8 @@ export function useSessionHistory({ sessionId, messagesUrl, onLoaded, isTurnActi
   const visitingRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (visitingRef.current !== sessionId) {
+    const enteringSession = visitingRef.current !== sessionId;
+    if (enteringSession) {
       visitingRef.current = sessionId;
       startedForRef.current = null;
       requestVersionRef.current += 1;
@@ -67,7 +70,8 @@ export function useSessionHistory({ sessionId, messagesUrl, onLoaded, isTurnActi
 
     // Cached history remains readable while session routing is resolved.
     const cached = getCachedSessionHistory(sessionId);
-    if (cached !== undefined && cached.length > 0 && !isTurnActive()) onLoaded(cached);
+    if ((enteringSession || reloadVersion === 0) && cached !== undefined && cached.length > 0 && !isTurnActive())
+      onLoaded(cached);
 
     if (messagesUrl === undefined) {
       requestVersionRef.current += 1;
@@ -83,7 +87,7 @@ export function useSessionHistory({ sessionId, messagesUrl, onLoaded, isTurnActi
       setSettledFor(sessionId);
       return;
     }
-    const requestKey = JSON.stringify([sessionId, messagesUrl]);
+    const requestKey = JSON.stringify([sessionId, messagesUrl, reloadVersion]);
     if (startedForRef.current === requestKey) return;
     startedForRef.current = requestKey;
     const requestVersion = ++requestVersionRef.current;
@@ -132,11 +136,12 @@ export function useSessionHistory({ sessionId, messagesUrl, onLoaded, isTurnActi
     };
 
     void load();
-  }, [sessionId, messagesUrl, onLoaded, isTurnActive]);
+  }, [sessionId, messagesUrl, onLoaded, isTurnActive, reloadVersion]);
 
   // No session is not "waiting": a fresh chat has no history to resolve, and
   // the marker left by the conversation just left says nothing about it.
   return {
+    reload,
     isLoading,
     isSettled: sessionId === null || settledFor === sessionId,
     isUnavailable: sessionId !== null && unavailableFor === sessionId,

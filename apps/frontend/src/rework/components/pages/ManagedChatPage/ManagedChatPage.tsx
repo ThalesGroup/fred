@@ -357,8 +357,13 @@ export default function ManagedChatPage() {
   }, [chat.sessionId, activeCapabilityKey]);
 
   const [transcribeAudio] = useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation();
-  // Re-resolved every render from the live messages so the open drawer streams.
-  const selectedTraceEntry = selectedTraceKey ? findTraceEntry(chat.messages, selectedTraceKey) : null;
+  // Use the rendered traces so the live drawer retains history availability annotations.
+  const selectedTraceEntry = selectedTraceKey
+    ? findTraceEntry(
+        chat.threadMessages.flatMap((message) => message.traceMessages),
+        selectedTraceKey,
+      )
+    : null;
   const fileTraceEntry =
     activePushDrawer?.kind === "skill-file" ? findTraceEntry(chat.messages, activePushDrawer.entryKey) : null;
   const previewFile = fileTraceEntry ? skillFileReadOf(fileTraceEntry) : null;
@@ -987,6 +992,7 @@ export default function ManagedChatPage() {
                     ) : (
                       <ConversationThread
                         readOnly={chat.executionDisabled}
+                        onRetryHitlAvailability={chat.retryHitlAvailability}
                         messages={chat.threadMessages}
                         pendingHitl={chat.pendingHitl}
                         pendingHitlTabs={chat.pendingHitlTabs}
