@@ -645,7 +645,8 @@ Les lots DOCX, titres, skills et e-mails précédents ne sont pas réouverts par
 Source Swift : `3d18384205a469f691bbf3ca3cb697911bc6b257` (#3471), après la
 borne intégrée `059ae1c91b959692f6a0fb61ddc9824c67c90355`. Base Weaver du
 portage : `e71bc96ac1d0ac94043b47bf7f0c762f69228e79`. Ce portage est en
-PR draft, non intégré ; il ne déplace pas la borne Swift fusionnée.
+[PR draft #3473](https://github.com/ThalesGroup/fred/pull/3473), non intégré ;
+il ne déplace pas la borne Swift fusionnée.
 
 Le CLI `fred_runtime downgrade` et le Make target Agent Pod acceptent une
 révision complète ou `base` pour un seul arbre runtime/capability. Les cibles
