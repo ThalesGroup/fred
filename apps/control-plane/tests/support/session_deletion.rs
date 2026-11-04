@@ -175,9 +175,9 @@ async fn team_retirement_hides_sessions_before_bounded_receipts_and_preserves_re
         content: None,
         processing: None,
     });
-    for path in [
-        format!("/spaces/{}/sessions/{fresh}", team.id),
-        format!("/agents/sessions/{fresh}/messages"),
+    for (path, expected) in [
+        (format!("/spaces/{}/sessions/{fresh}", team.id), 409),
+        (format!("/agents/sessions/{fresh}/messages"), 404),
     ] {
         let (status, _) = support::request(
             &app,
@@ -188,7 +188,7 @@ async fn team_retirement_hides_sessions_before_bounded_receipts_and_preserves_re
             serde_json::Value::Null,
         )
         .await;
-        assert!(matches!(status, 404 | 409), "{path}: {status}");
+        assert_eq!(status, expected, "{path}");
     }
     cleanup::batch(&e.pool, parent.id).await.unwrap();
     let first: i64 = sqlx::query_scalar(

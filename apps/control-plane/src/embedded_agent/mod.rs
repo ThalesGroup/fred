@@ -231,7 +231,12 @@ async fn messages(
     )
     .await
     .map_err(|error| match error {
-        AppError::Forbidden | AppError::Denied(_) => AppError::NotFound,
+        AppError::Forbidden
+        | AppError::Denied(_)
+        | AppError::Problem {
+            code: crate::lifecycle::store::PENDING_DELETION,
+            ..
+        } => AppError::NotFound,
         other => other,
     })?;
     let name = session_id.to_string();
