@@ -82,6 +82,9 @@ export function ChatListItem({
             {dateLabel && <span className={styles.dateLabel}>{dateLabel}</span>}
           </div>
         )}
+        {turnStatus === "awaiting_input" && !agentDeleted && (
+          <span className={styles.awaitingInput}>{t("rework.sidebar.chatList.awaitingInput")}</span>
+        )}
       </div>
       {turnStatus === "running" && (
         <span className={styles.turnStatus}>
@@ -89,10 +92,9 @@ export function ChatListItem({
           <span className={styles.accessibleStatus}>{t("rework.sidebar.chatList.answering")}</span>
         </span>
       )}
-      {turnStatus === "awaiting_input" && (
-        <span className={styles.turnStatus} title={t("rework.sidebar.chatList.awaitingInput")}>
-          <span className={styles.awaitingInput} />
-          <span className={styles.accessibleStatus}>{t("rework.sidebar.chatList.awaitingInput")}</span>
+      {unread && turnStatus === null && (
+        <span className={styles.turnStatus} title={t("rework.sidebar.chatList.answerReady")} aria-hidden="true">
+          <span className={styles.unreadDot} />
         </span>
       )}
       {agentDeleted && (

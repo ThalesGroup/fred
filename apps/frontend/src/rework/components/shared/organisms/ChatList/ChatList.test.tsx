@@ -155,6 +155,7 @@ it("announces a turn that ended out of sight with its title and a way to open it
     messages: [],
     detachedCallbacks: {},
     awaitingInput,
+    completed: !awaitingInput,
   });
   try {
     act(() => root.render(<ChatList teamId="team-1" />));

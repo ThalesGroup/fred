@@ -2808,7 +2808,7 @@
       "chatList": {
         "answerReady": "Answer ready",
         "answering": "Answer in progress",
-        "awaitingInput": "Waiting for your answer",
+        "awaitingInput": "Awaiting reply",
         "deleteDialog": {
           "title": "Delete this conversation?",
           "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",
