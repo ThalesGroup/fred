@@ -133,9 +133,9 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
             tx.commit().await?;
             return Ok(());
         }
-        complete_session(&mut tx, &receipt).await?;
+        let completed = complete_session(&mut tx, &receipt).await?;
         tx.commit().await?;
-        tracing::info!(target: "fred.security.audit", audit_event="deletion.completed", target_kind="session", operation_id=%id, session_id=%receipt.target_id, space_id=?receipt.target_parent_id, actor_uid=receipt.actor_subject, "Session deletion completed");
+        super::audit::session(&completed, &runtime_id);
         return Ok(());
     }
 
@@ -217,13 +217,12 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
 async fn complete_session(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     receipt: &Receipt,
-) -> AppResult<()> {
+) -> AppResult<Receipt> {
     sqlx::query("delete from session_metadata where session_id = $1 and deletion_id = $2")
         .bind(receipt.target_id)
         .bind(receipt.id)
         .execute(&mut **tx)
         .await?;
-    sqlx::query("update deletion set status = 'completed', completed_at = now(), error_code = null where id = $1")
-        .bind(receipt.id).execute(&mut **tx).await?;
-    Ok(())
+    Ok(sqlx::query_as("update deletion set status = 'completed', completed_at = now(), error_code = null where id = $1 returning *")
+        .bind(receipt.id).fetch_one(&mut **tx).await?)
 }

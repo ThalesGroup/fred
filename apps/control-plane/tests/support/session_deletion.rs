@@ -9,7 +9,7 @@ async fn session(e: &Env, team: &Space, runtime: &str) -> Uuid {
     let template =
         control_plane::agents::template_id(team.organization, runtime, fred_rust_agent::AGENT_ID);
     let agent = Uuid::new_v4();
-    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$3,$4,$5,'Agent','{}','alice',$6)")
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$3,$4,$5,$6,'{}','alice',$6)")
         .bind(agent).bind(team.id).bind(template).bind(runtime).bind(fred_rust_agent::AGENT_ID).bind(format!("agent-{agent}")).execute(&e.pool).await.unwrap();
     sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$3,$4,$5,'Agent',1)")
         .bind(id).bind(team.id).bind(agent).bind(template).bind(runtime).execute(&e.pool).await.unwrap();
@@ -70,5 +70,69 @@ async fn embedded_session_purge_observes_retention_and_is_idempotent() {
         .await
         .unwrap();
         assert_eq!(count, 0);
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn session_deletion_audit_has_runtime_independent_provenance() {
+    use tracing_subscriber::prelude::*;
+    let e = env().await;
+    let (_, team) = org_and_team(&e).await;
+    let capture = AuditCapture::default();
+    let _thread =
+        tracing::subscriber::set_default(tracing_subscriber::registry().with(capture.clone()));
+    for runtime in [fred_rust_agent::DEFINITION.provider, "python"] {
+        let id = session(&e, &team, runtime).await;
+        let receipt = lifecycle("PT0S")
+            .accept_session(&e.pool, "alice", team.id, id)
+            .await
+            .unwrap();
+        cleanup::batch(&e.pool, receipt.id).await.unwrap();
+        let events = capture.0.lock().unwrap();
+        let accepted = events
+            .iter()
+            .find(|event| {
+                event["audit_event"] == "deletion.accepted" && event["session_id"] == id.to_string()
+            })
+            .unwrap();
+        for field in [
+            "operation_id",
+            "session_id",
+            "space_id",
+            "organization_id",
+            "actor_uid",
+            "runtime_id",
+            "rule_id",
+            "requested_at",
+            "due_at",
+        ] {
+            assert!(accepted.get(field).is_some(), "missing {field}: {accepted}");
+        }
+        assert_eq!(accepted["space_id"], team.id.to_string());
+        assert_eq!(accepted["runtime_id"], runtime);
+        if runtime == fred_rust_agent::DEFINITION.provider {
+            let completed = events
+                .iter()
+                .find(|event| {
+                    event["audit_event"] == "deletion.completed"
+                        && event["session_id"] == id.to_string()
+                })
+                .unwrap();
+            for field in [
+                "operation_id",
+                "session_id",
+                "space_id",
+                "organization_id",
+                "actor_uid",
+                "runtime_id",
+                "rule_id",
+                "requested_at",
+                "due_at",
+            ] {
+                assert_eq!(accepted[field], completed[field]);
+            }
+            assert!(completed.get("completed_at").is_some());
+        }
     }
 }

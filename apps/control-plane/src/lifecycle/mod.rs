@@ -7,3 +7,5 @@ pub mod store;
 pub use store::{Lifecycle, Receipt, Status, TargetKind};
 pub mod cleanup;
 pub mod worker;
+
+mod audit;

@@ -237,15 +237,16 @@ impl Lifecycle {
     ) -> AppResult<Receipt> {
         let (mut tx, space) =
             spaces::authorized_mutation(pool, actor, space_id, Permission::Read).await?;
-        let retired: Option<Option<Uuid>> = sqlx::query_scalar(
-            "select deletion_id from session_metadata where space_id = $1 and user_id = $2 and session_id = $3 for update",
+        let retired: Option<(Option<Uuid>, String)> = sqlx::query_as(
+            "select deletion_id, runtime_id from session_metadata where space_id = $1 and user_id = $2 and session_id = $3 for update",
         )
         .bind(space_id)
         .bind(actor)
         .bind(session_id)
         .fetch_optional(&mut *tx)
         .await?;
-        if let Some(operation) = retired.ok_or(AppError::NotFound)? {
+        let (deletion, runtime) = retired.ok_or(AppError::NotFound)?;
+        if let Some(operation) = deletion {
             let receipt = sqlx::query_as("select * from deletion where id = $1")
                 .bind(operation)
                 .fetch_one(&mut *tx)
@@ -278,7 +279,7 @@ impl Lifecycle {
             .await?;
 
         tx.commit().await?;
-        tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="session", operation_id=%operation, session_id=%session_id, space_id=%space_id, actor_uid=actor, "Session deletion accepted");
+        super::audit::session(&receipt, &runtime);
         Ok(receipt)
     }
 
