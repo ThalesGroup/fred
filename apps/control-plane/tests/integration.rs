@@ -5011,3 +5011,6 @@ async fn owner_only_team_membership_governance() {
             .all(|a| second.items.iter().all(|b| a.user.id != b.user.id))
     );
 }
+
+#[path = "support/embedded_conversations.rs"]
+mod embedded_conversations;

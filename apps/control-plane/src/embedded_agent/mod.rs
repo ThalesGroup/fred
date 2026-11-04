@@ -4,6 +4,7 @@
 //! HTTP admission and SSE framing for the embedded agent library.
 
 pub(crate) mod kf_search;
+pub mod store;
 mod title;
 mod usage;
 
@@ -164,6 +165,7 @@ async fn execute_stream(
         let events = fred_rust_agent::answer::execute(
             turn,
             request.input,
+            None::<(store::ConversationStore, String)>,
             search.map(|search| move |query| async move { search.run(query).await }),
             move |tokens| usage::report(pool, span, space_id, session_id, offer, tokens),
         )
