@@ -115,7 +115,7 @@ runtime tree.
 
 Review the selected `downgrade()` script and take a suitable backup before
 running it. The writable-document capability's initial revision drops its
-document table on downgrade, and the ppt_builder tree's two table revisions drop
+document table on downgrade, and the ppt_builder tree's single revision drops
 `cap_ppt_builder_deck_plan` and `cap_ppt_builder_analysis` (stored templates and
 analyses included); fred-runtime's retired demo table revision has
 an empty downgrade. A changed version row therefore does not prove that data

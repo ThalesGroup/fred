@@ -86,8 +86,8 @@ package, so every fred-agents pod that installs that package registers it.
    older versions; leave them in place. To drop them anyway (stored templates,
    analyses and deck plans are lost), run from `apps/fred-agents`, before the
    rollback, `make db-downgrade MIGRATION_TREE=capability:ppt_builder
-   ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml` three times: each
-   call reverts one of the tree's three revisions.
+   ALEMBIC_CONFIG_FILE=/path/to/configuration_prod.yaml` once to revert the
+   capability's single schema revision.
 
 Agents configured with `ppt_builder` stop working on an older release, which
 does not know the capability; their stored configs are kept.

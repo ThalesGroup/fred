@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""create cap_ppt_builder_analysis table
+"""create the ppt_builder analysis and deck plan tables
 
-The ppt_builder capability's initial schema: one background template analysis
-per agent instance. No foreign keys.
+The analysis table stores agent and platform templates. The deck plan table
+keeps the last plan per conversation and agent instance. No foreign keys.
 
-Revision ID: p7b1d2a3c4e5
+Revision ID: r9d3f4a5b6c7
 Revises:
-Create Date: 2026-10-05 00:00:00.000000
+Create Date: 2026-10-22 00:00:00.000000
 
 """
 
@@ -29,7 +29,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "p7b1d2a3c4e5"  # pragma: allowlist secret
+revision: str = "r9d3f4a5b6c7"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -53,12 +53,23 @@ def upgrade() -> None:
         sa.Column("inventory_json", sa.Text(), nullable=True),
         sa.Column("patterns_pdf", sa.LargeBinary(), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
+        sa.Column("template_filename", sa.String(length=255), nullable=True),
+        sa.Column("overrides_json", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("agent_instance_id"),
+    )
+    op.create_table(
+        "cap_ppt_builder_deck_plan",
+        sa.Column("session_id", sa.String(length=128), nullable=False),
+        sa.Column("agent_instance_id", sa.String(length=128), nullable=False),
+        sa.Column("plan_json", sa.Text(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("session_id", "agent_instance_id"),
     )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_table("cap_ppt_builder_deck_plan")
     op.drop_table("cap_ppt_builder_analysis")
