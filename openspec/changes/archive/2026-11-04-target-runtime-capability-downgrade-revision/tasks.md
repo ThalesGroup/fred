@@ -10,5 +10,5 @@
 
 ## 3. Close-out
 
-- [ ] 3.1 Run focused tests and the required root quality check once, audit the branch against `swift`, then reconcile this change's artifacts with the verified implementation.
-- [ ] 3.2 Push the isolated branch and open a draft PR linked to issue #3112; verify its diff and CI status are visible to reviewers.
+- [x] 3.1 Run focused tests and the required root quality check once, audit the branch against `swift`, then reconcile this change's artifacts with the verified implementation.
+- [x] 3.2 Push the isolated branch and open a draft PR linked to issue #3112; verify its diff and CI status are visible to reviewers.
