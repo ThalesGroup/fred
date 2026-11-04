@@ -344,8 +344,7 @@ async fn prepare_execution(
         execution_transport: ExecutionTransport::Sse,
         execute_url: (!embedded).then(|| format!("{base}/agents/execute")),
         execute_stream_url: format!("{base}/agents/execute/stream"),
-        messages_url_template: (!embedded)
-            .then(|| format!("{base}/agents/sessions/{{session_id}}/messages")),
+        messages_url_template: Some(format!("{base}/agents/sessions/{{session_id}}/messages")),
         supports_streaming: true,
         supports_hitl: false,
         supports_ui_parts: !embedded,

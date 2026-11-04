@@ -13,7 +13,7 @@ pub(crate) use usage::{ModelUsage, UsageReport, persist_usage};
 
 use axum::{
     Json,
-    extract::State,
+    extract::{NestedPath, State},
     http::{StatusCode, header},
     response::IntoResponse,
 };
@@ -195,10 +195,14 @@ fn association_conflict() -> AppError {
     )
 }
 
-fn details(state: &AppState, record: SessionRecord) -> SessionDetails {
-    let messages_url =
+fn details(state: &AppState, record: SessionRecord, base: &str) -> SessionDetails {
+    let base = if record.runtime_id == fred_rust_agent::DEFINITION.provider {
+        Some(base)
+    } else {
         crate::agent_instances::preparation::public_base(&state.agent_catalog, &record.runtime_id)
-            .map(|base| format!("{base}/agents/sessions/{}/messages", record.session_id));
+    };
+    let messages_url =
+        base.map(|base| format!("{base}/agents/sessions/{}/messages", record.session_id));
     SessionDetails {
         session_id: record.session_id,
         space_id: record.space_id,
@@ -241,6 +245,7 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
 async fn create_session(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
+    nesting: Result<NestedPath, axum::extract::rejection::NestedPathRejection>,
     ApiPath(space_id): ApiPath<Uuid>,
     ApiJson(body): ApiJson<CreateSessionRequest>,
 ) -> AppResult<impl IntoResponse> {
@@ -295,7 +300,11 @@ async fn create_session(
     Ok((
         status,
         [(header::CACHE_CONTROL, "no-store")],
-        Json(details(&s, record)),
+        Json(details(
+            &s,
+            record,
+            nesting.as_ref().map_or("", |path| path.as_str()),
+        )),
     ))
 }
 
@@ -308,6 +317,7 @@ async fn create_session(
 async fn list_sessions(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
+    nesting: Result<NestedPath, axum::extract::rejection::NestedPathRejection>,
     ApiPath(space_id): ApiPath<Uuid>,
 ) -> AppResult<impl IntoResponse> {
     authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
@@ -319,7 +329,13 @@ async fn list_sessions(
         .await?;
     let records: Vec<_> = records
         .into_iter()
-        .map(|record| details(&s, record))
+        .map(|record| {
+            details(
+                &s,
+                record,
+                nesting.as_ref().map_or("", |path| path.as_str()),
+            )
+        })
         .collect();
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(records)))
 }
@@ -334,13 +350,18 @@ async fn list_sessions(
 async fn get_session(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
+    nesting: Result<NestedPath, axum::extract::rejection::NestedPathRejection>,
     ApiPath((space_id, session_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<impl IntoResponse> {
     authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
     let record = owned(&s.pool, space_id, &user.uid, session_id).await?;
     Ok((
         [(header::CACHE_CONTROL, "no-store")],
-        Json(details(&s, record)),
+        Json(details(
+            &s,
+            record,
+            nesting.as_ref().map_or("", |path| path.as_str()),
+        )),
     ))
 }
 
@@ -354,6 +375,7 @@ async fn get_session(
 async fn update_session(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
+    nesting: Result<NestedPath, axum::extract::rejection::NestedPathRejection>,
     ApiPath((space_id, session_id)): ApiPath<(Uuid, Uuid)>,
     ApiJson(body): ApiJson<UpdateSessionRequest>,
 ) -> AppResult<impl IntoResponse> {
@@ -380,7 +402,11 @@ async fn update_session(
     tx.commit().await?;
     Ok((
         [(header::CACHE_CONTROL, "no-store")],
-        Json(details(&s, record)),
+        Json(details(
+            &s,
+            record,
+            nesting.as_ref().map_or("", |path| path.as_str()),
+        )),
     ))
 }
 

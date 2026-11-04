@@ -9,6 +9,7 @@ mod title;
 mod usage;
 
 use axum::{
+    Json,
     extract::State,
     http::{HeaderValue, StatusCode, header},
     response::{
@@ -25,7 +26,7 @@ use crate::{
     agent_instances,
     api::AppState,
     error::{AppError, AppResult},
-    extract::ApiJson,
+    extract::{ApiJson, ApiPath},
     onboarding::AdmittedUser,
 };
 
@@ -35,10 +36,12 @@ pub(crate) fn serves(runtime_id: &str, template: &str) -> bool {
 }
 
 pub fn routes() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(routes!(execute_stream))
+    OpenApiRouter::new()
+        .routes(routes!(execute_stream))
+        .routes(routes!(messages))
 }
 
-/// Embedded Ralph: at most one document search per admitted turn, without saved history.
+/// Embedded Ralph: saved conversations and at most one document search per admitted turn.
 /// Direct demonstration remains a fixed response without an LLM call.
 #[utoipa::path(
     post, path = "/agents/execute/stream",
@@ -165,7 +168,10 @@ async fn execute_stream(
         let events = fred_rust_agent::answer::execute(
             turn,
             request.input,
-            None::<(store::ConversationStore, String)>,
+            Some((
+                store::ConversationStore(state.pool.clone()),
+                session_id.to_string(),
+            )),
             search.map(|search| move |query| async move { search.run(query).await }),
             move |tokens| usage::report(pool, span, space_id, session_id, offer, tokens),
         )
@@ -185,4 +191,50 @@ async fn execute_stream(
         .headers_mut()
         .insert("x-accel-buffering", HeaderValue::from_static("no"));
     Ok(response)
+}
+
+/// The caller's saved conversation; retirement and loss of space access both hide it.
+#[utoipa::path(get, path = "/agents/sessions/{session_id}/messages",
+    params(("session_id" = Uuid, Path)),
+    responses((status = 200, body = [fred_rust_agent::history::ChatMessage]),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 422, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody))) ]
+async fn messages(
+    State(state): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(session_id): ApiPath<Uuid>,
+) -> AppResult<impl IntoResponse> {
+    let space_id: Uuid = sqlx::query_scalar(
+        "select space_id from session_metadata
+         where session_id=$1 and user_id=$2 and runtime_id=$3 and deletion_id is null",
+    )
+    .bind(session_id)
+    .bind(&user.uid)
+    .bind(fred_rust_agent::DEFINITION.provider)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    crate::authorization::authorize(
+        &state.pool,
+        &user.uid,
+        space_id,
+        crate::domain::Permission::Read,
+    )
+    .await
+    .map_err(|error| match error {
+        AppError::Forbidden | AppError::Denied(_) => AppError::NotFound,
+        other => other,
+    })?;
+    let name = session_id.to_string();
+    let conversation = rig_memory::load_async(&store::ConversationStore(state.pool), &name)
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?;
+    Ok((
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(fred_rust_agent::history::messages(&conversation, &name)),
+    ))
 }

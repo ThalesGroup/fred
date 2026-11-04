@@ -41,6 +41,7 @@ async fn consumers_only_read_their_cp_read_contract_and_visibility_tracks_public
             .unwrap();
         let forbidden = [
             "select * from control_plane.document".to_string(),
+            "select * from control_plane.embedded_agent_conversation".to_string(),
             "select * from control_plane.space_role_grant".to_string(),
             format!("insert into cp_read.{view} default values"),
             format!("update cp_read.{view} set {column}={column} where false"),

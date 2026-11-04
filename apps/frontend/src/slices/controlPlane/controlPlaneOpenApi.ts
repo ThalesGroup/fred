@@ -52,6 +52,9 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.executeRequest,
       }),
     }),
+    messages: build.query<MessagesApiResponse, MessagesApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/agents/sessions/${queryArg.sessionId}/messages` }),
+    }),
     authorizeDocument: build.mutation<AuthorizeDocumentApiResponse, AuthorizeDocumentApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/authorize/document`,
@@ -762,6 +765,10 @@ export type ExecuteStreamApiResponse =
 export type ExecuteStreamApiArg = {
   executeRequest: ExecuteRequest;
 };
+export type MessagesApiResponse = /** status 200 undefined */ ChatMessage[];
+export type MessagesApiArg = {
+  sessionId: string;
+};
 export type AuthorizeDocumentApiResponse = /** status 200 Success */ Allowed;
 export type AuthorizeDocumentApiArg = {
   authorizeDocument: AuthorizeDocument;
@@ -1466,6 +1473,38 @@ export type ExecuteRequest = {
       };
   session_id?: string | null;
   [key: string]: any;
+};
+export type ChatMetadata = {
+  sources: SearchHit[];
+};
+export type MessagePart =
+  | {
+      text: string;
+      type: "text";
+    }
+  | {
+      args: {
+        [key: string]: any;
+      };
+      call_id: string;
+      name: string;
+      type: "tool_call";
+    }
+  | {
+      call_id: string;
+      content: string;
+      ok: boolean;
+      type: "tool_result";
+    };
+export type ChatMessage = {
+  channel: string;
+  exchange_id: string;
+  metadata: ChatMetadata;
+  parts: MessagePart[];
+  rank: number;
+  role: string;
+  session_id: string;
+  timestamp: string;
 };
 export type Allowed = {
   allowed: boolean;
@@ -2766,6 +2805,8 @@ export const {
   useTeamRegistryQuery,
   useLazyTeamRegistryQuery,
   useExecuteStreamMutation,
+  useMessagesQuery,
+  useLazyMessagesQuery,
   useAuthorizeDocumentMutation,
   useAuthorizePlatformMutation,
   useAuthorizeScopeMutation,

@@ -765,7 +765,10 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     )
     .await;
     assert_eq!(status, 201, "{registered}");
-    assert!(registered["messages_url"].is_null());
+    assert_eq!(
+        registered["messages_url"],
+        format!("/agents/sessions/{session}/messages")
+    );
     let nested = Router::new().nest("/custom/control-plane", app.clone());
     let preparation_path = format!(
         "/custom/control-plane{}/prepare-execution?session_id={session}",
@@ -786,7 +789,10 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         "/custom/control-plane/agents/execute/stream"
     );
     assert!(prepared["execute_url"].is_null());
-    assert!(prepared["messages_url_template"].is_null());
+    assert_eq!(
+        prepared["messages_url_template"],
+        "/custom/control-plane/agents/sessions/{session_id}/messages"
+    );
     assert_eq!(prepared["supports_ui_parts"], false);
     assert_eq!(prepared["supports_hitl"], false);
     assert_eq!(
@@ -969,6 +975,44 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     );
     assert!(!stream.contains("synthetic-inference-key"));
     assert!(!stream.contains("tokens") && !stream.contains("usage"));
+    let history_path = format!("/agents/sessions/{session}/messages");
+    let (status, history) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &history_path,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{history}");
+    assert_eq!(history.as_array().unwrap().len(), 2);
+    assert_eq!(history[0]["role"], "user");
+    assert_eq!(history[0]["parts"][0]["text"], "fixture question");
+    assert_eq!(history[1]["role"], "assistant");
+    assert_eq!(
+        history[1]["parts"][0]["text"],
+        "managed simulated inference"
+    );
+    assert_eq!(history[0]["exchange_id"], history[1]["exchange_id"]);
+    let (status, details) = request(
+        &nested,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!(
+            "/custom/control-plane/spaces/{}/sessions/{session}",
+            team.id
+        ),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        details["messages_url"],
+        format!("/custom/control-plane{history_path}")
+    );
+
     // Accounting is asynchronous and bounded; wait for the committed report.
     let reports = |expected| {
         let pool = &e.pool;
@@ -1033,6 +1077,19 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     assert!(String::from_utf8_lossy(&body).contains("execution_error"));
     assert_eq!(reports(2).await, rows);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &history_path,
+            Value::Null
+        )
+        .await
+        .1,
+        history
+    );
     *provider.inference_status.lock().await = 200;
 
     // Hold the journal write until after the browser drops the response body.
@@ -1077,7 +1134,7 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     .enumerate()
     {
         *provider.next_message.lock().await = Some(json!({"role":"assistant","content":null,
-            "tool_calls":[{"id":"search-1","type":"function","function":{
+            "tool_calls":[{"id":format!("search-{}", index + 1),"type":"function","function":{
                 "name":"search_documents","arguments":"{\"query\":\"manual question\"}"}}]}));
         *provider.search_response.lock().await = (status, hits);
         let before = provider.inference.lock().await.len();
@@ -1116,7 +1173,7 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
             let messages = calls.last().unwrap().1["messages"].as_array().unwrap();
             let tool = messages.last().unwrap();
             assert_eq!(tool["role"], "tool");
-            assert_eq!(tool["tool_call_id"], "search-1");
+            assert_eq!(tool["tool_call_id"], format!("search-{}", index + 1));
             let content: Value = serde_json::from_str(tool["content"].as_str().unwrap()).unwrap();
             assert_eq!(content["query"], "manual question");
             let model_hits = content["hits"].as_array().unwrap();

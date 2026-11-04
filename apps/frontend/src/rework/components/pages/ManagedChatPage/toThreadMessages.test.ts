@@ -17,6 +17,7 @@
 // lossy and is the exact regression this suite pins against.
 
 import { describe, expect, it } from "vitest";
+import embeddedSearchTurn from "../../../../../../../libs/fred-sdk/tests/fixtures/embedded_search_turn.json";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import { groupTraceEntries, isCancelledByUser, statusForEntry, traceSummary } from "../../../utils/traceUtils";
 import { hitlResponseKey, reconstructPendingHitl, reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
@@ -810,4 +811,15 @@ describe("HITL runtime availability", () => {
     );
     expect(statusForEntry(entries[0])).toBe("ok");
   });
+});
+
+it("reloads Ralph's shared history with one answer, its tool trace and cited sources", () => {
+  const history = embeddedSearchTurn.history as ChatMessage[];
+  expect(history.map((message) => message.rank)).toEqual([0, 1, 2, 3]);
+  const rows = toThreadMessages(history, false);
+  expect(rows.map((row) => row.role)).toEqual(["user", "assistant"]);
+  expect(rows[0].text).toBe("manual question");
+  expect(rows[1].text).toBe("Answer [Manual, p. 2]");
+  expect(rows[1].traceMessages.map((message) => message.channel)).toEqual(["tool_call", "tool_result"]);
+  expect(rows[1].sources?.map((source) => source.uid)).toEqual(["doc-1"]);
 });

@@ -138,3 +138,78 @@ async fn embedded_log_upgrade_retains_retired_content_until_metadata_purge() {
     );
     sqlx::migrate!().run(&pool).await.unwrap();
 }
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn embedded_history_hides_foreign_retired_and_unreadable_spaces() {
+    use control_plane::api::{AppState, routes};
+    use serde_json::{Value, json};
+    use std::sync::Arc;
+    let e = env().await;
+    let (id, space) = conversation(&e.pool).await;
+    support::member_organization(&e.pool, "Other organization", "bob")
+        .await
+        .unwrap();
+    support::member_organization(&e.pool, "Alice admission survives revocation", "alice")
+        .await
+        .unwrap();
+    let identity = support::IdentityServer::start().await;
+    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+    lifecycle.config.enabled = true;
+    let app = routes(AppState {
+        pool: e.pool.clone(),
+        agent_catalog: Default::default(),
+        auth: Arc::new(identity.auth().await),
+        directory: Some(identity.directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle,
+    });
+    let path = format!("/agents/sessions/{id}/messages");
+    assert_eq!(
+        support::request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await,
+        (200, json!([]))
+    );
+    let foreign = support::request(&app, &identity, Some("bob"), "GET", &path, Value::Null).await;
+    let missing = support::request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!("/agents/sessions/{}/messages", Uuid::new_v4()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(foreign, missing);
+    assert_eq!(foreign.0, 404);
+    // No authorization refresh inside Rig; each history request still needs current access.
+    sqlx::query("delete from space_role_grant where space_id=$1 and subject='alice'")
+        .bind(space)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        support::request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await,
+        missing
+    );
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'alice','member')")
+        .bind(space)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let (status, _) = support::request(
+        &app,
+        &identity,
+        Some("alice"),
+        "DELETE",
+        &format!("/spaces/{space}/sessions/{id}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 202);
+    assert_eq!(
+        support::request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await,
+        missing
+    );
+}
