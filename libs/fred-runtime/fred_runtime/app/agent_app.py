@@ -302,8 +302,8 @@ from .dependencies import (
     get_pod_container,
     get_pod_container_from_app,
 )
-from .session_title import propose_session_title
 from .observability_factory import bootstrap_observability
+from .session_title import propose_session_title
 
 logger = logging.getLogger(__name__)
 SESSION_TITLE_GRACE_SECONDS = 2.0

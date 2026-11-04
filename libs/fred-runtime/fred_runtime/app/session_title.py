@@ -13,6 +13,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from ..model_routing import RoutedChatModelFactory
 from ..model_routing.turn import current_turn
 from ..runtime_context import get_runtime_context
+from ..runtime_support.model_metadata import normalize_token_usage
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ async def propose_session_title(
             ]
         )
         if reply.usage_metadata is not None:
-            current_turn().record_usage(reply.usage_metadata)
+            current_turn().record_usage(normalize_token_usage(reply.usage_metadata))
         return _clean(reply.text)
     except Exception as exc:
         logger.warning("event=session_title_failed error=%s", type(exc).__name__)
