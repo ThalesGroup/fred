@@ -146,7 +146,8 @@ async def test_foreign_old_or_wrong_runtime_never_queries_authority(case, bindin
     "path", [f"/agents/sessions/{SESSION}/messages", f"/agents/checkpoints/{SESSION}"]
 )
 @pytest.mark.parametrize(
-    "upstream, expected", [(401, 401), (403, 404), (404, 404), (503, 503), (302, 503)]
+    "upstream, expected",
+    [(401, 401), (403, 404), (404, 404), (409, 404), (503, 503), (302, 503)],
 )
 async def test_refusal_and_failure_cover_both_content_readers(
     case, path, upstream, expected

@@ -101,7 +101,9 @@ async def authorize_history_read(
         )
         if response.status_code == 401:
             raise HTTPException(status_code=401, detail="Person credential rejected")
-        if response.status_code in (403, 404):
+        # A retired space is a Control Plane conflict; its conversations are
+        # equally unavailable before the bounded worker marks individual sessions.
+        if response.status_code in (403, 404, 409):
             raise _unavailable()
         if response.status_code != 200:
             raise HTTPException(status_code=503, detail="History authority unavailable")
