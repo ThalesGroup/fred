@@ -86,7 +86,7 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
     ))
 }
 
-#[utoipa::path(get, path="/spaces/{space_id}/capability-policies", params(("space_id"=Uuid, Path)), responses((status=200, body=[SpaceCapabilityPolicy]), (status=403, body=crate::error::ErrorBody), (status=404, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
+#[utoipa::path(get, path="/spaces/{space_id}/capability-policies", params(("space_id"=Uuid, Path)), responses((status=200, body=[SpaceCapabilityPolicy]), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=404, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
 async fn space_capability_policies(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -144,7 +144,7 @@ async fn space_capability_policies(
     Ok(Json(result))
 }
 
-#[utoipa::path(put, path="/spaces/{space_id}/capability-policies/{runtime_id}", params(("space_id"=Uuid, Path), ("runtime_id"=String, Path)), request_body=ReplaceSpaceCapabilityPolicy, responses((status=204), (status=403, body=crate::error::ErrorBody), (status=404, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
+#[utoipa::path(put, path="/spaces/{space_id}/capability-policies/{runtime_id}", params(("space_id"=Uuid, Path), ("runtime_id"=String, Path)), request_body=ReplaceSpaceCapabilityPolicy, responses((status=204), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=404, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
 async fn replace_space_capability_policy(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
