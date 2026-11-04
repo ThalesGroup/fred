@@ -1,93 +1,117 @@
-# Intégration des journaux Fred dans un SIEM
+# Fred log integration and detection scenarios for a SIEM
 
-Ce guide s'adresse aux équipes qui collectent les journaux d'une installation Fred sur des VM avec Podman Compose et exploitent un SIEM. L'architecture retenue transmet les sorties des conteneurs à journald, puis à un relais syslog et à un agent de collecte qui les transmet au SIEM. Ce document décrit les sources à recevoir, les champs utiles et des scénarios de détection à construire. Il ne prescrit ni produit SIEM ni seuil universel.
+This guide is for teams collecting logs from a Fred installation on virtual machines with Podman Compose. Container output reaches journald, a syslog relay, a collection agent, and then the SIEM. This document identifies the sources, fields, and initial security detection scenarios. The SIEM team owns the queries, correlation windows, alert routing, and tuning.
 
-Fred émet des **événements**, pas des alertes SIEM ni des règles exécutables. Un collecteur transmet les événements bruts au SIEM ; l'équipe de sécurité y définit les règles, les fenêtres de corrélation et le traitement des alertes. Les exemples ci-dessous sont des spécifications de détection à adapter au langage du SIEM retenu.
+Fred emits **events**, not SIEM alerts or executable rules. Translate each scenario below into the selected SIEM's query language.
 
 ```text
-Entra ID -------------------------------> SIEM
-VM Podman -> journald -> syslog -> agent -> SIEM -> règles -> alertes
-Entrée HTTP / WAF ----------------------> SIEM
+Microsoft Entra ID ---------------------> SIEM
+Podman VM -> journald -> syslog -> agent -> SIEM -> rules -> alerts
+HTTP ingress / WAF ---------------------> SIEM
 ```
 
-## 1. Sources et responsabilités
+## 1. Sources and ownership
 
-| Source | Événements utiles | Acheminement attendu | Responsable de la source |
+| Source | Useful events | Collection route | Source owner |
 | --- | --- | --- | --- |
-| `fred.security.audit` | Modifications de droits, accès à la plateforme, délégation, admission du runtime et invocations d'outils | Sortie standard JSON des conteneurs Fred, puis journald et relais syslog vers l'agent | Exploitant Fred pour l'émission ; exploitant SIEM pour la collecte |
-| Logs applicatifs Fred | Réponses HTTP, refus d'autorisation, erreurs et diagnostics | Sorties des conteneurs, puis journald et relais syslog ; `app.log_format: json` sur chaque backend et worker concerné | Exploitant Fred |
-| Proxy / frontend et entrée HTTP | Méthode, route, statut, volume et, selon le proxy d'entrée, IP source et décisions WAF | Journaux du proxy vers l'agent, via syslog si ce chemin est retenu | Exploitant de l'entrée HTTP |
-| Microsoft Entra ID | Connexions utilisateur interactives et non interactives, connexions des principaux de service, changements de répertoire | Paramètres de diagnostic Entra vers la destination choisie par l'exploitant SIEM, par exemple Event Hubs | Administrateur Entra et exploitant SIEM |
-| VM et Podman | Arrêts, redémarrages, erreurs du collecteur et absence de flux | Journaux système et supervision de l'agent | Exploitant des VM |
+| `fred.security.audit` | Permission changes, platform access, delegation, runtime admission, tool invocations | Fred container JSON on stdout, then journald and the syslog relay to the agent | Fred operator emits; SIEM operator collects |
+| Fred application logs | HTTP responses, authorization denials, errors, diagnostics | Container output, journald, syslog relay; set `app.log_format: json` on each relevant backend and worker | Fred operator |
+| HTTP ingress / proxy | Method, route, status, volume, and, where supported, source IP and WAF decisions | Ingress logs to the agent, through syslog if that is the selected route | Ingress operator |
+| Microsoft Entra ID | Interactive and non-interactive user sign-ins, service principal sign-ins, directory changes | Entra diagnostic settings to a destination selected by the SIEM operator, such as Event Hubs | Entra administrator and SIEM operator |
+| VM and Podman | Stops, restarts, collector errors, missing flows | Host logs and collector monitoring | VM operator |
 
-Fred écrit l'audit sur `stdout` en JSON avec `logger=fred.security.audit`. Ce flux est exclu du magasin de logs applicatifs Fred : **ne pas supposer qu'une requête OpenSearch sur ce magasin retrouve les audits**. L'acheminement durable, la rétention et la protection contre l'altération sont à établir dans l'infrastructure de collecte. Voir [Observability and Audit](OBSERVABILITY-AND-AUDIT.md#5-stream-3--security--audit-trail).
+Fred writes audit events to stdout as JSON with `logger=fred.security.audit`. They are excluded from Fred's application log store. **Do not rely on Fred's OpenSearch application log index to retrieve audit events.** Durable delivery, retention, and tamper protection belong in the collection infrastructure. See [Observability and Audit](OBSERVABILITY-AND-AUDIT.md#5-stream-3--security--audit-trail).
 
-La configuration Entra directe de Fred est décrite dans [Identity providers](IDENTITY-PROVIDERS.md#microsoft-entra-id-recipe). Entra remplace la source de connexion, mais les rôles applicatifs et les permissions Fred restent dans OpenFGA. Les journaux Entra ne prouvent donc pas qu'un rôle Fred a été accordé, et les audits Fred ne prouvent pas qu'une connexion Entra a réussi.
+Fred's direct Entra configuration is documented in [Identity providers](IDENTITY-PROVIDERS.md#microsoft-entra-id-recipe). Entra is the authentication source; Fred application roles and permissions remain in OpenFGA. An Entra sign-in does not prove a Fred role grant, and a Fred audit event does not prove a successful Entra sign-in.
 
-Par rapport à une installation Keycloak, cela change quatre choses pour le SIEM : aucune source Keycloak n'est à collecter ; les connexions humaines et des clients confidentiels viennent d'Entra ; les changements de configuration du tenant sont dans l'audit Entra, tandis que les changements de droits Fred restent dans l'audit Fred ; enfin, les identifiants des deux systèmes doivent être rapprochés et vérifiés. Cela ne change pas le format des audits Fred ni le principe de collecte sur les VM.
+Compared with Keycloak, the SIEM collects no Keycloak source. Human and confidential client sign-ins come from Entra. Entra directory audit records tenant configuration changes; Fred audit records Fred permission changes. A verified identity mapping is needed to join the two. Fred's audit format and VM collection route do not change.
 
-### Flux Entra à demander
+### Entra feeds to request
 
-Activer et acheminer au minimum les journaux de connexion utilisateur interactifs, non interactifs et des principaux de service, ainsi que les journaux d'audit du répertoire. Les premiers permettent de détecter les échecs, les succès, les conditions d'accès et l'usage des identités applicatives ; les derniers couvrent notamment les changements d'applications, d'utilisateurs et de groupes dans Entra. Ajouter les journaux d'identités managées si elles sont utilisées. Les catégories disponibles, les droits, les licences et la destination sont à vérifier avec l'administrateur du tenant. Microsoft décrit les [catégories exportables](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-diagnostic-settings-logs-options) et les [modes d'accès](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-access-activity-logs), dont les paramètres de diagnostic vers Event Hubs et l'API Microsoft Graph.
+Export at least interactive user sign-ins, non-interactive user sign-ins, service principal sign-ins, and directory audit logs. Add managed identity sign-ins if used. Check available categories, permissions, licensing, and export destination with the tenant administrator. Microsoft documents the [exportable categories](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-diagnostic-settings-logs-options) and [access routes](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-access-activity-logs), including diagnostic settings to Event Hubs and Microsoft Graph.
 
-Filtrer les événements Entra sur les identifiants d'application de l'UI et de l'API Fred, ainsi que sur les clients confidentiels Fred. Une connexion du principal de service est un événement d'authentification de l'application, pas une connexion utilisateur. Ne pas mélanger leurs seuils.
+Filter Entra events by the application IDs of the Fred UI, API, and confidential clients. A service principal sign-in represents an application authentication, not a human sign-in. Tune its thresholds separately.
 
-## 2. Contrat de collecte sur VM
+## 2. VM collection contract
 
-1. Vérifier le chemin `conteneur -> Podman -> journald -> relais syslog -> agent -> SIEM` et le pilote des conteneurs avec `podman info --format '{{ .Host.LogDriver }}'` et `podman inspect`. Podman ne liste pas `syslog` comme pilote natif de logs de conteneur : la configuration prévue utilise `journald`, puis un relais syslog sur la VM. Valider ces deux étapes avec la version et la configuration déployées. L'option globale `podman --syslog` concerne les messages de Podman et ne remplace pas l'acheminement de `stdout`/`stderr` des conteneurs. Voir la [documentation des pilotes](https://docs.podman.io/en/latest/markdown/podman-run.1.html) et celle de [`podman --syslog`](https://docs.podman.io/en/latest/markdown/podman.1.html).
-2. Transmettre `stdout` et `stderr` de tous les backends, workers, runtimes d'agent, du frontend et du proxy. L'agent reçoit les messages syslog et doit extraire le JSON Fred du champ message, sans perdre l'enveloppe syslog. Conserver le JSON original de l'audit. Ajouter `host`, `container`, `service`, environnement et horodatage de réception, sans écraser les champs producteurs. Vérifier le découpage, la taille maximale et l'encodage d'un événement JSON long.
-3. Router après décodage JSON par le champ structuré `logger`, pas par le texte de `msg` ni par le préfixe syslog. Réserver une destination et des droits d'accès adaptés aux événements `fred.security.audit`. Séparer les logs applicatifs, plus volumineux et moins durables. Éviter qu'un même événement soit ingéré deux fois par plusieurs chemins.
-4. Prévoir une file locale bornée et un renvoi après interruption du relais ou du SIEM, une limite d'espace disque et une alerte en cas d'échec ou de silence du collecteur. Vérifier les redémarrages, la rotation des journaux Podman et la politique de transport syslog retenue. Mesurer les pertes et le délai entre émission et disponibilité dans le SIEM.
-5. Transporter les journaux jusqu'au SIEM sur des canaux authentifiés et chiffrés lorsque le transport quitte la VM. Définir la rétention et les droits d'accès selon la politique de sécurité locale. Ne pas ajouter tokens, en-têtes d'authentification, URL signées, corps HTTP, messages utilisateur ou contenu documentaire aux événements.
+1. Verify `container -> Podman -> journald -> syslog relay -> agent -> SIEM`. Check the container log driver with `podman info --format '{{ .Host.LogDriver }}'` and `podman inspect`. Podman does not list `syslog` as a native container log driver. This deployment uses `journald`, followed by a VM syslog relay. Validate both steps against the deployed version and configuration. The global `podman --syslog` option logs Podman messages; it does not forward container stdout and stderr. See the [container log driver documentation](https://docs.podman.io/en/latest/markdown/podman-run.1.html) and [`podman --syslog`](https://docs.podman.io/en/latest/markdown/podman.1.html).
+2. Forward stdout and stderr from all backends, workers, agent runtimes, the frontend, and the proxy. Extract Fred JSON from the syslog message while retaining the syslog envelope and original audit JSON. Add host, container, service, environment, and receive time as separate fields. Check maximum message size, splitting, and encoding for long JSON events.
+3. Route decoded JSON by its structured `logger` field, not the text of `msg` or the syslog prefix. Give `fred.security.audit` a destination and access policy appropriate for security evidence. Keep higher-volume application logs separate. Avoid duplicate ingestion through multiple routes.
+4. Provide a bounded local queue and retry after relay or SIEM interruption, a disk-space limit, and an alert on collector failure or silence. Check restarts, Podman journal rotation, and the selected syslog transport. Measure loss and emission-to-ingestion delay.
+5. Use authenticated, encrypted transport when logs leave the VM. Set retention and access controls under the local security policy. Keep tokens, authorization headers, signed URLs, HTTP bodies, user messages, and document content out of events.
 
-Les accès JSON du frontend ne contiennent pas l'IP ni le chemin brut. Les diagnostics natifs sur `stderr` peuvent être du texte libre et demandent un traitement de confidentialité distinct. Pour une détection de scans, de blocages WAF ou de source réseau, utiliser les journaux du proxy d'entrée plutôt que d'inférer ces données des logs Fred. Voir [Observability and Audit](OBSERVABILITY-AND-AUDIT.md#63-frontend-pod-logs).
+The frontend's JSON access logs do not include the raw path or client IP. Native diagnostics on stderr can contain free text and need separate privacy handling. Use ingress logs for scans, WAF decisions, and network source information. See [Observability and Audit](OBSERVABILITY-AND-AUDIT.md#63-frontend-pod-logs).
 
-## 3. Normalisation minimale
+## 3. Minimum normalization
 
-| Sens | Audit Fred | Log applicatif Fred | Entra / entrée HTTP |
+| Meaning | Fred audit | Fred application log | Entra / HTTP ingress |
 | --- | --- | --- | --- |
-| Temps de l'événement | `ts` (secondes Unix) | `timestamp` ou temps structuré du producteur | Temps de l'événement source |
-| Provenance | `service`, `logger` | `service`, `logger`, `role` si présent | Tenant, application, hôte ou proxy |
-| Type d'action | `extra.audit_event` | `message`, `route`, `http_method` ou `denial_cause` selon l'événement | Type d'opération source |
-| Résultat | `extra.outcome`, `extra.reason` si présents | `outcome`, `http_status`, `denial_cause` si présents | Statut de connexion ou de décision |
-| Acteur et cible | `extra.actor_uid`, `extra.user_id`, `extra.subject`, `extra.resource`, `extra.team_id` ou `extra.link_id` selon l'événement | `user_id` et références admises si présentes | Identifiant utilisateur, application ou principal de service |
-| Corrélation | Champs `extra.*` explicitement émis | `request_id`, `correlation_id` si présents | Identifiants propres à Entra ou au proxy |
+| Event time | `ts` (Unix seconds) | `timestamp` or producer event time | Source event time |
+| Origin | `service`, `logger` | `service`, `logger`, `role` when present | Tenant, application, host, or proxy |
+| Action | `extra.audit_event` | `message`, `route`, `http_method`, or `denial_cause`, depending on the event | Source operation type |
+| Result | `extra.outcome`, `extra.reason` when present | `outcome`, `http_status`, `denial_cause` when present | Sign-in or decision status |
+| Actor and target | `extra.actor_uid`, `extra.user_id`, `extra.subject`, `extra.resource`, `extra.team_id`, or `extra.link_id`, depending on the event | `user_id` and permitted references when present | User, application, or service principal ID |
+| Correlation | Explicitly emitted `extra.*` fields | `request_id`, `correlation_id` when present | Entra or proxy identifiers |
 
-Un audit de relation peut ressembler à ceci. Les valeurs et certains champs varient selon l'appelant ; `actor_uid` peut manquer.
+With the current Entra recipe, Fred uses the access token's `oid` claim as the user identifier. A non-UUID identifier is converted to UUIDv5 using its issuer and value. Validate the Entra `oid` to Fred `user_id` mapping with a test account in the same tenant, and include tenant and target application in the join key. Entra and Fred correlation IDs are generated independently: **do not treat them as a shared request ID**. If identity is missing, retain the event without inventing an actor.
 
-```json
-{"ts": 1700000000.0, "level": "INFO", "logger": "fred.security.audit", "service": "control-plane", "msg": "[SECURITY] authz.relation.granted", "extra": {"audit_event": "authz.relation.granted", "actor_uid": "<actor-uid>", "subject": "user:<target-uid>", "relation": "platform_admin", "resource": "organization:fred"}}
-```
+## 4. Initial detection catalog
 
-Avec la recette Entra actuelle, Fred prend le claim `oid` du jeton d'accès comme identifiant utilisateur ; un identifiant non UUID est transformé en UUIDv5 à partir de l'émetteur et de la valeur. Pour une jointure Entra/Fred, valider sur un compte de test que le `oid` du même tenant correspond au `user_id` Fred observé. La clé de rapprochement doit inclure le tenant et l'application visée. Les `correlation_id` Entra et Fred sont générés séparément : **ne pas les joindre comme s'ils étaient communs**. Quand l'identité manque, conserver l'événement sans inventer d'acteur.
+The windows and thresholds below are starting points to tune against local traffic. Retain individual administrative events even when they do not raise an alert.
 
-## 4. Catalogue initial des détections
-
-Les fenêtres et seuils ci-dessous sont des points de départ à régler sur les volumes du site. Une action d'administration isolée peut être légitime ; le SIEM doit conserver l'événement même lorsqu'il ne déclenche pas d'alerte.
-
-| ID | Priorité | Règle proposée | Sources | Disponibilité et limite |
+| ID | Priority | Proposed rule | Sources | Availability and limits |
 | --- | --- | --- | --- | --- |
-| D01 | Haute | Toute attribution de `platform_admin` sur `organization:fred` ; autres relations d'administration selon la matrice locale de rôles | `authz.relation.granted` | Immédiate. `actor_uid` peut manquer ; relier la cible par `subject`. |
-| D02 | Haute | Attribution d'un droit élevé, suivie sous 30 minutes d'un changement de politique ou d'une action d'administration par la cible | Audit de relation + `platform.access.*` | Corrélation par identifiant Fred quand les deux événements le portent. |
-| D03 | Haute | `platform.access.filtering.updated` avec `filtering_enabled=false`, ou toute modification de politique et tout octroi d'exception d'accès | `platform.access.filtering.updated`, `platform.access.policy.updated`, `platform.access.user.granted`, `platform.access.users.granted`, `platform.access.team.updated` | Immédiate. L'audit de politique donne sa révision, pas son contenu ; investiguer l'état autorisé séparément. |
-| D04 | Haute | Ajout d'un secret ou certificat, changement de permission ou de consentement, ou modification d'une politique d'accès concernant les applications Fred | Audit du répertoire Entra | Les noms d'opération et champs exacts dépendent du flux Entra reçu ; filtrer sur les identifiants d'application enregistrés. |
-| D05 | Haute | Plusieurs échecs de connexion Entra, puis un succès du même compte, puis une action D01-D04 | Connexions Entra + audits Fred et Entra | Exige l'export Entra et la validation de la jointure `oid`/tenant. Éviter de compter un renouvellement silencieux comme une nouvelle connexion interactive. |
-| D06 | Moyenne | Une origine tente plusieurs comptes, ou un compte échoue depuis plusieurs origines, dans une fenêtre courte | Connexions Entra | Exige IP et statut Entra. Ajuster les seuils et exclure les causes applicatives connues ; les proxys/VPN partagent parfois une IP. |
-| D07 | Moyenne | Échecs ou nouvelle provenance de connexion d'un client confidentiel Fred | Connexions des principaux de service Entra | Corréler par application, statut et IP. Ces événements peuvent être agrégés par Entra ; vérifier les horodatages et comptes avant de fixer un seuil. |
-| D08 | Moyenne | Tentatives répétées d'accès aux sessions d'autrui ou à des ressources refusées | `session_owner_mismatch`, diagnostics `denial_cause=permission_refused` | Le refus de session est explicite ; avec la délégation activée, son audit perd les identifiants. Les refus génériques n'ont pas toujours une identité exploitable. |
-| D09 | Moyenne | Plusieurs grants délégués rejetés, notamment `caller_not_trusted` ou `caller_not_allowed` | `delegation.grant.rejected` | Compter par service et motif. Cet audit ne porte pas d'identité ou d'IP pour attribuer seul la tentative. |
-| D10 | Moyenne | Révélation d'un lien Free suivie d'adhésions, ou régénération d'un lien d'équipe suivie d'adhésions inhabituelles | `platform.access.link.revealed`, `platform.access.free.enrolled`, `team.join_link.regenerated`, `team.join_link.joined` | Joindre les événements Free par `link_id`. La régénération du lien d'équipe ne porte que `team_id` : corréler à ce niveau. |
-| D11 | Moyenne | Pic de 401/403/404/5xx sur une route ou une origine, avec blocages WAF ou erreurs applicatives proches | Entrée HTTP + logs Fred | Le proxy apporte l'IP et le chemin ; Fred apporte la route bornée et le résultat. Une rafale seule ne prouve pas une intrusion. |
-| D12 | Exploration | Invocation d'un outil rare, forte hausse de volume ou échecs répétés pour un compte ou une équipe | `agent.tool.invocation.started` et `.completed` | Les identités et noms d'outils peuvent être absents selon les réglages de délégation ; aucun contenu ou destination d'exfiltration n'est journalisé. |
+| D01 | High | Any `platform_admin` grant on `organization:fred`; other administrative relations according to the local role matrix | `authz.relation.granted` | Available now. `actor_uid` can be absent; identify the target with `subject`. |
+| D02 | High | A privileged grant followed within 30 minutes by a policy change or administrative action by the target | Relation audit + `platform.access.*` | Join on Fred user ID when both events carry it. |
+| D03 | High | `platform.access.filtering.updated` with `filtering_enabled=false`, or any policy change or platform access exception | `platform.access.filtering.updated`, `platform.access.policy.updated`, `platform.access.user.granted`, `platform.access.users.granted`, `platform.access.team.updated` | Available now. Policy audit gives the revision, not its content; investigate the authorized state separately. |
+| D04 | High | A secret or certificate added, an application permission or consent changed, or an access policy changed for a Fred application | Entra directory audit | Exact operation names and fields depend on the Entra export; filter by registered application IDs. |
+| D05 | High | Several failed Entra sign-ins, then success for the same account, then a D01-D04 action | Entra sign-ins + Fred and Entra audit | Requires Entra export and a validated `oid`/tenant join. Do not count silent token renewal as a new interactive login. |
+| D06 | Medium | One origin tries several accounts, or one account fails from several origins, in a short window | Entra sign-ins | Requires Entra IP and status. Tune thresholds and account for shared proxy/VPN IPs. |
+| D07 | Medium | Failed or newly sourced sign-ins for a Fred confidential client | Entra service principal sign-ins | Correlate by application, status, and IP. Entra may aggregate events; inspect timestamps and counts first. |
+| D08 | Medium | Repeated attempts to access another user's session or other denied resources | `session_owner_mismatch`, diagnostics with `denial_cause=permission_refused` | Session denial is explicit. With delegation enabled, its audit loses identifiers; generic denials may also lack usable identity. |
+| D09 | Medium | Multiple rejected delegated grants, especially `caller_not_trusted` or `caller_not_allowed` | `delegation.grant.rejected` | Count by service and reason. This audit does not identify a user or IP by itself. |
+| D10 | Medium | A Free link reveal followed by enrollments, or regeneration of a team join link followed by unusual joins | `platform.access.link.revealed`, `platform.access.free.enrolled`, `team.join_link.regenerated`, `team.join_link.joined` | Join Free events on `link_id`. A team link regeneration carries only `team_id`; correlate at that level. |
+| D11 | Medium | A spike of 401/403/404/5xx for one route or origin, near WAF blocks or application errors | HTTP ingress + Fred logs | Ingress supplies IP and path; Fred supplies bounded route and result. A burst alone does not prove intrusion. |
+| D12 | Investigate | Rare tool invocation, large volume increase, or repeated failures for an account or team | `agent.tool.invocation.started` and `.completed` | Identity and tool name may be absent with delegation settings. No document content or exfiltration destination is logged. |
 
-Ne pas présenter comme couvertes la détection fiable d'exfiltration documentaire, les révocations de toutes les relations OpenFGA ou l'attribution d'une tentative déléguée à une IP. Ces cas demandent un inventaire et, éventuellement, de nouveaux événements bornés. Aujourd'hui, l'audit `authz.relation.revoked` est émis sur la révocation des rôles de plateforme, tandis que le point central d'écriture des relations audite les grants. Les événements du runtime et de délégation peuvent se limiter à l'événement, au résultat et au motif lorsque la délégation est activée. Voir [Observability and Audit](OBSERVABILITY-AND-AUDIT.md#5-stream-3--security--audit-trail).
+Do not claim reliable detection of document exfiltration, revocation of every OpenFGA relation, or attribution of a delegated attempt to an IP. These cases need a source inventory and potentially new bounded events. Today `authz.relation.revoked` is emitted for platform-role revocation, while the central relation-write path audits grants. Runtime and delegation events can contain only event, result, and reason when delegation is enabled. See [Observability and Audit](OBSERVABILITY-AND-AUDIT.md#5-stream-3--security--audit-trail).
 
-Pour livrer D01 à un SIEM particulier, l'équipe sécurité traduit la spécification en requête native : sélectionner `logger=fred.security.audit`, `extra.audit_event=authz.relation.granted`, `extra.resource=organization:fred` et `extra.relation=platform_admin`, puis créer une alerte par événement avec `subject`, `actor_uid`, `service` et `ts`. Le langage exact, le format d'import et la politique de notification dépendent du SIEM. Les autres lignes du catalogue se traduisent de la même manière, avec agrégation temporelle lorsqu'elle est indiquée.
+For D01, translate the specification into a native SIEM query: select `logger=fred.security.audit`, `extra.audit_event=authz.relation.granted`, `extra.resource=organization:fred`, and `extra.relation=platform_admin`. Alert on each match with `subject`, `actor_uid`, `service`, and `ts`. Import format, query syntax, and notification policy depend on the SIEM. Other catalog entries use the same process, with time-window aggregation where specified.
 
-## 5. Recette de validation et critères d'acceptation
+## 5. Real development log chains
 
-Sur un environnement de test représentatif, effectuer des actions autorisées et refusées sans utiliser de données réelles : connexion Entra réussie et échouée, connexion d'un client confidentiel, grant d'un rôle puis révocation, modification de la politique d'accès, accès à une session non possédée, grant délégué rejeté et invocation d'un outil de test.
+These lines were captured on 4 November 2026 from a running local Fred Control Plane and Keycloak development stack. They are copied from the producer logs, with no synthesized fields or syslog envelope. This development Control Plane uses text application logging; the VM deployment should use JSON application logging as described above. Keycloak appears here only to make the example reproducible locally. In the target deployment, use Entra sign-in events for D05-D07.
 
-Pour chaque action, vérifier dans le SIEM : événement brut consultable, enveloppe syslog et JSON conservés, source et horodatage corrects, champs normalisés typés, absence de secret et de contenu, absence de doublon, délai d'arrivée acceptable et règle déclenchée ou volontairement silencieuse. Puis interrompre temporairement le relais ou la destination SIEM et redémarrer un conteneur pour vérifier le rattrapage, les limites de file et l'alerte de collecte. Mesurer le taux d'alertes sur du trafic normal avant d'activer une notification opérationnelle.
+<details>
+<summary>Failed sign-ins: attempts for alice and admin in the Keycloak development realm</summary>
 
-L'exploitant SIEM doit confirmer avant mise en service : relais et format syslog effectifs, protocole de transport vers l'agent, accès au tenant Entra et catégories exportées, identifiants d'application Fred, politique de rétention, séparation d'accès aux audits, seuils et fenêtres, plage de maintenance, destinataire des alertes et procédure d'investigation. L'exploitant Fred fournit les versions, les noms de services et les scénarios de test ; l'équipe sécurité possède les règles SIEM et leur réglage dans le temps.
+```text
+2026-11-04 08:28:15,168 WARN  [org.keycloak.events] (executor-thread-5) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="null", ipAddress="172.18.0.1", error="user_not_found", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="alice"
+2026-11-04 08:28:15,210 WARN  [org.keycloak.events] (executor-thread-5) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="null", ipAddress="172.18.0.1", error="user_not_found", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="admin"
+2026-11-04 08:28:40,476 WARN  [org.keycloak.events] (executor-thread-5) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="null", ipAddress="172.18.0.1", error="user_not_found", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="alice"
+2026-11-04 08:28:40,514 WARN  [org.keycloak.events] (executor-thread-5) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="null", ipAddress="172.18.0.1", error="user_not_found", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="admin"
+```
+
+The attempted usernames, client, realm, source IP, and rejection reason are visible. Because `userId="null"` and the reason is `user_not_found`, these events cannot establish that either account exists. The two usernames share the same source IP and recur within 25 seconds, making them useful inputs for D06 after local threshold tuning.
+
+</details>
+
+<details>
+<summary>Denied administrative API request: Fred authentication warning and HTTP completion</summary>
+
+```text
+2026-11-04T08:33:47+00:00 WARNING control-plane/fred_core.security.oidc No Bearer token provided on secured endpoint correlation_id=1b188ae9-63b9-4383-8630-312ac4e9b5be request_id=d541e93e-67d1-4728-93cd-0d27388774c7
+2026-11-04T08:33:47+00:00 WARNING control-plane/http GET /admin/platform/access/users → 401 | 82ms http_method=GET duration_ms=81.80919800361153 outcome=responded route=/admin/platform/access/users http_status=401 correlation_id=1b188ae9-63b9-4383-8630-312ac4e9b5be request_id=d541e93e-67d1-4728-93cd-0d27388774c7
+```
+
+The matching `correlation_id` and `request_id` show that the warning and 401 response belong to one request. No user identity is available because the request had no bearer token. The Fred route is bounded; obtain the client IP from the ingress log when implementing D11.
+
+</details>
+
+## 6. Validation and acceptance
+
+In a representative test environment, perform permitted and denied actions with test accounts: a successful and failed Entra sign-in, a confidential client sign-in, a role grant and revocation, an access-policy change, another user's session access attempt, a rejected delegated grant, and a test tool invocation.
+
+For each action, verify in the SIEM that the raw event is searchable; the syslog envelope and JSON survive; source and timestamp are correct; normalized fields have the expected types; content and credentials are absent; the event is not duplicated; delivery is timely; and the rule triggers or intentionally stays silent. Interrupt the relay or destination and restart a container to test recovery, queue limits, and collection alerts. Measure alert volume on normal traffic before enabling operational notifications.
+
+Before go-live, the SIEM operator confirms the actual relay and syslog format, transport to the agent, Entra tenant access and exported categories, Fred application IDs, retention, audit access separation, thresholds and windows, maintenance windows, alert recipients, and investigation procedure. The Fred operator supplies versions, service names, and test scenarios. The security team owns SIEM rules and ongoing tuning.
