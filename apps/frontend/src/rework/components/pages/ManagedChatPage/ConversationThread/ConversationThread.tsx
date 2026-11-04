@@ -31,6 +31,7 @@ import { hitlResponseKey } from "../toThreadMessages";
 
 interface ConversationThreadProps {
   readOnly?: boolean;
+  onRetryHitlAvailability?: () => void;
   messages: ThreadMessage[];
   pendingHitl: RuntimeAwaitingHumanEvent | null;
   pendingHitlTabs?: RuntimeAwaitingHumanEvent[];
@@ -68,6 +69,7 @@ interface ConversationThreadProps {
 // character typed, with cost scaling with conversation length (#2221).
 export const ConversationThread = memo(function ConversationThread({
   readOnly = false,
+  onRetryHitlAvailability,
   messages,
   pendingHitl,
   pendingHitlTabs = [],
@@ -142,7 +144,16 @@ export const ConversationThread = memo(function ConversationThread({
             exchange_id: msg.id,
             payload: { question: msg.text, choices: msg.hitlChoices, title: msg.hitlTitle },
           };
-          return <HitlPrompt key={msg.id} event={frozenEvent} onAnswer={() => {}} readonly />;
+          return (
+            <HitlPrompt
+              key={msg.id}
+              event={frozenEvent}
+              onAnswer={() => {}}
+              readonly
+              resumeStatus={msg.hitlResumeStatus}
+              onRetryAvailability={onRetryHitlAvailability}
+            />
+          );
         }
         return (
           <AssistantTurn

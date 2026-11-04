@@ -321,6 +321,9 @@ class PostgresHistoryStore(BaseHistoryStore):
                     metadata = ChatMetadata.model_validate(md_raw)
                 except ValidationError:
                     metadata = ChatMetadata()
+                # The persisted target identifies the graph thread on history reads.
+                if row.channel == Channel.hitl_request.value and row.agent_instance_id:
+                    metadata.agent_id = row.agent_instance_id
                 out.append(
                     ChatMessage(
                         session_id=session_id,

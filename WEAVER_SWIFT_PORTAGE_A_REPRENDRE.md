@@ -1,6 +1,12 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Etat consolidé le 4 novembre 2026.** Les portages DOCX, titres, skills et
+**Dernière tranche intégrée : Swift `059ae1c91b959692f6a0fb61ddc9824c67c90355`.**
+Le merge suivant part de Weaver `6adc65bf41d10e56202797a529443a67f8dbe191` et
+reprend deux nouveaux commits ; voir la section 11. Cette borne est celle à utiliser
+pour inventorier les prochaines arrivées Swift. Les repères `53e39f6f7` ci-dessous
+restent ceux de la tranche initiale et de ses portages différés.
+
+**Etat consolidé de la tranche initiale, le 4 novembre 2026.** Les portages DOCX, titres, skills et
 métadonnées e-mail de la tranche initiale sont intégrés. Mistral #3321 est mis de
 côté à la demande de l'utilisateur, sans validation fournisseur. Les réceptions
 k3d/plateforme et les raccords arc42 correspondants restent à effectuer.
@@ -579,8 +585,9 @@ La borne Swift de cette tranche reste `53e39f6f77e63bbc8238b881df38686df5be452e`
 La référence locale observée `0773ff95d` lui succède, mais n'a pas été rafraîchie lors
 de cette consolidation : ne pas la présenter comme le dernier état distant.
 
-Prochaine étape de merge : actualiser les références et inventorier les nouveaux
-commits selon la [méthode](docs/SWIFT_WEAVER_MERGES.md). Les réceptions DOCX, titres,
+La tranche suivante est décrite en section 11. Pour les arrivées ultérieures,
+actualiser les références et inventorier les nouveaux commits selon la
+[méthode](docs/SWIFT_WEAVER_MERGES.md), depuis la dernière borne intégrée. Les réceptions DOCX, titres,
 skills, e-mails et isolation k3d restent distinctes. Mettre à jour arc42 après leur
 validation réelle ; ne pas ajouter les plans ou bilans de merge dans son récit.
 
@@ -589,3 +596,46 @@ sans créer un second tableau de suivi dans les skills. Les notes et métriques 
 la fusion initiale en section 8 restent historiques ; les sections de chaque lot
 portent les résultats ultérieurs. Les choix de cible futurs ne réouvrent pas
 implicitement les portages clôturés.
+
+## 11. Deuxième tranche : Swift 059ae1c91
+
+Base Weaver : `6adc65bf41d10e56202797a529443a67f8dbe191`.
+Borne précédente : `53e39f6f77e63bbc8238b881df38686df5be452e`.
+Cible : `059ae1c91b959692f6a0fb61ddc9824c67c90355`.
+Le commit de merge contenant cette section a pour parents la base et la cible.
+
+| Commit Swift | Apport produit | Traitement Weaver |
+| --- | --- | --- |
+| `0773ff95d2dcde7c810e88c67cdbfed1e0d078a9` (#3428) | Notification d'une réponse terminée ou d'une demande humaine depuis toute page | Abonnement unique dans App, routes et catalogue de sessions par espace, identité vérifiée à l'émission et au clic ; pas de notification durable après fermeture/rechargement |
+| `059ae1c91b959692f6a0fb61ddc9824c67c90355` (#3431) | Demandes humaines historiques périmées identifiées ; refus de reprise et détails d'outils cohérents | Indication facultative calculée après autorisation de lecture, état/checkpoints existants, refus sémantiques et relecture de l'historique ; droits et événements runtime Weaver préservés |
+
+Le champ `resume_status` (`pending`, `unavailable`, `unknown`) est une indication
+au moment de la lecture, pas une réservation ou une autorisation d'exécution.
+Une reprise reste soumise à l'admission actuelle. Les requêtes sans réponse des
+anciens runtimes restent compatibles ; l'annotation ne modifie pas l'historique
+stocké ou les checkpoints. Aucun schéma SQL ni migration des données n'est ajouté.
+Le client runtime est régénéré depuis le contrat source résolu.
+
+La même tranche Swift introduit l'installation partagée de Trivy pour les scans
+Docker. La matrice Weaver est conservée. Un raccord supplémentaire assure que
+modifier cette action sélectionne aussi les trois images Knowledge Flow concernées.
+La syntaxe et la sélection sont contrôlées localement ; aucun build, téléchargement
+du scanner ou run GitHub Actions n'est présenté comme exécuté.
+
+Les évolutions des corpus docs/swift/OpenSpec supprimés ne sont pas restaurées.
+Leurs sources restent disponibles dans le commit Swift ; les conséquences opérateur
+sont adaptées dans les [notes HITL](deploy/release-notes/changes/2337-hitl-resume-rejections.md)
+et [notifications](deploy/release-notes/changes/answer-toast-on-every-page.md).
+Les nouvelles explications arc42 restent à intégrer après réception déployée.
+
+Contrôles de cette tranche : tests ciblés core/runtime, historique et admission,
+frontend et sélection d'images ; qualité des composants applicatifs modifiés ;
+notes opérateur et diff. Les suites d'historique se recouvrent : ne pas additionner
+leurs résultats comme une campagne unique. Les anciens tests Swift qui contournaient
+l'admission sont adaptés au véritable contrat Weaver, sans retirer les refus d'accès.
+
+Réception restante : notification depuis une autre page et retour dans le bon
+espace ; changement d'identité ; demande humaine pending/unavailable/unknown après
+reload ; refus avant acceptation et absence de fausse annulation d'outil ; détails
+de traces. Aucune validation navigateur k3d/plateforme ni appel fournisseur ici.
+Les lots DOCX, titres, skills et e-mails précédents ne sont pas réouverts par ce merge.

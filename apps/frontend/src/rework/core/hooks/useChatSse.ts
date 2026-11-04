@@ -287,6 +287,7 @@ export type ChatSseCallbacks = {
   onBackgroundTurnSettled?: (sessionId: string, messages: ChatMessage[]) => void;
   onSteeredMessage?: (messageId: string, sessionId: string) => void;
   onStreamInterrupted?: (sessionId: string) => void;
+  onHitlUnavailable?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string, code?: string) => void;
   onPreparation?: (preparation: ExecutionPreparation) => void;
@@ -343,6 +344,7 @@ export function useChatSse(
     spaceId = "",
     onError,
     onPreparation,
+    onHitlUnavailable,
     onTurnStarted,
     onTurnRejected,
     isTurnCurrent,
@@ -1350,6 +1352,7 @@ export function useChatSse(
         );
         console.debug(`[useChatSse][${sendId}] streamToMessages completed normally`);
       } catch (err) {
+        turn.interrupted = true;
         const name = (err as Error)?.name;
         const msg = (err as Error)?.message ?? String(err);
         if (ac.signal.aborted || abortRef.current !== ac || isTurnCurrent?.(effectiveSessionId) === false) {
@@ -1402,20 +1405,8 @@ export function useChatSse(
     ],
   );
 
-  /**
-   * Resume a paused HITL turn.
-   *
-   * Resolves `false` whenever the resume never reached the runtime — a token
-   * refusal, a prepare-execution failure, OR an abort/supersession before the
-   * stream was started. `handleHitlAnswer` clears `pendingHitl` before calling
-   * this, and the checkpoint stays paused until somebody answers it, so every
-   * not-reached outcome must offer the prompt back; an aborted attempt that
-   * reported "reached" stranded the interaction exactly like a silent refusal.
-   * Guarding the restore against a newer owner (a different session, a newer
-   * prompt) is the CALLER's job — it has the state to decide; this function
-   * only reports the fact.
-   * Resolves `true` once the resume stream has been started.
-   */
+  // False keeps the card retryable; true removes an accepted or obsolete card.
+  // Only onAccepted reports acceptance. The caller guards restoration against newer UI state.
   const sendHitlResume = useCallback(
     async (
       pending: RuntimeAwaitingHumanEvent,
@@ -1520,50 +1511,6 @@ export function useChatSse(
         return bailOut(false);
       }
 
-      // Optimistic cancel: flip every tool call this HITL prompt gated from
-      // "running" straight to a cancelled state, without waiting for the resume
-      // round-trip (which may even crash before resolving them). Each error
-      // tool_result flagged `cancelled_by_user` pairs with the dangling
-      // tool_call by call_id; a real result later supersedes it (upsertOne
-      // matches optimistic cancellations by call_id, since their Date.now()
-      // rank can never collide with a backend rank).
-      //
-      // Deliberately AFTER prepare-execution, alongside the token preflight
-      // above: everything before this point can still fail without the backend
-      // ever hearing about the resume, and `handleHitlAnswer` puts the prompt
-      // back when it does. Showing the calls as cancelled first left the retry
-      // facing tool calls already marked cancelled by an attempt that never ran.
-      if (answer === "cancel") {
-        const cancelTs = new Date().toISOString();
-        const rankBase = Date.now();
-        (pending.payload.pending_calls ?? []).forEach((call, i) => {
-          if (!call.tool_call_id) return;
-          // A result already on screen for this call — real (it arrived while
-          // the prompt sat unanswered) or optimistic (a prior cancel attempt
-          // whose stream failed after this point) — must win: inserting
-          // another Date.now()-ranked row would either shadow the real result
-          // or duplicate the cancelled one.
-          const alreadyResolved = messagesRef.current.some(
-            (x) =>
-              x.session_id === pending.session_id &&
-              x.exchange_id === pending.exchange_id &&
-              toolResultCallId(x) === call.tool_call_id,
-          );
-          if (alreadyResolved) return;
-          messagesRef.current = upsertOne(messagesRef.current, {
-            session_id: pending.session_id,
-            exchange_id: pending.exchange_id,
-            rank: rankBase + i,
-            timestamp: cancelTs,
-            role: "tool",
-            channel: "tool_result",
-            parts: [{ type: "tool_result", call_id: call.tool_call_id, ok: false, content: "", latency_ms: null }],
-            metadata: { extras: { cancelled_by_user: true } },
-          });
-        });
-        setMessages([...messagesRef.current]);
-      }
-
       const sessionId = pending.session_id;
       // Reuse the interrupted turn's exchange_id straight from the event that
       // reported it — `pending` is the exact `RuntimeAwaitingHumanEvent` this
@@ -1595,6 +1542,7 @@ export function useChatSse(
       // "not reached" and put the prompt back — the paused checkpoint is
       // otherwise unanswerable.
       let acceptedByRuntime = false;
+      let obsoletePrompt = false;
 
       try {
         await streamToMessages(
@@ -1654,6 +1602,35 @@ export function useChatSse(
           turn,
           () => {
             acceptedByRuntime = true;
+            // A refused answer must not leave tool calls falsely marked cancelled.
+            if (answer === "cancel") {
+              let next = readTurnMessages(turn);
+              const cancelTs = new Date().toISOString();
+              const rankBase = Date.now();
+              (pending.payload.pending_calls ?? []).forEach((call, i) => {
+                if (!call.tool_call_id) return;
+                const alreadyResolved = next.some(
+                  (x) =>
+                    x.session_id === pending.session_id &&
+                    x.exchange_id === pending.exchange_id &&
+                    toolResultCallId(x) === call.tool_call_id,
+                );
+                if (alreadyResolved) return;
+                next = upsertOne(next, {
+                  session_id: pending.session_id,
+                  exchange_id: pending.exchange_id,
+                  rank: rankBase + i,
+                  timestamp: cancelTs,
+                  role: "tool",
+                  channel: "tool_result",
+                  parts: [
+                    { type: "tool_result", call_id: call.tool_call_id, ok: false, content: "", latency_ms: null },
+                  ],
+                  metadata: { extras: { cancelled_by_user: true } },
+                });
+              });
+              writeTurnMessages(turn, next);
+            }
             if (agentQuestion || hitlPayload?.stage === "tool_approval") {
               // The SSE resume does not emit HITL history rows. Mirror the accepted
               // answer now; a later history load replaces these with persisted rows.
@@ -1734,15 +1711,31 @@ export function useChatSse(
       } catch (err) {
         const status = (err as { status?: number })?.status;
         const aborted = (err as Error)?.name === "AbortError";
-        // A configuration refusal never consumes the checkpoint. Other 409s
-        // describe a stale/already-answered interrupt; an abort may land after
-        // delivery, so neither should resurrect a potentially consumed prompt.
-        if ((status === 409 && normalizeApiError(err).code !== "agent_configuration_changed") || aborted) {
-          acceptedByRuntime = true;
-        }
+        const conflictCode = err instanceof RuntimeHttpError ? (err.code ?? err.message) : undefined;
+        // Only these existing runtime reasons prove that this card cannot be answered.
+        // Other conflicts leave the answer editable; no conflict counts as approval.
+        obsoletePrompt =
+          status === 409 &&
+          [
+            "No pending checkpoint was found for this session.",
+            "checkpoint is not waiting for resume.",
+            "interrupt_id does not match the pending HITL request for this session.",
+            "occurrence_id does not match the pending HITL request for this session.",
+          ].includes(conflictCode ?? "");
         // A detached resume has no view to report to; its thread still records the failure.
         if (!aborted && turn.host === host) {
-          if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
+          if (conflictCode === "agent_configuration_changed") {
+            reportRequestError(err, i18n.t("chatbot.agentConfigurationChanged"));
+          } else if (status === 409) {
+            const batchChanged =
+              conflictCode === "batch answers must match every pending HITL occurrence" ||
+              conflictCode === "batch answers do not match pending agent questions";
+            onError?.(
+              i18n.t(
+                `chatbot.errors.${obsoletePrompt ? "hitlUnavailable" : batchChanged ? "hitlQuestionsChanged" : "hitlConflict"}`,
+              ),
+            );
+          } else if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
             if (err.limitChars !== undefined) setMaxChatInputChars(err.limitChars);
             onError?.(
               err.limitChars === undefined
@@ -1758,10 +1751,9 @@ export function useChatSse(
       } finally {
         settleTurn(turn);
       }
-      // Reached only if the runtime accepted the resume. A mid-stream failure
-      // after that point has surfaced its own error and must NOT resurrect the
-      // prompt — the checkpoint was consumed. A failure before it never ran.
-      return acceptedByRuntime;
+      if (obsoletePrompt && turn.host === host) onHitlUnavailable?.(pending.session_id);
+      // Neither an accepted answer nor a proven obsolete card should be offered again.
+      return acceptedByRuntime || obsoletePrompt;
     },
     [
       agentInstanceId,
@@ -1772,6 +1764,7 @@ export function useChatSse(
       isExecutionAllowed,
       onError,
       reportRequestError,
+      onHitlUnavailable,
       applyPreparation,
       startTurn,
       host,

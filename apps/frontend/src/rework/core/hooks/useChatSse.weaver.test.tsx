@@ -243,6 +243,22 @@ describe("Weaver execution context and HTTP diagnostics", () => {
     expect(onTurnStarted).not.toHaveBeenCalled();
   });
 
+  it("preserves the configuration refusal code when HITL admission fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ detail: { code: "agent_configuration_changed", message: "Changed" } }), {
+            status: 409,
+          }),
+      ),
+    );
+    await act(async () => {
+      expect(await latest.sendHitlResume(pending, "yes")).toBe(false);
+    });
+    expect(onError).toHaveBeenCalledExactlyOnceWith(expect.any(String), "agent_configuration_changed");
+  });
+
   it.each([
     { detail: "A canonical space_id is required", expected: "A canonical space_id is required" },
     {

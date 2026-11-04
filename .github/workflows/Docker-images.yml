@@ -221,10 +221,13 @@ jobs:
           name: scan-image-${{ matrix.name }}
           path: /tmp
 
+      - name: Install Trivy
+        uses: ./.github/actions/setup-trivy
+
       - name: Scan built image for CVEs
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          version: v0.75.0
+          skip-setup-trivy: true
           input: /tmp/pr-image.tar
           scanners: vuln
           vuln-type: os,library
@@ -307,10 +310,13 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v5
 
+      - name: Install Trivy
+        uses: ./.github/actions/setup-trivy
+
       - name: Scan frontend dependencies
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          version: v0.75.0
+          skip-setup-trivy: true
           scan-type: fs
           scan-ref: apps/frontend
           trivy-config: .github/trivy-frontend.yaml

@@ -79,7 +79,12 @@ from fred_core.common.fastapi_handlers import (
 )
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.documents.selection import DocumentScope
-from fred_core.history.history_schema import ChatMessage, CommandDescriptor
+from fred_core.history.history_schema import (
+    ChatMessage,
+    CommandDescriptor,
+    HitlRequestPart,
+    HitlResponsePart,
+)
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -2274,30 +2279,114 @@ def _pending_interrupt_occurrences(
     for _task_id, channel, value in pending_writes:
         if channel != _REACT_V2_INTERRUPT_CHANNEL:
             continue
-        candidate: object = value
-        if isinstance(candidate, (list, tuple)):
-            if not candidate:
-                continue
-            candidate = candidate[0]
-        interrupt_id = getattr(candidate, "id", None)
-        if interrupt_id is None and isinstance(candidate, dict):
-            interrupt_id = candidate.get("id")
-        if isinstance(interrupt_id, str) and interrupt_id:
-            payload = getattr(candidate, "value", None)
-            if payload is None and isinstance(candidate, dict):
-                payload = candidate.get("value")
-            occurrence_id = getattr(payload, "occurrence_id", None)
-            if occurrence_id is None and isinstance(payload, dict):
-                occurrence_id = payload.get("occurrence_id")
-            occurrences.add(
-                (
-                    interrupt_id,
-                    occurrence_id
-                    if isinstance(occurrence_id, str) and occurrence_id
-                    else None,
+        for candidate in value if isinstance(value, (list, tuple)) else (value,):
+            interrupt_id = getattr(candidate, "id", None)
+            if interrupt_id is None and isinstance(candidate, dict):
+                interrupt_id = candidate.get("id")
+            if isinstance(interrupt_id, str) and interrupt_id:
+                payload = getattr(candidate, "value", None)
+                if payload is None and isinstance(candidate, dict):
+                    payload = candidate.get("value")
+                occurrence_id = getattr(payload, "occurrence_id", None)
+                if occurrence_id is None and isinstance(payload, dict):
+                    occurrence_id = payload.get("occurrence_id")
+                occurrences.add(
+                    (
+                        interrupt_id,
+                        occurrence_id
+                        if isinstance(occurrence_id, str) and occurrence_id
+                        else None,
+                    )
                 )
-            )
     return frozenset(occurrences)
+
+
+async def _annotate_hitl_availability(messages: list[ChatMessage]) -> list[ChatMessage]:
+    """Reconcile trailing unanswered cards without changing persisted history."""
+    if not messages:
+        return messages
+    trailing = [m for m in messages if m.exchange_id == messages[-1].exchange_id]
+    answered = {
+        p.occurrence_id
+        for m in trailing
+        for p in m.parts
+        if isinstance(p, HitlResponsePart) and p.occurrence_id
+    }
+    legacy_answers = sum(
+        isinstance(p, HitlResponsePart) and not p.occurrence_id
+        for m in trailing
+        for p in m.parts
+    )
+    requests: dict[int, HitlRequestPart] = {}
+    targets: dict[str | None, list[tuple[int, HitlRequestPart]]] = {}
+    for m in trailing:
+        for p in m.parts:
+            if not isinstance(p, HitlRequestPart) or p.occurrence_id in answered:
+                continue
+            if not p.occurrence_id and legacy_answers:
+                legacy_answers -= 1
+                continue
+            part = p.model_copy(update={"resume_status": "unknown"})
+            requests[m.rank] = part
+            if p.interrupt_id and p.occurrence_id:
+                targets.setdefault(m.metadata.agent_id, []).append((m.rank, part))
+    checkpointer = get_runtime_context().config.checkpointer
+
+    async def resolve(
+        agent_id: str | None, parts: list[tuple[int, HitlRequestPart]]
+    ) -> None:
+        if not isinstance(checkpointer, FredSqlCheckpointer):
+            return
+        identities = frozenset(
+            (p.interrupt_id, p.occurrence_id)
+            for _, p in parts
+            if p.interrupt_id and p.occurrence_id
+        )
+        session_id = messages[-1].session_id
+        locations = (
+            _resume_checkpoint_locations(session_id, agent_id=agent_id)
+            if agent_id
+            else ((session_id, ""),)
+        )
+        try:
+            loaded = None
+            # Candidate order must match resume admission: graph first, root fallback.
+            for thread_id, namespace in locations:
+                loaded = await checkpointer.aget_hitl_resume_state(
+                    thread_id=thread_id, checkpoint_ns=namespace, occurrences=identities
+                )
+                if loaded is not None:
+                    break
+            if loaded is None and not agent_id:
+                return
+            writes, blocked = loaded if loaded is not None else ([], frozenset())
+            pending = _pending_interrupt_occurrences(writes)
+            if writes and not pending:
+                return
+            for _, part in parts:
+                identity = (part.interrupt_id, part.occurrence_id)
+                part.resume_status = (
+                    "pending"
+                    if identity in pending and identity not in blocked
+                    else "unavailable"
+                )
+        except Exception:
+            logger.warning("HITL history availability lookup failed", exc_info=True)
+
+    await asyncio.gather(*(resolve(agent, parts) for agent, parts in targets.items()))
+    return [
+        m.model_copy(
+            update={
+                "parts": [
+                    requests[m.rank] if isinstance(p, HitlRequestPart) else p
+                    for p in m.parts
+                ]
+            }
+        )
+        if m.rank in requests
+        else m
+        for m in messages
+    ]
 
 
 async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> bool:
@@ -2314,7 +2403,9 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
         if not session_id or checkpointer is None:
             return False
         for thread_id, checkpoint_ns in _resume_checkpoint_locations(
-            request, session_id
+            session_id,
+            agent_id=request.agent_id,
+            agent_instance_id=request.agent_instance_id,
         ):
             loaded = await load_checkpoint(
                 checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
@@ -2374,7 +2465,11 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
     checkpointer = get_runtime_context().config.checkpointer
     if not session_id or checkpointer is None:
         return False
-    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+        session_id,
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ):
         loaded = await load_checkpoint(
             checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
         )
@@ -2420,7 +2515,7 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
 
 
 def _resume_checkpoint_locations(
-    request: RuntimeExecuteRequest, session_id: str
+    session_id: str, *, agent_id: str | None, agent_instance_id: str | None = None
 ) -> tuple[tuple[str, str], ...]:
     """
     `(thread_id, checkpoint_ns)` pairs a resume may target, best first.
@@ -2433,8 +2528,8 @@ def _resume_checkpoint_locations(
     """
 
     agent_ns = checkpoint_namespace(
-        agent_instance_id=request.agent_instance_id,
-        agent_id=request.agent_id or request.agent_instance_id or "",
+        agent_instance_id=agent_instance_id,
+        agent_id=agent_id or agent_instance_id or "",
     )
     return ((graph_thread_id(session_id, agent_ns), ""), (session_id, ""))
 
@@ -2499,7 +2594,11 @@ async def _validate_session_checkpoint_access(
         return ()
 
     loaded = None
-    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+        session_id,
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ):
         loaded = await load_checkpoint(
             checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
         )
@@ -5462,7 +5561,8 @@ def _build_agent_router(
         if history_store is None:
             raise HTTPException(status_code=503, detail="History storage unavailable")
         response.headers["Cache-Control"] = "no-store"
-        return await history_store.get(session_id=session_id, user_id=person.uid)
+        messages = await history_store.get(session_id=session_id, user_id=person.uid)
+        return await _annotate_hitl_availability(messages)
 
     @router.delete(
         "/sessions/{session_id}",

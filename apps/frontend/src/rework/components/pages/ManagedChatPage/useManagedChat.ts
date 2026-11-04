@@ -499,6 +499,11 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     [setPendingMessages],
   );
 
+  const reloadHitlHistoryRef = useRef<() => void>(() => {});
+  const handleHitlUnavailable = useCallback((sid: string) => {
+    if (activeSessionIdRef.current === sid) reloadHitlHistoryRef.current();
+  }, []);
+
   const {
     messages,
     waitResponse,
@@ -532,6 +537,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     onSteeredMessage: handleSteeredMessage,
     onStreamInterrupted: handleStreamInterrupted,
     onAwaitingHuman: handleAwaitingHuman,
+    onHitlUnavailable: handleHitlUnavailable,
     onError: handleChatError,
     onPreparation: acceptPreparation,
     onTurnStarted: handleTurnStarted,
@@ -687,6 +693,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     isSettled: isHistorySettled,
     isUnavailable: historyUnavailable,
     errorKey: historyErrorKey,
+    reload: retryHitlAvailability,
   } = useSessionHistory({
     sessionId: locallyCreatingSession && !sessionData ? null : sessionId,
     spaceId,
@@ -730,6 +737,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     canUpload: chatControls.some((control) => control.widget === "attach_files"),
     sentBefore,
   });
+  reloadHitlHistoryRef.current = retryHitlAvailability;
 
   const notifySessionSaveFailed = useCallback(
     (error: unknown) => {
@@ -1544,6 +1552,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     modelPreparationPending,
     historyErrorKey: sessionErrorKey ?? historyErrorKey,
     historyUnavailable,
+    retryHitlAvailability,
     agentInstance,
     capabilityIds,
     chatControls,
