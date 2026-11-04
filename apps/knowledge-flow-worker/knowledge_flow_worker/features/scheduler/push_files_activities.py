@@ -15,7 +15,6 @@
 import asyncio
 import logging
 import pathlib
-import tempfile
 
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
@@ -48,7 +47,7 @@ async def resolve_push_input_file_for_worker(
     working_dir: pathlib.Path,
     ingestion_service,
 ) -> pathlib.Path:
-    await asyncio.to_thread(ingestion_service.get_local_copy, user, metadata, working_dir)
+    await to_thread_with_heartbeat(ingestion_service.get_local_copy, user, metadata, working_dir, require_thread_stop=True)
     return _first_input_file(working_dir / "input")
 
 
@@ -115,7 +114,7 @@ async def push_input_process(
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)
         raise_if_document_deleted(await ingestion_service.persist_progress(user, metadata=metadata), metadata.document_uid)
 
-        with tempfile.TemporaryDirectory(prefix=f"doc-{metadata.document_uid}-") as tmpdir:
+        async with ingestion_service.workspace() as tmpdir:
             working_dir = pathlib.Path(tmpdir)
             input_dir = working_dir / "input"
             output_dir = working_dir / "output"
@@ -156,6 +155,7 @@ async def push_input_process(
                     "stage": "push_input_save_output",
                     "document_uid": metadata.document_uid,
                 },
+                require_thread_stop=True,
             )
 
         if not ingestion_service.context.is_tabular_file(metadata.document_name):

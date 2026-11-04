@@ -3,7 +3,7 @@
 use super::{
     Processing, conflict,
     models::*,
-    store::{self, generations, latest, row},
+    store::{self, Generation, generations, row},
 };
 use crate::{documents, error::AppResult, onboarding};
 use chrono::Utc;
@@ -98,8 +98,9 @@ impl Processing {
             self.pool.begin().await?
         };
         let current = store::locked(&mut tx, r.summary.id).await?;
-        let g = latest(&mut *tx, r.summary.id)
-            .await?
+        // Order publication with the cleanup claimant before checking the lease.
+        let g: Generation = sqlx::query_as("select * from generation where processing_id=$1 order by created_at desc,id desc limit 1 for update")
+            .bind(r.summary.id).fetch_optional(&mut *tx).await?
             .ok_or_else(|| conflict("stale_generation"))?;
         if g.id != manifest.generation || g.stage != commit.stage {
             return Err(conflict("stale_generation"));
@@ -111,7 +112,8 @@ impl Processing {
                 Err(conflict("manifest_conflict"))
             };
         }
-        if g.expires_at <= Utc::now()
+        if !g.pending_writes.is_empty()
+            || g.expires_at <= Utc::now()
             || current.deadline_at <= Utc::now()
             || current.summary.status.terminal()
         {

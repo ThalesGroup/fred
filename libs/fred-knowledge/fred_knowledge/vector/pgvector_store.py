@@ -224,7 +224,17 @@ class PgVectorStoreAdapter(BaseVectorStore):
             d.metadata.setdefault("vector_index", self.collection_name)
             d.metadata.setdefault("ingested_at", now_iso)
 
-        returned = self._vs.add_documents(documents, ids=assigned)
+        from fred_knowledge.vector.base_vector_store import vector_write_observer
+
+        observer = vector_write_observer.get()
+        if observer is None:
+            returned = self._vs.add_documents(documents, ids=assigned)
+        else:
+            texts = [document.page_content for document in documents]
+            embeddings = self.embedding_model.embed_documents(texts)
+            with observer.writing():
+                returned = self._vs.add_embeddings(texts, embeddings, metadatas=[document.metadata for document in documents], ids=assigned)
+
         logger.info(
             "[VECTOR][PGVECTOR] upserted %d chunk(s) into collection=%s",
             len(returned),
@@ -352,6 +362,8 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 ).scalar_one()
                 return int(res)
         except Exception:
+            if getattr(self, "strict_operations", False):
+                raise
             logger.exception("[VECTOR][PGVECTOR] Failed to count chunks for %s", document_uid)
             return 0
 

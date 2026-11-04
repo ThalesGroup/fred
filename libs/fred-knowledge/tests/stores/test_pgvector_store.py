@@ -182,3 +182,45 @@ def test_retrievable_toggle_raises_when_the_update_fails():
 
     with pytest.raises(RuntimeError, match="retrievable"):
         store.set_document_retrievable(document_uid="doc-a", value=False)
+
+
+@pytest.mark.parametrize("failure", [None, "embedding", "sql"])
+def test_managed_pgvector_journals_after_embedding_until_commit(failure):
+    from fred_knowledge.vector.base_vector_store import vector_write_observer
+
+    events = []
+
+    def embed(texts):
+        events.append("embed")
+        if failure == "embedding":
+            raise RuntimeError("provider unavailable")
+        return [[1.0] for _ in texts]
+
+    @contextmanager
+    def writing():
+        events.append("begin")
+        yield
+        events.append("ack")
+
+    def add(texts, embeddings, *, metadatas, ids):
+        assert events == ["embed", "begin"]
+        events.append("sql")
+        if failure == "sql":
+            raise RuntimeError("commit outcome unknown")
+        return ids
+
+    store, _ = _make_store([])
+    store.embedding_model_name = "test"
+    store.embedding_model = cast(Any, SimpleNamespace(embed_documents=embed))
+    store._vs = cast(Any, SimpleNamespace(add_embeddings=add))
+    token = vector_write_observer.set(SimpleNamespace(writing=writing))
+    try:
+        if failure:
+            with pytest.raises(RuntimeError):
+                store.add_documents([_chunk("doc", 0)], ids=["id"])
+            assert events == (["embed"] if failure == "embedding" else ["embed", "begin", "sql"])
+        else:
+            assert store.add_documents([_chunk("doc", 0)], ids=["id"]) == ["id"]
+            assert events == ["embed", "begin", "sql", "ack"]
+    finally:
+        vector_write_observer.reset(token)

@@ -184,6 +184,18 @@ async fn vectors(
     }
     service(&s)?.plan_vectors(input).await
 }
+#[utoipa::path(post,path="/document-processing/{id}/writes",params(("id"=Uuid,Path)),request_body=super::cleanup::WriteReceipt,responses((status=200),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
+async fn writes(
+    State(s): State<AppState>,
+    Worker: Worker,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<super::cleanup::WriteReceipt>,
+) -> AppResult<()> {
+    if id != input.work.processing_id {
+        return Err(invalid());
+    }
+    service(&s)?.record_write(input).await
+}
 #[utoipa::path(get,path="/document-processing/cleanup",responses((status=200,body=Vec<super::cleanup::Cleanup>),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn cleanup(
     State(s): State<AppState>,
@@ -238,6 +250,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(set_retrievable))
         .routes(routes!(retrieval_work, confirm_retrievable))
         .routes(routes!(vectors))
+        .routes(routes!(writes))
         .routes(routes!(cleanup, cleaned))
         .routes(routes!(start, history))
         .routes(routes!(work))

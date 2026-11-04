@@ -43,6 +43,9 @@ class ScopedVectors:
         self.bytes = 0
         self.started = False
 
+    def writing(self):
+        return self.artifacts.writing(self.descriptor)
+
     def before_write(self, documents, ids):
         from knowledge_flow_worker.application_context import ApplicationContext
         from knowledge_flow_worker.features.manager_processing.client import ManagerClient

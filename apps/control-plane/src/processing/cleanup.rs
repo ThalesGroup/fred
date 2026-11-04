@@ -23,14 +23,27 @@ const CLAIM_SECONDS: f64 = 300.0;
 /// excess ordinals. Queue order (`cleanup_after`) starts 60 s after the lease end.
 macro_rules! generation_due {
     () => {
-        "g.cleaned_at is null and d.deletion_id is null and (p.status in ('succeeded', 'failed') or g.committed_at is null) and (d.published_generation is distinct from g.id or cardinality(g.vector_ordinals) < g.chunks)"
+        "cardinality(g.pending_writes) = 0 and cardinality(g.pending_workspaces) = 0 and g.cleaned_at is null and d.deletion_id is null and (p.status in ('succeeded', 'failed') or g.committed_at is null) and (d.published_generation is distinct from g.id or cardinality(g.vector_ordinals) < g.chunks)"
     };
 }
 /// Retired documents past retention, with no active request or protected generation.
 macro_rules! purge_due {
     () => {
-        "d.deletion_id is not null and d.purged_at is null and exists (select 1 from deletion retired where retired.id = d.deletion_id and retired.due_at <= now()) and not exists (select 1 from document_processing a where a.document_id = d.id and a.status in ('pending', 'running')) and not exists (select 1 from document_processing lp join generation lg on lg.processing_id = lp.id where lp.document_id = d.id and lg.cleanup_after > clock_timestamp())"
+        "d.retrieval_phase is distinct from 'writing' and d.deletion_id is not null and d.purged_at is null and exists (select 1 from deletion retired where retired.id = d.deletion_id and retired.due_at <= now()) and not exists (select 1 from document_processing a where a.document_id = d.id and a.status in ('pending', 'running')) and not exists (select 1 from document_processing lp join generation lg on lg.processing_id = lp.id where lp.document_id = d.id and (lg.cleanup_after > clock_timestamp() or cardinality(lg.pending_writes) > 0 or cardinality(lg.pending_workspaces) > 0))"
     };
+}
+
+/// Each physical write is admitted once. A lost response leaves its intent pending;
+/// neither an activity retry nor a lease timeout can certify its completion.
+#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WriteReceipt {
+    pub work: Work,
+    pub generation: Uuid,
+    pub write_id: Uuid,
+    pub completed: bool,
+    #[serde(default)]
+    pub workspace: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
@@ -82,6 +95,43 @@ struct DuePurge {
 }
 
 impl Processing {
+    pub async fn record_write(&self, receipt: WriteReceipt) -> AppResult<()> {
+        let mut tx = self.pool.begin().await?;
+        let r = store::locked(&mut tx, receipt.work.processing_id).await?;
+        r.bind(self.installation, &receipt.work)?;
+        let changed = if receipt.completed {
+            // ACK remains valid after retirement, expiry or a newer activity attempt.
+            sqlx::query("update generation set pending_writes=array_remove(pending_writes,$3),pending_workspaces=array_remove(pending_workspaces,$3) where id=$1 and processing_id=$2 and $3=any(write_ids)")
+                .bind(receipt.generation).bind(r.summary.id).bind(receipt.write_id)
+                .execute(&mut *tx).await?.rows_affected()
+        } else {
+            // Serialize admission with retirement; ACK never needs a live document.
+            let retired: bool = sqlx::query_scalar(
+                "select deletion_id is not null from document where id=$1 for update",
+            )
+            .bind(receipt.work.document_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            if retired || r.summary.status.terminal() {
+                return Err(conflict("stale_generation"));
+            }
+            let g = latest(&mut *tx, r.summary.id).await?.ok_or_else(invalid)?;
+            if g.id != receipt.generation {
+                return Err(conflict("stale_generation"));
+            }
+            let bound = i64::from(self.config.limits.artifacts)
+                + i64::from(self.config.limits.chunks) * 16
+                + 32;
+            sqlx::query("update generation set write_ids=array_append(write_ids,$3),pending_writes=case when $5 then pending_writes else array_append(pending_writes,$3) end,pending_workspaces=case when $5 then array_append(pending_workspaces,$3) else pending_workspaces end where id=$1 and processing_id=$2 and not ($3=any(write_ids)) and cardinality(write_ids)<$4 and committed_at is null and cleaned_at is null and expires_at>clock_timestamp()")
+                .bind(g.id).bind(r.summary.id).bind(receipt.write_id).bind(bound).bind(receipt.workspace)
+                .execute(&mut *tx).await?.rows_affected()
+        };
+        if changed != 1 {
+            return Err(conflict("write_outcome_unknown"));
+        }
+        tx.commit().await?;
+        Ok(())
+    }
     pub async fn plan_vectors(&self, plan: VectorPlan) -> AppResult<()> {
         let mut tx = self.pool.begin().await?;
         let r = store::locked(&mut tx, plan.work.processing_id).await?;

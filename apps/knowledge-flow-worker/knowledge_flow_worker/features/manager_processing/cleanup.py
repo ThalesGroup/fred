@@ -40,7 +40,14 @@ def clean(store, client, artifacts, candidate):
             artifacts.client.remove_object(artifacts.bucket, item.object_name)
         client.post(
             "/document-processing/cleanup",
-            Cleaned(work=work, generation=generation, cursor=0, next_cursor=0, objects_empty=len(objects) <= 200, purge_document=True),
+            Cleaned(
+                work=work,
+                generation=generation,
+                cursor=0,
+                next_cursor=0,
+                objects_empty=not list(itertools.islice(artifacts.client.list_objects(artifacts.bucket, prefix=candidate["output_prefix"], recursive=True), 1)),
+                purge_document=True,
+            ),
         )
         return
     start = candidate["cursor"]
@@ -52,14 +59,23 @@ def clean(store, client, artifacts, candidate):
         store().delete_chunk(str(work.document_id), identifier)
         if "text" in store().get_chunk(str(work.document_id), identifier):
             raise RuntimeError("Vector cleanup is incomplete")
-    # One complete pass finishes a generation whose lease expired 60 s ago; a
-    # later stray write stays until the document purge and is never served.
+    # The manager only releases candidates after every admitted write acknowledged.
+    # An uncertain request never becomes safe merely because its lease expired.
     objects = [] if candidate["preserve_objects"] else list(itertools.islice(artifacts.client.list_objects(artifacts.bucket, prefix=candidate["output_prefix"], recursive=True), 201))
     for item in objects[:200]:
         if item.object_name is None:
             raise RuntimeError("Invalid object cleanup response")
         artifacts.client.remove_object(artifacts.bucket, item.object_name)
-    client.post("/document-processing/cleanup", Cleaned(work=work, generation=generation, cursor=start, next_cursor=end, objects_empty=not candidate["preserve_objects"] and len(objects) <= 200))
+    client.post(
+        "/document-processing/cleanup",
+        Cleaned(
+            work=work,
+            generation=generation,
+            cursor=start,
+            next_cursor=end,
+            objects_empty=not candidate["preserve_objects"] and not list(itertools.islice(artifacts.client.list_objects(artifacts.bucket, prefix=candidate["output_prefix"], recursive=True), 1)),
+        ),
+    )
 
 
 async def run():

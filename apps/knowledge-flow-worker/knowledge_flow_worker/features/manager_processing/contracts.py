@@ -109,6 +109,14 @@ class VectorPlan(Contract):
     count: int
 
 
+class WriteReceipt(Contract):
+    work: Work
+    generation: UUID
+    write_id: UUID
+    completed: bool
+    workspace: bool = False
+
+
 class Cleaned(Contract):
     work: Work
     generation: UUID

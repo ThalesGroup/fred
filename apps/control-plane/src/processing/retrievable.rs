@@ -229,10 +229,20 @@ impl Processing {
         if c.id != operation {
             return Err(conflict("retrieval_changed"));
         }
-        let document = db::pipeline_document(&self.pool, id).await?;
-        crate::authorization::authorize(&self.pool, &c.actor, document.space_id, Permission::Write)
+        if c.phase == ProjectionPhase::Ready {
+            let document = db::pipeline_document(&self.pool, id).await?;
+            crate::authorization::authorize(
+                &self.pool,
+                &c.actor,
+                document.space_id,
+                Permission::Write,
+            )
             .await?;
-        onboarding::require_accepted(&self.pool, self.terms.as_deref(), &c.actor).await?;
+            onboarding::require_accepted(&self.pool, self.terms.as_deref(), &c.actor).await?;
+        }
+        // An admitted worker must still acknowledge its write after retirement.
+        // This worker-only descriptor grants no new write; Claim checks retirement.
+
         let published: store::Generation = sqlx::query_as(
             "select g.* from document d join generation g on g.id=d.published_generation where d.id=$1",
         )
@@ -255,6 +265,15 @@ impl Processing {
         id: Uuid,
         input: RetrievalConfirmation,
     ) -> AppResult<()> {
+        if matches!(input.step, RetrievalStep::Applied) {
+            let changed = sqlx::query("update document set retrieval_phase='applied' where id=$1 and retrieval_id=$2 and retrieval_target=$3 and retrieval_phase in ('writing','applied')")
+                .bind(id).bind(input.operation_id).bind(input.retrievable).execute(&self.pool).await?.rows_affected();
+            return if changed == 1 {
+                Ok(())
+            } else {
+                Err(conflict("retrieval_projection_uncertain"))
+            };
+        }
         let work = self.retrieval_work(id, input.operation_id).await?;
         if input.retrievable != work.retrievable {
             return Err(invalid());
@@ -267,10 +286,9 @@ impl Processing {
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), &c.actor).await?;
         // The atomic phase fence survives worker/API restarts and Temporal history expiry.
         let changed = match input.step {
-            RetrievalStep::Claim => sqlx::query("update document set retrieval_phase='writing' where id=$1 and retrieval_id=$2 and retrieval_phase='ready' and not retrieval_confirmed")
+            RetrievalStep::Claim => sqlx::query("update document set retrieval_phase='writing' where id=$1 and retrieval_id=$2 and retrieval_phase='ready' and not retrieval_confirmed and deletion_id is null")
                 .bind(id).bind(input.operation_id).execute(&mut *tx).await?.rows_affected(),
-            RetrievalStep::Applied => sqlx::query("update document set retrieval_phase='applied' where id=$1 and retrieval_id=$2 and retrieval_phase in ('writing','applied')")
-                .bind(id).bind(input.operation_id).execute(&mut *tx).await?.rows_affected(),
+            RetrievalStep::Applied => return Err(invalid()),
             RetrievalStep::Confirm => sqlx::query("update document set retrievable=$3,retrieval_confirmed=true where id=$1 and retrieval_id=$2 and retrieval_phase='applied'")
                 .bind(id).bind(input.operation_id).bind(input.retrievable).execute(&mut *tx).await?.rows_affected(),
         };

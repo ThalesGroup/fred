@@ -15,7 +15,6 @@
 import asyncio
 import logging
 import pathlib
-import tempfile
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -63,7 +62,7 @@ async def _output_process_impl(
 
     output_stage: ProcessingStage | None = None
     try:
-        with tempfile.TemporaryDirectory(prefix=f"doc-{metadata.document_uid}-") as tmpdir:
+        async with ingestion_service.workspace() as tmpdir:
             working_dir = pathlib.Path(tmpdir)
             output_dir = working_dir / "output"
             document_name = metadata.document_name
@@ -83,6 +82,7 @@ async def _output_process_impl(
                 metadata,
                 working_dir,
                 heartbeat_details={"stage": "output_restore", "document_uid": metadata.document_uid},
+                require_thread_stop=True,
             )
             output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -125,6 +125,7 @@ async def _output_process_impl(
                 # write before letting the workflow purge — without this the
                 # purge raced the still-writing thread (#2315).
                 drain_on_cancel=True,
+                require_thread_stop=True,
             )
 
             # Save the updated metadata

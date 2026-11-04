@@ -1118,3 +1118,46 @@ def test_reader_rejects_incompatible_index_without_writing(monkeypatch):
     assert client.indices.create_calls == []
     assert client.indices.put_mapping_calls == []
     assert client.search_pipeline.put_calls == []
+
+
+@pytest.mark.parametrize("failure", ["refresh", "delete_timeout", "delete_partial", "conflict", "count_partial", "count_error", "none"])
+def test_manager_purge_refuses_partial_visibility_and_failed_counts(failure):
+    from types import SimpleNamespace
+
+    events = []
+    pending, visible = {"late-acknowledged-chunk"}, set()
+
+    def refresh(**_):
+        events.append("refresh")
+        visible.update(pending)
+        pending.clear()
+        return {"_shards": {"total": 2, "successful": 1 if failure == "refresh" else 2, "failed": 0}}
+
+    def delete(**_):
+        events.append("delete")
+        assert visible, "refresh must publish earlier bulk ACKs before deletion"
+        visible.clear()
+        return {"deleted": 1, "timed_out": failure == "delete_timeout", "failures": ["shard"] if failure == "delete_partial" else [], "version_conflicts": int(failure == "conflict")}
+
+    def count(**_):
+        events.append("count")
+        if failure == "count_error":
+            raise RuntimeError("count unavailable")
+        return {"count": len(visible), "_shards": {"total": 2, "successful": 1 if failure == "count_partial" else 2, "failed": int(failure == "count_partial")}}
+
+    store = ovs.OpenSearchVectorStoreAdapter.__new__(ovs.OpenSearchVectorStoreAdapter)
+    store._index = "fixture"
+    store.strict_operations = True
+    store.client = SimpleNamespace(indices=SimpleNamespace(refresh=refresh), delete_by_query=delete, count=count)
+    if failure == "none":
+        store.delete_vectors_for_document(document_uid="document")
+        assert store.get_document_chunk_count(document_uid="document") == 0
+        assert events == ["refresh", "delete", "count"]
+    elif failure.startswith("count"):
+        store.delete_vectors_for_document(document_uid="document")
+        with pytest.raises(RuntimeError):
+            store.get_document_chunk_count(document_uid="document")
+    else:
+        with pytest.raises(RuntimeError):
+            store.delete_vectors_for_document(document_uid="document")
+        assert "count" not in events

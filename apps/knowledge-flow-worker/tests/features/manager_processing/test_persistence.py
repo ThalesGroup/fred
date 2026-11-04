@@ -424,6 +424,7 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
     processed_prefix = second_prefix if remaining else prefix
     acknowledgments = []
     events = []
+    removed = set()
 
     class Client:
         def __init__(self, *_):
@@ -457,11 +458,13 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
         assert kwargs == {"prefix": processed_prefix, "recursive": True}
         events.append("list_objects")
         for i in range(object_count):
-            yield SimpleNamespace(object_name=f"{processed_prefix}{i}")
+            if f"{processed_prefix}{i}" not in removed:
+                yield SimpleNamespace(object_name=f"{processed_prefix}{i}")
 
     def remove(bucket, key):
         assert bucket == "derived"
         events.append(key)
+        removed.add(key)
 
     vectors = SimpleNamespace(delete_vectors_for_document=delete, get_document_chunk_count=count)
     artifacts = SimpleNamespace(bucket="derived", client=SimpleNamespace(list_objects=objects, remove_object=remove))
@@ -478,10 +481,10 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
         assert ack.purge_document
         assert ack.cursor == ack.next_cursor == 0
         assert ack.objects_empty == (object_count <= 200)
-        assert events == ["delete_vectors", "count_vectors", "delete_vectors", "count_vectors", "list_objects", *[f"{second_prefix}{i}" for i in range(min(object_count, 200))], "ack"]
+        assert events == ["delete_vectors", "count_vectors", "delete_vectors", "count_vectors", "list_objects", *[f"{second_prefix}{i}" for i in range(min(object_count, 200))], "list_objects", "ack"]
     else:
         cleanup.sweep(context)
-        assert events == ["delete_vectors", "count_vectors", "list_objects", *[f"{prefix}{i}" for i in range(min(object_count, 200))], "ack"]
+        assert events == ["delete_vectors", "count_vectors", "list_objects", *[f"{prefix}{i}" for i in range(min(object_count, 200))], "list_objects", "ack"]
         assert len(acknowledgments) == 1
         ack = acknowledgments[0]
         assert ack.purge_document
@@ -695,24 +698,38 @@ def test_original_stream_checks_size_and_digest(descriptor, tmp_path, received):
         assert error.value.permanent
 
 
-@pytest.mark.parametrize("fault", ["lost_ack", "conflict", "unavailable"])
-def test_artifact_write_reconciles_remote_ack_and_verifies_bytes(monkeypatch, tmp_path, fault):
+@pytest.mark.parametrize("fault", ["lost_ack", "conflict", "unavailable", "ok", "denied"])
+def test_artifact_write_ack_requires_terminal_remote_response(monkeypatch, tmp_path, descriptor, fault):
     import hashlib
 
     import requests
 
-    from knowledge_flow_worker.features.manager_processing.artifacts import Artifacts
+    from knowledge_flow_worker.features.manager_processing import artifacts
     from knowledge_flow_worker.features.manager_processing.client import ManagerError
     from knowledge_flow_worker.features.manager_processing.contracts import Artifact
 
     source = tmp_path / "output.md"
     source.write_bytes(b"original")
     artifact = Artifact(path="output.md", size=8, sha256=hashlib.sha256(b"original").hexdigest())
-    stored = []
-    released = []
+    events = []
+    receipts = []
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, path, receipt):
+            receipts.append(receipt)
+            events.append("ack" if receipt.completed else "begin")
 
     class Response:
-        status_code = 412 if fault == "conflict" else 503
+        status_code = {"ok": 200, "conflict": 412, "unavailable": 503, "denied": 403}.get(fault, 200)
 
         def __enter__(self):
             return self
@@ -721,29 +738,29 @@ def test_artifact_write_reconciles_remote_ack_and_verifies_bytes(monkeypatch, tm
             pass
 
     def put(*args, **kwargs):
+        assert events == ["begin"]
+        events.append("put")
         assert kwargs["headers"]["If-None-Match"] == "*"
         if fault == "lost_ack":
             raise requests.ConnectionError("lost response")
         return Response()
 
-    def get(*_):
-        stored.append(True)
-        return SimpleNamespace(stream=lambda _: iter([b"original"]), close=lambda: released.append("close"), release_conn=lambda: released.append("release"))
-
-    service = Artifacts.__new__(Artifacts)
+    service = artifacts.Artifacts.__new__(artifacts.Artifacts)
+    service.settings = object()
     service.bucket = "derived"
-    service.client = SimpleNamespace(presigned_put_object=lambda *args, **kwargs: "https://fixture.invalid", get_object=get)
+    service.client = SimpleNamespace(presigned_put_object=lambda *args, **kwargs: "https://fixture.invalid")
+    service.read = lambda *_: events.append("verify")
+    monkeypatch.setattr(artifacts, "ManagerClient", Client)
     monkeypatch.setattr(requests, "put", put)
-    if fault == "unavailable":
-        with pytest.raises(ManagerError):
-            service.put("generation/", source, artifact)
-        assert not stored
+    if fault in ("lost_ack", "unavailable", "denied"):
+        with pytest.raises((requests.ConnectionError, ManagerError)):
+            service.put(descriptor, source, artifact)
+        assert events == (["begin", "put", "ack"] if fault == "denied" else ["begin", "put"])
     else:
-        service.put("generation/", source, artifact)
-        assert released == ["close", "release"]
-        artifact.sha256 = "0" * 64
-        with pytest.raises(ManagerError, match="integrity_failure"):
-            service.put("generation/", source, artifact)
+        service.put(descriptor, source, artifact)
+        assert events == ["begin", "put", "ack", "verify"]
+        assert receipts[0].write_id == receipts[1].write_id
+        assert receipts[0].generation == descriptor.generation
 
 
 def test_manager_http_transient_failure_is_retryable_and_refreshes_auth():
@@ -906,7 +923,7 @@ def test_managed_tabular_pipeline_publishes_complete_datasets_without_vector_dep
     (extracted / "policy.json").write_text(profile.model_dump_json())
     objects, commits = {}, []
     artifacts = Artifacts.__new__(Artifacts)
-    artifacts.put = lambda prefix, path, artifact: objects.__setitem__(prefix + artifact.path, path.read_bytes())
+    artifacts.put = lambda d, path, artifact: objects.__setitem__(d.output_prefix + artifact.path, path.read_bytes())
     artifacts.read = lambda prefix, artifact, destination: (destination.parent.mkdir(parents=True, exist_ok=True), destination.write_bytes(objects[prefix + artifact.path]))
     pipeline, vectors = scoped_pipeline(app_context, descriptor, extracted, artifacts, include_output=False)
     assert vectors is None
@@ -1063,3 +1080,172 @@ def test_email_facts_cross_extraction_boundary_and_indexing_restore(descriptor, 
         assert result.identity.title is None
     if fixture == "forwarded.eml":
         assert result.identity.title == "Fwd: quarterly figures"
+
+
+@pytest.mark.parametrize("outcome", ["ok", "timeout", "rejected", "server_error", "cancelled"])
+def test_vector_network_write_acknowledges_only_definite_outcomes(monkeypatch, descriptor, outcome):
+    from fred_knowledge.vector.base_vector_store import vector_write_observer
+    from fred_knowledge.vector.opensearch_vector_store import ObservedRequestsHttpConnection
+    from opensearchpy import RequestsHttpConnection
+    from opensearchpy.exceptions import ConnectionTimeout, TransportError
+
+    from knowledge_flow_worker.features.manager_processing import artifacts
+
+    events = []
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, path, body):
+            events.append("ack" if body.completed else "begin")
+
+    def request(*args, **kwargs):
+        events.append("network")
+        if outcome == "timeout":
+            raise ConnectionTimeout("N/A", "lost response")
+        if outcome == "rejected":
+            raise TransportError(429, "rejected")
+        if outcome == "server_error":
+            raise TransportError(503, "unavailable")
+        if outcome == "cancelled":
+            raise KeyboardInterrupt()
+        return 200, {}, b"{}"
+
+    monkeypatch.setattr(artifacts, "ManagerClient", Client)
+    monkeypatch.setattr(RequestsHttpConnection, "perform_request", request)
+    writer = artifacts.Artifacts.__new__(artifacts.Artifacts)
+    writer.settings = object()
+    connection = ObservedRequestsHttpConnection.__new__(ObservedRequestsHttpConnection)
+    token = vector_write_observer.set(SimpleNamespace(writing=lambda: writer.writing(descriptor)))
+    try:
+        if outcome == "ok":
+            assert connection.perform_request("POST", "/_bulk")[0] == 200
+        else:
+            with pytest.raises((TransportError, KeyboardInterrupt)):
+                connection.perform_request("POST", "/_bulk")
+        assert events == (["begin", "network", "ack"] if outcome in ("ok", "rejected") else ["begin", "network"])
+    finally:
+        vector_write_observer.reset(token)
+    # A different context never inherits this conversation's writer receipt.
+    events.clear()
+    if outcome == "ok":
+        connection.perform_request("POST", "/_bulk")
+        assert events == ["network"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [None, "parse", "cleanup", "unconfirmed"])
+async def test_workspace_receipt_only_releases_after_known_stop_and_cleanup(monkeypatch, tmp_path, descriptor, failure):
+    from knowledge_flow_worker.features.manager_processing import service
+    from knowledge_flow_worker.features.scheduler.activity_utils import ThreadStopUnconfirmed
+
+    receipts = []
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, path, body):
+            receipts.append(body)
+
+    monkeypatch.setattr(service, "ManagerClient", Client)
+    monkeypatch.setattr(service.tempfile, "gettempdir", lambda: str(tmp_path))
+    if failure == "cleanup":
+        monkeypatch.setattr(service.shutil, "rmtree", lambda _: (_ for _ in ()).throw(OSError("cleanup failed")))
+    worker = service.ManagedIngestionService.__new__(service.ManagedIngestionService)
+    worker.descriptor, worker.settings = descriptor, object()
+    directory = None
+
+    async def run():
+        nonlocal directory
+        async with worker.workspace() as directory:
+            (directory / "private.txt").write_text("conversation bytes")
+            assert len(receipts) == 1 and receipts[0].workspace and not receipts[0].completed
+            if failure == "parse":
+                raise ValueError("invalid document")
+            if failure == "unconfirmed":
+                raise ThreadStopUnconfirmed("child outcome unknown")
+
+    if failure:
+        with pytest.raises((ValueError, OSError, ThreadStopUnconfirmed)):
+            await run()
+    else:
+        await run()
+    assert directory is not None
+    if failure in ("cleanup", "unconfirmed"):
+        assert directory.exists()
+        assert len(receipts) == 1
+    else:
+        assert not directory.exists()
+        assert len(receipts) == 2 and receipts[1].completed
+        assert receipts[0].write_id == receipts[1].write_id
+
+
+@pytest.mark.asyncio
+async def test_cancelled_workspace_does_not_ack_when_thread_can_still_write(monkeypatch, tmp_path, descriptor):
+    import asyncio
+    import threading
+
+    from knowledge_flow_worker.features.manager_processing import service
+    from knowledge_flow_worker.features.scheduler import activity_utils
+
+    receipts = []
+    entered, release, stopped = threading.Event(), threading.Event(), threading.Event()
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, path, body):
+            receipts.append(body)
+
+    monkeypatch.setattr(service, "ManagerClient", Client)
+    monkeypatch.setattr(service.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(activity_utils, "THREAD_CANCEL_DRAIN_MAX_SECONDS", 0.01)
+    worker = service.ManagedIngestionService.__new__(service.ManagedIngestionService)
+    worker.descriptor, worker.settings = descriptor, object()
+    directory = None
+
+    def writing():
+        entered.set()
+        release.wait(5)
+        (directory / "late.txt").write_text("late content")
+        stopped.set()
+
+    async def run():
+        nonlocal directory
+        async with worker.workspace() as directory:
+            await activity_utils.to_thread_with_heartbeat(writing, require_thread_stop=True)
+
+    task = asyncio.create_task(run())
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        task.cancel()
+        with pytest.raises(activity_utils.ThreadStopUnconfirmed):
+            await task
+        assert len(receipts) == 1 and directory.exists()
+        release.set()
+        assert await asyncio.to_thread(stopped.wait, 5)
+        assert (directory / "late.txt").exists()
+        assert len(receipts) == 1, "a detached writer must not lose its durable receipt"
+    finally:
+        release.set()

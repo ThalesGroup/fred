@@ -114,12 +114,17 @@ async def await_with_heartbeat(
                 _ = await task
 
 
+class ThreadStopUnconfirmed(RuntimeError):
+    """A managed workspace must retain its durable write receipt."""
+
+
 async def to_thread_with_heartbeat(
     func: Callable[..., T],
     *args: Any,
     heartbeat_details: dict[str, Any] | None = None,
     heartbeat_interval_seconds: float = 5.0,
     drain_on_cancel: bool = False,
+    require_thread_stop: bool = False,
     **kwargs: Any,
 ) -> T:
     """
@@ -179,17 +184,22 @@ async def to_thread_with_heartbeat(
                 heartbeat_interval_seconds=heartbeat_interval_seconds,
                 cancel_on_exit=False,
             )
-        except asyncio.CancelledError:
-            # Signal explicitly before draining — the scope also sets it on
-            # exit, but the drain below needs the thread reacting *now*.
+        except BaseException:
             cancel_signal.set()
-            if drain_on_cancel:
-                await _drain_cancelled_thread(
-                    thread_done,
-                    thread_outcome,
-                    heartbeat_details=heartbeat_details or {},
-                    heartbeat_interval_seconds=heartbeat_interval_seconds,
-                )
+            if drain_on_cancel or require_thread_stop:
+                try:
+                    await _drain_cancelled_thread(
+                        thread_done,
+                        thread_outcome,
+                        heartbeat_details=heartbeat_details or {},
+                        heartbeat_interval_seconds=heartbeat_interval_seconds,
+                    )
+                except BaseException:
+                    if require_thread_stop and not thread_done.is_set():
+                        raise ThreadStopUnconfirmed("workspace writer still running") from None
+                    raise
+            if require_thread_stop and not thread_done.is_set():
+                raise ThreadStopUnconfirmed("workspace writer still running") from None
             raise
         finally:
             if not task.done():

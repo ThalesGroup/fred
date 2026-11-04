@@ -4,10 +4,12 @@
 
 import asyncio
 import json
+import shutil
+import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import cast, get_args
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fred_core.documents.document_structures import DocumentMetadata, FileInfo, Identity, ProcessingStage, ProcessingStatus, SourceInfo, SourceType
 from fred_core.documents.processing_profile import IngestionProcessingProfile
@@ -18,8 +20,9 @@ from knowledge_flow_worker.application_context import EXTENSION_CATEGORY, Applic
 from knowledge_flow_worker.common.processing_profile_context import processing_profile_scope
 from knowledge_flow_worker.features.manager_processing.artifacts import Artifacts
 from knowledge_flow_worker.features.manager_processing.client import ManagerClient, ManagerError, raise_permanent_failure
-from knowledge_flow_worker.features.manager_processing.contracts import Claim, Commit, Descriptor, Failure, FailureCode, Stage, Work
+from knowledge_flow_worker.features.manager_processing.contracts import Claim, Commit, Descriptor, Failure, FailureCode, Stage, Work, WriteReceipt
 from knowledge_flow_worker.features.manager_processing.persistence import scoped_pipeline
+from knowledge_flow_worker.features.scheduler.activity_utils import ThreadStopUnconfirmed, to_thread_with_heartbeat
 
 
 class ManagedIngestionService:
@@ -36,6 +39,33 @@ class ManagedIngestionService:
         self.vectors = None
         self.output_finished = False
         self.failure_code: FailureCode = "indexing_failed" if descriptor.stage == "indexing" else "extraction_failed"
+
+    def _open_workspace(self):
+        d = self.descriptor
+        receipt = WriteReceipt(work=d.work, generation=d.generation, write_id=uuid4(), completed=False, workspace=True)
+        with ManagerClient(self.settings) as client:
+            client.post(f"/document-processing/{d.work.processing_id}/writes", receipt)
+        directory = Path(tempfile.gettempdir()) / f"manager-{d.generation}-{receipt.write_id}"
+        directory.mkdir(mode=0o700)
+        return directory, receipt
+
+    def _close_workspace(self, directory, receipt):
+        shutil.rmtree(directory)
+        with ManagerClient(self.settings) as client:
+            client.post(f"/document-processing/{receipt.work.processing_id}/writes", receipt.model_copy(update={"completed": True}))
+
+    @asynccontextmanager
+    async def workspace(self):
+        directory, receipt = await to_thread_with_heartbeat(self._open_workspace, require_thread_stop=True)
+        stopped = True
+        try:
+            yield directory
+        except ThreadStopUnconfirmed:
+            stopped = False
+            raise
+        finally:
+            if stopped:
+                await to_thread_with_heartbeat(self._close_workspace, directory, receipt, require_thread_stop=True)
 
     @property
     def extraction_context(self) -> str:
@@ -67,10 +97,12 @@ class ManagedIngestionService:
         return metadata
 
     def _prepare(self):
-        with TemporaryDirectory(prefix="manager-policy-") as temporary:
-            directory = Path(temporary)
+        directory, receipt = self._open_workspace()
+        try:
             (directory / "policy.json").write_text(json.dumps(self.descriptor.profile_settings))
             self._commit(directory)
+        finally:
+            self._close_workspace(directory, receipt)
 
     def _commit(self, output: Path, metadata: DocumentMetadata | None = None):
         d = self.descriptor
@@ -134,7 +166,7 @@ class ManagedIngestionService:
         if any(status == ProcessingStatus.FAILED for status in metadata.processing.stages.values()):
             await asyncio.to_thread(self._abandon)
         elif self.output_finished and self.output_dir is not None:
-            await asyncio.to_thread(self._commit, self.output_dir, metadata)
+            await to_thread_with_heartbeat(self._commit, self.output_dir, metadata, require_thread_stop=True)
         return True
 
     def record_failure(self, error: BaseException | None):

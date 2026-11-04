@@ -3,14 +3,16 @@
 """Immutable generation-scoped objects, shared by execution and cleanup."""
 
 import hashlib
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import requests
 from fred_knowledge.artifacts.reader import ArtifactReader, safe_path
 
-from knowledge_flow_worker.features.manager_processing.client import ManagerError
-from knowledge_flow_worker.features.manager_processing.contracts import Artifact, Descriptor, Manifest
+from knowledge_flow_worker.features.manager_processing.client import ManagerClient, ManagerError
+from knowledge_flow_worker.features.manager_processing.contracts import Artifact, Descriptor, Manifest, WriteReceipt
 
 
 def describe(path: Path, name: str) -> Artifact:
@@ -42,17 +44,34 @@ def adopt_output(descriptor: Descriptor, directory: Path, source: Path, name: st
 
 
 class Artifacts(ArtifactReader):
-    def put(self, prefix: str, path: Path, artifact: Artifact):
-        # A retried write can only confirm identical bytes, never overwrite a published object.
-        url = self.client.presigned_put_object(self.bucket, prefix + artifact.path, expires=timedelta(minutes=5))
-        try:
-            with path.open("rb") as body, requests.put(url, data=body, headers={"If-None-Match": "*", "Content-Type": "application/octet-stream"}, timeout=(5, 30), allow_redirects=False) as response:
-                if response.status_code not in (200, 201, 412):
-                    raise ManagerError("worker_failed")
-        except requests.RequestException:
-            # The acknowledgment can be lost after S3 accepted the object.
-            pass
-        self.read(prefix, artifact)
+    def __init__(self, settings):
+        super().__init__(settings)
+        self.settings = settings
+
+    @contextmanager
+    def writing(self, descriptor: Descriptor):
+        """Only the thread that observes a terminal remote response acknowledges.
+
+        Never acknowledge in finally: cancellation, timeout and process loss leave
+        durable uncertainty, even if a subsequent GET sees the requested bytes.
+        """
+        receipt = WriteReceipt(work=descriptor.work, generation=descriptor.generation, write_id=uuid4(), completed=False)
+        path = f"/document-processing/{descriptor.work.processing_id}/writes"
+        with ManagerClient(self.settings) as client:
+            client.post(path, receipt)
+            yield
+            client.post(path, receipt.model_copy(update={"completed": True}))
+
+    def put(self, descriptor: Descriptor, path: Path, artifact: Artifact):
+        url = self.client.presigned_put_object(self.bucket, descriptor.output_prefix + artifact.path, expires=timedelta(minutes=5))
+        with path.open("rb") as body, self.writing(descriptor):
+            with requests.put(url, data=body, headers={"If-None-Match": "*", "Content-Type": "application/octet-stream"}, timeout=(5, 30), allow_redirects=False) as response:
+                status = response.status_code
+                if status >= 500:
+                    raise ManagerError("write_outcome_unknown")
+        if status not in (200, 201, 412):
+            raise ManagerError("worker_failed")
+        self.read(descriptor.output_prefix, artifact)
 
     def read(self, prefix: str, artifact: Artifact, destination: Path | None = None):
         if destination is None:
@@ -70,7 +89,7 @@ class Artifacts(ArtifactReader):
         if sum(a.size for a in artifacts) > descriptor.max_output_bytes:
             raise ManagerError("capacity_exceeded", permanent=True)
         for artifact in artifacts:
-            self.put(descriptor.output_prefix, directory / artifact.path, artifact)
+            self.put(descriptor, directory / artifact.path, artifact)
         return Manifest(generation=descriptor.generation, artifacts=artifacts, chunks=chunks, vectors=vectors, rows=rows)
 
     def restore(self, descriptor: Descriptor, directory: Path):

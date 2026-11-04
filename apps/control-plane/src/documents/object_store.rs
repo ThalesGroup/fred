@@ -15,7 +15,7 @@ use aws_sdk_s3::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use super::config::ContentConfig;
 
@@ -48,7 +48,7 @@ impl ObjectStore {
             .endpoint_url(&config.endpoint)
             .force_path_style(config.force_path_style)
             .credentials_provider(Credentials::new(access, secret, None, None, "fred-content"))
-            .retry_config(RetryConfig::standard().with_max_attempts(2))
+            .retry_config(RetryConfig::standard().with_max_attempts(1))
             .timeout_config(
                 TimeoutConfig::builder()
                     .connect_timeout(Duration::from_secs(3))
@@ -176,9 +176,42 @@ impl ObjectStore {
         size: i64,
         digest: &[u8; 32],
     ) -> Result<()> {
-        let body = ByteStream::from_path(path)
-            .await
-            .context("cannot reopen upload spool")?;
+        let (_, outcome) = self.put(key, path, size, digest).await;
+        outcome?;
+        self.verify(key, size, digest).await
+    }
+
+    /// The boolean certifies that no request is still in flight. Read-back alone
+    /// cannot establish that fact after a timeout; automatic PUT retries are disabled.
+    pub async fn put(
+        &self,
+        key: &str,
+        path: &Path,
+        size: i64,
+        digest: &[u8; 32],
+    ) -> (bool, Result<()>) {
+        let file = match tokio::fs::File::open(path).await {
+            Ok(file) => file,
+            Err(error) => return (true, Err(error).context("cannot reopen upload spool")),
+        };
+        self.put_file(key, file, size, digest).await
+    }
+
+    pub async fn put_file(
+        &self,
+        key: &str,
+        mut file: tokio::fs::File,
+        size: i64,
+        digest: &[u8; 32],
+    ) -> (bool, Result<()>) {
+        // FsBuilder only seeks for a nonzero offset; the spool is positioned at EOF.
+        if let Err(error) = file.rewind().await {
+            return (true, Err(error).context("cannot rewind upload spool"));
+        }
+        let body = match ByteStream::read_from().file(file).build().await {
+            Ok(body) => body,
+            Err(error) => return (true, Err(error).context("cannot read upload spool")),
+        };
         let result = self
             .client
             .put_object()
@@ -194,16 +227,17 @@ impl ObjectStore {
             .body(body)
             .send()
             .await;
-        // A lost acknowledgment or 412 after retry is settled by the same integrity check.
-        if let Err(error) = &result {
-            tracing::warn!(
-                storage_operation = "put",
-                outcome = "uncertain",
-                retryable = error.as_service_error().is_none(),
-                "content write requires verification"
-            );
+        match result {
+            Ok(_) => (true, Ok(())),
+            Err(error) => {
+                let status = error.raw_response().map(|r| r.status().as_u16());
+                if status == Some(412) {
+                    return (true, Ok(()));
+                }
+                let certain = status.is_some_and(|s| (400..500).contains(&s));
+                (certain, Err(anyhow::anyhow!("content write failed")))
+            }
         }
-        self.verify(key, size, digest).await
     }
 
     /// Streaming read-back works even when an S3-compatible provider omits checksums.
@@ -284,6 +318,27 @@ impl ObjectStore {
             .await
             .map_err(|_| anyhow::anyhow!("content cleanup failed"))?;
         Ok(())
+    }
+
+    pub async fn absent(&self, key: &str) -> Result<bool> {
+        match self
+            .client
+            .head_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await
+        {
+            Ok(_) => Ok(false),
+            Err(error)
+                if error
+                    .raw_response()
+                    .is_some_and(|r| r.status().as_u16() == 404) =>
+            {
+                Ok(true)
+            }
+            Err(_) => bail!("cannot verify content deletion"),
+        }
     }
 
     /// A bounded inventory page; the durable cursor is advanced only after processing it.

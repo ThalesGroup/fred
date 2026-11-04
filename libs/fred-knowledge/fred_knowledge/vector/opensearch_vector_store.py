@@ -273,6 +273,29 @@ def scan_document_uids_composite(
         return []
 
 
+class ObservedRequestsHttpConnection(RequestsHttpConnection):
+    """Journal actual bulk requests, after embedding and immediately before I/O."""
+
+    def perform_request(self, method, url, *args, **kwargs):
+        from fred_knowledge.vector.base_vector_store import vector_write_observer
+
+        observer = vector_write_observer.get()
+        scope = observer.writing() if observer is not None and url.split("?", 1)[0].endswith("/_bulk") else nullcontext()
+        from opensearchpy.exceptions import TransportError
+
+        rejected = None
+        with scope:
+            try:
+                return super().perform_request(method, url, *args, **kwargs)
+            except TransportError as error:
+                if not isinstance(error.status_code, int) or not 400 <= error.status_code < 500:
+                    raise
+                # A definite server rejection completed this physical attempt.
+                # Bulk item failures are returned normally and inspected upstream.
+                rejected = error
+        raise rejected
+
+
 class OpenSearchVectorStoreAdapter(BaseVectorStore):
     """
     Fred — OpenSearch-backed Vector Store (LangChain for ANN + OS client for lexical/phrase).
@@ -325,7 +348,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             http_auth=(username, password),
             use_ssl=secure,
             verify_certs=verify_certs,
-            connection_class=RequestsHttpConnection,
+            connection_class=ObservedRequestsHttpConnection,
             ssl_show_warn=False,
         )
 
@@ -354,6 +377,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 use_ssl=self._secure,
                 verify_certs=self._verify_certs,
                 http_auth=(self._username, self._password),
+                connection_class=ObservedRequestsHttpConnection,
                 pool_maxsize=20,
                 bulk_size=self._bulk_size,
             )
@@ -1044,10 +1068,17 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
         try:
             body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
+            if getattr(self, "strict_operations", False):
+                refreshed = self._client.indices.refresh(index=self._index)
+                shards = refreshed.get("_shards", {})
+                if shards.get("failed", 0) or shards.get("successful") != shards.get("total") or "total" not in shards:
+                    raise RuntimeError("Vector refresh was incomplete.")
             # conflicts="proceed": the purge is idempotent and may race a second pass on a
             # cancelled ingestion. refresh: deleted chunks must stop being searchable and
             # counted when this returns, like the per-document update paths below.
             resp = self._client.delete_by_query(index=self._index, body=body, params={"conflicts": "proceed", "refresh": "true"})
+            if resp.get("timed_out") or resp.get("failures") or resp.get("version_conflicts", 0):
+                raise RuntimeError("Vector deletion was incomplete.")
             deleted = int(resp.get("deleted", 0))
             logger.info("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
         except Exception:
@@ -1062,6 +1093,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         try:
             body = {"query": {"term": {"metadata.document_uid": {"value": document_uid}}}}
             resp = self._client.count(index=self._index, body=body)
+            if getattr(self, "strict_operations", False):
+                shards = resp.get("_shards", {})
+                if shards.get("failed", 0) or shards.get("successful") != shards.get("total") or "total" not in shards or "count" not in resp:
+                    raise RuntimeError("Vector count was incomplete.")
             count = int(resp.get("count", 0))
             logger.debug(
                 "[VECTOR][OPENSEARCH] counted %s vector chunks for document_uid=%s in index=%s",
@@ -1071,6 +1106,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             )
             return count
         except Exception:
+            if getattr(self, "strict_operations", False):
+                raise
             logger.exception(
                 "[VECTOR][OPENSEARCH] failed to count vector chunks for document_uid=%s in index=%s",
                 document_uid,

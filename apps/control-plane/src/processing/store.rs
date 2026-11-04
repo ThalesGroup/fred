@@ -41,6 +41,7 @@ pub struct Generation {
     pub vector_ordinals: Option<Vec<i32>>,
     pub rows: Option<i64>,
     pub cleanup_cursor: i32,
+    pub pending_writes: Vec<Uuid>,
     pub cleaned_at: Option<DateTime<Utc>>,
 }
 

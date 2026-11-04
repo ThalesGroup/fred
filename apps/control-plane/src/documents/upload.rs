@@ -23,7 +23,7 @@ use crate::{
 };
 
 pub(crate) struct Spool {
-    pub path: tempfile::TempPath,
+    pub file: tokio::fs::File,
     pub name: String,
     pub mime: String,
     pub size: i64,
@@ -157,8 +157,19 @@ impl Storage {
             return Ok((false, row.receipt));
         }
         let outcome = async {
+            let (certain, result) = self
+                .objects
+                .put_file(&row.object_key, spool.file, spool.size, &spool.digest)
+                .await;
+            if certain {
+                sqlx::query("update document_upload set put_pending=false where id=$1")
+                    .bind(row.id)
+                    .execute(&self.pool)
+                    .await?;
+            }
+            result.map_err(|_| unavailable())?;
             self.objects
-                .put_verified(&row.object_key, &spool.path, spool.size, &spool.digest)
+                .verify(&row.object_key, spool.size, &spool.digest)
                 .await
                 .map_err(|_| unavailable())?;
             self.publish(user, destination, &row, processing).await
@@ -182,11 +193,12 @@ impl Storage {
 
     async fn spool(&self, mut multipart: Multipart) -> AppResult<Spool> {
         let path = self.temp.path().to_owned();
-        let file = tokio::task::spawn_blocking(move || tempfile::NamedTempFile::new_in(path))
+        let file = tokio::task::spawn_blocking(move || tempfile::tempfile_in(path))
             .await
             .map_err(|_| unavailable())?
             .map_err(|_| unavailable())?;
-        let (file, path) = file.into_parts();
+        // An anonymous spool has no durable pathname, including before reservation.
+        // Its inode is released on close or process loss; other replicas need no reaper.
         let mut file = tokio::fs::File::from_std(file);
         let mut field = tokio::time::timeout(self.idle(), multipart.next_field())
             .await
@@ -237,7 +249,7 @@ impl Storage {
         }
         file.flush().await.map_err(|_| unavailable())?;
         Ok(Spool {
-            path,
+            file,
             name,
             mime,
             size,
@@ -416,7 +428,7 @@ impl Storage {
                 "The encoded document path exceeds the object-store key limit",
             ));
         }
-        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),$15,$16) returning *, null::uuid as document_id")
+        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile,put_pending) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),$15,$16,true) returning *, null::uuid as document_id")
             .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space.id).bind(folder_id).bind(session_id).bind(owner)
             .bind(&file.name).bind(&file.mime).bind(file.size).bind(&digest).bind(object_key)
             .bind(self.config.limits.lease_seconds() as f64).bind(predecessor.as_ref().map(|p|p.id)).bind(profile).fetch_one(&mut *tx).await?;
