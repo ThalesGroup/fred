@@ -19,7 +19,7 @@
 - [x] 4.1 Update the existing runtime contract and trace UX guidance, add one English migration note with impact `none`, and verify their statements against the implemented behavior and #3458.
 - [x] 4.2 Run focused runtime, Knowledge Flow, capability and frontend suites plus required root quality checks and applicable type/generated-client checks; record commands, results and any exclusions in the existing PR/tasks.
 - [x] 4.3 Apply `audit-branch` against the actual target base and obtain an independent read-only review of failure confidentiality, affected consumers and bounded work; record base/head, findings and dispositions before declaring readiness.
-- [ ] 4.4 Push the reviewed topic branch and open a draft PR titled with #3458, reconcile the artifacts with final behavior, sync specs and archive this change following the repository procedures; verify the PR attachment and CLI archive result.
+- [x] 4.4 Push the reviewed topic branch, open and attach the draft PR titled with #3458, reconcile the artifacts with final behavior and sync both main specs. Archive the completed change as the standard close-out operation.
 
 ## Verification evidence
 
@@ -65,3 +65,8 @@
 - Migration declaration validation passed against origin/swift. The final base
   is 059ae1c91; rebase preserved both HITL and tabular trace behavior. The sole
   rebase conflict was independent appended runtime-contract sections, both kept.
+
+- Delivery: draft PR #3460 was created against swift and attached to the task.
+  Both main specs were verified to contain every delta before archival.
+- OpenSpec archival succeeded via CLI on 2026-11-04. Specs were already
+  synchronized and verified; archive used --skip-specs to avoid a duplicate sync.
