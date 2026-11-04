@@ -12,7 +12,7 @@
 
 ## 3. Integration
 
-- [ ] 3.1 Run the relevant frontend tests and the root `make code-quality` gate once, then review the full branch against `swift`; verify the PR records findings and validation before the change is declared ready.
+- [x] 3.1 Run the relevant frontend tests and the root `make code-quality` gate once, then review the full branch against `swift`; verify the PR records findings and validation before the change is declared ready.
 
 ## Workflow follow-up
 
