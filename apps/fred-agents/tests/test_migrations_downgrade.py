@@ -36,18 +36,33 @@ def test_cli_downgrades_only_selected_tree(tmp_path: Path, monkeypatch) -> None:
     assert "runtime_web_research_activity" in tables
     assert "runtime_turn_steering" in tables
     assert "cap_writable_document_docs" in tables
-    assert runtime_revision == "a7b8c9d0e1f2"  # pragma: allowlist secret
-    assert capability_revision == "w1r2i3t4a5b6"  # pragma: allowlist secret
+    assert runtime_revision == "c9d0e1f2a3b4"  # pragma: allowlist secret
+    assert capability_revision == "w2r3i4t5a6b7"  # pragma: allowlist secret
+
+    # Ownership migrations advance SQLite's revision without changing its schema.
+    # PostgreSQL deliberately refuses these downgrades to preserve purge fencing.
+    for expected_revision in (
+        "b8c9d0e1f2a3",  # pragma: allowlist secret
+        "a7b8c9d0e1f2",  # pragma: allowlist secret
+        "f6a7b8c9d0e1",  # pragma: allowlist secret
+    ):
+        assert main(["downgrade", "runtime", "-1"]) == 0
+        tables, runtime_revision, capability_revision = _database_state(database_path)
+        assert "runtime_web_research_activity" in tables
+        assert "runtime_turn_steering" in tables
+        assert "cap_writable_document_docs" in tables
+        assert runtime_revision == expected_revision
+        assert capability_revision == "w2r3i4t5a6b7"  # pragma: allowlist secret
 
     assert main(["downgrade", "runtime", "-1"]) == 0
     tables, runtime_revision, capability_revision = _database_state(database_path)
     assert "runtime_web_research_activity" in tables
-    assert "runtime_turn_steering" in tables
+    assert "runtime_turn_steering" not in tables
     assert "cap_writable_document_docs" in tables
-    assert runtime_revision == "f6a7b8c9d0e1"  # pragma: allowlist secret
-    assert capability_revision == "w1r2i3t4a5b6"  # pragma: allowlist secret
+    assert runtime_revision == "e5f6a7b8c9d0"  # pragma: allowlist secret
+    assert capability_revision == "w2r3i4t5a6b7"  # pragma: allowlist secret
 
-    assert main(["downgrade", "runtime", "-1"]) == 0
+    assert main(["downgrade", "capability:writable_document", "-1"]) == 0
     tables, runtime_revision, capability_revision = _database_state(database_path)
     assert "runtime_web_research_activity" in tables
     assert "runtime_turn_steering" not in tables
@@ -68,5 +83,5 @@ def test_cli_downgrades_only_selected_tree(tmp_path: Path, monkeypatch) -> None:
     assert "runtime_web_research_activity" in tables
     assert "runtime_turn_steering" in tables
     assert "cap_writable_document_docs" in tables
-    assert runtime_revision == "a7b8c9d0e1f2"  # pragma: allowlist secret
-    assert capability_revision == "w1r2i3t4a5b6"  # pragma: allowlist secret
+    assert runtime_revision == "c9d0e1f2a3b4"  # pragma: allowlist secret
+    assert capability_revision == "w2r3i4t5a6b7"  # pragma: allowlist secret
