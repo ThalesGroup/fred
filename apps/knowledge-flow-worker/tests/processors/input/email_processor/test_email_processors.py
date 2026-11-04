@@ -20,13 +20,16 @@ from pathlib import Path
 
 import pytest
 
+from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType
+
 from knowledge_flow_worker.core.processors.input.common.base_input_processor import InputValidationError
 from knowledge_flow_worker.core.processors.input.email_processor import email_message_parser
 from knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor import EmailMarkdownProcessor
 from knowledge_flow_worker.core.processors.input.email_processor.email_message_parser import ATTACHED_MESSAGE_UNREADABLE, BODY_NOT_EXTRACTABLE, EncryptedEmailError
 from knowledge_flow_worker.core.processors.input.fast_text_processor.base_fast_text_processor import FastTextOptions
 from knowledge_flow_worker.core.processors.input.fast_text_processor.fast_email_processor import FastEmailProcessor
-from knowledge_flow_worker.features.scheduler.extraction_process import _is_permanent
+from knowledge_flow_worker.core.processors.output.vectorization_processor.vectorization_utils import flat_metadata_from
+from knowledge_flow_worker.features.scheduler.extraction_process import _apply_email_metadata, _is_permanent
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -64,6 +67,39 @@ def test_malformed_ole_container_is_permanent(tmp_path):
 def _library_markdown(file_path: Path, output_dir: Path) -> str:
     result = EmailMarkdownProcessor().convert_file_to_markdown(file_path, output_dir, None)
     return Path(result["md_file"]).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("fixture", ["plain_with_attachments.eml", "plain_with_attachments.msg"])
+def test_library_email_metadata_crosses_extraction_process_boundary(tmp_path, fixture):
+    file_path = FIXTURES / fixture
+    metadata = DocumentMetadata(
+        identity=Identity(document_uid="test-uid", document_name=file_path.name),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
+    )
+    EmailMarkdownProcessor().convert_file_to_markdown(file_path, tmp_path, None)
+
+    _apply_email_metadata(tmp_path, metadata)
+
+    assert metadata.identity.title
+    assert metadata.identity.author
+    assert metadata.identity.created
+    assert metadata.extensions is not None
+    assert metadata.extensions["email"]["to"]
+    assert metadata.extensions["email"]["cc"]
+    assert metadata.extensions["email"]["message_id"]
+    assert "bcc" not in metadata.extensions["email"]
+    assert flat_metadata_from(metadata)["author"] == metadata.identity.author
+    assert not (tmp_path / "email-metadata.json").exists()
+
+
+def test_library_email_metadata_rejects_missing_sidecar(tmp_path):
+    metadata = DocumentMetadata(
+        identity=Identity(document_uid="test-uid", document_name="message.eml"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
+    )
+
+    with pytest.raises(ValueError, match="missing"):
+        _apply_email_metadata(tmp_path, metadata)
 
 
 @pytest.mark.parametrize(

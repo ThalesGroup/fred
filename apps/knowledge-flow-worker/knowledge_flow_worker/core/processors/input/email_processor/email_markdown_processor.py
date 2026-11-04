@@ -16,12 +16,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from knowledge_flow_worker.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 from knowledge_flow_worker.core.processors.input.email_processor.email_message_parser import (
     EMAIL_SUFFIXES,
     LIBRARY_MAX_BODY_CHARS,
+    email_extension,
     email_metadata,
     parse_email_file,
     render_email_markdown,
@@ -38,8 +40,19 @@ class EmailMarkdownProcessor(BaseMarkdownProcessor):
         return email_metadata(parse_email_file(file_path))
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
-        markdown = render_email_markdown(parse_email_file(file_path), max_body_chars=LIBRARY_MAX_BODY_CHARS)
+        parsed = parse_email_file(file_path)
+        markdown = render_email_markdown(parsed, max_body_chars=LIBRARY_MAX_BODY_CHARS)
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
         md_path.write_text(markdown, encoding="utf-8")
+        metadata = {
+            **email_metadata(parsed),
+            "title": parsed.subject or file_path.stem,
+            "email": email_extension(parsed),
+        }
+        sidecar = output_dir / "email-metadata.json"
+        encoded = json.dumps(metadata, default=str).encode("utf-8")
+        if len(encoded) > 65_536:
+            raise ValueError("Mail metadata is too large")
+        sidecar.write_bytes(encoded)
         return {"doc_dir": str(output_dir), "md_file": str(md_path)}

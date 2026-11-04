@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
+import json
 import logging
 import multiprocessing
 import os
@@ -689,6 +690,8 @@ async def extract_document(
             ),
             heartbeat=_heartbeat,
         )
+        if input_path.suffix.lower() in {".msg", ".eml"}:
+            _apply_email_metadata(output_dir, metadata)
     except ExtractionStopUnconfirmed:
         # Do not unwind the activity: that would delete working files and free
         # a slot while the extraction may still be using both.
@@ -705,6 +708,22 @@ async def extract_document(
         if exc.permanent:
             raise exceptions.ApplicationError(str(exc), type="ExtractionPermanentError", non_retryable=True) from exc
         raise
+
+
+def _apply_email_metadata(output_dir: pathlib.Path, metadata: DocumentMetadata) -> None:
+    sidecar = output_dir / "email-metadata.json"
+    if not sidecar.is_file() or sidecar.stat().st_size > 65_536:
+        raise ValueError("Mail metadata is missing or too large")
+    fields = json.loads(sidecar.read_text(encoding="utf-8"))
+    sidecar.unlink()
+    if not isinstance(fields, dict) or not isinstance(fields.get("email"), dict):
+        raise ValueError("Mail metadata is invalid")
+    identity = {
+        **metadata.identity.model_dump(),
+        **{name: fields.get(name) for name in ("title", "author", "created")},
+    }
+    metadata.identity = type(metadata.identity).model_validate(identity)
+    metadata.extensions = {**(metadata.extensions or {}), "email": fields["email"]}
 
 
 def _attempt_timeout_seconds() -> int:
