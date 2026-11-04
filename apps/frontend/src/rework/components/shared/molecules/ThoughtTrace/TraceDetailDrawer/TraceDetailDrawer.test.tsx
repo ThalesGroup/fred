@@ -282,6 +282,8 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
 
   it.each([
     "AUTHENTICATION_REQUIRED: unrelated malformed provider content",
+    "Provider Error: password=example-secret",
+    "Authentication Error: access_token=example-token",
     "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying. extra provider text",
   ])("does not invent diagnoses from malformed catalog content: %s", (content) => {
     const html = renderToStaticMarkup(
@@ -293,6 +295,8 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
     expect(html).toContain("No further usable diagnostic");
     expect(html).not.toContain("Authentication was refused");
     expect(html).not.toContain("provider content");
+    expect(html).not.toContain("example-secret");
+    expect(html).not.toContain("example-token");
   });
 
   it("shows the actual submitted arguments and a safe cause without recovery advice", () => {

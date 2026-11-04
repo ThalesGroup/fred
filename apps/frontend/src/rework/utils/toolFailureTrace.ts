@@ -93,7 +93,7 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   const sqlFailure =
     query &&
     !errorKey &&
-    /^(?:[A-Z][A-Za-z]*(?: [A-Za-z]+){0,4} Error:|Invalid SQL query:|Exactly one SQL statement is allowed|Unable to parse SQL query|Query exceeded the per-query memory budget|Reading this dataset exceeded the per-query memory budget|Query references|Query uses|Table functions|No authorized|Description references|Empty SQL|Only SELECT)/.test(
+    /^(?:(?:Binder|Parser|Catalog|Conversion|Invalid Input|Invalid Type|Out of Range|Type Mismatch|Syntax) Error:|Invalid SQL query:|Exactly one SQL statement is allowed|Unable to parse SQL query|Query exceeded the per-query memory budget|Reading this dataset exceeded the per-query memory budget|Query references|Query uses|Table functions|No authorized|Description references|Empty SQL|Only SELECT)/.test(
       content,
     )
       ? asFailedSqlQueryResult(entry)

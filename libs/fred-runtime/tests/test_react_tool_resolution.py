@@ -279,14 +279,18 @@ async def test_caught_mcp_failure_keeps_safe_nonempty_feedback(
         body = {
             "detail": "private provider diagnostic https://provider.example/?token=secret"
         }
-        if transport != "legacy":
-            library = httpx2 if transport == "httpx2" else httpx
-            response = library.Response(
+        if transport == "httpx2":
+            httpx2.Response(
                 status,
                 json=body,
-                request=library.Request("GET", "https://provider.example"),
-            )
-            response.raise_for_status()
+                request=httpx2.Request("GET", "https://provider.example"),
+            ).raise_for_status()
+        elif transport == "httpx":
+            httpx.Response(
+                status,
+                json=body,
+                request=httpx.Request("GET", "https://provider.example"),
+            ).raise_for_status()
         raise RuntimeError(
             f"Error calling list_tabular_documents. Status code: {status}. Response: {json.dumps(body)}"
         )
