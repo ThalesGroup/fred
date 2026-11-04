@@ -702,3 +702,21 @@ describe("HitlPrompt keyboard", () => {
     container.remove();
   });
 });
+
+it.each(["unavailable", "unknown"] as const)("renders %s history as a notice without answer controls", (status) => {
+  const html = renderToStaticMarkup(
+    <HitlPrompt
+      event={{ ...event, payload: { ...event.payload, stage: "agent_question", question: "Choose a style" } }}
+      readonly
+      resumeStatus={status}
+      onAnswer={() => {}}
+      onRetryAvailability={() => {}}
+    />,
+  );
+  expect(html).toContain("Choose a style");
+  expect(html).toContain(`rework.hitlPrompt.${status}`);
+  expect(html).not.toContain("Proceed");
+  expect(html).not.toContain("chatbot.sendHitlAnswer");
+  expect(html).not.toContain("chatbot.skipHitlQuestion");
+  expect(html.includes("rework.hitlPrompt.retryAvailability")).toBe(status === "unknown");
+});

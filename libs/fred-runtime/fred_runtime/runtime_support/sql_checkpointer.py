@@ -753,6 +753,73 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             )
         return (await conn.execute(select(func.now()))).scalar_one()
 
+    async def aget_hitl_resume_state(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        occurrences: frozenset[tuple[str, str]],
+    ) -> tuple[list[tuple[str, str, Any]], frozenset[tuple[str, str]]] | None:
+        """Read only the latest interrupts and blocking claims, without channel blobs."""
+        await self._ensure_tables()
+        keys = {_hitl_claim_key(*identity): identity for identity in occurrences}
+        async with self.store.begin() as conn:
+            checkpoint_id = (
+                await conn.execute(
+                    select(self.checkpoints_table.c.checkpoint_id)
+                    .where(
+                        self.checkpoints_table.c.thread_id == thread_id,
+                        self.checkpoints_table.c.checkpoint_ns == checkpoint_ns,
+                    )
+                    .order_by(
+                        self.checkpoints_table.c.created_at.desc(),
+                        self.checkpoints_table.c.checkpoint_id.desc(),
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if checkpoint_id is None:
+                return None
+            rows = (
+                await conn.execute(
+                    select(self.writes_table).where(
+                        self.writes_table.c.thread_id == thread_id,
+                        self.writes_table.c.checkpoint_ns == checkpoint_ns,
+                        self.writes_table.c.checkpoint_id == checkpoint_id,
+                        self.writes_table.c.channel == "__interrupt__",
+                    )
+                )
+            ).all()
+            now = await self._db_now(conn)
+            cutoff = now - timedelta(seconds=self._hitl_claim_ttl_seconds)
+            blocked_keys = (
+                (
+                    await conn.execute(
+                        select(self.hitl_claim_table.c.interrupt_id).where(
+                            self.hitl_claim_table.c.thread_id == thread_id,
+                            self.hitl_claim_table.c.checkpoint_ns == checkpoint_ns,
+                            self.hitl_claim_table.c.interrupt_id.in_(keys),
+                            or_(
+                                self.hitl_claim_table.c.status
+                                != self._HITL_CLAIM_CLAIMED,
+                                self.hitl_claim_table.c.claimed_at >= cutoff,
+                            ),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        writes = [
+            (
+                str(row.task_id),
+                str(row.channel),
+                self.serde.loads_typed((str(row.value_type), bytes(row.value_blob))),
+            )
+            for row in rows
+        ]
+        return writes, frozenset(keys[key] for key in blocked_keys)
+
     async def aclaim_hitl_resume(
         self,
         *,

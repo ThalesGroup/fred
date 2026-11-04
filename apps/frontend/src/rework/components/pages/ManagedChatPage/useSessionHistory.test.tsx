@@ -111,6 +111,36 @@ describe("useSessionHistory serve-then-revalidate cache", () => {
     });
   };
 
+  it("explicit retry revalidates without restoring cached questions and ignores a late response after navigation", async () => {
+    fetchImpl = async () => okResponse([msg("old")]);
+    mount("A");
+    await act(async () => {});
+    onLoaded.mockClear();
+    const pending = deferred<ReturnType<typeof okResponse>>();
+    fetchImpl = () => pending.promise;
+    await act(async () => latest.reload());
+    expect(onLoaded).not.toHaveBeenCalled();
+    fetchImpl = async () => okResponse([msg("B")]);
+    render("B");
+    await act(async () => {});
+    onLoaded.mockClear();
+    await act(async () => pending.resolve(okResponse([msg("late-A")])));
+    expect(onLoaded).not.toHaveBeenCalled();
+  });
+
+  it("keeps another session's cached history readable after an explicit retry", async () => {
+    fetchImpl = async () => okResponse([msg("A")]);
+    mount("A");
+    await act(async () => {});
+    await act(async () => latest.reload());
+    setCachedSessionHistory("B", [msg("cached-B")]);
+    onLoaded.mockClear();
+    routeOverride = null;
+    render("B");
+    await act(async () => {});
+    expect(onLoaded).toHaveBeenCalledWith([msg("cached-B")]);
+  });
+
   const mount = (sessionId: string | null) => {
     container = document.createElement("div");
     document.body.appendChild(container);
