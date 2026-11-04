@@ -227,4 +227,26 @@ mod tests {
         );
         assert!(messages(&Conversation::new(), "empty").is_empty());
     }
+
+    #[test]
+    fn a_failed_search_replays_its_error_without_sources_or_reasoning() {
+        let conversation = Conversation::from_messages([
+            Message::user("question"),
+            serde_json::from_value(json!({"role":"assistant", "content":[
+                {"type":"reasoning", "text":"private thought"},
+                {"type":"toolcall", "id":{"provider":"call-search"}, "function":{
+                    "name":"search_documents", "arguments":{"query":"question"}}}
+            ]})).unwrap(),
+            serde_json::from_value(json!({"role":"user", "content":[{
+                "type":"toolresult", "call":{"provider":"call-search"}, "name":"search_documents",
+                "is_error":true, "content":[{"type":"text", "text":"Document search is unavailable or failed."}]
+            }]})).unwrap(),
+            Message::assistant("Search unavailable"),
+        ]);
+        let wire = serde_json::to_value(messages(&conversation, "session")).unwrap();
+        assert_eq!(wire.as_array().unwrap().len(), 4);
+        assert_eq!(wire[2]["parts"][0]["ok"], false);
+        assert_eq!(wire[3]["metadata"]["sources"], json!([]));
+        assert!(!wire.to_string().contains("private thought"));
+    }
 }
