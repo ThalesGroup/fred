@@ -5,7 +5,7 @@
 
 ## 2. Contextual trace details
 
-- [ ] 2.1 Extend `traceUtils.ts` and `TraceDetailDrawer` with curated failed-call explanations and authorized document-name context, preserving the attempted-SQL view; verify French/English rendering and unknown/historical diagnostics without exposing arbitrary content or arguments.
+- [ ] 2.1 Extend `traceUtils.ts` and `TraceDetailDrawer` to show recorded per-tool business arguments and the safe recorded error, preserving the attempted-SQL view; verify French/English rendering, invalid submitted identifiers and no-argument calls, with no next-step section or recovery advice and no exposed credentials/injected scope internals.
 - [ ] 2.2 Verify identical failed-call detail after live SSE handling and history reload, including a partially failed tool batch; use focused hook/drawer tests and a manual light/dark-theme check without adding a toast per failed call.
 
 ## 3. Concise tool guidance

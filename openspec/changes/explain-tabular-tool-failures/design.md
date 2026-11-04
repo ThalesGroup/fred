@@ -8,7 +8,7 @@ The follow-up investigation distinguishes API campaigns from browser use: all 15
 
 ## Goals / Non-Goals
 
-**Goals:** repair useful error feedback using existing result content and make tool instructions more precise without substantial prompt growth.
+**Goals:** repair useful error feedback using existing result content, show the call arguments and recorded error in an explanatory drawer, and make tool instructions more precise without substantial prompt growth.
 
 **Non-Goals:** change credential ownership or lifetime, pass refresh tokens to the pod, add retries or caches, substitute document identifiers, change models, or redesign trace navigation. Repeated-success prevention needs a separately agreed policy for freshness and deliberate repeats.
 
@@ -16,7 +16,7 @@ The follow-up investigation distinguishes API campaigns from browser use: all 15
 
 ### 1. Classify at the existing trusted source boundary
 
-In `common/context_aware_tool.py`, create non-empty Fred-owned text blocks for caught failures. Use a small fixed catalog based on a recognized HTTP envelope/status: invalid arguments, authentication required, unavailable document/scope, overload, timeout and generic service failure. Unknown exceptions use the existing generic message. Each catalog entry includes a short recovery instruction; it must not imply that an inaccessible document exists.
+In `common/context_aware_tool.py`, create non-empty Fred-owned text blocks for caught failures. Use a small fixed catalog based on a recognized HTTP envelope/status: invalid arguments, authentication required, unavailable document/scope, overload, timeout and generic service failure. Unknown exceptions use the existing generic message. Each catalog entry includes a short recovery instruction for the model; it must not imply that an inaccessible document exists.
 
 Only `read_query` HTTP 400 retains the existing already-redacted SQL detail. Keep `AuthorityLostError`, cancellation and other run-stop errors propagating. The MCP mount's existing generic authority-refusal behavior remains intact. Do not expose response bodies for other cases or infer permission causes from SQL alias rejection text. Fix the shared renderer's empty-block fallback as a defensive measure.
 
@@ -24,9 +24,11 @@ Reusing typed artifacts and text avoids a new diagnostic event, SDK field, histo
 
 ### 2. Extend the existing drawer with a curated failure view
 
-Dispatch failed calls before success-shape parsing in `TraceDetailDrawer`. Show the existing localized action and status, a safe cause, a next step when known, and duration. Resolve document names only from earlier authorized list/schema results in the same exchange; do not print opaque UIDs. Keep attempted SQL and the existing curated SQL diagnostic in the SQL view.
+Dispatch failed calls before success-shape parsing in `TraceDetailDrawer`. Show the existing localized action/status, the recorded call arguments and the error preserved by the trusted boundary. The drawer is explanatory: do not add a next-step section, reconnection advice or other recovery instructions. Recovery guidance supplied to the model remains outside this user-facing projection.
 
-For generic MCP failures, recognize only the fixed Fred-owned catalog messages, ignoring arbitrary appended or malformed content. Unknown or historical empty/unrecognized failures get a localized non-empty fallback explaining that no further diagnostic was recorded. Other arguments, provider content, URLs and traces remain hidden. Existing supported native-tool detail views retain their own trust rules. This preserves historical safety instead of displaying all failed-result content indiscriminately.
+For tabular calls, expose only their recorded business parameters: `document_uids`, `dataset_uids`, `sql`, `keyword`, `max_rows`, `max_rows_per_table` and `max_matching_tables` where the named tool supports them. Preserve actual submitted values, including mistyped UIDs, so the user can diagnose the invocation. Do not substitute inferred values or claim that these are the full HTTP wire arguments. Render no-argument discovery honestly. Keep SQL in its existing code view and the recorded identifiers in the argument block; human-readable document names can additionally come from earlier authorized results. Do not expose injected credentials, grants or runtime scope internals. Other tool argument schemas require their existing curated policy, not a blanket raw-arguments fallback.
+
+For generic MCP failures, recognize only the fixed Fred-owned catalog messages and display their diagnostic portion without their recovery hint, ignoring arbitrary appended or malformed content. Preserve the existing curated SQL engine error instead of replacing it with editorial advice. Unknown or historical empty/unrecognized failures get a localized non-empty fallback explaining that no further diagnostic was recorded. Provider content, private URLs and traces remain hidden. Existing supported native-tool detail views retain their own trust rules. This preserves historical safety instead of displaying all failed-result content indiscriminately.
 
 Use existing `ToolResultRuntimeEvent.content` and `ToolResultPart.content`, so live and reloaded conversations share the same parsing. Do not add raw diagnostic strings to trace-row summaries or toast every failed attempt; the row remains a failure and its existing drawer supplies the explanation. Use existing design-system tokens and French/English translations.
 
@@ -41,7 +43,7 @@ The seven-execution empty-result example filtered a string month by `2026-10-01`
 ## Risks / Trade-offs
 
 - Historical results cannot recover discarded causes -> show an honest fallback rather than inventing a diagnosis.
-- Broader display could expose untrusted content -> exact fixed-message recognition, the existing SQL-only detail exception, bounded display and adversarial regression cases.
+- Broader display could expose untrusted content -> per-tool business-argument allowlists, credential redaction, exact fixed-message recognition, the existing SQL-only detail exception, bounded display and adversarial regression cases.
 - Concise guidance cannot eliminate model reasoning errors -> validate representative calls and correctness; do not promise a reduction percentage from these synthetic campaigns.
 - Multiple tool calls and pods -> this adds no cross-request state or cache. Classification is bounded per result; resolve names once from the relevant exchange when opening the drawer, not on every streaming frame. Keep existing read and connection budgets.
 

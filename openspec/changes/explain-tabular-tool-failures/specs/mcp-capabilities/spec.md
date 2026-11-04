@@ -2,7 +2,7 @@
 
 ### Requirement: Caught MCP failures provide bounded non-empty feedback
 
-The runtime SHALL provide non-empty Fred-owned feedback for every caught MCP failure. Recognized failures SHALL explain a safe cause and appropriate next action. Unknown failures SHALL use a fixed generic message. Only the existing curated `read_query` HTTP 400 diagnostic SHALL expose dynamic SQL error detail. Provider response bodies, exception representations, credentials and private URLs MUST NOT become generic user-facing error text. Delegated authority refusals and cancellation SHALL retain their existing stopping behavior.
+The runtime SHALL provide non-empty Fred-owned feedback for every caught MCP failure. Recognized failures SHALL explain a safe cause and appropriate next action to the model. Unknown failures SHALL use a fixed generic message. Only the existing curated `read_query` HTTP 400 diagnostic SHALL expose dynamic SQL error detail. Provider response bodies, exception representations, credentials and private URLs MUST NOT become generic user-facing error text. Delegated authority refusals and cancellation SHALL retain their existing stopping behavior.
 
 #### Scenario: Authentication failure before a tabular invocation
 - **WHEN** an attachment-inventory request fails with an expired-token HTTP 401 during preparation of a tabular call
@@ -23,17 +23,22 @@ The runtime SHALL provide non-empty Fred-owned feedback for every caught MCP fai
 
 ### Requirement: Failed tool details explain the action and recorded safe cause
 
-The existing chat trace drawer SHALL show the failed action, a non-empty safe explanation, available recovery guidance and duration. For supported tabular failures it SHALL show an authorized document name when already available and the submitted SQL for `read_query`. It SHALL use the same interpretation for live and reloaded history, support French and English labels, and retain failure status without claiming zero returned rows. Generic failures SHALL NOT reveal arbitrary tool arguments or provider-controlled text.
+The existing chat trace drawer SHALL show the failed action, its recorded business arguments and the error preserved by the trusted boundary. It SHALL remain an explanatory view without a next-step section or recovery advice. For supported tabular failures it SHALL preserve the submitted document selectors, SQL, keyword and result-limit arguments where applicable, including invalid values that explain the failed invocation. It SHALL use the same interpretation for live and reloaded history, support French and English labels, and retain failure status without claiming zero returned rows. Argument display MUST exclude credentials, injected authentication/scope internals and unsupported arbitrary provider fields.
 
 #### Scenario: Supported failure in live or reloaded history
 - **WHEN** a user opens a failed tabular tool step with a recognized Fred-owned diagnostic
-- **THEN** the drawer explains the action and recorded cause with its recovery guidance
+- **THEN** the drawer displays the action, recorded business arguments and safe recorded error without a next-step section or recovery advice
 - **AND** reopening the conversation presents the same diagnostic and failure status
 
-#### Scenario: Authorized document context
-- **WHEN** an earlier authorized discovery result identifies the requested document within the exchange
-- **THEN** the failure detail can show that document's human-readable name
-- **AND** opaque document UIDs, SQL aliases and unrelated tool arguments are not printed as context
+#### Scenario: Failed invocation arguments remain inspectable
+- **WHEN** a tabular call fails after submitting a document selector, SQL expression, keyword or result limit
+- **THEN** the drawer displays those recorded business arguments without replacing incorrect values with inferred corrections
+- **AND** an available authorized document name can supplement the argument block without hiding the identifier actually submitted
+
+#### Scenario: Agent recovery guidance stays outside the explanatory view
+- **WHEN** a recognized error includes recovery guidance for the agent
+- **THEN** the drawer displays its diagnostic portion without a separate next-step section or generated recovery advice
+- **AND** the submitted arguments and safe error remain available
 
 #### Scenario: Empty historical or untrusted diagnostic
 - **WHEN** a failed result has an empty diagnostic, unrecognized provider text or a malformed diagnostic message

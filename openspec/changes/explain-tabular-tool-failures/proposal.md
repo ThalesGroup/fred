@@ -4,10 +4,10 @@
 
 ## What Changes
 
-- Give caught MCP failures a non-empty Fred-owned explanation and next action; preserve the existing curated `read_query` HTTP 400 diagnostic and authority-stop behavior.
-- Explain failures in the existing trace drawer, including the action, safe cause, recovery guidance and authorized document name when available. Retain attempted SQL for `read_query` and equivalent live/history behavior.
+- Give the model a non-empty Fred-owned failure explanation and next action; preserve the existing curated `read_query` HTTP 400 diagnostic and authority-stop behavior.
+- Make the existing trace drawer an explanatory view: show the failed action, the recorded business arguments and the error preserved by the trusted boundary. Do not show a next-step section or recovery advice. Retain equivalent live/history behavior.
 - Clarify document UIDs, SQL aliases and the DuckDB dialect in parameter descriptions. Add only one compact date-arithmetic example and a short reminder to use exact stored text values.
-- Keep arbitrary provider errors, credentials, private URLs and unrelated arguments outside the user-facing detail.
+- Show tabular document selectors, SQL, search terms and result limits as recorded in the call. Keep credentials, injected authentication/scope internals and arbitrary provider errors outside the user-facing detail.
 
 Authentication changes, model changes, automatic filename-to-UID substitution, caching and duplicate-call enforcement are out of scope. The API-versus-browser and repeated-success investigations inform this change but do not authorize those separate behavioral changes.
 
