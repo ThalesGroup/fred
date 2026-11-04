@@ -169,6 +169,9 @@ applications:
             default: {source_id: mistral, upstream_model_id: mistral-small-latest}
             fallback: null
             reasoning_enabled: []
+        # address: enables Ralph's document search, through the delegation role
+        # granted by prepare_ingestion.py.
+        knowledge_flow_url: http://knowledge-flow-backend:8000/knowledge-flow/v2
         runtime_catalog_sources:
           - runtime_id: fred-agents
             base_url: http://fred-agents/fred/agents/v2

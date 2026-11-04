@@ -161,7 +161,9 @@ After deploying, use organization administration -> Agents to find and activate
 `fred.github.assistant`, then verify the list after reload. The deployment does
 not enable templates in organizations or alter instance settings. The explicit
 organization model declarations below initialize model policy once.
-Ralph and its embedded execution path are unchanged. Unavailable template
+Ralph runs embedded in Control Plane. Its document search calls Knowledge Flow
+with the `control-plane` service account, to which preparation grants the same
+delegation caller role. Unavailable template
 dependencies still prevent their activation. Discovery still fails globally if
 an enabled catalog source cannot be reached, including while the pod is starting.
 

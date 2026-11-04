@@ -5,9 +5,11 @@
 
 use std::{sync::LazyLock, time::Duration};
 
-use fred_rust_agent::inference::InferenceError;
+use fred_rust_agent::{
+    search::{SearchHit, TOP_K},
+    turn::InferenceError,
+};
 use reqwest::{Client, Url};
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::keycloak::Directory;
@@ -43,16 +45,6 @@ pub(super) struct Search {
     context: String,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Hit {
-    uid: String,
-    title: String,
-    content: String,
-    page: Option<i64>,
-    #[serde(default, skip_serializing)]
-    chunk_kind: Option<String>,
-}
-
 impl Search {
     pub(super) fn new(
         base: &str,
@@ -79,13 +71,13 @@ impl Search {
         })
     }
 
-    pub(super) async fn run(self, query: String) -> Result<String, InferenceError> {
+    pub(super) async fn run(self, query: String) -> Result<Vec<SearchHit>, InferenceError> {
         tokio::time::timeout(Duration::from_secs(30), self.fetch(query))
             .await
             .map_err(|_| InferenceError::Search)?
     }
 
-    async fn fetch(self, query: String) -> Result<String, InferenceError> {
+    async fn fetch(self, query: String) -> Result<Vec<SearchHit>, InferenceError> {
         let client = HTTP.as_ref().map_err(|_| InferenceError::Search)?;
         let token = self
             .directory
@@ -96,14 +88,14 @@ impl Search {
             .post(self.url)
             .bearer_auth(token)
             .header("x-fred-document-context", self.context)
-            .json(&serde_json::json!({"question":query,"top_k":5}))
+            .json(&serde_json::json!({"question":query,"top_k":TOP_K}))
             .send()
             .await
             .map_err(|_| InferenceError::Search)?;
         if !response.status().is_success() {
             return Err(InferenceError::Search);
         }
-        // Bound the wire body as well as the excerpts passed to the model.
+        // Everything relayed to the model and the browser comes from this bounded body.
         let mut body = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(|_| InferenceError::Search)? {
             if body.len() + chunk.len() > 512 * 1024 {
@@ -111,19 +103,7 @@ impl Search {
             }
             body.extend_from_slice(&chunk);
         }
-        let hits: Vec<Hit> = serde_json::from_slice(&body).map_err(|_| InferenceError::Search)?;
-        let hits: Vec<_> = hits
-            .into_iter()
-            // Dataset pointers are discovery metadata, not documentary evidence.
-            .filter(|hit| hit.chunk_kind.as_deref() != Some("dataset_pointer"))
-            .take(5)
-            .map(|mut hit| {
-                hit.title = hit.title.chars().take(256).collect();
-                hit.content = hit.content.chars().take(4000).collect();
-                hit
-            })
-            .collect();
-        serde_json::to_string(&hits).map_err(|_| InferenceError::Search)
+        serde_json::from_slice(&body).map_err(|_| InferenceError::Search)
     }
 }
 

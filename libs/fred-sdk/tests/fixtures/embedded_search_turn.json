@@ -1,0 +1,60 @@
+{
+  "query": "manual question",
+  "knowledge_flow_hits": [
+    {
+      "uid": "doc-1",
+      "title": "Manual",
+      "content": "Evidence",
+      "score": 0.8,
+      "page": 2,
+      "section": "Install",
+      "file_name": "manual.pdf",
+      "chunk_kind": null,
+      "repository": null,
+      "tag_names": ["guide"],
+      "citation_url": "/documents/doc-1"
+    },
+    {
+      "uid": "dataset-1",
+      "title": "Dataset",
+      "content": "Discovery pointer",
+      "score": 0.7,
+      "chunk_kind": "dataset_pointer"
+    },
+    {
+      "uid": "doc-2",
+      "title": "Annex",
+      "content": "Unrelated",
+      "score": 0.2
+    }
+  ],
+  "tool_result": {
+    "kind": "tool_result",
+    "sequence": 3,
+    "tool_name": "search_documents",
+    "call_id": "call-search",
+    "content": "{\"query\":\"manual question\",\"hits\":[{\"uid\":\"doc-1\",\"title\":\"Manual\",\"content\":\"Evidence\",\"file_name\":\"manual.pdf\",\"page\":2,\"section\":\"Install\",\"score\":0.8},{\"uid\":\"doc-2\",\"title\":\"Annex\",\"content\":\"Unrelated\",\"file_name\":null,\"page\":null,\"section\":null,\"score\":0.2}]}",
+    "is_error": false,
+    "latency_ms": 12
+  },
+  "final": {
+    "kind": "final",
+    "sequence": 5,
+    "content": "Answer [Manual, p. 2]",
+    "sources": [
+      {
+        "uid": "doc-1",
+        "title": "Manual",
+        "content": "Evidence",
+        "score": 0.8,
+        "page": 2,
+        "section": "Install",
+        "file_name": "manual.pdf",
+        "repository": null,
+        "tag_names": ["guide"],
+        "citation_url": "/documents/doc-1"
+      }
+    ],
+    "finish_reason": "stop"
+  }
+}

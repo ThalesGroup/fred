@@ -71,7 +71,7 @@ pub struct RuntimeCatalogSource {
 impl PlatformConfig {
     pub fn validate(&self) -> Result<()> {
         if let Some(url) = &self.knowledge_flow_url {
-            crate::embedded_agent::search::endpoint(url)?;
+            crate::embedded_agent::kf_search::endpoint(url)?;
         }
         crate::model_catalog::config::validate_sources(&self.model_sources)?;
         crate::model_catalog::initialization::validate(&self.organization_models)?;

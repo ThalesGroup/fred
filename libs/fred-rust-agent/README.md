@@ -3,8 +3,9 @@
 `fred-rust-agent` executes admitted model calls inside the Control Plane workload.
 The host owns authentication, consent, instance/space authorization and the common
 `model_catalog::instance::decide` decision. The library owns local provisioning
-checks, Rig invocation, bounded execution and Fred event production. Document
-search is fixed in the runtime, without instance tuning or capability registration.
+checks, the turn deadline, usage reports and Fred event production; `rig-agent` owns
+the model calls, the tool loop and the history. Document search is fixed in the
+runtime, without instance tuning or capability registration.
 
 ## Managed execution
 
@@ -29,33 +30,37 @@ input limit is 16,384 Unicode scalars, fitting the 65,536-byte runtime ceiling.
 
 The library checks `platform.inference_credentials` against the admitted source,
 source revision, destination and credential binding before reading the named local
-environment variable. See the parent README for the common contract and coordinated
+environment variable. See the [Control Plane README](../../apps/control-plane/README.md) for the common contract and coordinated
 rotation. An absent or mismatched binding returns 503 before opening the event
 stream; forbidden/unknown selections return 409 with the shared decision error.
 No failure substitutes another model, source, account or credential.
 
-The pinned `rig-core = 0.42.0` uses its OpenAI Chat Completions adapter, with an
-explicit API key, base URL and shared reqwest pool (redirects disabled; 5-second
-connect and 60-second HTTP timeouts). Its request builder consumes the admitted
-model, temperature, token ceiling, top-p and reasoning. Official versioned API:
-[completion request builder](https://docs.rs/rig-core/0.42.0/rig_core/completion/request/struct.CompletionRequestBuilder.html).
-The 120-second turn deadline starts at local admission and covers model and search
-calls. The answer makes at most two model calls and one document search, retaining the
-same model credential, offer and options throughout.
+The pinned Rig 0.46 crates run one `rig-agent` agent per turn, over its Chat
+Completions wire with an explicit API key and base URL, and a shared reqwest pool
+(redirects disabled; 5-second connect and 60-second read timeouts). A destination
+on `api.mistral.ai` uses Rig's Mistral dialect, which sends no `stream_options`.
+The agent consumes the admitted model, temperature, token ceiling, top-p and
+reasoning through Rig's typed options; an option the wire cannot honour fails the
+request instead of being dropped. The 120-second turn deadline starts at local
+admission and covers model and search calls. The answer makes at most two model
+calls and one document search, retaining the same model credential, offer and
+options throughout.
 
-The Fred answer SSE starts with `status`, followed by any native reasoning and
-document-search events, one `assistant_delta` with the completed provider text,
-then `final`. Native reasoning uses the shared `thought_start`, `thought_delta`
+The Fred answer SSE starts with `status`, followed by reasoning, document-search
+and `assistant_delta` events as the provider streams them, then `final` with the
+complete answer. Native reasoning uses the shared `thought_start`, `thought_delta`
 and `thought_end` events with `source: model_native`. Only displayable provider
 text is forwarded, never signatures, encrypted or redacted payloads. An answer
-without provider reasoning produces no reasoning block.
+without provider reasoning produces no reasoning block. Text a model writes before
+its search appears live; the chat clears it at the tool row, and `final` holds only
+the last reply.
 A successful title may add `session_title` before `final`; the host sequences
-the combined stream monotonically. The answer remains buffered, not token-streamed
-from the upstream provider. The provider's finish reason is retained in Fred's
-normalized vocabulary. A failed/timed-out completion emits terminal
-`execution_error`, with a fixed public message and no provider body or credential.
-The polled `async-stream` generator yields tool events as work progresses.
-Dropping the stream cancels the in-flight future; no detached producer remains.
+the combined stream monotonically. The provider's finish reason is retained in Fred's
+normalized vocabulary. A failed/timed-out completion or a provider stream cut before
+its end emits terminal `execution_error`, with a fixed public message and no provider
+body or credential; deltas already sent stay, and no `final` follows.
+The stream is pulled by its consumer, so a slow browser slows the provider read.
+Dropping it cancels the in-flight run; no detached producer remains.
 No call can run after the turn closes. Attribution and revisions are logged through
 the host's tracing context; the host's existing logger strips dependency payloads.
 
@@ -82,31 +87,48 @@ KF remains responsible for access, publication and lifecycle checks.
 
 Search uses the default KF policy, `top_k=5`, no reranking or retry, and a 30-second
 timeout including service-token acquisition. The wire response is capped at
-512 KiB, and the model receives at most five excerpts of 4,000 characters, with
-document IDs, available page numbers and titles limited to 256 characters. Dataset pointers are
-excluded because they are not documentary evidence. Empty results are valid;
-transport, authorization and invalid-response failures end the turn explicitly.
+512 KiB. Empty results are valid. A transport, authorization or invalid-response
+failure, like invalid arguments, closes the tool row with `is_error` and a fixed
+message; the model then answers, as it does after a Python tool's failure.
 
-The second model call receives the correlated tool result and cannot request
-another search. The prompt treats excerpts as untrusted data and asks for textual
-title/page references. The shared chat receives `tool_call` before search starts
-and a correlated `tool_result` with bounded content, elapsed time and an error
-flag. A search failure closes that tool row before the terminal `execution_error`.
-No separate Rust UI or trace endpoint is involved.
+The `search` module owns this contract; the host's `kf_search` only transports the hits. It
+produces what the Python `search_documents` capability produces, so the shared chat
+renders both alike without a Rust-specific path:
+
+- the tool content, read by the model and the trace, is `{query, hits}`: at most
+  five excerpts of 4,000 characters, with titles limited to 256 characters and only
+  document ID, file name, page, section and score besides;
+- `final.sources` carries the whole hits the chat cites as source cards, except
+  those scoring below half of the call's best score;
+- dataset pointers reach neither, because they are not documentary evidence and
+  Ralph has no tabular tool to pivot to.
+
+`libs/fred-sdk/tests/fixtures/embedded_search_turn.json` binds the Rust events, the
+Python event contract and the chat's source and trace views.
+
+The second model call receives the correlated tool result under a `none` tool
+choice. A model that calls again ends the turn with `execution_error`: Rig's turn
+budget refuses a third call, and the search itself runs at most once. The prompt
+treats excerpts as untrusted data and asks for textual title/page references. The
+shared chat receives `tool_call` before search starts and a correlated `tool_result`
+with elapsed time and an error flag. An expired turn closes that tool row before the
+terminal `execution_error`.
 Only in-turn messages are retained, until the stream completes or is dropped.
 
 ## Consumption
 
 Ralph participates in the `model_usage` journal for managed execution. A missing
 `session_id` returns 422 before inference. The library accumulates input, output
-and cache token counts from decoded model responses, including responses without
-displayable text. Missing counters default to zero. It reports the aggregate once
-on completion, error or stream drop, if any model response was decoded. A failed
-search or second model call therefore preserves consumption of the first call.
+and cache token counts from each model response Rig completes, including responses
+without displayable text. Missing counters default to zero. It reports the aggregate
+once on completion, error or stream drop, if any model response completed. A failed
+second model call therefore preserves consumption of the first call. A provider
+reports usage when its reply ends, so a reply cut or abandoned mid-stream is not
+counted; nor is a reply Rig fails on a refused tool call.
 The host uses the admitted offer, fresh report/exchange UUIDs and server time;
 the shared HTTP-report transaction derives person, space and instance from the
 session. Token counts never enter browser events, and the agent crate has no DB
-access. A turn with no decoded model response produces no report. These counters
+access. A turn with no completed model response produces no report. These counters
 cover Ralph's model calls, not KF's embedding workload.
 
 The host starts one write attempt before yielding the response, with a two-second
@@ -133,7 +155,7 @@ the text is invalid; it is not included a second time in the answer aggregate.
 
 The host conditionally persists the result with its admitted attempt and provenance
 before emitting `session_title`. Manual renames and deletion win at the database
-boundary. See the [owner contract](../README.md#automatic-conversation-titles).
+boundary. See the [owner contract](../../apps/control-plane/README.md#automatic-conversation-titles).
 
 ## Direct demonstration
 
@@ -145,11 +167,12 @@ history options return 422.
 
 ## Targeted verification
 
-`cargo test -p fred-rust-agent --lib` exercises the real Rig HTTP adapter against a
-loopback provider: destination, model, options, fictitious credential, repeated
-calls, missing/mismatched provisioning, errors, deadlines, stream cancellation
-usage before the response event, tool-call correlation, single-search bounds,
-partial failures and cancellation between model calls.
+`cargo test -p fred-rust-agent --lib` exercises the real Rig agent and HTTP adapter
+against a loopback SSE provider: destination, model, options, fictitious credential,
+missing/mismatched provisioning, errors, deadlines, a delta delivered before the
+provider finishes, a stream cut before its end, mid-reply cancellation, usage before
+the last event, tool-call correlation, single-search bounds, partial failures and
+cancellation between model calls.
 The same fixtures cover native reasoning, opaque-data exclusion, event ordering,
 terminal errors, and cancellation or deadline expiry between trace deliveries.
 Control Plane's `agent_instances::model_catalog` integration tests additionally

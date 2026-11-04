@@ -39,7 +39,7 @@ The same process serves `POST /control-plane/v1/agents/execute/stream` (under th
 configured base URL). It uses the existing authentication and consent checks and
 streams Fred runtime events. Managed instances use the common inference admission
 and Rig; direct `agent_id: "fred.github.ralph"` remains a fixed demonstration. See the
-[agent library](agent/README.md) for the contract and current integration limits.
+[agent library](../../libs/fred-rust-agent/README.md) for the contract and current integration limits.
 No additional server or deployment is required.
 
 ## From scratch (fred-deployment-factory)
