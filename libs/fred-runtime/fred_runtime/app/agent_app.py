@@ -4355,6 +4355,7 @@ async def _iterate_runtime_event_payloads_inner(
         runtime_context=runtime_context,
         portable_context=portable_context,
         platform_prompt=platform_prompt,
+        disabled_platform_skills=current_turn().binding.disabled_platform_skills,
         is_resuming=request.resume_payload is not None,
     )
 

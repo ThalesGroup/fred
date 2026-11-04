@@ -192,6 +192,7 @@ class WeaverRuntimeBinding(ResolverFact):
     models: RuntimeModels
     inference: InferenceAdmission
     attachments: tuple[RuntimeAttachment, ...]
+    disabled_platform_skills: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def owning_organization(self) -> WeaverRuntimeBinding:

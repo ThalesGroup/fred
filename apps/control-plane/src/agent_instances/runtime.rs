@@ -96,6 +96,7 @@ pub struct RuntimeBinding {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference: Option<fred_rust_sdk::inference::InferenceAdmission>,
     pub attachments: Vec<RuntimeAttachment>,
+    pub disabled_platform_skills: Vec<String>,
 }
 
 #[derive(Serialize, sqlx::FromRow, ToSchema)]
@@ -266,6 +267,7 @@ async fn resolve_runtime_binding(
         .as_object()
         .context("invalid saved agent tuning")?;
     let models = models::resolve(&mut tx, space.organization, &record.tuning.0).await?;
+    let disabled_platform_skills = crate::skill_policy::disabled_in(&mut tx).await?;
     let choice = match (&query.model_source_id, &query.model_upstream_id) {
         (None, None) => None,
         (Some(source_id), Some(upstream_model_id)) => Some(models::ModelOfferKey {
@@ -306,6 +308,7 @@ async fn resolve_runtime_binding(
         models,
         inference,
         attachments,
+        disabled_platform_skills,
         subject_id: subject.to_owned(),
         run_id: query.run.clone(),
         conversation_id: query.conversation.clone(),
