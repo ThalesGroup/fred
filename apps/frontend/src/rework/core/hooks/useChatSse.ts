@@ -461,7 +461,8 @@ export function useChatSse(
     (sessionId: string, controller: AbortController, steeringTurnId: string): LiveTurn => {
       const turn: LiveTurn = {
         sessionId,
-        destination: { teamId, agentInstanceId },
+        teamId,
+        agentInstanceId,
         controller,
         steeringTurnId,
         thoughts: new Map(),
@@ -1291,6 +1292,7 @@ export function useChatSse(
         );
         console.debug(`[useChatSse][${sendId}] streamToMessages completed normally`);
       } catch (err) {
+        turn.interrupted = true;
         const name = (err as Error)?.name;
         const msg = (err as Error)?.message ?? String(err);
         if (ac.signal.aborted || abortRef.current !== ac || isTurnCurrent?.(effectiveSessionId) === false) {

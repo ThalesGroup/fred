@@ -12,48 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Announces a turn that ended while its conversation was not shown.
+
 import { useEffect } from "react";
-import { useStore } from "react-redux";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import type { AppState } from "../../../common/store";
-import { controlPlaneApi } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { useStore } from "react-redux";
+
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { controlPlaneApi } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import type { AppState } from "../../../common/store";
 import { subscribeBackgroundSettled } from "./backgroundTurns";
 
-// Mounted by the common layout, including admin pages where ChatList is absent.
-export function useBackgroundTurnNotifications() {
-  const { showInfo } = useToast();
+export function conversationHref(teamId: string | undefined, agentInstanceId: string, sessionId: string): string {
+  return `/team/${teamId}/managed-chat/${agentInstanceId}?session=${sessionId}`;
+}
+
+// Read the list already cached by the sidebar without delaying the toast on a network request.
+function sessionTitle(state: AppState, teamId: string, sessionId: string): string | undefined {
+  const { data } = controlPlaneApi.endpoints.getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet.select({ teamId })(
+    state,
+  );
+  return data?.find((session) => session.session_id === sessionId)?.title || undefined;
+}
+
+export function useBackgroundTurnNotifications(navigate: (href: string) => void): void {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const { showInfo } = useToast();
   const store = useStore<AppState>();
+
   useEffect(
     () =>
-      subscribeBackgroundSettled((sessionId, awaitingInput, destination) => {
-        const state = store.getState();
-        const session = destination
-          ? (controlPlaneApi.endpoints.getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet.select({
-              teamId: destination.teamId,
-              sessionId,
-            })(state).data ??
-            controlPlaneApi.endpoints.getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet
-              .select({ teamId: destination.teamId })(state)
-              .data?.find((item) => item.session_id === sessionId))
-          : undefined;
+      subscribeBackgroundSettled((turn) => {
+        const title = sessionTitle(store.getState(), turn.teamId, turn.sessionId);
         showInfo({
-          summary: t(awaitingInput ? "rework.sidebar.chatList.awaitingInput" : "rework.sidebar.chatList.answerReady"),
-          detail: session?.title || undefined,
-          action: destination
-            ? {
-                label: t("rework.sidebar.chatList.openConversation"),
-                onClick: () =>
-                  navigate(
-                    `/team/${destination.teamId}/managed-chat/${destination.agentInstanceId}?session=${sessionId}`,
-                  ),
-              }
-            : undefined,
+          summary: t(
+            turn.awaitingInput ? "rework.sidebar.chatList.awaitingInput" : "rework.sidebar.chatList.answerReady",
+          ),
+          detail: title,
+          action: {
+            label: t("rework.sidebar.chatList.openConversation"),
+            onClick: () => navigate(conversationHref(turn.teamId, turn.agentInstanceId, turn.sessionId)),
+          },
         });
       }),
-    [showInfo, t, navigate, store],
+    [store, navigate, showInfo, t],
   );
 }

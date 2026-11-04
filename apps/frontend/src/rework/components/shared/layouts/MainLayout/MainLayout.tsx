@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useBackgroundTurnNotifications } from "@core/hooks/useBackgroundTurnNotifications";
 import { Outlet } from "react-router-dom";
 import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
 import TeamAdminCharterGate from "@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate.tsx";
@@ -21,7 +20,6 @@ import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydratio
 import styles from "./MainLayout.module.css";
 
 export default function MainLayout() {
-  useBackgroundTurnNotifications();
   useTaskRehydration();
   useTaskPolling();
   return (

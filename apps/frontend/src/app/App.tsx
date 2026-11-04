@@ -29,6 +29,7 @@ import { ApplicationContext, ApplicationContextProvider } from "./ApplicationCon
 import { uiThemeBase, uiThemeTab } from "./uiThemes";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
 import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
+import { useBackgroundTurnNotifications } from "@core/hooks/useBackgroundTurnNotifications.ts";
 import styles from "./App.module.css";
 
 const LoadingScreen = ({
@@ -56,6 +57,11 @@ const LoadingScreen = ({
     </div>
   );
 };
+
+function BackgroundTurnNotificationHost({ navigate }: { navigate: (href: string) => void }) {
+  useBackgroundTurnNotifications(navigate);
+  return null;
+}
 
 function FredUiContent() {
   const [router, setRouter] = useState<any>(null);
@@ -128,6 +134,7 @@ function FredUiContent() {
                       >
                         {/* Same guards as the banners, and above the router: it never remounts. */}
                         <PatchNoteGate />
+                        <BackgroundTurnNotificationHost navigate={router.navigate} />
                         <RouterProvider router={router} />
                       </ToastProvider>
                     </ConfirmationDialogProvider>

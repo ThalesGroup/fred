@@ -35,13 +35,10 @@ vi.mock("../../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "" }),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-const navigate = vi.hoisted(() => vi.fn());
-vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
+vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: vi.fn() }),
 }));
-const showInfo = vi.hoisted(() => vi.fn());
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showInfo }) }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery: () => ({
     data: sessions,

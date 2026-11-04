@@ -2082,7 +2082,14 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         expect(unread).toBe(outcome === "final");
         expect(settled).toHaveBeenCalledTimes(outcome === "final" ? 1 : 0);
         if (outcome === "final")
-          expect(settled).toHaveBeenCalledWith("session-1", false, { teamId: "team-1", agentInstanceId: "agent-1" });
+          expect(settled).toHaveBeenCalledWith(
+            expect.objectContaining({
+              sessionId: "session-1",
+              teamId: "team-1",
+              agentInstanceId: "agent-1",
+              completed: true,
+            }),
+          );
         act(() => probeRoot.unmount());
         unsubscribe();
         fetchSpy.mockRestore();
@@ -2169,6 +2176,40 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         stream.close();
         await sendPromise;
       });
+      act(() => probeRoot.unmount());
+      fetchSpy.mockRestore();
+    });
+
+    it("discards a detached queue when the stream connection fails before a response", async () => {
+      let queue: ReturnType<typeof usePendingMessages>[0] = [];
+      function Queue() {
+        [queue] = usePendingMessages("session-1");
+        return null;
+      }
+      const probeRoot = createRoot(document.createElement("div"));
+      act(() => probeRoot.render(<Queue />));
+      let rejectFetch!: (reason: Error) => void;
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementationOnce(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            rejectFetch = reject;
+          }),
+      );
+      mount();
+      let sendPromise!: Promise<boolean>;
+      await act(async () => {
+        sendPromise = latest.send("hello", "session-1");
+        await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      });
+      act(() => {
+        updatePendingMessages("session-1", [{ id: "queued", text: "discard", status: "waiting" }]);
+        latest.reset();
+      });
+      await act(async () => {
+        rejectFetch(new Error("no connection"));
+        await sendPromise;
+      });
+      expect(queue).toEqual([]);
       act(() => probeRoot.unmount());
       fetchSpy.mockRestore();
     });

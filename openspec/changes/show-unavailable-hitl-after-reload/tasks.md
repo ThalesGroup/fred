@@ -10,7 +10,7 @@
 - [x] 2.2 Add localized unavailable and unknown notices with lookup retry; verify readable history, actual tool-result precedence and legacy responses without annotations.
 - [x] 2.3 Refresh the same conversation's history after an authoritative obsolete 409; verify session-switch guards, no automatic answer replay and preserved drafts for retryable conflicts.
 
-- [x] 2.4 Restore existing background HITL toasts on admin pages by moving their subscription to the common layout; verify the original conversation link and a single notification with unit tests and Playwright. This localized follow-up was requested during implementation.
+- [x] 2.4 Restore existing background HITL toasts on admin pages by hosting their subscription above the router; verify the original conversation link and a single notification with unit tests and Playwright. This localized follow-up was requested during implementation; the equivalent upstream correction in `0773ff95d` is retained on integration.
 
 ## 3. Validation and delivery
 
