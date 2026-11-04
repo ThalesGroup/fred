@@ -2085,7 +2085,9 @@
       "toolStatus": {
         "failure": "Échec",
         "running": "En cours",
-        "success": "Succès"
+        "success": "Succès",
+        "unavailable": "Indisponible",
+        "unknown": "Inconnu"
       },
       "toolLabels": {
         "platform": {

@@ -18,11 +18,15 @@
 - [x] 3.2 Verify a consumed checkpoint with missing response history against the runtime history endpoint, then reload that fixture in the browser; confirm the card cannot be resubmitted without modifying execution or stored history.
 - [x] 3.3 Update the relevant runtime/UI contract and migration note; verify the disconnected-turn lifecycle in runtime contract section 8.89 remains unchanged.
 - [x] 3.4 Apply the full branch audit and obtain independent read-only review against the actual PR base; resolve findings and record reviewed revisions, evidence and exclusions.
-- [ ] 3.5 Run root code quality once before committing the completed block, push the scoped change and follow required PR checks to green; reconcile and archive the approved OpenSpec change after verification.
+- [x] 3.5 Run root code quality once before committing the completed block, push the scoped change and follow required PR checks to green; reconcile and archive the approved OpenSpec change after verification.
 
 
 ## Verification evidence
 
-- Frontend suite: 393 files passed, one skipped; 4,938 tests passed, eight skipped. Focused runtime/history/checkpoint suite: 84 passed. Core history/schema suite: 15 passed.
+- Frontend suite: 393 files passed, one skipped; 4,944 tests passed, eight skipped. Focused runtime/history/checkpoint suite: 84 passed. Core history/schema suite: 15 passed.
 - Playwright on the production frontend with controlled HTTP/SSE and notification events: five availability scenarios and the admin-page background HITL toast passed. The admin toast opens its originating conversation. Screenshots/videos are retained in the session artifacts. This does not certify a deployed multi-pod system or Keycloak refresh behavior.
 - Independent read-only audit covered the full PR from base `53e39f6f77e63bbc8238b881df38686df5be452e` through `34e2c6afeeb6a314ae95b48c9cacafe3fc2d63aa` plus this working-tree implementation, including authorization, shared claims, occurrence identities, frontend drafts/races, notifications, consumers and documentation. Both findings were fixed and re-reviewed: use admission's checkpoint ordering, and preserve cached session rendering after a lookup retry followed by navigation. No remaining actionable findings. Runtime performance review includes the fixed five-query bound for 100 sibling requests and independent SQL connections; deployed PostgreSQL load testing is excluded.
+
+- Merge review of `58cc406fd` against parents `f10907330` and `0773ff95d` confirmed one App notification subscriber, preserved interrupted-turn suppression and retained HITL reconciliation. The 139 focused frontend tests and admin-page Playwright scenario passed after integration. Root quality passed; GitHub reported 134 successful checks and three conditional skips on `58cc406fd`.
+- The user confirmed retaining server-side availability. A subsequent frontend-only correction preserves the rendered trace annotation when opening its detail and aligns its badge and generic payload. Page/detail/trace tests: 270 passed; Playwright reproduced reload plus opening the unavailable question and verified the corrected detail. No execution or runtime lifecycle change was added.
+- Independent review of the detail-only delta against `58cc406fd` found no actionable issues; stable selection, live updates, real-result precedence and both localized states were checked. The previous full-PR and merge reviews remain applicable.

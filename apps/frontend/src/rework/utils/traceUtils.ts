@@ -514,7 +514,7 @@ export function genericToolPayload(
   translate?: (key: string) => string,
 ): Record<string, unknown> {
   const action = entryLabel(entry, translate);
-  if (!entry.result) return { action, status: "running" };
+  if (!entry.result) return { action, status: inactiveHitlStatus(entry) ?? "running" };
   return {
     action,
     status: toolResultOk(entry.result) ? "completed" : "failed",

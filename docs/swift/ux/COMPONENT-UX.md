@@ -2013,7 +2013,8 @@ _(none yet)_
 - **History availability (2026-11-04):** unanswered questions with runtime
   `resume_status: unavailable` remain readable with "This question can no longer
   accept an answer." and no choice, send or skip controls. Their unresolved tool
-  trace has a neutral unavailable state, never a fabricated failed result.
+  trace, detail badge and generic detail payload share the same neutral
+  unavailable state, never a fabricated failed result or running status.
   `unknown` shows a lookup failure with "Check again"; `pending` and legacy
   unannotated history retain actions. Known obsolete 409s refresh the same
   conversation's availability without replaying the answer. Actual tool results
