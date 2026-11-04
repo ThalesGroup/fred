@@ -1,5 +1,5 @@
 # Rust ingestion and Python agent catalog overlay owned by this checkout.
-# Run make k3d-up-weaver or make k3d-up-migration from the factory.
+# Run make k3d-up or make k3d-up-weaver from the factory.
 # prepare exports the selected worker's contract and provisions application identities.
 
 # secret: lists replace the instance lists, so retain every required dependency.
@@ -15,6 +15,11 @@ x-postgres-kf: &postgres-kf
 x-model: &model
   name: OPENAI_API_KEY
   valueFrom: {secretKeyRef: {name: fred-model-credentials, key: OPENAI_API_KEY}}
+# choice: Swift may share this OpenSearch instance, never these indexes.
+x-log-store: &log-store {type: opensearch, index: weaver-app-logs}
+x-observability: &observability
+  kpi:
+    opensearch: {enabled: true, index: weaver-kpi}
 applications:
   monitor:
     enabled: true
@@ -48,6 +53,11 @@ applications:
           api_key_env: OPENAI_API_KEY
       app:
         gcu_version: v1
+      observability: *observability
+      storage:
+        log_store: *log-store
+        opensearch:
+          username: fred-agents
       security:
         profile: c3
   control-plane-backend:
@@ -231,7 +241,9 @@ applications:
         delegation:
           accept_delegated_calls: true
           act_for_people: true
+      observability: *observability
       storage:
+        log_store: *log-store
         opensearch:
           username: fred-kf-api
         vector_store:
@@ -266,12 +278,14 @@ applications:
       requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 5Gi}
       limits: {cpu: "4", memory: 6Gi, ephemeral-storage: 8Gi}
     configuration:
-      observability:
-        kpi:
-          opensearch: {enabled: true, index: kpi-index}
+      observability: *observability
       storage:
+        log_store: *log-store
         opensearch:
           username: fred-kf-ingestion
+        # Replace the inherited Swift index, including for adapters built from storage.
+        vector_store:
+          index: document-vectors
       scheduler:
         enabled: true
         backend: temporal
