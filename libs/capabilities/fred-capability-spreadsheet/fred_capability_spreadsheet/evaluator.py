@@ -2309,7 +2309,7 @@ _FUNCTIONS: dict[str, Callable[[Evaluator, list[Value]], Value]] = {
     "COUNTIF": _countif,
     "COUNTIFS": _countifs,
     "SUMIF": _sumif,
-    "SUMIFS": _ifs_family(lambda v: math.fsum(v)),
+    "SUMIFS": _ifs_family(math.fsum),
     "AVERAGEIF": _averageif,
     "AVERAGEIFS": _ifs_family(lambda v: math.fsum(v) / len(v) if v else DIV0),
     "MINIFS": _ifs_family(lambda v: min(v, default=0.0)),

@@ -411,7 +411,6 @@ FUNCTION_FAMILIES = (
 # --- Tokenizer -----------------------------------------------------------------
 
 _CELL = r"(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)"
-_CELL_RE = re.compile(_CELL)
 _RANGE_RE = re.compile(_CELL + r"(?::" + _CELL + r")?")
 _WHOLE_COLUMN_RE = re.compile(r"\$?[A-Za-z]{1,3}:\$?[A-Za-z]{1,3}(?![A-Za-z0-9])")
 _WHOLE_ROW_RE = re.compile(r"\$?[0-9]+:\$?[0-9]+")
