@@ -900,6 +900,25 @@ The frontend's `controlPlane` client targets this Rust API. `legacyControlPlane`
 retains the previous API types and clients for screens not yet migrated; the
 Python backend is no longer shipped.
 
+### Email facts in document previews
+
+The existing preview endpoint serves the published generation's `metadata.json`
+with the same document read checks as its Markdown. The API schema describes the
+subset used by the viewer; other metadata extensions retain their existing
+contracts. Email facts are bounded and validated before final publication, outside
+SQL locks, alongside the existing immutable-byte/hash and identity checks.
+Publication never derives identity, uniqueness or access from an email address or
+message reference. No SQL migration or catalog filter is introduced.
+
+A conversation attachment requires `session_id` on the preview request. Control
+Plane verifies the document's actual association, current space read access and
+ownership of that live conversation. Without this context the drive route still
+excludes attachments. The email preview in the existing conversation attachment
+panel supplies it; this does not make an attachment a shared library document.
+Metadata and text modes each read one published artifact, without combining fields
+from different generations in one view. Missing metadata on older documents has
+an explicit empty state. See the [operator note](../../deploy/release-notes/changes/weaver-email-metadata.md).
+
 ### Document search inclusion
 
 `Document.retrievable` is the last confirmed inclusion state, separate from processing

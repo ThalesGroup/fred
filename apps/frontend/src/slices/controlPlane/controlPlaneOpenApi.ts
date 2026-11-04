@@ -186,6 +186,7 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/documents/${queryArg.id}/preview`,
         params: {
           artifact: queryArg.artifact,
+          session_id: queryArg.sessionId,
         },
       }),
     }),
@@ -866,11 +867,13 @@ export type ContentApiResponse = /** status 200 undefined */ string;
 export type ContentApiArg = {
   id: string;
 };
-export type PreviewApiResponse = /** status 200 undefined */ string | /** status 206 undefined */ string;
+export type PreviewApiResponse = /** status 200 undefined */ MetadataPreview | /** status 206 undefined */ string;
 export type PreviewApiArg = {
   id: string;
   /** native, raw, metadata, or a relative path from the published manifest. */
   artifact?: string;
+  /** Required for a conversation attachment; ownership is checked server-side. */
+  sessionId?: string;
 };
 export type HistoryApiResponse = /** status 200 undefined */ Summary[];
 export type HistoryApiArg = {
@@ -1377,6 +1380,42 @@ export type UpdateOrganization = {
 };
 export type RuntimeEvent =
   | {
+      kind: "thought_start";
+      phase: string;
+      sequence: number;
+      source: string;
+      thought_id: string;
+    }
+  | {
+      delta: string;
+      kind: "thought_delta";
+      sequence: number;
+      thought_id: string;
+    }
+  | {
+      kind: "thought_end";
+      sequence: number;
+      thought_id: string;
+    }
+  | {
+      arguments: {
+        [key: string]: any;
+      };
+      call_id: string;
+      kind: "tool_call";
+      sequence: number;
+      tool_name: string;
+    }
+  | {
+      call_id: string;
+      content: string;
+      is_error: boolean;
+      kind: "tool_result";
+      latency_ms: number;
+      sequence: number;
+      tool_name: string;
+    }
+  | {
       kind: "status";
       sequence: number;
       status: string;
@@ -1664,6 +1703,24 @@ export type UploadReceipt = {
   status: UploadStatus;
   /** Request key of the retry that replaced this failed upload. */
   successor_key?: string | null;
+};
+export type EmailHeaders = {
+  cc: string[];
+  in_reply_to?: string | null;
+  message_id?: string | null;
+  to: string[];
+};
+export type PreviewExtensions = {
+  email?: EmailHeaders | null;
+};
+export type ExtractedFacts = {
+  author?: string | null;
+  created?: string | null;
+  title?: string | null;
+};
+export type MetadataPreview = {
+  extensions?: PreviewExtensions | null;
+  identity: ExtractedFacts;
 };
 export type Start = {
   profile: Profile;

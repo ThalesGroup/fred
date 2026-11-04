@@ -163,6 +163,35 @@ impl ExecuteRequest {
 #[derive(Serialize, utoipa::ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RuntimeEvent {
+    ThoughtStart {
+        sequence: u64,
+        thought_id: String,
+        phase: &'static str,
+        source: &'static str,
+    },
+    ThoughtDelta {
+        sequence: u64,
+        thought_id: String,
+        delta: String,
+    },
+    ThoughtEnd {
+        sequence: u64,
+        thought_id: String,
+    },
+    ToolCall {
+        sequence: u64,
+        tool_name: &'static str,
+        call_id: String,
+        arguments: serde_json::Map<String, serde_json::Value>,
+    },
+    ToolResult {
+        sequence: u64,
+        tool_name: &'static str,
+        call_id: String,
+        content: String,
+        is_error: bool,
+        latency_ms: u64,
+    },
     Status {
         sequence: u64,
         status: &'static str,
@@ -185,6 +214,24 @@ pub enum RuntimeEvent {
         content: String,
         finish_reason: &'static str,
     },
+}
+
+impl RuntimeEvent {
+    /// The host may insert title events; sequence the final wire stream once.
+    pub fn with_sequence(mut self, value: u64) -> Self {
+        let (Self::Status { sequence, .. }
+        | Self::AssistantDelta { sequence, .. }
+        | Self::Final { sequence, .. }
+        | Self::Error { sequence, .. }
+        | Self::SessionTitle { sequence, .. }
+        | Self::ThoughtStart { sequence, .. }
+        | Self::ThoughtDelta { sequence, .. }
+        | Self::ThoughtEnd { sequence, .. }
+        | Self::ToolCall { sequence, .. }
+        | Self::ToolResult { sequence, .. }) = &mut self;
+        *sequence = value;
+        self
+    }
 }
 
 /// Produce the fixed response after host admission; no caller context enters the stream.

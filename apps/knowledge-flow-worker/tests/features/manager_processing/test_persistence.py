@@ -961,3 +961,105 @@ def test_managed_tabular_pipeline_publishes_complete_datasets_without_vector_dep
         assert {entry["object_key"] for entry in catalog} == {table.object_key for table in tables}
     else:
         assert "city-349" not in (output / "output.md").read_text()
+
+
+@pytest.mark.parametrize("fixture", ["plain_with_attachments.eml", "plain_with_attachments.msg", "forwarded.eml", "with_embedded.msg", "no_subject.eml"])
+@pytest.mark.parametrize("profile,attachment", [("fast", False), ("medium", False), ("rich", False), ("fast", True)])
+def test_email_facts_cross_extraction_boundary_and_indexing_restore(descriptor, tmp_path, monkeypatch, fixture, profile, attachment):
+    """Real configured converter -> disk -> manager -> output metadata; storage/HTTP doubled."""
+    import shutil
+
+    from fred_core.documents.document_structures import DocumentMetadata, FileInfo, Identity, SourceInfo, SourceType
+
+    from knowledge_flow_worker.common.structures import ProcessingConfig
+    from knowledge_flow_worker.core.processing_pipeline import ProcessingPipeline
+    from knowledge_flow_worker.core.processing_pipeline_manager import ProcessingPipelineManager
+    from knowledge_flow_worker.features.manager_processing import service
+    from knowledge_flow_worker.features.manager_processing.service import ManagedIngestionService
+    from tests.core.test_processing_pipeline import CapturingOutputProcessor
+
+    source = Path(__file__).parents[2] / "processors/input/email_processor/fixtures" / fixture
+    configuration = yaml.safe_load(Path("config/configuration_worker.yaml").read_text())
+    profiles = ProcessingConfig.model_validate(configuration["processing"])
+    # Keep production mail routing, without constructing unrelated vision models.
+    for settings in (profiles.profiles.fast, profiles.profiles.medium, profiles.profiles.rich):
+        settings.input_processors = [entry for entry in settings.input_processors if entry.suffix in {".eml", ".msg"}]
+    manager = ProcessingPipelineManager(default_pipeline=ProcessingPipeline(name="test", input_processors={}, output_processors={}))
+    manager._register_profile_pipelines(SimpleNamespace(get_config=lambda: SimpleNamespace(processing=profiles)))
+    descriptor = Descriptor.model_validate(
+        {
+            **descriptor.model_dump(),
+            "name": fixture,
+            "stage": "extraction",
+            "work": {**descriptor.work.model_dump(), "profile": profile},
+            **({"folder_id": None, "folder_path": None, "session_id": uuid4()} if attachment else {}),
+        }
+    )
+    metadata = DocumentMetadata(
+        identity=Identity(document_uid=str(descriptor.work.document_id), document_name=fixture, uploaded_by=descriptor.actor), source=SourceInfo(source_type=SourceType.PUSH), file=FileInfo()
+    )
+    parent = metadata.model_copy(deep=True)
+    output = tmp_path / "output"
+    manager.run_input(input_path=source, output_dir=output, metadata=metadata.model_copy(deep=True), profile=profile)
+    extracted = json.loads((output / "metadata.json").read_text())
+    assert extracted["extensions"]["email"]
+    assert parent.identity.title is None
+    # A converter may not replace any server identity, even if it writes one.
+    extracted["identity"].update(document_uid="forged", document_name="forged", uploaded_by="forged")
+    (output / "metadata.json").write_text(json.dumps(extracted))
+    worker = ManagedIngestionService.__new__(ManagedIngestionService)
+    worker.descriptor = descriptor
+    worker.vectors = None
+    worker.settings = SimpleNamespace(temporary_bytes=2_000_000)
+    manifests = []
+    worker.artifacts = SimpleNamespace(publish=lambda d, path, **kw: SimpleNamespace(vector_ordinals=[]))
+
+    class Client:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def original(self, d, path):
+            path.parent.mkdir(parents=True)
+            shutil.copyfile(source, path)
+
+        def post(self, path, commit):
+            manifests.append(commit)
+
+    # Keep _commit's real serialization and callback payload, substitute only IO.
+    from knowledge_flow_worker.features.manager_processing.contracts import Manifest
+
+    worker.artifacts.publish = lambda d, path, **kw: Manifest(generation=d.generation, artifacts=[], chunks=0, vectors=0)
+    monkeypatch.setattr(service, "ManagerClient", Client)
+    worker.save_output(None, parent, output)
+    published = json.loads((output / "metadata.json").read_text())
+    assert published["identity"]["document_uid"] == str(descriptor.work.document_id)
+    assert published["identity"]["document_name"] == fixture
+    assert published["identity"]["uploaded_by"] == descriptor.actor
+    assert published["identity"]["title"] == extracted["identity"]["title"]
+    assert published["extensions"]["email"] == extracted["extensions"]["email"]
+    assert "bcc" not in published["extensions"]["email"]
+    assert manifests
+    # Simulate an activity retry losing its in-memory result: only predecessor
+    # artifacts restore the extracted facts, with no second parse of the original.
+    retried = metadata.model_copy(deep=True)
+    retried.identity.title = "stale extracted title"
+    retried.identity.created = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    worker.descriptor = descriptor.model_copy(update={"stage": "indexing"})
+    worker.artifacts.restore = lambda d, directory: shutil.copytree(output, directory)
+    worker.get_local_copy(SimpleNamespace(uid=descriptor.actor), retried, tmp_path / "retry")
+    output_processor = CapturingOutputProcessor()
+    pipeline = ProcessingPipeline(name="output", input_processors={}, output_processors={".md": [output_processor]})
+    result = pipeline.process_output("output.md", tmp_path / "retry/output", retried)
+    assert result.identity == parent.identity
+    assert result.extensions == parent.extensions
+    assert output_processor.processed_paths
+    if fixture == "no_subject.eml":
+        assert result.identity.title is None
+    if fixture == "forwarded.eml":
+        assert result.identity.title == "Fwd: quarterly figures"

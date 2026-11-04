@@ -148,16 +148,9 @@ pub(crate) fn stream(
                     }
                 }
             } else { match events.next().await { Some(event) => Some(event), None => return None } };
-            if let Some(mut event) = event {
+            if let Some(event) = event {
                 sequence += 1;
-                match &mut event {
-                    RuntimeEvent::Status { sequence: value, .. } |
-                    RuntimeEvent::AssistantDelta { sequence: value, .. } |
-                    RuntimeEvent::Final { sequence: value, .. } |
-                    RuntimeEvent::Error { sequence: value, .. } |
-                    RuntimeEvent::SessionTitle { sequence: value, .. } => *value = sequence,
-                }
-                return Some((event, (events, title, pending, sequence)));
+                return Some((event.with_sequence(sequence), (events, title, pending, sequence)));
             }
         }
     }).boxed()
@@ -318,5 +311,52 @@ mod tests {
         .collect::<Vec<_>>()
         .await;
         assert!(matches!(&events[..], [RuntimeEvent::Final { .. }]));
+    }
+
+    #[tokio::test]
+    async fn title_insertion_preserves_trace_order_and_sequences_the_whole_stream() {
+        let events = super::stream(
+            stream::iter([
+                RuntimeEvent::ToolCall {
+                    sequence: 80,
+                    tool_name: "search_documents",
+                    call_id: "search".into(),
+                    arguments: serde_json::Map::new(),
+                },
+                RuntimeEvent::ToolResult {
+                    sequence: 81,
+                    tool_name: "search_documents",
+                    call_id: "search".into(),
+                    content: "[]".into(),
+                    is_error: false,
+                    latency_ms: 1,
+                },
+                RuntimeEvent::Final {
+                    sequence: 82,
+                    content: "answer".into(),
+                    finish_reason: "stop",
+                },
+            ])
+            .boxed(),
+            Some(async { Some("session".into()) }.boxed()),
+        )
+        .collect::<Vec<_>>()
+        .await;
+        let wire: Vec<_> = events
+            .iter()
+            .map(|event| serde_json::to_value(event).unwrap())
+            .collect();
+        assert_eq!(wire.len(), 4);
+        for (index, event) in wire.iter().enumerate() {
+            assert_eq!(event["sequence"], index + 1);
+        }
+        assert_eq!(wire.last().unwrap()["kind"], "final");
+        assert_eq!(
+            wire.iter()
+                .filter_map(|event| event["kind"].as_str())
+                .filter(|kind| kind.starts_with("tool_"))
+                .collect::<Vec<_>>(),
+            ["tool_call", "tool_result"]
+        );
     }
 }

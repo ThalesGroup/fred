@@ -22,7 +22,7 @@ not enable steering or change the inference prompt.
 
 Ralph has no memory: every message is an independent turn. Preparation returns
 null synchronous-execution and history URLs, and false
-HITL/UI-parts support. The existing chat displays a notice and keeps only this
+HITL/UI-parts support. The existing shared chat keeps only this
 visit's live messages; leaving/reloading does not restore them. Session metadata
 still uses the common ownership and instance-association checks. The browser
 input limit is 16,384 Unicode scalars, fitting the 65,536-byte runtime ceiling.
@@ -43,12 +43,18 @@ The 120-second turn deadline starts at local admission and covers model and sear
 calls. The answer makes at most two model calls and one document search, retaining the
 same model credential, offer and options throughout.
 
-The Fred answer SSE sequence is `status`, one `assistant_delta` with the completed
-provider text, then `final`. A successful title may add `session_title` before
-`final`. This buffers the final answer; it is not token streaming
+The Fred answer SSE starts with `status`, followed by any native reasoning and
+document-search events, one `assistant_delta` with the completed provider text,
+then `final`. Native reasoning uses the shared `thought_start`, `thought_delta`
+and `thought_end` events with `source: model_native`. Only displayable provider
+text is forwarded, never signatures, encrypted or redacted payloads. An answer
+without provider reasoning produces no reasoning block.
+A successful title may add `session_title` before `final`; the host sequences
+the combined stream monotonically. The answer remains buffered, not token-streamed
 from the upstream provider. The provider's finish reason is retained in Fred's
 normalized vocabulary. A failed/timed-out completion emits terminal
 `execution_error`, with a fixed public message and no provider body or credential.
+The polled `async-stream` generator yields tool events as work progresses.
 Dropping the stream cancels the in-flight future; no detached producer remains.
 No call can run after the turn closes. Attribution and revisions are logged through
 the host's tracing context; the host's existing logger strips dependency payloads.
@@ -83,7 +89,10 @@ transport, authorization and invalid-response failures end the turn explicitly.
 
 The second model call receives the correlated tool result and cannot request
 another search. The prompt treats excerpts as untrusted data and asks for textual
-title/page references. There is no new source panel or tool event in the browser.
+title/page references. The shared chat receives `tool_call` before search starts
+and a correlated `tool_result` with bounded content, elapsed time and an error
+flag. A search failure closes that tool row before the terminal `execution_error`.
+No separate Rust UI or trace endpoint is involved.
 Only in-turn messages are retained, until the stream completes or is dropped.
 
 ## Consumption
@@ -141,6 +150,8 @@ loopback provider: destination, model, options, fictitious credential, repeated
 calls, missing/mismatched provisioning, errors, deadlines, stream cancellation
 usage before the response event, tool-call correlation, single-search bounds,
 partial failures and cancellation between model calls.
+The same fixtures cover native reasoning, opaque-data exclusion, event ordering,
+terminal errors, and cancellation or deadline expiry between trace deliveries.
 Control Plane's `agent_instances::model_catalog` integration tests additionally
 cover HTTP instance/session creation, preparation under a custom router mount,
 the browser execution envelope, delegated admission, browser projection,

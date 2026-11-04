@@ -1544,23 +1544,15 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     modelPreparationPending,
     historyErrorKey: sessionErrorKey ?? historyErrorKey,
     historyUnavailable,
-    historyUnsupported: preparation?.messages_url_template === null,
     agentInstance,
     capabilityIds,
     chatControls,
     models: preparation?.models,
     skills: preparation?.skills?.availability === "unavailable" ? undefined : (preparation?.skills ?? undefined),
-    skillState: !preparation
-      ? undefined
-      : !preparation.skill_detail_url_template
-        ? "unsupported"
-        : !preparation.skills?.supported
-          ? "incompatible"
-          : preparation.skills.availability !== "available"
-            ? preparation.skills.availability
-            : preparation.skills.skills.length === 0
-              ? "empty"
-              : "available",
+    skillsUnavailable:
+      !!preparation?.skill_detail_url_template &&
+      preparation.skills?.supported === true &&
+      preparation.skills.availability === "unavailable",
     skillsSupported: !!preparation?.skill_detail_url_template,
     skillDetailUrlTemplate: preparation?.skill_detail_url_template,
     refreshSkills: async () => ({

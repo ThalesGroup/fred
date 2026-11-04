@@ -20,6 +20,8 @@ import ChatSidePanel from "../ChatSidePanel/ChatSidePanel.tsx";
 import { MarkdownPreviewModal } from "../MarkdownPreviewModal/MarkdownPreviewModal";
 import { formatBytes as formatBytesUnit } from "@shared/utils/formatBytes";
 import type { SessionAttachment } from "@rework/types/attachments";
+import DocumentPreviewDrawer from "../DocumentPreviewDrawer/DocumentPreviewDrawer";
+import { isEmailFile } from "../../../../utils/documentViewerUtils";
 import styles from "./SessionAttachmentsDrawer.module.css";
 
 interface SessionAttachmentsDrawerProps {
@@ -103,19 +105,30 @@ export function SessionAttachmentsDrawer({
           )}
         </div>
       </ChatSidePanel>
-      <MarkdownPreviewModal
-        open={previewAttachment != null}
-        onClose={() => setPreviewAttachmentId(null)}
-        title={previewAttachment?.name ?? t("chatbot.sessionAttachments.filePreviewTitle")}
-        subtitle={[
-          previewAttachment?.mime,
-          formatBytes(previewAttachment?.sizeBytes),
-          formatTimestamp(previewAttachment?.createdAt),
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-        markdown={previewAttachment?.summaryMd || t("chatbot.sessionAttachments.noSummary")}
-      />
+      {previewAttachment?.documentUid && previewAttachment.sessionId && isEmailFile(previewAttachment.name) ? (
+        <DocumentPreviewDrawer
+          target={{
+            documentUid: previewAttachment.documentUid,
+            sessionId: previewAttachment.sessionId,
+            fileName: previewAttachment.name,
+          }}
+          onClose={() => setPreviewAttachmentId(null)}
+        />
+      ) : (
+        <MarkdownPreviewModal
+          open={previewAttachment != null}
+          onClose={() => setPreviewAttachmentId(null)}
+          title={previewAttachment?.name ?? t("chatbot.sessionAttachments.filePreviewTitle")}
+          subtitle={[
+            previewAttachment?.mime,
+            formatBytes(previewAttachment?.sizeBytes),
+            formatTimestamp(previewAttachment?.createdAt),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          markdown={previewAttachment?.summaryMd || t("chatbot.sessionAttachments.noSummary")}
+        />
+      )}
     </>
   );
 }

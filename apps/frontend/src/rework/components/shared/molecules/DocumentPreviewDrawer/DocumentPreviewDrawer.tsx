@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 export interface DocumentPreviewTarget {
   documentUid: string;
+  sessionId?: string;
   fileName?: string;
 }
 import {
@@ -24,7 +25,7 @@ import {
   type ViewMode,
 } from "@shared/organisms/DocumentViewer/DocumentViewer.tsx";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
-import { hasNativePreview } from "../../../../utils/documentViewerUtils.ts";
+import { hasNativePreview, isEmailFile } from "../../../../utils/documentViewerUtils.ts";
 
 export interface DocumentPreviewDrawerProps {
   /** The document to show, or null to keep the drawer closed. */
@@ -53,10 +54,19 @@ export default function DocumentPreviewDrawer({ target, onClose }: DocumentPrevi
       title={target?.fileName ?? t("rework.resources.preview.title")}
       width="80vw"
       headerActions={
-        hasNativePreview(target?.fileName) ? <DocumentViewerModeToggle view={view} onChange={setView} /> : undefined
+        hasNativePreview(target?.fileName) || isEmailFile(target?.fileName) ? (
+          <DocumentViewerModeToggle view={view} onChange={setView} fileName={target?.fileName} />
+        ) : undefined
       }
     >
-      {target && <DocumentViewer documentUid={target.documentUid} fileName={target.fileName} view={view} />}
+      {target && (
+        <DocumentViewer
+          documentUid={target.documentUid}
+          sessionId={target.sessionId}
+          fileName={target.fileName}
+          view={view}
+        />
+      )}
     </InlineDrawer>
   );
 }

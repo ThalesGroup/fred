@@ -658,7 +658,6 @@
     "deletedAgentSuffix": "(supprimé)",
     "modelPreparationErrorTitle": "Envoi indisponible",
     "historyUnavailable": "L'historique de la conversation est indisponible. Réessayez plus tard.",
-    "historyUnsupported": "Cet agent répond à chaque message indépendamment. Les messages ne sont pas sauvegardés et disparaîtront en quittant ce chat.",
     "preparationUnavailable": "Impossible de préparer la conversation. Vérifiez votre connexion puis réessayez.",
     "savedModelChoiceInvalid": "Le modèle enregistré doit être sélectionné à nouveau dans le menu Modèles.",
     "skipAllHitlQuestions": "Tout passer",
@@ -724,13 +723,6 @@
           "title": "Visualiser des données",
           "description": "Choisir une représentation utile des données et la produire avec les outils disponibles."
         }
-      },
-      "state": {
-        "unsupported": "Cet agent ne prend pas en charge les skills.",
-        "incompatible": "Les skills ne sont pas encore disponibles sur cet agent.",
-        "unavailable": "Le catalogue des skills est indisponible. Réessayez avant de sélectionner un skill.",
-        "disabled": "Les skills sont désactivés sur cet agent.",
-        "empty": "Aucun skill n’est autorisé dans cet espace."
       }
     }
   },
@@ -2740,6 +2732,18 @@
         "newFolder": "Nouveau dossier",
         "newSubfolder": "Nouveau sous-dossier dans « {{name}} »",
         "preview": "Aperçu",
+        "email": {
+          "subject": "Sujet",
+          "sender": "Expéditeur",
+          "sent": "Date du message",
+          "to": "À",
+          "cc": "Cc",
+          "messageId": "Identifiant du message",
+          "inReplyTo": "En réponse à",
+          "missing": "Non renseigné",
+          "unavailable": "Aucun détail structuré du mail disponible pour cette génération.",
+          "description": "Faits extraits du message principal. Ils ne désignent pas l’auteur de l’import et n’accordent aucun accès. Les longs en-têtes et listes de destinataires peuvent être raccourcis."
+        },
         "process": "Traiter",
         "refresh": "Rafraîchir cette vue",
         "relaunchIngestion": "Relancer l'ingestion",
@@ -2828,6 +2832,7 @@
         "title": "Aperçu du document",
         "tabsAria": "Mode d'affichage",
         "tabs": {
+          "metadata": "Détails du mail",
           "file": "Fichier",
           "raw": "Raw"
         },

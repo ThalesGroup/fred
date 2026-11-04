@@ -163,6 +163,7 @@ export function useChatAttachments({
       ),
   ];
   const persistedAttachments: SessionAttachment[] = (documents ?? []).map((d) => ({
+    sessionId: sessionId ?? undefined,
     attachmentId: d.document_id,
     name: d.name,
     mime: d.mime,

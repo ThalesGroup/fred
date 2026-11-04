@@ -147,6 +147,34 @@ describe("useSessionHistory authorized reads", () => {
     vi.unstubAllGlobals();
   });
 
+  it.each([null, "/runtime/sessions/session-a/messages"])(
+    "preserves the first completed exchange while session metadata resolves to %s",
+    async (route) => {
+      routeOverride = undefined;
+      currentMessages = [{ ...msg("first-answer"), session_id: "session-a", exchange_id: "first" }];
+      fetchImpl = async () => okResponse([]);
+      mount("session-a");
+      await settle();
+      expect(latest.isLoading).toBe(true);
+      expect(onLoaded).not.toHaveBeenCalled();
+      expect(latest.isAuthorized).toBe(false);
+
+      routeOverride = route;
+      historySupported = route !== null;
+      render("session-a");
+      await settle();
+      expect(onLoaded).not.toHaveBeenCalled();
+      expect(latest.isSettled).toBe(true);
+
+      // Preserving this visit never authorizes another conversation's transcript.
+      routeOverride = undefined;
+      render("session-b");
+      await settle();
+      expect(onLoaded).toHaveBeenLastCalledWith([]);
+      expect(latest.isAuthorized).toBe(false);
+    },
+  );
+
   it("keeps this visit's completed response when the admitted runtime has no history", async () => {
     routeOverride = null;
     historySupported = false;

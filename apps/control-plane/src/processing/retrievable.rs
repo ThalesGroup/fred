@@ -121,6 +121,7 @@ impl Processing {
         if metadata["identity"]["document_uid"].as_str() != Some(document_id.to_string().as_str()) {
             return Err(invalid());
         }
+        super::preview::validate_email_metadata(&metadata)?;
         let value = metadata["source"]["retrievable"]
             .as_bool()
             .ok_or_else(invalid)?;

@@ -11,7 +11,7 @@ use rig_core::{
     completion::{
         AssistantContent, CompletionModel, CompletionResponse, FinishReason, ToolDefinition, Usage,
     },
-    message::{Message, ToolChoice, ToolResultContent, UserContent},
+    message::{Message, ReasoningContent, ToolChoice, ToolResultContent, UserContent},
     providers::openai,
 };
 use tokio::time::Instant;
@@ -196,10 +196,15 @@ impl InferenceTurn {
         )
         .await;
         // No provider error/body, URL, credential or prompt is recorded.
+        let outcome = match &result {
+            Ok(Ok(_)) => "success",
+            Ok(Err(_)) => "provider_error",
+            Err(_) => "timeout",
+        };
         tracing::info!(target: "control_plane::inference", source_id = %selection.key.source_id, model = %selection.key.upstream_model_id,
             policy_revision = selection.policy_revision, source_revision = selection.source_revision,
             snapshot_revision = selection.snapshot_revision, selection = ?selection.source,
-            latency_ms = started.elapsed().as_millis() as u64, "Inference completed");
+            latency_ms = started.elapsed().as_millis() as u64, outcome, "Inference completed");
         let response = match result {
             Ok(Ok(response)) => response,
             Ok(Err(_)) => {
@@ -298,119 +303,204 @@ where
     S: FnOnce(String) -> F + Send,
     F: Future<Output = Result<String, InferenceError>> + Send,
 {
-    stream::once(async {
-        RuntimeEvent::Status {
-            sequence: 1,
+    let events = async_stream::try_stream! {
+        yield RuntimeEvent::Status {
+            sequence: 0,
             status: "running",
+        };
+        let mut usage = TurnUsage {
+            report: Some(on_usage),
+            total: None,
+        };
+        let input = Message::user(input);
+        let mut response = turn
+            .complete(input.clone(), vec![], search.is_some())
+            .await?;
+        usage.record(response.usage);
+        for event in reasoning_events(&response, "model-1", "planning") {
+            yield event;
+        }
+        let calls: Vec<_> = response
+            .choice
+            .iter()
+            .filter_map(|part| match part {
+                AssistantContent::ToolCall(call) => Some(call.clone()),
+                _ => None,
+            })
+            .collect();
+        if !calls.is_empty() {
+            if calls.len() != 1 {
+                Err(InferenceError::ToolCall)?;
+            }
+            let call = calls.first().ok_or(InferenceError::ToolCall)?;
+            if call.function.name != "search_documents" {
+                Err(InferenceError::ToolCall)?;
+            }
+            let args: SearchArguments = serde_json::from_value(call.function.arguments.clone())
+                .map_err(|_| InferenceError::ToolCall)?;
+            if args.query.trim().is_empty() || args.query.chars().count() > 2048 {
+                Err(InferenceError::ToolCall)?;
+            }
+            let search = search.ok_or(InferenceError::ToolCall)?;
+            yield RuntimeEvent::ToolCall {
+                sequence: 0,
+                tool_name: "search_documents",
+                call_id: call.id.to_string(),
+                arguments: serde_json::Map::from_iter([("query".into(), args.query.clone().into())]),
+            };
+            let started = Instant::now();
+            let found = if Instant::now() >= turn.deadline {
+                Err(InferenceError::Ended)
+            } else {
+                tokio::time::timeout_at(turn.deadline, search(args.query))
+                    .await
+                    .map_err(|_| InferenceError::Ended)
+                    .and_then(|result| result)
+            };
+            yield RuntimeEvent::ToolResult {
+                sequence: 0,
+                tool_name: "search_documents",
+                call_id: call.id.to_string(),
+                content: match &found {
+                    Ok(content) => content.clone(),
+                    Err(error) => public_error(error).into(),
+                },
+                is_error: found.is_err(),
+                latency_ms: started.elapsed().as_millis() as u64,
+            };
+            let found = found?;
+            let result = Message::User {
+                content: vec![UserContent::tool_result_for(
+                    call.id.clone(),
+                    call.provider.clone(),
+                    "search_documents",
+                    vec![ToolResultContent::text(found)],
+                )],
+            };
+            let history = vec![
+                input,
+                Message::Assistant {
+                    id: response.message_id,
+                    content: response.choice,
+                },
+            ];
+            response = turn.complete(result, history, false).await?;
+            usage.record(response.usage);
+            for event in reasoning_events(&response, "model-2", "synthesis") {
+                yield event;
+            }
+        }
+        if response
+            .choice
+            .iter()
+            .any(|part| matches!(part, AssistantContent::ToolCall(_)))
+        {
+            Err(InferenceError::ToolCall)?;
+        }
+        let reason = match response.finish_reason() {
+            Some(FinishReason::Stop) => "stop",
+            Some(FinishReason::Length) => "length",
+            Some(FinishReason::ContentFilter) => "content_filter",
+            _ => "other",
+        };
+        let text: String = response
+            .choice
+            .into_iter()
+            .filter_map(|part| match part {
+                AssistantContent::Text(text) => Some(text.text),
+                _ => None,
+            })
+            .collect();
+        if text.is_empty() {
+            Err(InferenceError::Provider)?;
+        }
+        turn.close();
+        drop(usage);
+        yield RuntimeEvent::AssistantDelta {
+            sequence: 0,
+            delta: text.clone(),
+        };
+        yield RuntimeEvent::Final {
+            sequence: 0,
+            content: text,
+            finish_reason: reason,
+        };
+    };
+    // Drop the producer (including usage accounting) before publishing an error.
+    // No spawned task or queue survives the consumer; error is terminal.
+    stream::unfold(Some(Box::pin(events)), |events| async move {
+        let mut events = events?;
+        match events.next().await {
+            Some(Ok(event)) => Some((event, Some(events))),
+            Some(Err(error)) => {
+                drop(events);
+                Some((
+                    RuntimeEvent::Error {
+                        sequence: 0,
+                        message: public_error(&error),
+                    },
+                    None,
+                ))
+            }
+            None => None,
         }
     })
-    .chain(
-        stream::once(async move {
-            let mut usage = TurnUsage {
-                report: Some(on_usage),
-                total: None,
-            };
-            let result = async {
-                let input = Message::user(input);
-                let mut response = turn
-                    .complete(input.clone(), vec![], search.is_some())
-                    .await?;
-                usage.record(response.usage);
-                let calls: Vec<_> = response
-                    .choice
-                    .iter()
-                    .filter_map(|part| match part {
-                        AssistantContent::ToolCall(call) => Some(call.clone()),
-                        _ => None,
-                    })
-                    .collect();
-                if !calls.is_empty() {
-                    let [call] = calls.as_slice() else {
-                        return Err(InferenceError::ToolCall);
-                    };
-                    if call.function.name != "search_documents" {
-                        return Err(InferenceError::ToolCall);
-                    }
-                    let args: SearchArguments =
-                        serde_json::from_value(call.function.arguments.clone())
-                            .map_err(|_| InferenceError::ToolCall)?;
-                    if args.query.trim().is_empty() || args.query.chars().count() > 2048 {
-                        return Err(InferenceError::ToolCall);
-                    }
-                    let search = search.ok_or(InferenceError::ToolCall)?;
-                    let found = tokio::time::timeout_at(turn.deadline, search(args.query))
-                        .await
-                        .map_err(|_| InferenceError::Ended)??;
-                    let result = Message::User {
-                        content: vec![UserContent::tool_result_for(
-                            call.id.clone(),
-                            call.provider.clone(),
-                            "search_documents",
-                            vec![ToolResultContent::text(found)],
-                        )],
-                    };
-                    let history = vec![
-                        input,
-                        Message::Assistant {
-                            id: response.message_id,
-                            content: response.choice,
-                        },
-                    ];
-                    response = turn.complete(result, history, false).await?;
-                    usage.record(response.usage);
-                }
-                if response
-                    .choice
-                    .iter()
-                    .any(|part| matches!(part, AssistantContent::ToolCall(_)))
-                {
-                    return Err(InferenceError::ToolCall);
-                }
-                let reason = match response.finish_reason() {
-                    Some(FinishReason::Stop) => "stop",
-                    Some(FinishReason::Length) => "length",
-                    Some(FinishReason::ContentFilter) => "content_filter",
-                    _ => "other",
-                };
-                let text: String = response
-                    .choice
-                    .into_iter()
-                    .filter_map(|part| match part {
-                        AssistantContent::Text(text) => Some(text.text),
-                        _ => None,
-                    })
-                    .collect();
-                Ok((text, reason))
-            }
-            .await;
-            turn.close();
-            drop(usage);
-            match result {
-                Ok((text, reason)) if !text.is_empty() => vec![
-                    RuntimeEvent::AssistantDelta {
-                        sequence: 2,
-                        delta: text.clone(),
-                    },
-                    RuntimeEvent::Final {
-                        sequence: 3,
-                        content: text,
-                        finish_reason: reason,
-                    },
-                ],
-                error => vec![RuntimeEvent::Error {
-                    sequence: 2,
-                    message: match error {
-                        Err(InferenceError::Search) => "Document search is unavailable or failed.",
-                        Err(InferenceError::ToolCall) => {
-                            "The model requested an invalid or additional tool call."
-                        }
-                        _ => "Inference failed or exceeded its deadline.",
-                    },
-                }],
-            }
+    .enumerate()
+    .map(|(index, event)| event.with_sequence(index as u64 + 1))
+}
+
+fn public_error(error: &InferenceError) -> &'static str {
+    match error {
+        InferenceError::Search => "Document search is unavailable or failed.",
+        InferenceError::ToolCall => "The model requested an invalid or additional tool call.",
+        _ => "Inference failed or exceeded its deadline.",
+    }
+}
+
+/// Only provider-supplied, displayable reasoning; never signatures or opaque payloads.
+fn reasoning_events(
+    response: &CompletionResponse,
+    id: &str,
+    phase: &'static str,
+) -> Vec<RuntimeEvent> {
+    let text = response
+        .choice
+        .iter()
+        .filter_map(|part| match part {
+            AssistantContent::Reasoning(reasoning) => Some(&reasoning.content),
+            _ => None,
         })
-        .flat_map(stream::iter),
-    )
+        .flatten()
+        .filter_map(|part| match part {
+            ReasoningContent::Text { text, .. } | ReasoningContent::Summary(text)
+                if !text.trim().is_empty() =>
+            {
+                Some(text.as_str())
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    if text.is_empty() {
+        return vec![];
+    }
+    vec![
+        RuntimeEvent::ThoughtStart {
+            sequence: 0,
+            thought_id: id.into(),
+            phase,
+            source: "model_native",
+        },
+        RuntimeEvent::ThoughtDelta {
+            sequence: 0,
+            thought_id: id.into(),
+            delta: text,
+        },
+        RuntimeEvent::ThoughtEnd {
+            sequence: 0,
+            thought_id: id.into(),
+        },
+    ]
 }
 
 #[cfg(test)]
@@ -613,6 +703,145 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn native_reasoning_uses_shared_events_without_opaque_provider_data() {
+        let provider = Provider::script(vec![(Duration::ZERO, 200, json!({
+            "choices": [{"index": 0, "finish_reason": "stop", "message": {
+                "role": "assistant", "content": "answer",
+                "reasoning_content": "Provider explanation",
+                "reasoning_details": [{"type": "reasoning.encrypted", "data": "private-opaque-payload"}]
+            }}]
+        }))]).await;
+        let events: Vec<_> = execute(provider.turn(), "question".into(), no_search(), |_| {})
+            .collect()
+            .await;
+        let wire: Vec<_> = events
+            .iter()
+            .map(|event| serde_json::to_value(event).unwrap())
+            .collect();
+        assert_eq!(
+            wire.iter()
+                .map(|event| event["kind"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            [
+                "status",
+                "thought_start",
+                "thought_delta",
+                "thought_end",
+                "assistant_delta",
+                "final"
+            ]
+        );
+        assert_eq!(wire[1]["source"], "model_native");
+        assert_eq!(wire[2]["delta"], "Provider explanation");
+        assert_eq!(wire[1]["thought_id"], wire[2]["thought_id"]);
+        assert_eq!(wire[2]["thought_id"], wire[3]["thought_id"]);
+        assert!(
+            !serde_json::to_string(&wire)
+                .unwrap()
+                .contains("private-opaque-payload")
+        );
+        for (index, event) in wire.iter().enumerate() {
+            assert_eq!(event["sequence"], index + 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn tool_events_precede_work_and_cancellation_at_either_boundary_stops_execution() {
+        for after_result in [false, true] {
+            let provider = Provider::script(vec![
+                (
+                    Duration::ZERO,
+                    200,
+                    search_response(json!({"query": "question"})),
+                ),
+                (Duration::ZERO, 200, final_response()),
+            ])
+            .await;
+            let searched = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let called = searched.clone();
+            let reports = Arc::new(Mutex::new(Vec::new()));
+            let captured = reports.clone();
+            let mut events = Box::pin(execute(
+                provider.turn(),
+                "question".into(),
+                Some(move |_| async move {
+                    called.store(true, std::sync::atomic::Ordering::SeqCst);
+                    Ok("[]".into())
+                }),
+                move |usage| captured.lock().unwrap().push(usage),
+            ));
+            assert!(matches!(
+                events.next().await,
+                Some(RuntimeEvent::Status { .. })
+            ));
+            assert!(matches!(
+                events.next().await,
+                Some(RuntimeEvent::ToolCall { .. })
+            ));
+            assert!(!searched.load(std::sync::atomic::Ordering::SeqCst));
+            if after_result {
+                assert!(matches!(
+                    events.next().await,
+                    Some(RuntimeEvent::ToolResult {
+                        is_error: false,
+                        ..
+                    })
+                ));
+                assert!(searched.load(std::sync::atomic::Ordering::SeqCst));
+            }
+            drop(events);
+            assert_eq!(provider.calls.lock().unwrap().len(), 1);
+            let reports = reports.lock().unwrap();
+            assert_eq!(reports.len(), 1);
+            assert_eq!(reports[0].input_tokens, 2);
+        }
+    }
+
+    #[tokio::test]
+    async fn expired_turn_never_starts_search_after_a_trace_delivery_pause() {
+        let provider = Provider::script(vec![(
+            Duration::ZERO,
+            200,
+            search_response(json!({"query": "question"})),
+        )])
+        .await;
+        let reports = Arc::new(Mutex::new(Vec::new()));
+        let captured = reports.clone();
+        let mut events = Box::pin(execute(
+            provider.turn(),
+            "question".into(),
+            Some(|_| {
+                std::future::poll_fn::<Result<String, InferenceError>, _>(|_| {
+                    panic!("expired turn must not invoke search")
+                })
+            }),
+            move |usage| captured.lock().unwrap().push(usage),
+        ));
+        assert!(matches!(
+            events.next().await,
+            Some(RuntimeEvent::Status { .. })
+        ));
+        assert!(matches!(
+            events.next().await,
+            Some(RuntimeEvent::ToolCall { .. })
+        ));
+        tokio::time::pause();
+        tokio::time::advance(TURN_TIMEOUT).await;
+        assert!(matches!(
+            events.next().await,
+            Some(RuntimeEvent::ToolResult { is_error: true, .. })
+        ));
+        assert!(matches!(
+            events.next().await,
+            Some(RuntimeEvent::Error { .. })
+        ));
+        // Accounting is complete before the terminal error reaches the browser.
+        assert_eq!(reports.lock().unwrap().len(), 1);
+        assert!(events.next().await.is_none());
+        assert_eq!(provider.calls.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
     async fn usage_is_reported_once_before_yield_even_without_displayable_text() {
         // Rig preserves an empty completion when the model's token limit is reached.
         for (content, reason) in [("simulated answer", "stop"), ("", "length")] {
@@ -684,8 +913,19 @@ mod tests {
             )
             .collect()
             .await;
-            assert_eq!(events.len(), 3);
-            assert!(matches!(&events[2], RuntimeEvent::Final { .. }));
+            assert_eq!(events.len(), 5);
+            assert!(
+                matches!(&events[1], RuntimeEvent::ToolCall { call_id, arguments, .. }
+                if call_id == "call-search" && arguments["query"] == "manual question")
+            );
+            assert!(
+                matches!(&events[2], RuntimeEvent::ToolResult { call_id, content, is_error: false, .. }
+                if call_id == "call-search" && content == found)
+            );
+            assert!(matches!(&events[4], RuntimeEvent::Final { .. }));
+            for (index, event) in events.iter().enumerate() {
+                assert_eq!(serde_json::to_value(event).unwrap()["sequence"], index + 1);
+            }
             let reports = reports.lock().unwrap();
             assert_eq!(reports.len(), 1);
             assert_eq!((reports[0].input_tokens, reports[0].output_tokens), (4, 4));
@@ -759,8 +999,21 @@ mod tests {
             )
             .collect()
             .await;
-            assert_eq!(events.len(), 2);
-            assert!(matches!(&events[1], RuntimeEvent::Error { .. }));
+            assert_eq!(events.len(), if failure == "arguments" { 2 } else { 4 });
+            assert!(matches!(events.last(), Some(RuntimeEvent::Error { .. })));
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| matches!(event, RuntimeEvent::Error { .. }))
+                    .count(),
+                1
+            );
+            if failure == "search" {
+                assert!(matches!(
+                    &events[2],
+                    RuntimeEvent::ToolResult { is_error: true, .. }
+                ));
+            }
             let reports = reports.lock().unwrap();
             assert_eq!(reports.len(), 1);
             let tokens = if failure == "extra_call" { 4 } else { 2 };
@@ -813,7 +1066,11 @@ mod tests {
             ));
             tokio::time::timeout(Duration::from_secs(5), async {
                 tokio::select! {
-                    _ = events.next() => panic!("unexpected terminal event"),
+                    _ = async {
+                        while let Some(event) = events.next().await {
+                            assert!(!matches!(event, RuntimeEvent::Final { .. } | RuntimeEvent::Error { .. }));
+                        }
+                    } => panic!("unexpected stream end"),
                     _ = async {
                         entered.notified().await;
                         if !during_search {

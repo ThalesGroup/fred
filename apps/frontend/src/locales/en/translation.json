@@ -658,7 +658,6 @@
     "deletedAgentSuffix": "(deleted)",
     "modelPreparationErrorTitle": "Sending unavailable",
     "historyUnavailable": "Conversation history is unavailable. Please try again later.",
-    "historyUnsupported": "This agent answers each message independently. Messages are not saved and will disappear when you leave this chat.",
     "preparationUnavailable": "The conversation could not be prepared. Check your connection and try again.",
     "savedModelChoiceInvalid": "The saved model choice must be selected again in the Models menu.",
     "skipAllHitlQuestions": "Skip all",
@@ -724,13 +723,6 @@
           "title": "Visualize data",
           "description": "Choose a useful representation of data and create it using available tools."
         }
-      },
-      "state": {
-        "unsupported": "This agent does not support skills.",
-        "incompatible": "Skills are not yet available on this agent.",
-        "unavailable": "The skill catalog is unavailable. Retry before selecting a skill.",
-        "disabled": "Skills are disabled on this agent.",
-        "empty": "No skills are authorized in this space."
       }
     }
   },
@@ -2740,6 +2732,18 @@
         "newFolder": "New folder",
         "newSubfolder": "New subfolder in \"{{name}}\"",
         "preview": "Preview",
+        "email": {
+          "subject": "Subject",
+          "sender": "Sender",
+          "sent": "Message date",
+          "to": "To",
+          "cc": "Cc",
+          "messageId": "Message ID",
+          "inReplyTo": "In reply to",
+          "missing": "Not provided",
+          "unavailable": "No structured email details are available for this generation.",
+          "description": "Facts extracted from the main message. They do not identify the uploader or grant access. Long headers and recipient lists may be shortened."
+        },
         "process": "Process",
         "refresh": "Refresh this view",
         "relaunchIngestion": "Relaunch ingestion",
@@ -2828,6 +2832,7 @@
         "title": "Document preview",
         "tabsAria": "Display mode",
         "tabs": {
+          "metadata": "Email details",
           "file": "File",
           "raw": "Raw"
         },

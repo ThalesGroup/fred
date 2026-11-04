@@ -18,17 +18,22 @@ import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRen
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import type { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
 import { PdfStreamingDocumentViewer } from "../../../../../common/PdfStreamingDocumentViewer";
-import { documentPdfSourceUrl, hasNativePreview, isTabularFile } from "../../../../utils/documentViewerUtils";
+import {
+  documentPdfSourceUrl,
+  hasNativePreview,
+  isEmailFile,
+  isTabularFile,
+} from "../../../../utils/documentViewerUtils";
 import { useLazyPreviewQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { MetadataPreview } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./DocumentViewer.module.css";
 import { ManagerPreviewImage } from "./ManagerPreviewImage";
 
-export type ViewMode = "file" | "raw";
-
-const VIEW_TABS: ViewMode[] = ["file", "raw"];
+export type ViewMode = "file" | "raw" | "metadata";
 
 interface DocumentViewerProps {
   documentUid: string;
+  sessionId?: string;
   /** Real file name incl. extension — decides the render strategy (§2.1, FRONT-13). Falls
    * back to markdown rendering when absent, matching the pre-FRONT-13 behavior. */
   fileName?: string | null;
@@ -39,10 +44,8 @@ interface DocumentViewerProps {
    *  automatically — the corpus workspace preview drawer pairs this with a
    *  `DocumentViewerModeToggle` rendered in its own header (left of the
    *  close button), so the toggle isn't fighting the document for vertical
-   *  space inside this "chrome-less" body. Ignored for formats with no native
-   *  renderer: they already render nothing but their markdown extraction, so
-   *  there is nothing to toggle to. Omit to keep the pre-FRONT-09 single-
-   *  strategy behavior (`DocumentViewerPage`). */
+   *  space inside this "chrome-less" body. Email also offers extracted facts;
+   *  other formats without a native renderer keep their single Markdown view. */
   view?: ViewMode;
 }
 
@@ -59,10 +62,16 @@ interface DocumentViewerProps {
  * Deliberately chrome-less: both hosting contexts already provide their own
  * header/close affordance (the page's top bar, `InlineDrawer`'s header).
  */
-export function DocumentViewer({ documentUid, fileName, onMarkdownLoaded, view }: DocumentViewerProps) {
+export function DocumentViewer({ documentUid, sessionId, fileName, onMarkdownLoaded, view }: DocumentViewerProps) {
   if (!hasNativePreview(fileName)) {
     return (
-      <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} fullWidth={isTabularFile(fileName)} />
+      <MarkdownDocumentBody
+        documentUid={documentUid}
+        sessionId={sessionId}
+        onLoaded={onMarkdownLoaded}
+        fullWidth={isTabularFile(fileName)}
+        artifact={isEmailFile(fileName) && view === "metadata" ? "metadata" : "raw"}
+      />
     );
   }
 
@@ -76,23 +85,37 @@ export function DocumentViewer({ documentUid, fileName, onMarkdownLoaded, view }
 
   return (
     <div className={styles.viewerBody}>
-      {view === "file" ? nativeBody : <MarkdownDocumentBody documentUid={documentUid} onLoaded={onMarkdownLoaded} />}
+      {view === "file" ? (
+        nativeBody
+      ) : (
+        <MarkdownDocumentBody documentUid={documentUid} sessionId={sessionId} onLoaded={onMarkdownLoaded} />
+      )}
     </div>
   );
 }
 
 /**
- * The "Fichier"/"Raw" mode toggle for `DocumentViewer`'s `view` prop —
+ * The file/raw or file/email-details toggle for `DocumentViewer`'s `view` prop —
  * rendered separately (not inside `DocumentViewer` itself) so a host can
  * place it in its own header, e.g. `InlineDrawer`'s `headerActions` (left of
  * the close button), instead of stealing a row of vertical space from the
  * document body.
  */
-export function DocumentViewerModeToggle({ view, onChange }: { view: ViewMode; onChange: (view: ViewMode) => void }) {
+export function DocumentViewerModeToggle({
+  view,
+  onChange,
+  fileName,
+}: {
+  view: ViewMode;
+  onChange: (view: ViewMode) => void;
+  fileName?: string | null;
+}) {
   const { t } = useTranslation();
+  const email = isEmailFile(fileName);
+  const tabs: ViewMode[] = email ? ["file", "metadata"] : ["file", "raw"];
   const viewTabItems: ButtonGroupItemProps[] = [
     { label: t("rework.resources.preview.tabs.file") },
-    { label: t("rework.resources.preview.tabs.raw") },
+    { label: t(email ? "rework.resources.preview.tabs.metadata" : "rework.resources.preview.tabs.raw") },
   ];
 
   return (
@@ -102,20 +125,24 @@ export function DocumentViewerModeToggle({ view, onChange }: { view: ViewMode; o
       color="secondary"
       variant="tabs"
       aria-label={t("rework.resources.preview.tabsAria")}
-      selectedIndex={VIEW_TABS.indexOf(view)}
-      onSelectedIndexChange={(index) => onChange(VIEW_TABS[index])}
+      selectedIndex={tabs.indexOf(view)}
+      onSelectedIndexChange={(index) => onChange(tabs[index])}
     />
   );
 }
 
 function MarkdownDocumentBody({
   documentUid,
+  sessionId,
   onLoaded,
   fullWidth,
+  artifact = "raw",
 }: {
   documentUid: string;
+  sessionId?: string;
   onLoaded?: (content: string) => void;
   fullWidth?: boolean;
+  artifact?: "raw" | "metadata";
 }) {
   const { t } = useTranslation();
   const [content, setContent] = useState("");
@@ -144,7 +171,7 @@ function MarkdownDocumentBody({
     let cancelled = false;
     setLoading(true);
     setUnavailable(false);
-    const response = fetchManagerPreview({ id: documentUid, artifact: "raw" })
+    const response = fetchManagerPreview({ id: documentUid, artifact, ...(sessionId ? { sessionId } : {}) })
       .unwrap()
       .then((value) => {
         if (typeof value !== "string") throw new Error("Invalid preview");
@@ -155,7 +182,7 @@ function MarkdownDocumentBody({
         if (cancelled) return;
         setContent(decoded);
         setUnavailable(decoded.trim() === "");
-        onLoaded?.(decoded);
+        if (artifact === "raw") onLoaded?.(decoded);
       })
       .catch(() => {
         if (cancelled) return;
@@ -171,7 +198,7 @@ function MarkdownDocumentBody({
     };
     // onLoaded is a per-render callback (title-derivation), not a fetch dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentUid, fetchManagerPreview]);
+  }, [documentUid, sessionId, artifact, fetchManagerPreview]);
 
   if (loading) {
     return (
@@ -183,10 +210,17 @@ function MarkdownDocumentBody({
   if (unavailable) {
     return (
       <div className={styles.markdownBody}>
-        <p className={styles.unavailable}>{t("rework.resources.preview.markdownUnavailable")}</p>
+        <p className={styles.unavailable}>
+          {t(
+            artifact === "metadata"
+              ? "rework.resources.preview.email.unavailable"
+              : "rework.resources.preview.markdownUnavailable",
+          )}
+        </p>
       </div>
     );
   }
+  if (artifact === "metadata") return <EmailDetails content={content} />;
   return (
     <div className={styles.markdownBody}>
       <MarkdownRenderer
@@ -196,6 +230,40 @@ function MarkdownDocumentBody({
         localLinksAsText
         diagramsAsCode
       />
+    </div>
+  );
+}
+
+function EmailDetails({ content }: { content: string }) {
+  const { t } = useTranslation();
+  let metadata: MetadataPreview;
+  try {
+    metadata = JSON.parse(content) as MetadataPreview;
+    if (!metadata.identity || !metadata.extensions?.email) throw new Error("No extracted mail facts");
+  } catch {
+    return <p className={styles.unavailable}>{t("rework.resources.preview.email.unavailable")}</p>;
+  }
+  const email = metadata.extensions!.email!;
+  const fields = [
+    ["subject", metadata.identity.title],
+    ["sender", metadata.identity.author],
+    ["sent", metadata.identity.created],
+    ["to", email.to.join("; ")],
+    ["cc", email.cc.join("; ")],
+    ["messageId", email.message_id],
+    ["inReplyTo", email.in_reply_to],
+  ];
+  return (
+    <div className={styles.markdownBody}>
+      <p>{t("rework.resources.preview.email.description")}</p>
+      <dl className={styles.emailDetails}>
+        {fields.map(([key, value]) => (
+          <div key={key}>
+            <dt>{t(`rework.resources.preview.email.${key}`)}</dt>
+            <dd>{value || t("rework.resources.preview.email.missing")}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

@@ -22,6 +22,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MetadataPreview } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -173,5 +174,52 @@ describe("DocumentViewer — markdown mode for a natively-rendered file", () => 
 
     expect(container.querySelector('[data-testid="content"]')).toBeNull();
     expect(container.textContent).toContain("rework.resources.preview.markdownUnavailable");
+  });
+});
+
+describe("DocumentViewer - structured email facts", () => {
+  it("reads the published metadata with conversation scope and renders facts as text", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const loaded = vi.fn();
+    act(() =>
+      root.render(
+        <DocumentViewer
+          documentUid="mail"
+          sessionId="conversation"
+          fileName="message.EML"
+          view="metadata"
+          onMarkdownLoaded={loaded}
+        />,
+      ),
+    );
+    expect(fetchPreview).toHaveBeenCalledWith({ id: "mail", artifact: "metadata", sessionId: "conversation" });
+    await act(async () => {
+      pending.get("mail")!.resolve(
+        JSON.stringify({
+          identity: { title: '<img src=x onerror="attack()">', author: "Paul", created: "2026-10-27T10:30:00+01:00" },
+          extensions: { email: { to: ["Alice", "Bob"], cc: [], message_id: "<external>", in_reply_to: null } },
+        } satisfies MetadataPreview),
+      );
+    });
+    expect(container.textContent).toContain('<img src=x onerror="attack()">');
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("Paul");
+    expect(container.textContent).toContain("Alice; Bob");
+    expect(container.textContent).toContain("2026-10-27T10:30:00+01:00");
+    expect(container.textContent).toContain("rework.resources.preview.email.missing");
+    expect(loaded).not.toHaveBeenCalled();
+  });
+
+  it("keeps old documents without extracted headers readable with an explicit empty state", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => root.render(<DocumentViewer documentUid="old-mail" fileName="message.msg" view="metadata" />));
+    await act(async () => {
+      pending.get("old-mail")!.resolve(JSON.stringify({ identity: {}, extensions: null }));
+    });
+    expect(container.textContent).toContain("rework.resources.preview.email.unavailable");
   });
 });

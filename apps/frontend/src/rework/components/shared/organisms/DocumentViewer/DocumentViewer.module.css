@@ -51,3 +51,18 @@
   min-width: 1em;
   min-height: 1em;
 }
+
+.emailDetails {
+  display: grid;
+  gap: var(--spacing-m);
+}
+
+.emailDetails dt {
+  font-weight: 600;
+}
+
+.emailDetails dd {
+  margin: var(--spacing-xs) 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

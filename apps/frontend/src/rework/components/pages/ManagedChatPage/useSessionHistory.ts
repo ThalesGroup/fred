@@ -53,6 +53,8 @@ export function useSessionHistory({
 
   useEffect(() => {
     if (!sessionId) return;
+    const displayed = getCurrentMessages?.() ?? [];
+    const hasCurrentMessages = displayed.length > 0 && displayed.every((message) => message.session_id === sessionId);
     const controller = new AbortController();
     const current = () =>
       !controller.signal.aborted && activeKey.current === key && KeyCloakService.GetSessionIdentity() === actor;
@@ -80,12 +82,14 @@ export function useSessionHistory({
       return;
     }
     if (messagesUrl === undefined) {
-      if (!isTurnActive()) onLoaded([]);
+      // Metadata can arrive after the first SSE final. Loading is not a refusal
+      // and must not erase the admitted exchange already received in this visit.
+      if (!isTurnActive() && !hasCurrentMessages) onLoaded([]);
       setResult({ key, status: "loading" });
       return;
     }
     if (loadedKey.current !== key && !isTurnActive()) {
-      onLoaded([]);
+      if (!hasCurrentMessages) onLoaded([]);
       setResult({ key, status: "loading" });
     }
     const load = async () => {

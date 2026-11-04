@@ -362,16 +362,11 @@ function ManagedChatContent({
     !chat.executionDisabled &&
     !chat.historyUnavailable;
 
-  const conversationNotice = (chat.historyUnavailable ||
-    chat.sessionUnavailable ||
-    chat.preparationUnavailable ||
-    chat.historyUnsupported) && (
+  const conversationNotice = (chat.historyUnavailable || chat.sessionUnavailable || chat.preparationUnavailable) && (
     <p className={styles.conversationNotice} role="status">
       {chat.historyUnavailable || chat.sessionUnavailable
         ? t(chat.historyErrorKey ?? "chatbot.historyUnavailable")
-        : chat.preparationUnavailable
-          ? chat.preparationErrorDetail || t("chatbot.preparationUnavailable")
-          : t("chatbot.historyUnsupported")}
+        : chat.preparationErrorDetail || t("chatbot.preparationUnavailable")}
     </p>
   );
 
@@ -689,7 +684,7 @@ function ManagedChatContent({
     promptsEnabled: space.kind !== "project",
     skillCatalog: chat.skills,
     skillsLoading: chat.modelPreparationPending,
-    skillsFailed: chat.preparationUnavailable || chat.skillState === "unavailable",
+    skillsFailed: chat.preparationUnavailable || chat.skillsUnavailable,
     refreshSkills: chat.refreshSkills,
     sessionId: chat.sessionId,
     teamId,
@@ -783,9 +778,6 @@ function ManagedChatContent({
             description={chat.modelPreparationError}
           />
         </div>
-      )}
-      {chat.skillState && chat.skillState !== "available" && (
-        <p role="status">{t(`chatbot.skills.state.${chat.skillState}`)}</p>
       )}
       <RichInputField
         value={commands.composerValue}

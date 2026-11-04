@@ -875,3 +875,268 @@ async fn project_attachment_counts_against_its_team_quota() {
         404
     );
 }
+
+/// Real processor and manager serialization, real publication and authorized reader.
+/// Temporal scheduling, model calls and the worker HTTP transport are not exercised.
+#[tokio::test]
+#[ignore]
+async fn email_metadata_publication_and_conversation_reader() {
+    let (d, p) = Box::pin(setup_with_lifecycle(deletion())).await;
+    let space = d.folder.space_id;
+    let session = conversation(&d, "reader", space).await;
+    let other = conversation(&d, "reader", space).await;
+    for (fixture, attachment, title) in [
+        (
+            "plain_with_attachments.eml",
+            false,
+            Some("Réunion budget 2027"),
+        ),
+        (
+            "plain_with_attachments.msg",
+            false,
+            Some("Budget review 2027"),
+        ),
+        ("no_subject.eml", false, None),
+        ("forwarded.eml", true, Some("Fwd: quarterly figures")),
+        ("with_embedded.msg", true, Some("Fwd: supplier contract")),
+    ] {
+        let original = std::fs::canonicalize(format!(
+            "../knowledge-flow-worker/tests/processors/input/email_processor/fixtures/{fixture}"
+        ))
+        .unwrap();
+        let bytes = std::fs::read(&original).unwrap();
+        let (code, receipt) = if attachment {
+            attach(&d, "reader", space, session, fixture, &bytes).await
+        } else {
+            d.upload("writer", fixture, &bytes, Uuid::new_v4(), None)
+                .await
+        };
+        assert_eq!(code, 201, "{receipt}");
+        let operation = if attachment {
+            receipt["processing"]["id"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap()
+        } else {
+            p.start(
+                "writer",
+                Uuid::new_v4(),
+                receipt["document_id"].as_str().unwrap().parse().unwrap(),
+                Start {
+                    profile: Profile::Fast,
+                    retry_of: None,
+                },
+            )
+            .await
+            .unwrap()
+            .id
+        };
+        let work = store::row(&d.e.pool, operation)
+            .await
+            .unwrap()
+            .work(p.installation);
+        let preparation = p
+            .claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
+            .await
+            .unwrap();
+        commit(&p, &preparation, &[("policy.json", b"{}")], 0).await;
+        let extraction = p
+            .claim(claim(&work, Stage::Extraction, Uuid::new_v4(), 1))
+            .await
+            .unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let job = temp.path().join("job.json");
+        let output = temp.path().join("output");
+        std::fs::write(&job, serde_json::to_vec(&extraction).unwrap()).unwrap();
+        let result = tokio::process::Command::new("../knowledge-flow-worker/.venv/bin/python")
+            .arg(std::fs::canonicalize("tests/support/email_metadata_worker.py").unwrap())
+            .args([job.as_os_str(), original.as_os_str(), output.as_os_str()])
+            .current_dir("../knowledge-flow-worker")
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let metadata = std::fs::read(output.join("metadata.json")).unwrap();
+        let markdown = std::fs::read(output.join("output.md")).unwrap();
+        let facts: Value = serde_json::from_slice(&metadata).unwrap();
+        assert_eq!(facts["identity"]["title"].as_str(), title);
+        assert_eq!(
+            facts["identity"]["uploaded_by"],
+            if attachment { "reader" } else { "writer" }
+        );
+        assert!(facts["extensions"]["email"].get("bcc").is_none());
+        let files = [
+            ("metadata.json", metadata.as_slice()),
+            ("output.md", markdown.as_slice()),
+        ];
+        commit(&p, &extraction, &files, 0).await;
+        let index_activity = Uuid::new_v4();
+        let mut indexed = p
+            .claim(claim(&work, Stage::Indexing, index_activity, 1))
+            .await
+            .unwrap();
+        if fixture == "plain_with_attachments.eml" {
+            let mut invalid = facts.clone();
+            invalid["extensions"]["email"]["bcc"] = json!(["private@example.test"]);
+            let invalid = serde_json::to_vec(&invalid).unwrap();
+            let mut artifacts = Vec::new();
+            for (name, bytes) in [
+                ("metadata.json", invalid.as_slice()),
+                ("output.md", markdown.as_slice()),
+            ] {
+                let file = tempfile::NamedTempFile::new().unwrap();
+                std::fs::write(file.path(), bytes).unwrap();
+                let hash: [u8; 32] = Sha256::digest(bytes).into();
+                Box::pin(p.derived.put_verified(
+                    &format!("{}{name}", indexed.output_prefix),
+                    file.path(),
+                    bytes.len() as i64,
+                    &hash,
+                ))
+                .await
+                .unwrap();
+                artifacts.push(Artifact {
+                    path: name.into(),
+                    size: bytes.len() as i64,
+                    sha256: format!("{:x}", Sha256::digest(bytes)),
+                });
+            }
+            let bad = Commit {
+                work: work.clone(),
+                stage: Stage::Indexing,
+                manifest: Manifest {
+                    generation: indexed.generation,
+                    artifacts,
+                    chunks: 0,
+                    vectors: 0,
+                    vector_ordinals: vec![],
+                    rows: None,
+                },
+            };
+            assert!(Box::pin(p.commit(bad.clone())).await.is_err());
+            // Invalid immutable bytes cannot be edited in place. A new fenced
+            // attempt restores the extraction; the old generation stays unreadable.
+            indexed = p
+                .claim(claim(&work, Stage::Indexing, index_activity, 2))
+                .await
+                .unwrap();
+            assert!(Box::pin(p.commit(bad)).await.is_err());
+        }
+        let path = format!(
+            "/documents/{}/preview?artifact=metadata{}",
+            work.document_id,
+            if attachment {
+                format!("&session_id={session}")
+            } else {
+                String::new()
+            }
+        );
+        let before = d
+            .request("reader", "GET", &path, Body::empty(), "", None)
+            .await;
+        assert_eq!(before.status(), 404);
+        let done = commit(&p, &indexed, &files, 0).await;
+        let preview = d
+            .request("reader", "GET", &path, Body::empty(), "", None)
+            .await;
+        assert_eq!(preview.status(), 200);
+        assert_eq!(
+            to_bytes(preview.into_body(), 2_097_152)
+                .await
+                .unwrap()
+                .as_ref(),
+            metadata
+        );
+        let raw_path = path.replace("artifact=metadata", "artifact=raw");
+        let raw = d
+            .request("reader", "GET", &raw_path, Body::empty(), "", None)
+            .await;
+        assert_eq!(raw.status(), 200);
+        assert_eq!(
+            to_bytes(raw.into_body(), 2_097_152).await.unwrap().as_ref(),
+            markdown
+        );
+        // Recipient strings never authorize an account, and current space
+        // revocation also applies to the structured preview.
+        assert_eq!(
+            d.request("bob@example.com", "GET", &path, Body::empty(), "", None)
+                .await
+                .status(),
+            403
+        );
+        if fixture == "plain_with_attachments.eml" {
+            crate::delete_tuple(&d.e, "reader", "member", &format!("space:{space}")).await;
+            assert_eq!(
+                d.request("reader", "GET", &path, Body::empty(), "", None)
+                    .await
+                    .status(),
+                403
+            );
+            crate::grant(&d.e, space, Role::Member, "reader").await;
+        }
+        // Same committed manifest is idempotent; contradictory metadata cannot replace it.
+        let (_, manifest) = published(&d.e.pool, work.document_id).await;
+        let replay = Commit {
+            work: work.clone(),
+            stage: Stage::Indexing,
+            manifest: manifest.clone(),
+        };
+        assert_eq!(
+            Box::pin(p.commit(replay)).await.unwrap().status,
+            done.status
+        );
+        let mut changed = manifest;
+        changed
+            .artifacts
+            .iter_mut()
+            .find(|a| a.path == "metadata.json")
+            .unwrap()
+            .sha256 = "0".repeat(64);
+        assert!(
+            Box::pin(p.commit(Commit {
+                work: work.clone(),
+                stage: Stage::Indexing,
+                manifest: changed
+            }))
+            .await
+            .is_err()
+        );
+        if attachment {
+            for denied in [
+                path.replace(&session.to_string(), &other.to_string()),
+                format!("/documents/{}/preview?artifact=metadata", work.document_id),
+            ] {
+                assert_eq!(
+                    d.request("reader", "GET", &denied, Body::empty(), "", None)
+                        .await
+                        .status(),
+                    404
+                );
+            }
+            assert_eq!(
+                d.request("writer", "GET", &path, Body::empty(), "", None)
+                    .await
+                    .status(),
+                404
+            );
+            let delete = format!("{}/{}", attachments(space, session), work.document_id);
+            assert!(
+                d.request("reader", "DELETE", &delete, Body::empty(), "", None)
+                    .await
+                    .status()
+                    .is_success()
+            );
+            assert_eq!(
+                d.request("reader", "GET", &path, Body::empty(), "", None)
+                    .await
+                    .status(),
+                404
+            );
+        }
+    }
+}

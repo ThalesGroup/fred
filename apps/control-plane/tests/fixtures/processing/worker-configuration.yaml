@@ -24,6 +24,10 @@ processing:
       pdf:
         do_ocr: false
       input_processors:
+      - suffix: .eml
+        class_path: knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
+      - suffix: .msg
+        class_path: knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
       - suffix: .pdf
         class_path: knowledge_flow_worker.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
       - suffix: .docx
@@ -88,6 +92,10 @@ processing:
         do_ocr: true
         docling_num_threads: 2
       input_processors:
+      - suffix: .eml
+        class_path: knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
+      - suffix: .msg
+        class_path: knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
       - suffix: .pdf
         class_path: knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
       - suffix: .docx
@@ -152,6 +160,10 @@ processing:
         do_ocr: true
         docling_num_threads: 2
       input_processors:
+      - suffix: .eml
+        class_path: knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
+      - suffix: .msg
+        class_path: knowledge_flow_worker.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
       - suffix: .pdf
         class_path: knowledge_flow_worker.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
       - suffix: .docx

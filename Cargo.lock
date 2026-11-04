@@ -1456,6 +1456,7 @@ dependencies = [
 name = "fred-rust-agent"
 version = "5.0.0"
 dependencies = [
+ "async-stream",
  "axum",
  "fred-rust-sdk",
  "futures",
