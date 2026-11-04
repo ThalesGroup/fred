@@ -221,9 +221,6 @@ where
                 _ => {}
             }
         };
-        if answer.is_empty() {
-            Err(InferenceError::Provider)?;
-        }
         // The tool holds the only other reference to what it cited.
         drop(run);
         drop(usage);
@@ -668,11 +665,13 @@ mod tests {
         // Rig preserves an empty completion when the model's token limit is reached.
         for (content, reason) in [("simulated answer", "stop"), ("", "length")] {
             let provider = Provider::with_response(Duration::ZERO, 200, content, reason).await;
+            let store = rig_memory::MemoryStore::default();
             let reported = Arc::new(Mutex::new(Vec::new()));
             let captured = reported.clone();
-            let mut events = Box::pin(without_memory(
+            let mut events = Box::pin(execute(
                 provider.turn(),
                 "question".into(),
+                Some((store.clone(), "chat".into())),
                 no_search(),
                 move |usage| {
                     captured
@@ -693,6 +692,13 @@ mod tests {
                 );
             }
             assert_eq!(*reported.lock().unwrap(), vec![(Some(2), Some(2))]);
+            assert_eq!(
+                rig_memory::load(&store, "chat")
+                    .unwrap()
+                    .messages()
+                    .is_empty(),
+                content.is_empty()
+            );
         }
     }
 

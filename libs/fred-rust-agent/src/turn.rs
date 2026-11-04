@@ -10,12 +10,16 @@ use fred_rust_sdk::inference::{InferenceAdmission, InferenceCredentialBinding, R
 use futures::StreamExt;
 use rig_agent::{
     AgentBuilder,
-    agent::{MultiTurnStreamItem, StreamingResult},
+    agent::{
+        AgentHook, HookContext, ModelTurnAction, ModelTurnFinished, MultiTurnStreamItem,
+        StreamingResult,
+    },
     completion::PromptError,
 };
 use rig_core::{
     DynModel,
     completion::{Effort, GenerationOptions, Usage},
+    message::AssistantContent,
     operation::Completion,
     providers::openai::{
         OpenAIConfig,
@@ -32,6 +36,28 @@ pub(crate) const TURN_TIMEOUT: Duration = Duration::from_secs(120);
 /// A stalled provider, not a long answer: the turn deadline bounds the whole stream.
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
 const TITLE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Reject an unusable final before Rig saves the run, rather than after memory
+/// has committed. A tool-call reply may legitimately have no answer text yet.
+struct NonemptyAnswer;
+
+impl AgentHook for NonemptyAnswer {
+    async fn on_model_turn_finished(
+        &self,
+        _: &HookContext,
+        event: ModelTurnFinished<'_>,
+    ) -> ModelTurnAction {
+        if event.content.iter().any(|part| match part {
+            AssistantContent::ToolCall(_) => true,
+            AssistantContent::Text(text) => !text.text.is_empty(),
+            _ => false,
+        }) {
+            ModelTurnAction::Continue
+        } else {
+            ModelTurnAction::Stop("The model returned no answer text.".into())
+        }
+    }
+}
 
 static HTTP: LazyLock<Result<reqwest::Client, reqwest::Error>> = LazyLock::new(|| {
     reqwest::Client::builder()
@@ -193,7 +219,9 @@ impl InferenceTurn {
         F: Future<Output = Result<Vec<SearchHit>, InferenceError>> + Send + 'static,
     {
         let _span = self.span.enter();
-        let mut agent = self.agent(self.generation().parallel_tool_calls(false));
+        let mut agent = self
+            .agent(self.generation().parallel_tool_calls(false))
+            .add_hook(NonemptyAnswer);
         if let Some((store, log)) = memory {
             agent = agent.memory(store).conversation(log);
         }
