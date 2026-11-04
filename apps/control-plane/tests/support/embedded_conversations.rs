@@ -183,6 +183,22 @@ async fn embedded_history_hides_foreign_retired_and_unreadable_spaces() {
     .await;
     assert_eq!(foreign, missing);
     assert_eq!(foreign.0, 404);
+    // A format-incompatible log is refused without repair or loss of the bytes.
+    let store = ConversationStore(e.pool.clone());
+    store
+        .append_log_async(&id.to_string(), 0, b"{\"format\":\"rig-session/999\"}\n")
+        .await
+        .unwrap();
+    assert_eq!(
+        support::request(&app, &identity, Some("alice"), "GET", &path, Value::Null)
+            .await
+            .0,
+        500
+    );
+    assert_eq!(
+        store.read_log_async(&id.to_string()).await.unwrap(),
+        b"{\"format\":\"rig-session/999\"}\n"
+    );
     // No authorization refresh inside Rig; each history request still needs current access.
     sqlx::query("delete from space_role_grant where space_id=$1 and subject='alice'")
         .bind(space)
