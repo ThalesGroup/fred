@@ -26,10 +26,10 @@ macro_rules! generation_due {
         "g.cleaned_at is null and d.deletion_id is null and (p.status in ('succeeded', 'failed') or g.committed_at is null) and (d.published_generation is distinct from g.id or cardinality(g.vector_ordinals) < g.chunks)"
     };
 }
-/// Retired documents with no active request and no generation before its cleanup time.
+/// Retired documents past retention, with no active request or protected generation.
 macro_rules! purge_due {
     () => {
-        "d.deletion_id is not null and d.purged_at is null and not exists (select 1 from document_processing a where a.document_id = d.id and a.status in ('pending', 'running')) and not exists (select 1 from document_processing lp join generation lg on lg.processing_id = lp.id where lp.document_id = d.id and lg.cleanup_after > clock_timestamp())"
+        "d.deletion_id is not null and d.purged_at is null and exists (select 1 from deletion retired where retired.id = d.deletion_id and retired.due_at <= now()) and not exists (select 1 from document_processing a where a.document_id = d.id and a.status in ('pending', 'running')) and not exists (select 1 from document_processing lp join generation lg on lg.processing_id = lp.id where lp.document_id = d.id and lg.cleanup_after > clock_timestamp())"
     };
 }
 

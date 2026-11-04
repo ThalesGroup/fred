@@ -2513,6 +2513,20 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     assert_eq!(receipt.documents_deleted, 1);
     assert!(receipt.error_code.is_none());
 
+    // Retirement hides content immediately but cannot erase derived data before
+    // the same receipt deadline that protects metadata and original objects.
+    sqlx::query("update deletion set due_at=now()+interval '1 day' where id=$1")
+        .bind(operation)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
+    sqlx::query("update deletion set due_at=now() where id=$1")
+        .bind(operation)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+
     let candidates = p.cleanup_candidates().await.unwrap();
     assert_eq!(candidates.len(), 1);
     let candidate = candidates.into_iter().next().unwrap();
