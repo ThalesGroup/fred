@@ -2,10 +2,11 @@
 
 - **Summary**
 
-  Keep working while agents answer, send follow-up instructions during a response, and bring email files into your libraries. Personal settings are saved across visits, and new conversations receive clear titles automatically.
+  Create presentations from your instructions using a corporate template. Keep working while agents answer, send follow-up instructions during a response, and bring email files into your libraries. Personal settings are saved across visits, and new conversations receive clear titles automatically.
 
 - **Features**
 
+  - Build presentations from instructions with your own template or a shared platform template, preview them and download the result (#2679)
   - Queue follow-up messages or send instructions to an agent while it is answering (#3284)
   - Upload Outlook and email files to libraries or attach them to conversations (#3306)
   - Keep your language, theme and display preferences across visits (#3282)
@@ -27,6 +28,7 @@
 
 - **Bug Fixes**
 
+  - Keep approval answers after retryable errors and clearly distinguish pending, answered and expired requests (#2337)
   - Answers keep running during in-app navigation, with completion and input requests announced on every page (#2603, #3427, #3428)
   - Find documents in their current folders and honor disabled search visibility on supported stores (#3199, #3202, #3203)
   - Read structured table results reliably and show their query details (#3325, #3365)

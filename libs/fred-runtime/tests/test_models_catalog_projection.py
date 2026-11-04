@@ -553,6 +553,22 @@ def test_response_models_match_the_entries_projection() -> None:
     assert response.models == _project_model_catalog_entries(catalog)
 
 
+def test_vision_profile_ids_is_the_supports_vision_subset() -> None:
+    catalog = _catalog(
+        (
+            _profile("chat.vision", name="gpt-4o").model_copy(
+                update={"supports_vision": True}
+            ),
+            _profile("chat.text", name="gpt-4o"),
+            _profile("other", name="gpt-5.1"),
+        )
+    )
+
+    entries = _project_model_catalog_entries(catalog)
+
+    assert [entry.vision_profile_ids for entry in entries] == [["chat.vision"], []]
+
+
 def test_reasoning_efforts_lists_only_profiles_with_selectable_levels() -> None:
     levelled = ModelProfile(
         profile_id="chat.gpt.levels",

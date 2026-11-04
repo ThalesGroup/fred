@@ -438,6 +438,10 @@ class CapabilityCatalogEntry(BaseModel):
     # so the admin row shows no reasoning control at all (an administrator
     # cannot make a model reason). Always empty for kind="tool"/"agent".
     model_thinking_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # The subset of `model_profile_ids` declaring `supports_vision`, derived by
+    # the pod like the thinking subset above. Lets a form offer image-reading
+    # features only when a vision-capable model is reachable.
+    model_vision_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
     # Reasoning levels per thinking profile id, for profiles declaring at least
     # two (`reasoning_efforts`); empty when a platform helper has no level to
     # send (no own `reasoning_effort` either). Any other thinking profile is on/off.

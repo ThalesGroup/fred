@@ -31,7 +31,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => (opts ? `${key} ${JSON.stringify(opts)}` : key),
-    i18n: { language: "en" },
+    i18n: { language: "en", exists: (key: string) => key === "capability.ppt_builder.preparing" },
   }),
 }));
 
@@ -273,5 +273,53 @@ describe("AgentCard marketplace bar", () => {
     const popover = container.querySelector('[role="dialog"]');
     expect(popover?.textContent).toContain("reasons.suspended");
     expect(popover?.textContent).not.toContain("removed.hide");
+  });
+});
+
+// A capability still preparing its configuration reads "preparing" (with what
+// it prepares when it says so), not "broken"; a failed preparation says so
+// with the capability's own message.
+describe("AgentCard capability readiness", () => {
+  it("shows the preparing warning while a capability is pending", () => {
+    render({ ...instance(), suspension_reason: "capability_pending" }, false);
+    expect(container.textContent).toContain("rework.agentCard.preparing");
+    expect(container.textContent).not.toContain("rework.agentCard.suspended");
+  });
+
+  it("says what the pending capability is preparing when it declares it", () => {
+    render(
+      {
+        ...instance(),
+        suspension_reason: "capability_pending",
+        selected_capability_ids: ["ppt_builder", "web_search"],
+        capability_config: { ppt_builder: {}, web_search: {} },
+      } as ManagedAgentInstanceSummary,
+      false,
+    );
+    expect(container.textContent).toContain("rework.agentCard.preparingDetail");
+    expect(container.textContent).toContain("capability.ppt_builder.preparing");
+  });
+
+  it("falls back to the generic preparing text when no capability declares one", () => {
+    render(
+      {
+        ...instance(),
+        suspension_reason: "capability_pending",
+        capability_config: { web_search: {} },
+      } as ManagedAgentInstanceSummary,
+      false,
+    );
+    expect(container.textContent).toContain("rework.agentCard.preparing");
+    expect(container.textContent).not.toContain("preparingDetail");
+  });
+
+  it("shows the failure detail once the preparation failed", () => {
+    render(
+      { ...instance(), suspension_reason: "capability_pending", suspension_detail: "Template unreadable." },
+      false,
+    );
+    expect(container.textContent).toContain("rework.agentCard.preparationFailed");
+    expect(container.textContent).toContain("Template unreadable.");
+    expect(container.textContent).not.toContain("rework.agentCard.preparing");
   });
 });

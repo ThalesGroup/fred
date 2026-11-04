@@ -38,14 +38,17 @@ Follow the feature procedures in this release guide before deploying.
 
 No additional configuration changes are introduced by release preparation.
 
-The standard helper selected shared-library 4.5.10 from the stable code baseline,
-but all three coordinates were independently published after that tag. The dry
-run found different wheel contents for fred-core, fred-sdk and fred-runtime.
-Release preparation therefore advances them once from published 4.5.10 to
-4.5.11 and synchronizes selected dependency floors and locks using the existing
-rewrite and lock-verification functions. The baseline remains code/v3.9.2.
+The standard helper selects shared-library 4.5.10 from the stable code baseline,
+but those coordinates were independently published after that tag with different
+wheel contents. The merged PPT contribution advances fred-core, fred-sdk and
+fred-runtime to 4.6.0 for its readiness and model interfaces. Release
+preparation preserves that reviewed minor version and synchronizes selected
+dependency floors and locks. The baseline remains code/v3.9.2; no existing
+coordinate is overwritten.
 The writable-document distribution advances to 4.5.2; only its editor manifest
 advances from 0.1.0 to 0.1.1. The import-tool manifest remains 0.1.0.
+The ppt-filler distribution advances to 4.5.3 and its existing ppt_filler manifest
+to 0.1.1. The new ppt_builder manifest keeps its initial 0.1.0 version.
 
 ## Upgrade
 

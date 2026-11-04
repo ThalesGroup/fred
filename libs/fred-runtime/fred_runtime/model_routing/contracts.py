@@ -231,6 +231,14 @@ class ModelProfile(FrozenModel):
             "`RuntimeContext.reasoning_enabled_model_ids`."
         ),
     )
+    supports_vision: bool = Field(
+        default=False,
+        description=(
+            "Declared aptitude: this profile's model accepts image input. "
+            "Capability calls that require vision fail closed on a profile "
+            "that does not declare it."
+        ),
+    )
 
     reasoning_efforts: tuple[ReasoningEffortLevel, ...] | None = Field(
         default=None,
