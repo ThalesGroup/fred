@@ -67,6 +67,9 @@ REVOKE ALL ON SCHEMA runtime FROM PUBLIC, fred_cp, fred_kf, fred_monitor,
 REVOKE ALL ON SCHEMA knowledge FROM PUBLIC, fred_cp, fred_runtime, fred_monitor,
     fred_kf_reader, fred_runtime_reader, fred_monitor_reader;
 GRANT USAGE ON SCHEMA cp_read TO fred_kf_reader, fred_runtime_reader, fred_monitor_reader;
+-- Cross-schema FKs bind runtime payloads to the CP conversation root.
+-- Table REFERENCES is granted by CP migration 0009; no SELECT/DML is granted.
+GRANT USAGE ON SCHEMA control_plane TO fred_runtime;
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA knowledge;
 DO $bootstrap$
 BEGIN
