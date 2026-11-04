@@ -78,6 +78,7 @@ import {
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./TeamAgentsPage.module.css";
+import type { StagedAssetFile } from "../../../features/capabilities/types.ts";
 
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
 type AgentRequestCapabilityConfigValues = NonNullable<CreateAgentInstanceRequest["capability_config_values"]>;
@@ -92,20 +93,24 @@ type AgentRequestCapabilityConfigValues = NonNullable<CreateAgentInstanceRequest
  */
 function buildAgentSaveFormData(
   request: CreateAgentInstanceRequest | UpdateAgentInstanceRequest,
-  assetFiles: Record<string, Record<string, File>>,
+  assetFiles: Record<string, Record<string, StagedAssetFile>>,
 ): FormData {
   const formData = new FormData();
   formData.append("request", JSON.stringify(request));
   for (const [capabilityId, slots] of Object.entries(assetFiles)) {
-    for (const [slotKey, file] of Object.entries(slots)) {
-      formData.append("asset_slots", `${capabilityId}:${slotKey}`);
-      formData.append("asset_files", file, file.name);
+    for (const [slotKey, staged] of Object.entries(slots)) {
+      // A multi-file slot repeats the same slot ref once per file, in order -
+      // the pod receives them as one ordered list for that slot.
+      for (const file of Array.isArray(staged) ? staged : [staged]) {
+        formData.append("asset_slots", `${capabilityId}:${slotKey}`);
+        formData.append("asset_files", file, file.name);
+      }
     }
   }
   return formData;
 }
 
-const hasAssetFiles = (assetFiles: Record<string, Record<string, File>>): boolean =>
+const hasAssetFiles = (assetFiles: Record<string, Record<string, StagedAssetFile>>): boolean =>
   Object.values(assetFiles).some((slots) => Object.keys(slots).length > 0);
 
 /** Returns undefined (rather than a hardcoded fallback string) when no usable

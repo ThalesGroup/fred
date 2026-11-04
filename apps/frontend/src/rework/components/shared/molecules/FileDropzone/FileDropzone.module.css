@@ -44,6 +44,13 @@
   color: var(--on-primary-container);
 }
 
+.zone:disabled {
+  cursor: not-allowed;
+  border-color: var(--outline-variant);
+  background: transparent;
+  color: var(--state-text-disabled);
+}
+
 .zone:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;

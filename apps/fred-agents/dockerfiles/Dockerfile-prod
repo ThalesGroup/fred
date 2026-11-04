@@ -64,6 +64,7 @@ COPY libs/fred-runtime/pyproject.toml /workspace/libs/fred-runtime/
 COPY libs/fred-sdk/pyproject.toml /workspace/libs/fred-sdk/
 COPY libs/capabilities/fred-capability-writable-document/pyproject.toml /workspace/libs/capabilities/fred-capability-writable-document/
 COPY libs/capabilities/fred-capability-ppt-filler/pyproject.toml /workspace/libs/capabilities/fred-capability-ppt-filler/
+COPY libs/capabilities/fred-capability-word-template/pyproject.toml /workspace/libs/capabilities/fred-capability-word-template/
 COPY libs/capabilities/fred-capability-platform-ops/pyproject.toml /workspace/libs/capabilities/fred-capability-platform-ops/
 COPY libs/capabilities/fred-capability-html-artifact/pyproject.toml /workspace/libs/capabilities/fred-capability-html-artifact/
 COPY libs/capabilities/fred-capability-team-wiki/pyproject.toml /workspace/libs/capabilities/fred-capability-team-wiki/
@@ -112,6 +113,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-runtime /workspace/libs/fred-runti
 COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-sdk /workspace/libs/fred-sdk
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-writable-document /workspace/libs/capabilities/fred-capability-writable-document
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-ppt-filler /workspace/libs/capabilities/fred-capability-ppt-filler
+COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-word-template /workspace/libs/capabilities/fred-capability-word-template
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-platform-ops /workspace/libs/capabilities/fred-capability-platform-ops
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-html-artifact /workspace/libs/capabilities/fred-capability-html-artifact
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-team-wiki /workspace/libs/capabilities/fred-capability-team-wiki

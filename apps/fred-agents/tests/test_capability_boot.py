@@ -134,6 +134,7 @@ _SHIPPED_CAPABILITY_IDS = frozenset(
         "platform_postgres",
         "ppt_filler",
         "team_wiki",
+        "word_template",
         "writable_document",
         "web_research",
     }

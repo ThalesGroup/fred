@@ -21,6 +21,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import en from "../../../../locales/en/translation.json";
 import fr from "../../../../locales/fr/translation.json";
+import type { StagedAssetFile } from "../types";
 import type { ParseResult } from "./api/pptFillerCapabilityOpenApi";
 
 const api = vi.hoisted(() => ({ result: { schema: [], errors: [] } as ParseResult, success: vi.fn() }));
@@ -58,7 +59,7 @@ describe.each(surfaces)("%s template validation", (_label, Surface) => {
     await i18n.init({ lng: locale, resources: { en: { translation: en }, fr: { translation: fr } } });
     const onBlockingErrorChange = vi.fn();
     function Form() {
-      const [assetFiles, setAssetFiles] = useState<Record<string, File | undefined>>({});
+      const [assetFiles, setAssetFiles] = useState<Record<string, StagedAssetFile | undefined>>({});
       return (
         <Surface
           capabilityId="ppt_filler"

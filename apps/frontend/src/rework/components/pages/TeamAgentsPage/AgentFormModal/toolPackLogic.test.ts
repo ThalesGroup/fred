@@ -31,6 +31,7 @@ import {
   CAP_PPT_FILLER,
   CAP_TABULAR,
   CAP_TEAM_WIKI,
+  CAP_WORD_TEMPLATE,
   CAP_WRITABLE_DOCUMENT,
   TOOL_PACK_SECTIONS,
   type ToolPack,
@@ -45,6 +46,7 @@ function packById(id: string): ToolPack {
 const ATTACHMENTS = packById("attachments");
 const TEAM_DOCUMENTS = packById("team_documents");
 const WORD = packById("word_document");
+const WORD_TEMPLATE = packById("word_template");
 const PPT = packById("powerpoint_document");
 const SHARED_IDS = [
   CAP_DOCUMENT_ACCESS,
@@ -58,6 +60,7 @@ const ALL_IDS: ReadonlySet<string> = new Set([
   ...TEAM_DOCUMENT_IDS,
   CAP_TEAM_WIKI,
   CAP_WRITABLE_DOCUMENT,
+  CAP_WORD_TEMPLATE,
   CAP_PPT_FILLER,
 ]);
 
@@ -295,6 +298,16 @@ describe("plain packs and included capability status", () => {
     state = applyPackToggle(WORD, false, state, ALL_IDS);
     expect(state.selectedCapabilityIds).toEqual([CAP_PPT_FILLER]);
     expect(derivePackChecked(PPT, state, ALL_IDS)).toBe(true);
+  });
+
+  it("keeps the two Word engines on separate switches", () => {
+    let state = applyPackToggle(WORD_TEMPLATE, true, empty(), ALL_IDS);
+    expect(state.selectedCapabilityIds).toEqual([CAP_WORD_TEMPLATE]);
+    expect(derivePackChecked(WORD, state, ALL_IDS)).toBe(false);
+
+    state = applyPackToggle(WORD, true, state, ALL_IDS);
+    state = applyPackToggle(WORD_TEMPLATE, false, state, ALL_IDS);
+    expect(state.selectedCapabilityIds).toEqual([CAP_WRITABLE_DOCUMENT]);
   });
 
   it("reads active, inactive, and unavailable from live selection and availability", () => {

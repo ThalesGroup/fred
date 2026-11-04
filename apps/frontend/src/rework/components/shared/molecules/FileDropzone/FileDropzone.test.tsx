@@ -59,4 +59,25 @@ describe("FileDropzone", () => {
     expect(onFile).toHaveBeenCalledExactlyOnceWith(file);
     expect(input.value).toBe("");
   });
+
+  it("hands every file to onFiles in multi-file mode", () => {
+    const onFiles = vi.fn();
+    render(<FileDropzone accept=".docx" hint="Upload" multiple onFiles={onFiles} />);
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const files = [new File(["a"], "a.docx"), new File(["b"], "b.docx")];
+    Object.defineProperty(input, "files", { value: files, configurable: true });
+    act(() => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(onFiles).toHaveBeenCalledExactlyOnceWith(files);
+  });
+
+  it("requires exactly one handler at the type level", () => {
+    // @ts-expect-error -- a dropzone without onFile/onFiles must not type-check
+    const missing = <FileDropzone accept=".json" hint="Upload" />;
+    // @ts-expect-error -- onFile and onFiles are mutually exclusive
+    const both = <FileDropzone accept=".json" hint="Upload" onFile={vi.fn()} onFiles={vi.fn()} />;
+    expect(missing).toBeTruthy();
+    expect(both).toBeTruthy();
+  });
 });

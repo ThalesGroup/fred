@@ -29,6 +29,7 @@ import Chip from "@shared/atoms/Chip/Chip.tsx";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import type { StagedAssetFile } from "../types";
 import { PptTemplateDownloadButton } from "./PptTemplateDownloadButton";
 import { usePptTemplateAnalysis } from "./usePptTemplateAnalysis";
 import styles from "./PptFillerPackOptions.module.css";
@@ -40,8 +41,8 @@ interface PptFillerPackOptionsProps {
   agentInstanceId?: string;
   agentDisplayName?: string;
   configValues: Record<string, unknown>;
-  assetFiles: Record<string, File | undefined>;
-  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  assetFiles: Record<string, StagedAssetFile | undefined>;
+  onAssetFileChange: (slotKey: string, file: StagedAssetFile | null) => void;
   onBlockingErrorChange: (message: string | null) => void;
 }
 

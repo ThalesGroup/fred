@@ -1,0 +1,109 @@
+/* Copyright Thales 2026 - Apache-2.0 (see repository license header convention). */
+
+.segment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+/* The text as it reads: a borderless button (keyboard reachable) that shows
+ * a light frame on hover/focus to say "click to edit". */
+.reading {
+  appearance: none;
+  cursor: text;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: 0 var(--spacing-xs);
+  width: 100%;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.reading:hover:not(:disabled),
+.reading:focus-visible {
+  outline: none;
+  border-color: var(--outline-muted);
+  background-color: var(--state-on-surface-hover);
+}
+
+.reading:disabled {
+  cursor: default;
+}
+
+.reading p,
+.reading ul,
+.reading ol {
+  margin: var(--spacing-xs) 0;
+}
+
+.reading ul,
+.reading ol {
+  padding-left: var(--spacing-m);
+}
+
+.placeholder {
+  display: block;
+  padding: var(--spacing-xs) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-style: italic;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
+/* Editor frame, MDXEditor's theme variables mapped onto our tokens (same
+ * mapping as WritableDocumentPane.module.css). */
+.editorArea {
+  outline: 2px solid var(--primary);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+.editorArea :global(.mdxeditor) {
+  --basePageBg: var(--surface-container-lowest);
+  --baseBase: var(--surface-container);
+  --baseBgSubtle: var(--surface-container);
+  --baseBg: var(--surface-container-high);
+  --baseBgHover: var(--state-on-surface-hover);
+  --baseBgActive: var(--state-on-surface-pressed);
+  --baseLine: var(--outline-muted);
+  --baseBorder: var(--outline-muted);
+  --baseBorderHover: var(--outline);
+  --baseText: var(--on-surface);
+  --baseTextContrast: var(--on-surface);
+  background-color: var(--surface-container-lowest);
+  color: var(--on-surface);
+}
+
+.editorArea :global(.mdxeditor [role="toolbar"]) {
+  position: static;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--outline-muted);
+  border-radius: 0;
+  background-color: var(--surface-container-high);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+}
+
+.editable {
+  padding: var(--spacing-xs);
+  min-height: 4rem;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+/* A picture placed in the document (`img:` reference). */
+.image {
+  display: block;
+  margin: 0.5rem auto;
+  max-width: 100%;
+  height: auto;
+}

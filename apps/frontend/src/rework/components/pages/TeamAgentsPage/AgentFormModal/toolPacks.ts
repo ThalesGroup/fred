@@ -61,6 +61,7 @@ export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
 // CSV and Excel attachments expose SQL datasets through tabular tools.
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
+export const CAP_WORD_TEMPLATE = "word_template";
 export const CAP_PPT_FILLER = "ppt_filler";
 export const CAP_HTML_ARTIFACT = "html_artifact";
 // Both document packs grant the reading tools; Advanced keeps separate toggles.
@@ -137,6 +138,17 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         descriptionKey: "rework.teams.formAgent.capabilities.packs.wordDocument.description",
         includes: [{ capabilityId: CAP_WRITABLE_DOCUMENT, labelKey: "capability.writable_document.name" }],
         enablesCapabilityIds: [CAP_WRITABLE_DOCUMENT],
+      },
+      {
+        // A second Word engine (fills the team's own .docx templates). Its own
+        // pack, not part of "word_document": one switch turning both on would
+        // hand the agent two overlapping sets of document tools.
+        id: "word_template",
+        icon: "article",
+        titleKey: "rework.teams.formAgent.capabilities.packs.wordTemplate.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.wordTemplate.description",
+        includes: [{ capabilityId: CAP_WORD_TEMPLATE, labelKey: "capability.word_template.name" }],
+        enablesCapabilityIds: [CAP_WORD_TEMPLATE],
       },
       {
         id: "powerpoint_document",

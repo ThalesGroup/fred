@@ -1,0 +1,128 @@
+/* Copyright Thales 2026 - Apache-2.0 (see repository license header convention). */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.label {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+/* A compact text field: invisible until hovered/focused in a cell, a light
+ * outline otherwise, so the view reads as a document rather than a form. */
+.input {
+  box-sizing: border-box;
+  outline: 2px solid transparent;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-xs);
+  background-color: var(--surface-container-lowest);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--outline);
+}
+
+.input:focus {
+  outline-color: var(--primary);
+  border-color: transparent;
+}
+
+.input:disabled {
+  background-color: var(--state-on-surface-disabled);
+  color: var(--state-text-disabled);
+}
+
+.input[data-variant="cell"] {
+  border-color: transparent;
+  background-color: transparent;
+  padding: var(--spacing-2xs);
+  resize: none;
+}
+
+.input[data-variant="cell"]:hover:not(:disabled) {
+  border-color: var(--outline-muted);
+}
+
+.input[data-variant="heading"] {
+  border-color: transparent;
+  background-color: transparent;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  resize: none;
+  font: var(--font-title-small);
+}
+
+.input[data-variant="heading"]:hover:not(:disabled) {
+  border-color: var(--outline-muted);
+}
+
+.pieces {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.piece {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.piece .input {
+  width: auto;
+  max-width: 100%;
+}
+
+/* A field of the document (page number, date...): shown, never edited. */
+.fieldPiece {
+  border-radius: var(--radius-xs);
+  background-color: var(--secondary-container);
+  padding: 0 var(--spacing-2xs);
+  color: var(--on-secondary-container);
+  font: var(--font-body-small);
+}
+
+.readOnly {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  white-space: pre-wrap;
+}
+
+.notes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  font: var(--font-body-small);
+}
+
+.remote {
+  color: var(--warning);
+}
+
+.unsaved {
+  color: var(--on-surface-retreat);
+}
+
+.linkButton {
+  appearance: none;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--primary);
+  font: var(--font-body-small);
+  text-decoration: underline;
+}

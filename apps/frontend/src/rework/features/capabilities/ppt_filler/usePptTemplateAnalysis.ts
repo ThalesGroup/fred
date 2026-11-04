@@ -20,6 +20,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { StagedAssetFile } from "../types";
 import {
   useAnalyzeAnalyzePostMutation,
   type BodyAnalyzeAnalyzePost,
@@ -50,8 +51,8 @@ export function useTemplateErrorText() {
 
 interface UsePptTemplateAnalysisArgs {
   configValues: Record<string, unknown>;
-  assetFiles: Record<string, File | undefined>;
-  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  assetFiles: Record<string, StagedAssetFile | undefined>;
+  onAssetFileChange: (slotKey: string, file: StagedAssetFile | null) => void;
   onBlockingErrorChange: (message: string | null) => void;
 }
 
@@ -90,7 +91,9 @@ export function usePptTemplateAnalysis({
   const [analysis, setAnalysis] = useState<ParseResult | null>(null);
   const [analyzeFailed, setAnalyzeFailed] = useState(false);
 
-  const stagedFile = assetFiles[TEMPLATE_SLOT];
+  // A single-file slot: only ever staged as one `File`.
+  const staged = assetFiles[TEMPLATE_SLOT];
+  const stagedFile = staged instanceof File ? staged : undefined;
   const persistedSchema = (configValues.schema_slides as SlideSchema[] | undefined) ?? [];
   const hasPersistedTemplate = persistedSchema.length > 0;
 
