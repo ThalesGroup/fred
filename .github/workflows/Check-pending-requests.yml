@@ -415,6 +415,10 @@ jobs:
         run: make test
         working-directory: libs/frontend
 
+      - name: Run isolated consumer integration tests
+        run: npm run test:consumer:integration
+        working-directory: libs/frontend
+
       - name: Download release-toolchain fixture archives
         uses: actions/download-artifact@v4
         with:
