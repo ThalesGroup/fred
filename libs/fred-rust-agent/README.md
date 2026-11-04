@@ -130,9 +130,11 @@ once on completion, error or stream drop, if any model response completed. A fai
 second model call therefore preserves consumption of the first call. A provider
 reports usage when its reply ends, so a reply cut or abandoned mid-stream is not
 counted; nor is a reply Rig fails on a refused tool call.
-The host uses the admitted offer, fresh report/exchange UUIDs and server time;
-the shared HTTP-report transaction derives person, space and instance from the
-session. Token counts never enter browser events, and the agent crate has no DB
+The host uses the admitted offer, fresh report/exchange UUIDs and server time. Its
+immutable admission snapshot retains person, space and instance for the shared
+journal writer, even if the session is physically purged before the turn ends.
+External HTTP reports still derive provenance from retained session metadata.
+Token counts never enter browser events, and the agent crate has no DB
 access. A turn with no completed model response produces no report. These counters
 cover Ralph's model calls, not KF's embedding workload.
 
@@ -171,8 +173,9 @@ contracts directly; it does not implement a second history engine.
 - The whole log is read each turn, and PostgreSQL rewrites the `bytea` value on
   every append. There is no history window or compaction: a sufficiently long
   conversation exceeds the provider's context limit and fails the turn.
-- An interrupted or failed turn saves nothing. Closing the browser during the
-  answer loses that question and its partial reply on reload.
+- A run interrupted before its final append saves no new messages. An append
+  already committed remains saved even if the browser disconnects before `final`.
+  Provider failures and refused empty answers do not save partial turns.
 - Concurrent runs from two tabs may both consume model tokens. Rig's optimistic
   append accepts the first save; the other run ends with a fixed public history
   error after its model call, without overwriting the saved conversation.
@@ -191,8 +194,10 @@ Conversation removal and retention belong to the Control Plane lifecycle, not to
 Rig. Removing access hides history immediately; physical deletion follows the
 retention receipt and attachment cleanup. The stored log follows the session row's
 foreign-key cascade only at physical deletion. `model_usage` is independent and
-survives. Python history cleanup is also coordinated by the Control Plane, through
-the runtime's own purge routes; the Control Plane never accesses Python's schema.
+survives. Python receipts remain blocked with `session_purge_unavailable`: an
+already admitted Python turn can still write after retention, and its runtime
+does not yet durably coordinate those writes with erasure. A successful DELETE
+alone cannot prove final erasure. The Control Plane never accesses Python's schema.
 
 ## Direct demonstration
 

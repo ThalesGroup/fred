@@ -40,7 +40,12 @@ configured base URL). It uses the existing authentication and consent checks and
 streams Fred runtime events. Managed instances use the common inference admission
 and Rig; direct `agent_id: "fred.github.ralph"` remains a fixed demonstration. See the
 [agent library](../../libs/fred-rust-agent/README.md) for the contract and current integration limits.
-No additional server or deployment is required.
+The host stores Rig's opaque log in `embedded_agent_conversation`, keyed by the
+existing private session. Successful turns restore and append that log; the title
+call stays memoryless. `GET /agents/sessions/{session_id}/messages` projects it
+into the shared chat history contract under the same configured base URL.
+No additional server or deployment is required. Apply migrations 0006 and 0007
+before startup; the latter indexes sessions awaiting retirement receipts.
 
 ## From scratch (fred-deployment-factory)
 
@@ -628,6 +633,7 @@ establish a k3d/integration-validated journey. Paths below are relative to the C
 | `GET /spaces/{space_id}/sessions` | Only the authenticated owner's conversations, ordered by `updated_at DESC, session_id`. |
 | `GET /spaces/{space_id}/sessions/{session_id}` | Private metadata, retained instance/template/runtime IDs, current or registration-snapshot agent name, deletion/disabled flags, nullable public `messages_url`. |
 | `PATCH /spaces/{space_id}/sessions/{session_id}` | Only `title` and/or `updated_at`; omitted/null values are unchanged. Empty title clears; activity is monotonic and capped at server time. |
+| `DELETE /spaces/{space_id}/sessions/{session_id}` | Retire the owned session immediately and create its retained deletion receipt. Effective erasure follows the lifecycle policy. |
 | `POST /spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution?session_id=...` | Admission, space Read, template Use, instance/source state and optional private association checks; public runtime/history routes and browser-safe model facts. |
 
 Admission and current space Read apply to all operations. Session ownership is
@@ -642,10 +648,12 @@ Title/activity edits and history metadata reads do not require template Use.
 Table `session_metadata` is a private index, distinct from
 shared instances; it contains no messages or checkpoints.
 Its immutable identity columns deliberately have no cascading foreign keys:
-instance/space purge neither removes retained provenance nor cascades into runtime
-history. Missing/retired space authorization still prevents reading that index.
-No purge, deletion endpoint, attachments, prompt library or history migration is
-part of this surface. Agent names fall back to the registration snapshot after
+the worker removes this index only when its runtime storage can be erased safely.
+The embedded log cascades from physical session deletion; Python sessions remain
+retained until their runtime supports safe coordination with in-flight execution.
+Missing/retired space authorization still prevents reading that index; retired
+sessions are hidden from metadata and history reads during retention.
+Agent names fall back to the registration snapshot after
 instance deletion; registration is not a name-synchronization mechanism.
 
 For each external `platform.runtime_catalog_sources` entry, `base_url` remains the
@@ -656,6 +664,35 @@ slash, encoded characters, authority, query or fragment). No route is inferred.
 Missing/disabled sources return `messages_url=null`; an instance's deletion or
 disabling does not itself remove history routing. Reusing a runtime ID for another
 history store is not a supported migration.
+Embedded Ralph instead uses the Control Plane's configured mount for its history
+URL, without an external runtime source. Unknown, foreign and retired sessions
+return the same 404; an authorized conversation with no completed turn returns `[]`.
+
+The lifecycle worker removes attachments before conversation storage. Ralph's log
+is removed with its session row; its foreign key prevents a late admitted turn
+from recreating it after purge. The usage journal is retained. One audit helper
+records session acceptance and completion with runtime and retention provenance.
+
+Python receipts remain blocked with `session_purge_unavailable`. Existing runtime
+DELETE endpoints alone cannot guarantee final erasure: a turn already admitted
+before retirement can continue without a bounded deadline and recreate history,
+checkpoints or files after DELETE. Safe activation requires durable coordination
+of execution and erasure across replicas and all runtime kinds. No additional
+workload permission or unused HTTP purge adapter is activated in this lot.
+See the [rollout note](../../deploy/release-notes/changes/weaver-conversation-persistence-and-purge.md).
+
+Retiring an organization or team also hides its conversations through the space
+access check. After retention, the worker selects one remaining space and creates
+at most 100 child session receipts per visit, preserving the parent's original request, deadline, actor
+and rule; already retired sessions keep their own receipt and deadline. These
+child acceptance audit events are emitted when the worker creates the receipts.
+The parent waits for every conversation to disappear before removing its spaces.
+A Python child therefore keeps the parent pending. Ordinary space documents and
+pending uploads retain the existing deletion restriction; conversation attachments
+use the existing document cleanup before their session can be removed.
+The partial retirement index excludes sessions that already have receipts, so
+blocked children do not accumulate in the queue being materialized. Each space
+can require additional sweeps; the batch bound is not a completion-time guarantee.
 
 Preparation uses the existing bounded, nonredirecting template discovery, outside
 SQL. Unavailable discovery is 503, denied discovery is 403, absent template is 409.

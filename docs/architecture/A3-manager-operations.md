@@ -497,8 +497,10 @@ to discover or repair.
 Inspect safe errors through the receipt. `unsupported_documents` requires resolving
 unexpected document metadata through its owning lifecycle; `unexpected_reference`
 or `unexpected_hierarchy` requires reconciling the scope before retry.
-`dependency_unavailable` retries the transaction. No content-store cleanup is
-claimed. `make test-lifecycle-temporal` verifies HTTP acceptance, a real worker restart,
+`dependency_unavailable` retries the transaction. The conversation-storage
+implementation and its validation limits are recorded in the
+[Control Plane README](../../apps/control-plane/README.md#conversation-metadata-and-browser-preparation-m5a).
+`make test-lifecycle-temporal` verifies HTTP acceptance, a real worker restart,
 schedule reuse, history replay, SIGTERM during a SQL lock wait and exhausted-retry
 recovery against disposable services.
 
