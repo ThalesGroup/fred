@@ -3308,6 +3308,7 @@ export type TabularQueryRequest = {
   owner_filter?: OwnerFilter | null;
   /** Team ID required when owner_filter is 'team'. */
   team_id?: string | null;
+  /** Maximum result rows to return, capped by the server. For totals or statistics, aggregate in SQL rather than counting this preview. */
   max_rows?: number | null;
 };
 export type TabularTableMatch = {
@@ -3333,7 +3334,7 @@ export type TabularSearchResponse = {
   searched_dataset_uids?: string[];
 };
 export type TabularSearchRequest = {
-  /** Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate. */
+  /** Precise word or expression of at least two characters after trimming. Use after document description; generic terms match too many tables to locate a value. */
   keyword: string;
   /** Document UIDs copied exactly from authorized discovery. Do not pass filenames or SQL table aliases. One workbook UID selects all its tables. */
   dataset_uids?: string[] | null;

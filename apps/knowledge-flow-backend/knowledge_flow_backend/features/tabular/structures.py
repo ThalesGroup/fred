@@ -181,34 +181,13 @@ class TabularDocumentDescriptionResponse(BaseModel):
 
 class TabularQueryRequest(BaseModel):
     """
-    Read-only SQL query request for authorized tabular datasets.
+    One read-only DuckDB SELECT over authorized document tables.
 
-    Why this exists:
-    - The new tabular runtime can query several document-scoped datasets at once.
-
-    How to use:
-    - Send `sql` and an optional `dataset_uids` subset.
-    - Leave `dataset_uids` empty to make every readable dataset in the active
-      tabular scope available to the query. Only the aliases the SQL actually
-      references are mounted, so leaving it empty costs nothing.
-    - The query must reference at least one dataset alias in its `FROM` clause;
-      a query that reads no dataset (`SELECT 1`) is rejected with 400.
-    - A query joining more datasets than the server's per-request limit is also
-      rejected with 400 — split it or scope `dataset_uids`.
-    - Optionally pass `owner_filter`, `team_id`, and
-      `document_library_tags_ids` so SQL execution stays inside the current
-      personal/team area and selected libraries.
-
-    Example:
-    ```python
-    request = TabularQueryRequest(
-        sql="SELECT city, COUNT(*) FROM d_doc_sales GROUP BY city",
-        dataset_uids=["doc-sales"],
-        owner_filter=OwnerFilter.TEAM,
-        team_id="team-a",
-        max_rows=50,
-    )
-    ```
+    sql uses discovered table aliases; dataset_uids scopes exact document UIDs.
+    If omitted, SQL may reference any table in the active authorized scope;
+    only referenced tables are mounted. The query must read at least one table
+    and respect the server's dataset limit. Scope parameters do not grant access.
+    max_rows caps the returned preview; compute totals and statistics in SQL.
     """
 
     sql: str = Field(
@@ -235,7 +214,9 @@ class TabularQueryRequest(BaseModel):
         default=None,
         description="Team ID required when owner_filter is 'team'.",
     )
-    max_rows: Optional[int] = Field(default=None, ge=1)
+    max_rows: Optional[int] = Field(
+        default=None, ge=1, description="Maximum result rows to return, capped by the server. For totals or statistics, aggregate in SQL rather than counting this preview."
+    )
 
     @property
     def sql_text(self) -> str:
@@ -273,31 +254,20 @@ SEARCH_MAX_MATCHING_TABLES = 30
 
 class TabularSearchRequest(BaseModel):
     """
-    Keyword value-locator request over authorized tabular datasets.
+    Bounded lookup of a precise value after inspecting document structure.
 
-    Why this exists:
-    - The catalog and schemas expose a workbook's structure but never its cell
-      values, so a question about a value otherwise forces a blind table-by-table
-      scan — one MCP/LLM round trip per table. This locates the value once,
-      server-side.
-
-    How to use:
-    - Send a precise `keyword`; scope with `dataset_uids` when possible (one
-      spreadsheet uid covers all its tables). Leave `dataset_uids` empty to search
-      every readable dataset in the active scope.
-    - `max_rows_per_table` and `max_matching_tables` are ceilings (module
-      constants) — lower them, never raise them.
-
-    Example:
-    ```python
-    request = TabularSearchRequest(keyword="ABC-123", dataset_uids=["doc-sales"])
-    ```
+    Schemas expose types and categorical values; this locator helps find other
+    cell values across tables. dataset_uids scopes exact document UIDs, with
+    one workbook UID covering all its tables. If omitted, all readable datasets
+    in the active scope may be searched. Prefer a narrow scope and keyword.
+    Preview ceilings can be lowered, never raised; truncation means partial
+    coverage and requires refining the search.
     """
 
     keyword: str = Field(
         ...,
         min_length=1,
-        description="Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate.",
+        description="Precise word or expression of at least two characters after trimming. Use after document description; generic terms match too many tables to locate a value.",
     )
     dataset_uids: Optional[list[str]] = Field(
         default=None, description="Document UIDs copied exactly from authorized discovery. Do not pass filenames or SQL table aliases. One workbook UID selects all its tables."

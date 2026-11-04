@@ -34,7 +34,7 @@ Use existing `ToolResultRuntimeEvent.content` and `ToolResultPart.content`, so l
 
 ### 3. Put concise guidance next to tool arguments
 
-Update the descriptions of `document_uids`, `dataset_uids` and `sql` in the tabular controller/models: UIDs come from authorized discovery, an alias names a SQL table, and SQL uses DuckDB. Do not impose a UUID syntax on opaque UIDs or rename fields. Regenerate Knowledge Flow OpenAPI and its frontend client through existing commands.
+Rewrite each of the four tool descriptions around purpose, prerequisites, inputs, results and relevant limits, removing internal implementation commentary. Keep discovery/description/query/value-location roles distinct, explain successful emptiness and avoid blanket unchanged retries. Update the descriptions of `document_uids`, `dataset_uids`, `sql`, `keyword` and `max_rows` in the tabular controller/models: UIDs come from authorized discovery, an alias names a SQL table, and SQL uses DuckDB. Do not impose a UUID syntax on opaque UIDs or rename fields. Regenerate Knowledge Flow OpenAPI and its frontend client through existing commands.
 
 Rewrite the whole packaged tabular prompt into a compact workflow, identifiers/types, and result/error handling. Remove repeated requirements while preserving mandatory schema inspection, exact aliases, source boundaries, the CSV/Excel distinction, the catalog-based absence rule, value-search bounds and typed filtering. Keep at most one compact date expression, `date_column + INTERVAL '7 days'`; explain the unsupported SQLite signature and text conversion. Require exact categorical text values. The revised prompt must not exceed the previous word count, and parameter descriptions must not repeat examples.
 

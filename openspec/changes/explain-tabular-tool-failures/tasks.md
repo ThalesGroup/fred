@@ -10,15 +10,15 @@
 
 ## 3. Concise tool guidance
 
-- [x] 3.1 Clarify `document_uids`, `dataset_uids` and `sql` descriptions in Knowledge Flow; verify the published tool/OpenAPI descriptions and unchanged field names, opaque UID compatibility and authorization behavior, then regenerate the existing OpenAPI/frontend client artifacts.
+- [x] 3.1 Rewrite all four MCP tool descriptions and clarify `document_uids`, `dataset_uids`, `sql`, `keyword` and `max_rows` descriptions in Knowledge Flow; verify the published tool/OpenAPI descriptions and unchanged field names, opaque UID compatibility and authorization behavior, then regenerate the existing OpenAPI/frontend client artifacts.
 - [x] 3.2 Rewrite the complete packaged tabular prompt for readable workflow and result handling, preserving existing discovery/schema/source/type rules; verify at most one date example, no word-count growth, and DuckDB checks for date arithmetic and exact-text filters.
 - [x] 3.3 Add the explicit zero-row success message to structured SQL responses and localized chat details; verify empty success, populated success, zero/null aggregates and error paths, with no cache or duplicate-call enforcement.
 
 ## 4. Verification and delivery
 
 - [x] 4.1 Update the existing runtime contract and trace UX guidance, add one English migration note with impact `none`, and verify their statements against the implemented behavior and #3458.
-- [ ] 4.2 Run focused runtime, Knowledge Flow, capability and frontend suites plus required root quality checks and applicable type/generated-client checks; record commands, results and any exclusions in the existing PR/tasks.
-- [ ] 4.3 Apply `audit-branch` against the actual target base and obtain an independent read-only review of failure confidentiality, affected consumers and bounded work; record base/head, findings and dispositions before declaring readiness.
+- [x] 4.2 Run focused runtime, Knowledge Flow, capability and frontend suites plus required root quality checks and applicable type/generated-client checks; record commands, results and any exclusions in the existing PR/tasks.
+- [x] 4.3 Apply `audit-branch` against the actual target base and obtain an independent read-only review of failure confidentiality, affected consumers and bounded work; record base/head, findings and dispositions before declaring readiness.
 - [ ] 4.4 Push the reviewed topic branch and open a draft PR titled with #3458, reconcile the artifacts with final behavior, sync specs and archive this change following the repository procedures; verify the PR attachment and CLI archive result.
 
 ## Verification evidence
@@ -26,12 +26,13 @@
 - Runtime: 145 targeted tests passed (context injection, provider resolution,
   failure rendering, cancellation/authority and both HTTP client error types).
   After the final test typing correction, all 66 resolver tests passed again.
-- Frontend: 332 focused tests passed; the final confidentiality regressions
-  bring the drawer suite to 32 passing tests. Coverage includes actual SSE
+- Frontend: 418 focused tests passed after rebase, including 32 drawer tests
+  and the affected managed-chat/history consumers. Coverage includes actual SSE
   projection, a history JSON round trip, partial batches and French/English
   cause-only translations. Typecheck and OpenAPI regeneration passed.
-- Knowledge Flow: 69 contract tests passed; wider offline suite completion is
-  being finalized using the standard `not integration` marker.
+- Knowledge Flow: 168 selected unit tests passed with two integration tests
+  deselected by the standard `not integration` marker. The isolated integration
+  HTTP-server test requires network access and was not counted as unit evidence.
 - Manual DuckDB checks passed for typed date arithmetic, rejection of SQLite's
   date modifier and exact stored-string filtering. The installed MCP catalog
   loads the 531-word prompt (previously 796 words).
@@ -39,6 +40,28 @@
   light/dark validation is unavailable; reused error-container foreground and
   background tokens and wrapping rules were inspected. No visual check or
   model-campaign error-rate reduction is claimed.
-- Independent review covered base 0773ff95d through 9859738a8 and local docs.
-  The four original findings were corrected. The follow-up SQL category
-  narrowing is committed at 9ba01df68; final disposition remains pending.
+- Independent full-branch review covered the original base and then the final
+  corrective/rebase delta against origin/swift 059ae1c91 through 2ca0ce328.
+  Four initial findings plus the SQL category-narrowing follow-up were fixed
+  and independently closed. Coverage included MCP/resolver/rendering, SQL
+  contracts/client/prompt, privacy, bounded work, live/history and incoming HITL
+  compatibility. No supported residual findings. The subsequent spec sync only
+  copies the already reviewed requirements. No shipped tabular Graph consumer
+  was found; richer Graph drawer behavior and load tests were not established.
+- Both modified main specs and the change pass strict OpenSpec validation.
+  A broader spec scan reports a pre-existing placeholder Purpose in unchanged
+  frontend-surface-scale; it is outside this change.
+
+- Final description pass: all four controller summaries/docstrings and request
+  metadata were rewritten and independently reviewed with no actionable
+  mismatch (61717d119 plus the final local delta). Tool descriptions total
+  444 words versus 462 before; redundant request examples were removed.
+  Twenty-one published-MCP/controller tests passed; regenerated OpenAPI/client
+  and the final narrow formatting checks passed.
+- Root `make code-quality` completed successfully across all 17 modules, exit 0.
+  Existing unreachable-code warnings remain in unrelated runtime files.
+  After the TypeScript library-compatibility correction, typecheck and 233
+  affected frontend tests passed. SDK MCP catalog/capability tests: 56 passed.
+- Migration declaration validation passed against origin/swift. The final base
+  is 059ae1c91; rebase preserved both HITL and tabular trace behavior. The sole
+  rebase conflict was independent appended runtime-contract sections, both kept.

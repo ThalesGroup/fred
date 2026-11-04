@@ -81,7 +81,7 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   const query = /^(?:mcp__knowledge_flow__)?read_query(?:_\d+)?$/.test(name);
   const tabular = query || tabularToolKind(name) !== null;
   const content = toolResultContent(entry.result).trim();
-  const errorKey = Object.hasOwn(ERROR_MESSAGES, content) ? ERROR_MESSAGES[content] : undefined;
+  const errorKey = Object.prototype.hasOwnProperty.call(ERROR_MESSAGES, content) ? ERROR_MESSAGES[content] : undefined;
   if (!tabular && !errorKey) return null;
   const args = toolArgs(entry.call);
   const budget = { remaining: 20000 };

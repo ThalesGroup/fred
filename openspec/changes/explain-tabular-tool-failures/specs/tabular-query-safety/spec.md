@@ -2,7 +2,7 @@
 
 ### Requirement: Tabular tool descriptions distinguish references and SQL dialect
 
-The tabular tool argument descriptions SHALL distinguish document UIDs from filenames and SQL table aliases. They SHALL direct the agent to reuse references from authorized discovery and identify DuckDB as the SQL dialect. Existing argument names, access rules and read-only validation SHALL remain unchanged. Opaque document identifiers MUST NOT acquire an assumed UUID format requirement.
+The descriptions of all four tabular tools SHALL state their purpose, prerequisites, expected inputs, returned data and relevant limits so the model can choose the correct operation. They SHALL distinguish successful empty results from errors and remain consistent with the packaged workflow. Argument descriptions SHALL distinguish document UIDs from filenames and SQL table aliases. They SHALL direct the agent to reuse references from authorized discovery and identify DuckDB as the SQL dialect. Existing argument names, access rules and read-only validation SHALL remain unchanged. Opaque document identifiers MUST NOT acquire an assumed UUID format requirement.
 
 #### Scenario: Model receives the tool schemas
 - **WHEN** the runtime advertises description and query tools
