@@ -11,7 +11,7 @@ The tabular tool argument descriptions SHALL distinguish document UIDs from file
 
 ### Requirement: Tabular date guidance is concise and type-aware
 
-The packaged instructions SHALL explain interval arithmetic for DATE/TIMESTAMP columns, conversion only when the source is text, and the unsupported SQLite-style two-argument `date` signature. They SHALL direct the agent to preserve exact categorical text values when constructing filters. The change SHALL add at most one compact date expression example and no more than 100 English words net to the existing tabular instructions.
+The packaged instructions SHALL explain interval arithmetic for DATE/TIMESTAMP columns, conversion only when the source is text, and the unsupported SQLite-style two-argument `date` signature. They SHALL direct the agent to preserve exact categorical text values when constructing filters. A global readability pass SHALL remove repetition and retain the discovery, mandatory schema inspection, source, CSV/Excel, alias, search and type rules. The revised prompt SHALL use at most one compact date expression example and SHALL NOT exceed the previous word count.
 
 #### Scenario: Add days to a typed date
 - **WHEN** an agent needs to add seven days to a DATE/TIMESTAMP column
@@ -22,3 +22,16 @@ The packaged instructions SHALL explain interval arithmetic for DATE/TIMESTAMP c
 - **WHEN** a discovered categorical string contains `2026-10-01 00:00:00`
 - **THEN** the guidance directs the agent to use the exact stored string or an explicit appropriate date conversion
 - **AND** it does not treat a successful empty result as an execution error requiring the unchanged query again
+
+### Requirement: Empty SQL results remain explicit successes
+
+A successful tabular query returning zero rows SHALL retain its SQL, empty `rows`, null `error` and dataset references, and SHALL include the message "Requête exécutée avec succès : 0 ligne correspondant aux conditions." The chat detail SHALL render the equivalent localized success explanation. Instructions SHALL direct the model to reuse successful results and inspect types and filters before changing an unexpectedly empty query. This change MUST NOT introduce result caching, duplicate-call suppression or new execution limits.
+
+#### Scenario: No rows match the conditions
+- **WHEN** an authorized SQL query completes with zero rows
+- **THEN** its response includes the explicit zero-row success message and remains a successful tool result
+- **AND** the model receives the structured query result and the chat shows an empty success rather than an error
+
+#### Scenario: Aggregate returns a zero or null value
+- **WHEN** a successful query returns an aggregate row containing zero or null
+- **THEN** that row remains in the result and the response does not claim that zero rows were returned

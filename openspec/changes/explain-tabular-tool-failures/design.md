@@ -16,7 +16,7 @@ The follow-up investigation distinguishes API campaigns from browser use: all 15
 
 ### 1. Classify at the existing trusted source boundary
 
-In `common/context_aware_tool.py`, create non-empty Fred-owned text blocks for caught failures. Use a small fixed catalog based on a recognized HTTP envelope/status: invalid arguments, authentication required, unavailable document/scope, overload, timeout and generic service failure. Unknown exceptions use the existing generic message. Each catalog entry includes a short recovery instruction for the model; it must not imply that an inaccessible document exists.
+In `common/context_aware_tool.py`, create non-empty Fred-owned text blocks for caught failures. Use a small fixed catalog based on a recognized HTTP envelope/status (including both installed HTTP client exception types): invalid arguments, authentication required, unavailable document/scope, overload, timeout and generic service failure. Unknown exceptions use the existing generic message. Each catalog entry includes a short recovery instruction for the model; it must not imply that an inaccessible document exists.
 
 Only `read_query` HTTP 400 retains the existing already-redacted SQL detail. Keep `AuthorityLostError`, cancellation and other run-stop errors propagating. The MCP mount's existing generic authority-refusal behavior remains intact. Do not expose response bodies for other cases or infer permission causes from SQL alias rejection text. Fix the shared renderer's empty-block fallback as a defensive measure.
 
@@ -36,7 +36,9 @@ Use existing `ToolResultRuntimeEvent.content` and `ToolResultPart.content`, so l
 
 Update the descriptions of `document_uids`, `dataset_uids` and `sql` in the tabular controller/models: UIDs come from authorized discovery, an alias names a SQL table, and SQL uses DuckDB. Do not impose a UUID syntax on opaque UIDs or rename fields. Regenerate Knowledge Flow OpenAPI and its frontend client through existing commands.
 
-Amend the packaged tabular instructions with at most one compact date expression: `date_column + INTERVAL '7 days'` for an actual DATE/TIMESTAMP. Explain that SQLite's two-argument `date(value, '+7 days')` signature is unsupported even for a correctly typed column, and conversion is needed only for text. Require exact stored values for categorical text filters, including timestamp-shaped strings. Limit net instruction growth to 100 English words; parameter descriptions stay short and do not repeat examples.
+Rewrite the whole packaged tabular prompt into a compact workflow, identifiers/types, and result/error handling. Remove repeated requirements while preserving mandatory schema inspection, exact aliases, source boundaries, the CSV/Excel distinction, the catalog-based absence rule, value-search bounds and typed filtering. Keep at most one compact date expression, `date_column + INTERVAL '7 days'`; explain the unsupported SQLite signature and text conversion. Require exact categorical text values. The revised prompt must not exceed the previous word count, and parameter descriptions must not repeat examples.
+
+Add optional `RawSQLResponse.message`, set to "Requête exécutée avec succès : 0 ligne correspondant aux conditions." only when a query succeeds with `rows=[]`. Keep `error=None`, SQL and dataset references intact. This is also visible to the model through MCP's structured result; the frontend renders a localized empty-success message. A returned aggregate row containing zero or null is not a zero-row result. Add the short instruction to reuse a successful result and inspect types/filters before a changed query when emptiness is unexpected. No execution guard, result cache or duplicate-call limit is added.
 
 The seven-execution empty-result example filtered a string month by `2026-10-01`, while the returned categories contained `2026-10-01 00:00:00`. A successful empty rowset is a real response; choosing an incorrect filter is separate from SQL execution failure.
 
@@ -45,7 +47,7 @@ The seven-execution empty-result example filtered a string month by `2026-10-01`
 - Historical results cannot recover discarded causes -> show an honest fallback rather than inventing a diagnosis.
 - Broader display could expose untrusted content -> per-tool business-argument allowlists, credential redaction, exact fixed-message recognition, the existing SQL-only detail exception, bounded display and adversarial regression cases.
 - Concise guidance cannot eliminate model reasoning errors -> validate representative calls and correctness; do not promise a reduction percentage from these synthetic campaigns.
-- Multiple tool calls and pods -> this adds no cross-request state or cache. Classification is bounded per result; resolve names once from the relevant exchange when opening the drawer, not on every streaming frame. Keep existing read and connection budgets.
+- Multiple tool calls and pods -> this adds no cross-request state or cache. Classification is bounded per result and argument previews share a 20,000-character budget. Keep existing read and connection budgets; the drawer does not add lookups or network calls.
 
 ## Migration Plan
 
