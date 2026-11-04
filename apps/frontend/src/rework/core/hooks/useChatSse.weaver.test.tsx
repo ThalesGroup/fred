@@ -18,6 +18,7 @@ vi.mock("../../../security/KeycloakService", () => ({
     GetTokenSecondsLeft: () => 3600,
     GetToken: () => "test-token",
     GetUserId: () => "user-1",
+    GetSessionIdentity: () => "user-1-session",
   },
 }));
 vi.mock("react-i18next", () => ({
