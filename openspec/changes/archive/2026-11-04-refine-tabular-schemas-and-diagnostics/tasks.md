@@ -16,10 +16,10 @@
 
 ## 4. Validation and review
 
-- [ ] 4.1 Measure old/new description sizes using the same synthetic workbook and replay the retained failing SQL plus numerical references after deliberate fixture reprocessing. Report execution success separately from answer correctness and distinguish fresh model trials from isolated SQL checks.
+- [x] 4.1 Measure old/new description sizes using the same synthetic workbook and replay the retained failing SQL plus numerical references after deliberate fixture reprocessing. Report execution success separately from answer correctness and distinguish fresh model trials from isolated SQL checks.
 - [x] 4.2 Run root `make code-quality`, affected integration checks and focused concurrent description/query checks within existing capacity limits; record results and verify no cross-request/pod-local correctness state was introduced.
 - [x] 4.3 Apply the full `audit-branch` procedure against the actual target, obtain independent correctness and performance reviews for changed tool paths, record base/head, findings/dispositions and exclusions, and update migration guidance.
-- [ ] 4.4 Reconcile the final implementation with these artifacts, sync delta specs and archive after verification; commit reviewable blocks and update the existing draft PR with the approved follow-up scope and evidence.
+- [x] 4.4 Reconcile the final implementation with these artifacts, sync delta specs and archive after verification; commit reviewable blocks and update the existing draft PR with the approved follow-up scope and evidence.
 
 Verification: 222 targeted backend tests, 161 Excel tests, 47 frontend tests,
 47 runtime diagnostic tests and 10 prompt/catalog tests passed. Root
@@ -40,3 +40,35 @@ requires coordinated consumer upgrades and deliberate source reprocessing.
 Excluded: production rollout, live multi-pod/large-user load and full application
 browser/theme validation; focused concurrency and frontend consumer tests are
 the available evidence.
+
+Final campaign: same 32 trials (28 distinct prompt/context pairs), same instance,
+model and tuning. Historical / first fixes / latest: 188/325, 29/187 and 25/139
+failed tabular calls; 32/31/31 finals; 21/6/1 repeated successful calls. Latest
+per-call failure rate is 17.99%, versus 15.51% on the first replay, with 13 rather
+than 11 affected trials: lower failure count is not better per-call reliability.
+All 25 latest failures are SQL; all 12 empty successes contain the approved
+message. Of 29 descriptions, 23 select tables. One extraction approval pause
+was retained; no latest provider/auth interruption, approval or rerun occurred.
+The same bounded numerical subset is 1/11, 2/11 and 3/11 exact; no complete
+answer-accuracy or causal A/B claim is made. Historical 77 HTTP401s disappeared
+after login and are not credited to code.
+
+Reported retained input/output tokens: 8475016/112522, 5734114/84875 and
+3385332/76230. Four preserved interrupted first-fix attempts add 199387/1874;
+all-attempt first-fix usage is 5933501/86749. Generation IDs are deduplicated;
+all 32 retained model sums reconcile with terminal parent counters in each
+series. Missing usage belongs to HTTP429 and remains unknown, not zero. An
+independent report audit corrected trace-completeness gating and historical
+category attribution. The final offline HTML/JSON provide both token scopes.
+
+Native description characters: 34881 before and after initial fixes, 20004
+latest (22 tables), 9242 for Clients/Activite only. Original workbook SHA-256,
+UID and all 22 aliases match. All five valid reference SQL rowsets match their
+original expected values; harness month formatting was adapted to the new
+physical type without changing model inputs, business filters or expected rows.
+All 28 unchanged previously invalid SQL remain invalid; six gain scoped column
+diagnostics. These direct checks are separate from the model campaign. Final
+trace validation proves original prompt/context, updated packaged guidance,
+all four tools and the expected model for 32/32 trials. Sources were rechecked
+after the campaign. Main specs were synchronized and strictly validated before
+archive; draft PR #3460 is the close-out destination.
