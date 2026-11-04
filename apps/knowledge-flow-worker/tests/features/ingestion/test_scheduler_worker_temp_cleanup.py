@@ -27,29 +27,22 @@ from knowledge_flow_worker.features.scheduler.push_files_activities import push_
 from knowledge_flow_worker.features.scheduler.scheduler_structures import FileToProcess
 
 
-class _TrackedTemporaryDirectory:
-    """
-    Track that a worker tempdir is removed when the context manager exits.
+class _TrackedWorkspace:
+    """Observe activities entering and releasing the manager-owned workspace.
 
-    Why this exists:
-    - Worker cleanup relies on `tempfile.TemporaryDirectory(...)`.
-    - These tests need an observable directory under `tmp_path` so they can
-      assert the workdir really disappears after the activity completes.
-
-    How to use:
-    - Instantiate with a target path.
-    - Patch the module-local `tempfile.TemporaryDirectory` factory to return it.
+    Actual cleanup and write receipts are covered by the manager service tests.
+    This double checks that activities keep the workspace through processing.
     """
 
     def __init__(self, path: pathlib.Path) -> None:
         self.path = path
         self.exited = False
 
-    def __enter__(self) -> str:
+    async def __aenter__(self) -> str:
         self.path.mkdir(parents=True, exist_ok=True)
         return str(self.path)
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(self, exc_type, exc, tb) -> None:
         self.exited = True
         shutil.rmtree(self.path, ignore_errors=True)
 
@@ -92,15 +85,18 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     - Once output persistence completes, that folder should not remain on disk.
 
     How to use:
-    - Patch the worker tempdir factory, run `push_input_process(...)`, then
+    - Supply a tracked manager workspace, run `push_input_process(...)`, then
       assert the tracked folder no longer exists.
     """
-    tracked_dir = _TrackedTemporaryDirectory(tmp_path / "worker-push-temp")
+    tracked_dir = _TrackedWorkspace(tmp_path / "worker-push-temp")
     metadata = _FakeMetadata(document_uid="doc-push", document_name="sample.csv")
 
     class _FakeService:
         already_committed = False
         extraction_context = "{}"
+
+        def workspace(self):
+            return tracked_dir
 
         def __init__(self) -> None:
             self.context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
@@ -134,16 +130,13 @@ async def test_push_input_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         "knowledge_flow_worker.features.scheduler.push_files_activities.activity.logger",
         logging.getLogger("test-push-input-process"),
     )
-    monkeypatch.setattr(
-        "knowledge_flow_worker.features.scheduler.push_files_activities.tempfile.TemporaryDirectory",
-        lambda prefix="": tracked_dir,
-    )
     # Extraction now runs in a child process. The contract under test is that the
     # worker's temporary directory is removed once the activity finishes, which
     # holds whatever extraction does — so it is intercepted rather than spawned.
     extracted: dict[str, object] = {}
 
     async def _fake_extract_document(*, input_path, output_dir, metadata, profile, stage, started_at, manager_job_json) -> None:
+        assert output_dir.exists()
         extracted.update({"input_path": input_path, "output_dir": output_dir, "stage": stage})
 
     monkeypatch.setattr(
@@ -177,10 +170,10 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
     - That restored worker folder should disappear once the activity finishes.
 
     How to use:
-    - Patch the worker tempdir factory, run `output_process(...)`, then assert
+    - Supply a tracked manager workspace, run `output_process(...)`, then assert
       the tracked folder no longer exists.
     """
-    tracked_dir = _TrackedTemporaryDirectory(tmp_path / "worker-output-temp")
+    tracked_dir = _TrackedWorkspace(tmp_path / "worker-output-temp")
     metadata = _FakeMetadata(document_uid="doc-output", document_name="sample.csv")
     user = _user()
     file = FileToProcess(
@@ -196,6 +189,9 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         already_committed = False
         extraction_context = "{}"
 
+        def workspace(self):
+            return tracked_dir
+
         async def persist_progress(self, user, metadata) -> bool:
             return True
 
@@ -206,6 +202,7 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
             return working_dir
 
         def process_output(self, user, file_name_for_processing, output_dir, metadata, profile):
+            assert output_dir.exists()
             return metadata
 
     fake_app_context = SimpleNamespace(
@@ -230,10 +227,6 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
         "knowledge_flow_worker.features.scheduler.activities.activity.logger",
         logging.getLogger("test-output-process"),
     )
-    monkeypatch.setattr(
-        "knowledge_flow_worker.features.scheduler.activities.tempfile.TemporaryDirectory",
-        lambda prefix="": tracked_dir,
-    )
 
     result = await output_process(file=file, metadata=metadata)
 
@@ -245,6 +238,7 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_output_process_uses_manager_progress_writer(tmp_path, monkeypatch):
     """Output processing persists progress through its admitted manager job service."""
+    tracked_dir = _TrackedWorkspace(tmp_path / "worker-output-checked")
     metadata = _FakeMetadata(document_uid="doc-output", document_name="sample.csv")
     user = _user()
     file = FileToProcess(
@@ -260,6 +254,9 @@ async def test_output_process_uses_manager_progress_writer(tmp_path, monkeypatch
         already_committed = False
         extraction_context = "{}"
 
+        def workspace(self):
+            return tracked_dir
+
         def __init__(self) -> None:
             self.checked_calls = 0
 
@@ -274,6 +271,7 @@ async def test_output_process_uses_manager_progress_writer(tmp_path, monkeypatch
             return working_dir
 
         def process_output(self, user, file_name_for_processing, output_dir, metadata, profile):
+            assert output_dir.exists()
             return metadata
 
     fake_app_context = SimpleNamespace(
@@ -294,10 +292,6 @@ async def test_output_process_uses_manager_progress_writer(tmp_path, monkeypatch
     monkeypatch.setattr(
         "knowledge_flow_worker.features.scheduler.activities.activity.logger",
         logging.getLogger("test-output-process"),
-    )
-    monkeypatch.setattr(
-        "knowledge_flow_worker.features.scheduler.activities.tempfile.TemporaryDirectory",
-        lambda prefix="": _TrackedTemporaryDirectory(tmp_path / "worker-output-checked"),
     )
 
     monkeypatch.setattr(

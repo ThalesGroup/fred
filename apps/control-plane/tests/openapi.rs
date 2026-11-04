@@ -155,6 +155,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /document-processing/{id}/commit",
         "post /document-processing/{id}/abandon",
         "post /document-processing/{id}/vectors",
+        "post /document-processing/{id}/writes",
         "get /document-processing/{id}/original",
         "get /document-processing/cleanup",
         "post /document-processing/cleanup",
