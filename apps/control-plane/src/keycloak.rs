@@ -55,6 +55,18 @@ pub(crate) fn effective_email(username: &str, email: Option<&str>) -> String {
 }
 
 impl Directory {
+    /// Only the configured workload's verified service account, never a person
+    /// logged in through the same client, carries the Control Plane identity.
+    pub(crate) fn is_own_service_account(&self, caller: &crate::auth::CurrentUser) -> bool {
+        caller.service_account
+            && caller.client_id.as_deref() == Some(self.client_id.as_str())
+            && caller
+                .token_issuer
+                .as_deref()
+                .map(|issuer| issuer.trim_end_matches('/'))
+                == Some(self.realm.as_str())
+    }
+
     pub fn configured(config: Option<&M2mConfig>) -> Result<Option<Self>> {
         let Some(config) = config.filter(|c| c.enabled) else {
             return Ok(None);

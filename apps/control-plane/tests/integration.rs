@@ -5017,3 +5017,6 @@ mod session_deletion;
 
 #[path = "support/embedded_conversations.rs"]
 mod embedded_conversations;
+
+#[path = "support/platform_workload.rs"]
+mod platform_workload;
