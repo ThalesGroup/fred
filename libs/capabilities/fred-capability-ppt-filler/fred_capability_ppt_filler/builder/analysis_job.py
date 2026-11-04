@@ -268,7 +268,8 @@ class AnalysisStore(ABC):
     @abstractmethod
     async def get(
         self, instance_id: str, *, with_inventory: bool = True
-    ) -> Optional[AnalysisRecord]: ...
+    ) -> Optional[AnalysisRecord]:
+        raise NotImplementedError
 
     @abstractmethod
     async def template(
@@ -277,7 +278,8 @@ class AnalysisStore(ABC):
         """The stored template; with ``sha``, only while the row is that template's."""
 
     @abstractmethod
-    async def patterns_pdf(self, instance_id: str) -> Optional[bytes]: ...
+    async def patterns_pdf(self, instance_id: str) -> Optional[bytes]:
+        raise NotImplementedError
 
     @abstractmethod
     async def start(
@@ -309,7 +311,8 @@ class AnalysisStore(ABC):
         meanwhile; ``force`` (an author's action) ignores the attempts spent."""
 
     @abstractmethod
-    async def heartbeat(self, instance_id: str, job_id: str) -> bool: ...
+    async def heartbeat(self, instance_id: str, job_id: str) -> bool:
+        raise NotImplementedError
 
     @abstractmethod
     async def finish(
@@ -338,7 +341,8 @@ class AnalysisStore(ABC):
         """Store the Fred template's pattern edits; ``None`` removes them."""
 
     @abstractmethod
-    async def fail(self, instance_id: str, job_id: str, error: str) -> bool: ...
+    async def fail(self, instance_id: str, job_id: str, error: str) -> bool:
+        raise NotImplementedError
 
 
 class SqlAnalysisStore(AnalysisStore):

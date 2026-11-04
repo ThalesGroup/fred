@@ -148,6 +148,25 @@ _SAME_DESIGN = 20
 _DECOR_MIN_AREA = 0.02
 
 
+@dataclass(frozen=True)
+class FrameMetrics:
+    """What a text box costs in room (padding, line spacing, paragraph spacing)
+    before a glyph is drawn: ``lnSpc 114%`` + ``spcBef 16pt`` fits barely half
+    the bullets a bare "height / (size × 1.2)" would promise."""
+
+    lr_inset: int = 2 * text_metrics.DEFAULT_INSET_EMU
+    tb_inset: int = 2 * text_metrics.DEFAULT_V_INSET_EMU
+    line_spacing: float = 1.0
+    space_before_pt: float = 0.0
+    space_after_pt: float = 0.0
+    # Does not wrap: the box widens with its text instead of breaking a line.
+    # Auto-sizing the *height* does not count — such a box still wraps, and the
+    # width limit that follows from it is the one that matters.
+    grows: bool = False
+    # Text runs top to bottom (`vert`, `vert270`…): lines run along the height.
+    vertical: bool = False
+
+
 @dataclass
 class _Rec:
     key: str
@@ -164,7 +183,7 @@ class _Rec:
     lines: int
     name: str
     shape: "BaseShape" = field(repr=False)
-    frame: "FrameMetrics" = field(default_factory=lambda: FrameMetrics(), repr=False)
+    frame: "FrameMetrics" = field(default_factory=FrameMetrics, repr=False)
     # Holds a slide-number or date field: chrome, never a slot.
     is_field: bool = False
 
@@ -293,25 +312,6 @@ def _placeholder_pt(shape, layout, master) -> Optional[float]:
         return None
     is_title = fmt.type is not None and fmt.type.name in ("TITLE", "CENTER_TITLE")
     return _lst_style_pt(styles.find(qn("p:titleStyle" if is_title else "p:bodyStyle")))
-
-
-@dataclass(frozen=True)
-class FrameMetrics:
-    """What a text box costs in room (padding, line spacing, paragraph spacing)
-    before a glyph is drawn: ``lnSpc 114%`` + ``spcBef 16pt`` fits barely half
-    the bullets a bare "height / (size × 1.2)" would promise."""
-
-    lr_inset: int = 2 * text_metrics.DEFAULT_INSET_EMU
-    tb_inset: int = 2 * text_metrics.DEFAULT_V_INSET_EMU
-    line_spacing: float = 1.0
-    space_before_pt: float = 0.0
-    space_after_pt: float = 0.0
-    # Does not wrap: the box widens with its text instead of breaking a line.
-    # Auto-sizing the *height* does not count — such a box still wraps, and the
-    # width limit that follows from it is the one that matters.
-    grows: bool = False
-    # Text runs top to bottom (`vert`, `vert270`…): lines run along the height.
-    vertical: bool = False
 
 
 def _pPr_chain(shape, layout, master) -> List[Any]:
