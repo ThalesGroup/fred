@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from importlib.resources import files
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -103,12 +104,13 @@ def binding(selection: str | None = None) -> BoundRuntimeContext:
 def test_package_discovery_and_read_only_reference() -> None:
     catalog = PlatformSkills.from_directory("package")
     assert [entry.name for entry in catalog.catalog.skills] == [
+        "analyze-data",
         "compare-options",
+        "graph",
+        "grill-me",
         "grounded-research",
         "meeting-minutes",
-        "mermaid",
         "summarize-document",
-        "verify-answer",
     ]
     template = catalog.read("meeting-minutes", "references/meeting-minutes-template.md")
     assert "Not specified" in template
@@ -122,23 +124,20 @@ def test_package_discovery_and_read_only_reference() -> None:
     assert upload_results[0].error == "permission_denied"
 
 
-def test_mermaid_skill_retains_renderer_syntax_guards() -> None:
-    contract = PlatformSkills.from_directory("package").read("mermaid")
-    assert "in the chat as a fenced `mermaid` block" in contract
-    assert "Do not send Mermaid source to `render_html_artifact`" in contract
-    assert "it does not run Mermaid" in contract
-    assert "```mermaid" not in contract
-    assert "placeholder Mermaid fences" in contract
-    assert "never nest a `mermaid` fence inside another" in contract
-    assert "echo the fence's own opening/closing backticks inside its body" in contract
-    assert (
-        "The fence body starts directly with `flowchart TD` or `graph TD`" in contract
-    )
-    assert "never with backticks, `subgraph`, a node, or an edge" in contract
-    assert "there is no four-backtick wrapping" in contract
-    assert "do not write subgraph titles with node-label syntax" in contract
-    assert 'subgraph SUBGRAPH_ID["Title"]' in contract
-    assert "Markdown list or table instead of Mermaid" in contract
+def test_graph_core_and_reference_match_react_and_native_deep_resources() -> None:
+    skills = PlatformSkills.from_directory("package")
+    resource = files("fred_runtime.skills").joinpath("graph")
+    assert {entry.name for entry in resource.iterdir()} == {"SKILL.md", "references"}
+    core = skills.read("graph")
+    assert "references/mermaid.md" in core
+    assert "flowchart TD" not in core
+    for path in ["SKILL.md", "references/mermaid.md"]:
+        snapshot_content = skills.read("graph", path)
+        native_result = skills.filesystem_backend.download_files([f"/graph/{path}"])
+        assert len(native_result) == 1
+        assert native_result[0].error is None
+        assert native_result[0].content == snapshot_content.encode()
+    assert "flowchart TD" in skills.read("graph", "references/mermaid.md")
 
 
 @pytest.mark.asyncio
