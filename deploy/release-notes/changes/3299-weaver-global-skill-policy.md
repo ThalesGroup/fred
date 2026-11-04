@@ -2,8 +2,8 @@
 schema: 1
 title: "Apply global platform skill opt-outs at turn admission"
 impact: minor
-configuration: none
-configuration_reason: "Policy is stored in the control-plane database and sent in trusted runtime bindings."
+configuration: local
+configuration_reason: "Only comments in the local YAML examples change; packaged skills already default to enabled and explicit null remains the opt-out. Production chart values are unchanged, and policy is stored in the control-plane database."
 ---
 ## Applicability
 
