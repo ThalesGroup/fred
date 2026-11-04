@@ -94,3 +94,14 @@ endif
 .PHONY: prepare-processing-worker
 prepare-processing-worker: ## Prepare the Python worker used by document-processing integration tests
 	$(MAKE) -C ../knowledge-flow-worker dev
+
+# The embedded runtime is part of this component's supported execution path.
+.PHONY: test-rust-agent code-quality-rust-agent
+test: test-rust-agent
+test-rust-agent: dev
+	$(CARGO) test --locked -p fred-rust-agent --lib
+
+code-quality: code-quality-rust-agent
+code-quality-rust-agent: dev
+	$(CARGO) fmt -p fred-rust-agent --check
+	$(CARGO) clippy --locked -p fred-rust-agent --all-targets -- -D warnings
