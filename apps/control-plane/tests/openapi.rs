@@ -222,6 +222,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /organizations/{organization_id}/supervision/teams/{team_id}",
         "put /organizations/{organization_id}/agents/{agent_id}/default-on",
         "post /agents/execute/stream",
+        "get /agents/sessions/{session_id}/messages",
     ]
     .into_iter()
     .map(String::from)
