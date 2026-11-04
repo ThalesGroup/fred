@@ -947,6 +947,7 @@ def _build_runtime_services(
     if isinstance(governed_skills, PlatformSkills):
         governed_skills = governed_skills.for_execution(
             tuple(s.name for s in binding.runtime_context.selected_skills),
+            binding.unavailable_skill_names,
             resuming=binding.is_resuming,
         )
     if conversation_filesystem is None:
@@ -4491,7 +4492,7 @@ async def _iterate_runtime_event_payloads_inner(
         runtime_context=runtime_context,
         portable_context=portable_context,
         platform_prompt=platform_prompt,
-        disabled_platform_skills=current_turn().binding.disabled_platform_skills,
+        unavailable_skill_names=current_turn().binding.disabled_platform_skills,
         is_resuming=request.resume_payload is not None,
     )
 
