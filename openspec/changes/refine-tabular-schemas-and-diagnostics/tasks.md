@@ -17,6 +17,26 @@
 ## 4. Validation and review
 
 - [ ] 4.1 Measure old/new description sizes using the same synthetic workbook and replay the retained failing SQL plus numerical references after deliberate fixture reprocessing. Report execution success separately from answer correctness and distinguish fresh model trials from isolated SQL checks.
-- [ ] 4.2 Run root `make code-quality`, affected integration checks and focused concurrent description/query checks within existing capacity limits; record results and verify no cross-request/pod-local correctness state was introduced.
-- [ ] 4.3 Apply the full `audit-branch` procedure against the actual target, obtain independent correctness and performance reviews for changed tool paths, record base/head, findings/dispositions and exclusions, and update migration guidance.
+- [x] 4.2 Run root `make code-quality`, affected integration checks and focused concurrent description/query checks within existing capacity limits; record results and verify no cross-request/pod-local correctness state was introduced.
+- [x] 4.3 Apply the full `audit-branch` procedure against the actual target, obtain independent correctness and performance reviews for changed tool paths, record base/head, findings/dispositions and exclusions, and update migration guidance.
 - [ ] 4.4 Reconcile the final implementation with these artifacts, sync delta specs and archive after verification; commit reviewable blocks and update the existing draft PR with the approved follow-up scope and evidence.
+
+Verification: 222 targeted backend tests, 161 Excel tests, 47 frontend tests,
+47 runtime diagnostic tests and 10 prompt/catalog tests passed. Root
+`make code-quality` passed across all 17 modules; migration check and strict
+change validation passed. The backend suite includes six concurrent mixed
+description/query requests under existing capacity limits. No new I/O,
+connection, shared correctness state or distributed coordination was introduced.
+
+Review: actual PR target `swift` at `de9192157`, merge base `059ae1c91`.
+Independent read-only full-branch correctness and tool-path performance reviews
+covered the implementation integrated in `7e5931af8`, including affected stored
+metadata, API/MCP, frontend/history, runtime and prompt consumers. Confirmed
+findings were fixed and replayed: omitted CSV markdown parsing, missing table
+selectors in failure arguments, and a filtered catalog-budget bypass. Author
+review of subsequent `e19b8b04e` found only an existing-import reordering and a
+static pandas Series cast, without a behavior change. Migration guidance now
+requires coordinated consumer upgrades and deliberate source reprocessing.
+Excluded: production rollout, live multi-pod/large-user load and full application
+browser/theme validation; focused concurrency and frontend consumer tests are
+the available evidence.

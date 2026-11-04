@@ -1,5 +1,30 @@
 ## MODIFIED Requirements
 
+### Requirement: Numeric bounds are calculated when documents are described
+
+For each authorized table selected through `describe_tabular_documents`, the system SHALL calculate `min_value` and `max_value` from that table's current queryable data for every integer and float column. It SHALL use finite non-null values only, and SHALL return null bounds when none exist. A description SHALL NOT depend on bounds stored in document metadata.
+
+#### Scenario: Older workbook without stored bounds
+
+- **WHEN** an agent describes a previously imported Excel document whose tables contain numeric values but whose metadata has no bounds
+- **THEN** every numeric column in every selected table has the minimum and maximum from its queryable table data
+
+#### Scenario: Mixed batch of CSV and Excel documents
+
+- **WHEN** an agent describes authorized CSV and Excel documents in one call
+- **THEN** each document retains its requested position, catalog and table descriptions, and each selected numeric column has bounds from its own table
+
+#### Scenario: No finite numeric values
+
+- **WHEN** a numeric column is empty, null throughout, or contains only non-finite values
+- **THEN** its `min_value` and `max_value` are null
+
+#### Scenario: Historical bounds differ from current table data
+
+- **WHEN** stored bounds differ from the values in the queryable table
+- **THEN** the description returns bounds calculated from the queryable table on that call
+
+
 ### Requirement: Categorical values are read when documents are described
 
 CSV and Excel ingestion SHALL identify categorical string columns. For every selected column identified as categorical, `describe_tabular_documents` SHALL return its exact distinct non-null string values from its current queryable table data in `categorical_values`. It SHALL NOT use stored sample values as the source of the description. A non-categorical or temporal column SHALL omit `categorical_values`.
