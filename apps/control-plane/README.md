@@ -526,10 +526,63 @@ adapters with simulated providers, and disposable SQL for host admission. These
 checks do not establish k3d, provider or selector availability for Ralph.
 
 
+## Automatic conversation titles
+
+Newly registered conversations keep their initial title until one cosmetic title
+attempt succeeds. Migration `0004_conversation_titles.sql` leaves every existing
+session ineligible; it does not rewrite titles or histories. Registration replays
+retain the original row and its eligibility. Run `control-plane init-schema` before
+starting this version, using the normal schema-owner deployment procedure.
+
+An organization **Owner** can optionally select a title model in its existing
+Models settings. The choice is a pair `(source_id, upstream_model_id)` in the same
+organization's permitted offers. It is persisted with the revisioned model policy,
+whose complete replacement now requires `title` (use `null` for no dedicated
+choice). Inventory `selectable` and write validation use the same calculation.
+There is no platform-wide override, additional role or per-pod title setting.
+
+With no dedicated choice, title inference uses the offer admitted for the answer,
+with separate bounded settings: at most 128 output tokens (capped by known model
+limits), no reasoning, no inherited answer temperature/top-p. With a dedicated
+choice, an unusable offer leaves the initial title; it never falls back to another
+organization's model or bypasses permission. Workload credentials for that source
+must already be provisioned by the existing inference contract. Unchanged choices
+can remain visible when unavailable, but newly selected offers must be selectable.
+
+The read-only `GET .../agent-instances/{id}/runtime` never reserves a title.
+Execution uses workload-delegated `POST` on the same path; the embedded Rust host
+uses its private equivalent. After normal admission and association checks, an
+atomic session update consumes `title_pending` and returns a unique attempt only
+to one execution. A first resume or unavailable title model also consumes the
+opportunity. Failures and retries do not schedule later attempts. No transaction
+spans a provider call, and no extra queue or service is involved.
+
+`POST /spaces/{space}/sessions/{session}/generated-title` is workload-only. Its
+conditional write checks admitted subject, space, instance, session, attempt and
+absence of deletion. Any manual non-null `PATCH` title clears the attempt, even
+when its text equals the initial title; an activity-only patch does not. A late
+result then receives 409 without changing the row. Deleted sessions are never
+recreated. Successful persistence emits `session_title` with the original session
+ID so the browser reloads canonical metadata instead of applying a stale string.
+
+Python managed agent turns and embedded Rust Ralph implement the same envelope:
+first 600 input characters, a prompt for 3–8 words in the input language, plain
+text bounded to 80 characters, 10-second generation budget and at most 2 seconds
+of grace before the final answer event. Closing/cancelling the stream cancels the
+title work; failure or invalid output leaves the answer intact. The title is not
+an assistant message. Existing inference observation and usage reporting count
+consumption under its actual offer, including output rejected as an invalid title.
+A provider's unreturned usage cannot be inferred after cancellation.
+
+These contracts are covered by focused simulated-provider, SQL-upgrade and UI
+component tests. They do not certify a local k3d or integration-platform journey.
+Deploy Control Plane, SDK/runtime and frontend coherently; see the
+[operator note](../../deploy/release-notes/changes/weaver-conversation-titles.md).
+
 ## Conversation metadata and browser preparation (M5a)
 
-These are backend APIs with generated clients, not a connected or functionally
-validated chat journey. All paths below are relative to the configured CP prefix.
+These backend APIs and generated clients back managed chat. Focused tests do not
+establish a k3d/integration-validated journey. Paths below are relative to the CP prefix.
 
 | Method / path | Behavior |
 | --- | --- |

@@ -570,3 +570,21 @@ the separate Rust [monitor](../monitor/README.md), via `/monitor/v1/status`.
 Vite proxies `/monitor` to `VITE_BACKEND_URL_MONITOR` (default port 8223); the
 production image uses `FRONTEND_MONITOR_UPSTREAM`. The server also enforces the
 platform-admin permission; hiding the navigation item is not an access boundary.
+
+## Weaver conversation titles
+
+Organization Owners select an optional conversation-title model in the existing
+Models settings drawer, using the server's `selectable` facts and the organization's
+permitted offers. The complete revisioned policy preserves this choice on other
+edits and explicitly clears it when its offer is revoked. English and French labels
+explain the default and unavailable-model behavior. Failed writes retain the
+server state and show the existing policy error toast.
+
+The chat sends no title authority flag. `session_title` events invalidate canonical
+session/list queries only for the originating turn and identity, including detached
+turns. They never apply a generated string to the active chat. The editor submits
+explicit manual confirmation even for unchanged text, allowing the server to reject
+late generated results from other tabs. Navigation and identity guards are shared
+with the existing managed chat flow. See the
+[Control Plane contract](../control-plane/README.md#automatic-conversation-titles)
+for atomicity, eligibility and rollout requirements.

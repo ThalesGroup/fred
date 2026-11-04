@@ -12,6 +12,7 @@ from fred_core.documents.transport import DocumentAccessContext
 from fred_core.history.history_schema import ChatTokenUsage
 from fred_sdk.contracts.context import PortableContext, RuntimeContext
 from fred_sdk.contracts.weaver import (
+    InferenceSelection,
     ModelOfferKey,
     WeaverRuntimeBinding,
 )
@@ -38,21 +39,22 @@ class TurnAuthority:
     ):
         self.binding = binding
         self.usage_report_id = str(uuid4())
-        self.token_usage: ChatTokenUsage | None = None
+        self.model_usage: dict[ModelOfferKey, ChatTokenUsage] = {}
         self.choice = choice
         self._scope: RunScope | None = None
         self._ended = False
-        self.models: dict[ModelOfferKey, BaseChatModel] = {}
+        self.models: dict[InferenceSelection, BaseChatModel] = {}
         self._documents: DocumentAccessContext | None = None
 
-    def record_usage(self, usage: dict[str, int] | None) -> None:
-        """Retain known consumption even if the run never emits a final event."""
+    def record_usage(
+        self, usage: dict[str, int] | None, *, offer: ModelOfferKey | None = None
+    ) -> None:
+        """Retain consumption by admitted offer, including unfinished/error turns."""
         if usage is not None:
-            self.token_usage = ChatTokenUsage.model_validate(
-                sum_token_usage(
-                    self.token_usage.model_dump() if self.token_usage else None,
-                    usage,
-                )
+            key = offer or self.binding.inference.selection.key
+            previous = self.model_usage.get(key)
+            self.model_usage[key] = ChatTokenUsage.model_validate(
+                sum_token_usage(previous.model_dump() if previous else None, usage)
             )
 
     def bind_documents(

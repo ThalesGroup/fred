@@ -165,6 +165,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
     onSteeredMessage: (messageId, sessionId) => onSteeredMessageMock(messageId, sessionId),
     onStreamInterrupted: (sessionId) => onStreamInterruptedMock(sessionId),
+    onSessionTitle: (sessionId) => onSessionTitleMock(sessionId),
     onBackgroundTurnSettled: (sessionId, messages) => onBackgroundTurnSettledMock(sessionId, messages),
     isTurnCurrent,
     isExecutionAllowed,
@@ -183,6 +184,7 @@ const onAwaitingHumanMock = vi.fn();
 const onSteeredMessageMock = vi.fn();
 const onStreamInterruptedMock = vi.fn();
 const onBackgroundTurnSettledMock = vi.fn();
+const onSessionTitleMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -213,6 +215,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onSteeredMessageMock.mockClear();
     onStreamInterruptedMock.mockClear();
     onBackgroundTurnSettledMock.mockClear();
+    onSessionTitleMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -2051,6 +2054,24 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       const signal = fetchSpy.mock.calls[0][1]?.signal as AbortSignal;
       return { stream, fetchSpy, signal, sendPromise };
     };
+
+    it("refreshes only the original session title, including while detached", async () => {
+      mount();
+      const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
+      await act(async () => stream.push({ kind: "session_title", session_id: "wrong-session" }));
+      expect(onSessionTitleMock).not.toHaveBeenCalled();
+      act(() => latest.reset());
+      await act(async () => stream.push({ kind: "session_title", session_id: "session-1" }));
+      expect(onSessionTitleMock).toHaveBeenCalledExactlyOnceWith("session-1");
+      expect(latest.messages).toEqual([]);
+      const identity = vi.spyOn(KeyCloakService, "GetSessionIdentity").mockReturnValue("different-login");
+      await act(async () => stream.push({ kind: "session_title", session_id: "session-1" }));
+      expect(onSessionTitleMock).toHaveBeenCalledTimes(1);
+      identity.mockRestore();
+      stream.close();
+      await act(async () => sendPromise);
+      fetchSpy.mockRestore();
+    });
 
     const text = (message: { parts: unknown[] }) => (message.parts[0] as { text?: string }).text;
 

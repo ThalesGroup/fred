@@ -40,11 +40,12 @@ connect and 60-second HTTP timeouts). Its request builder consumes the admitted
 model, temperature, token ceiling, top-p and reasoning. Official versioned API:
 [completion request builder](https://docs.rs/rig-core/0.42.0/rig_core/completion/request/struct.CompletionRequestBuilder.html).
 The 120-second turn deadline starts at local admission and covers model and search
-calls. A turn makes at most two model calls and one document search, retaining the
+calls. The answer makes at most two model calls and one document search, retaining the
 same model credential, offer and options throughout.
 
-The Fred SSE sequence is `status`, one `assistant_delta` with the completed provider
-text, then `final`. This buffers the final answer; it is not token streaming
+The Fred answer SSE sequence is `status`, one `assistant_delta` with the completed
+provider text, then `final`. A successful title may add `session_title` before
+`final`. This buffers the final answer; it is not token streaming
 from the upstream provider. The provider's finish reason is retained in Fred's
 normalized vocabulary. A failed/timed-out completion emits terminal
 `execution_error`, with a fixed public message and no provider body or credential.
@@ -104,6 +105,26 @@ timeout. This accounting task survives browser disconnection; inference remains
 cancellable. A failed write is logged without content or secrets and does not
 change the reply. This is best effort: there is no retry, outbox or recovery after
 a process crash. The shared transaction preserves atomicity and report idempotency.
+
+## Managed title attempt
+
+Control Plane may reserve one optional title admission for a new session. The host
+owns the title future alongside the answer stream, using this crate's existing
+`InferenceTurn` transport, credential checks and inference spans. It is an extra
+call, with independent bounded options and an organization-selected offer, or the
+answer's admitted offer when no dedicated choice exists. No database or model
+policy is introduced in the agent crate.
+
+The title request reads at most 600 characters, targets 3–8 words and cleans plain
+text to 80 characters. Generation times out after 10 seconds. The host waits at
+most 2 seconds before yielding the final event; dropping the stream drops unfinished
+title work. Title errors never fail the answer. Decoded title usage goes through
+the existing usage callback as a separate report for its actual offer, even when
+the text is invalid; it is not included a second time in the answer aggregate.
+
+The host conditionally persists the result with its admitted attempt and provenance
+before emitting `session_title`. Manual renames and deletion win at the database
+boundary. See the [owner contract](../README.md#automatic-conversation-titles).
 
 ## Direct demonstration
 

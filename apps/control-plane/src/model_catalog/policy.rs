@@ -27,6 +27,9 @@ pub struct OrganizationModelPolicy {
     pub reasoning_enabled: Vec<ModelOfferKey>,
     pub default: Option<ModelOfferKey>,
     pub fallback: Option<ModelOfferKey>,
+    /// Optional conversation-title model, within this organization's permitted offers.
+    #[serde(default)]
+    pub title: Option<ModelOfferKey>,
     pub created_by: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_by: Option<String>,
@@ -50,6 +53,10 @@ pub struct ReplaceModelPolicy {
     #[serde(deserialize_with = "Option::deserialize")]
     #[schema(required = true)]
     pub fallback: Option<ModelOfferKey>,
+    /// Optional conversation-title model, within this organization's permitted offers.
+    #[serde(deserialize_with = "Option::deserialize")]
+    #[schema(required = true)]
+    pub title: Option<ModelOfferKey>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -59,6 +66,8 @@ struct PolicyRow {
     default_upstream_model_id: Option<String>,
     fallback_source_id: Option<String>,
     fallback_upstream_model_id: Option<String>,
+    title_source_id: Option<String>,
+    title_upstream_model_id: Option<String>,
     created_by: String,
     created_at: DateTime<Utc>,
     updated_by: String,
@@ -81,7 +90,7 @@ pub(super) async fn read(
 ) -> AppResult<OrganizationModelPolicy> {
     let row: Option<PolicyRow> = sqlx::query_as(
         "select revision, default_source_id, default_upstream_model_id,
-             fallback_source_id, fallback_upstream_model_id, created_by, created_at, updated_by, updated_at
+             fallback_source_id, fallback_upstream_model_id, title_source_id, title_upstream_model_id, created_by, created_at, updated_by, updated_at
          from organization_model_policy where organization_id = $1",
     ).bind(organization_id).fetch_optional(&mut *conn).await?;
     let permissions: Vec<(String, String, bool)> = sqlx::query_as(
@@ -112,6 +121,7 @@ pub(super) async fn read(
             reasoning_enabled,
             default: key(row.default_source_id, row.default_upstream_model_id),
             fallback: key(row.fallback_source_id, row.fallback_upstream_model_id),
+            title: key(row.title_source_id, row.title_upstream_model_id),
             created_by: Some(row.created_by),
             created_at: Some(row.created_at),
             updated_by: Some(row.updated_by),
@@ -124,6 +134,7 @@ pub(super) async fn read(
             reasoning_enabled,
             default: None,
             fallback: None,
+            title: None,
             created_by: None,
             created_at: None,
             updated_by: None,
@@ -164,12 +175,12 @@ impl ReplaceModelPolicy {
                 return Err(AppError::Unprocessable("invalid offer identity".into()));
             }
         }
-        if [&self.default, &self.fallback]
+        if [&self.default, &self.fallback, &self.title]
             .into_iter()
             .flatten()
             .any(|choice| !permitted.contains(choice))
         {
-            return Err(AppError::Unprocessable("default and fallback must be permitted; clear or replace revoked choices explicitly".into()));
+            return Err(AppError::Unprocessable("default, fallback and title must be permitted; clear or replace revoked choices explicitly".into()));
         }
         Ok(permitted)
     }
@@ -179,7 +190,22 @@ impl ReplaceModelPolicy {
 struct Candidate {
     source_id: String,
     upstream_model_id: String,
-    eligible: bool,
+    enabled: bool,
+    observed_ok: bool,
+    current: bool,
+    advertised: bool,
+    chat: bool,
+}
+
+/// One calculation for administrative picker choices and write validation.
+pub(super) fn selectable(
+    enabled: bool,
+    observed_ok: bool,
+    current: bool,
+    advertised: bool,
+    chat: bool,
+) -> bool {
+    enabled && observed_ok && current && advertised && chat
 }
 
 /// Shared source boundary for policy writes, recommendations and refresh admission.
@@ -225,9 +251,10 @@ pub(super) async fn require_selectable(
     }
     let rows: Vec<Candidate> = sqlx::query_as(
         "select o.source_id, o.upstream_model_id,
-             coalesce((s.configuration->>'enabled')::boolean and s.state = 'ok'
-                 and s.snapshot_source_revision = (s.configuration->>'revision')::bigint
-                 and o.advertised and o.metadata->'chat' = 'true'::jsonb, false) as eligible
+             coalesce((s.configuration->>'enabled')::boolean, false) as enabled,
+             s.state = 'ok' as observed_ok,
+             coalesce(s.snapshot_source_revision = (s.configuration->>'revision')::bigint, false) as current,
+             o.advertised, coalesce(o.metadata->'chat' = 'true'::jsonb, false) as chat
          from model_source s join model_offer o on o.source_id = s.source_id
          join jsonb_to_recordset($1) as x(source_id text, upstream_model_id text)
              on (o.source_id, o.upstream_model_id) = (x.source_id, x.upstream_model_id)
@@ -250,7 +277,15 @@ pub(super) async fn require_selectable(
             "A newly permitted or selected offer does not exist.",
         ));
     }
-    if rows.iter().any(|row| !row.eligible) {
+    if rows.iter().any(|row| {
+        !selectable(
+            row.enabled,
+            row.observed_ok,
+            row.current,
+            row.advertised,
+            row.chat,
+        )
+    }) {
         return Err(AppError::problem(
             StatusCode::CONFLICT,
             "model_offer_not_selectable",
@@ -287,6 +322,7 @@ pub(super) async fn replace(
     for (choice, old) in [
         (&request.default, &current.default),
         (&request.fallback, &current.fallback),
+        (&request.title, &current.title),
     ] {
         if choice != old
             && let Some(choice) = choice
@@ -322,13 +358,15 @@ pub(super) async fn replace(
     sqlx::query(
         "insert into organization_model_policy
              (organization_id, revision, default_source_id, default_upstream_model_id,
-              fallback_source_id, fallback_upstream_model_id, created_by, updated_by)
-         values ($1, $2, $3, $4, $5, $6, $7, $7)
+              fallback_source_id, fallback_upstream_model_id, title_source_id, title_upstream_model_id, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
          on conflict (organization_id) do update set revision = excluded.revision,
              default_source_id = excluded.default_source_id,
              default_upstream_model_id = excluded.default_upstream_model_id,
              fallback_source_id = excluded.fallback_source_id,
              fallback_upstream_model_id = excluded.fallback_upstream_model_id,
+             title_source_id = excluded.title_source_id,
+             title_upstream_model_id = excluded.title_upstream_model_id,
              updated_by = excluded.updated_by, updated_at = now()",
     )
     .bind(organization_id)
@@ -337,6 +375,8 @@ pub(super) async fn replace(
     .bind(request.default.as_ref().map(|k| &k.upstream_model_id))
     .bind(request.fallback.as_ref().map(|k| &k.source_id))
     .bind(request.fallback.as_ref().map(|k| &k.upstream_model_id))
+    .bind(request.title.as_ref().map(|k| &k.source_id))
+    .bind(request.title.as_ref().map(|k| &k.upstream_model_id))
     .bind(uid)
     .execute(&mut *conn)
     .await?;

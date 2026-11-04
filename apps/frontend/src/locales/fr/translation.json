@@ -1461,6 +1461,8 @@
         },
         "emptyKnowledgeBases": "Aucune définition de base de connaissances n'a encore été publiée dans ce déploiement.",
         "organizationModels": {
+          "title": "Modèle des titres de conversation",
+          "titleHint": "Facultatif. Sans choix dédié, les titres utilisent le modèle admis pour la réponse. Si le modèle dédié est indisponible, le titre initial est conservé.",
           "permitted": "Autorisé",
           "permitAria": "Autoriser {{name}}",
           "saved": "Politique des modèles enregistrée.",
@@ -1470,7 +1472,7 @@
           "none": "Aucun",
           "policyHint": "Ces choix s'appliquent à votre organisation. Choisissez parmi les modèles autorisés. Les réglages par pod ne sont pas disponibles dans ce catalogue.",
           "revokeTitle": "Retirer l'autorisation ?",
-          "revokeMessage": "Retirer {{name}} des modèles autorisés ? S'il est sélectionné par défaut ou en secours, ce choix sera aussi effacé.",
+          "revokeMessage": "Retirer {{name}} des modèles autorisés ? Si ce modèle est choisi par défaut, en repli ou pour les titres de conversation, ce choix sera aussi effacé.",
           "withdrawn": "Retiré de la source",
           "chat": "Chat confirmé",
           "notChat": "Sans aptitude chat",

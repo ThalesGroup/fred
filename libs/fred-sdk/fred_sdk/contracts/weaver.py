@@ -88,6 +88,7 @@ class OrganizationModelPolicy(ResolverFact):
     reasoning_enabled: tuple[ModelOfferKey, ...]
     default: ModelOfferKey | None
     fallback: ModelOfferKey | None
+    title: ModelOfferKey | None = None
     created_by: str | None
     created_at: datetime | None
     updated_by: str | None
@@ -183,6 +184,11 @@ class RuntimeAttachment(ResolverFact):
     mime: str
 
 
+class TitleAdmission(ResolverFact):
+    attempt_id: UUID
+    inference: InferenceAdmission
+
+
 class WeaverRuntimeBinding(ResolverFact):
     subject_id: str
     run_id: str | None
@@ -191,10 +197,13 @@ class WeaverRuntimeBinding(ResolverFact):
     agent: RuntimeAgent
     models: RuntimeModels
     inference: InferenceAdmission
+    title: TitleAdmission | None = None
     attachments: tuple[RuntimeAttachment, ...]
 
     @model_validator(mode="after")
     def owning_organization(self) -> WeaverRuntimeBinding:
+        if self.title and not self.conversation_id:
+            raise ValueError("Title requires a conversation")
         if self.attachments and not self.conversation_id:
             raise ValueError("Attachments require a conversation")
         if self.attachments:

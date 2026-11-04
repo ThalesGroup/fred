@@ -144,6 +144,40 @@ workload restart, while already-admitted clients retain their context.
 
 ---
 
+### Managed conversation titles
+
+Managed execution now uses the workload-delegated **POST** runtime resolver. Its
+optional `title` admission is the sole authority to generate a title; preparation,
+skill catalog GETs and browser flags do not grant that permission. Resume admission
+consumes eligibility without generating another title. Existing sessions remain
+unchanged. Standalone/local SDK invocations without a managed admission do not
+produce persistent titles.
+
+`app/session_title.py` uses the existing routed factory, admitted credentials,
+HTTP pools and inference tracing/KPI middleware. The title admission may name a
+different permitted offer, or the answer offer with independent bounded options.
+It does not change the answer model or inherit its reasoning parameters. Model
+instances are cached per complete selection so these options cannot collide.
+
+One child task lives inside the owner's `RunScope`: input is limited to 600
+characters, the prompt targets 3–8 words, cleaned text is limited to 80 characters,
+and the whole operation has a 10-second budget. Persistence has a 2-second bound;
+the final answer waits at most 2 seconds for outstanding title work. Completion,
+disconnection and cancellation cancel and await that child before authority closes.
+Errors/invalid output preserve the initial title without failing the answer.
+
+The workload-only conditional metadata write carries immutable admitted provenance
+and the attempt ID. A manual rename or deletion supersedes it. On success the SSE
+`session_title` event carries only the originating session ID: consumers reload
+canonical metadata. Usage is aggregated by offer in the existing idempotent run
+report (one aggregate when answer and title share the offer). It is not added to
+the assistant's displayed answer usage or saved as a chat message. Received usage
+is retained even if title cleanup/persistence fails; unavailable provider counters
+on cancellation are not estimated. No title retries or background worker are added.
+
+See the [Control Plane contract](../../apps/control-plane/README.md#automatic-conversation-titles)
+and [rollout note](../../deploy/release-notes/changes/weaver-conversation-titles.md).
+
 ### `fred_runtime.common` — Knowledge Flow + MCP clients
 
 HTTP clients that connect agent tools to the Fred platform services:

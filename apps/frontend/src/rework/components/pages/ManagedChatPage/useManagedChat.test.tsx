@@ -30,9 +30,10 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const dispatchMock = vi.fn();
 vi.mock("react-redux", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-redux")>()),
-  useDispatch: () => vi.fn(),
+  useDispatch: () => dispatchMock,
 }));
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: {
@@ -110,6 +111,7 @@ const sendHitlResumeMock = vi.fn<(...args: unknown[]) => Promise<boolean>>(async
 const abortMock = vi.fn();
 const replaceAllMessagesMock = vi.fn();
 const adoptBackgroundTurnMock = vi.fn((_sessionId: string) => false);
+let capturedOnSessionTitle: ((sessionId: string) => void) | undefined;
 let capturedOnBackgroundTurnSettled: ((sessionId: string, messages: unknown[]) => void) | undefined;
 // Mutable so the #2239 departure-snapshot test below can put a displayed
 // thread on screen; reset to [] in beforeEach.
@@ -134,8 +136,10 @@ vi.mock("@hooks/useChatSse", () => ({
     onAwaitingHuman?: (event: unknown) => void;
     onSteeredMessage?: (messageId: string, sessionId: string) => void;
     onStreamInterrupted?: (sessionId: string) => void;
+    onSessionTitle?: (sessionId: string) => void;
     onBackgroundTurnSettled?: (sessionId: string, messages: unknown[]) => void;
   }) => {
+    capturedOnSessionTitle = params.onSessionTitle;
     capturedOnBackgroundTurnSettled = params.onBackgroundTurnSettled;
     capturedOnTurnStarted = params.onTurnStarted;
     capturedOnTurnRejected = params.onTurnRejected;
@@ -288,6 +292,7 @@ function deferred<T>() {
 }
 
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  enhancedControlPlaneApi: { util: { invalidateTags: (tags: unknown) => ({ type: "invalidate", payload: tags }) } },
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery: () => ({ data: [] }),
   useListAgentInstancesQuery: () => ({ data: [] }),
   useGetSessionQuery: () => ({
@@ -453,6 +458,8 @@ describe("useManagedChat — session write reliability", () => {
     }
     // Captured callbacks are per-mount; leaving a previous test's copy behind
     // lets an assertion pass against a component that is already unmounted.
+    dispatchMock.mockClear();
+    capturedOnSessionTitle = undefined;
     capturedOnTurnStarted = undefined;
     capturedOnTurnRejected = undefined;
     capturedIsTurnCurrent = undefined;
@@ -468,6 +475,26 @@ describe("useManagedChat — session write reliability", () => {
     });
     container.remove();
     vi.unstubAllGlobals();
+  });
+
+  it("reloads canonical metadata for a background title without patching the active session", async () => {
+    mount();
+    bindSession("session-2");
+    act(() => capturedOnSessionTitle?.("session-1"));
+    expect(dispatchMock).toHaveBeenCalledWith({
+      type: "invalidate",
+      payload: [
+        { type: "Sessions", id: "space-1" },
+        { type: "Sessions", id: "space-1:session-1" },
+      ],
+    });
+    expect(patchSessionCalls).toEqual([]);
+    const { KeyCloakService } = await import("../../../../security/KeycloakService");
+    const identity = vi.spyOn(KeyCloakService, "GetSessionIdentity").mockReturnValue("new-login");
+    dispatchMock.mockClear();
+    act(() => capturedOnSessionTitle?.("session-1"));
+    expect(dispatchMock).not.toHaveBeenCalled();
+    identity.mockRestore();
   });
 
   it("waits for one confirmed session before two rapid attachment additions", async () => {

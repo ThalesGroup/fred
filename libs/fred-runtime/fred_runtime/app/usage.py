@@ -32,7 +32,7 @@ async def report_run_usage(
     if not binding.conversation_id:
         logger.info("event=run_usage outcome=skipped reason=no_session")
         return
-    if authority.token_usage is None:
+    if not authority.model_usage:
         logger.info("event=run_usage outcome=skipped reason=no_consumption")
         return
     delegation = get_delegation_runtime()
@@ -55,15 +55,15 @@ async def report_run_usage(
                     "event=run_usage outcome=lost reason=missing_destination"
                 )
                 return
-            offer = binding.inference.selection.key
             body = {
                 "occurred_at": occurred_at.isoformat(),
                 "models": [
                     {
                         "model_source_id": offer.source_id,
                         "upstream_model_id": offer.upstream_model_id,
-                        **authority.token_usage.model_dump(exclude={"total_tokens"}),
+                        **usage.model_dump(exclude={"total_tokens"}),
                     }
+                    for offer, usage in authority.model_usage.items()
                 ],
             }
             url = (

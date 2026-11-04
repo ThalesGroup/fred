@@ -1461,6 +1461,8 @@
         },
         "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet.",
         "organizationModels": {
+          "title": "Conversation title model",
+          "titleHint": "Optional. Without a dedicated choice, titles use the model admitted for the answer. If the dedicated model is unavailable, the initial title is kept.",
           "permitted": "Permitted",
           "permitAria": "Permit {{name}}",
           "saved": "Model policy saved.",
@@ -1470,7 +1472,7 @@
           "none": "None",
           "policyHint": "These choices apply to your organization. Choose from permitted models. Per-pod settings are unavailable in this catalog.",
           "revokeTitle": "Remove permission?",
-          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default or fallback, that choice will also be cleared.",
+          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default, fallback or conversation title model, that choice will also be cleared.",
           "withdrawn": "Withdrawn from source",
           "chat": "Chat confirmed",
           "notChat": "Not chat capable",

@@ -296,6 +296,15 @@ const injectedRtkApi = api.injectEndpoints({
     mySpaces: build.query<MySpacesApiResponse, MySpacesApiArg>({
       query: () => ({ url: `/control-plane/v1/me/spaces` }),
     }),
+    myUsage: build.query<MyUsageApiResponse, MyUsageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
+      }),
+    }),
     organizationAgents: build.query<OrganizationAgentsApiResponse, OrganizationAgentsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/agents` }),
     }),
@@ -505,6 +514,22 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    admitRuntime: build.mutation<AdmitRuntimeApiResponse, AdmitRuntimeApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/runtime`,
+        method: "POST",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          conversation: queryArg.conversation,
+          model_source_id: queryArg.modelSourceId,
+          model_upstream_id: queryArg.modelUpstreamId,
+          reasoning: queryArg.reasoning,
+          resume: queryArg.resume,
+        },
+      }),
+    }),
     spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
     }),
@@ -634,6 +659,32 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/attachments/${queryArg.documentId}`,
         method: "DELETE",
+      }),
+    }),
+    recordUsage: build.mutation<RecordUsageApiResponse, RecordUsageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/exchanges/${queryArg.exchangeId}/usage`,
+        method: "POST",
+        body: queryArg.usageReport,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+      }),
+    }),
+    recordTitle: build.mutation<RecordTitleApiResponse, RecordTitleApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/generated-title`,
+        method: "POST",
+        body: queryArg.generatedTitle,
+      }),
+    }),
+    spaceUsage: build.query<SpaceUsageApiResponse, SpaceUsageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+        },
       }),
     }),
     getMyPreferences: build.query<GetMyPreferencesApiResponse, GetMyPreferencesApiArg>({
@@ -892,6 +943,13 @@ export type PromptPublicationTeamsApiArg = {
 };
 export type MySpacesApiResponse = /** status 200 Success */ MySpace[];
 export type MySpacesApiArg = void;
+export type MyUsageApiResponse = /** status 200 undefined */ UsageResponse;
+export type MyUsageApiArg = {
+  /** Inclusive ISO 8601 instant with offset; defaults to 30 days before until. */
+  since?: string;
+  /** Exclusive ISO 8601 instant with offset; defaults to now. Maximum range: 366 days. */
+  until?: string;
+};
 export type OrganizationAgentsApiResponse = /** status 200 undefined */ AgentEnablement[];
 export type OrganizationAgentsApiArg = {
   organizationId: string;
@@ -1079,6 +1137,19 @@ export type ResolveRuntimeApiArg = {
   /** Requested reasoning subject to policy. */
   reasoning?: boolean;
 };
+export type AdmitRuntimeApiResponse = /** status 200 undefined */ RuntimeBinding;
+export type AdmitRuntimeApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  person: string;
+  run: string;
+  agent: string;
+  conversation?: string;
+  modelSourceId?: string;
+  modelUpstreamId?: string;
+  reasoning?: boolean;
+  resume?: boolean;
+};
 export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
 export type SpaceAgentTemplatesApiArg = {
   spaceId: string;
@@ -1198,6 +1269,30 @@ export type DeleteAttachmentApiArg = {
   sessionId: string;
   documentId: string;
 };
+export type RecordUsageApiResponse = unknown;
+export type RecordUsageApiArg = {
+  /** Caller-chosen consumption report UUID; required and unique per run */
+  "Idempotency-Key": string;
+  spaceId: string;
+  sessionId: string;
+  /** Turn identifier, without surrounding whitespace or control characters */
+  exchangeId: string;
+  usageReport: UsageReport;
+};
+export type RecordTitleApiResponse = unknown;
+export type RecordTitleApiArg = {
+  spaceId: string;
+  sessionId: string;
+  generatedTitle: GeneratedTitle;
+};
+export type SpaceUsageApiResponse = /** status 200 undefined */ UsageResponse;
+export type SpaceUsageApiArg = {
+  spaceId: string;
+  /** Inclusive ISO 8601 instant with offset; defaults to 30 days before until. */
+  since?: string;
+  /** Exclusive ISO 8601 instant with offset; defaults to now. Maximum range: 366 days. */
+  until?: string;
+};
 export type GetMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
 export type GetMyPreferencesApiArg = void;
 export type PatchMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
@@ -1274,6 +1369,11 @@ export type RuntimeEvent =
       sequence: number;
     }
   | {
+      kind: "session_title";
+      sequence: number;
+      session_id: string;
+    }
+  | {
       content: string;
       finish_reason: string;
       kind: "final";
@@ -1335,6 +1435,7 @@ export type SpacePermission =
   | "run_evaluations"
   | "manage_evaluation_corpus"
   | "read_conversations_for_evaluation"
+  | "read_usage"
   | "administer_organization"
   | "create_personal_space";
 export type SpaceCheck = {
@@ -1693,6 +1794,42 @@ export type MySpace = Space & {
   /** Roles held directly on this space. */
   roles: Role[];
 };
+export type UsageTotals = {
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  /** Distinct (session_id, exchange_id) whose first consumption falls in the range.
+    HITL resumes add tokens, never another turn. */
+  turns: number;
+};
+export type AgentUsage = UsageTotals & {
+  agent_instance_id: string;
+  /** Current instance name, latest retained session name, or null. */
+  display_name: string | null;
+  /** Consumption space recorded in the journal. */
+  space_id: string;
+};
+export type ModelUsageTotals = UsageTotals & {
+  model_source_id: string;
+  upstream_model_id: string;
+};
+export type UsageInterval = "hour" | "day" | "week";
+export type UsagePoint = UsageTotals & {
+  /** Start of the UTC bucket; the first bucket may start before since. */
+  start: string;
+};
+export type UsageResponse = {
+  /** Sorted by input + output tokens descending. No per-user breakdown. */
+  by_agent: AgentUsage[];
+  /** Sorted by input + output tokens descending; a turn may use several models. */
+  by_model: ModelUsageTotals[];
+  interval: UsageInterval;
+  series: UsagePoint[];
+  since: string;
+  totals: UsageTotals;
+  until: string;
+};
 export type AgentCapabilityKind = "agent";
 export type AgentScopePolicy = "admin_gated";
 export type AgentEnablement = {
@@ -1811,6 +1948,7 @@ export type OrganizationModelPolicy = {
   reasoning_enabled: ModelOfferKey[];
   /** Zero means no saved policy: no permissions or implicit selections. */
   revision: number;
+  title?: ModelOfferKey | null;
   updated_at?: string | null;
   updated_by?: string | null;
 };
@@ -1821,6 +1959,7 @@ export type ReplaceModelPolicy = {
   permitted: ModelOfferKey[];
   /** Organization ceiling, independent of the user's per-question choice. */
   reasoning_enabled: ModelOfferKey[];
+  title: ModelOfferKey | null;
 };
 export type ModelObservation = {
   checked_at?: string | null;
@@ -1849,6 +1988,8 @@ export type StoredModelOffer = {
   first_seen_at: string;
   last_seen_at: string;
   metadata: ModelMetadata;
+  /** Server-calculated eligibility for a new administrative selection. */
+  selectable: boolean;
   source_id: string;
   upstream_model_id: string;
   withdrawn_at?: string | null;
@@ -2287,6 +2428,10 @@ export type RuntimeSpace = {
   project_id: string | null;
   team_id: string | null;
 };
+export type TitleAdmission = {
+  attempt_id: string;
+  inference: InferenceAdmission;
+};
 export type RuntimeBinding = {
   agent: RuntimeAgent;
   attachments: RuntimeAttachment[];
@@ -2296,6 +2441,7 @@ export type RuntimeBinding = {
   run_id: string | null;
   space: RuntimeSpace;
   subject_id: string;
+  title?: TitleAdmission | null;
 };
 export type AgentTemplateStatus = "available";
 export type AgentTemplateSummary = {
@@ -2424,6 +2570,28 @@ export type Attachment = {
   ready: boolean;
   size: number;
 };
+export type ModelUsage = {
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  input_tokens: number;
+  /** Source identifier of the Weaver catalogue offer; retained after its removal. */
+  model_source_id: string;
+  output_tokens: number;
+  /** Upstream model identifier, 1 to 256 UTF-8 bytes, without surrounding whitespace. */
+  upstream_model_id: string;
+};
+export type UsageReport = {
+  /** Complete set of distinct offers consumed during this report (one run); order is irrelevant. */
+  models: ModelUsage[];
+  /** Time of consumption; at most five minutes ahead of server time. */
+  occurred_at: string;
+};
+export type GeneratedTitle = {
+  agent_instance_id: string;
+  attempt_id: string;
+  subject_id: string;
+  title: string;
+};
 export type AgentSort = "name" | "created_at:desc" | "updated_at:desc";
 export type Language = "en" | "fr";
 export type TeamSortMode = "recent" | "alpha";
@@ -2516,6 +2684,8 @@ export const {
   useLazyPromptPublicationTeamsQuery,
   useMySpacesQuery,
   useLazyMySpacesQuery,
+  useMyUsageQuery,
+  useLazyMyUsageQuery,
   useOrganizationAgentsQuery,
   useLazyOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
@@ -2563,6 +2733,7 @@ export const {
   usePrepareExecutionMutation,
   useResolveRuntimeQuery,
   useLazyResolveRuntimeQuery,
+  useAdmitRuntimeMutation,
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
   useListPromptCategoriesQuery,
@@ -2591,6 +2762,10 @@ export const {
   useLazyListAttachmentsQuery,
   useUploadAttachmentMutation,
   useDeleteAttachmentMutation,
+  useRecordUsageMutation,
+  useRecordTitleMutation,
+  useSpaceUsageQuery,
+  useLazySpaceUsageQuery,
   useGetMyPreferencesQuery,
   useLazyGetMyPreferencesQuery,
   usePatchMyPreferencesMutation,

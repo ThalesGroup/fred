@@ -159,6 +159,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeEventKind,
     RuntimeServices,
+    SessionTitleRuntimeEvent,
     parse_human_input_answer,
 )
 from fred_sdk.contracts.skills import SkillCatalog, SkillDetail, SkillInvocation
@@ -188,6 +189,7 @@ from fred_runtime.app.history_access import (
     require_history_person,
 )
 from fred_runtime.app.security import prepare_authorization
+from fred_runtime.app.session_title import generate_session_title
 from fred_runtime.app.usage import report_run_usage
 from fred_runtime.app.web_research_activity import WebResearchActivity
 from fred_runtime.capabilities import (
@@ -1196,6 +1198,7 @@ class _AgentExecuteRequest(BaseModel):
     _document_scope: DocumentScope = PrivateAttr(default_factory=DocumentScope)
 
     _turn_authority: TurnAuthority | None = PrivateAttr(default=None)
+    _title_task: asyncio.Task[str | None] | None = PrivateAttr(default=None)
     """
     Input payload for the agent execution endpoints.
 
@@ -1621,6 +1624,7 @@ async def _resolve_agent_instance(
         params["model_source_id"] = choice.source_id
         params["model_upstream_id"] = choice.upstream_model_id
     params["reasoning"] = "true" if ctx.get("reasoning") is True else "false"
+    params["resume"] = "true" if request.resume_payload is not None else "false"
     # UUID validation prevents URL path interpolation from changing the target.
     try:
         space_id = str(UUID(space_id))
@@ -1637,11 +1641,11 @@ async def _resolve_agent_instance(
     if request_id:
         headers["X-Request-Id"] = request_id
     try:
-        response = await http_client.get(
+        response = await http_client.post(
             f"{control_plane_url.rstrip('/')}/spaces/{space_id}/agent-instances/{instance_id}/runtime",
             headers=headers,
             params=params,
-            auth=None,  # Never inherit client auth or a transparent resolver retry.
+            auth=httpx.Auth(),  # Disable inherited auth and transparent resolver retries.
             follow_redirects=False,
         )
         if response.status_code == 409:
@@ -4146,6 +4150,22 @@ async def _iterate_runtime_event_payloads(
 
                 scope.set_owner_authority_end(end_turn_authority)
             async for payload in iterator:
+                title_task = request._title_task
+                if title_task is not None and (
+                    title_task.done() or payload.get("kind") == "final"
+                ):
+                    await asyncio.wait({title_task}, timeout=2.0)
+                    if title_task.done() and not title_task.cancelled():
+                        titled_session = title_task.result()
+                        if titled_session:
+                            yield SessionTitleRuntimeEvent(
+                                session_id=titled_session
+                            ).model_dump(mode="json")
+                    title_task.cancel()
+                    await complete_cleanup(
+                        asyncio.gather(title_task, return_exceptions=True)
+                    )
+                    request._title_task = None
                 if payload.get("kind") == "execution_error":
                     outcome = "failed"
                 elif payload.get("kind") == "awaiting_human" and outcome != "failed":
@@ -4367,6 +4387,11 @@ async def _iterate_runtime_event_payloads_inner(
             capability_registry, tuning, definition
         ),
     )
+    if owns_run_record and current_turn().binding.title is not None:
+        request._title_task = asyncio.create_task(
+            generate_session_title(request.message, binding=binding, services=services)
+        )
+        register_run_child(request._title_task)
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
     # LangGraph's checkpointer invariant (thread_id required internally) is met.

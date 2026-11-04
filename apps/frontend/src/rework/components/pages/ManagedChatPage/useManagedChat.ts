@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { useDispatch } from "react-redux";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
+import { enhancedControlPlaneApi } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { ExecutionPreparation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useComposerSettings } from "./useComposerSettings";
 import { documentSelectionTurnOptions } from "./documentSelectionTurnOptions";
@@ -299,6 +300,18 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
 
   const [registerSession] = useCreateSessionMutation();
   const [refreshSession] = useUpdateSessionMutation();
+  const refreshSessionTitle = useCallback(
+    (sid: string) => {
+      if (!isScopeCurrent()) return;
+      dispatch(
+        enhancedControlPlaneApi.util.invalidateTags([
+          { type: "Sessions", id: spaceId },
+          { type: "Sessions", id: `${spaceId}:${sid}` },
+        ]),
+      );
+    },
+    [dispatch, spaceId, isScopeCurrent],
+  );
   // Bumps the session's activity timestamp (tile date + chat-list ordering) —
   // called both at send time (so the tile jumps to the top the moment the
   // user hits Enter) and again when the turn completes.
@@ -508,6 +521,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     spaceId,
     flushPendingWrites: flushSessionWrites,
     onBindDraftAgentToSessionId: bindSessionId,
+    onSessionTitle: refreshSessionTitle,
     onTurnPersisted: useCallback(
       (sid: string) => {
         touchSessionActivity(sid);
@@ -944,7 +958,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
           // and not from the prompt body (which would give every run of one
           // command the same name). The prompt's name reads best; any text
           // typed after the command is what makes this conversation its own.
-          // Nothing retitles a session afterwards, so this is the only shot.
+          // The server may replace this initial title after the first admitted turn.
           const titleSource = turnCommand
             ? [turnCommand.prompt_name || `/${turnCommand.command}`, turnCommand.appended_text]
                 .filter(Boolean)

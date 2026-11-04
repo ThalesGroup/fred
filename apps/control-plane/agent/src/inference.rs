@@ -112,6 +112,35 @@ impl InferenceTurn {
         })
     }
 
+    /// Title and answer reuse the same admitted transport, limits and observation boundary.
+    pub async fn title(mut self, input: &str, on_usage: impl FnOnce(Usage)) -> Option<String> {
+        let input: String = input.chars().take(600).collect();
+        let request = Message::user(format!(
+            "Name this chat conversation. Reply with the title only: 3 to 8 words, no quotes, no final punctuation, in the language of the user's message.\n\n{input}"
+        ));
+        let mut usage = TurnUsage {
+            report: Some(on_usage),
+            total: None,
+        };
+        let response = tokio::time::timeout(
+            Duration::from_secs(10),
+            self.complete(request, vec![], false),
+        )
+        .await
+        .ok()?
+        .ok()?;
+        usage.record(response.usage);
+        let text: String = response
+            .choice
+            .into_iter()
+            .filter_map(|part| match part {
+                AssistantContent::Text(text) => Some(text.text),
+                _ => None,
+            })
+            .collect();
+        clean_title(&text)
+    }
+
     pub fn close(&mut self) {
         self.ended = true;
     }
@@ -184,6 +213,34 @@ impl InferenceTurn {
         };
         Ok(response)
     }
+}
+
+fn clean_title(text: &str) -> Option<String> {
+    let line: String = text
+        .trim()
+        .lines()
+        .next()?
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c.is_whitespace() || "'’-".contains(c) {
+                c
+            } else {
+                ' '
+            }
+        })
+        .collect();
+    let title: String = line
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(80)
+        .collect();
+    let title = title.trim_matches(['\'', '’', '-', ' ']);
+    title
+        .chars()
+        .any(char::is_alphabetic)
+        .then(|| title.to_owned())
 }
 
 fn search_tool() -> ToolDefinition {

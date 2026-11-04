@@ -40,6 +40,7 @@ import type {
   ToolCallRuntimeEvent,
   ToolResultRuntimeEvent,
   TurnPersistedEvent,
+  SessionTitleRuntimeEvent,
 } from "../../../slices/runtime/runtimeOpenApi";
 import { toolResultCallId, upsertOne } from "./chatSseUtils";
 import {
@@ -186,6 +187,7 @@ type AnyRuntimeEvent =
   | ({ kind: "thought_end" } & ThoughtEndEvent)
   | ({ kind: "tool_call" } & ToolCallRuntimeEvent)
   | ({ kind: "tool_result" } & ToolResultRuntimeEvent)
+  | ({ kind: "session_title" } & SessionTitleRuntimeEvent)
   | ({ kind: "turn_persisted" } & TurnPersistedEvent)
   | ({ kind: "execution_error" } & RuntimeErrorEvent)
   | ({ kind: "execution_interrupted" } & ExecutionInterruptedRuntimeEvent);
@@ -278,6 +280,7 @@ export type RuntimeAwaitingHumanEvent = {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export type ChatSseCallbacks = {
+  onSessionTitle?: (sessionId: string) => void;
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
   onTurnPersisted?: (sessionId: string) => void;
   /** A turn that kept streaming after its view left has ended; `messages` is its full thread. */
@@ -596,6 +599,12 @@ export function useChatSse(
         });
 
       switch (event.kind) {
+        case "session_title": {
+          if (event.session_id === sessionId && turn.scope.actor === KeyCloakService.GetSessionIdentity()) {
+            turnCallbacks(turn).onSessionTitle?.(sessionId);
+          }
+          break;
+        }
         case "steered_user_message": {
           updatePendingMessages(
             sessionId,

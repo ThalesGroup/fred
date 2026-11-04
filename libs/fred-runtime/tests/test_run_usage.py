@@ -406,3 +406,20 @@ async def test_hitl_resume_has_new_key_on_same_exchange(reporting, monkeypatch):
     first, resumed = reporting.calls
     assert first.url == resumed.url
     assert first.headers["Idempotency-Key"] != resumed.headers["Idempotency-Key"]
+
+
+@pytest.mark.asyncio
+async def test_title_usage_aggregates_by_offer_in_the_existing_report(reporting):
+    authority = admitted_run()
+    main = authority.binding.inference.selection.key
+    title = main.model_copy(update={"upstream_model_id": "title-model"})
+    authority.record_usage(COUNTERS, offer=main)
+    authority.record_usage(COUNTERS, offer=title)
+    authority.close()
+    await usage.report_run_usage(authority, exchange_id="exchange", occurred_at=ENDED)
+    [sent] = reporting.calls
+    models = json.loads(sent.content)["models"]
+    assert len(models) == 2
+    assert models[0]["input_tokens"] == 2 * COUNTERS["input_tokens"]
+    assert models[1]["input_tokens"] == COUNTERS["input_tokens"]
+    assert models[1]["upstream_model_id"] == "title-model"

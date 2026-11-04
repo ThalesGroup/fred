@@ -176,6 +176,10 @@ pub enum RuntimeEvent {
         sequence: u64,
         message: &'static str,
     },
+    SessionTitle {
+        sequence: u64,
+        session_id: String,
+    },
     Final {
         sequence: u64,
         content: String,

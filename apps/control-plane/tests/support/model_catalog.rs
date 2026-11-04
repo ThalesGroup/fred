@@ -332,7 +332,7 @@ async fn sources_isolate_inventory_refresh_policy_recommendation_and_admission()
     assert_eq!(body["code"], "model_source_not_assigned");
     assert_eq!(calls, provider.response.lock().await.2);
     let policy_path = format!("/organizations/{}/model-policy", org.id);
-    let policy = json!({"expected_revision":1,"permitted":[key("b")],"reasoning_enabled":[],"default":key("b"),"fallback":null});
+    let policy = json!({"expected_revision":1,"permitted":[key("b")],"reasoning_enabled":[],"default":key("b"),"fallback":null,"title":null});
     assert_eq!(
         request(&app, &identity, Some("alice"), "PUT", &policy_path, policy)
             .await
@@ -444,7 +444,7 @@ async fn seed_replay_preserves_ui_empty_deleted_policy_and_source_rotation() {
     let identity = support::IdentityServer::start().await;
     let app = model_app(&e, &identity, platform.clone()).await;
     let policy_path = format!("/organizations/{}/model-policy", org.id);
-    let empty = json!({"expected_revision":1,"permitted":[],"reasoning_enabled":[],"default":null,"fallback":null});
+    let empty = json!({"expected_revision":1,"permitted":[],"reasoning_enabled":[],"default":null,"fallback":null,"title":null});
     assert_eq!(
         request(&app, &identity, Some("alice"), "PUT", &policy_path, empty)
             .await
@@ -804,8 +804,9 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     let workload = identity.sign(json!({"sub":"service-account-pod","preferred_username":"service-account-pod",
         "azp":"pod","client_id":"pod","iss":identity.realm,"aud":"fred-delegation","iat":now,"exp":now+300,
         "resource_access":{"fred-delegation":{"roles":["delegation_caller"]}}}));
-    let delegated_path =
-        format!("{runtime_path}?person=alice&run=run&agent={instance}&reasoning=true");
+    let delegated_path = format!(
+        "{runtime_path}?person=alice&run=run&agent={instance}&reasoning=true&conversation={session}"
+    );
     let resolve = || {
         app.clone().oneshot(
             Request::builder()
@@ -820,6 +821,7 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     let delegated: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
             .unwrap();
+    assert!(delegated.get("title").is_none());
     let decision = &delegated["inference"]["selection"];
     assert_eq!(decision["key"], key("a"));
     assert_eq!(
@@ -854,6 +856,55 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         !prepared.to_string().contains("credential_binding")
             && !prepared.to_string().contains(&provider.url)
     );
+    // Python's mutating admission, unlike the GET above, consumes one attempt.
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &runtime_path,
+            Value::Null
+        )
+        .await
+        .0,
+        403
+    );
+    for resume in [false, true] {
+        let python_session = Uuid::new_v4();
+        assert_eq!(request(&app, &identity, Some("alice"), "POST", &format!("/spaces/{}/sessions", team.id),
+            json!({"session_id":python_session,"agent_instance_id":instance,"agent_configuration_revision":1})).await.0, 201);
+        for attempt in 0..2 {
+            let path = format!(
+                "{runtime_path}?person=alice&run=run&agent={instance}&conversation={python_session}&resume={}",
+                resume && attempt == 0
+            );
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(path)
+                        .header("authorization", format!("Bearer {workload}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), 200);
+            let admitted: Value =
+                serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+                    .unwrap();
+            assert_eq!(admitted.get("title").is_some(), attempt == 0 && !resume);
+            if let Some(title) = admitted.get("title") {
+                assert_eq!(
+                    title["inference"]["selection"]["options"]["max_tokens"],
+                    128
+                );
+                assert!(title["inference"]["selection"]["options"]["reasoning_effort"].is_null());
+            }
+        }
+    }
     let execute = json!({"agent_instance_id":instance,"input":"fixture question",
         "session_id":session,"steering_turn_id":Uuid::new_v4(),
         "runtime_context":{"space_id":team.id,"reasoning":true,"language":"fr"}});
@@ -912,7 +963,7 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
             }).await.unwrap()
         }
     };
-    let rows = reports(1).await;
+    let rows = reports(2).await;
     let report = &rows[0];
     assert_eq!(report["session_id"], session.to_string());
     assert_eq!(report["space_id"], team.id.to_string());
@@ -926,8 +977,23 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     assert_eq!(report["cache_creation_tokens"], 0);
     Uuid::parse_str(report["report_id"].as_str().unwrap()).unwrap();
     Uuid::parse_str(report["exchange_id"].as_str().unwrap()).unwrap();
-    let calls = provider.inference.lock().await;
-    assert_eq!(calls.len(), 1);
+    let captured = provider.inference.lock().await;
+    let calls = &captured;
+    assert_eq!(calls.len(), 2);
+    assert!(stream.contains("session_title"));
+    let saved: String =
+        sqlx::query_scalar("select title from session_metadata where session_id=$1")
+            .bind(session)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(saved, "managed simulated inference");
+    let title_call = calls
+        .iter()
+        .find(|c| c.1["max_tokens"] == 128 || c.1["max_completion_tokens"] == 128)
+        .unwrap();
+    assert!(title_call.1.get("reasoning_effort").is_none());
+    let calls: Vec<_> = calls.iter().filter(|c| c.1["temperature"] == 0.2).collect();
     assert_eq!(
         calls[0].0["authorization"],
         "Bearer synthetic-inference-key"
@@ -937,13 +1003,14 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         assert_eq!(&calls[0].1[key], value);
     }
     drop(calls);
+    drop(captured);
 
     // A failed provider call does not submit a consumption report.
     *provider.inference_status.lock().await = 500;
     let response = send(app.clone(), execute.clone()).await.unwrap();
     let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     assert!(String::from_utf8_lossy(&body).contains("execution_error"));
-    assert_eq!(reports(1).await, rows);
+    assert_eq!(reports(2).await, rows);
     *provider.inference_status.lock().await = 200;
 
     // Hold the journal write until after the browser drops the response body.
@@ -967,7 +1034,7 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     .unwrap();
     drop(stream);
     lock.commit().await.unwrap();
-    let after_drop = reports(2).await;
+    let after_drop = reports(3).await;
     assert_ne!(after_drop[0]["report_id"], after_drop[1]["report_id"]);
     assert_ne!(after_drop[0]["exchange_id"], after_drop[1]["exchange_id"]);
 
@@ -1001,7 +1068,7 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
             "execution_error"
         }));
         assert!(!body.contains("private KF failure") && !body.contains("service-token"));
-        let rows = reports(3 + index).await;
+        let rows = reports(4 + index).await;
         let row = rows.last().unwrap();
         assert_eq!(row["input_tokens"], if status == 200 { 4 } else { 2 });
         assert_eq!(row["output_tokens"], if status == 200 { 4 } else { 2 });
@@ -1040,7 +1107,8 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
             }
         }
     }
-    let after_search = reports(5).await;
+    let after_search = reports(6).await;
+    let calls_after_search = provider.inference.lock().await.len();
 
     let mut unprovisioned = state;
     unprovisioned.agent_catalog.inference_credentials.clear();
@@ -1074,12 +1142,99 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         .unwrap();
     assert_eq!(resolve().await.unwrap().status(), 409);
     assert_eq!(send(app.clone(), execute).await.unwrap().status(), 409);
-    assert_eq!(provider.inference.lock().await.len(), 8);
+    assert_eq!(provider.inference.lock().await.len(), calls_after_search);
     // Direct demonstration cannot access the provider even though provisioning exists.
     let direct = json!({"agent_id":fred_rust_agent::AGENT_ID,"input":"question"});
     let response = send(app.clone(), direct).await.unwrap();
     assert_eq!(response.status(), 200);
     let _ = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
-    assert_eq!(provider.inference.lock().await.len(), 8);
-    assert_eq!(reports(5).await, after_search);
+    assert_eq!(provider.inference.lock().await.len(), calls_after_search);
+    assert_eq!(reports(6).await, after_search);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn title_model_policy_uses_organization_offers_and_survives_reload() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let provider = Provider::start().await;
+    let catalog = Catalog::start().await;
+    let mut platform = catalog.config();
+    platform.model_sources = vec![provider.source("a")];
+    platform.organization_models = vec![declaration("TSN", &["a"])];
+    model_catalog::configure_sources(&e.pool, &platform.model_sources)
+        .await
+        .unwrap();
+    initialize(&e.pool, &platform, true).await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = model_app(&e, &identity, platform).await;
+    let view = inventory(&app, &identity, org.id).await;
+    assert!(view["policy"]["title"].is_null());
+    let offer = view["sources"][0]["offers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["upstream_model_id"] == "chat")
+        .unwrap();
+    assert_eq!(offer["selectable"], true);
+    let path = format!("/organizations/{}/model-policy", org.id);
+    let mut body = json!({"expected_revision":1,"permitted":[key("a")],"reasoning_enabled":[],"default":key("a"),"fallback":null,"title":key("a")});
+    let (status, saved) = request(&app, &identity, Some("alice"), "PUT", &path, body.clone()).await;
+    assert_eq!(status, 200, "{saved}");
+    assert_eq!(saved["title"], key("a"));
+    assert_eq!(
+        inventory(&app, &identity, org.id).await["policy"]["title"],
+        key("a")
+    );
+    let mut missing_title = body.clone();
+    missing_title.as_object_mut().unwrap().remove("title");
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "PUT", &path, missing_title)
+            .await
+            .0,
+        422
+    );
+    body["expected_revision"] = saved["revision"].clone();
+    body["title"] = key("another-organization-source");
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "PUT", &path, body.clone())
+            .await
+            .0,
+        422
+    );
+    assert_ne!(
+        request(&app, &identity, Some("bob"), "PUT", &path, body.clone())
+            .await
+            .0,
+        200
+    );
+    body["title"] = Value::Null;
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "PUT", &path, body.clone())
+            .await
+            .0,
+        200
+    );
+    sqlx::query(
+        "update model_offer set advertised=false, withdrawn_at=now() where source_id='a' and upstream_model_id='chat'",
+    )
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    body["expected_revision"] = json!(3);
+    body["title"] = key("a");
+    let view = inventory(&app, &identity, org.id).await;
+    let offer = view["sources"][0]["offers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["upstream_model_id"] == "chat")
+        .unwrap();
+    assert_eq!(offer["selectable"], false);
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "PUT", &path, body)
+            .await
+            .0,
+        409
+    );
 }

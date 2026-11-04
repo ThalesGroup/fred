@@ -335,6 +335,9 @@ export type ExecuteAgentApiResponse = /** status 200 Successful Response */
           kind: "node_error";
         } & NodeErrorRuntimeEvent)
       | ({
+          kind: "session_title";
+        } & SessionTitleRuntimeEvent)
+      | ({
           kind: "status";
         } & StatusRuntimeEvent)
       | ({
@@ -1076,6 +1079,11 @@ export type NodeErrorRuntimeEvent = {
   node_id: string;
   routed_to: string;
   sequence?: number;
+};
+export type SessionTitleRuntimeEvent = {
+  kind?: "session_title";
+  sequence?: number;
+  session_id: string;
 };
 export type SkillLoadAttribution = {
   agent_id: string;

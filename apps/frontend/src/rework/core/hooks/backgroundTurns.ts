@@ -57,7 +57,7 @@ export type LiveTurn = {
   completed?: boolean;
   interrupted?: boolean;
   /** Session-keyed side effects that stay meaningful with no view attached. */
-  detachedCallbacks: Pick<ChatSseCallbacks, "onTurnPersisted" | "onBackgroundTurnSettled">;
+  detachedCallbacks: Pick<ChatSseCallbacks, "onTurnPersisted" | "onBackgroundTurnSettled" | "onSessionTitle">;
 };
 
 const INDICATOR_STORAGE_KEY = "chat.background-indicators";
@@ -207,9 +207,9 @@ export function turnCallbacks(turn: LiveTurn): ChatSseCallbacks {
 
 export function detachTurn(turn: LiveTurn): void {
   if (!turn.host) return;
-  const { onTurnPersisted, onBackgroundTurnSettled } = turn.host.callbacks();
+  const { onTurnPersisted, onBackgroundTurnSettled, onSessionTitle } = turn.host.callbacks();
   turn.messages = turn.host.read();
-  turn.detachedCallbacks = { onTurnPersisted, onBackgroundTurnSettled };
+  turn.detachedCallbacks = { onTurnPersisted, onBackgroundTurnSettled, onSessionTitle };
   turn.host = null;
   detached.set(turn.sessionId, turn);
 }

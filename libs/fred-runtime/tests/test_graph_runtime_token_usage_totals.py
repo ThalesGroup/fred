@@ -135,8 +135,9 @@ async def test_run_keeps_known_usage_across_nodes_after_authority_closes() -> No
                 },
                 finish_reason=None,
             )
-    assert authority.token_usage is not None
-    assert authority.token_usage.model_dump(exclude={"total_tokens"}) == {
+    assert authority.model_usage[authority.binding.inference.selection.key].model_dump(
+        exclude={"total_tokens"}
+    ) == {
         "input_tokens": 20,
         "output_tokens": 4,
         "cache_read_tokens": 6,

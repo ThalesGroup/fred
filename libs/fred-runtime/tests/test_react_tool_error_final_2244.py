@@ -136,8 +136,9 @@ async def test_consumption_survives_close_before_final_event() -> None:
         assert isinstance(stream, AsyncGenerator)
         await anext(stream)
         await stream.aclose()
-    assert authority.token_usage is not None
-    assert authority.token_usage.model_dump() == {
+    assert authority.model_usage[
+        authority.binding.inference.selection.key
+    ].model_dump() == {
         "input_tokens": 11,
         "output_tokens": 4,
         "total_tokens": 15,

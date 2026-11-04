@@ -958,6 +958,7 @@ Operation `team_supervision`.
 | DELETE | [/spaces/{space_id}/agent-instances/{agent_instance_id}](#delete-spacesspace_idagent-instancesagent_instance_id) |  |
 | POST | [/spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution](#post-spacesspace_idagent-instancesagent_instance_idprepare-execution) |  |
 | GET | [/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime](#get-spacesspace_idagent-instancesagent_instance_idruntime) |  |
+| POST | [/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime](#post-spacesspace_idagent-instancesagent_instance_idruntime) | A trusted runtime admits an actual execution; read-only resolution never claims a title |
 | GET | [/spaces/{space_id}/agent-templates](#get-spacesspace_idagent-templates) |  |
 | GET | [/spaces/{space_id}/prompt-categories](#get-spacesspace_idprompt-categories) |  |
 | POST | [/spaces/{space_id}/prompt-categories](#post-spacesspace_idprompt-categories) |  |
@@ -980,6 +981,7 @@ Operation `team_supervision`.
 | POST | [/spaces/{space_id}/sessions/{session_id}/attachments](#post-spacesspace_idsessionssession_idattachments) | Attach one file to the caller's conversation and request its `fast` processing atomically |
 | DELETE | [/spaces/{space_id}/sessions/{session_id}/attachments/{document_id}](#delete-spacesspace_idsessionssession_idattachmentsdocument_id) | Delete one attachment of the caller's conversation, as `DELETE /documents/{id}` does |
 | POST | [/spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage](#post-spacesspace_idsessionssession_idexchangesexchange_idusage) | Atomically record consumption reported by a trusted runtime workload in its own name |
+| POST | [/spaces/{space_id}/sessions/{session_id}/generated-title](#post-spacesspace_idsessionssession_idgenerated-title) |  |
 | GET | [/spaces/{space_id}/usage](#get-spacesspace_idusage) | Read team/project consumption with direct ReadUsage (Owner or Analyst) |
 
 ### POST /spaces
@@ -1197,6 +1199,28 @@ Operation `resolve_runtime`.
 | `model_source_id` | query | string |  | Requested source; never authority. |
 | `model_upstream_id` | query | string |  | Requested model; supply with source. |
 | `reasoning` | query | boolean |  | Requested reasoning subject to policy. |
+
+- 200: [`RuntimeBinding`](#runtimebinding)
+- 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### POST /spaces/{space_id}/agent-instances/{agent_instance_id}/runtime
+
+A trusted runtime admits an actual execution; read-only resolution never claims a title.
+
+Operation `admit_runtime`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `agent_instance_id` | path | string (uuid) | yes |  |
+| `person` | query | string | yes |  |
+| `run` | query | string | yes |  |
+| `agent` | query | string | yes |  |
+| `conversation` | query | string |  |  |
+| `model_source_id` | query | string |  |  |
+| `model_upstream_id` | query | string |  |  |
+| `reasoning` | query | boolean |  |  |
+| `resume` | query | boolean |  |  |
 
 - 200: [`RuntimeBinding`](#runtimebinding)
 - 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
@@ -1516,6 +1540,22 @@ Request: [`UsageReport`](#usagereport).
 - 403: [`ErrorBody`](#errorbody) — A trusted runtime workload is required
 - 404: [`ErrorBody`](#errorbody) — Session not found in this space
 - 409: [`ErrorBody`](#errorbody) — idempotency_conflict: the report key already identifies a different consumption report
+
+### POST /spaces/{space_id}/sessions/{session_id}/generated-title
+
+Operation `record_title`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes |  |
+
+Request: [`GeneratedTitle`](#generatedtitle).
+
+- 204: no body — Applied
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 401, 403, 422, 500, 503: [`ErrorBody`](#errorbody)
+- 409: [`ErrorBody`](#errorbody) — Attempt superseded, consumed or session removed
 
 ### GET /spaces/{space_id}/usage
 
@@ -2114,6 +2154,15 @@ Multipart body: exactly one `file` part.
 | `root_bootstrap_required` | boolean | yes |  |
 | `user_auth` | [`PublicAuth`](#publicauth) | yes |  |
 
+### GeneratedTitle
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent_instance_id` | string (uuid) | yes |  |
+| `attempt_id` | string (uuid) | yes |  |
+| `subject_id` | string | yes |  |
+| `title` | string, min length 1, max length 80 | yes |  |
+
 ### Grant
 
 | Field | Type | Required | Description |
@@ -2346,6 +2395,7 @@ Governance view of one organization: its technical admins and business owners.
 | `permitted` | array of [`ModelOfferKey`](#modelofferkey) | yes |  |
 | `reasoning_enabled` | array of [`ModelOfferKey`](#modelofferkey), max items 4096 | yes | Organization ceiling, independent of the user's per-question choice. |
 | `revision` | integer (int64) | yes | Zero means no saved policy: no permissions or implicit selections. |
+| `title` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
 | `updated_at` | string (date-time) or null |  |  |
 | `updated_by` | string or null |  |  |
 
@@ -2704,6 +2754,7 @@ One of: `high`.
 | `fallback` | [`ModelOfferKey`](#modelofferkey) or null | yes |  |
 | `permitted` | array of [`ModelOfferKey`](#modelofferkey), max items 4096 | yes |  |
 | `reasoning_enabled` | array of [`ModelOfferKey`](#modelofferkey), max items 4096 | yes | Organization ceiling, independent of the user's per-question choice. |
+| `title` | [`ModelOfferKey`](#modelofferkey) or null | yes |  |
 
 ### Report
 
@@ -2782,6 +2833,7 @@ One of: `member`, `editor`, `owner`, `analyst`, `organization_admin`.
 | `run_id` | string or null | yes |  |
 | `space` | [`RuntimeSpace`](#runtimespace) | yes |  |
 | `subject_id` | string | yes |  |
+| `title` | [`TitleAdmission`](#titleadmission) or null |  |  |
 
 ### RuntimeEvent
 
@@ -2810,6 +2862,14 @@ One of:
 | `kind` | `execution_error` | yes |  |
 | `message` | string | yes |  |
 | `sequence` | integer (int64), >= 0 | yes |  |
+
+- `kind` = `session_title`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `session_title` | yes |  |
+| `sequence` | integer (int64), >= 0 | yes |  |
+| `session_id` | string | yes |  |
 
 - `kind` = `final`
 
@@ -2978,6 +3038,7 @@ Storage usage of a space; a project counts against its team's quota.
 | `first_seen_at` | string (date-time) | yes |  |
 | `last_seen_at` | string (date-time) | yes |  |
 | `metadata` | [`ModelMetadata`](#modelmetadata) | yes |  |
+| `selectable` | boolean | yes | Server-calculated eligibility for a new administrative selection. |
 | `source_id` | string | yes |  |
 | `upstream_model_id` | string | yes |  |
 | `withdrawn_at` | string (date-time) or null |  |  |
@@ -3055,6 +3116,13 @@ One of: `recent`, `alpha`.
 ### ThemeMode
 
 One of: `light`, `dark`, `system`.
+
+### TitleAdmission
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `attempt_id` | string (uuid) | yes |  |
+| `inference` | [`InferenceAdmission`](#inferenceadmission) | yes |  |
 
 ### TuningScalar
 
