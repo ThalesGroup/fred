@@ -1253,6 +1253,8 @@ export type HitlRequestPart = {
   occurrence_id?: string | null;
   pending_calls?: HitlPendingCallRecord[];
   question: string;
+  /** Read-time availability; absent in stored history and older runtimes. */
+  resume_status?: ("pending" | "unavailable" | "unknown") | null;
   stage?: string | null;
   title?: string | null;
   type?: "hitl_request";

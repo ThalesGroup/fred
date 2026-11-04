@@ -987,6 +987,7 @@ export default function ManagedChatPage() {
                     ) : (
                       <ConversationThread
                         readOnly={chat.executionDisabled}
+                        onRetryHitlAvailability={chat.retryHitlAvailability}
                         messages={chat.threadMessages}
                         pendingHitl={chat.pendingHitl}
                         pendingHitlTabs={chat.pendingHitlTabs}

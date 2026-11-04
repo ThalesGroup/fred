@@ -62,7 +62,7 @@ export type TraceEntry =
   | { kind: "solo"; message: ChatMessage }
   | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
 
-export type TraceStatus = "pending" | "awaiting_confirmation" | "ok" | "error" | "streaming";
+export type TraceStatus = "unavailable" | "pending" | "awaiting_confirmation" | "ok" | "error" | "streaming";
 
 export function isTraceChannel(channel: Channel): boolean {
   return TRACE_CHANNELS.includes(channel);
@@ -726,6 +726,12 @@ export function secondaryTextForEntry(entry: TraceEntry): string {
  * already executing unless the caller tells us which call_ids are actually
  * still waiting on the human.
  */
+export function inactiveHitlStatus(entry: TraceEntry): "unavailable" | "unknown" | undefined {
+  if (entry.kind !== "combo" || entry.result) return undefined;
+  const value = entry.call.metadata?.extras?.hitl_resume_status;
+  return value === "unavailable" || value === "unknown" ? value : undefined;
+}
+
 export function statusForEntry(entry: TraceEntry, pendingToolCallIds?: readonly string[] | null): TraceStatus {
   if (entry.kind === "solo") {
     const extras = entry.message.metadata?.extras as { streaming_delta?: boolean } | undefined;
@@ -735,6 +741,7 @@ export function statusForEntry(entry: TraceEntry, pendingToolCallIds?: readonly 
   }
   // combo
   if (!entry.result) {
+    if (inactiveHitlStatus(entry)) return "unavailable";
     if (pendingToolCallIds?.includes(toolCallId(entry.call))) return "awaiting_confirmation";
     return "pending";
   }

@@ -138,6 +138,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     teamId: "team-1",
     flushPendingWrites,
     onError: (msg) => onErrorMock(msg),
+    onHitlUnavailable: (sid) => onHitlUnavailableMock(sid),
     onTurnStarted: () => onTurnStartedMock(),
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
@@ -156,6 +157,7 @@ let flushPendingWrites: ((sessionId: string) => Promise<boolean>) | undefined;
 let isTurnCurrent: ((sessionId: string) => boolean) | undefined;
 let isExecutionAllowed: (() => boolean) | undefined;
 const onErrorMock = vi.fn();
+const onHitlUnavailableMock = vi.fn();
 const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
 const onAwaitingHumanMock = vi.fn();
@@ -187,6 +189,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     isTurnCurrent = undefined;
     isExecutionAllowed = undefined;
     onErrorMock.mockClear();
+    onHitlUnavailableMock.mockClear();
     onTurnStartedMock.mockClear();
     onTurnRejectedMock.mockClear();
     onAwaitingHumanMock.mockClear();
@@ -1534,6 +1537,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       result = await latest.sendHitlResume(hitlEvent, "cancel", undefined, undefined, undefined, false, accepted);
     });
     expect(result).toBe(discard);
+    expect(onHitlUnavailableMock).toHaveBeenCalledTimes(discard ? 1 : 0);
+    if (discard) expect(onHitlUnavailableMock).toHaveBeenCalledWith(hitlEvent.session_id);
     expect(accepted).not.toHaveBeenCalled();
     expect(latest.messages).toHaveLength(0);
     expect(onErrorMock).toHaveBeenCalledWith(`chatbot.errors.${messageKey}:`);
@@ -2076,6 +2081,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         });
         expect(unread).toBe(outcome === "final");
         expect(settled).toHaveBeenCalledTimes(outcome === "final" ? 1 : 0);
+        if (outcome === "final")
+          expect(settled).toHaveBeenCalledWith("session-1", false, { teamId: "team-1", agentInstanceId: "agent-1" });
         act(() => probeRoot.unmount());
         unsubscribe();
         fetchSpy.mockRestore();

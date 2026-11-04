@@ -2008,6 +2008,21 @@ _(none yet)_
 
 - **Focus management (2026-10-10)** — closed without autofocus (owner decision): the card never takes focus, and number keys, Enter and Escape answer it instead (see the visual refresh below).
 
+- **History availability (2026-11-04):** unanswered questions with runtime
+  `resume_status: unavailable` remain readable with "This question can no longer
+  accept an answer." and no choice, send or skip controls. Their unresolved tool
+  trace has a neutral unavailable state, never a fabricated failed result.
+  `unknown` shows a lookup failure with "Check again"; `pending` and legacy
+  unannotated history retain actions. Known obsolete 409s refresh the same
+  conversation's availability without replaying the answer. Actual tool results
+  take precedence. Refresh does not resume an interrupted generation.
+- **Background notifications outside chat (2026-11-04):** the common layout
+  subscribes to completed/awaiting-input background turns, including on admin
+  pages where ChatList is absent. Toast actions retain the originating team,
+  agent and session; titles use existing query cache without additional fetches.
+  This remains a browser-tab notification for live detached turns, not a server
+  notification service or a replay of old questions on page reload.
+
 - **Visual refresh, design tokens only (2026-10-10)** — OpenSpec `refresh-hitl-card-visuals`.
   - **Tokens:** no hard-coded font size, spacing or colour mix remains. Only layout widths stay literal, and the glow shared with `RichInputField`.
   - **Radii:** cards use `--radius-ms`. Inner controls (choices, "Other", free text, recap rows) use `--radius-xs`.

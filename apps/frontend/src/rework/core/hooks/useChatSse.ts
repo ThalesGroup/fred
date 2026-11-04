@@ -276,6 +276,7 @@ export type ChatSseCallbacks = {
   onSessionTitle?: (title: string, sessionId: string) => void;
   onSteeredMessage?: (messageId: string, sessionId: string) => void;
   onStreamInterrupted?: (sessionId: string) => void;
+  onHitlUnavailable?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string) => void;
   /**
@@ -329,6 +330,7 @@ export function useChatSse(
     agentInstanceId,
     teamId,
     onError,
+    onHitlUnavailable,
     onTurnStarted,
     onTurnRejected,
     isTurnCurrent,
@@ -459,6 +461,7 @@ export function useChatSse(
     (sessionId: string, controller: AbortController, steeringTurnId: string): LiveTurn => {
       const turn: LiveTurn = {
         sessionId,
+        destination: { teamId, agentInstanceId },
         controller,
         steeringTurnId,
         thoughts: new Map(),
@@ -470,7 +473,7 @@ export function useChatSse(
       registerTurn(turn);
       return turn;
     },
-    [host],
+    [host, teamId, agentInstanceId],
   );
 
   // Re-attaches the session's turn that kept streaming while this view was
@@ -1668,6 +1671,7 @@ export function useChatSse(
       } finally {
         settleTurn(turn);
       }
+      if (obsoletePrompt && turn.host === host) onHitlUnavailable?.(pending.session_id);
       // Neither an accepted answer nor a proven obsolete card should be offered again.
       return acceptedByRuntime || obsoletePrompt;
     },
@@ -1679,6 +1683,7 @@ export function useChatSse(
       isTurnCurrent,
       isExecutionAllowed,
       onError,
+      onHitlUnavailable,
       applyPreparation,
       startTurn,
       host,

@@ -2236,6 +2236,9 @@
       "validate": "Accept the TOS"
     },
     "hitlPrompt": {
+      "unavailable": "This question can no longer accept an answer.",
+      "unknown": "The availability of this question could not be checked.",
+      "retryAvailability": "Check again",
       "answerSummary": "Question and answer",
       "selected": "Selected",
       "skipped": "Skipped",

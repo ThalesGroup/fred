@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties";
 import { useNavigate } from "react-router-dom";
@@ -27,8 +27,7 @@ import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import styles from "./ChatList.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService";
-import { abortTurn, subscribeBackgroundSettled } from "@core/hooks/backgroundTurns";
-import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { abortTurn } from "@core/hooks/backgroundTurns";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
@@ -88,29 +87,6 @@ export default function ChatList({ teamId }: ChatListProps) {
     t("rework.sidebar.chatList.unknownAgent", { agentsNicknameSingular });
   const agentDeleted = (id: string) =>
     Boolean(agentsResolved && !agentsError && agentInstances && !agentNameByInstanceId.has(id));
-
-  const { showInfo } = useToast();
-  const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
-  // The sidebar outlives every chat view, so it announces turns that ended out of sight.
-  useEffect(
-    () =>
-      subscribeBackgroundSettled((sessionId, awaitingInput) => {
-        const session = sessionsRef.current?.find((candidate) => candidate.session_id === sessionId);
-        const agentInstanceId = session?.agent_instance_id;
-        showInfo({
-          summary: t(awaitingInput ? "rework.sidebar.chatList.awaitingInput" : "rework.sidebar.chatList.answerReady"),
-          detail: session?.title || undefined,
-          action: agentInstanceId
-            ? {
-                label: t("rework.sidebar.chatList.openConversation"),
-                onClick: () => navigate(conversationHref(teamId, agentInstanceId, sessionId)),
-              }
-            : undefined,
-        });
-      }),
-    [showInfo, t, navigate, teamId],
-  );
 
   const [deleteSession] = useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation();
 

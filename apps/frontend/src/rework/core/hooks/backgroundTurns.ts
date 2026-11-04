@@ -43,6 +43,7 @@ export type TurnHost = {
 
 export type LiveTurn = {
   sessionId: string;
+  destination?: { teamId: string; agentInstanceId: string };
   controller: AbortController;
   steeringTurnId: string;
   thoughts: Map<string, ThoughtBuffer>;
@@ -81,7 +82,8 @@ const awaitingInput = restoreIndicator("awaitingInput");
 // Sessions whose turn ended while no view showed it; opening one marks it read.
 const unread = restoreIndicator("unread");
 const runningListeners = new Set<() => void>();
-const settledListeners = new Set<(sessionId: string, awaitingInput: boolean) => void>();
+type SettledListener = (sessionId: string, awaitingInput: boolean, destination?: LiveTurn["destination"]) => void;
+const settledListeners = new Set<SettledListener>();
 
 function notifyRunning(): void {
   for (const listener of runningListeners) listener();
@@ -163,7 +165,7 @@ export function markSessionRead(sessionId: string): void {
 }
 
 /** Notified when a turn ends while no view shows its conversation. */
-export function subscribeBackgroundSettled(listener: (sessionId: string, awaitingInput: boolean) => void): () => void {
+export function subscribeBackgroundSettled(listener: SettledListener): () => void {
   settledListeners.add(listener);
   return () => settledListeners.delete(listener);
 }
@@ -230,6 +232,6 @@ export function settleTurn(turn: LiveTurn): void {
     if (!turn.awaitingInput && (!turn.completed || turn.interrupted)) return;
     unread.add(turn.sessionId);
     notifyIndicatorsChanged();
-    for (const listener of settledListeners) listener(turn.sessionId, Boolean(turn.awaitingInput));
+    for (const listener of settledListeners) listener(turn.sessionId, Boolean(turn.awaitingInput), turn.destination);
   }
 }

@@ -2236,6 +2236,9 @@
       "validate": "Accepter les CGU"
     },
     "hitlPrompt": {
+      "unavailable": "Cette question ne peut plus recevoir de réponse.",
+      "unknown": "La disponibilité de cette question n'a pas pu être vérifiée.",
+      "retryAvailability": "Vérifier à nouveau",
       "answerSummary": "Question et réponse",
       "selected": "Choisi",
       "skipped": "Passé",

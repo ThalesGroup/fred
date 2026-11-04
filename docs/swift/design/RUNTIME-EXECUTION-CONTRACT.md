@@ -7267,3 +7267,23 @@ model-only procedures follow existing selection validation; stored identities
 and conversation context are retained. The existing migration note documents
 the broadened graph policy and all-replica rollout. SDK/API schemas and shared
 loading mechanisms are unchanged.
+
+
+### 8.122 Historical HITL availability (2026-11-04)
+
+Authorized session history reads annotate trailing unanswered `HitlRequestPart`
+records with optional `resume_status`: `pending`, `unavailable`, or `unknown`.
+The runtime reads the latest relevant shared SQL checkpoint's interrupts and
+single-use claims using the same target order and database-clock expiry as
+resume admission. Stored target identity is exposed as `metadata.agent_id` on
+HITL history rows so managed Graph threads can be located without activation.
+Only interrupt writes and matching claims are read; channel blobs and earlier
+checkpoints are not loaded. Empty/unauthorized history triggers no checkpoint
+lookup. Lookup failures and unsupported legacy identity produce `unknown`.
+
+The annotation is a read-time snapshot, not an execution result or authorization
+to bypass admission. It does not persist a response, release a claim, or restart
+a disconnected turn. Section 8.89 remains unchanged. Clients without this field
+retain legacy rendering; deploy the updated runtime and frontend for the new
+availability display. See the `managed-conversations` specification and the
+existing HITL migration note.
