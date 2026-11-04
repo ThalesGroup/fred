@@ -21,6 +21,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import httpx
+import httpx2
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.tools import ToolResult
@@ -255,7 +256,7 @@ async def test_current_fastmcp_http_failure_survives_provider_resolution(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("direct", [False, True])
+@pytest.mark.parametrize("transport", ["legacy", "httpx", "httpx2"])
 @pytest.mark.parametrize(
     "status,code",
     [
@@ -272,17 +273,18 @@ async def test_current_fastmcp_http_failure_survives_provider_resolution(
     ],
 )
 async def test_caught_mcp_failure_keeps_safe_nonempty_feedback(
-    status: int, code: str | None, direct: bool
+    status: int, code: str | None, transport: str
 ) -> None:
     async def _inventory() -> str:
         body = {
             "detail": "private provider diagnostic https://provider.example/?token=secret"
         }
-        if direct:
-            response = httpx.Response(
+        if transport != "legacy":
+            library = httpx2 if transport == "httpx2" else httpx
+            response = library.Response(
                 status,
                 json=body,
-                request=httpx.Request("GET", "https://provider.example"),
+                request=library.Request("GET", "https://provider.example"),
             )
             response.raise_for_status()
         raise RuntimeError(

@@ -22,6 +22,7 @@ from typing import Any, Callable, Optional, cast
 from urllib.parse import quote
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
+import httpx2
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.security.delegation import scrub_grant_text
@@ -59,14 +60,16 @@ logger = logging.getLogger(__name__)
 _READ_QUERY_TOOL_NAME = "read_query"
 
 
-def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusError]:
+def _unwrap_httpx_status_error(
+    exc: BaseException,
+) -> Optional[httpx.HTTPStatusError | httpx2.HTTPStatusError]:
     # Backward compatibility for existing callers
     return unwrap_httpx_status_error(exc)
 
 
 def _build_tool_error_message(
     exc: BaseException,
-    inner: Optional[httpx.HTTPStatusError],
+    inner: Optional[httpx.HTTPStatusError | httpx2.HTTPStatusError],
     *,
     tool_name: str | None = None,
 ) -> str:
@@ -80,7 +83,7 @@ def _build_tool_error_message(
         parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
         if parsed is not None and tool_name == _READ_QUERY_TOOL_NAME:
             status_code, detail = parsed
-            if status_code == 400:
+            if status_code == 400 and detail:
                 return scrub_grant_text(f"Error: {detail}")
         return scrub_grant_text(f"Error: {exc}")
     code = inner.response.status_code if inner.response is not None else "?"
@@ -90,7 +93,7 @@ def _build_tool_error_message(
     return scrub_grant_text(f"Error: HTTP {code}: {detail}")
 
 
-def _http_error_detail(inner: httpx.HTTPStatusError) -> str:
+def _http_error_detail(inner: httpx.HTTPStatusError | httpx2.HTTPStatusError) -> str:
     """Extract the upstream service detail without its HTTP transport wrapper."""
     detail: str = str(inner)
     try:
@@ -104,7 +107,7 @@ def _http_error_detail(inner: httpx.HTTPStatusError) -> str:
                     detail = raw[:300] if raw else str(inner)
             except Exception:
                 detail = raw[:300] if raw else str(inner)
-    except httpx.ResponseNotRead:
+    except (httpx.ResponseNotRead, httpx2.ResponseNotRead):
         logger.debug(
             "HTTP response body not read (streamed response); using default error message"
         )
@@ -162,7 +165,7 @@ def _build_tool_error_artifact(
     tool_name: str,
     kwargs: dict[str, Any],
     exc: BaseException,
-    inner: Optional[httpx.HTTPStatusError],
+    inner: Optional[httpx.HTTPStatusError | httpx2.HTTPStatusError],
 ) -> ToolInvocationResult:
     """Return Fred's trusted failure signal for one caught MCP exception.
 
@@ -182,7 +185,7 @@ def _build_tool_error_artifact(
         if inner.response.status_code == 400:
             try:
                 body = inner.response.json()
-            except (ValueError, httpx.ResponseNotRead):
+            except (ValueError, httpx.ResponseNotRead, httpx2.ResponseNotRead):
                 body = None
             if isinstance(body, dict) and isinstance(body.get("detail"), str):
                 detail = body["detail"]
@@ -233,7 +236,9 @@ def _build_tool_error_artifact(
     )
 
 
-def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
+def _log_http_error(
+    tool_name: str, err: httpx.HTTPStatusError | httpx2.HTTPStatusError
+) -> None:
     """
     Fred rationale:
     Give ops-grade traces that directly point to auth/token problems, with enough
@@ -258,7 +263,7 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
             body_preview = scrub_grant_text(
                 f" | body: {txt[:300].replace(chr(10), ' ')}"
             )
-    except httpx.ResponseNotRead:
+    except (httpx.ResponseNotRead, httpx2.ResponseNotRead):
         logger.debug(
             "HTTP response body not read (streamed response); skipping body preview"
         )
