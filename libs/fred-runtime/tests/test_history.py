@@ -960,64 +960,64 @@ def test_postgres_history_store_satisfies_history_store_port() -> None:
 # current space authorization and persisted provenance rather than dev bypasses.
 
 
-def _make_app_with_user(monkeypatch, tmp_path, user_uid: str):
+@pytest.mark.parametrize(
+    ("decision_status", "allowed", "expected_status"),
+    [(200, False, 403), (503, None, 503), (200, True, 200)],
+)
+def test_session_purge_requires_platform_authority(
+    monkeypatch, decision_status, allowed, expected_status
+) -> None:
+    """Only platform maintenance can close files before the CP's SQL cascade.
+
+    Ordinary user deletion goes through CP retirement. A denied or unavailable
+    decision must not touch storage, and this endpoint never deletes history alone.
     """
-    Build a test app where _authenticated_user is overridden to return a fixed
-    KeycloakUser.  Used to verify ownership enforcement without real Keycloak.
-    """
+    from fastapi import FastAPI
     from fred_core.security.structure import KeycloakUser
-
-    fake_user = KeycloakUser(uid=user_uid, username=user_uid, roles=[])
-
-    # Patch _make_user_dependency before create_routes() runs so the closure
-    # produced by create_agent_app picks up our fake-user factory.
-    monkeypatch.setattr(
-        agent_app_module,
-        "_make_user_dependency",
-        lambda _fn, _enabled: lambda: fake_user,
-    )
-    return _make_app(monkeypatch, tmp_path), fake_user
-
-
-def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> None:
-    """
-    DELETE /sessions/{id} must pass the JWT uid as user_id so only the caller's
-    rows are deleted — prevents one user from deleting another user's history.
-
-    Why this test exists:
-    - delete without user scoping is an irreversible cross-user data destruction
-      vector; this verifies the ownership filter is applied at the store layer
-    """
-    app, _ = _make_app_with_user(monkeypatch, tmp_path, "alice-uid")
+    from fred_runtime.app.security import current_user_or_service
+    from fred_runtime.runtime_support.session_fence import SessionFence
 
     mock_store = AsyncMock()
-    mock_store.delete_session = AsyncMock(return_value=3)
+    filesystem = AsyncMock()
+    fence = AsyncMock(spec=SessionFence)
     authority = AsyncMock(spec=httpx.AsyncClient)
-    authority.post.return_value = httpx.Response(200, json={"allowed": False})
-    mock_ctx = RuntimeContext(
+    authority.post.return_value = httpx.Response(
+        decision_status, json={"allowed": allowed}
+    )
+    context = RuntimeContext(
         RuntimeConfig(
             knowledge_flow_url="http://localhost:8111/knowledge-flow/v2",
             history_store=mock_store,
+            filesystem=filesystem,
+            session_fence=fence,
             control_plane_url="https://authority.test",
             control_plane_http_client=authority,
         )
     )
-
+    monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: context)
+    monkeypatch.setattr(authorization_module, "get_runtime_context", lambda: context)
+    app = FastAPI()
+    app.include_router(agent_app_module._build_agent_router({}, True, 10_000))
+    app.dependency_overrides[current_user_or_service] = lambda: KeycloakUser(
+        uid="alice-uid", username="alice", roles=[]
+    )
     with TestClient(app) as client:
-        monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: mock_ctx)
-        monkeypatch.setattr(
-            authorization_module, "get_runtime_context", lambda: mock_ctx
-        )
         response = client.delete(
-            "/pod/v1/agents/sessions/session-liam",
+            "/agents/sessions/session-liam",
             headers={"Authorization": "Bearer alice-token"},
         )
 
-    assert response.status_code == 200
-    assert response.json() == {"deleted": 3}
-    mock_store.delete_session.assert_awaited_once_with(
-        session_id="session-liam", user_id="alice-uid"
-    )
+    assert response.status_code == expected_status, response.text
+    mock_store.delete_session.assert_not_awaited()
+    if expected_status == 200:
+        assert response.json() == {"purged": True, "sql_cascade": True}
+        fence.close.assert_awaited_once_with("session-liam")
+        filesystem.delete.assert_awaited_once_with("conversations/session-liam")
+        fence.acknowledge_purge.assert_awaited_once_with("session-liam")
+    else:
+        fence.close.assert_not_awaited()
+        filesystem.delete.assert_not_awaited()
+        fence.acknowledge_purge.assert_not_awaited()
     authority.post.assert_awaited_once_with(
         "https://authority.test/authorize/platform",
         json={"permission": "manage_platform"},

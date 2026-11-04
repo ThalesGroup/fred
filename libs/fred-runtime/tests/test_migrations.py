@@ -42,6 +42,8 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
         "c3d4b5a6f7e8_add_team_and_instance.py",  # pragma: allowlist secret
         "e5f6a7b8c9d0_web_research_activity.py",  # pragma: allowlist secret
         "a7b8c9d0e1f2_execution_space.py",  # pragma: allowlist secret
+        "b8c9d0e1f2a3_conversation_ownership.py",  # pragma: allowlist secret
+        "c9d0e1f2a3b4_conversation_filesystem.py",  # pragma: allowlist secret
         "f6a7b8c9d0e1_shared_turn_steering.py",  # pragma: allowlist secret
         "d4e5c6b7a8f9_drop_demo_echo_tables.py",  # pragma: allowlist secret
     }
@@ -51,6 +53,8 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+        ("c9d0e1f2a3b4", "b8c9d0e1f2a3"),  # pragma: allowlist secret
+        ("b8c9d0e1f2a3", "a7b8c9d0e1f2"),  # pragma: allowlist secret
         ("a7b8c9d0e1f2", "f6a7b8c9d0e1"),  # pragma: allowlist secret
         ("f6a7b8c9d0e1", "e5f6a7b8c9d0"),  # pragma: allowlist secret
         ("e5f6a7b8c9d0", "d4e5c6b7a8f9"),  # pragma: allowlist secret
@@ -102,7 +106,7 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "space_id",
         "agent_instance_id",
     }
-    assert revision == ("a7b8c9d0e1f2",)  # pragma: allowlist secret
+    assert revision == ("c9d0e1f2a3b4",)  # pragma: allowlist secret
 
 
 def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> None:
