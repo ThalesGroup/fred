@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from fred_core.common import OwnerFilter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, GetJsonSchemaHandler, SerializerFunctionWrapHandler, model_serializer
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 # -- Constants for consistent types --
 DTypes = Literal["string", "integer", "float", "boolean", "datetime", "unknown"]
@@ -28,6 +30,8 @@ TabularDocumentKind = Literal["csv", "spreadsheet"]
 
 
 class TabularColumnSchema(BaseModel):
+    """Stored column types/classification, including readable legacy values."""
+
     name: str
     dtype: DTypes
     is_categorical: Optional[bool] = Field(
@@ -37,10 +41,6 @@ class TabularColumnSchema(BaseModel):
             "between 1 and max_categories(row_count), with null rows included in "
             "row_count. None for non-string or older columns without this analysis."
         ),
-    )
-    has_two_values: Optional[bool] = Field(
-        default=None,
-        description=("For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values."),
     )
     sample_values: Optional[list[str]] = Field(
         default=None,
@@ -54,6 +54,51 @@ class TabularColumnSchema(BaseModel):
         default=None,
         description="Largest finite non-null value of an integer or float column. None when unavailable.",
     )
+
+
+class TabularColumnDescription(BaseModel):
+    """Compact public schema, separate from stored ingestion classification."""
+
+    name: str
+    dtype: DTypes
+    categorical_values: list[str] | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description="Exact distinct non-null categories, preserving spelling and case. Present only for a described categorical string column.",
+    )
+    min_value: int | float | None = Field(default=None, description="Smallest finite value. Present only for integer/float columns; null if none exist.")
+    max_value: int | float | None = Field(default=None, description="Largest finite value. Present only for integer/float columns; null if none exist.")
+
+    @model_serializer(mode="wrap")
+    def _compact(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Pydantic's handler returns the model's heterogeneous field dictionary.
+        result = handler(self)
+        if self.dtype != "string":
+            result.pop("categorical_values", None)
+        if self.dtype in {"integer", "float"}:
+            result.update(min_value=self.min_value, max_value=self.max_value)
+        else:
+            result.pop("min_value", None)
+            result.pop("max_value", None)
+        return result
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        # Advertise the declared fields, not the serializer's generic dictionary.
+        if handler.mode == "serialization":
+            schema = schema.copy()
+            schema.pop("serialization", None)
+        return handler(schema)
+
+    @classmethod
+    def from_stored(cls, column: TabularColumnSchema, *, values_read: bool = False) -> "TabularColumnDescription":
+        return cls(
+            name=column.name,
+            dtype=column.dtype,
+            categorical_values=(column.sample_values or []) if values_read and column.dtype == "string" and column.is_categorical else None,
+            min_value=column.min_value if values_read else None,
+            max_value=column.max_value if values_read else None,
+        )
 
 
 class TabularDatasetResponse(BaseModel):
@@ -73,7 +118,7 @@ class TabularDatasetResponse(BaseModel):
     document_name: str
     query_alias: str
     row_count: Optional[int] = None
-    columns: list[TabularColumnSchema] = Field(default_factory=list)
+    columns: list[TabularColumnDescription] = Field(default_factory=list)
     tag_ids: list[str] = Field(default_factory=list)
     tag_names: list[str] = Field(default_factory=list)
     source_tag: Optional[str] = None
@@ -155,7 +200,7 @@ class TabularTableSchema(TabularTableSummary):
     - Returned inside `TabularDocumentDescriptionResponse.tables`.
     """
 
-    columns: list[TabularColumnSchema] = Field(default_factory=list)
+    columns: list[TabularColumnDescription] = Field(default_factory=list)
 
 
 class TabularDocumentDescriptionResponse(BaseModel):
@@ -174,7 +219,7 @@ class TabularDocumentDescriptionResponse(BaseModel):
     document_uid: str
     document_name: str
     kind: TabularDocumentKind
-    markdown: str | None
+    markdown: str | None = None
     tables: list[TabularTableSchema] = Field(default_factory=list)
     source_tag: Optional[str] = None
 

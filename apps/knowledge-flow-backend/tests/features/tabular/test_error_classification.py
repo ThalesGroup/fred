@@ -25,6 +25,8 @@ hit the `ProgrammingError`/`DataError` branch and needs its own classification.
 
 from __future__ import annotations
 
+import asyncio
+
 import duckdb
 import pytest
 
@@ -71,3 +73,13 @@ def test_other_duckdb_io_errors_still_surface_as_server_errors():
     with pytest.raises(TabularDatasetReadError):
         with _redacting_dataset_read_errors():
             raise duckdb.IOException("IO Error: could not read https://signed.example.invalid/x?X-Amz-Signature=deadbeef")
+
+
+@pytest.mark.parametrize("error", [PermissionError("authority lost"), asyncio.CancelledError()])
+def test_diagnostic_path_preserves_authority_and_cancellation_stops(error):
+    """Only SQL-authoring errors receive diagnostics; hard stops pass through."""
+    with pytest.raises(type(error)) as caught:
+        with _redacting_query_execution_errors():
+            raise error
+
+    assert caught.value is error

@@ -134,6 +134,7 @@ class TabularController:
         @router.get(
             "/tabular/documents/schemas",
             response_model=List[TabularDocumentDescriptionResponse],
+            response_model_exclude_none=True,
             tags=["Tabular"],
             summary="Inspect document catalogs, SQL aliases and column types",
             operation_id="describe_tabular_documents",
@@ -146,6 +147,10 @@ class TabularController:
                     description="Document UIDs copied exactly from list_tabular_documents or authorized attachments, not filenames or SQL table aliases. Repeat the parameter for several documents.",
                 ),
             ],
+            table_names: Annotated[
+                list[str] | None,
+                Query(max_length=1000, description="Optional exact query_alias values or unambiguous sheet/title names. Omit or pass an empty list for all tables. Does not rename SQL aliases."),
+            ] = None,
             document_library_tags_ids: Annotated[
                 list[str] | None,
                 Query(description="Optional library tag IDs used to keep documents inside selected libraries."),
@@ -171,10 +176,11 @@ class TabularController:
             SQL aliases. Batch several documents when a query will join them.
             For Excel, read markdown first for sheet/table context and residual
             notes, then inspect tables[].columns. CSV has no markdown catalog.
-            Every extracted table is described, including its query_alias and
-            exact column names and dtypes.
+            Describe all tables by default, or select exact table_names to
+            inspect only relevant schemas. The workbook catalog stays complete.
+            Returned tables include query_alias, exact column names and dtypes.
 
-            Categorical string sample_values contain all distinct non-null
+            Categorical string categorical_values contain all distinct non-null
             values when available: preserve their exact spelling and format in
             filters. Numeric min_value/max_value are finite observed bounds,
             not query answers. Use query_alias values in SQL FROM/JOIN clauses;
@@ -185,6 +191,7 @@ class TabularController:
                 return await self.service.describe_documents(
                     user,
                     document_uids=document_uids,
+                    table_names=table_names,
                     document_library_tags_ids=document_library_tags_ids,
                     owner_filter=owner_filter,
                     team_id=team_id,

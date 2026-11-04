@@ -46,7 +46,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 const ARGUMENTS: Record<string, string[]> = {
   list_tabular_documents: [],
-  describe_tabular_documents: ["document_uids"],
+  describe_tabular_documents: ["document_uids", "table_names"],
   get_tabular_document_markdown: ["document_uid"],
   get_tabular_documents_schemas: ["document_uids"],
   read_query: ["dataset_uids", "sql", "max_rows"],

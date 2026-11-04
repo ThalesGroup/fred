@@ -1,43 +1,57 @@
 ---
 schema: 1
-title: "Explain tabular tool failures and successful empty results"
-impact: none
+title: "Compact tabular schemas, preserve dates and explain SQL failures"
+impact: minor
 configuration: none
-configuration_reason: "No configuration keys or defaults change; the tabular MCP prompt is packaged with the existing capability."
-no_action_reason: "No data migration, re-ingestion or administrator action is required. The SQL response only gains an optional explanation field."
+configuration_reason: "No configuration keys or defaults change; API consumers and packaged prompts must be upgraded together for the compact schema."
 ---
 
 ## Applicability
 
-Deployments using tabular MCP tools and the chat trace drawer.
+Deployments using tabular MCP tools, CSV/Excel ingestion and the chat trace drawer.
 
 ## Prerequisites
 
-No additional prerequisites beyond the normal deployment procedure.
+Adapt custom consumers: `categorical_values` replaces `is_categorical` and
+`sample_values`; `has_two_values` is removed. Bounds appear only on numeric
+columns. The updated frontend still reads historical trace responses.
 
 ## Configuration
 
-No configuration changes are required.
+No configuration or permission changes. Optional `table_names` selects exact
+aliases or unambiguous sheet/title labels; omitted/empty describes all tables.
+SQL aliases and document UIDs do not change.
 
 ## Upgrade
 
-Deploy the runtime, Knowledge Flow and frontend normally. New turns use the
-updated packaged tabular prompt. SQL responses with zero rows include an
-explicit success message; zero/null aggregate rows remain ordinary results.
+Deploy the compatible frontend first. Drain active turns as appropriate and
+upgrade Knowledge Flow API/ingestion workers and agent pods to the same release,
+so compact responses and packaged instructions agree. Restart long-lived local
+processes when testing without reload.
+
+New Excel ingestion preserves temporal Parquet types. Existing files stay
+unchanged and truthfully typed. Reprocessing an existing source is optional and
+deliberate; there is no bulk migration. Development validation explicitly
+reprocessed only the synthetic Orion workbook.
 
 ## Validation
 
-Run a valid SELECT matching no rows and inspect its trace detail. Confirm the
-explicit success explanation. Open a failed tabular call: its business arguments
-and safe error should be visible, with no recovery section. Unknown historical
-errors show a fallback rather than arbitrary exception text.
+Describe all tables and then selected tables; verify the complete catalog and
+compact columns. Check a newly ingested date column has an actual temporal SQL
+type. A failed column query must suggest only already referenced tables. The
+trace drawer retains submitted arguments, including table selectors, and the
+safe cause without recovery advice. Zero-row success keeps its explicit message.
 
 ## Rollback
 
-Use the normal rollback procedure. No stored data or configuration is changed.
+Roll back API, frontend and agent/worker versions together. Stored classification
+remains compatible; temporal Parquet was already supported by the prior dtype
+vocabulary. Do not convert correctly typed data back to text. Explicit source
+reprocessing is not reverted automatically.
 
 ## Limitations
 
-Prompt guidance does not guarantee that a model will avoid all redundant calls.
-There is no new cache, duplicate-call suppression or execution limit. This
-change does not modify token refresh behavior or repair authentication failures.
+Prompt guidance does not guarantee correct calculations or eliminate redundant
+calls. No result cache, duplicate-call suppression, multi-statement execution,
+automatic UID substitution or new legacy-date repair policy is added. Complex
+SQL scopes retain bounded redacted diagnostics. Token refresh is unchanged.

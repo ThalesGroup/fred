@@ -304,6 +304,7 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
       "mcp__knowledge_flow__describe_tabular_documents_2",
       {
         document_uids: ["invalid-workbook.xlsx"],
+        table_names: ["Commandes"],
         access_token: "private-token",
         team_id: "hidden-team",
       },
@@ -323,6 +324,8 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
     expect(html).toContain("Call arguments:");
     expect(html).toContain("invalid-workbook.xlsx");
+    expect(html).toContain("table_names");
+    expect(html).toContain("Commandes");
     expect(html).toContain("Authentication was refused (HTTP 401).");
     for (const hidden of [
       "private-token",

@@ -26,6 +26,7 @@ capability-native), not just `ContextAwareTool`-wrapped ones.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -136,26 +137,38 @@ async def test_mcp_success_normalization_handles_sync_and_async_calls(
 
 
 @pytest.mark.asyncio
-async def test_fastapi_mcp_read_query_400_returns_a_typed_sql_failure() -> None:
+@pytest.mark.parametrize(
+    "detail",
+    [
+        "Binder Error: Referenced column amount_typo not found",
+        'Binder Error: Table "c" does not have a column named "region"\n'
+        'Column "region" does not exist in "Commandes" (SQL qualifier "c"). '
+        'Visible references in the tables already used by this SQL: "cl"."region".',
+    ],
+)
+async def test_fastapi_mcp_read_query_400_returns_a_typed_sql_failure(
+    detail: str,
+) -> None:
     """The model keeps a useful tool result while the runtime gets a trusted,
     HTTP-free SQL failure payload for the trace and observability layers."""
     wrapper = ContextAwareTool(
-        base_tool=_FailingReadQueryTool(),
+        base_tool=_FailingReadQueryTool(
+            failure_message="Error calling read_query. Status code: 400. Response: "
+            + json.dumps({"detail": detail})
+        ),
         context_provider=lambda: None,
         agent_settings_provider=_FakeAgentSettings,
     )
 
     content, artifact = await wrapper._arun(sql="SELECT amount_typo FROM d_sales")
 
-    assert content == "Error: Binder Error: Referenced column amount_typo not found"
+    assert content == f"Error: {detail}"
     assert "HTTP" not in content
     assert artifact is not None
     assert artifact.is_error is True
     assert len(artifact.blocks) == 1
     assert artifact.blocks[0].kind == ToolContentKind.TEXT
-    assert artifact.blocks[0].text == (
-        "Binder Error: Referenced column amount_typo not found"
-    )
+    assert artifact.blocks[0].text == detail
 
 
 @pytest.mark.asyncio

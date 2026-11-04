@@ -1061,6 +1061,7 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/tabular/documents/schemas`,
         params: {
           document_uids: queryArg.documentUids,
+          table_names: queryArg.tableNames,
           document_library_tags_ids: queryArg.documentLibraryTagsIds,
           owner_filter: queryArg.ownerFilter,
           team_id: queryArg.teamId,
@@ -2195,6 +2196,8 @@ export type DescribeTabularDocumentsApiResponse =
 export type DescribeTabularDocumentsApiArg = {
   /** Document UIDs copied exactly from list_tabular_documents or authorized attachments, not filenames or SQL table aliases. Repeat the parameter for several documents. */
   documentUids: string[];
+  /** Optional exact query_alias values or unambiguous sheet/title names. Omit or pass an empty list for all tables. Does not rename SQL aliases. */
+  tableNames?: string[] | null;
   /** Optional library tag IDs used to keep documents inside selected libraries. */
   documentLibraryTagsIds?: string[] | null;
   /** Optional ownership scope: 'personal' or 'team'. */
@@ -3251,18 +3254,14 @@ export type TabularDocumentListResponse = {
   source_kind?: "corpus" | "conversation_attachment";
   tag_names?: string[] | null;
 };
-export type TabularColumnSchema = {
+export type TabularColumnDescription = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
-  /** For string columns, whether the count of distinct non-null values is between 1 and max_categories(row_count), with null rows included in row_count. None for non-string or older columns without this analysis. */
-  is_categorical?: boolean | null;
-  /** For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values. */
-  has_two_values?: boolean | null;
-  /** Every distinct non-null string value when is_categorical is true, preserving exact casing for SQL filters. None otherwise. */
-  sample_values?: string[] | null;
-  /** Smallest finite non-null value of an integer or float column. None when unavailable. */
+  /** Exact distinct non-null categories, preserving spelling and case. Present only for a described categorical string column. */
+  categorical_values?: string[] | null;
+  /** Smallest finite value. Present only for integer/float columns; null if none exist. */
   min_value?: number | number | null;
-  /** Largest finite non-null value of an integer or float column. None when unavailable. */
+  /** Largest finite value. Present only for integer/float columns; null if none exist. */
   max_value?: number | number | null;
 };
 export type TabularTableSchema = {
@@ -3271,13 +3270,13 @@ export type TabularTableSchema = {
   title?: string | null;
   row_count?: number | null;
   generated_at?: string | null;
-  columns?: TabularColumnSchema[];
+  columns?: TabularColumnDescription[];
 };
 export type TabularDocumentDescriptionResponse = {
   document_uid: string;
   document_name: string;
   kind: "csv" | "spreadsheet";
-  markdown: string | null;
+  markdown?: string | null;
   tables?: TabularTableSchema[];
   source_tag?: string | null;
 };

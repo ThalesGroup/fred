@@ -11,7 +11,10 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
    conversation. Only enabled sources are listed. Excel entries include
    table aliases, sheets and titles; CSV entries have no table list.
 2. `describe_tabular_documents`: pass the selected document UIDs, batching
-   several documents when needed. For Excel, read the `markdown` catalog
+   several documents when needed. Optionally set `table_names` to exact
+   discovered SQL aliases or unambiguous sheet/table names to describe only
+   relevant tables; omit it or pass an empty list to describe all tables.
+   For Excel, read the complete `markdown` catalog
    first: sheets, table context, ranges and residual notes identify the
    relevant data. Then inspect `tables[].columns` for exact names and types.
    CSV has no catalog; inspect its typed table directly. You MUST describe
@@ -28,6 +31,8 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
    in every FROM/JOIN. Scope `dataset_uids` with the document UIDs being
    queried; one workbook UID makes all its tables available. Cross-table
    and cross-document joins are supported within the authorized scope.
+   Use a separate call for each independent SQL statement; never combine
+   several statements in one call.
 
 ### Keep references and types exact
 
@@ -40,11 +45,12 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
   with a modifier is unsupported. Convert text explicitly before date
   arithmetic; a timestamp-shaped string is still text.
 - Apply LIKE/ILIKE only to text. Use comparisons or ranges for numeric
-  columns. For categorical strings, `sample_values` contains every distinct
+  columns. For categorical strings, `categorical_values` contains every distinct
   non-null value: preserve exact spelling and formatting in filters.
-  `has_two_values=true` does not imply boolean semantics; only
-  `dtype=boolean` confirms a boolean column. Numeric `min_value`/`max_value`
+  Only `dtype=boolean` confirms a boolean column. Numeric `min_value`/`max_value`
   are finite observed bounds, not computed answers to the user's question.
+- In joins, qualify column references with their table alias, including
+  references in filters, GROUP BY and ORDER BY, to avoid ambiguous columns.
 - Only SELECT is available. Do not attempt mutations or schema changes.
 
 ### Interpret results before taking another action

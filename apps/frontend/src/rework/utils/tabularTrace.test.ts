@@ -112,6 +112,16 @@ describe("tabular trace result validation", () => {
       kind: "descriptions",
       documents: [description, csvDescription],
     });
+    const compactCsv = {
+      document_uid: csvDescription.document_uid,
+      document_name: csvDescription.document_name,
+      kind: "csv",
+      tables: csvDescription.tables,
+    };
+    expect(parseTabularTraceResult("describe_tabular_documents", JSON.stringify([description, compactCsv]))).toEqual({
+      kind: "descriptions",
+      documents: [description, compactCsv],
+    });
   });
 
   it("accepts a workbook catalog and a partial value search", () => {
@@ -146,6 +156,42 @@ describe("tabular trace result validation", () => {
     ).toEqual({ kind: "search", keyword: "Acme", matches: [match], tablesTruncated: true });
   });
 
+  it("accepts compact columns without requiring historical metadata or numeric bounds on dates", () => {
+    const description = {
+      ...document,
+      markdown: "# Sales",
+      tables: [
+        {
+          ...table,
+          columns: [
+            { name: "status", dtype: "string", categorical_values: ["annulee", "validee"] },
+            { name: "amount", dtype: "float", min_value: 0, max_value: 12.5 },
+            { name: "ordered_at", dtype: "datetime" },
+          ],
+        },
+      ],
+    };
+    expect(parseTabularTraceResult("describe_tabular_documents", JSON.stringify([description]))).toEqual({
+      kind: "descriptions",
+      documents: [description],
+    });
+  });
+
+  it.each(["annulee", ["annulee", 42], {}])("rejects malformed category lists: %j", (categorical_values) => {
+    expect(
+      parseTabularTraceResult(
+        "describe_tabular_documents",
+        JSON.stringify([
+          {
+            ...document,
+            markdown: "# Sales",
+            tables: [{ ...table, columns: [{ name: "status", dtype: "string", categorical_values }] }],
+          },
+        ]),
+      ),
+    ).toBeNull();
+  });
+
   it("rejects malformed and unrelated content instead of exposing its fields", () => {
     expect(parseTabularTraceResult("mcp__other__list_tabular_documents", JSON.stringify([document]))).toBeNull();
     expect(
@@ -167,7 +213,7 @@ describe("tabular trace result validation", () => {
         JSON.stringify([
           {
             ...document,
-            markdown: null,
+            markdown: "# Sales",
             tables: [{ ...table, columns: [{ name: "status", dtype: "string", is_categorical: "yes" }] }],
           },
         ]),
@@ -179,7 +225,7 @@ describe("tabular trace result validation", () => {
         JSON.stringify([
           {
             ...document,
-            markdown: null,
+            markdown: "# Sales",
             tables: [{ ...table, columns: [{ name: "status", dtype: "string", has_two_values: "yes" }] }],
           },
         ]),
@@ -191,7 +237,7 @@ describe("tabular trace result validation", () => {
         JSON.stringify([
           {
             ...document,
-            markdown: null,
+            markdown: "# Sales",
             tables: [{ ...table, columns: [{ name: "amount", dtype: "integer", min_value: "0" }] }],
           },
         ]),

@@ -233,8 +233,7 @@ in-band (not a frozen platform contract):
 
 - `tabular_v1` (`TabularArtifactV1`, CSV, single table): `dataset_uid`,
   `object_key`, `source_revision` (document `sha256`), `format="parquet"`,
-  `row_count`, `columns` (`TabularColumnSchema{name, dtype, is_categorical,
-  has_two_values, sample_values, min_value, max_value}`), `generated_at`,
+  `row_count`, `columns` (stored `TabularColumnSchema` types/classification), `generated_at`,
   `file_size_bytes`.
 - `tabular_multi_v1` (`TabularMultiArtifactV1`, spreadsheet): holds
   `tables: list[TabularTableArtifactV1]`, each **extending** `TabularArtifactV1`
@@ -246,22 +245,25 @@ in-band (not a frozen platform contract):
 - `DTypes = Literal["string","integer","float","boolean","datetime","unknown"]`
   — one stable vocabulary independent of pandas or DuckDB internals; both
   producers converge on the same `TabularColumnSchema` shape.
-- For string columns, ingestion sets `is_categorical` when 1 to
-  `max_categories(n)` distinct non-null values occur across `n` table rows.
-  Null rows count in `n`; the limit is 2 through 10 rows, then
-  `min(256, int(2 × (n/10)^0.7))`. Ingestion also sets `has_two_values` for
-  exactly two distinct strings without assigning true/false meaning. It does
-  not store category samples; non-string columns have no category verdict.
-- For integer and float columns, ingestion stores the type but does not
-  calculate or store bounds. On each `describe_tabular_documents` call, the
-  authorized Parquet tables are read under the tabular execution limits:
-  `sample_values` contains every distinct non-null value of columns already
-  classified as categorical, and `min_value`/`max_value` contain the smallest
-  and largest finite non-null numeric values. Columns without such values keep
-  null samples or bounds. Historical stored samples/bounds are ignored in the
-  description response; old documents need no re-ingestion. Every table is
-  checked for readability, and requests above `max_selected_datasets` are
-  rejected before scanning.
+- Stored string classification stays internal and readable for old artifacts.
+  Public `TabularColumnDescription` contains `name`, `dtype`, optional
+  `categorical_values` for categorical strings, and `min_value`/`max_value`
+  only for integer/float columns (null when no finite values exist).
+  Removed flags and unrelated nulls are omitted; historical traces stay readable.
+- Classification thresholds and exact call-time category/numeric-bound reads
+  are defined by `openspec/specs/tabular-document-description/spec.md`.
+  Description ignores stored samples/bounds and never persists calculated values.
+- Optional `table_names` selects exact aliases or unambiguous sheet/title labels.
+  Omitted/empty means all tables, with the complete workbook catalog retained.
+  Requested-document and selected-table counts independently retain the configured
+  dataset budget before catalog/value reads.
+- New Excel ingestion preserves unambiguous temporal columns through Parquet
+  with API dtype `datetime`, without discarding incompatible non-empty values.
+  Existing text artifacts keep their type until explicit reprocessing; no
+  historical migration runs automatically.
+- Curated SQL column errors use only already mounted, referenced tables in proven
+  visible scopes. Uncertain CTE/subquery/join scopes keep the safe engine error.
+  Enrichment never reads another table or rewrites SQL.
 
 **Object-store layout** — content-addressed, under
 `storage.tabular_store.artifacts_prefix` (default `tabular/datasets`):

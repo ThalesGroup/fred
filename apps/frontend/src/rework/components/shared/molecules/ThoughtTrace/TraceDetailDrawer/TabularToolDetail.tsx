@@ -288,11 +288,13 @@ function SchemasDetail({ data }: { data: Extract<TabularTraceResult, { kind: "sc
                               <PagedItems
                                 items={table.columns}
                                 renderItem={(column, columnIndex) => {
-                                  const label = column.is_categorical
-                                    ? t("rework.chatTrace.tabular.categorical")
-                                    : column.dtype;
+                                  const categoryValues = column.categorical_values ?? column.sample_values;
+                                  const label =
+                                    column.categorical_values != null || column.is_categorical
+                                      ? t("rework.chatTrace.tabular.categorical")
+                                      : column.dtype;
                                   const isNumeric = column.dtype === "integer" || column.dtype === "float";
-                                  const hasValues = !isNumeric && Boolean(column.sample_values?.length);
+                                  const hasValues = !isNumeric && Boolean(categoryValues?.length);
                                   const summary = (
                                     <>
                                       <span>{column.name}</span>
@@ -306,7 +308,7 @@ function SchemasDetail({ data }: { data: Extract<TabularTraceResult, { kind: "sc
                                           <summary className={tabularStyles.columnSummary}>{summary}</summary>
                                           <code className={tabularStyles.columnDetails}>
                                             {hasValues
-                                              ? column.sample_values?.join(" / ")
+                                              ? categoryValues?.join(" / ")
                                               : `min ${column.min_value ?? "—"} · max ${column.max_value ?? "—"}`}
                                           </code>
                                         </details>
