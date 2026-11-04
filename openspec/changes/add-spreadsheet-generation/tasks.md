@@ -34,3 +34,9 @@ Tracking: GitHub issue #3208.
 - [x] 5.4 Live check in the UI by the owner with a ReAct agent, 2026-10-28
 - [ ] 5.5 Live check with a Deep and a Graph agent (creation and revision)
 - [ ] 5.6 Archive the change, close #3208
+
+## 6. Review follow-up: one document shape (D14)
+
+- [x] 6.1 Candidate B as a translator to the D10 operations, bench-only switch
+- [x] 6.2 Bench: 22 edit tasks FR+EN plus the 14 creation tasks
+- [x] 6.3 A/B run 2026-11-04: thresholds not met on mistral-medium, B deleted (D14)

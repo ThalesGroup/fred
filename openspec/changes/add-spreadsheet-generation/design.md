@@ -66,6 +66,12 @@ A `changes` call, or `sheets` with the base's file name, makes the next version 
 
 A JSON preview (first 500 rows, evaluated values, one formula template per formula column) is written beside the file; a `spreadsheet_preview` card opens a read-only Excel-like side panel. If the preview cannot be stored, the plain download chip is shown and the file is still delivered.
 
+### D14. One document shape for create and edit: rejected
+
+Review candidate B: `file_name` + `mode`, the same sheet/column/row objects for creating and editing (`{row, values}`, `delete`, `insert`, `rename_to`, `move_to`), translated to the D10 operations. Agreed thresholds: edit success at least 10 points above `changes` and creation not more than 5 below on both models, with no category showing more unintended changes.
+
+A/B 2026-11-04: 36 tasks (14 creation, 22 edits, FR and EN), mistral-small-latest and mistral-medium-latest, 5 repetitions, 720 runs. Medium: edits 85% → 60%, creation 52% → 40%, more unintended changes on edit_column and move_rows. Small: edits 24% → 38%, creation 16% → 44%, more unintended changes on move_rows. B used 1.5 to 2 times more output tokens. Main causes: several row inserts in one call (row numbers of the delivered file, sent as 7, 8 and refused), `total` dropped at creation, malformed documents without a shape hint. `changes` stays; B was deleted. B did better on row deletion, ambiguous labels, clearing formula-column cells and edits after trimmed history.
+
 ## Known limitations
 
 - Only the last delivered workbook can be revised; bases and generated files are never deleted (#3212, #2990).
