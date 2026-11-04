@@ -123,7 +123,7 @@ async def database(monkeypatch):
             "DATABASE_URL", runtime_url.render_as_string(hide_password=False)
         )
         monkeypatch.setenv("DATABASE_SCHEMA", "runtime")
-        await asyncio.to_thread(_upgrade, "a7b8c9d0e1f2")
+        await asyncio.to_thread(_upgrade, "a7b8c9d0e1f2")  # pragma: allowlist secret
         yield cp, runtime
     finally:
         await cp.dispose()
@@ -394,7 +394,7 @@ async def test_orphan_backfill_fails_without_data_loss(database):
     async with runtime.connect() as conn:
         assert (
             await conn.scalar(text("SELECT version_num FROM alembic_version_runtime"))
-            == "a7b8c9d0e1f2"
+            == "a7b8c9d0e1f2"  # pragma: allowlist secret
         )
 
 

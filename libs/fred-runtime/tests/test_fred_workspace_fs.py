@@ -83,3 +83,25 @@ async def test_outputs_reject_traversal_and_missing_session(storage):
     with pytest.raises(RuntimeError, match="conversation"):
         await _writer(None).write("outputs/deck.pptx", b"secret")
     assert storage.files == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "alias",
+    [
+        "AABBCCDD-1111-4222-8333-0123456789AB",
+        "aabbccdd1111422283330123456789ab",  # pragma: allowlist secret - synthetic UUID alias
+        "{AABBCCDD-1111-4222-8333-0123456789AB}",
+    ],
+)
+async def test_published_artifact_uses_canonical_conversation_identity(storage, alias):
+    canonical = "aabbccdd-1111-4222-8333-0123456789ab"
+    artifact = await _writer(alias).write(f"outputs/{alias}/deck.pptx", b"private")
+    assert artifact.key == f"conversations/{canonical}/exports/deck.pptx"
+    assert (
+        artifact.href
+        == f"/pod/v1/agents/sessions/{canonical}/filesystem/exports/deck.pptx"
+    )
+    assert storage.files == {artifact.key: b"private"}
+    await ConversationFilesystemService(storage, canonical).purge()
+    assert storage.files == {}

@@ -2122,6 +2122,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
             kpi=runtime.kpi_writer,
         )
         await filesystem.exports().write_bytes(relative, content)
+        session_id = filesystem.session_id
         file_name = relative.rsplit("/", 1)[-1]
         return PublishedArtifact(
             key=f"conversations/{session_id}/exports/{relative}",

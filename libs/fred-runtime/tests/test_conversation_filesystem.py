@@ -517,3 +517,35 @@ async def test_storage_failure_log_has_safe_operation_context(
     assert "private-content" not in caplog.text
     assert "private-path.md" not in caplog.text
     assert "provider credential" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "alias",
+    [
+        "AABBCCDD-1111-4222-8333-0123456789AB",
+        "aabbccdd1111422283330123456789ab",  # pragma: allowlist secret - synthetic UUID alias
+        "{AABBCCDD-1111-4222-8333-0123456789AB}",
+        "urn:uuid:aabbccdd-1111-4222-8333-0123456789ab",
+    ],
+)
+async def test_uuid_aliases_share_physical_identity_and_purge(alias):
+    canonical = "aabbccdd-1111-4222-8333-0123456789ab"
+    storage = _MemoryFilesystem()
+    writer = ConversationFilesystemService(storage, alias)
+    reader = ConversationFilesystemService(storage, canonical)
+    assert writer.session_id == canonical
+    await writer.scratchpad().write_text("note", "private")
+    await reader.exports().write_bytes("deck.pptx", b"generated")
+    assert await reader.scratchpad().read_text("note") == "private"
+    assert await writer.exports().read_bytes("deck.pptx") == b"generated"
+    other = ConversationFilesystemService(storage, canonical + "-neighbour")
+    await other.scratchpad().write_text("note", "retained")
+    await reader.purge()
+    assert storage.files == {
+        f"conversations/{canonical}-neighbour/scratchpad/note": b"retained"
+    }
+    await reader.scratchpad().write_text("again", "private")
+    await writer.purge()
+    assert await other.scratchpad().read_text("note") == "retained"
+    assert not await reader.scratchpad().exists("again")

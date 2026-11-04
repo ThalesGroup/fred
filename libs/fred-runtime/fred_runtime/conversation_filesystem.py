@@ -25,6 +25,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any, Protocol
+from uuid import UUID
 
 from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
@@ -200,6 +201,14 @@ class ConversationFilesystemService:
         kpi: BaseKPIWriter | None = None,
         fence: SessionFence | None = None,
     ) -> None:
+        # PostgreSQL UUID ownership treats case, compact and braced forms as
+        # one identity. Physical keys must use that same identity for every
+        # read, write and purge. Standalone non-UUID SDK sessions stay valid.
+        if isinstance(session_id, str):
+            try:
+                session_id = str(UUID(session_id))
+            except ValueError:
+                pass
         if not _is_safe_session_id(session_id):
             raise ConversationScratchpadInvalidPathError(
                 "Conversation identifier must be one safe path segment"
@@ -209,6 +218,11 @@ class ConversationFilesystemService:
         self._quotas = quotas
         self._kpi = kpi
         self._fence = fence
+
+    @property
+    def session_id(self) -> str:
+        """Canonical identity used by physical paths and published artifact URLs."""
+        return self._session_id
 
     def scratchpad(self) -> ConversationTextNamespacePort:
         """Return the trusted physical default namespace for runtime maintenance."""
