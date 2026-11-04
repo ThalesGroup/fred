@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from docx import Document
+from fred_capability_writable_document import docx_export
 from fred_capability_writable_document.docx_export import markdown_to_docx_bytes
 
 
@@ -47,6 +49,35 @@ def test_docx_is_valid_zip_with_title():
     paras = _read_paragraphs(data)
     assert ("Title", "My Doc") in paras
     assert ("Heading 1", "Hello") in paras
+
+
+@pytest.mark.parametrize(
+    "author", ["Élodie Dùpont", "", "é" * 254, "é" * 255, "é" * 256]
+)
+def test_docx_sets_author_properties(author: str) -> None:
+    data = markdown_to_docx_bytes("Body", author=author)
+    doc = Document(io.BytesIO(data))
+    assert doc.core_properties.author == author[:255]
+    assert doc.core_properties.last_modified_by == author[:255]
+    assert [p.text for p in doc.paragraphs] == ["Body"]
+
+
+@pytest.mark.parametrize("explicit_empty", [False, True])
+def test_docx_clears_template_authors(
+    monkeypatch: pytest.MonkeyPatch, explicit_empty: bool
+) -> None:
+    template = Document()
+    template.core_properties.author = "Template author"
+    template.core_properties.last_modified_by = "Template editor"
+    monkeypatch.setattr(docx_export, "Document", lambda: template)
+    data = (
+        markdown_to_docx_bytes("Body", author="")
+        if explicit_empty
+        else markdown_to_docx_bytes("Body")
+    )
+    doc = Document(io.BytesIO(data))
+    assert doc.core_properties.author == ""
+    assert doc.core_properties.last_modified_by == ""
 
 
 def test_docx_maps_common_markdown_constructs():

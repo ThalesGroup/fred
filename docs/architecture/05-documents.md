@@ -1,12 +1,13 @@
 # 5. Documents and knowledge
 
-Fred keeps the **original document** and, when processing is requested, produces
-**derived results** such as extracted text and search indexes. Storing a file
-and processing its content are distinct steps.
+Fred distinguishes documents stored in a space's drive from working documents
+authored in a conversation. Drive documents retain their original file and can
+produce derived results, such as extracted text and search indexes. Conversation
+documents support drafting and revision with an assistant.
 
 ## 5.1. Organize and import
 
-Documents belong to a space and are organized into folders in its drive.
+Drive documents belong to a space and are organized into folders in its drive.
 Their access rights come from that space, not from individual folders.
 Readers can consult content; editors can import documents and manage folders.
 
@@ -55,6 +56,20 @@ Automatic cleanup removes abandoned upload data and obsolete processing outputs,
 while preserving stored originals and published results. Cancelling a queued
 upload does not delete a stored document.
 
-See [Security](03-security.md) for permissions and the
+For drive documents, see [Security](03-security.md) for permissions and the
 [technical annex](A9-documents.md) for storage layout, processing states,
 retry and cleanup contracts, and implementation references.
+
+## 5.5. Documents authored in a conversation
+
+The Agent Pod's document-writing capability stores the working content as
+Markdown, associated with its conversation and user. The editor and the
+assistant update that content. Reading, editing and exporting it require the
+authenticated user to match its recorded owner.
+
+Export produces a downloadable Word or Markdown file. It does not publish the
+document into a space's drive or make it searchable by other assistants. Word's
+author metadata identifies the exporter; it does not change ownership or access.
+
+See the [implementation reference](A9-documents.md#documents-authored-in-a-conversation)
+for the responsible components and export behavior.

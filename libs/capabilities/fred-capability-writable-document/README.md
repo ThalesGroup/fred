@@ -9,6 +9,16 @@ export it to Word (`.docx`) or Markdown. Documents are scoped to one chat
 session and co-authored over time by the agent and the user; only the last
 author is tracked.
 
+Word exports set both Author and Last modified by to the authenticated exporter's
+verified first and last names when both are non-empty after trimming, otherwise
+to their trimmed verified username. If no reliable name is available, including
+for delegated `AssertedUser` identities without a profile, both properties are
+explicitly cleared. No user ID or workload name is substituted and no directory
+lookup is performed. Each property is limited to 255 characters. These export
+properties do not change the stored content, ownership or access controls, and
+Markdown export remains unchanged. Names supplied by the browser or model are
+not accepted as author metadata.
+
 This package is a Swift port of Kea's "Writable Document" feature (GitHub issue
 #1905): the editor feature is one `AgentCapability` — the `write_document`
 middleware (static tool + user-edit notification + open-documents catalog
