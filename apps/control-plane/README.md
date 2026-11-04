@@ -649,8 +649,10 @@ Table `session_metadata` is a private index, distinct from
 shared instances; it contains no messages or checkpoints.
 Its immutable identity columns deliberately have no cascading foreign keys:
 the worker removes this index only when its runtime storage can be erased safely.
-The embedded log cascades from physical session deletion; Python sessions remain
-retained until their runtime supports safe coordination with in-flight execution.
+The embedded log and migrated Python content cascade from the same physical
+session deletion. Runtime roles receive only schema USAGE and column REFERENCES
+on this root, not access to Control Plane rows. Retained deletion receipts forbid
+reusing a purged session UUID.
 Missing/retired space authorization still prevents reading that index; retired
 sessions are hidden from metadata and history reads during retention.
 Agent names fall back to the registration snapshot after
@@ -673,13 +675,36 @@ is removed with its session row; its foreign key prevents a late admitted turn
 from recreating it after purge. The usage journal is retained. One audit helper
 records session acceptance and completion with runtime and retention provenance.
 
-Python receipts remain blocked with `session_purge_unavailable`. Existing runtime
-DELETE endpoints alone cannot guarantee final erasure: a turn already admitted
-before retirement can continue without a bounded deadline and recreate history,
-checkpoints or files after DELETE. Safe activation requires durable coordination
-of execution and erasure across replicas and all runtime kinds. No additional
-workload permission or unused HTTP purge adapter is activated in this lot.
-See the [rollout note](../../deploy/release-notes/changes/weaver-conversation-persistence-and-purge.md).
+Python cleanup now closes its existing conversation filesystem through the private
+runtime source and the Control Plane's existing M2M token. A positive response
+must certify both filesystem erasure and the validated SQL cascade schema; the
+former history-only DELETE response is rejected. The runtime owns its history,
+steering, checkpoint/blob/write/HITL tables and writable-document content. Their
+foreign keys arbitrate concurrent commits and final erasure across replicas.
+The worker neither reads these private tables nor enumerates them.
+
+Object originals, derived artifacts, vectors, scratchpad/Deep files and generated
+exports retain durable manifests until physical cleanup is confirmed. Pending
+writes never expire merely because a lease ended. A lost result remains explicitly
+blocked; a late successful acknowledgement permits the next sweep to continue.
+`completed` is recorded atomically with root deletion and the SQL cascade. Existing
+blocked receipts are selected again automatically, without SQL edits. The receipt
+keeps immutable attribution for late consumption reports after session/space/agent
+metadata deletion; usage itself is never cascaded. Delivery remains the existing
+best-effort reporting path, not a new accounting outbox.
+
+The workload exception for `manage_platform` is limited to the verified service
+account of the configured CP M2M client and issuer, with no person/run/agent
+assertion. It grants no permission to users, other workloads, or delegated users.
+This is an identity-level `manage_platform` authorization decision, not a new
+purge-specific permission: any consumer of that existing decision retains its own
+authentication guards. It does not grant other platform permissions or bypass
+Control Plane business-route authorization. The runtime checks that decision on
+its purge route. Unavailable identity,
+runtime or storage services do not authorize completion.
+
+See the [Python erasure rollout note](../../deploy/release-notes/changes/weaver-python-conversation-erasure.md)
+for mandatory migration ordering, storage constraints and validation limits.
 
 Retiring an organization or team also hides its conversations through the space
 access check. After retention, the worker selects one remaining space and creates
@@ -687,9 +712,10 @@ at most 100 child session receipts per visit, preserving the parent's original r
 and rule; already retired sessions keep their own receipt and deadline. These
 child acceptance audit events are emitted when the worker creates the receipts.
 The parent waits for every conversation to disappear before removing its spaces.
-A Python child therefore keeps the parent pending. Ordinary space documents and
-pending uploads retain the existing deletion restriction; conversation attachments
-use the existing document cleanup before their session can be removed.
+An incomplete child keeps the parent pending. Ordinary space documents and
+pending uploads outside conversations retain the existing deletion restriction.
+Conversation uploads and attachments use the existing document cleanup before
+their session can be removed, including an upload already admitted at retirement.
 The partial retirement index excludes sessions that already have receipts, so
 blocked children do not accumulate in the queue being materialized. Each space
 can require additional sweeps; the batch bound is not a completion-time guarantee.
