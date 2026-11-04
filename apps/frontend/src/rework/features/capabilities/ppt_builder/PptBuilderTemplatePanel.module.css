@@ -1,0 +1,133 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention). */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+/* The template block (upload row, status, summary) reads as one group,
+   tighter than the gap that separates it from the vision settings. */
+.template {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.uploadRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.fileInput {
+  display: none;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+/* The summary and its action read as one line: the count on the left, the
+   review entry point on the right. */
+.summaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+/* Discreet: a small primary link, underlined on hover only. */
+.guideLink {
+  align-self: flex-start;
+  color: var(--primary);
+  font: var(--font-body-small);
+  text-decoration: none;
+}
+
+.guideLink:hover {
+  text-decoration: underline;
+}
+
+.summary,
+.hint {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* Each setting sits in its own outlined frame, no fill. */
+.settingCard {
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+/* A setting card holding a switch row and, below it, its controls. */
+.stacked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.switchRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+  cursor: pointer;
+}
+
+.switchText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.switchLabel {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.switchDescription {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* The variety selects on one line; they wrap only when the form is very narrow. */
+.varietyControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.modeSelect {
+  flex: 1 1 10rem;
+  min-width: 10rem;
+}
+
+.maxSelect {
+  flex: 0 0 4.5rem;
+}

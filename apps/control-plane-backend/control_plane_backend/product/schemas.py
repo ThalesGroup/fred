@@ -322,7 +322,18 @@ class ManagedAgentInstanceSummary(BaseModel):
             "editor's enable/disable toggle): a suspended instance is hidden "
             "from chat-only members and shows editors a warning with a locked "
             "enable toggle. One of capability_unavailable / "
-            "capability_access_revoked / capability_config_invalid."
+            "capability_access_revoked / capability_config_invalid / "
+            "capability_pending (a capability is still preparing its saved "
+            "configuration, or failed to)."
+        ),
+    )
+    suspension_detail: str | None = Field(
+        default=None,
+        description=(
+            "Plain-language failure message carried with "
+            "`suspension_reason=capability_pending` when a capability "
+            "reported that preparing its configuration failed; null while it "
+            "is still pending and for every other reason."
         ),
     )
     created_at: datetime | None = None

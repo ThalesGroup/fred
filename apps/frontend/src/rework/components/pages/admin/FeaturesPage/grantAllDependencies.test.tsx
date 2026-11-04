@@ -147,6 +147,7 @@ vi.mock("@rework/core/hooks/useUserCapabilities", () => ({
 }));
 
 vi.mock("./SuspendedInstancesDrawer", () => ({ SuspendedInstancesDrawer: () => null }));
+vi.mock("./CapabilityPlatformDrawer", () => ({ CapabilityPlatformDrawer: () => null }));
 vi.mock("./PlatformModelBindingsPanel/PlatformModelBindingsPanel", () => ({
   PlatformModelBindingsPanel: () => null,
 }));

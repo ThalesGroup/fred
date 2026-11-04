@@ -19,6 +19,8 @@ import logging
 from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
+from typing import Literal
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
@@ -63,6 +65,15 @@ class AgentNameAlreadyExistsError(Exception):
         self.display_name = display_name
 
 
+class _AnyReason(Enum):
+    ANY = "any"
+
+
+# `set_suspension(expected_reason=ANY_REASON)` writes whatever the row holds.
+ANY_REASON: Literal[_AnyReason.ANY] = _AnyReason.ANY
+ExpectedReason = str | None | Literal[_AnyReason.ANY]
+
+
 def _utcnow() -> datetime:
     """Return a stable UTC timestamp for local DB writes.
 
@@ -97,6 +108,7 @@ class AgentInstanceRecord:
         created_by: str | None,
         tuning: ManagedAgentTuning,
         suspension_reason: str | None = None,
+        suspension_detail: str | None = None,
         created_at=None,
         updated_at=None,
         updated_by: str | None = None,
@@ -115,6 +127,8 @@ class AgentInstanceRecord:
         # is not suspended; a non-None value is a `SuspensionReason`. Distinct
         # from `enabled` (the editor's disable toggle).
         self.suspension_reason = suspension_reason
+        # Failure message carried with `capability_pending`; None otherwise.
+        self.suspension_detail = suspension_detail
         self.created_at = created_at
         self.updated_at = updated_at
         # Last editing user's uid (#1952); None = never user-edited.
@@ -156,6 +170,7 @@ def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
         created_by=row.created_by,
         tuning=tuning,
         suspension_reason=row.suspension_reason,
+        suspension_detail=row.suspension_detail,
         created_at=row.created_at,
         updated_at=row.updated_at,
         updated_by=row.updated_by,
@@ -241,6 +256,7 @@ class AgentInstanceStore:
             description=record.description,
             enabled=record.enabled,
             suspension_reason=record.suspension_reason,
+            suspension_detail=record.suspension_detail,
             created_by=record.created_by,
             updated_by=record.updated_by,
             tuning_json=tuning_json,
@@ -443,11 +459,18 @@ class AgentInstanceStore:
         team_id: TeamId,
         *,
         reason: str | None,
+        detail: str | None = None,
+        expected_reason: ExpectedReason = ANY_REASON,
         session: AsyncSession | None = None,
     ) -> AgentInstanceRecord | None:
         """
         Set or clear the platform-forced suspension reason for one instance
-        (#1975, RFC §3.9). ``reason=None`` clears the suspension.
+        (RFC §3.9). ``reason=None`` clears the suspension. ``detail`` is
+        written with every call, so a reason change drops a stale message.
+
+        ``expected_reason`` makes the write a compare-and-set: the row is
+        changed only while it still holds that reason (None = not suspended),
+        so a slow reconcile never overwrites a reason written meanwhile.
 
         Why this is a dedicated method (not part of ``update``):
         - suspension is a platform-forced lifecycle state, separate from the
@@ -457,36 +480,42 @@ class AgentInstanceStore:
         - it deliberately does NOT touch ``updated_at``: a reconciliation sweep
           flipping the platform state must not look like a user edit.
 
-        Returns the refreshed record, or None if no such instance exists in the
-        team.
+        Returns the refreshed record (unchanged when the compare failed), or
+        None if no such instance exists in the team.
         """
-        async with use_session(self._sessions, session) as s:
-            rows = (
-                (
-                    await s.execute(
-                        select(AgentInstanceRow).where(
-                            AgentInstanceRow.agent_instance_id == agent_instance_id,
-                            AgentInstanceRow.team_id == str(team_id),
-                        )
-                    )
-                )
-                .scalars()
-                .all()
+        statement = (
+            update(AgentInstanceRow)
+            .where(
+                AgentInstanceRow.agent_instance_id == agent_instance_id,
+                AgentInstanceRow.team_id == str(team_id),
             )
-            if not rows:
-                return None
-            rows[0].suspension_reason = reason
+            # Self-assignment keeps `onupdate` from bumping updated_at.
+            .values(
+                suspension_reason=reason,
+                suspension_detail=detail,
+                updated_at=AgentInstanceRow.updated_at,
+            )
+        )
+        if expected_reason is None:
+            statement = statement.where(AgentInstanceRow.suspension_reason.is_(None))
+        elif expected_reason is not ANY_REASON:
+            statement = statement.where(
+                AgentInstanceRow.suspension_reason == expected_reason
+            )
+        async with use_session(self._sessions, session) as s:
+            result: CursorResult = await s.execute(statement)  # type: ignore[assignment]
+            # Only a suspension that landed unpublishes; a failed compare changes nothing.
             removed = (
                 await remove_published_entries(
                     s,
                     reason=RemovalReason.SUSPENDED,
                     agent_instance_ids=[agent_instance_id],
                 )
-                if reason is not None
+                if reason is not None and result.rowcount > 0
                 else []
             )
         emit_unpublished(removed)
-        return await self.get(agent_instance_id)
+        return await self.get_for_team(agent_instance_id, team_id)
 
     async def delete(
         self,

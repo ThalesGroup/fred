@@ -75,8 +75,8 @@ class FakeAssets(AgentAssetPort):
 class FakeWorkspace(WorkspaceFsPort):
     """``WorkspaceFsPort`` whose ``write`` records bytes and mints a durable href.
 
-    Only ``write`` is functional (the fill tool's single workspace need); every
-    other abstract method raises so an accidental use is loud, not silent.
+    ``write`` is functional (the tools' workspace needs); every other
+    abstract method raises so an accidental use is loud, not silent.
     """
 
     def __init__(self) -> None:
@@ -119,9 +119,6 @@ class FakeWorkspace(WorkspaceFsPort):
             document_uid=f"uid-{path}",
             mime=content_type,
         )
-
-    async def ls(self, path: str = "") -> list:  # pragma: no cover
-        raise NotImplementedError
 
     async def delete(self, path: str) -> None:  # pragma: no cover
         raise NotImplementedError
