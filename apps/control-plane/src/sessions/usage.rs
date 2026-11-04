@@ -59,6 +59,16 @@ pub struct ModelUsage {
     pub cache_creation_tokens: i64,
 }
 
+/// Immutable server-side attribution, obtained from session metadata or an
+/// already admitted embedded turn. Never deserialized from a workload report.
+#[derive(Clone, sqlx::FromRow)]
+pub(crate) struct UsageProvenance {
+    pub session_id: Uuid,
+    pub space_id: Uuid,
+    pub user_id: String,
+    pub agent_instance_id: Uuid,
+}
+
 #[derive(sqlx::FromRow)]
 struct StoredUsage {
     #[sqlx(flatten)]
@@ -103,10 +113,18 @@ async fn record_usage(
     if !state.auth.accepts_runtime_delegation(&caller) {
         return Err(AppError::Forbidden);
     }
+    let provenance = sqlx::query_as::<_, UsageProvenance>(
+        "select session_id, space_id, user_id, agent_instance_id from session_metadata
+         where session_id=$1 and space_id=$2",
+    )
+    .bind(session_id)
+    .bind(space_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
     persist_usage(
         &state.pool,
-        space_id,
-        session_id,
+        provenance,
         &exchange_id,
         idempotency_key(&headers)?,
         body,
@@ -116,11 +134,10 @@ async fn record_usage(
 }
 
 /// Shared by workload HTTP reports and admitted embedded turns. The caller owns
-/// admission; this transaction derives provenance from the retained session.
+/// admission and immutable provenance; journal writes survive physical session purge.
 pub(crate) async fn persist_usage(
     pool: &sqlx::PgPool,
-    space_id: Uuid,
-    session_id: Uuid,
+    provenance: UsageProvenance,
     exchange_id: &str,
     report_id: Uuid,
     body: UsageReport,
@@ -159,16 +176,12 @@ pub(crate) async fn persist_usage(
         .execute(&mut *tx)
         .await?;
 
-    // No live-space, consent or deletion predicate: this is a fact from an admitted turn.
-    let (space, user, agent): (Uuid, String, Uuid) = sqlx::query_as(
-        "select space_id, user_id, agent_instance_id from session_metadata
-         where session_id = $1 and space_id = $2",
-    )
-    .bind(session_id)
-    .bind(space_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(AppError::NotFound)?;
+    let UsageProvenance {
+        session_id,
+        space_id: space,
+        user_id: user,
+        agent_instance_id: agent,
+    } = provenance;
 
     // Compare timestamps in PostgreSQL at the same precision used by insertion.
     let stored: Vec<StoredUsage> = sqlx::query_as(

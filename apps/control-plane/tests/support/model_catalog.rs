@@ -1197,6 +1197,61 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         }
     }
     let after_search = reports(6).await;
+
+    // An admitted answer may finish after its session was physically purged.
+    // The FK refuses history resurrection; already consumed model tokens still
+    // use the immutable admission provenance, without recreating product metadata.
+    let late_session = Uuid::new_v4();
+    sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision,title)
+        select $1,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision,'Known title'
+        from session_metadata where session_id=$2")
+        .bind(late_session).bind(session).execute(&e.pool).await.unwrap();
+    let mut late_execute = execute.clone();
+    late_execute["session_id"] = json!(late_session);
+    let response = send(app.clone(), late_execute).await.unwrap();
+    assert_eq!(response.status(), 200);
+    let mut late_stream = response.into_body().into_data_stream();
+    while let Some(frame) = late_stream.next().await {
+        if String::from_utf8_lossy(&frame.unwrap()).contains("\"kind\":\"assistant_delta\"") {
+            break;
+        }
+    }
+    sqlx::query("delete from session_metadata where session_id=$1")
+        .bind(late_session)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let mut rest = String::new();
+    while let Some(frame) = late_stream.next().await {
+        rest.push_str(&String::from_utf8_lossy(&frame.unwrap()));
+    }
+    assert!(rest.contains("execution_error"), "{rest}");
+    assert!(!rest.contains("\"kind\":\"final\""));
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let rows: Vec<Value> =
+                sqlx::query_scalar("select to_jsonb(u) from model_usage u where session_id=$1")
+                    .bind(late_session)
+                    .fetch_all(&e.pool)
+                    .await
+                    .unwrap();
+            if let Some(row) = rows.first() {
+                assert_eq!(rows.len(), 1);
+                assert_eq!(row["user_id"], "alice");
+                assert_eq!(row["space_id"], team.id.to_string());
+                assert_eq!(row["agent_instance_id"], instance.to_string());
+                assert_eq!(row["input_tokens"], 2);
+                assert_eq!(row["output_tokens"], 2);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let recreated: bool = sqlx::query_scalar("select exists(select 1 from session_metadata where session_id=$1) or exists(select 1 from embedded_agent_conversation where session_id=$1)")
+        .bind(late_session).fetch_one(&e.pool).await.unwrap();
+    assert!(!recreated);
     let calls_after_search = provider.inference.lock().await.len();
 
     let mut unprovisioned = state;

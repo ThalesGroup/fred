@@ -50,9 +50,15 @@ pub(super) fn generate(
             return None;
         };
         let usage_pool = pool.clone();
+        let provenance = crate::sessions::UsageProvenance {
+            session_id,
+            space_id,
+            user_id: subject_id.clone(),
+            agent_instance_id: instance_id,
+        };
         let generated = turn
             .title(&input, move |tokens| {
-                super::usage::report(usage_pool, span, space_id, session_id, offer, tokens)
+                super::usage::report(usage_pool, span, provenance, offer, tokens)
             })
             .await?;
         let body = GeneratedTitle {

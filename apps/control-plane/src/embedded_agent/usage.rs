@@ -9,13 +9,12 @@ use sqlx::PgPool;
 use tracing::{Instrument, Span};
 use uuid::Uuid;
 
-use crate::sessions::{ModelUsage, UsageReport, persist_usage};
+use crate::sessions::{ModelUsage, UsageProvenance, UsageReport, persist_usage};
 
 pub(super) fn report(
     pool: PgPool,
     span: Span,
-    space_id: Uuid,
-    session_id: Uuid,
+    provenance: UsageProvenance,
     offer: ModelOfferKey,
     usage: Usage,
 ) {
@@ -60,7 +59,7 @@ pub(super) fn report(
         async move {
             let failure = match tokio::time::timeout(
                 std::time::Duration::from_secs(2),
-                persist_usage(&pool, space_id, session_id, &exchange_id, report_id, report),
+                persist_usage(&pool, provenance, &exchange_id, report_id, report),
             )
             .await
             {

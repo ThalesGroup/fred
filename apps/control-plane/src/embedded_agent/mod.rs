@@ -164,7 +164,12 @@ async fn execute_stream(
                 )
             })?;
         let pool = state.pool.clone();
-        let space_id = binding.space.id;
+        let provenance = crate::sessions::UsageProvenance {
+            session_id,
+            space_id: binding.space.id,
+            user_id: binding.subject_id,
+            agent_instance_id: binding.agent.instance_id,
+        };
         let events = fred_rust_agent::answer::execute(
             turn,
             request.input,
@@ -173,7 +178,7 @@ async fn execute_stream(
                 session_id.to_string(),
             )),
             search.map(|search| move |query| async move { search.run(query).await }),
-            move |tokens| usage::report(pool, span, space_id, session_id, offer, tokens),
+            move |tokens| usage::report(pool, span, provenance, offer, tokens),
         )
         .boxed();
         title::stream(events, title)
