@@ -6,6 +6,10 @@ les reports et les pistes de portage, pas des fonctionnalités déjà disponible
 Les pistes proposées restent à concevoir et à valider dans chaque prochain chantier.
 Aucune issue GitHub supplémentaire n'a été créée.
 
+**Mise à jour du 4 novembre 2026 :** le lot auteur DOCX est intégré dans Weaver
+et clôturé pour le portage de code. Voir la section 5 pour le commit, les contrôles
+effectués et la validation fonctionnelle qui reste à faire.
+
 > **À retenir : les commits Swift différés deviennent des ancêtres de Weaver avec
 > cette fusion. Un prochain `git merge` ne les réappliquera pas automatiquement.**
 > Il faudra porter explicitement les comportements ci-dessous. Ne pas lancer un
@@ -26,7 +30,7 @@ Aucune issue GitHub supplémentaire n'a été créée.
 | ----------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | [Skills : politique, catalogue et traces](#skills)    | PR #3342 entièrement différée, décision confirmée       | Définir la portée de la politique et sa transmission dans le contexte admis    |
 | [Titres automatiques et modèle configurable](#titles) | PR #3351 entièrement différée, décision confirmée       | Définir le choix autorisé du modèle et la protection serveur du renommage      |
-| [Nom d'auteur des exports DOCX](#docx)                | PR #3422 entièrement différée, décision confirmée       | Examiner l'annuaire Rust et le contrat de profil vers la capability            |
+| [Nom d'auteur des exports DOCX](#docx)                | Portage intégré le 4 novembre, lot code clôturé         | Validation humaine de l'export Word/Markdown restante                         |
 | [Mistral Large 4](#mistral)                           | Entrée du catalogue local Swift non reprise             | Vérifier le besoin, puis utiliser le catalogue de modèles Weaver               |
 | [Métadonnées e-mail structurées](#mail)               | Partie de #3317 non reprise ; extraction worker reprise | Définir les champs utiles et leur publication par le propriétaire du catalogue |
 | [E-mail joint à une conversation](#mail-chat)         | Parcours intégré non établi par cette revue             | Tracer le parcours Weaver actuel avant de décider s'il manque du code          |
@@ -259,8 +263,34 @@ Côté Weaver : [décision de modèle](apps/control-plane/src/model_catalog/inst
 
 **Références :** [issue #3421](https://github.com/ThalesGroup/fred/issues/3421), [PR #3422](https://github.com/ThalesGroup/fred/pull/3422), [commit 55de29845](https://github.com/ThalesGroup/fred/commit/55de298455ffabf3a14b8eadc946553a4045a725).
 
-**État : report intégral confirmé.** Cela concerne les métadonnées d'export DOCX,
-pas la correction de validation des DOCX importés, qui est bien reprise.
+**État actuel : intégré, lot de portage clôturé le 4 novembre 2026.** Commit
+`c784b3b71fae2a5a8d055e159450387fd38bdf73`, intégré sans conflit depuis
+`codex/port-docx-author`. Le report intégral décidé lors de la fusion du 3 novembre
+est conservé ci-dessous comme contexte historique. Ce lot concerne les propriétés
+d'export Word, pas la validation des DOCX importés déjà reprise.
+
+Le routeur utilise le prénom et le nom vérifiés de l'exportateur si tous deux sont
+non vides après nettoyage, sinon son username vérifié nettoyé. Sans nom fiable,
+notamment pour `AssertedUser`, `author` et `last_modified_by` sont explicitement
+vides. Les deux propriétés sont limitées à 255 caractères. Aucun uid ou nom de
+workload ne remplace la personne ; aucun appel annuaire ni enrichissement de claims.
+Cette divergence volontaire du backport doit être conservée aux prochains merges.
+
+Le routeur, le convertisseur et leurs tests existants ont été adaptés. Les droits,
+le contenu enregistré et l'export Markdown sont conservés. Aucun changement de
+Rust, de schéma, d'API publique ou de client généré. Le README de la capability et
+la [note opérateur](deploy/release-notes/changes/weaver-docx-export-author.md)
+décrivent le comportement. Les raccords arc42 ont été approuvés séparément par
+l'utilisateur : vue d'ensemble, parcours de Bob, distinction drive/conversation
+et repères d'implémentation dans l'annexe A9.
+
+Contrôles réalisés : qualité du package réussie ; **57 tests offline ciblés**
+réussis dans `test_router.py` et `test_docx_export.py` ; note opérateur, liens et
+ancres documentaires contrôlés. Le contrôle Git d'espacement est également passé.
+Les tests remplacent l'authentification et le stockage par leurs fixtures : ils
+ne prouvent pas l'export depuis un pod vivant. La validation humaine carte/panneau,
+Word/LibreOffice et Markdown, ainsi que le parcours local k3d et plateforme
+d'intégration, restent à faire. La clôture du portage ne les déclare pas réalisés.
 
 ### Ce que Swift apporte
 
@@ -269,7 +299,7 @@ authentifié. Il utilise prénom + nom quand les deux existent, sinon le usernam
 Le convertisseur renseigne `core_properties.author` et `last_modified_by`, avec
 une limite de 255 caractères. Les tests couvrent l'auteur transmis et l'export.
 
-### Pourquoi le report et ce qui existe déjà dans Weaver
+### Pourquoi le report initial
 
 La capability accepte notamment un `AssertedUser` qui ne possède pas ces champs de
 profil. Copier l'accès aux attributs casserait ce chemin ou pousserait à fabriquer
@@ -292,7 +322,7 @@ Côté Weaver : [identité assertée](libs/fred-core/fred_core/security/delegati
 [route d'export](libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/router.py),
 [convertisseur DOCX](libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/docx_export.py).
 
-### Démarche proposée pour Weaver
+### Démarche initialement proposée (historique)
 
 1. Confirmer la sémantique : auteur = personne qui exporte, comme Swift, ou autre
    besoin explicite. Définir nom incomplet, utilisateur sans profil et annuaire
@@ -305,13 +335,14 @@ Côté Weaver : [identité assertée](libs/fred-core/fred_core/security/delegati
 4. Porter les deux propriétés Word, la borne de longueur et les tests. Garder les
    contrôles actuels d'accès au document et à la conversation.
 
-### Critères de fin à vérifier
+### Critères du portage vérifiés
 
-- [ ] Chemin `AssertedUser` réellement couvert, pas uniquement un mock `KeycloakUser` enrichi.
-- [ ] Noms accentués, nom incomplet, absence de profil et chaîne trop longue.
-- [ ] Auteur et dernière modification cohérents ; pas de nom hérité du modèle DOCX.
-- [ ] Refus d'accès au document inchangé ; nom fourni par le client ignoré.
-- [ ] Fallback documenté et testé lorsque la source de profil ne répond pas.
+- [x] Vraie classe `AssertedUser` couverte dans les tests offline du routeur.
+- [x] Noms accentués, nom incomplet, absence de profil et chaîne trop longue.
+- [x] Auteur et dernière modification cohérents ; propriétés du modèle effacées.
+- [x] Refus d'accès préservé dans les tests ; nom fourni par le client ignoré.
+- [x] Fallback vide documenté et testé sans profil ; aucun service de profil ajouté.
+- [ ] Validation fonctionnelle humaine de l'export depuis l'interface et du déploiement.
 
 <a id="mistral"></a>
 
@@ -601,7 +632,7 @@ sans confondre leur appartenance à l'ascendance et leur adoption fonctionnelle.
 | -------------------------- | ------------------------------------------------------ | ----------------------------------------- |
 | Skills #3342               | Différé intégralement                                  | À renseigner                              |
 | Titres #3351               | Différé intégralement                                  | À renseigner                              |
-| Auteur DOCX #3422          | Différé intégralement                                  | À renseigner                              |
+| Auteur DOCX #3422          | Portage intégré, lot code clôturé le 4 novembre         | `c784b3b71` ; qualité et 57 tests offline réussis ; validation fonctionnelle restante |
 | Mistral #3321              | Configuration non reprise ; besoin à confirmer         | À renseigner                              |
 | Métadonnées e-mail #3317   | Extraction reprise, publication structurée non reprise | À renseigner                              |
 | E-mail joint au chat #3317 | Parcours à établir avant de conclure à un manque       | À renseigner                              |
