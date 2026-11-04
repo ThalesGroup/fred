@@ -1007,7 +1007,9 @@ async fn instances_retention_and_exact_space_purge() {
     let receipt = lifecycle.accept(&e.pool, "root", team.id).await.unwrap();
     gate.release.notify_one();
     assert_eq!(pending.await.unwrap().0, 409);
-    cleanup::batch(&e.pool, receipt.id).await.unwrap();
+    cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
+        .await
+        .unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>("select count(*) from agent_instance where space_id=$1")
             .bind(team.id)
@@ -1050,7 +1052,9 @@ async fn instances_retention_and_exact_space_purge() {
         .await
         .unwrap();
     for _ in 0..100 {
-        cleanup::batch(&e.pool, receipt.id).await.unwrap();
+        cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
+            .await
+            .unwrap();
         if store::status(&e.pool, "root", receipt.id)
             .await
             .unwrap()

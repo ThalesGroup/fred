@@ -978,7 +978,10 @@ async fn document_revocation_cleanup_and_late_put_recovery() {
     .fetch_one(&d.e.pool)
     .await
     .unwrap();
-    assert!(cleaned);
+    assert!(
+        !cleaned,
+        "an expired lease cannot complete a PUT still in flight"
+    );
     gate.release.notify_one();
     let (status, body) = request.await.unwrap();
     assert_eq!(status, 409, "{body}");
@@ -1013,7 +1016,18 @@ async fn document_lost_ack_and_unavailable_provider_keep_durable_outcomes() {
     let (status, receipt) = d
         .upload("writer", "ack.txt", b"content", Uuid::new_v4(), None)
         .await;
-    assert_eq!(status, 201, "{receipt}");
+    assert_eq!(status, 503, "{receipt}");
+    let (uncertain, original): (bool, String) =
+        sqlx::query_as("select put_pending,object_key from document_upload where name='ack.txt'")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert!(uncertain);
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(
+        d.bucket.store.get(&original).await.is_ok(),
+        "read-back does not prove the timed-out writer ended"
+    );
     d.proxy.fault.lock().await.lose_put_ack = false;
     d.proxy.fault.lock().await.deny_put = true;
     let key = Uuid::new_v4();

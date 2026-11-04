@@ -15,7 +15,9 @@ async fn drain(e: &Env, id: Uuid) {
         if store::status(&e.pool, "root", id).await.unwrap().status == Status::Completed {
             return;
         }
-        cleanup::batch(&e.pool, id).await.unwrap();
+        cleanup::batch(&e.pool, id, &Default::default(), None)
+            .await
+            .unwrap();
     }
     panic!("cleanup did not converge");
 }
@@ -148,7 +150,9 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
     )
     .await
     .unwrap();
-    cleanup::batch(&e.pool, receipt.id).await.unwrap();
+    cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
+        .await
+        .unwrap();
     assert!(spaces::load(&e.pool, recreated.id).await.is_ok());
 }
 
@@ -189,7 +193,9 @@ async fn lifecycle_blocked_scope_is_visible_and_does_not_starve_candidates() {
         .await
         .unwrap();
     assert_eq!(cleanup::candidates(&e.pool, 1).await.unwrap(), [first.id]);
-    cleanup::batch(&e.pool, first.id).await.unwrap();
+    cleanup::batch(&e.pool, first.id, &Default::default(), None)
+        .await
+        .unwrap();
     let blocked = store::status(&e.pool, "root", first.id).await.unwrap();
     assert_eq!(blocked.status, Status::Blocked);
     assert_eq!(blocked.error_code.as_deref(), Some("unsupported_documents"));

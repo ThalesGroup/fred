@@ -2488,7 +2488,9 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .unwrap();
     assert_eq!((cursor, purged), (200, false));
 
-    cleanup::batch(&d.e.pool, operation).await.unwrap();
+    cleanup::batch(&d.e.pool, operation, &Default::default(), Some(&d.storage))
+        .await
+        .unwrap();
     let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)
@@ -2503,7 +2505,9 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .await
         .unwrap();
     assert_eq!(remaining, vec![work.document_id]);
-    cleanup::batch(&d.e.pool, operation).await.unwrap();
+    cleanup::batch(&d.e.pool, operation, &Default::default(), Some(&d.storage))
+        .await
+        .unwrap();
     let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)
@@ -2552,9 +2556,9 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     for (key, _, _) in objects.objects {
         p.derived.delete(&key).await.unwrap();
     }
-    // The purge sweeps `{document}/output/` only; the original below `input/` remains.
+    // Original cleanup is now part of the receipt, before metadata removal.
     for key in &originals {
-        assert!(d.storage.objects.get(key).await.is_ok());
+        assert!(d.storage.objects.get(key).await.is_err());
     }
     p.cleaned(control_plane::processing::cleanup::Cleaned {
         work: candidate.work,
@@ -2574,7 +2578,9 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     assert!(purged);
     assert!(p.cleanup_candidates().await.unwrap().is_empty());
     for _ in 0..20 {
-        cleanup::batch(&d.e.pool, operation).await.unwrap();
+        cleanup::batch(&d.e.pool, operation, &Default::default(), Some(&d.storage))
+            .await
+            .unwrap();
         let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
             .bind(operation)
             .fetch_one(&d.e.pool)
@@ -2639,7 +2645,9 @@ async fn lifecycle_waits_for_running_retired_document() {
         .bind(processing).execute(&d.e.pool).await.unwrap();
     assert!(p.cleanup_candidates().await.unwrap().is_empty());
     for _ in 0..2 {
-        cleanup::batch(&d.e.pool, operation).await.unwrap();
+        cleanup::batch(&d.e.pool, operation, &Default::default(), Some(&d.storage))
+            .await
+            .unwrap();
         let receipt: Receipt = sqlx::query_as("select * from deletion where id=$1")
             .bind(operation)
             .fetch_one(&d.e.pool)
@@ -2721,6 +2729,18 @@ async fn editor_deletes_document_without_retiring_its_folder() {
     )
     .await;
     assert_eq!(done.status, ProcessingStatus::Succeeded);
+    use control_plane::processing::retrievable::{RetrievalConfirmation, RetrievalStep};
+    let retrieval = Uuid::new_v4();
+    sqlx::query("update document set retrieval_id=$2,retrieval_actor='writer',retrieval_target=false,retrieval_phase='ready',retrieval_confirmed=false where id=$1")
+        .bind(work.document_id).bind(retrieval).execute(&d.e.pool).await.unwrap();
+    let callback = |step| RetrievalConfirmation {
+        step,
+        operation_id: retrieval,
+        retrievable: false,
+    };
+    p.confirm_retrievable(work.document_id, callback(RetrievalStep::Claim))
+        .await
+        .unwrap();
 
     let (status, d2) = d
         .upload("writer", "D2.txt", b"unprocessed", Uuid::new_v4(), None)
@@ -2864,16 +2884,37 @@ async fn editor_deletes_document_without_retiring_its_folder() {
         .bind(active_work.document_id).fetch_one(&d.e.pool).await.unwrap();
     assert!(untouched);
 
-    cleanup::batch(&d.e.pool, operation).await.unwrap();
+    cleanup::batch(&d.e.pool, operation, &Default::default(), Some(&d.storage))
+        .await
+        .unwrap();
     let waiting: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)
         .await
         .unwrap();
-    assert_eq!(waiting.status, Status::Running);
+    assert_eq!(waiting.status, Status::Blocked);
     assert_eq!(waiting.documents_deleted, 0);
-    assert!(waiting.error_code.is_none());
+    assert_eq!(
+        waiting.error_code.as_deref(),
+        Some("document_writes_pending")
+    );
     expire_generations(&d.e.pool, processing).await;
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
+    assert!(
+        p.retrieval_work(work.document_id, retrieval).await.is_ok(),
+        "admitted worker can fetch its ACK context after retirement"
+    );
+    assert!(
+        p.confirm_retrievable(work.document_id, callback(RetrievalStep::Claim))
+            .await
+            .is_err()
+    );
+    p.confirm_retrievable(work.document_id, callback(RetrievalStep::Applied))
+        .await
+        .unwrap();
+    p.confirm_retrievable(work.document_id, callback(RetrievalStep::Applied))
+        .await
+        .unwrap();
     let candidates = p.cleanup_candidates().await.unwrap();
     let candidate = candidates
         .into_iter()
@@ -2899,7 +2940,9 @@ async fn editor_deletes_document_without_retiring_its_folder() {
     })
     .await
     .unwrap();
-    cleanup::batch(&d.e.pool, operation).await.unwrap();
+    cleanup::batch(&d.e.pool, operation, &Default::default(), Some(&d.storage))
+        .await
+        .unwrap();
     let completed: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)
@@ -2954,7 +2997,9 @@ async fn editor_deletes_document_without_retiring_its_folder() {
     .await;
     assert_eq!(status, 202, "{accepted}");
     let operation: Uuid = accepted["id"].as_str().unwrap().parse().unwrap();
-    cleanup::batch(&d.e.pool, operation).await.unwrap();
+    cleanup::batch(&d.e.pool, operation, &Default::default(), Some(&d.storage))
+        .await
+        .unwrap();
     let completed: Receipt = sqlx::query_as("select * from deletion where id=$1")
         .bind(operation)
         .fetch_one(&d.e.pool)

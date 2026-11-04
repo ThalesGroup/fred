@@ -27,6 +27,10 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> Self {
+        Self::with_runtime(false).await
+    }
+
+    async fn with_runtime(embedded: bool) -> Self {
         let e = env().await;
         bootstrap::grant_root(&e.pool, "usage-fixture-root")
             .await
@@ -34,10 +38,20 @@ impl Fixture {
         let (_, team) = org_and_team(&e).await;
         let agent = Uuid::new_v4();
         let session = Uuid::new_v4();
-        sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$1,'native','assistant','Usage','{}','alice','usage')")
-            .bind(agent).bind(team.id).execute(&e.pool).await.unwrap();
-        sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$3,$3,'native','Usage',1)")
-            .bind(session).bind(team.id).bind(agent).execute(&e.pool).await.unwrap();
+        let (runtime, source_agent) = if embedded {
+            ("control-plane", fred_rust_agent::AGENT_ID)
+        } else {
+            ("native", "assistant")
+        };
+        let template = if embedded {
+            control_plane::agents::template_id(team.organization, runtime, source_agent)
+        } else {
+            agent
+        };
+        sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$3,$4,$5,'Usage','{}','alice','usage')")
+            .bind(agent).bind(team.id).bind(template).bind(runtime).bind(source_agent).execute(&e.pool).await.unwrap();
+        sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$3,$4,$5,'Usage',1)")
+            .bind(session).bind(team.id).bind(agent).bind(template).bind(runtime).execute(&e.pool).await.unwrap();
         let identity = support::IdentityServer::start().await;
         let mut config: Configuration =
             serde_yaml_ng::from_str(include_str!("../../config/configuration.yaml")).unwrap();
@@ -86,6 +100,22 @@ impl Fixture {
             "/spaces/{}/sessions/{}/exchanges/{exchange}/usage",
             self.space, self.session
         )
+    }
+
+    async fn retire(&self) -> Uuid {
+        let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+        lifecycle.config.enabled = true;
+        let receipt = lifecycle
+            .accept_session(&self.pool, "alice", self.space, self.session)
+            .await
+            .unwrap();
+        // Simulate the retention deadline, keeping acceptance and cleanup real.
+        sqlx::query("update deletion set due_at=requested_at where id=$1")
+            .bind(receipt.id)
+            .execute(&self.pool)
+            .await
+            .unwrap();
+        receipt.id
     }
 
     async fn post(&self, token: &str, path: &str, body: &Value) -> (u16, Value) {
@@ -874,6 +904,115 @@ async fn usage_requires_a_trusted_workload_and_uses_session_provenance_after_ret
     assert_eq!(status, 200, "{retained_usage}");
     assert_eq!(retained_usage["totals"]["input_tokens"], 400);
     assert_eq!(retained_usage["totals"]["turns"], 1);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn usage_after_effective_purge_keeps_server_provenance_and_idempotency() {
+    let f = Fixture::with_runtime(true).await;
+    let operation = f.retire().await;
+    // A parent-space purge may be requested by somebody other than the owner.
+    sqlx::query("update deletion set actor_subject='platform-owner' where id=$1")
+        .bind(operation)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    control_plane::lifecycle::cleanup::batch(&f.pool, operation, &Default::default(), None)
+        .await
+        .unwrap();
+    control_plane::lifecycle::cleanup::batch(&f.pool, operation, &Default::default(), None)
+        .await
+        .unwrap();
+    let state: (String, String, Uuid, bool) = sqlx::query_as(
+        "select status,session_user_id,session_agent_instance_id,
+            exists(select 1 from session_metadata where session_id=$2)
+         from deletion where id=$1",
+    )
+    .bind(operation)
+    .bind(f.session)
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(state, ("completed".into(), "alice".into(), f.agent, false));
+    // No earlier report is available to reconstruct the late run's attribution.
+    let body = usage();
+    let path = f.path("late-turn");
+    assert_eq!(f.post(&f.workload, &path, &body).await.0, 204);
+    assert_eq!(f.post(&f.workload, &path, &body).await.0, 204);
+    let mut conflicting = body.clone();
+    conflicting["models"][0]["input_tokens"] = json!(1);
+    assert_eq!(f.post(&f.workload, &path, &conflicting).await.0, 409);
+    for foreign in [
+        path.replace(&f.space.to_string(), &Uuid::new_v4().to_string()),
+        path.replace(&f.session.to_string(), &Uuid::new_v4().to_string()),
+    ] {
+        assert_eq!(f.post(&f.workload, &foreign, &body).await.0, 404);
+    }
+    assert_eq!(
+        f.post(&f.identity.token("alice"), &path, &body).await.0,
+        403
+    );
+
+    // Removing the agent and placement does not remove facts or require a live
+    // association when a later HITL report arrives for the same exchange.
+    sqlx::query("delete from agent_instance where agent_instance_id=$1")
+        .bind(f.agent)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    sqlx::query("delete from space where id=$1")
+        .bind(f.space)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        f.post_report(&f.workload, &path, &body, Uuid::new_v4())
+            .await
+            .0,
+        204
+    );
+    let provenance: Vec<(String, Uuid, Uuid)> = sqlx::query_as(
+        "select user_id,space_id,agent_instance_id from model_usage where session_id=$1",
+    )
+    .bind(f.session)
+    .fetch_all(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(provenance, vec![("alice".into(), f.space, f.agent); 4]);
+    let (status, retained) = f
+        .get(Some("alice"), &format!("/me/usage?{READ_RANGE}"))
+        .await;
+    assert_eq!(status, 200, "{retained}");
+    assert_eq!(retained["totals"]["input_tokens"], 400);
+    assert_eq!(retained["totals"]["turns"], 1);
+    assert_eq!(retained["by_agent"][0]["display_name"], Value::Null);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn usage_racing_purge_keeps_every_complete_report() {
+    let f = Fixture::with_runtime(true).await;
+    let operation = f.retire().await;
+    let body = usage();
+    let path = f.path("racing-turn");
+    let reports = futures::future::join_all(
+        (0..16).map(|_| f.post_report(&f.workload, &path, &body, Uuid::new_v4())),
+    );
+    let runtime = Default::default();
+    let (purge, results) = tokio::join!(
+        control_plane::lifecycle::cleanup::batch(&f.pool, operation, &runtime, None),
+        reports
+    );
+    purge.unwrap();
+    for (status, problem) in results {
+        assert_eq!(status, 204, "{problem}");
+    }
+    let count: i64 = sqlx::query_scalar("select count(*) from model_usage where session_id=$1")
+        .bind(f.session)
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 32);
 }
 
 #[tokio::test]

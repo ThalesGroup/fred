@@ -6,6 +6,7 @@ pub mod policy;
 pub mod store;
 pub use store::{Lifecycle, Receipt, Status, TargetKind};
 pub mod cleanup;
+pub mod runtime_storage;
 pub mod worker;
 
 mod audit;

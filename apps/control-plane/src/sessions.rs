@@ -261,6 +261,15 @@ async fn create_session(
             .await?;
     let mut status = StatusCode::OK;
     if !existing {
+        let retired: bool = sqlx::query_scalar(
+            "select exists(select 1 from deletion where target_kind='session' and target_id=$1)",
+        )
+        .bind(body.session_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if retired {
+            return Err(AppError::NotFound);
+        }
         let instance = agent_instances::get_for_space(&mut *tx, space_id, body.agent_instance_id)
             .await?
             .ok_or(AppError::NotFound)?;

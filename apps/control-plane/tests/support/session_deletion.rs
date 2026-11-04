@@ -3,6 +3,7 @@
 
 use super::*;
 use control_plane::lifecycle::{Lifecycle, Status, cleanup};
+use serde_json::json;
 
 async fn session(e: &Env, team: &Space, runtime: &str) -> Uuid {
     let id = Uuid::new_v4();
@@ -39,7 +40,9 @@ async fn embedded_session_purge_observes_retention_and_is_idempotent() {
         .accept_session(&e.pool, "alice", team.id, id)
         .await
         .unwrap();
-    cleanup::batch(&e.pool, receipt.id).await.unwrap();
+    cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
+        .await
+        .unwrap();
     let before: i64 =
         sqlx::query_scalar("select count(*) from embedded_agent_conversation where session_id=$1")
             .bind(id)
@@ -53,7 +56,9 @@ async fn embedded_session_purge_observes_retention_and_is_idempotent() {
         .await
         .unwrap();
     for _ in 0..2 {
-        cleanup::batch(&e.pool, receipt.id).await.unwrap();
+        cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
+            .await
+            .unwrap();
     }
     let status: Status = sqlx::query_scalar("select status from deletion where id=$1")
         .bind(receipt.id)
@@ -80,6 +85,7 @@ async fn session_deletion_audit_has_runtime_independent_provenance() {
     use tracing_subscriber::prelude::*;
     let e = env().await;
     let (_, team) = org_and_team(&e).await;
+    let pod = PythonPurge::start(e.pool.clone()).await;
     let capture = AuditCapture::default();
     let subscriber = tracing_subscriber::registry().with(capture.clone());
     async {
@@ -89,8 +95,10 @@ async fn session_deletion_audit_has_runtime_independent_provenance() {
                 .accept_session(&e.pool, "alice", team.id, id)
                 .await
                 .unwrap();
-            cleanup::batch(&e.pool, receipt.id).await.unwrap();
-            if runtime == fred_rust_agent::DEFINITION.provider {
+            cleanup::batch(&e.pool, receipt.id, &pod.runtime, None)
+                .await
+                .unwrap();
+            {
                 let status: Status = sqlx::query_scalar("select status from deletion where id=$1")
                     .bind(receipt.id)
                     .fetch_one(&e.pool)
@@ -121,7 +129,7 @@ async fn session_deletion_audit_has_runtime_independent_provenance() {
             }
             assert_eq!(accepted["space_id"], team.id.to_string());
             assert_eq!(accepted["runtime_id"], runtime);
-            if runtime == fred_rust_agent::DEFINITION.provider {
+            {
                 let completed = events
                     .iter()
                     .find(|event| {
@@ -203,7 +211,9 @@ async fn team_retirement_hides_sessions_before_bounded_receipts_and_preserves_re
         .await;
         assert_eq!(status, expected, "{path}");
     }
-    cleanup::batch(&e.pool, parent.id).await.unwrap();
+    cleanup::batch(&e.pool, parent.id, &Default::default(), None)
+        .await
+        .unwrap();
     let first: i64 = sqlx::query_scalar(
         "select count(*) from deletion where target_kind='session' and actor_subject='root'",
     )
@@ -211,7 +221,9 @@ async fn team_retirement_hides_sessions_before_bounded_receipts_and_preserves_re
     .await
     .unwrap();
     assert_eq!(first, 100);
-    cleanup::batch(&e.pool, parent.id).await.unwrap();
+    cleanup::batch(&e.pool, parent.id, &Default::default(), None)
+        .await
+        .unwrap();
     let children: Vec<control_plane::lifecycle::Receipt> = sqlx::query_as(
         "select * from deletion where target_kind='session' and actor_subject='root'",
     )
@@ -222,9 +234,13 @@ async fn team_retirement_hides_sessions_before_bounded_receipts_and_preserves_re
     for child in &children {
         assert_eq!(child.requested_at, parent.requested_at);
         assert_eq!(child.due_at, parent.due_at);
-        cleanup::batch(&e.pool, child.id).await.unwrap();
+        cleanup::batch(&e.pool, child.id, &Default::default(), None)
+            .await
+            .unwrap();
     }
-    cleanup::batch(&e.pool, parent.id).await.unwrap();
+    cleanup::batch(&e.pool, parent.id, &Default::default(), None)
+        .await
+        .unwrap();
     let retained: control_plane::lifecycle::Receipt =
         sqlx::query_as("select * from deletion where id=$1")
             .bind(old_receipt.id)
@@ -238,8 +254,12 @@ async fn team_retirement_hides_sessions_before_bounded_receipts_and_preserves_re
         .execute(&e.pool)
         .await
         .unwrap();
-    cleanup::batch(&e.pool, old_receipt.id).await.unwrap();
-    cleanup::batch(&e.pool, parent.id).await.unwrap();
+    cleanup::batch(&e.pool, old_receipt.id, &Default::default(), None)
+        .await
+        .unwrap();
+    cleanup::batch(&e.pool, parent.id, &Default::default(), None)
+        .await
+        .unwrap();
     let status: Status = sqlx::query_scalar("select status from deletion where id=$1")
         .bind(parent.id)
         .fetch_one(&e.pool)
@@ -272,7 +292,9 @@ async fn organization_retirement_keeps_python_conversations_and_their_space_unti
         .await
         .unwrap();
     for _ in 0..2 {
-        cleanup::batch(&e.pool, parent.id).await.unwrap();
+        cleanup::batch(&e.pool, parent.id, &Default::default(), None)
+            .await
+            .unwrap();
     }
     let children: Vec<(Uuid, Uuid)> =
         sqlx::query_as("select id,target_id from deletion where target_kind='session'")
@@ -281,9 +303,13 @@ async fn organization_retirement_keeps_python_conversations_and_their_space_unti
             .unwrap();
     assert_eq!(children.len(), 2);
     for (id, _) in &children {
-        cleanup::batch(&e.pool, *id).await.unwrap();
+        cleanup::batch(&e.pool, *id, &Default::default(), None)
+            .await
+            .unwrap();
     }
-    cleanup::batch(&e.pool, parent.id).await.unwrap();
+    cleanup::batch(&e.pool, parent.id, &Default::default(), None)
+        .await
+        .unwrap();
     let remains: Vec<Uuid> = sqlx::query_scalar("select session_id from session_metadata")
         .fetch_all(&e.pool)
         .await
@@ -345,9 +371,18 @@ async fn organization_purge_drains_conversations_and_attachments_in_teams_projec
             .await
             .unwrap();
     assert_eq!(retired_attachments, 3);
+    // This hierarchy fixture creates SQL manifests only, with no object store.
+    // Physical original deletion is covered by document-storage integration tests.
+    sqlx::query("update document set original_cleaned_at=now() where deletion_id=$1")
+        .bind(parent.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
     for _ in 0..10 {
         for candidate in cleanup::candidates(&e.pool, 100).await.unwrap() {
-            cleanup::batch(&e.pool, candidate).await.unwrap();
+            cleanup::batch(&e.pool, candidate, &Default::default(), None)
+                .await
+                .unwrap();
         }
     }
     let done: control_plane::lifecycle::Receipt =
@@ -366,4 +401,251 @@ async fn organization_purge_drains_conversations_and_attachments_in_teams_projec
     .await
     .unwrap();
     assert!(!remains);
+}
+
+struct PythonPurge {
+    runtime: control_plane::lifecycle::runtime_storage::RuntimeStorage,
+    status: std::sync::Arc<std::sync::atomic::AtomicU16>,
+    purged: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    gate: std::sync::Arc<support::Gate>,
+    pause: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    task: tokio::task::JoinHandle<()>,
+    _identity: support::IdentityServer,
+}
+impl Drop for PythonPurge {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+impl PythonPurge {
+    async fn start(pool: sqlx::PgPool) -> Self {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering},
+        };
+        let identity = support::IdentityServer::start().await;
+        let status = Arc::new(AtomicU16::new(200));
+        let purged = Arc::new(AtomicBool::new(true));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let pause = Arc::new(AtomicBool::new(false));
+        let gate = Arc::new(support::Gate::default());
+        let app = axum::Router::new().route(
+            "/private/agents/sessions/{session}",
+            axum::routing::delete({
+                let (status, purged, calls, pause, gate) = (
+                    status.clone(),
+                    purged.clone(),
+                    calls.clone(),
+                    pause.clone(),
+                    gate.clone(),
+                );
+                move |headers: axum::http::HeaderMap| {
+                    let (status, purged, calls, pause, gate, pool) = (
+                        status.clone(),
+                        purged.clone(),
+                        calls.clone(),
+                        pause.clone(),
+                        gate.clone(),
+                        pool.clone(),
+                    );
+                    async move {
+                        assert_eq!(headers["authorization"], "Bearer service-token");
+                        // The lifecycle's global lock must be released during HTTP.
+                        let mut tx = pool.begin().await.unwrap();
+                        let free: bool = sqlx::query_scalar("select pg_try_advisory_xact_lock($1)")
+                            .bind(bootstrap::LOCK_KEY)
+                            .fetch_one(&mut *tx)
+                            .await
+                            .unwrap();
+                        assert!(
+                            free,
+                            "runtime purge must not run inside the lifecycle SQL transaction"
+                        );
+                        tx.rollback().await.unwrap();
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        gate.entered.notify_one();
+                        if pause.load(Ordering::SeqCst) {
+                            gate.release.notified().await;
+                        }
+                        (
+                            axum::http::StatusCode::from_u16(status.load(Ordering::SeqCst))
+                                .unwrap(),
+                            axum::Json(
+                                if status.load(Ordering::SeqCst) == 503
+                                    && purged.load(Ordering::SeqCst)
+                                {
+                                    json!({"detail":"session_writes_pending"})
+                                } else if purged.load(Ordering::SeqCst) {
+                                    json!({"purged":true,"sql_cascade":true})
+                                } else {
+                                    json!({"deleted":3})
+                                },
+                            ),
+                        )
+                    }
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let runtime = control_plane::lifecycle::runtime_storage::RuntimeStorage {
+            directory: Some(identity.directory()),
+            sources: vec![control_plane::agents::RuntimeCatalogSource {
+                runtime_id: "python".into(),
+                base_url: format!("http://{address}/private"),
+                public_base_url: Some("/browser-must-not-be-used".into()),
+                enabled: true,
+            }],
+        };
+        Self {
+            runtime,
+            status,
+            purged,
+            calls,
+            gate,
+            pause,
+            task,
+            _identity: identity,
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn python_purge_retries_blocked_receipts_and_requires_effective_erasure() {
+    use std::sync::atomic::Ordering;
+    let e = env().await;
+    let (_, team) = org_and_team(&e).await;
+    let id = session(&e, &team, "python").await;
+    let untouched = session(&e, &team, "python").await;
+    let receipt = lifecycle("PT0S")
+        .accept_session(&e.pool, "alice", team.id, id)
+        .await
+        .unwrap();
+    cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
+        .await
+        .unwrap();
+    assert!(
+        cleanup::candidates(&e.pool, 100)
+            .await
+            .unwrap()
+            .contains(&receipt.id)
+    );
+    let pod = PythonPurge::start(e.pool.clone()).await;
+    // Disabled sources cannot trigger a call, even when they have a URL.
+    let mut disabled = pod.runtime.clone();
+    disabled.sources[0].enabled = false;
+    cleanup::batch(&e.pool, receipt.id, &disabled, None)
+        .await
+        .unwrap();
+    assert_eq!(pod.calls.load(Ordering::SeqCst), 0);
+    pod.purged.store(false, Ordering::SeqCst);
+    for status in [503, 404, 401, 302] {
+        pod.status.store(status, Ordering::SeqCst);
+        assert!(
+            cleanup::batch(&e.pool, receipt.id, &pod.runtime, None)
+                .await
+                .is_err()
+        );
+        cleanup::retrying(&e.pool, receipt.id).await.unwrap();
+        let exists: bool =
+            sqlx::query_scalar("select exists(select 1 from session_metadata where session_id=$1)")
+                .bind(id)
+                .fetch_one(&e.pool)
+                .await
+                .unwrap();
+        assert!(exists);
+    }
+    pod.status.store(503, Ordering::SeqCst);
+    pod.purged.store(true, Ordering::SeqCst);
+    cleanup::batch(&e.pool, receipt.id, &pod.runtime, None)
+        .await
+        .unwrap();
+    let reason: String = sqlx::query_scalar("select error_code from deletion where id=$1")
+        .bind(receipt.id)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(reason, "session_writes_pending");
+    pod.status.store(200, Ordering::SeqCst);
+    pod.purged.store(false, Ordering::SeqCst);
+    assert!(
+        cleanup::batch(&e.pool, receipt.id, &pod.runtime, None)
+            .await
+            .is_err(),
+        "old history-only endpoint must not complete erasure"
+    );
+    pod.purged.store(true, Ordering::SeqCst);
+    for _ in 0..2 {
+        cleanup::batch(&e.pool, receipt.id, &pod.runtime, None)
+            .await
+            .unwrap();
+    }
+    assert_eq!(pod.calls.load(Ordering::SeqCst), 7);
+    let status: Status = sqlx::query_scalar("select status from deletion where id=$1")
+        .bind(receipt.id)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(status, Status::Completed);
+    let remaining: Vec<Uuid> = sqlx::query_scalar("select session_id from session_metadata")
+        .fetch_all(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining, vec![untouched]);
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn python_purge_resumes_after_cancelled_call_and_unblocks_parent_deletion() {
+    use std::sync::atomic::Ordering;
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let (org, team) = org_and_team(&e).await;
+    let id = session(&e, &team, "python").await;
+    let parent = lifecycle("PT0S")
+        .accept(&e.pool, "root", org.id)
+        .await
+        .unwrap();
+    let pod = PythonPurge::start(e.pool.clone()).await;
+    cleanup::batch(&e.pool, parent.id, &pod.runtime, None)
+        .await
+        .unwrap();
+    let receipt: Uuid = sqlx::query_scalar("select id from deletion where target_id=$1")
+        .bind(id)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    pod.pause.store(true, Ordering::SeqCst);
+    let task = tokio::spawn({
+        let pool = e.pool.clone();
+        let runtime = pod.runtime.clone();
+        async move { cleanup::batch(&pool, receipt, &runtime, None).await }
+    });
+    pod.gate.entered.notified().await;
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    pod.pause.store(false, Ordering::SeqCst);
+    pod.gate.release.notify_one();
+    // Fresh activity state retries an ambiguous call, then parent sweeps progress.
+    let runtime = pod.runtime.clone();
+    for _ in 0..5 {
+        for candidate in cleanup::candidates(&e.pool, 100).await.unwrap() {
+            cleanup::batch(&e.pool, candidate, &runtime, None)
+                .await
+                .unwrap();
+        }
+    }
+    let status: Status = sqlx::query_scalar("select status from deletion where id=$1")
+        .bind(parent.id)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(status, Status::Completed);
+    assert_eq!(pod.calls.load(Ordering::SeqCst), 2);
+    assert!(db::space(&e.pool, org.id).await.is_err());
 }

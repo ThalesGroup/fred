@@ -233,6 +233,10 @@ async fn serve(config: Config) -> Result<()> {
             )?,
         },
     };
+    let runtime_storage = control_plane::lifecycle::runtime_storage::RuntimeStorage {
+        sources: state.agent_catalog.runtime_catalog_sources.clone(),
+        directory: state.directory.clone(),
+    };
     let addr = config.listen_addr();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!(addr, "control-plane listening");
@@ -259,7 +263,7 @@ async fn serve(config: Config) -> Result<()> {
                 .context("HTTP server stopped")
         }
     }));
-    if let Some(storage) = content {
+    if let Some(storage) = content.clone() {
         let stopping = stopping.clone();
         tasks.push(Box::pin(async move {
             let cleanup = async {
@@ -300,6 +304,8 @@ async fn serve(config: Config) -> Result<()> {
             match control_plane::lifecycle::worker::run(
                 pool.clone(),
                 config.scheduler.lifecycle.clone(),
+                runtime_storage.clone(),
+                content.clone(),
                 stopping.clone(),
             )
             .await

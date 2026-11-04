@@ -98,7 +98,7 @@ async fn embedded_log_is_atomic_across_handles_and_checks_expected_length() {
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
 async fn embedded_log_upgrade_retains_retired_content_until_metadata_purge() {
-    for next in [6, 7] {
+    for next in [6, 7, 8, 9] {
         let mut previous = sqlx::migrate!();
         previous.migrations = std::borrow::Cow::Owned(
             previous

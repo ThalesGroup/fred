@@ -403,7 +403,14 @@ async fn tabular_attachments_publish_without_vectors_and_purge_all_artifacts() {
         })
         .await
         .unwrap();
-        cleanup::batch(&d.e.pool, deletion_id).await.unwrap();
+        cleanup::batch(
+            &d.e.pool,
+            deletion_id,
+            &Default::default(),
+            Some(&d.storage),
+        )
+        .await
+        .unwrap();
         let remaining: i64 =
             sqlx::query_scalar("select count(*) from artifact where generation_id=$1")
                 .bind(generation.id)
@@ -759,10 +766,17 @@ async fn conversation_deletion_retires_and_purges_its_attachments() {
         .await;
     assert_eq!(storage["used_bytes"], 0);
 
+    // A separately retired attachment remains owned until its own receipt completes.
+    let child: Uuid = accepted["id"].as_str().unwrap().parse().unwrap();
+    cleanup::batch(&d.e.pool, child, &Default::default(), Some(&d.storage))
+        .await
+        .unwrap();
     // Cleanup purges the attachment as a document, then blocks only on runtime history.
     finish_processing(&d, kept).await;
     for _ in 0..2 {
-        cleanup::batch(&d.e.pool, operation).await.unwrap();
+        cleanup::batch(&d.e.pool, operation, &Default::default(), Some(&d.storage))
+            .await
+            .unwrap();
     }
     let present: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1)")
         .bind(kept)
@@ -803,7 +817,9 @@ async fn purged_attachment_receipt_answers_its_deleter_only() {
     .await;
     assert_eq!(code, 202, "{accepted}");
     let operation: Uuid = accepted["id"].as_str().unwrap().parse().unwrap();
-    cleanup::batch(&d.e.pool, operation).await.unwrap();
+    cleanup::batch(&d.e.pool, operation, &Default::default(), Some(&d.storage))
+        .await
+        .unwrap();
     let present: bool = sqlx::query_scalar("select exists(select 1 from document where id=$1)")
         .bind(document)
         .fetch_one(&d.e.pool)
@@ -1139,4 +1155,181 @@ async fn email_metadata_publication_and_conversation_reader() {
             );
         }
     }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn session_purge_waits_for_admitted_original_and_derived_writers() {
+    use control_plane::lifecycle::{Receipt, Status, cleanup};
+    use control_plane::processing::cleanup::{Cleaned, WriteReceipt};
+    let lifecycle = deletion();
+    let (d, p) = Box::pin(setup_with_lifecycle(lifecycle.clone())).await;
+    let d = Arc::new(d);
+    let team = d.folder.space_id;
+    let org: Uuid = sqlx::query_scalar("select organization_id from space where id=$1")
+        .bind(team)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    let runtime = fred_rust_agent::DEFINITION.provider;
+    let template = control_plane::agents::template_id(org, runtime, fred_rust_agent::AGENT_ID);
+    let session = Uuid::new_v4();
+    let agent = Uuid::new_v4();
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$3,$4,$5,$1::text,'{}','reader',$1::text)")
+        .bind(agent).bind(team).bind(template).bind(runtime).bind(fred_rust_agent::AGENT_ID).execute(&d.e.pool).await.unwrap();
+    sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'reader',$2,$3,$4,$5,'Ralph',1)")
+        .bind(session).bind(team).bind(agent).bind(template).bind(runtime).execute(&d.e.pool).await.unwrap();
+    let witness = conversation(&d, "reader", team).await;
+    let (status, kept) = attach(&d, "reader", team, witness, "kept.txt", b"kept").await;
+    assert_eq!(status, 201, "{kept}");
+    let kept: Uuid = kept["document_id"].as_str().unwrap().parse().unwrap();
+    let (status, original) = attach(&d, "reader", team, session, "ready.txt", b"ready").await;
+    assert_eq!(status, 201, "{original}");
+    let document: Uuid = original["document_id"].as_str().unwrap().parse().unwrap();
+    let processing: Uuid =
+        sqlx::query_scalar("select id from document_processing where document_id=$1")
+            .bind(document)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let work = store::row(&d.e.pool, processing)
+        .await
+        .unwrap()
+        .work(p.installation);
+    let generation = p
+        .claim(claim(&work, Stage::Preparation, Uuid::new_v4(), 1))
+        .await
+        .unwrap();
+    let nonce = Uuid::new_v4();
+    let receipt = |completed| WriteReceipt {
+        work: work.clone(),
+        generation: generation.generation,
+        write_id: nonce,
+        completed,
+        workspace: false,
+    };
+    p.record_write(receipt(false)).await.unwrap();
+    let workspace_id = Uuid::new_v4();
+    p.record_write(WriteReceipt {
+        write_id: workspace_id,
+        workspace: true,
+        ..receipt(false)
+    })
+    .await
+    .unwrap();
+    assert!(
+        p.record_write(receipt(false)).await.is_err(),
+        "begin is never replayable"
+    );
+    let gate = Arc::new(crate::support::Gate::default());
+    d.proxy.fault.lock().await.hold_put = Some(gate.clone());
+    let sending = d.clone();
+    let late = tokio::spawn(async move {
+        attach(&sending, "reader", team, session, "late.txt", b"late").await
+    });
+    tokio::time::timeout(Duration::from_secs(10), gate.entered.notified())
+        .await
+        .unwrap();
+    let deletion = lifecycle
+        .accept_session(&d.e.pool, "reader", team, session)
+        .await
+        .unwrap();
+    finish_processing(&d, document).await;
+    expire_generations(&d.e.pool, processing).await;
+    for _ in 0..2 {
+        cleanup::batch(
+            &d.e.pool,
+            deletion.id,
+            &Default::default(),
+            Some(&d.storage),
+        )
+        .await
+        .unwrap();
+        let state: Receipt = sqlx::query_as("select * from deletion where id=$1")
+            .bind(deletion.id)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+        assert_eq!(state.status, Status::Blocked);
+        assert_eq!(state.error_code.as_deref(), Some("document_writes_pending"));
+        assert!(p.cleanup_candidates().await.unwrap().is_empty());
+    }
+    gate.release.notify_one();
+    let (status, _) = late.await.unwrap();
+    assert_eq!(status, 404);
+    // An admitted writer can still arrive after retirement. Its durable receipt
+    // keeps the generation alive across lease expiry and independent DB connections.
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), b"late-derived").unwrap();
+    let key = format!("{}late.txt", generation.output_prefix);
+    let digest: [u8; 32] = Sha256::digest(b"late-derived").into();
+    Box::pin(p.derived.put_verified(&key, file.path(), 12, &digest))
+        .await
+        .unwrap();
+    assert!(p.cleanup_candidates().await.unwrap().is_empty());
+    p.record_write(receipt(true)).await.unwrap();
+    p.record_write(receipt(true)).await.unwrap();
+    assert!(p.record_write(receipt(false)).await.is_err());
+    assert!(
+        p.record_write(WriteReceipt {
+            write_id: Uuid::new_v4(),
+            ..receipt(false)
+        })
+        .await
+        .is_err()
+    );
+    assert!(
+        p.cleanup_candidates().await.unwrap().is_empty(),
+        "workspace cleanup has not acknowledged"
+    );
+    p.record_write(WriteReceipt {
+        write_id: workspace_id,
+        workspace: true,
+        ..receipt(true)
+    })
+    .await
+    .unwrap();
+    let candidates = p.cleanup_candidates().await.unwrap();
+    let candidate = candidates
+        .iter()
+        .find(|c| c.work.document_id == document)
+        .unwrap();
+    assert!(candidate.purge_document);
+    p.derived.delete(&key).await.unwrap();
+    assert!(p.derived.absent(&key).await.unwrap());
+    p.cleaned(Cleaned {
+        work: work.clone(),
+        generation: candidate.generation,
+        cursor: 0,
+        next_cursor: 0,
+        objects_empty: true,
+        purge_document: true,
+    })
+    .await
+    .unwrap();
+    for _ in 0..3 {
+        cleanup::batch(
+            &d.e.pool,
+            deletion.id,
+            &Default::default(),
+            Some(&d.storage),
+        )
+        .await
+        .unwrap();
+    }
+    let state: Receipt = sqlx::query_as("select * from deletion where id=$1")
+        .bind(deletion.id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(state.status, Status::Completed);
+    let retained: bool = sqlx::query_scalar("select exists(select 1 from session_metadata where session_id=$1) or exists(select 1 from document where session_id=$1) or exists(select 1 from document_upload where session_id=$1)")
+        .bind(session).fetch_one(&d.e.pool).await.unwrap();
+    assert!(!retained);
+    let witness_key: String = sqlx::query_scalar("select object_key from document where id=$1")
+        .bind(kept)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert!(d.storage.objects.get(&witness_key).await.is_ok());
 }

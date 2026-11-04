@@ -271,7 +271,9 @@ async fn pod_skills_ceilings_roles_concurrency_and_project_resolution() {
         .await
         .unwrap();
     for _ in 0..100 {
-        cleanup::batch(&e.pool, receipt.id).await.unwrap();
+        cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
+            .await
+            .unwrap();
         if deletions::status(&e.pool, "root", receipt.id)
             .await
             .unwrap()

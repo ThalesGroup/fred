@@ -3348,9 +3348,15 @@ async fn a_stopped_lifecycle_worker_reports_only_its_stage() {
         },
         ..Default::default()
     };
-    let error = worker::run(e.pool.clone(), config, std::future::pending())
-        .await
-        .unwrap_err();
+    let error = worker::run(
+        e.pool.clone(),
+        config,
+        Default::default(),
+        None,
+        std::future::pending(),
+    )
+    .await
+    .unwrap_err();
     assert_eq!(worker::stage(&error), "temporal_connect");
     assert!(!format!("{error:#}").contains("127.0.0.1"), "{error:#}");
     assert_eq!(worker::stage(&anyhow::anyhow!("other")), "unknown");
@@ -5017,3 +5023,9 @@ mod session_deletion;
 
 #[path = "support/embedded_conversations.rs"]
 mod embedded_conversations;
+
+#[path = "support/platform_workload.rs"]
+mod platform_workload;
+
+#[path = "support/conversation_ownership.rs"]
+mod conversation_ownership;

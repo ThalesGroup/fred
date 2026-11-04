@@ -25,6 +25,8 @@ use uuid::Uuid;
 pub struct CleanupActivities {
     pub pool: PgPool,
     pub config: LifecycleConfig,
+    pub runtime: super::runtime_storage::RuntimeStorage,
+    pub storage: Option<Arc<crate::documents::Storage>>,
 }
 // A Temporal timeout signals cancellation; it does not drop Rust activity futures.
 // Keep local work shorter than start-to-close and release resources on shutdown.
@@ -76,7 +78,13 @@ impl CleanupActivities {
         }
         bounded(
             &ctx,
-            cleanup::batch(&self.pool, operation).instrument(tracing::info_span!(
+            cleanup::batch(
+                &self.pool,
+                operation,
+                &self.runtime,
+                self.storage.as_deref(),
+            )
+            .instrument(tracing::info_span!(
                 "deletion",
                 operation_id = %operation,
                 target_kind = tracing::field::Empty,
@@ -212,6 +220,8 @@ pub fn stage(error: &anyhow::Error) -> &'static str {
 pub async fn run(
     pool: PgPool,
     config: LifecycleConfig,
+    runtime_storage: super::runtime_storage::RuntimeStorage,
+    storage: Option<Arc<crate::documents::Storage>>,
     stopping: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<()> {
     let client = match connect(&config).await {
@@ -238,7 +248,12 @@ pub async fn run(
         .graceful_shutdown_period(Duration::from_secs(2))
         .register_workflow::<SpaceDeletionSweep>()
         .map_err(setup)?
-        .register_activities(CleanupActivities { pool, config })
+        .register_activities(CleanupActivities {
+            pool,
+            config,
+            runtime: runtime_storage,
+            storage,
+        })
         .build();
     let mut worker = Worker::new(&runtime, client, options).map_err(setup)?;
     let shutdown = worker.shutdown_handle();

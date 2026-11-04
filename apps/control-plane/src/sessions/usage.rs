@@ -59,8 +59,8 @@ pub struct ModelUsage {
     pub cache_creation_tokens: i64,
 }
 
-/// Immutable server-side attribution, obtained from session metadata or an
-/// already admitted embedded turn. Never deserialized from a workload report.
+/// Immutable server-side attribution, obtained from session metadata, its deletion
+/// receipt or an admitted embedded turn. Never deserialized from a workload report.
 #[derive(Clone, sqlx::FromRow)]
 pub(crate) struct UsageProvenance {
     pub session_id: Uuid,
@@ -83,7 +83,7 @@ pub(super) fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
 }
 
 /// Atomically record consumption reported by a trusted runtime workload in its own name.
-/// Session provenance supplies the space, person and agent, including after retirement.
+/// Session provenance supplies the space, person and agent, including after purge.
 /// Idempotency-Key identifies the report: identical replays return 204; any difference returns idempotency_conflict.
 /// Different keys may report consumption for the same exchange, including after a human-validation resume.
 /// This records an admitted turn without renewing its admission or requiring a live agent.
@@ -113,9 +113,17 @@ async fn record_usage(
     if !state.auth.accepts_runtime_delegation(&caller) {
         return Err(AppError::Forbidden);
     }
+    // One statement sees either live metadata or the completed receipt: cleanup
+    // captures attribution and deletes metadata in one transaction. No check/write
+    // gap or FK to a purged object can discard a report admitted before retirement.
     let provenance = sqlx::query_as::<_, UsageProvenance>(
         "select session_id, space_id, user_id, agent_instance_id from session_metadata
-         where session_id=$1 and space_id=$2",
+         where session_id=$1 and space_id=$2
+         union all
+         select target_id, target_parent_id, session_user_id, session_agent_instance_id
+         from deletion where target_kind='session' and target_id=$1 and target_parent_id=$2
+             and status='completed' and session_user_id is not null
+         limit 1",
     )
     .bind(session_id)
     .bind(space_id)

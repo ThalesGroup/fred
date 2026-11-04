@@ -23,7 +23,17 @@ pub async fn retrying(pool: &PgPool, id: Uuid) -> AppResult<()> {
         .bind(id).execute(pool).await?;
     Ok(())
 }
-pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
+pub async fn batch(
+    pool: &PgPool,
+    id: Uuid,
+    runtime: &super::runtime_storage::RuntimeStorage,
+    storage: Option<&crate::documents::Storage>,
+) -> AppResult<()> {
+    // Object deletion is idempotent and runs without a SQL transaction. Durable
+    // manifests remain until absence is confirmed; uncertain PUTs are never expired.
+    if let Some(storage) = storage {
+        storage.purge_retired_originals(id).await?;
+    }
     let mut tx = pool.begin().await?;
     // Server-side bounds also release a statement if its Rust future is cancelled.
     sqlx::query("set local lock_timeout = '5s'")
@@ -55,13 +65,51 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
     });
     spaces::lock_organization(&mut tx, &organization).await?;
     sqlx::query("update deletion set status = 'running', last_visit = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
-    let docs: bool = sqlx::query_scalar("select exists(select 1 from document where deletion_id is distinct from $1 and (session_id is null or deletion_id is null) and space_id in (select id from space where deletion_id = $1)) or exists(select 1 from document_upload where status = 'pending' and space_id in (select id from space where deletion_id = $1))").bind(id).fetch_one(&mut *tx).await?;
+    let docs: bool = sqlx::query_scalar("select exists(select 1 from document where deletion_id is distinct from $1 and (session_id is null or deletion_id is null) and space_id in (select id from space where deletion_id = $1)) or exists(select 1 from document_upload where status = 'pending' and session_id is null and space_id in (select id from space where deletion_id = $1))").bind(id).fetch_one(&mut *tx).await?;
     if docs {
         sqlx::query("update deletion set status = 'blocked', error_code = 'unsupported_documents' where id = $1")
             .bind(id).execute(&mut *tx).await?;
         tx.commit().await?;
         return Ok(());
     }
+    let uncertain: bool = sqlx::query_scalar(
+        "select exists(select 1 from document_upload u where u.put_pending and
+          (u.session_id=$2 or u.space_id in (select id from space where deletion_id=$1)))
+         or exists(select 1 from generation g join document d on d.id=g.document_id
+          where d.deletion_id=$1 and (cardinality(g.pending_writes)>0 or cardinality(g.pending_workspaces)>0))
+         or exists(select 1 from document d where d.deletion_id=$1 and d.retrieval_phase='writing')",
+    )
+    .bind(id)
+    .bind(receipt.target_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if uncertain {
+        sqlx::query(
+            "update deletion set status='blocked',error_code='document_writes_pending' where id=$1",
+        )
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        return Ok(());
+    }
+    let originals: bool = sqlx::query_scalar(
+        "select exists(select 1 from document where deletion_id=$1 and original_cleaned_at is null)
+         or exists(select 1 from document_upload u where u.status<>'stored' and u.cleaned_at is null
+          and (u.session_id=$2 or u.space_id in (select id from space where deletion_id=$1)))",
+    )
+    .bind(id)
+    .bind(receipt.target_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if originals && storage.is_none() {
+        sqlx::query("update deletion set status='blocked',error_code='document_storage_unavailable' where id=$1")
+            .bind(id).execute(&mut *tx).await?;
+        tx.commit().await?;
+        return Ok(());
+    }
+    sqlx::query("delete from document_upload u where u.status='failed' and not u.put_pending and u.cleaned_at is not null and (u.session_id=$2 or u.space_id in (select id from space where deletion_id=$1))")
+        .bind(id).bind(receipt.target_id).execute(&mut *tx).await?;
     let remaining: i64 = sqlx::query_scalar("select count(*) from document where deletion_id = $1")
         .bind(id)
         .fetch_one(&mut *tx)
@@ -70,6 +118,9 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
         let ready: Vec<Uuid> = sqlx::query_scalar(
             "select d.id from document d
              where d.deletion_id = $1
+               and d.original_cleaned_at is not null
+               and d.retrieval_phase is distinct from 'writing'
+               and not exists (select 1 from document_upload u where u.id=d.id and u.put_pending)
                and (d.purged_at is not null or not exists (
                    select 1 from document_processing p
                    left join generation g on g.processing_id = p.id
@@ -117,6 +168,14 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
         }
     }
     if receipt.target_kind == TargetKind::Session {
+        let attachments: bool = sqlx::query_scalar("select exists(select 1 from document where session_id=$1) or exists(select 1 from document_upload where session_id=$1)")
+            .bind(receipt.target_id).fetch_one(&mut *tx).await?;
+        if attachments {
+            sqlx::query("update deletion set status='blocked',error_code='document_purge_pending' where id=$1")
+                .bind(id).execute(&mut *tx).await?;
+            tx.commit().await?;
+            return Ok(());
+        }
         let (runtime_id, template_id): (String, Uuid) = sqlx::query_as(
             "select runtime_id, template_id from session_metadata where session_id = $1 and deletion_id = $2",
         ).bind(receipt.target_id).bind(id).fetch_one(&mut *tx).await?;
@@ -128,10 +187,38 @@ pub async fn batch(pool: &PgPool, id: Uuid) -> AppResult<()> {
                     fred_rust_agent::AGENT_ID,
                 );
         if !embedded {
-            sqlx::query("update deletion set status = 'blocked', error_code = 'session_purge_unavailable' where id = $1")
-                .bind(id).execute(&mut *tx).await?;
             tx.commit().await?;
-            return Ok(());
+            let blocked = match runtime.purge(&runtime_id, receipt.target_id).await? {
+                super::runtime_storage::Purge::Ready => None,
+                super::runtime_storage::Purge::Unavailable => Some("session_purge_unavailable"),
+                super::runtime_storage::Purge::WritesPending => Some("session_writes_pending"),
+            };
+            if let Some(code) = blocked {
+                sqlx::query("update deletion set status='blocked',error_code=$2 where id=$1 and status<>'completed'")
+                    .bind(id).bind(code).execute(pool).await?;
+                return Ok(());
+            }
+            // The network call holds no SQL transaction. Another activity may have
+            // completed meanwhile; reacquire the existing lifecycle lock order.
+            tx = pool.begin().await?;
+            sqlx::query("set local lock_timeout = '5s'")
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("set local statement_timeout = '10s'")
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("select pg_advisory_xact_lock($1)")
+                .bind(bootstrap::LOCK_KEY)
+                .execute(&mut *tx)
+                .await?;
+            spaces::lock_organization(&mut tx, &organization).await?;
+            let status: Status = sqlx::query_scalar("select status from deletion where id=$1")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+            if status == Status::Completed {
+                return Ok(());
+            }
         }
         let completed = complete_session(&mut tx, &receipt).await?;
         tx.commit().await?;
@@ -260,6 +347,10 @@ async fn complete_session(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     receipt: &Receipt,
 ) -> AppResult<Receipt> {
+    // Keep only immutable accounting attribution in the existing receipt. Late
+    // runtime usage reports need it after conversation and parent metadata vanish.
+    sqlx::query("update deletion d set session_user_id=s.user_id, session_agent_instance_id=s.agent_instance_id from session_metadata s where d.id=$1 and s.session_id=d.target_id and s.deletion_id=d.id")
+        .bind(receipt.id).execute(&mut **tx).await?;
     sqlx::query("delete from session_metadata where session_id = $1 and deletion_id = $2")
         .bind(receipt.target_id)
         .bind(receipt.id)
