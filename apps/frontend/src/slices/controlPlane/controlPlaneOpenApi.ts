@@ -1378,6 +1378,17 @@ export type UpdateOrganization = {
   name?: string | null;
   owner_username?: string | null;
 };
+export type SearchHit = {
+  chunk_kind?: string | null;
+  content: string;
+  file_name?: string | null;
+  page?: number | null;
+  score: number;
+  section?: string | null;
+  title: string;
+  uid: string;
+  [key: string]: any;
+};
 export type RuntimeEvent =
   | {
       kind: "thought_start";
@@ -1440,6 +1451,7 @@ export type RuntimeEvent =
       finish_reason: string;
       kind: "final";
       sequence: number;
+      sources: SearchHit[];
     };
 export type ExecuteRequest = {
   agent_id?: string | null;

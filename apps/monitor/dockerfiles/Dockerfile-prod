@@ -5,7 +5,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY libs/fred-rust-sdk ./libs/fred-rust-sdk
 # Cargo loads every workspace manifest; the Control Plane is not compiled here.
 COPY apps/control-plane/Cargo.toml ./apps/control-plane/Cargo.toml
-COPY apps/control-plane/agent ./apps/control-plane/agent
+COPY libs/fred-rust-agent ./libs/fred-rust-agent
 RUN mkdir -p apps/control-plane/src && echo "fn main() {}" > apps/control-plane/src/main.rs
 COPY apps/monitor ./apps/monitor
 RUN cargo build --release --locked -p monitor

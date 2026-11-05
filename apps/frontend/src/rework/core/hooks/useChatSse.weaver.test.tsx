@@ -29,7 +29,9 @@ vi.mock("../../../common/platformAccess", () => ({ handlePlatformAccessResponse:
 import { useChatSse, type RuntimeAwaitingHumanEvent } from "./useChatSse";
 import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { fullReasoning } from "../../components/shared/molecules/FullReasoningPanel/fullReasoning";
-import { groupTraceEntries } from "../../utils/traceUtils";
+import { toThreadMessages } from "../../components/pages/ManagedChatPage/toThreadMessages";
+import { asRagSearchResult, groupTraceEntries, parseToolResultContent } from "../../utils/traceUtils";
+import embeddedSearchTurn from "../../../../../../libs/fred-sdk/tests/fixtures/embedded_search_turn.json";
 
 const spaceId = "f0137825-89b0-4d36-bdc3-b007a9777122";
 const preparation: ExecutionPreparation = {
@@ -168,6 +170,52 @@ describe("Weaver execution context and HTTP diagnostics", () => {
       expect(onError).not.toHaveBeenCalled();
     },
   );
+
+  it("gives Ralph's search the chat's source cards and trace view", async () => {
+    prepare.mockImplementation(() => ({
+      unwrap: async () => ({
+        ...preparation,
+        runtime_id: "control-plane",
+        execute_stream_url: "/control-plane/v1/agents/execute/stream",
+        execute_url: null,
+        messages_url_template: null,
+        supports_hitl: false,
+      }),
+    }));
+    const frames = [
+      { kind: "status", sequence: 1, status: "running" },
+      {
+        kind: "tool_call",
+        sequence: 2,
+        tool_name: "search_documents",
+        call_id: "call-search",
+        arguments: { query: embeddedSearchTurn.query },
+      },
+      embeddedSearchTurn.tool_result,
+      { kind: "assistant_delta", sequence: 4, delta: embeddedSearchTurn.final.content },
+      embeddedSearchTurn.final,
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(frames.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+            headers: { "content-type": "text/event-stream" },
+          }),
+      ),
+    );
+    await act(async () => {
+      expect(await latest.send("question", "saved-session")).toBe(true);
+    });
+
+    const answer = toThreadMessages(latest.messages, false).find((message) => message.role === "assistant");
+    expect(answer?.role === "assistant" && answer.sources).toEqual(embeddedSearchTurn.final.sources);
+    const result = latest.messages.find((message) => message.channel === "tool_result");
+    const rag = asRagSearchResult(parseToolResultContent(result!));
+    expect(rag?.query).toBe(embeddedSearchTurn.query);
+    expect(rag?.hits.map((hit) => hit.uid)).toEqual(["doc-1", "doc-2"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
 
   it.each(["first", "reopened", "hitl"])("sends canonical space without team on %s turn", async (turn) => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ detail: "Refused" }), { status: 403 }));

@@ -184,7 +184,13 @@ def prepare() -> None:
         run([*kube, "get", "secret", "fred-secrets", "-o", "json"])
     )["data"]
     application = provision_storage(kube, foundation, here, image)
-    provision_workload_identities(foundation, api_config)
+    provision_workload_identities(
+        foundation,
+        api_config,
+        yaml.safe_load(
+            configs["control-plane-backend-back"]["data"]["configuration.yaml"]
+        ),
+    )
     user = base64.b64decode(foundation["OPENSEARCH_ADMIN"]).decode()
     password = base64.b64decode(foundation["OPENSEARCH_ADMIN_PASSWORD"]).decode()
     authorization = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
@@ -578,7 +584,9 @@ if not s3.bucket_exists("app-content-documents"):
     return credentials
 
 
-def provision_workload_identities(foundation: dict, api_config: dict) -> None:
+def provision_workload_identities(
+    foundation: dict, api_config: dict, control_plane_config: dict
+) -> None:
     # The generic factory identities hook creates the client and retains its secret.
     base = f"http://127.0.0.1:{int(os.environ['K3D_HOST_PORT_KEYCLOAK'])}"
     form = urlencode(
@@ -667,27 +675,31 @@ def provision_workload_identities(foundation: dict, api_config: dict) -> None:
         else:
             api(target, "POST", mapper)
 
-    # The API delegates the already authenticated person to Control Plane. This
-    # grants trust to assert identity, never a platform or content permission.
+    # The KF API delegates the already authenticated person to Control Plane, and
+    # Control Plane delegates the admitted person to KF for Ralph's document search.
+    # This grants trust to assert identity, never a platform or content permission.
     security = api_config["security"]
-    caller_id = security["m2m"]["client_id"]
     delegation = security["delegation"]
     audience = delegation.get("audience", "fred-delegation")
     role_name = delegation.get("caller_role", "delegation_caller")
-    callers = api("/clients?" + urlencode({"clientId": caller_id}))
     targets = api("/clients?" + urlencode({"clientId": audience}))
-    if len(callers) != 1 or len(targets) != 1:
-        raise RuntimeError("Knowledge Flow and delegation clients must already exist")
-    caller_path = "/clients/" + callers[0]["id"]
+    if len(targets) != 1:
+        raise RuntimeError("The delegation client must already exist")
     target_id = targets[0]["id"]
-    service = api(caller_path + "/service-account-user")
     role = api("/clients/" + target_id + "/roles/" + quote(role_name, safe=""))
-    api(
-        "/users/" + service["id"] + "/role-mappings/clients/" + target_id,
-        "POST",
-        [role],
-    )
-    api(caller_path + "/scope-mappings/clients/" + target_id, "POST", [role])
+    for config in (api_config, control_plane_config):
+        caller_id = config["security"]["m2m"]["client_id"]
+        callers = api("/clients?" + urlencode({"clientId": caller_id}))
+        if len(callers) != 1:
+            raise RuntimeError(f"The {caller_id} client must already exist")
+        caller_path = "/clients/" + callers[0]["id"]
+        service = api(caller_path + "/service-account-user")
+        api(
+            "/users/" + service["id"] + "/role-mappings/clients/" + target_id,
+            "POST",
+            [role],
+        )
+        api(caller_path + "/scope-mappings/clients/" + target_id, "POST", [role])
 
 
 if __name__ == "__main__":

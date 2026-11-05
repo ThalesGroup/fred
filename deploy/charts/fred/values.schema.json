@@ -18404,6 +18404,13 @@
                       },
                       "type": "array"
                     },
+                    "knowledge_flow_url": {
+                      "description": "Optional server-owned KF base URL; enables Ralph's fixed document search tool.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "model_sources": {
                       "items": {
                         "additionalProperties": false,
@@ -20474,6 +20481,13 @@
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "knowledge_flow_url": {
+                      "description": "Optional server-owned KF base URL; enables Ralph's fixed document search tool.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "model_sources": {
                       "items": {
