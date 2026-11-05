@@ -203,6 +203,7 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
             pool_recycle=effective_pool_recycle,
             pool_pre_ping=effective_pool_pre_ping,
             connect_args=connect_args,
+            hide_parameters=True,
         )
         logger.info(
             "[SQL][AsyncEngine] Engine created: pool_size=%s max_overflow=%s "

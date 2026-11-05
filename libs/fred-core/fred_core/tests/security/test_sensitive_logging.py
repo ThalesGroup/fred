@@ -149,6 +149,13 @@ def test_engine_creation_failure_logs_no_connection_identity(
     assert [record.exc_info for record in sink.records if record.exc_info] == []
 
 
+def test_async_postgres_engine_hides_statement_parameters(monkeypatch) -> None:
+    """A late write refused after a purge must not log the erased content it carried."""
+    engine = create_async_engine_from_config(_postgres_config(monkeypatch))
+
+    assert engine.sync_engine.hide_parameters is True
+
+
 def test_sqlite_engine_creation_logs_no_path(sink, monkeypatch) -> None:
     """The path names a location on the host, and often the account on it."""
     monkeypatch.setattr(Path, "mkdir", lambda *args, **kwargs: None)
