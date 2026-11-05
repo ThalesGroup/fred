@@ -24,4 +24,4 @@ None.
 
 ## Impact
 
-`fred-runtime` model catalog loading and discovery, its tests, and the model-discovery operator guide. The existing `fred-core` Azure APIM inference provider and pod-local `AZURE_AD_CLIENT_SECRET` and `AZURE_APIM_SUBSCRIPTION_KEY` are reused. No database or public HTTP API migration is planned. No release tag or C2 deployment is part of this change.
+`fred-runtime` model catalog loading and discovery, its tests, and a new operator migration note. The existing `fred-core` Azure APIM inference provider and pod-local `AZURE_AD_CLIENT_SECRET` and `AZURE_APIM_SUBSCRIPTION_KEY` are reused. No database or public HTTP API migration is planned. No release tag or C2 deployment is part of this change.
