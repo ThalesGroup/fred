@@ -13,7 +13,7 @@
 ## 3. Operator guidance and integration
 
 - [x] 3.1 Update the discovery operator guide with C2's tested list URL, existing credential variables, chat-model allowlist, rollout dependency, and rollback; verify the documented YAML parses and matches the source contract.
-- [ ] 3.2 Run relevant model-discovery and routing tests, root `make code-quality`, and full branch review against `swift`; record any remaining draft limitations in the PR.
+- [x] 3.2 Run relevant model-discovery and routing tests, root `make code-quality`, and full branch review against `swift`; record any remaining draft limitations in the PR.
 
 ## Workflow follow-up
 
