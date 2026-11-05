@@ -237,18 +237,18 @@ jobs:
           output: trivy-results.json
           exit-code: "0"
 
-      - name: Verify isolated API production dependencies and imports
-        if: ${{ matrix.name == 'knowledge-flow-backend' }}
-        run: |
-          image=$(docker load --input /tmp/pr-image.tar | sed -n 's/^Loaded image: //p' | tail -1)
-          docker run --rm --entrypoint python -v "$PWD/scripts/check_knowledge_api.py:/checks/check_api.py:ro" "$image" /checks/check_api.py
-
       - name: Upload Trivy report
         uses: actions/upload-artifact@v4
         with:
           name: trivy-${{ matrix.name }}
           path: trivy-results.json
           retention-days: 14
+
+      - name: Verify isolated API production dependencies and imports
+        if: ${{ matrix.name == 'knowledge-flow-backend' }}
+        run: |
+          image=$(docker load --input /tmp/pr-image.tar | sed -n 's/^Loaded image: //p' | tail -1)
+          docker run --rm --entrypoint python -v "$PWD/scripts/check_knowledge_api.py:/checks/check_api.py:ro" "$image" /checks/check_api.py
 
       - name: Record image licenses and SBOM
         if: ${{ matrix.name == 'fred-agents' || startsWith(matrix.name, 'knowledge-flow-') }}

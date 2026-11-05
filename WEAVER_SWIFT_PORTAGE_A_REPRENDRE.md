@@ -710,7 +710,7 @@ ou routes de readiness sans consommateur Weaver.
 Notes opérateur : [PowerPoint](deploy/release-notes/changes/ppt-builder-capability.md),
 [versions](deploy/release-notes/changes/3433-prepare-v3-10-0-release.md),
 [Trivy](deploy/release-notes/changes/3469-trivy-sbom-timeout.md),
-[downgrade](deploy/release-notes/changes/target-runtime-capability-downgrade.md).
+[downgrade](deploy/release-notes/changes/weaver-exact-agent-migration-downgrade.md).
 Le README de capability et l'aide EN/FR distinguent les chemins disponibles des
 reports. Pas de description arc42 de fonctionnement déployé avant réception.
 
@@ -1211,3 +1211,36 @@ parcours complet. Après déploiement par le développeur : comparer les capture
 Swift en FR/EN, déposer/remplacer puis observer préparation/échec/relance, corriger
 et rouvrir les slides (intégré et uploadé), réinitialiser, vérifier deux pods et
 deux organisations, les permissions et la priorité du modèle propre à l'agent.
+## 13. Réconciliation des backports #3472 et #3473 - 5 novembre 2026
+
+`origin/weaver` a reçu `1a42bb838` (#3472, depuis #3470) et `df5c45c9b` (#3473,
+depuis #3471), alors que le merge local `394a9150f` contenait déjà ces deux commits
+Swift. La borne Swift reste `3d18384205a469f691bbf3ca3cb697911bc6b257` : elle vient
+de ce merge, pas des backports. Le code du CLI, le Makefile et `test_migrations.py`
+sont identiques des deux côtés. Le texte du backport annonçant la borne `059ae1c91`
+et #3473 non intégré décrivait l'état avant réunion ; il est remplacé par cette section.
+
+Résolutions, examinées par rapport aux deux parents :
+
+- **Trivy** : la fusion automatique doublait `Upload Trivy report`, avec le même nom
+  d'artefact. Une seule étape reste, à la position du backport : juste après le scan,
+  avant le contrôle d'import et la licence/SBOM. `fred-agents` reste dans les preuves
+  de licence et SBOM, avec le délai de 15 minutes.
+- **Downgrade** : `test_migrations_downgrade.py` garde le passage par étapes et le
+  refus de `-1` sur une vraie base. Le retour traversant plusieurs révisions, visé par
+  #3473, reste couvert par `test_downgrade_runtime_to_exact_older_revision`.
+- **Notes opérateur** : `3469-trivy-sbom-timeout.md` réunit les deux textes.
+  `weaver-exact-agent-migration-downgrade.md` est la seule note du downgrade ;
+  `target-runtime-capability-downgrade.md`, non publiée et redondante, est retirée.
+
+Preuves locales, sans recouvrement entre elles : `test_migrations_downgrade.py`
+(fred-agents) **1 réussi**, `test_migrations.py` (fred-runtime) **11 réussis**,
+`test_select_docker_images.py` **20 réussis**, YAML du workflow parsé. GitHub Actions
+et rollback sur installation isolée non exécutés.
+
+**Reste à corriger avant la prochaine PR :** `scripts/migration_guides.py check-pr
+--base origin/weaver --worktree` échoue sur `weaver-powerpoint-file-ownership.md`
+(section `## Prerequisites` absente), note de `ad97b2440` que ce merge ne modifie
+pas. Les autres notes modifiées depuis `origin/weaver` passent `parse_note`, mais les
+contrôles suivants de `check-pr` n'ont pas pu s'exécuter tant que cette note échoue.
+
