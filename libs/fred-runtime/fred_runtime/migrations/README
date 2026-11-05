@@ -3,6 +3,11 @@ runtime activity/steering tables. The packaged migration runner is
 `python -m fred_runtime migrate`; it also walks installed capability trees.
 Use the owning application's configured migration command for deployment.
 
+For a reviewed rollback, `python -m fred_runtime downgrade runtime <revision>`
+or `python -m fred_runtime downgrade capability:<id> <revision>` targets one
+tree by its complete revision ID. Use `base` only when the previous release had
+no revision in that tree. Relative targets such as `-1` are rejected.
+
 Execution-space schema (revision a7b8c9d0e1f2):
 - runtime_turn_steering.team_id already contained an admitted space. It is renamed
   to space_id, preserving that value and the mailbox's identity/lease lifecycle.

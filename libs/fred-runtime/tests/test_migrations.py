@@ -20,6 +20,7 @@ from pathlib import Path
 
 import fred_runtime
 import pytest
+from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from fred_runtime import migrations
@@ -113,16 +114,22 @@ def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> Non
         def migration_locations(self) -> tuple[tuple[str, str], ...]:
             return (("alpha", "/alpha"), ("beta", "/beta"))
 
-    calls: list[str] = []
+    calls: list[tuple[str, str]] = []
     monkeypatch.setattr(migrations, "CapabilityRegistry", Registry)
     monkeypatch.setattr(
-        migrations, "_downgrade", lambda location, *, label: calls.append(location)
+        migrations,
+        "_downgrade",
+        lambda location, *, label, revision: calls.append((location, revision)),
     )
 
-    assert migrations.downgrade_migration_tree("capability:beta") == "beta"
-    assert calls == ["/beta"]
-    assert migrations.downgrade_migration_tree("runtime") == "fred-runtime"
-    assert calls == ["/beta", str(RUNTIME_ALEMBIC_DIR)]
+    assert migrations.downgrade_migration_tree("capability:beta", "base") == "beta"
+    assert calls == [("/beta", "base")]
+    target_revision = "e5f6a7b8c9d0"  # pragma: allowlist secret
+    assert (
+        migrations.downgrade_migration_tree("runtime", target_revision)
+        == "fred-runtime"
+    )
+    assert calls == [("/beta", "base"), (str(RUNTIME_ALEMBIC_DIR), target_revision)]
 
 
 def test_downgrade_rejects_unknown_tree_without_running_alembic(
@@ -139,12 +146,14 @@ def test_downgrade_rejects_unknown_tree_without_running_alembic(
 
     monkeypatch.setattr(migrations, "CapabilityRegistry", Registry)
     monkeypatch.setattr(
-        migrations, "_downgrade", lambda location, *, label: calls.append(location)
+        migrations,
+        "_downgrade",
+        lambda location, *, label, revision: calls.append(location),
     )
 
     for tree in ("", "alpha", "capability:", "capability:missing"):
         with pytest.raises(ValueError):
-            migrations.downgrade_migration_tree(tree)
+            migrations.downgrade_migration_tree(tree, "base")
 
     assert calls == []
 
@@ -152,49 +161,91 @@ def test_downgrade_rejects_unknown_tree_without_running_alembic(
 def test_downgrade_propagates_alembic_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fail(_location: str, *, label: str) -> None:
+    def fail(_location: str, *, label: str, revision: str) -> None:
         raise RuntimeError("downgrade failed")
 
     monkeypatch.setattr(migrations, "_downgrade", fail)
     with pytest.raises(RuntimeError, match="downgrade failed"):
-        migrations.downgrade_migration_tree("runtime")
+        migrations.downgrade_migration_tree("runtime", "base")
 
 
-def test_downgrade_cli_accepts_only_one_revision(
+def test_downgrade_cli_requires_explicit_target(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    calls: list[str] = []
+    calls: list[tuple[str, str]] = []
     monkeypatch.setattr(
         migrations,
         "downgrade_migration_tree",
-        lambda tree: calls.append(tree) or "fred-runtime",
+        lambda tree, revision: calls.append((tree, revision)) or "fred-runtime",
     )
 
     for argv in (
         ["downgrade"],
         ["downgrade", "runtime"],
-        ["downgrade", "runtime", "base"],
     ):
         with pytest.raises(SystemExit) as error:
             main(argv)
         assert error.value.code == 2
     assert calls == []
 
-    assert main(["downgrade", "runtime", "-1"]) == 0
-    assert calls == ["runtime"]
+    target_revision = "e5f6a7b8c9d0"  # pragma: allowlist secret
+    assert main(["downgrade", "runtime", target_revision]) == 0
+    assert main(["downgrade", "capability:ppt_builder", "base"]) == 0
+    assert calls == [("runtime", target_revision), ("capability:ppt_builder", "base")]
     assert "downgraded: fred-runtime" in capsys.readouterr().out
 
 
 def test_downgrade_cli_reports_unknown_tree(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def reject(_tree: str) -> str:
+    def reject(_tree: str, _revision: str) -> str:
         raise migrations.MigrationTreeSelectionError("unknown tree")
 
     monkeypatch.setattr(migrations, "downgrade_migration_tree", reject)
 
-    assert main(["downgrade", "capability:missing", "-1"]) == 2
+    assert main(["downgrade", "capability:missing", "base"]) == 2
     assert "unknown tree" in capsys.readouterr().err
+
+
+def test_downgrade_rejects_non_exact_target_before_alembic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        command, "downgrade", lambda _config, revision: calls.append(revision)
+    )
+
+    for revision in ("-1", "head", "e5f6", "missing"):
+        with pytest.raises(migrations.MigrationTreeSelectionError, match="complete ID"):
+            migrations.downgrade_migration_tree("runtime", revision)
+
+    assert calls == []
+
+
+def test_downgrade_runtime_to_exact_older_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "runtime-downgrade.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")
+    upgrade_sqlite_database(database_path)
+
+    target_revision = "d4e5c6b7a8f9"  # pragma: allowlist secret
+    assert (
+        migrations.downgrade_migration_tree("runtime", target_revision)
+        == "fred-runtime"
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute(
+            "SELECT version_num FROM alembic_version_runtime"
+        ).fetchone() == (target_revision,)
+        assert not connection.execute(
+            "PRAGMA table_info(runtime_turn_steering)"
+        ).fetchall()
+        assert not connection.execute(
+            "PRAGMA table_info(runtime_web_research_activity)"
+        ).fetchall()
+        assert connection.execute("PRAGMA table_info(session_history)").fetchall()
 
 
 def test_packaged_tree_is_not_excluded_from_the_docker_build_context() -> None:
