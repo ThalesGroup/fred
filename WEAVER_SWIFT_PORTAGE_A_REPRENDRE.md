@@ -640,13 +640,27 @@ reload ; refus avant acceptation et absence de fausse annulation d'outil ; déta
 de traces. Aucune validation navigateur k3d/plateforme ni appel fournisseur ici.
 Les lots DOCX, titres, skills et e-mails précédents ne sont pas réouverts par ce merge.
 
-## 12. Nouvelle arrivée Swift : cibles exactes pour le retour des migrations Agent Pod
+## 12. Arrivées Swift après la borne 059ae1c91
 
-Source Swift : `3d18384205a469f691bbf3ca3cb697911bc6b257` (#3471), après la
+Inventaire initial fixé sur Weaver `e71bc96ac1d0ac94043b47bf7f0c762f69228e79`
+et Swift `541f3275d9908732a4b7c5d99a7302756fce2171`, puis complété par le
+portage ciblé de `3d18384205a469f691bbf3ca3cb697911bc6b257`. La borne intégrée
+reste `059ae1c91b959692f6a0fb61ddc9824c67c90355` : un cherry-pick isolé ne la déplace pas.
+
+| Commit Swift | Apport | Etat Weaver |
+| --- | --- | --- |
+| `de9192157ea898fe9bb8873362b858fca3e7295d` (#3290) | Construction de présentations depuis un modèle, avec administration et catalogue de capacité | Adaptation requise : le commit modifie le Control Plane Python retiré ; examiner le contrat dans le Control Plane Rust et les mécanismes de capacités avant portage. |
+| `d850bdce63a69854ecc77d13ebb7fdb98fa33187` (#3470) | Conserver le rapport CVE et laisser 15 minutes au SBOM Trivy de l'image PyMuPDF | Intégré via #3472 : matrice Weaver et contrôle d'import conservés, note opérateur déplacée. |
+| `541f3275d9908732a4b7c5d99a7302756fce2171` (#3436) | Préparation de la version Swift 3.10.0 | Exclu du backport fonctionnel Weaver : versionnement propre à Swift. |
+| `3d18384205a469f691bbf3ca3cb697911bc6b257` (#3471) | Cibles exactes pour le retour des migrations Agent Pod | Portage en PR #3473, non intégré ; voir ci-dessous. |
+
+### Cibles exactes pour le retour des migrations Agent Pod
+
+Source Swift : `3d18384205a469f691bbf3ca3cb697911bc6b257`, après la
 borne intégrée `059ae1c91b959692f6a0fb61ddc9824c67c90355`. Base Weaver du
-portage : `e71bc96ac1d0ac94043b47bf7f0c762f69228e79`. Ce portage est en
-[PR draft #3473](https://github.com/ThalesGroup/fred/pull/3473), non intégré ;
-il ne déplace pas la borne Swift fusionnée.
+portage : `e71bc96ac1d0ac94043b47bf7f0c762f69228e79`. La
+[PR #3473](https://github.com/ThalesGroup/fred/pull/3473) ne déplace pas la
+borne Swift fusionnée.
 
 Le CLI `fred_runtime downgrade` et le Make target Agent Pod acceptent une
 révision complète ou `base` pour un seul arbre runtime/capability. Les cibles
