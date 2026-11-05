@@ -84,8 +84,8 @@ A turn interrupted for human validation produces several reports, and its
 consumption is the sum of those reports. Provenance survives retirement or purge.
 Embedded Ralph submits one report per managed turn with at least one decoded
 model response, through the same validation and transaction. It sums Rig's token
-counters for the admitted offer, including responses received before a later
-failure or cancellation. Managed execution requires a session; direct
+counters for the admitted offer, including responses completed before a later
+failure or cancellation; a reply abandoned mid-stream has reported no usage. Managed execution requires a session; direct
 demonstration emits no report. Its single, two-second write attempt survives browser disconnection but
 is best effort: a write failure or process crash can lose the report without
 changing the reply. A turn with no decoded model response emits no report.

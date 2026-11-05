@@ -1,36 +1,15 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Embedded Ralph runtime. The host owns HTTP, identity and admission.
+//! The execution request Ralph accepts: a validated shape, not authority.
 
-use std::{collections::BTreeMap, time::Duration};
+use std::collections::BTreeMap;
 
 use fred_rust_sdk::inference::ModelOfferKey;
-use futures::{Stream, StreamExt, stream};
-pub use rig_core::completion::Usage;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 
-pub mod inference;
-
-pub const AGENT_ID: &str = "fred.github.ralph";
-
-/// Descriptive metadata, independent of the host's discovery wire format.
-pub struct AgentDefinition {
-    pub id: &'static str,
-    pub title: &'static str,
-    pub version: &'static str,
-    pub provider: &'static str,
-    pub description: &'static str,
-}
-
-pub const DEFINITION: AgentDefinition = AgentDefinition {
-    id: AGENT_ID,
-    title: "Ralph",
-    version: env!("CARGO_PKG_VERSION"),
-    provider: "control-plane",
-    description: "Rust chat agent with optional document search. Each message is independent; no saved history.",
-};
+use crate::AGENT_ID;
 
 // Subset of fred-sdk/contracts/execution.py::RuntimeExecuteRequest accepted by Ralph.
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -157,111 +136,6 @@ impl ExecuteRequest {
         // Direct-demo session/context remain inert metadata: no memory or tools.
         Ok(RequestedTarget::Direct)
     }
-}
-
-// Wire subset of fred-sdk/contracts/runtime.py::RuntimeEvent.
-#[derive(Serialize, utoipa::ToSchema)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum RuntimeEvent {
-    ThoughtStart {
-        sequence: u64,
-        thought_id: String,
-        phase: &'static str,
-        source: &'static str,
-    },
-    ThoughtDelta {
-        sequence: u64,
-        thought_id: String,
-        delta: String,
-    },
-    ThoughtEnd {
-        sequence: u64,
-        thought_id: String,
-    },
-    ToolCall {
-        sequence: u64,
-        tool_name: &'static str,
-        call_id: String,
-        arguments: serde_json::Map<String, serde_json::Value>,
-    },
-    ToolResult {
-        sequence: u64,
-        tool_name: &'static str,
-        call_id: String,
-        content: String,
-        is_error: bool,
-        latency_ms: u64,
-    },
-    Status {
-        sequence: u64,
-        status: &'static str,
-    },
-    AssistantDelta {
-        sequence: u64,
-        delta: String,
-    },
-    #[serde(rename = "execution_error")]
-    Error {
-        sequence: u64,
-        message: &'static str,
-    },
-    SessionTitle {
-        sequence: u64,
-        session_id: String,
-    },
-    Final {
-        sequence: u64,
-        content: String,
-        finish_reason: &'static str,
-    },
-}
-
-impl RuntimeEvent {
-    /// The host may insert title events; sequence the final wire stream once.
-    pub fn with_sequence(mut self, value: u64) -> Self {
-        let (Self::Status { sequence, .. }
-        | Self::AssistantDelta { sequence, .. }
-        | Self::Final { sequence, .. }
-        | Self::Error { sequence, .. }
-        | Self::SessionTitle { sequence, .. }
-        | Self::ThoughtStart { sequence, .. }
-        | Self::ThoughtDelta { sequence, .. }
-        | Self::ThoughtEnd { sequence, .. }
-        | Self::ToolCall { sequence, .. }
-        | Self::ToolResult { sequence, .. }) = &mut self;
-        *sequence = value;
-        self
-    }
-}
-
-/// Produce the fixed response after host admission; no caller context enters the stream.
-pub fn execute() -> impl Stream<Item = RuntimeEvent> {
-    let events = [
-        RuntimeEvent::Status {
-            sequence: 1,
-            status: "running",
-        },
-        RuntimeEvent::AssistantDelta {
-            sequence: 2,
-            delta: "Hello ".into(),
-        },
-        RuntimeEvent::AssistantDelta {
-            sequence: 3,
-            delta: "world!".into(),
-        },
-        RuntimeEvent::Final {
-            sequence: 4,
-            content: "Hello world!".into(),
-            finish_reason: "stop",
-        },
-    ];
-    // Dropping the stream cancels the async delay; there is no detached producer.
-    stream::iter(events).then(|event| async move {
-        if matches!(&event, RuntimeEvent::AssistantDelta { .. }) {
-            tokio::time::sleep(Duration::from_millis(150)).await;
-        }
-        event
-    })
 }
 
 #[cfg(test)]
