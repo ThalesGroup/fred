@@ -120,16 +120,16 @@ pub struct PodTemplateCapability {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PodInventory {
-    complete: bool,
+pub(super) struct PodInventory {
+    pub(super) complete: bool,
     capabilities: Vec<PodCapabilityDescriptor>,
     template_capabilities: Vec<PodTemplateCapability>,
     #[serde(default)]
-    skills: Option<super::skills::SkillCatalog>,
+    pub(super) skills: Option<super::skills::SkillCatalog>,
 }
 
 impl PodInventory {
-    fn snapshot(mut self, runtime_id: &str) -> Result<catalog::CatalogSnapshot> {
+    pub(super) fn snapshot(mut self, runtime_id: &str) -> Result<catalog::CatalogSnapshot> {
         ensure!(self.complete, "incomplete inventory");
         for entry in &self.capabilities {
             ensure!(
@@ -454,7 +454,7 @@ async fn organization_capabilities(
     Ok(Json(inventory))
 }
 
-async fn fetch(source: &RuntimeCatalogSource) -> AppResult<catalog::CatalogSnapshot> {
+pub(super) async fn fetch_raw(source: &RuntimeCatalogSource) -> AppResult<PodInventory> {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     let client = if let Some(client) = CLIENT.get() {
         client.clone()
@@ -499,10 +499,20 @@ async fn fetch(source: &RuntimeCatalogSource) -> AppResult<catalog::CatalogSnaps
         }
         bytes.extend_from_slice(&chunk);
     }
-    serde_json::from_slice::<PodInventory>(&bytes)
-        .map_err(|_| invalid())?
+    serde_json::from_slice::<PodInventory>(&bytes).map_err(|_| invalid())
+}
+
+pub(super) async fn fetch(source: &RuntimeCatalogSource) -> AppResult<catalog::CatalogSnapshot> {
+    fetch_raw(source)
+        .await?
         .snapshot(&source.runtime_id)
-        .map_err(|_| invalid())
+        .map_err(|_| {
+            AppError::problem(
+                StatusCode::BAD_GATEWAY,
+                "invalid_pod_inventory",
+                "Pod returned an invalid or incomplete capability inventory.",
+            )
+        })
 }
 
 #[utoipa::path(

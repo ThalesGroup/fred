@@ -290,16 +290,23 @@ async fn prepare_execution(
     enablement::require_usable(&policy, &space, &current.source_runtime_id, &selected)?;
     let supports_skills = !embedded && matches!(template.category.as_str(), "react" | "deep");
     let skills = if supports_skills {
+        let disabled_platform_skills = crate::skill_policy::disabled_in(&mut tx).await?;
         Some(
-            crate::agents::skills::resolve(&mut tx, &space, &current.source_runtime_id, &policy)
-                .await?
-                .unwrap_or(crate::agents::skills::SkillCatalog {
-                    availability: crate::agents::skills::SkillAvailability::Unavailable,
-                    supported: false,
-                    policy_supported: false,
-                    revision: String::new(),
-                    skills: vec![],
-                }),
+            crate::agents::skills::resolve(
+                &mut tx,
+                &space,
+                &current.source_runtime_id,
+                &policy,
+                &disabled_platform_skills,
+            )
+            .await?
+            .unwrap_or(crate::agents::skills::SkillCatalog {
+                availability: crate::agents::skills::SkillAvailability::Unavailable,
+                supported: false,
+                policy_supported: false,
+                revision: String::new(),
+                skills: vec![],
+            }),
         )
     } else {
         None

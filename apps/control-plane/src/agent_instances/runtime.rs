@@ -327,15 +327,21 @@ async fn resolve_runtime_binding(
         &record.source_runtime_id,
         &super::tuning::saved_selection(&record.tuning.0)?,
     )?;
-    let skills =
-        crate::agents::skills::resolve(&mut tx, &space, &record.source_runtime_id, &policy).await?;
+    let disabled_platform_skills = crate::skill_policy::disabled_in(&mut tx).await?;
+    let skills = crate::agents::skills::resolve(
+        &mut tx,
+        &space,
+        &record.source_runtime_id,
+        &policy,
+        &disabled_platform_skills,
+    )
+    .await?;
     record
         .tuning
         .0
         .as_object()
         .context("invalid saved agent tuning")?;
     let models = models::resolve(&mut tx, space.organization, &record.tuning.0).await?;
-    let disabled_platform_skills = crate::skill_policy::disabled_in(&mut tx).await?;
     let choice = match (&query.model_source_id, &query.model_upstream_id) {
         (None, None) => None,
         (Some(source_id), Some(upstream_model_id)) => Some(models::ModelOfferKey {

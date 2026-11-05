@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
 use control_plane::agents::{catalog as store, enablement, skills};
+use control_plane::{authorization, roles::PlatformRole, skill_policy};
 
 fn inventory() -> Value {
     json!({"complete":true,"capabilities":[{"id":"tool","name":"Tool","description":"A tool","icon":"tune","version":"1","kind":"tool"}], "template_capabilities":[],
@@ -47,7 +48,8 @@ async fn allowed(e: &Env, space: &Space) -> Vec<String> {
     let policy = enablement::Policy::load(&mut *tx, space.organization)
         .await
         .unwrap();
-    skills::resolve(&mut tx, space, "fixture", &policy)
+    let disabled = skill_policy::disabled_in(&mut tx).await.unwrap();
+    skills::resolve(&mut tx, space, "fixture", &policy, &disabled)
         .await
         .unwrap()
         .unwrap()
@@ -55,6 +57,202 @@ async fn allowed(e: &Env, space: &Space) -> Vec<String> {
         .into_iter()
         .map(|s| s.name)
         .collect()
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn packaged_skill_policy_is_global_and_recoverable_offline() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    catalog.state.lock().await.inventory = inventory();
+    let app = app(&e, &identity, &catalog).await;
+    authorization::write_platform(
+        &mut e.pool.acquire().await.unwrap(),
+        "alice",
+        PlatformRole::FeatureManager,
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "GET",
+            "/platform/skills",
+            Value::Null
+        )
+        .await
+        .0,
+        403
+    );
+    let (status, listed) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        "/platform/skills",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{listed}");
+    assert_eq!(listed["skills"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["skills"][0]["skill"]["name"], "graph");
+    assert_eq!(listed["skills"][0]["runtime_ids"], json!(["fixture"]));
+    let second = Catalog::start().await;
+    let mut second_inventory = inventory();
+    second_inventory["skills"]["skills"][0]["description"] = json!("Different rollout version");
+    second.state.lock().await.inventory = second_inventory;
+    let mut sources = catalog.config();
+    let mut second_source = second.config().runtime_catalog_sources.remove(0);
+    second_source.runtime_id = "fixture-b".into();
+    sources.runtime_catalog_sources.push(second_source);
+    let mixed_app = routes(AppState {
+        pool: e.pool.clone(),
+        agent_catalog: sources,
+        auth: Arc::new(identity.auth().await),
+        directory: Some(identity.directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    });
+    let (status, mixed) = request(
+        &mixed_app,
+        &identity,
+        Some("alice"),
+        "GET",
+        "/platform/skills",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{mixed}");
+    assert_eq!(
+        mixed["skills"][0]["runtime_ids"],
+        json!(["fixture", "fixture-b"])
+    );
+    assert_eq!(mixed["skills"][0]["skill"]["description"], "Draw");
+    assert_eq!(mixed["conflicting_skill_names"], json!(["graph"]));
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            "/platform/skills/private-procedure",
+            json!({"enabled":false})
+        )
+        .await
+        .0,
+        404
+    );
+    let (status, _) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PUT",
+        "/platform/skills/graph",
+        json!({"enabled":false}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(observe(&app, &identity, org.id).await, 204);
+    permit(&app, &identity, org.id, "skill:graph", true).await;
+    permit(&app, &identity, org.id, "skill:private-procedure", true).await;
+    assert_eq!(allowed(&e, &team).await, ["private-procedure"]);
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let instance = create(&app, &identity, team.id, creation(template, "Skill agent")).await;
+    let runtime = format!("{}/runtime", item(team.id, &instance));
+    let preparation = format!("{}/prepare-execution", item(team.id, &instance));
+    let (status, binding) =
+        request(&app, &identity, Some("alice"), "GET", &runtime, Value::Null).await;
+    assert_eq!(status, 200, "{binding}");
+    assert_eq!(binding["skills"]["skills"][0]["name"], "private-procedure");
+    assert_eq!(binding["disabled_platform_skills"], json!(["graph"]));
+    let (status, prepared) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "POST",
+        &preparation,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{prepared}");
+    assert_eq!(prepared["skills"], binding["skills"]);
+    catalog.state.lock().await.status = 503;
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            "/platform/skills/graph",
+            json!({"enabled":false})
+        )
+        .await
+        .0,
+        503
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            "/platform/skills/graph",
+            json!({"enabled":true})
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(allowed(&e, &team).await, ["graph", "private-procedure"]);
+    let (status, restored) =
+        request(&app, &identity, Some("alice"), "GET", &runtime, Value::Null).await;
+    assert_eq!(status, 200, "{restored}");
+    assert_eq!(restored["skills"]["skills"].as_array().unwrap().len(), 2);
+    {
+        let mut source = catalog.state.lock().await;
+        source.status = 200;
+        source.inventory["skills"]["availability"] = json!("disabled");
+        source.inventory["skills"]["skills"] = json!([]);
+    }
+    let (status, disabled_source) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        "/platform/skills",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{disabled_source}");
+    assert_eq!(disabled_source["disabled_runtime_ids"], json!(["fixture"]));
+    {
+        let mut source = catalog.state.lock().await;
+        source.inventory["skills"]["availability"] = json!("available");
+        source.inventory["skills"]["skills"] = json!([{
+            "name":"private-procedure", "description":"Custom source",
+            "argument_hint":null, "builtin":false, "user_invocable":false,
+            "disable_model_invocation":false
+        }]);
+    }
+    let (status, custom_source) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        "/platform/skills",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{custom_source}");
+    assert_eq!(custom_source["custom_runtime_ids"], json!(["fixture"]));
 }
 async fn permit(app: &Router, identity: &support::IdentityServer, org: Uuid, id: &str, on: bool) {
     let result = request(
