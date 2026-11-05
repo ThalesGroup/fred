@@ -160,11 +160,22 @@ from the old image against a database stamped at a newer revision.
    use an `up` command that silently selects newly built images.
 3. For an in-place schema rollback, use the **new** image to run `alembic
    downgrade <recorded-old-revision>` separately for control plane and
-   Knowledge Flow. For runtime and each capability, invoke Alembic against
-   its own migration directory and version table with the new agent image;
-   `python -m fred_runtime migrate` cannot downgrade. Use the release guide's
-   exact targets and ordering, not a blanket `base` or `-1`. Check the
-   version table and affected data after each tree. Then perform step 2.
+   Knowledge Flow. For runtime and each affected capability, run
+   `python -m fred_runtime downgrade <tree> <recorded-old-revision>` with the
+   new agent image. Use `base` only when that tree did not exist in the old
+   release; it undoes every revision in that tree. The agent CLI rejects
+   relative targets such as `-1`. `python -m fred_runtime migrate` only
+   upgrades. Check each version table and affected data before step 2. Older
+   agent images, including v3.10.0, only accept `-1` in this CLI. For those
+   images, use direct Alembic with the exact `script_location` and the same
+   database configuration, or a reviewed sequence of single-revision calls.
+
+   ```bash
+   docker compose -f <new-app-compose> -p <project> run --rm --no-deps --entrypoint alembic <control-plane-service> downgrade <old-control-plane-revision>
+   docker compose -f <new-app-compose> -p <project> run --rm --no-deps --entrypoint alembic <knowledge-flow-service> downgrade <old-knowledge-flow-revision>
+   docker compose -f <new-app-compose> -p <project> run --rm --no-deps --entrypoint python <agent-service> -m fred_runtime downgrade runtime <old-runtime-revision>
+   docker compose -f <new-app-compose> -p <project> run --rm --no-deps --entrypoint python <agent-service> -m fred_runtime downgrade capability:<id> <old-capability-revision-or-base>
+   ```
 4. For snapshot restoration, keep all application writers stopped. Restore
    PostgreSQL and any affected identity provider/OpenFGA/Temporal databases, object
    storage, OpenSearch and local files from the **same coordinated recovery
@@ -197,3 +208,24 @@ from the old image against a database stamped at a newer revision.
 If the current state does not fit a rehearsed path, keep writers stopped and
 escalate to the release and data owners. Guessing a revision or restoring only
 one store can turn a recoverable failed deployment into data corruption.
+
+## Migration rehearsal: v3.8.0 to v3.10.0 and back
+
+An isolated Docker Compose project with PostgreSQL and one-shot migration
+containers exercised the published release images. Control plane upgraded from
+`c9acb7dd3ad0` to `b8e1f4a2c6d9` through six revisions; six exact-target
+downgrades returned it to `c9acb7dd3ad0`. Fred-runtime moved from
+`e5f6a7b8c9d0` to `f6a7b8c9d0e1` and back. The new `ppt_builder` capability
+moved from no version table to `r9d3f4a5b6c7` and back to `base`.
+`writable_document` stayed at `w1r2i3t4a5b6`. Knowledge Flow stayed at
+`02d556a6f182`; it had no revision to downgrade in this release jump. The
+published v3.10.0 agent CLI was exercised with `-1` for the two affected
+trees, and its runtime tree was also moved to the recorded v3.8.0 revision
+through direct Alembic as a separate check.
+
+The test used a fresh database and synthetic rows in newly added tables.
+Downgrades removed those rows and cannot recover them. The control-plane
+repair revision `7e0d93f21c6a` has an empty `downgrade()`; its preceding
+schema revision removes the affected tables. A real deployment must review
+data and external stores before choosing an in-place downgrade. This rehearsal
+did not start the full application or validate user flows.

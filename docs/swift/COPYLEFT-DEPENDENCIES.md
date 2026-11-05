@@ -11,11 +11,11 @@ adopting or deploying it. It intentionally goes into more depth than the
 [README Licensing Note](../../README.md#licensing-note), which only summarizes
 the current state and links here.
 
-Tracked as `LICENSE-01`/`LICENSE-02`/`LICENSE-03` in the table below;
+Tracked as `LICENSE-01` through `LICENSE-04` in the table below;
 originated from GitHub issue
 [#1939](https://github.com/ThalesGroup/fred/issues/1939).
 
-Last updated: 2026-07-09.
+Last updated: 2026-11-04.
 
 ## How to read this document
 
@@ -45,6 +45,7 @@ what we ship, and under what terms:
 | `LICENSE-01` | `pymupdf`, `pymupdf4llm`, `pymupdf-layout` | AGPL/commercial; layout: PolyForm Noncommercial | Explicit Knowledge Flow PDF extra | **High** | Standard installs exclude the family; issue #3159 |
 | `LICENSE-02` | `psycopg`, `psycopg[binary]`, `psycopg2-binary` | LGPL-3.0-only / LGPL-2.0-only | `fred-core`, `knowledge-flow-backend` (Postgres driver) | Low | Resolved via disclosure — no code change needed |
 | `LICENSE-03` | `jwcrypto` | LGPL-3.0-or-later | Transitive, via `python-keycloak`'s `KeycloakAdmin` — `fred-core`, `control-plane-backend`, `knowledge-flow-backend`, `fred-agents`, `fred-sdk`, `fred-runtime` | Low | Disclosed, compliant as unmodified/dynamically-imported dependency. Full removal of the transitive dependency tracked separately (issue #1949), not implemented |
+| `LICENSE-04` | `fonts-urw-base35` | AGPL-3.0 with PostScript/PDF font exception | Standard `fred-agents` image | Medium | Unmodified font asset; image notice, matching source directions and license scan added |
 
 ---
 
@@ -168,3 +169,25 @@ Tracked in: **GitHub issue [#1949](https://github.com/ThalesGroup/fred/issues/19
 — no RFC planned, since this is a like-for-like dependency substitution with
 no design decision to make; flag here if that turns out not to hold once
 someone starts the port.
+
+## LICENSE-04 - URW Base35 fonts
+
+The standard `fred-agents` image installs Ubuntu's `fonts-urw-base35` package.
+Its URW Gothic face is selected by a Fontconfig alias for Century Gothic in
+uploaded PowerPoint templates. The font files are not modified or linked into
+Fred's code. They remain under AGPL 3 with an exception allowing their
+incorporation into PostScript and PDF documents without changing the document's
+license. Generated PPTX files reference font names; they do not embed URW font
+files. Local development uses the host's Fontconfig configuration, which may
+select a different substitute; the alias above is configured in the image.
+Fred's own source remains Apache 2.0, while the distributed image
+contains components under several licenses.
+
+The Ubuntu package carries its copyright notice, full AGPL text and exception
+at `/usr/share/doc/fonts-urw-base35/copyright` in the image. The
+[`fred-agents` font notice](../../apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md)
+names every added font package and gives instructions for obtaining the
+corresponding Ubuntu source package for the installed version. The Docker
+build checks that the notices are retained, and CI records the image's license
+report and SBOM. The source availability and notices must be maintained for
+every published image version.

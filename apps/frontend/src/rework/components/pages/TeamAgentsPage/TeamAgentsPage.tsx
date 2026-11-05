@@ -34,6 +34,7 @@ import {
   useUnpublishAgentMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import { useTeamAgentInstances } from "@hooks/useTeamAgentInstances.ts";
 import { type AgentFormPayload, default as AgentFormModal } from "./AgentFormModal/AgentFormModal.tsx";
 import CopyAgentDialog from "./CopyAgentDialog/CopyAgentDialog.tsx";
 import { duplicateCopyArgs, duplicateWarning } from "./duplicateAgent.ts";
@@ -69,7 +70,6 @@ import {
   type ManagedAgentInstanceSummary,
   type UpdateAgentInstanceRequest,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
   usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
@@ -181,10 +181,7 @@ export default function TeamAgentsPage() {
     isLoading: isLoadingInstances,
     isError: isInstancesError,
     refetch: refetchInstances,
-  } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
-    { teamId: teamId || "" },
-    { skip: !teamId },
-  );
+  } = useTeamAgentInstances(teamId);
 
   const {
     data: availableTemplates = [],

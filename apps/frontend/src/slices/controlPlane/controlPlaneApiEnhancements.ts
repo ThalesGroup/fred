@@ -678,6 +678,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
           .filter((r) => r.agent)
           .map((r) => ({ type: "ControlPlaneAgentInstance" as const, id: `LIST-${r.team_id}` })),
     },
+    // A re-check may lift a capability_pending suspension: the list must show it.
+    postTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPost: {
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
+    },
     // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
     // route needs no team — so it invalidates the whole type rather than one
     // team's list: the alternative is passing a team id the API never asked for.
@@ -829,6 +836,10 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     // Its effective default follows the stored policy, so a save refetches it.
     getAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlaneRoutingPolicy" as const, id: arg.teamId }],
+    },
+    // Model enablement changes refetch it, like the team lists above.
+    getPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGet: {
+      providesTags: [{ type: "ControlPlaneRoutingPolicy" as const, id: "PLATFORM" }],
     },
     // The composer's model label (#2387). Tagged under the same
     // ControlPlaneRoutingPolicy/teamId entity the policy read and write already
@@ -1046,12 +1057,17 @@ export const {
   // Routing-policy picker option set (#2167).
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery:
     useAvailableModelProfilesQuery,
+  // The same option set for a platform-wide choice (capability managers).
+  useGetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetQuery:
+    usePlatformAvailableModelProfilesQuery,
   // The model a chat turn will actually route to — the composer label (#2387).
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery: useEffectiveChatModelQuery,
   useLazyGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery:
     useLazyDisableImpactQuery,
   useHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery: useSkillUsageQuery,
   useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
+  usePostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostMutation:
+    useAgentReadinessCheckMutation,
   useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,

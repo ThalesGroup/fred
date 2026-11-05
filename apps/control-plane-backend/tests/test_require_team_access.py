@@ -252,12 +252,13 @@ async def test_product_route_no_longer_triggers_full_projection(
             get_agent_marketplace_store=_NoMarketplaceEntries,
         ),
     )
+    request = cast(Any, MagicMock(headers={}))
     result = await product_api.get_team_agent_instances(
-        TeamId("fredlab"), deps, _user()
+        TeamId("fredlab"), deps, request, _user()
     )
 
     assert result == expected_instances
-    list_instances.assert_awaited_once_with(TeamId("fredlab"), deps)
+    list_instances.assert_awaited_once_with(TeamId("fredlab"), deps, authorization=None)
     assert engine.list_relations_calls == []
     assert engine.has_permission_calls == [
         ("u", TeamPermission.CAN_USE_TEAM_AGENTS, "fredlab")

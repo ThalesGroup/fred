@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import weakref
 from concurrent.futures import ThreadPoolExecutor
@@ -62,3 +63,22 @@ def test_four_concurrent_workers_keep_the_existing_bound() -> None:
                 job.result(timeout=5)
                 concurrency.release_heavy_job_slot()
     assert concurrency._active_jobs == 0
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_caller_keeps_the_slot_until_its_thread_ends() -> None:
+    release = threading.Event()
+    assert concurrency.acquire_heavy_job_slot()
+    held = concurrency._active_jobs
+    caller = asyncio.ensure_future(concurrency.in_slot_thread(release.wait, 5))
+    await asyncio.sleep(0.05)
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    assert concurrency._active_jobs == held  # the thread still runs
+    release.set()
+    for _ in range(100):
+        if concurrency._active_jobs < held:
+            break
+        await asyncio.sleep(0.01)
+    assert concurrency._active_jobs == held - 1

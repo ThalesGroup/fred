@@ -27,7 +27,7 @@ A team, its corpus, then its agents — in that order. Governance sits underneat
 rather than bolted on top, because the AI Act, GDPR and your security team leave
 no other option.
 
-Apache 2.0 end to end. No licence, no hosted tier, nothing to sign. **A third
+Fred's own code is Apache 2.0 end to end. No licence, no hosted tier, nothing to sign. **A third
 party can install the whole thing without us — that is deliberate.**
 
 > The default PDF/PPTX pipeline uses pypdf, Docling and pypdfium2. PyMuPDF is
@@ -729,11 +729,12 @@ Persistence options:
 
 Fred's own code is released under the **Apache License 2.0**. Optional integrations (like OpenSearch) are configured externally and do not contaminate Fred's licensing.
 
-Fred currently depends on a small number of third-party Python packages under copyleft licenses, tracked under `LICENSE-01`/`LICENSE-02`/`LICENSE-03`. Full detail, severity assessment, and remediation status for each: [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
+Fred also ships third-party packages under their own licenses. Copyleft dependencies in Python packages and images are tracked under `LICENSE-01` through `LICENSE-04` in [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
 
 - `pymupdf` / `pymupdf4llm` are optional under AGPL-3.0 or Artifex commercial terms. The locked extra also includes `pymupdf-layout`, under PolyForm Noncommercial 1.0.0; it is not covered by an AGPL-only assessment. These packages are excluded from ordinary development installs and the standard Knowledge Flow image. See [installation and deployment](apps/knowledge-flow-backend/README.md#optional-pymupdf-processing) and [issue #3159](https://github.com/ThalesGroup/fred/issues/3159).
 - `psycopg2-binary` / `psycopg` (PostgreSQL driver, `fred-core` / `knowledge-flow-backend`) — **LGPL-3.0-only**, used as an unmodified, dynamically imported package (not statically linked or embedded).
 - `jwcrypto` (transitive, via `python-keycloak`'s admin client, `fred-core` / `control-plane-backend` / `knowledge-flow-backend` / `fred-agents`) — **LGPL-3.0-or-later**, used as an unmodified, dynamically imported package; never directly invoked by Fred's own code (Fred's JWT verification path uses PyJWT).
+- `fonts-urw-base35` in the `fred-agents` image is **AGPL-3.0 with a PostScript/PDF font exception**. It is an unmodified font package, separate from Fred's Apache-2.0 code. The image includes the [font notices and source directions](apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md).
 
 If your use case requires a fully copyleft-free dependency tree, audit these packages before deployment.
 

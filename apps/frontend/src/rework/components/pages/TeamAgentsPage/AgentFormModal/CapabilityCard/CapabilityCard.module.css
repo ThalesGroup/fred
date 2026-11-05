@@ -58,6 +58,12 @@
   min-width: 0;
 }
 
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .name {
   color: var(--on-surface);
   font: var(--font-body-large);
@@ -87,41 +93,6 @@
   margin: 0;
   border: none;
   border-top: 1px solid var(--outline-muted);
-}
-
-/* "Advanced settings" toggle: plain left-aligned text + chevron, no button
- * chrome — clicking it reveals the ui.advanced fields below. */
-.advancedToggle {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  gap: var(--spacing-3xs);
-  cursor: pointer;
-  border: none;
-  border-radius: var(--radius-s);
-  background: transparent;
-  padding: 0;
-  color: var(--on-surface-retreat);
-}
-
-.advancedToggle:hover {
-  color: var(--on-surface);
-}
-
-.advancedToggle:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.advancedToggleLabel {
-  font: var(--font-label-medium);
-}
-
-/* Field stack revealed under the advanced toggle */
-.advancedFields {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
 }
 
 /* A field gated by ui.visible_when sits visually under its gating sibling:

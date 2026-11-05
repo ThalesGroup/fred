@@ -237,27 +237,27 @@ jobs:
           output: trivy-results.json
           exit-code: "0"
 
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.name }}
+          path: trivy-results.json
+          retention-days: 14
+
       - name: Record image licenses and SBOM
-        if: ${{ startsWith(matrix.name, 'knowledge-flow-backend') }}
+        if: ${{ matrix.name == 'fred-agents' || startsWith(matrix.name, 'knowledge-flow-backend') }}
         run: |
           trivy image --input /tmp/pr-image.tar --scanners license --license-full --format json --output image-licenses.json
-          trivy image --input /tmp/pr-image.tar --format cyclonedx --output image-sbom.cdx.json
+          trivy image --input /tmp/pr-image.tar --format cyclonedx --timeout 15m --output image-sbom.cdx.json
 
       - name: Retain image license evidence
-        if: ${{ startsWith(matrix.name, 'knowledge-flow-backend') }}
+        if: ${{ matrix.name == 'fred-agents' || startsWith(matrix.name, 'knowledge-flow-backend') }}
         uses: actions/upload-artifact@v4
         with:
           name: licenses-${{ matrix.name }}
           path: |
             image-licenses.json
             image-sbom.cdx.json
-          retention-days: 14
-
-      - name: Upload Trivy report
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-${{ matrix.name }}
-          path: trivy-results.json
           retention-days: 14
 
       - name: Report scan findings
