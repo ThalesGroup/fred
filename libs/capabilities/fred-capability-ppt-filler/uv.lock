@@ -543,7 +543,7 @@ wheels = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

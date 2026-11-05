@@ -1082,7 +1082,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "../../libs/capabilities/fred-capability-ppt-filler" }
 dependencies = [
     { name = "fastapi" },
@@ -1208,7 +1208,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "4.5.1"
+version = "4.5.2"
 source = { editable = "../../libs/capabilities/fred-capability-writable-document" }
 dependencies = [
     { name = "fastapi" },

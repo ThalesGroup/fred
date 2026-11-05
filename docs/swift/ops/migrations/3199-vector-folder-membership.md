@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [chat-active-turn-steering]
 title: "Keep vector chunk folders in sync when documents are linked, unlinked or refiled"
 impact: minor
 configuration: none

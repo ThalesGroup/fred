@@ -313,7 +313,7 @@ class PptFillerCapability(
 
     manifest = CapabilityManifest(
         id=PPT_FILLER_CAPABILITY_ID,
-        version="0.1.0",
+        version="0.1.1",
         name="capability.ppt_filler.name",
         description="capability.ppt_filler.description",
         icon="slideshow",

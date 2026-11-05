@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [chat-active-turn-steering]
 title: "Require Node 24 for frontend builds and package consumers"
 impact: minor
 configuration: none
@@ -12,7 +13,7 @@ Frontend source builds, development containers, CI and consumers of the shared f
 
 ## Prerequisites
 
-Install Node 24.21.0 and npm 11.19.0. The supported Node range is >=24.21.0 <25; Node 22 and Node 25 or newer are unsupported. Release preparation retains exact Node/npm pins.
+Install the exact Node version in `.nvmrc` (24.22.2 for this release) and npm 11.19.0. The supported Node range is >=24.21.0 <25; Node 22 and Node 25 or newer are unsupported. Release preparation retains exact Node/npm pins.
 
 ## Configuration
 

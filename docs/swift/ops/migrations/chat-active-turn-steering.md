@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [platform-skills-evolution]
 title: "Queue and send messages during active agent turns"
 impact: minor
 configuration: none
