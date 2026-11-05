@@ -72,7 +72,12 @@ from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
 from fred_core.diagnostics import install_gc_diagnostics
-from fred_core.history.history_schema import ChatMessage, CommandDescriptor
+from fred_core.history.history_schema import (
+    ChatMessage,
+    CommandDescriptor,
+    HitlRequestPart,
+    HitlResponsePart,
+)
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -112,6 +117,7 @@ from fred_sdk.contracts.capability import (
     CapabilityConfigExportRequest,
     CapabilityConfigExportResult,
     CapabilityIdentity,
+    CapabilityReadiness,
     ChatControlsRequest,
     ChatControlsResponse,
     SaveContext,
@@ -198,6 +204,14 @@ from fred_runtime.capabilities.errors import (
     CapabilityError,
     TurnOptionsInvalidError,
     UnknownCapabilityError,
+)
+from fred_runtime.capabilities.platform_ports import (
+    AGENT_EDITOR_DENIED,
+    CapabilitySaveRouting,
+    RoutedCapabilityModelPort,
+    parse_save_routing,
+    require_team_permission,
+    team_authorizer_binder,
 )
 from fred_runtime.common.background_tasks import spawn
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
@@ -1378,6 +1392,30 @@ class _AgentTemplateSummary(BaseModel):
     max_chat_input_chars: int
 
 
+class _ReadinessRequestItem(BaseModel):
+    capability_id: str
+    stored: StoredCapabilityConfig
+
+
+class _ReadinessRequest(BaseModel):
+    """One instance's stored slices, as control-plane persisted them."""
+
+    agent_instance_id: str
+    team_id: str | None = None
+    items: list[_ReadinessRequestItem] = Field(default_factory=list)
+
+
+class _ReadinessResult(CapabilityReadiness):
+    capability_id: str
+
+
+class _ReadinessResponse(BaseModel):
+    """One result per known capability; an unknown id or a slice that no
+    longer parses is omitted — config health owns that verdict."""
+
+    results: list[_ReadinessResult] = Field(default_factory=list)
+
+
 class _McpCatalogEntry(BaseModel):
     id: str
     name: str
@@ -1428,6 +1466,9 @@ class _ModelCatalogEntry(BaseModel):
     for profiles declaring two or more (`ModelProfile.reasoning_levels`).
     Absent: that thinking profile is on/off only. Empty: no level a platform
     helper can send (`ModelProfile.reasoning_on_effort` is None)."""
+    vision_profile_ids: list[str] = Field(default_factory=list)
+    """The subset of `profile_ids` declaring `supports_vision` — what lets a
+    capability form offer image reading only when a vision model exists."""
     display_name: str | None = None
     """The ops-authored `model_display_name` of this model's first profile that
     declares one — the label the composer shows instead of splitting the
@@ -1633,6 +1674,8 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
             elif profile.reasoning_on_effort is None:
                 # Nothing a platform helper could send: reported as no levels.
                 existing.reasoning_efforts[profile.profile_id] = []
+        if profile.supports_vision:
+            existing.vision_profile_ids.append(profile.profile_id)
     return list(seen.values())
 
 
@@ -2855,30 +2898,114 @@ def _pending_interrupt_occurrences(
     for _task_id, channel, value in pending_writes:
         if channel != _REACT_V2_INTERRUPT_CHANNEL:
             continue
-        candidate: object = value
-        if isinstance(candidate, (list, tuple)):
-            if not candidate:
-                continue
-            candidate = candidate[0]
-        interrupt_id = getattr(candidate, "id", None)
-        if interrupt_id is None and isinstance(candidate, dict):
-            interrupt_id = candidate.get("id")
-        if isinstance(interrupt_id, str) and interrupt_id:
-            payload = getattr(candidate, "value", None)
-            if payload is None and isinstance(candidate, dict):
-                payload = candidate.get("value")
-            occurrence_id = getattr(payload, "occurrence_id", None)
-            if occurrence_id is None and isinstance(payload, dict):
-                occurrence_id = payload.get("occurrence_id")
-            occurrences.add(
-                (
-                    interrupt_id,
-                    occurrence_id
-                    if isinstance(occurrence_id, str) and occurrence_id
-                    else None,
+        for candidate in value if isinstance(value, (list, tuple)) else (value,):
+            interrupt_id = getattr(candidate, "id", None)
+            if interrupt_id is None and isinstance(candidate, dict):
+                interrupt_id = candidate.get("id")
+            if isinstance(interrupt_id, str) and interrupt_id:
+                payload = getattr(candidate, "value", None)
+                if payload is None and isinstance(candidate, dict):
+                    payload = candidate.get("value")
+                occurrence_id = getattr(payload, "occurrence_id", None)
+                if occurrence_id is None and isinstance(payload, dict):
+                    occurrence_id = payload.get("occurrence_id")
+                occurrences.add(
+                    (
+                        interrupt_id,
+                        occurrence_id
+                        if isinstance(occurrence_id, str) and occurrence_id
+                        else None,
+                    )
                 )
-            )
     return frozenset(occurrences)
+
+
+async def _annotate_hitl_availability(messages: list[ChatMessage]) -> list[ChatMessage]:
+    """Reconcile trailing unanswered cards without changing persisted history."""
+    if not messages:
+        return messages
+    trailing = [m for m in messages if m.exchange_id == messages[-1].exchange_id]
+    answered = {
+        p.occurrence_id
+        for m in trailing
+        for p in m.parts
+        if isinstance(p, HitlResponsePart) and p.occurrence_id
+    }
+    legacy_answers = sum(
+        isinstance(p, HitlResponsePart) and not p.occurrence_id
+        for m in trailing
+        for p in m.parts
+    )
+    requests: dict[int, HitlRequestPart] = {}
+    targets: dict[str | None, list[tuple[int, HitlRequestPart]]] = {}
+    for m in trailing:
+        for p in m.parts:
+            if not isinstance(p, HitlRequestPart) or p.occurrence_id in answered:
+                continue
+            if not p.occurrence_id and legacy_answers:
+                legacy_answers -= 1
+                continue
+            part = p.model_copy(update={"resume_status": "unknown"})
+            requests[m.rank] = part
+            if p.interrupt_id and p.occurrence_id:
+                targets.setdefault(m.metadata.agent_id, []).append((m.rank, part))
+    checkpointer = get_runtime_context().config.checkpointer
+
+    async def resolve(
+        agent_id: str | None, parts: list[tuple[int, HitlRequestPart]]
+    ) -> None:
+        if not isinstance(checkpointer, FredSqlCheckpointer):
+            return
+        identities = frozenset(
+            (p.interrupt_id, p.occurrence_id)
+            for _, p in parts
+            if p.interrupt_id and p.occurrence_id
+        )
+        session_id = messages[-1].session_id
+        locations = (
+            _resume_checkpoint_locations(session_id, agent_id=agent_id)
+            if agent_id
+            else ((session_id, ""),)
+        )
+        try:
+            loaded = None
+            # Candidate order must match resume admission: graph first, root fallback.
+            for thread_id, namespace in locations:
+                loaded = await checkpointer.aget_hitl_resume_state(
+                    thread_id=thread_id, checkpoint_ns=namespace, occurrences=identities
+                )
+                if loaded is not None:
+                    break
+            if loaded is None and not agent_id:
+                return
+            writes, blocked = loaded if loaded is not None else ([], frozenset())
+            pending = _pending_interrupt_occurrences(writes)
+            if writes and not pending:
+                return
+            for _, part in parts:
+                identity = (part.interrupt_id, part.occurrence_id)
+                part.resume_status = (
+                    "pending"
+                    if identity in pending and identity not in blocked
+                    else "unavailable"
+                )
+        except Exception:
+            logger.warning("HITL history availability lookup failed", exc_info=True)
+
+    await asyncio.gather(*(resolve(agent, parts) for agent, parts in targets.items()))
+    return [
+        m.model_copy(
+            update={
+                "parts": [
+                    requests[m.rank] if isinstance(p, HitlRequestPart) else p
+                    for p in m.parts
+                ]
+            }
+        )
+        if m.rank in requests
+        else m
+        for m in messages
+    ]
 
 
 async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> bool:
@@ -2895,7 +3022,9 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
         if not session_id or checkpointer is None:
             return False
         for thread_id, checkpoint_ns in _resume_checkpoint_locations(
-            request, session_id
+            session_id,
+            agent_id=request.agent_id,
+            agent_instance_id=request.agent_instance_id,
         ):
             loaded = await load_checkpoint(
                 checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
@@ -2955,7 +3084,11 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
     checkpointer = get_runtime_context().config.checkpointer
     if not session_id or checkpointer is None:
         return False
-    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+        session_id,
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ):
         loaded = await load_checkpoint(
             checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
         )
@@ -3001,7 +3134,7 @@ async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> boo
 
 
 def _resume_checkpoint_locations(
-    request: RuntimeExecuteRequest, session_id: str
+    session_id: str, *, agent_id: str | None, agent_instance_id: str | None = None
 ) -> tuple[tuple[str, str], ...]:
     """
     `(thread_id, checkpoint_ns)` pairs a resume may target, best first.
@@ -3014,8 +3147,8 @@ def _resume_checkpoint_locations(
     """
 
     agent_ns = checkpoint_namespace(
-        agent_instance_id=request.agent_instance_id,
-        agent_id=request.agent_id or request.agent_instance_id or "",
+        agent_instance_id=agent_instance_id,
+        agent_id=agent_id or agent_instance_id or "",
     )
     return ((graph_thread_id(session_id, agent_ns), ""), (session_id, ""))
 
@@ -3080,7 +3213,11 @@ async def _validate_session_checkpoint_access(
         return ()
 
     loaded = None
-    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+        session_id,
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ):
         loaded = await load_checkpoint(
             checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
         )
@@ -4152,6 +4289,7 @@ def _build_capability_save_services(
     team_id: str | None,
     access_token: str | None,
     agent_instance_id: str | None = None,
+    routing: CapabilitySaveRouting | None = None,
 ) -> RuntimeServices:
     """
     Minimal `RuntimeServices` for one capability save-time validation (#1974).
@@ -4164,6 +4302,8 @@ def _build_capability_save_services(
       identity/team, but none of the execution-only services
     - `document_folders` lets an asset-parsing capability resolve author folder
       strings against the agent's space at save time (#1903 image support)
+    - `capability_model` gives save-time and background work the model the
+      saved agent routes to by default, from the team `routing` snapshot
     """
 
     request_id = str(current_context().get("request_id") or uuid4())
@@ -4174,6 +4314,12 @@ def _build_capability_save_services(
             team_id=team_id,
             access_token=access_token,
             agent_instance_id=agent_instance_id,
+            chat_default_profile_id=(
+                routing.chat_default_profile_id if routing else None
+            ),
+        ),
+        recommended_chat_profile_id=(
+            routing.recommended_chat_profile_id if routing else None
         ),
         portable_context=PortableContext(
             request_id=request_id,
@@ -4188,12 +4334,28 @@ def _build_capability_save_services(
         ),
     )
     settings = _PodAgentSettings(id=actor, name=actor, team_id=team_id, tuning=None)
-    web_factory = get_runtime_context().config.web_research_factory
+    runtime_config = get_runtime_context().config
+    web_factory = runtime_config.web_research_factory
+    # The model port may outlive the request in a background job: no token.
+    model_binding = binding.model_copy(
+        update={
+            "runtime_context": binding.runtime_context.model_copy(
+                update={"access_token": None}  # nosec B105
+            )
+        }
+    )
     return RuntimeServices(
         workspace_fs=FredWorkspaceFs(binding=binding, settings=settings),
         agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
         document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
         web_research=(web_factory(binding) if web_factory else None),
+        capability_model=RoutedCapabilityModelPort(
+            binding=model_binding,
+            # Team overrides are keyed by template agent id, as on its turns.
+            routing_agent_id=(routing.template_agent_id if routing else None) or actor,
+            factory=runtime_config.chat_model_factory,
+            rebac=runtime_config.rebac_engine,
+        ),
     )
 
 
@@ -5353,6 +5515,8 @@ def _mount_capability_routers(
     from fred_core.security.oidc import get_current_user
 
     auth_deps = [Depends(get_current_user)] if security_enabled else []
+    # Binds the caller's team authorizer read by `capability_team_authorizer`.
+    auth_deps.append(Depends(team_authorizer_binder(security_enabled=security_enabled)))
     for cap_id, router in capability_registry.routers():
         api_router.include_router(
             router,
@@ -5405,6 +5569,30 @@ def _build_agent_router(
     # Returns None in local-dev mode so dev pods start without Keycloak.
     _authenticated_user = _make_user_dependency(get_current_user, security_enabled)
     _execution_subject = _make_execution_dependency(get_current_user, security_enabled)
+
+    async def _require_team(
+        caller: KeycloakUser | None,
+        team_id: str | None,
+        permission: TeamPermission = TeamPermission.CAN_UPDATE_AGENTS,
+        denied: str = AGENT_EDITOR_DENIED,
+    ) -> None:
+        # Capability routes build team-scoped services (the team's models):
+        # the caller must hold the permission on the team they name.
+        if not team_id:
+            if security_enabled:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Field 'team_id' is required.",
+                )
+            return
+        await require_team_permission(
+            user=caller,
+            enforce=security_enabled,
+            rebac=get_runtime_context().config.rebac_engine,
+            team_id=team_id,
+            permission=permission,
+            denied=denied,
+        )
 
     def _enforce_chat_input_limit(request: RuntimeExecuteRequest) -> None:
         violation = validate_runtime_request(request, max_chat_input_chars)
@@ -5978,6 +6166,8 @@ def _build_agent_router(
         capability = capability_registry.capability(capability_id)
 
         form = await http_request.form()
+        form_team = form.get("team_id")
+        await _require_team(caller, form_team if isinstance(form_team, str) else None)
         raw_config = form.get("config") or "{}"
         if not isinstance(raw_config, str):
             raise HTTPException(
@@ -6055,6 +6245,7 @@ def _build_agent_router(
                     form_instance_id if isinstance(form_instance_id, str) else None
                 )
                 or None,
+                routing=parse_save_routing(http_request.query_params),
             ),
         )
         try:
@@ -6088,6 +6279,7 @@ def _build_agent_router(
         capability_id: str,
         team_id: str,
         agent_instance_id: str,
+        routing: CapabilitySaveRouting | None = None,
     ) -> SaveContext:
         user_id = (caller.uid if caller is not None else None) or "anonymous"
         auth = http_request.headers.get("Authorization", "")
@@ -6103,6 +6295,7 @@ def _build_agent_router(
                 team_id=team_id,
                 access_token=auth.removeprefix("Bearer ").strip() or None,
                 agent_instance_id=agent_instance_id,
+                routing=routing,
             ),
         )
 
@@ -6132,6 +6325,11 @@ def _build_agent_router(
         """
 
         capability = _installed_capability(http_request, capability_id)
+        # Control-plane requires agent editing in both teams for a copy. A
+        # snapshot import sends its files inline and never reads the source.
+        if body.asset_files is None:
+            await _require_team(caller, body.source_team_id)
+        await _require_team(caller, body.target_team_id)
         try:
             return await prepare_capability_copy(
                 capability,
@@ -6149,6 +6347,8 @@ def _build_agent_router(
                     capability_id,
                     body.target_team_id,
                     body.target_agent_instance_id,
+                    # The destination team's routing, as validate-config reads it.
+                    parse_save_routing(http_request.query_params),
                 ),
             )
         except CapabilityCopyRejectedError as exc:
@@ -6226,6 +6426,76 @@ def _build_agent_router(
             return ChatControlsResponse(results=[])
         return evaluate_chat_controls_batch(capability_registry, body)
 
+    @router.post("/capabilities/readiness")
+    async def evaluate_capability_readiness(
+        body: _ReadinessRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> _ReadinessResponse:
+        """
+        Ask each capability whether one instance's saved slice can serve turns
+        yet. Control-plane maps pending/failed to the `capability_pending`
+        suspension after a save, in its sweep and on an editor's re-check.
+        """
+
+        # Any member who lists the team's agents may re-check them.
+        await _require_team(
+            caller,
+            body.team_id,
+            TeamPermission.CAN_USE_TEAM_AGENTS,
+            "You cannot use the agents of this team.",
+        )
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None:
+            return _ReadinessResponse()
+        identity = CapabilityIdentity(
+            user_id=(caller.uid if caller is not None else None) or "anonymous",
+            team_id=body.team_id,
+            agent_instance_id=body.agent_instance_id,
+        )
+        results: list[_ReadinessResult] = []
+        for item in body.items:
+            if item.capability_id not in capability_registry:
+                continue
+            capability = capability_registry.capability(item.capability_id)
+            try:
+                stored = (
+                    capability.StoredConfigModel.model_validate(item.stored.config)
+                    if item.stored.schema_version == capability.manifest.version
+                    else capability.upgrade_config(
+                        item.stored.config, item.stored.schema_version
+                    )
+                )
+            except Exception:
+                # A slice that no longer parses is config health's verdict.
+                logger.warning(
+                    "[capability-readiness] unreadable slice for '%s' on instance %s",
+                    item.capability_id,
+                    body.agent_instance_id,
+                    exc_info=True,
+                )
+                continue
+            try:
+                verdict = await capability.readiness(stored, identity)
+            except Exception:
+                # Omitted would read as ready: a hook that failed keeps it pending.
+                logger.warning(
+                    "[capability-readiness] readiness hook of '%s' failed on "
+                    "instance %s",
+                    item.capability_id,
+                    body.agent_instance_id,
+                    exc_info=True,
+                )
+                verdict = CapabilityReadiness(state="pending")
+            results.append(
+                _ReadinessResult(
+                    capability_id=item.capability_id,
+                    state=verdict.state,
+                    detail=verdict.detail,
+                )
+            )
+        return _ReadinessResponse(results=results)
+
     @router.get("/sessions")
     async def list_sessions(
         caller: KeycloakUser | None = Depends(_authenticated_user),
@@ -6279,7 +6549,8 @@ def _build_agent_router(
                 detail="No history store configured — session history is unavailable.",
             )
         caller_uid = caller.uid if caller is not None else None
-        return await history_store.get(session_id=session_id, user_id=caller_uid)
+        messages = await history_store.get(session_id=session_id, user_id=caller_uid)
+        return await _annotate_hitl_availability(messages)
 
     @router.delete(
         "/sessions/{session_id}",

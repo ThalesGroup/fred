@@ -399,6 +399,7 @@ describe("categorized tool labels", () => {
     ["list_document_tree", "Consultation de l'arborescence des documents"],
     ["write_document", "Rédaction d'un document Word"],
     ["fill_ppt_template", "Création d'une présentation PowerPoint"],
+    ["build_presentation", "Création d'une présentation PowerPoint"],
     ["wiki_read_page", "Lecture d'une page du wiki"],
     ["mcp__knowledge_flow__os_health", "État de santé d'OpenSearch"],
     ["mcp__knowledge_flow__prometheus_query_range_2", "Exécution d'une requête Prometheus sur une période"],
@@ -413,6 +414,7 @@ describe("categorized tool labels", () => {
     ["prometheus_targets", "mcp.prometheusOps.prometheus_targets"],
     ["list_document_tree", "capabilities.documentAccess.list_document_tree"],
     ["write_document", "capabilities.writableDocument.write_document"],
+    ["build_presentation", "capabilities.pptFiller.build_presentation"],
     ["ls", "deep.ls"],
   ])("uses the source category for %s", (name, path) => {
     const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };

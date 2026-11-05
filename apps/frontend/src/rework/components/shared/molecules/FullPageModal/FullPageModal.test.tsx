@@ -167,3 +167,43 @@ describe("FullPageModal Escape", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe("Stacked Dialogs Escape", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    document.getElementById("modal-portal")?.remove();
+  });
+
+  it("lets only the innermost of two stacked Dialogs answer Escape", () => {
+    const outer = vi.fn();
+    const inner = vi.fn();
+    const ui = (innerOpen: boolean) => (
+      <DialogPrimitive open title="Outer" confirmLabel="Done" onConfirm={() => {}} onCancel={outer}>
+        <DialogPrimitive open={innerOpen} title="Inner" confirmLabel="Done" onConfirm={() => {}} onCancel={inner}>
+          <input aria-label="Inner field" />
+        </DialogPrimitive>
+      </DialogPrimitive>
+    );
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(ui(false));
+    });
+    act(() => {
+      root.render(ui(true));
+    });
+    const field = document.querySelector('[aria-label="Inner field"]') as HTMLElement;
+    act(() => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    });
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(outer).not.toHaveBeenCalled();
+  });
+});

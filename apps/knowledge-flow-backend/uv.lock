@@ -1306,7 +1306,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "4.5.10"
+version = "4.6.0"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiohttp" },

@@ -25,6 +25,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.chatControlsRequest,
       }),
     }),
+    evaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPost: build.mutation<
+      EvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostApiResponse,
+      EvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/readiness`,
+        method: "POST",
+        body: queryArg.readinessRequest,
+      }),
+    }),
     copyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPost: build.mutation<
       CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiResponse,
       CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiArg
@@ -293,6 +303,11 @@ export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiRespon
 export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg = {
   chatControlsRequest: ChatControlsRequest;
 };
+export type EvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostApiResponse =
+  /** status 200 Successful Response */ ReadinessResponse;
+export type EvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostApiArg = {
+  readinessRequest: ReadinessRequest;
+};
 export type CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiResponse =
   /** status 200 Successful Response */ CapabilityConfigCopyResult;
 export type CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiArg = {
@@ -535,6 +550,23 @@ export type ChatControlsRequestItem = {
 };
 export type ChatControlsRequest = {
   items?: ChatControlsRequestItem[];
+};
+export type ReadinessResult = {
+  capability_id: string;
+  detail?: string | null;
+  state: "ready" | "pending" | "failed";
+};
+export type ReadinessResponse = {
+  results?: ReadinessResult[];
+};
+export type ReadinessRequestItem = {
+  capability_id: string;
+  stored: StoredCapabilityConfig;
+};
+export type ReadinessRequest = {
+  agent_instance_id: string;
+  items?: ReadinessRequestItem[];
+  team_id?: string | null;
 };
 export type CapabilityConfigCopyResult = {
   config?: {
@@ -1135,6 +1167,7 @@ export type ModelCatalogEntry = {
     [key: string]: ("low" | "medium" | "high")[];
   };
   thinking_profile_ids?: string[];
+  vision_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
   active_revision?: number;
@@ -1253,6 +1286,8 @@ export type HitlRequestPart = {
   occurrence_id?: string | null;
   pending_calls?: HitlPendingCallRecord[];
   question: string;
+  /** Read-time availability; absent in stored history and older runtimes. */
+  resume_status?: ("pending" | "unavailable" | "unknown") | null;
   stage?: string | null;
   title?: string | null;
   type?: "hitl_request";
@@ -1432,6 +1467,7 @@ export type CapabilityCatalogEntry = {
   };
   model_runtime_ids?: string[];
   model_thinking_profile_ids?: string[];
+  model_vision_profile_ids?: string[];
   /** i18n key */
   name: string;
   public_version?: string | null;
@@ -1544,6 +1580,7 @@ export const {
   useGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useEvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostMutation,
+  useEvaluateCapabilityReadinessPodV1AgentsCapabilitiesReadinessPostMutation,
   useCopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostMutation,
   useExportCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdExportConfigPostMutation,
   useValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostMutation,

@@ -21,6 +21,11 @@ export function isHelpLang(value: string | undefined): value is HelpLang {
   return HELP_LANGS.includes(value as HelpLang);
 }
 
+/** App-language → help-content language ("fr-FR" → "fr"; anything non-English falls back to fr). */
+export function helpLangFor(appLanguage: string | undefined): HelpLang {
+  return appLanguage?.toLowerCase().startsWith("en") ? "en" : "fr";
+}
+
 export interface HelpSectionSpec {
   /** URL segment and content folder name (`content/<lang>/<id>/`). */
   id: string;

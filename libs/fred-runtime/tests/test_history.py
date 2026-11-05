@@ -1105,10 +1105,12 @@ def test_get_session_messages_passes_caller_uid_to_store(monkeypatch, tmp_path) 
 
     mock_store = AsyncMock()
     mock_store.get = AsyncMock(return_value=[])
+    cp = AsyncMock()
     mock_ctx = RuntimeContext(
         RuntimeConfig(
             knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
             history_store=mock_store,
+            checkpointer=cp,
         )
     )
 
@@ -1120,6 +1122,8 @@ def test_get_session_messages_passes_caller_uid_to_store(monkeypatch, tmp_path) 
     mock_store.get.assert_awaited_once_with(
         session_id="session-liam", user_id="alice-uid"
     )
+
+    cp.aget_hitl_resume_state.assert_not_called()
 
 
 def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> None:
@@ -1506,3 +1510,42 @@ def test_deep_selection_uses_native_pins_and_rejects_unknown_names(
             and loads[0]["name"] == selection
             and loads[0]["origin"] == "user"
         )
+
+
+def test_history_endpoint_reports_consumed_pause_without_repair(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from test_hitl_history_availability import availability, request, seed
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'availability.db'}")
+    cp = FredSqlCheckpointer(engine, prefix="v2_")
+
+    async def prepare():
+        await seed(cp)
+        await seed(cp, identities=())
+
+    asyncio.run(prepare())
+    app, _ = _make_app_with_user(monkeypatch, tmp_path, "alice")
+    original = request()
+    store = AsyncMock()
+    store.get.return_value = [original]
+    ctx = RuntimeContext(
+        RuntimeConfig(
+            knowledge_flow_url="http://localhost:8111",
+            history_store=store,
+            checkpointer=cp,
+        )
+    )
+    try:
+        with TestClient(app) as client:
+            monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: ctx)
+            response = client.get("/pod/v1/agents/sessions/session/messages")
+        assert response.status_code == 200
+        assert response.json()[0]["parts"][0]["resume_status"] == "unavailable"
+        assert availability(original) is None
+        store.save.assert_not_called()
+        store.get.assert_awaited_once_with(session_id="session", user_id="alice")
+    finally:
+        asyncio.run(engine.dispose())

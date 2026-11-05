@@ -24,6 +24,7 @@ import type { IconType } from "@shared/utils/Type";
 import type { RawUiPart } from "@rework/types/parts";
 import type { PendingToolCall } from "../../../slices/runtime/runtimeOpenApi";
 import type { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { CapabilityEnablementItem } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 export interface UiPartRendererProps {
   /** The raw part; renderers narrow it to their generated type. */
@@ -201,6 +202,19 @@ export interface CapabilityHitlRendererProps {
  */
 export type CapabilityHitlRenderer = ComponentType<CapabilityHitlRendererProps>;
 
+export interface CapabilityPlatformPanelProps {
+  /** This capability's row of the admin catalogue. */
+  capability: CapabilityEnablementItem;
+  /** A platform admin or feature manager: write actions are shown. */
+  canManage: boolean;
+}
+
+/**
+ * Platform-wide settings of a capability, opened from its row in Admin >
+ * Features. Only capabilities with platform state of their own declare one.
+ */
+export type CapabilityPlatformPanel = ComponentType<CapabilityPlatformPanelProps>;
+
 export interface CapabilityUiPlugin {
   /** Backend capability id (`manifest.id`), e.g. "demo_echo". */
   id: string;
@@ -244,4 +258,6 @@ export interface CapabilityUiPlugin {
    * side-panel and config-widget registries.
    */
   hitlRenderers?: Record<string, CapabilityHitlRenderer>;
+  /** Platform-wide settings panel, opened from Admin > Features. */
+  platformPanel?: CapabilityPlatformPanel;
 }

@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [3346-generated-conversation-title]
 title: "Enable packaged skills and add global skill policy"
 impact: minor
 configuration: production

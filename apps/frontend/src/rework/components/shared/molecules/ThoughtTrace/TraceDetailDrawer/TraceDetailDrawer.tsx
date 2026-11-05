@@ -31,6 +31,7 @@ import {
   formatLatencyMs,
   findTabularDocumentName,
   genericToolPayload,
+  inactiveHitlStatus,
   isDocumentTreeTool,
   isSummarizeDocumentTool,
   parseToolResultContent,
@@ -243,7 +244,9 @@ export function TraceDetailDrawer({ entry, messages, onClose }: TraceDetailDrawe
   const label = entry ? entryLabel(entry, (key) => t(key)) : "";
   const isError = entry?.kind === "solo" && statusForEntry(entry) === "error";
   const toolStatus =
-    entry?.kind === "combo" ? (!entry.result ? "running" : toolResultOk(entry.result) ? "success" : "failure") : null;
+    entry?.kind === "combo"
+      ? (inactiveHitlStatus(entry) ?? (!entry.result ? "running" : toolResultOk(entry.result) ? "success" : "failure"))
+      : null;
   const toolLatency = entry?.kind === "combo" && entry.result ? formatLatencyMs(toolResultLatencyMs(entry.result)) : "";
 
   return (

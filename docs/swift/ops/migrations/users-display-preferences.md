@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [discover-chat-models-from-gateway]
 title: "Persist user display preferences in PostgreSQL"
 impact: minor
 configuration: none
