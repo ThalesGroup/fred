@@ -21,7 +21,10 @@ overridable provider so the whole path runs offline.
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
+from fred_capability_writable_document import capability as capability_module
 from fred_capability_writable_document import store as store_module
 from fred_capability_writable_document.capability import (
     WritableDocumentPart,
@@ -33,17 +36,20 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from port_fakes import FakeWritableDocumentStore
 
 
 @pytest.fixture()
 def fake_store() -> FakeWritableDocumentStore:
+    rebuild_ui_part_union([WritableDocumentPart])
     fake = FakeWritableDocumentStore()
     store_module.set_store_provider(lambda: fake)
     try:
         yield fake
     finally:
         store_module.clear_store_provider()
+        rebuild_ui_part_union()
 
 
 def _tool(session_id: str | None = "s-1", user_id: str = "u-1"):
@@ -129,3 +135,64 @@ async def test_no_session_returns_graceful_error(
     assert artifact.ui_parts == ()
     # Nothing persisted.
     assert await fake_store.list_for_session("s-1") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["title", "content_markdown"])
+@pytest.mark.parametrize("count", [1, 107])
+async def test_nul_write_is_controlled_and_preserves_existing_document(
+    fake_store: FakeWritableDocumentStore, monkeypatch, field: str, count: int
+) -> None:
+    tool = _tool()
+    _, saved = await tool.coroutine(title="Report", content_markdown="Original")
+    document_id = saved.ui_parts[0].document_id
+    upsert = AsyncMock(side_effect=AssertionError("Invalid text reached storage"))
+    monkeypatch.setattr(fake_store, "upsert", upsert)
+    args = {"title": "Report", "content_markdown": "New text"}
+    args[field] += "\x00" * count
+
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "invalid-write",
+            "args": {**args, "document_id": document_id},
+        }
+    )
+
+    assert result.tool_call_id == "invalid-write"
+    assert result.artifact.is_error
+    assert "INVALID_DOCUMENT_CONTENT" in result.content
+    assert field in result.content and str(count) in result.content
+    assert result.artifact.blocks[0].text == result.content
+    assert result.artifact.ui_parts == ()
+    upsert.assert_not_awaited()
+    stored = await fake_store.get("s-1", document_id)
+    assert stored is not None and stored.content_md == "Original"
+
+
+@pytest.mark.asyncio
+async def test_valid_unicode_markdown_is_preserved(
+    fake_store: FakeWritableDocumentStore,
+) -> None:
+    text = "# Décisions\n\nCafé\t東京\nLiteral [U+0000] and \\u0000"
+    _, result = await _tool().coroutine(title="Résumé", content_markdown=text)
+
+    assert not result.is_error
+    assert result.ui_parts[0].content_md == text
+
+
+@pytest.mark.asyncio
+async def test_nul_create_does_not_acquire_a_document_store(monkeypatch) -> None:
+    def forbidden_store():
+        raise AssertionError("Invalid text acquired a document store")
+
+    monkeypatch.setattr(
+        capability_module, "get_writable_document_store", forbidden_store
+    )
+    content, artifact = await _tool().coroutine(
+        title="Invalid\x00title", content_markdown="Invalid\x00content"
+    )
+
+    assert artifact.is_error and artifact.blocks[0].text == content
+    assert "title" in content and "content_markdown" in content

@@ -7391,3 +7391,14 @@ schema inspection, exact references/types and successful/empty/error handling;
 reuse of successful results is model guidance, without runtime deduplication.
 The trace drawer presents the submitted business arguments and a safe localized
 cause. Model recovery guidance remains outside this explanatory drawer.
+
+### Document tool reliability (2026-11-05)
+
+Native read and summary parameter schemas now describe exact UID reuse; search
+retains its existing `uid` field. Writable-document tools reject NUL title or
+Markdown values before accessing storage and return a non-empty failure result.
+The history store represents NUL in serialized string values as `[U+0000]`,
+attributed by `history_text_normalization` metadata, without changing live tool
+arguments. Existing field names, scope checks and database schemas are retained.
+The `document-tool-reliability` specification owns the acceptance contract; see
+the corresponding migration note for validation and compatibility limits.

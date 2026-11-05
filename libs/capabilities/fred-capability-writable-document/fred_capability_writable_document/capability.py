@@ -57,7 +57,12 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
     SidePanelSpec,
 )
-from fred_sdk.contracts.context import ToolInvocationResult, UiPart
+from fred_sdk.contracts.context import (
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationResult,
+    UiPart,
+)
 from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
@@ -158,6 +163,24 @@ async def save_writable_document(
         return (
             "Cannot save the document: no active session.",
             ToolInvocationResult(tool_ref=tool_ref, is_error=True),
+        )
+
+    invalid_fields = [
+        f"{name}: {count} NUL character(s)"
+        for name, value in (("title", title), ("content_markdown", content_markdown))
+        if (count := value.count("\x00"))
+    ]
+    if invalid_fields:
+        message = (
+            "INVALID_DOCUMENT_CONTENT: Cannot save the document ("
+            + "; ".join(invalid_fields)
+            + "). Remove U+0000 NUL characters and resubmit corrected text. "
+            "No document was saved or changed."
+        )
+        return message, ToolInvocationResult(
+            tool_ref=tool_ref,
+            is_error=True,
+            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
         )
 
     store = get_writable_document_store()

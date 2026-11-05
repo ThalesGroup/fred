@@ -110,6 +110,19 @@ async def test_rejects_non_markdown_before_reading(fake_store):
 
 
 @pytest.mark.asyncio
+async def test_imported_nul_markdown_returns_controlled_failure(fake_store):
+    filesystem = AsyncMock(spec=ConversationFilesystemPort)
+    filesystem.read_text.return_value = "# Report\n\nInvalid\x00text"
+
+    content, artifact = await _run_tool(filesystem, path="/report.md", title="Report")
+
+    assert "INVALID_DOCUMENT_CONTENT" in content
+    assert artifact.is_error and artifact.blocks[0].text == content
+    assert artifact.ui_parts == ()
+    assert await fake_store.list_for_session("session-1") == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("path", "error"),
     [
