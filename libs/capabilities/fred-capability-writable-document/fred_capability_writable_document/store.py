@@ -16,9 +16,10 @@
 
 Why this module exists:
 - the capability owns ONE table, `cap_writable_document_docs`, on its OWN
-  isolated `DeclarativeBase` with NO foreign keys (the boot hygiene contract the
-  registry enforces): `session_id` and `user_id` reference core ids as plain
-  columns so install/uninstall ordering stays free
+  isolated `DeclarativeBase`, its ORM model with NO foreign keys (the boot hygiene
+  contract the registry enforces): `session_id` and `user_id` reference core ids
+  as plain columns. On PostgreSQL, a migration binds `session_id` to the
+  conversation root
 - the store is reached through an OVERRIDABLE module-level provider
   (`get_writable_document_store`). Production resolves a `SqlWritableDocumentStore`
   built lazily from the pod's own Postgres config; offline tests substitute an
@@ -82,8 +83,9 @@ class WritableDocumentDoc(WritableDocumentBase):
 
     Hygiene (RFC §7.1, enforced at pod boot):
     - name is prefixed `cap_writable_document_` (the `cap_<id>_` convention)
-    - no foreign keys — `session_id` / `user_id` reference core ids as PLAIN
-      columns, so install/uninstall ordering stays free
+    - no foreign keys on this model — `session_id` / `user_id` reference core ids
+      as PLAIN columns; on PostgreSQL, a migration binds `session_id` to the
+      conversation root
     """
 
     __tablename__ = "cap_writable_document_docs"

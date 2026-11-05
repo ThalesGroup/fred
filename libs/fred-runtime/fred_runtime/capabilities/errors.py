@@ -77,11 +77,12 @@ class InvalidExecutionModelError(CapabilityRegistrationError):
 class CapabilityTableHygieneError(CapabilityRegistrationError):
     """
     A capability's owned `tables` break the RFC §7.1 hygiene rules — a table
-    name not prefixed `cap_<id>_`, or a cross-table foreign key. Capability
+    name not prefixed `cap_<id>_`, or a foreign key on the ORM model. Capability
     tables are independently versioned pip-package tables: a shared prefix
-    keeps their namespace collision-free, and forbidding foreign keys (core
-    ids are referenced as plain columns instead) keeps install/uninstall
-    ordering free. Raised at pod boot so the violation surfaces at deploy.
+    keeps their namespace collision-free, and their models reference core ids
+    as plain columns. A PostgreSQL migration may bind a `session_id` column to
+    the conversation root; other references stay forbidden. Raised at pod boot
+    so the violation surfaces at deploy.
     """
 
 

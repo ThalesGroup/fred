@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 _MESSAGE_PARTS_ADAPTER: TypeAdapter[List[MessagePart]] = TypeAdapter(List[MessagePart])
 
 
-def _dialect_insert(engine: AsyncEngine):
+def dialect_insert(engine: AsyncEngine):
     """
     Return the dialect-appropriate ``insert`` constructor.
 
@@ -254,7 +254,7 @@ class PostgresHistoryStore(BaseHistoryStore):
             }
             for msg in messages
         ]
-        stmt = _dialect_insert(self._engine)(SessionHistoryRow).values(rows)
+        stmt = dialect_insert(self._engine)(SessionHistoryRow).values(rows)
         upsert_stmt = stmt.on_conflict_do_update(
             index_elements=["session_id", "user_id", "rank"],
             set_={

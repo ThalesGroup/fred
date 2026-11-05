@@ -293,9 +293,9 @@ class CapabilityRegistry:
         rather than colliding another package's schema at runtime:
         - every table name is prefixed `cap_<id>_` (namespace isolation across
           independently-versioned pip packages)
-        - no foreign keys at all — cross-capability references are forbidden and
-          core-table ids are carried as plain columns, so install/uninstall
-          ordering stays free (RFC §7.1)
+        - no foreign keys on the ORM model: core-table ids are carried as plain
+          columns (RFC §7.1). A PostgreSQL migration may bind a `session_id`
+          column to the conversation root; other references stay forbidden
         """
 
         for cap_id in self.ids():

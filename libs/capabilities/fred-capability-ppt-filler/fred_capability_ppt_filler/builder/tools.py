@@ -1405,8 +1405,8 @@ _BASE_UNREADABLE = (
 
 
 class _BasePlans:
-    """The last delivered deck of this conversation and agent, in the shared
-    store; without a session (eval, tests) there is nothing to share."""
+    """The last delivered or proposed deck plan of this conversation and agent,
+    in the shared store; without a session (eval, tests) there is nothing to share."""
 
     def __init__(self, session_id: Optional[str], instance_id: Optional[str]) -> None:
         self._key = (session_id, instance_id or "") if session_id else None

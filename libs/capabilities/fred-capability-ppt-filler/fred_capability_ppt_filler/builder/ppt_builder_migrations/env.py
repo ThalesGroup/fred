@@ -22,11 +22,40 @@ from fred_capability_ppt_filler.builder.analysis_job import PptBuilderBase
 from fred_capability_ppt_filler.builder.deck_plans import DeckPlanRow  # noqa: F401
 from fred_core.common import load_postgres_config
 from fred_core.sql import make_alembic_env
+from fred_core.sql.alembic_env import _build_url
+from sqlalchemy import Column, Computed, ForeignKey, Index, MetaData, Table, Uuid
+
+_metadata = MetaData()
+for table in PptBuilderBase.metadata.tables.values():
+    table.to_metadata(_metadata)
+if _build_url(load_postgres_config).startswith("postgresql"):
+    Table(
+        "session_metadata",
+        _metadata,
+        Column("session_id", Uuid, primary_key=True),
+        schema="control_plane",
+    )
+    _deck_plans = _metadata.tables["cap_ppt_builder_deck_plan"]
+    _deck_plans.append_column(
+        Column(
+            "conversation_id",
+            Uuid,
+            Computed("session_id::uuid", persisted=True),
+            ForeignKey(
+                "control_plane.session_metadata.session_id",
+                ondelete="CASCADE",
+                name="cap_ppt_builder_deck_plan_conversation_fk",
+            ),
+            nullable=False,
+        )
+    )
+    Index("cap_ppt_builder_deck_plan_conversation_idx", _deck_plans.c.conversation_id)
 
 run_migrations_offline, run_migrations_online = make_alembic_env(
-    target_metadata=PptBuilderBase.metadata,
+    target_metadata=_metadata,
     get_postgres_config=load_postgres_config,
     version_table="cap_ppt_builder_alembic_version",
+    owned_tables=["cap_ppt_builder_analysis", "cap_ppt_builder_deck_plan"],
 )
 
 if context.is_offline_mode():

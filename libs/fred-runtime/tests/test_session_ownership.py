@@ -48,6 +48,7 @@ TABLES = (
     "v2_checkpoint_thread_owner",
     "v2_checkpoint_hitl_claim",
     "cap_writable_document_docs",
+    "cap_ppt_builder_deck_plan",
 )
 
 
@@ -58,13 +59,21 @@ def _upgrade(revision):
 
 
 def _capability_migrations(connection):
-    versions = (
-        Path(__file__).resolve().parents[2]
-        / "capabilities/fred-capability-writable-document/fred_capability_writable_document/writable_document_migrations/versions"
+    capabilities = Path(__file__).resolve().parents[2] / "capabilities"
+    trees = (
+        (
+            "fred-capability-writable-document/fred_capability_writable_document/writable_document_migrations/versions",
+            "w*.py",
+        ),
+        (
+            "fred-capability-ppt-filler/fred_capability_ppt_filler/builder/ppt_builder_migrations/versions",
+            "r*.py",
+        ),
     )
     with Operations.context(MigrationContext.configure(connection)):
-        for migration in sorted(versions.glob("w*.py")):
-            runpy.run_path(str(migration))["upgrade"]()
+        for versions, pattern in trees:
+            for migration in sorted((capabilities / versions).glob(pattern)):
+                runpy.run_path(str(migration))["upgrade"]()
 
 
 @pytest_asyncio.fixture
@@ -170,6 +179,12 @@ async def _seed(runtime, cp, session):
         await conn.execute(
             text(
                 "INSERT INTO cap_writable_document_docs (session_id, document_id, user_id, title, content_md, updated_by, created_at, updated_at) VALUES (:id, 'doc', 'alice', 'Title', 'private', 'agent', now(), now())"
+            ),
+            {"id": session},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO cap_ppt_builder_deck_plan (session_id, agent_instance_id, plan_json, updated_at) VALUES (:id, 'agent', 'private', now())"
             ),
             {"id": session},
         )

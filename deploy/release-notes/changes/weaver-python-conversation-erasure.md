@@ -62,7 +62,7 @@ Only fresh installations are supported.
 2. Run `python -m fred_runtime migrate` with the runtime role/schema and all
    installed capability migrations. Runtime migrations create checkpoint tables,
    cascading ownership and the durable filesystem manifest. Writable-document
-   adds the same root FK.
+   and the PPT deck plan add the same root FK.
 3. Verify shared storage settings and M2M authorization, then start the existing
    lifecycle worker.
 

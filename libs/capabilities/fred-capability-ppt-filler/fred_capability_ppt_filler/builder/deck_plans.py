@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The last deck ``build_presentation`` delivered, per conversation and
-agent: the base a ``changes`` call applies to. In the capability's own table,
-so any replica and any later turn reads it."""
+"""The last deck plan ``build_presentation`` delivered or proposed, per
+conversation and agent: the base a ``changes`` call applies to. In the
+capability's own table, so any replica and any later turn reads it."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
-from sqlalchemy import DateTime, String, Text, select, update
-from sqlalchemy.exc import IntegrityError
+from fred_core.history.postgres_history_store import dialect_insert
+from sqlalchemy import DateTime, String, Text, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,7 +35,9 @@ from fred_capability_ppt_filler.builder.analysis_job import (
 
 
 class DeckPlanRow(PptBuilderBase):
-    """One row per conversation and agent instance; no foreign keys."""
+    """One row per conversation and agent instance. The model has no foreign
+    key; on PostgreSQL, a migration binds ``session_id`` to the conversation
+    root, so the row disappears with its conversation."""
 
     __tablename__ = "cap_ppt_builder_deck_plan"
 
@@ -80,25 +82,16 @@ class SqlDeckPlanStore(DeckPlanStore):
         values = {"plan_json": plan_json, "updated_at": datetime.now(timezone.utc)}
         async with self._sessionmaker() as session:
             async with session.begin():
-                result = await session.execute(
-                    update(DeckPlanRow)
-                    .where(*self._key(session_id, instance_id))
-                    .values(**values)
-                )
-                if getattr(result, "rowcount", 0):
-                    return
-        try:
-            async with self._sessionmaker() as session:
-                async with session.begin():
-                    session.add(
-                        DeckPlanRow(
-                            session_id=session_id,
-                            agent_instance_id=instance_id,
-                            **values,
-                        )
+                await session.execute(
+                    dialect_insert(self._sessionmaker.kw["bind"])(DeckPlanRow)
+                    .values(
+                        session_id=session_id, agent_instance_id=instance_id, **values
                     )
-        except IntegrityError:  # a concurrent call inserted it first
-            await self.put(session_id, instance_id, plan_json)
+                    .on_conflict_do_update(
+                        index_elements=["session_id", "agent_instance_id"],
+                        set_=values,
+                    )
+                )
 
 
 class MemoryDeckPlanStore(DeckPlanStore):
