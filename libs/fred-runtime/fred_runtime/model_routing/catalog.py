@@ -249,13 +249,31 @@ async def _discovery_headers_async(source: ModelDiscoverySource) -> dict[str, st
 
 
 def _discovered_model_settings(
-    source: ModelDiscoverySource, base_url: str
+    source: ModelDiscoverySource,
+    base_url: str,
+    manual_settings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if source.provider == "openai":
         return {"base_url": base_url}
     settings = source.azure_apim_settings
     assert settings is not None
-    return {**settings.model_dump(exclude_none=True), "temperature": None}
+    result = {**settings.model_dump(exclude_none=True), "temperature": None}
+    if manual_settings and (
+        manual_settings.get("azure_apim_base_url") == settings.azure_apim_base_url
+        and manual_settings.get("azure_apim_resource_path")
+        == settings.azure_apim_resource_path
+    ):
+        for key in (
+            "request_timeout",
+            "stream_usage",
+            "temperature",
+            "use_responses_api",
+            "reasoning",
+            "extra_body",
+        ):
+            if key in manual_settings:
+                result[key] = deepcopy(manual_settings[key])
+    return result
 
 
 def _positive_int(value: object) -> int | None:
@@ -670,6 +688,12 @@ class ModelCatalog(FrozenModel):
         ]
         existing_profile_ids = {profile.profile_id for profile in profiles}
         existing_capability_ids = {profile.capability_id for profile in profiles}
+        manual_apim_settings = {
+            profile.model.name: profile.model.settings or {}
+            for profile in profiles
+            if profile.model.provider == "azure-apim"
+            and profile.profile_id not in self._discovered_profile_sources
+        }
         discovered_profile_sources = {
             profile_id: owner
             for profile_id, owner in self._discovered_profile_sources.items()
@@ -700,7 +724,9 @@ class ModelCatalog(FrozenModel):
                 model=ModelConfiguration(
                     provider=source.provider,
                     name=wire_id,
-                    settings=_discovered_model_settings(source, base_url),
+                    settings=_discovered_model_settings(
+                        source, base_url, manual_apim_settings.get(wire_id)
+                    ),
                 ),
             )
             if (

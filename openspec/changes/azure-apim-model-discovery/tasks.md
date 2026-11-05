@@ -3,12 +3,12 @@
 ## 1. Azure APIM source contract and routing
 
 - [x] 1.1 Add a typed Azure APIM discovery source with required non-secret settings and URL consistency validation; verify malformed or credential-shaped YAML is rejected by focused catalog tests.
-- [x] 1.2 Generate `azure-apim` profiles for eligible listed chat models, preserving wire IDs and filtering; verify the resulting profile can construct the existing provider and standard OpenAI sources remain unchanged.
+- [x] 1.2 Generate `azure-apim` profiles for eligible listed chat models, preserving wire IDs and filtering; verify the resulting profile can construct the existing provider, inherit matching manual model options, and leave standard OpenAI sources unchanged.
 
 ## 2. Authenticated discovery and URL boundary
 
 - [x] 2.1 Use pod-local OAuth client secret and APIM subscription key in synchronous and asynchronous list requests and asynchronous detail requests; verify headers, missing-secret failure, redacted errors, and no request to unapproved origins with focused tests.
-- [ ] 2.2 Allow Azure APIM URL overrides within the configured origin and product path, reject other URLs before token acquisition or network access, and retain the existing admin edit/refresh flow; verify both outcomes with focused tests.
+- [x] 2.2 Allow Azure APIM URL overrides within the configured origin and product path, reject other URLs before token acquisition or network access, and retain the existing admin edit/refresh flow; verify both outcomes with focused tests.
 
 ## 3. Operator guidance and integration
 

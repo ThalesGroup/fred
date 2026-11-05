@@ -26,13 +26,19 @@ A discovery source configured for Azure APIM SHALL use an Entra client-credentia
 
 ### Requirement: Azure APIM discovered models are routable
 
-An Azure APIM source SHALL generate chat profiles with the existing `azure-apim` provider and its configured non-secret inference settings. A model SHALL be advertised only when its generated profile can be constructed for inference. Static profiles and source-specific model filtering SHALL retain their current behavior.
+An Azure APIM source SHALL generate chat profiles with the existing `azure-apim` provider and its configured non-secret inference settings. A model SHALL be advertised only when its generated profile can be constructed for inference. When a manual profile for the same Azure APIM model and gateway exists, generated profiles SHALL reuse its model-specific routing options. Static profiles and source-specific model filtering SHALL retain their current behavior.
 
 #### Scenario: Discovered chat model is selected
 
 - **GIVEN** an Azure APIM `/models` response with an allowed chat model and valid inference settings
 - **WHEN** the pod advertises and selects that model
 - **THEN** inference uses the model's wire identifier through the Azure APIM provider with pod-local credentials
+
+#### Scenario: Existing model-specific APIM route
+
+- **GIVEN** a manual Azure APIM profile for a model that uses the Responses API
+- **WHEN** that same model is returned by discovery from the same gateway
+- **THEN** its discovered profile retains the manual profile's model-specific route and request options
 
 #### Scenario: Incomplete inference settings
 

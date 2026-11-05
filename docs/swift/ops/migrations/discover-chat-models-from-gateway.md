@@ -34,7 +34,7 @@ discovery:
       stream_usage: false
 ```
 
-The agent pod must already receive `AZURE_AD_CLIENT_SECRET` and `AZURE_APIM_SUBSCRIPTION_KEY` through its existing secret-backed environment. Discovery uses these for OAuth and the APIM header; it does not use `OPENAI_API_KEY`. No new credential is needed. An administrator may edit the discovery URL only within the same HTTPS origin and APIM resource path. The provider's inference route remains the configured resource path. If the gateway does not report `capabilities.completion_chat`, consider `include_model_ids` to list known chat models; unlisted embeddings must not be enabled as chat models. Upgrade Fred before enabling this source in C2 values. To roll back, remove the source and keep the existing static profiles.
+The agent pod must already receive `AZURE_AD_CLIENT_SECRET` and `AZURE_APIM_SUBSCRIPTION_KEY` through its existing secret-backed environment. Discovery uses these for OAuth and the APIM header; it does not use `OPENAI_API_KEY`. No new credential is needed. An administrator may edit the discovery URL only within the same HTTPS origin and APIM resource path. The provider's inference route remains the configured resource path. A discovered model that matches a static Azure APIM profile on the same gateway reuses that profile's model-specific request options, such as Responses API routing. If the gateway does not report `capabilities.completion_chat`, consider `include_model_ids` to list known chat models; unlisted embeddings must not be enabled as chat models. Upgrade Fred before enabling this source in C2 values. To roll back, remove the source and keep the existing static profiles.
 
 ## Upgrade
 

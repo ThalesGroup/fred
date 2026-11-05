@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -139,6 +139,7 @@ def test_azure_apim_discovery_uses_oauth_and_routable_provider(monkeypatch) -> N
     assert token_requests == ["api://models/.default"]
     assert profile.model.provider == "azure-apim"
     assert profile.model.name == "gpt-chat"
+    assert profile.model.settings is not None
     assert profile.model.settings["azure_apim_resource_path"] == "/ai-models/openai"
     assert profile.model.settings["temperature"] is None
     assert "client-secret" not in str(profile.model.settings)
@@ -146,7 +147,7 @@ def test_azure_apim_discovery_uses_oauth_and_routable_provider(monkeypatch) -> N
     from fred_core.model import factory as model_factory
 
     monkeypatch.setattr(model_factory, "AzureChatOpenAI", lambda **kwargs: kwargs)
-    model = model_factory.get_model(profile.model)
+    model = cast(dict[str, Any], model_factory.get_model(profile.model))
     assert model["azure_endpoint"].endswith(
         "/ai-models/openai/deployments/gpt-chat/chat/completions?api-version=2024-06-01"
     )
@@ -247,28 +248,74 @@ def test_azure_apim_allows_url_change_within_product(monkeypatch) -> None:
         transport=httpx.MockTransport(respond),
     )
     assert resolved.discovery_sources[0].base_url.endswith("/v2")
+    assert resolved.profiles[0].model.settings is not None
     assert (
         resolved.profiles[0].model.settings["azure_apim_resource_path"]
         == "/ai-models/openai"
     )
 
 
-def test_azure_apim_requires_credentials_and_rejects_secret_fields(monkeypatch) -> None:
+def test_azure_apim_discovery_reuses_matching_manual_model_settings(
+    monkeypatch,
+) -> None:
+    from fred_runtime.model_routing import catalog as catalog_module
+
+    source = _apim_catalog().model_dump()["discovery"][0]
+    settings = source["azure_apim_settings"] | {
+        "use_responses_api": True,
+        "reasoning": {"effort": "low"},
+        "temperature": None,
+    }
+    catalog = ModelCatalog.model_validate(
+        {
+            "discovery": [source],
+            "profiles": [
+                {
+                    "profile_id": "chat.apim.astra",
+                    "capability": "chat",
+                    "model": {
+                        "provider": "azure-apim",
+                        "name": "gpt-6-astra",
+                        "settings": settings,
+                    },
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        catalog_module,
+        "_discovery_headers",
+        lambda _source: {"Authorization": "Bearer local-test"},
+    )
+    resolved = catalog.resolve_discovery(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(200, json={"data": [{"id": "gpt-6-astra"}]})
+        )
+    )
+    discovered = next(
+        profile
+        for profile in resolved.profiles
+        if profile.profile_id in resolved.discovered_profile_ids
+    )
+    assert discovered.model.settings is not None
+    assert discovered.model.settings["use_responses_api"] is True
+    assert discovered.model.settings["reasoning"] == {"effort": "low"}
+    assert discovered.model.settings["azure_apim_resource_path"] == "/ai-models/openai"
+
+
+def test_azure_apim_requires_credentials_and_rejects_extra_fields(monkeypatch) -> None:
     monkeypatch.delenv("AZURE_AD_CLIENT_SECRET", raising=False)
     monkeypatch.delenv("AZURE_APIM_SUBSCRIPTION_KEY", raising=False)
     with pytest.raises(ValueError, match="credentials are unavailable"):
         _apim_catalog().resolve_discovery()
+    settings = _apim_catalog().discovery_sources[0].azure_apim_settings
+    assert settings is not None
     with pytest.raises(ValidationError):
         _apim_catalog(
             azure_apim_settings={
-                "azure_tenant_id": "tenant",
-                "azure_ad_client_id": "client",
-                "azure_ad_client_scope": "scope",
-                "azure_apim_base_url": "https://api.example",
-                "azure_apim_resource_path": "/ai-models/openai",
-                "azure_openai_api_version": "2024-06-01",
-                "client_secret": "must-not-appear",
-            }
+                **settings.model_dump(),
+                "unexpected_option": "placeholder",
+            },
         )
 
 
