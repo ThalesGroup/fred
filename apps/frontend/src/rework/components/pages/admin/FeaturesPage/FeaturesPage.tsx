@@ -49,6 +49,8 @@ import type {
 import styles from "./FeaturesPage.module.css";
 import { skillPresentation } from "@rework/utils/skillPresentation";
 import { OrganizationCapabilities } from "./OrganizationCapabilities";
+import { CapabilityPlatformDrawer } from "./CapabilityPlatformDrawer";
+import { platformPanelFor } from "../../../../features/capabilities/platformPanelRegistry";
 import { OrganizationModels } from "./OrganizationModels";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
@@ -107,6 +109,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   const [fetchOfferRevokeImpact, offerRevokeImpact] = useLazyOrganizationCapabilityRevokeImpactQuery();
 
   // A pod offer's defaultOnKey.
+  const [platformOffer, setPlatformOffer] = useState<CapabilityInventoryOffer | null>(null);
   const [suspendedKey, setSuspendedKey] = useState<string | null>(null);
   const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<DefaultOnRow | null>(null);
@@ -437,7 +440,21 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       ) : column.field === "health" ? (
         healthCell(offer.unusable_instances.length, () => setSuspendedKey(defaultOnKey(offer)))
       ) : column.field === "actions" ? (
-        manageTeamsCell(!offer.advertised)
+        <div className={styles.actionsCell}>
+          {manageTeamsCell(!offer.advertised)}
+          {platformPanelFor(offer.capability_id) && (
+            <Button
+              color="on-surface"
+              variant="outlined"
+              size="small"
+              icon={{ category: "outlined", type: "settings" }}
+              onClick={() => setPlatformOffer(offer)}
+              disabled={!offer.advertised}
+            >
+              {t("rework.admin.capabilities.platformSettings")}
+            </Button>
+          )}
+        </div>
       ) : (
         <div className={styles.centered} />
       ),
@@ -456,6 +473,18 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
 
   return (
     <div className={styles.page}>
+      <CapabilityPlatformDrawer
+        capability={
+          platformOffer
+            ? {
+                id: platformOffer.capability_id,
+                name: offerName(platformOffer),
+                route_base_url: platformOffer.route_base_url,
+              }
+            : null
+        }
+        onClose={() => setPlatformOffer(null)}
+      />
       <PageHeader
         title={t("rework.admin.capabilities.title")}
         subtitle={t("rework.admin.capabilities.subtitle")}

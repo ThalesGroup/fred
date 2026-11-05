@@ -93,6 +93,26 @@ Turning publishing off for a team removes its published agents from the
 marketplace; the confirmation states how many first. Lowering the max agents
 keeps the agents already published but blocks new publications.
 
+## The platform presentation template
+
+On the **Features** page, the **Generate a presentation** row has a
+**Platform settings** icon. A **Platform admin**
+chooses there the PowerPoint template of agents without one of their own (the
+Fred template until changed):
+
+- **Upload a .pptx template** — the file is read in the background. Until the
+  reading succeeds, or if it fails, agents keep the previous template.
+- **Use a vision model** — unavailable in Weaver. Structural analysis works without a model call; review slide names and kinds manually.
+- **Review slides** — rename a slide, change its kind or set it aside. The
+  edits are saved when the review closes and apply to every agent using this
+  template. A new reading of the same file keeps them; another file starts
+  without edits. With no uploaded template, you edit the Fred template's
+  slides the same way.
+- **Reset to the Fred template** — deletes the template and every edit, the
+  Fred template's included, after a confirmation.
+
+A change reaches every agent within a minute.
+
 ## Who opens functions to your team
 
 Opening a function is the responsibility of a **Platform admin** or a **Feature

@@ -2013,6 +2013,8 @@ export type CapabilityInventoryOffer = {
   /** Enabled for every space of this organization. */
   default_on: boolean;
   descriptor: PodCapabilityDescriptor;
+  /** Browser route derived from the platform-approved pod ingress. */
+  route_base_url?: string | null;
   runtime_id: string;
   /** Instances that select this offer and may no longer use it. */
   unusable_instances: AffectedAgentInstance[];

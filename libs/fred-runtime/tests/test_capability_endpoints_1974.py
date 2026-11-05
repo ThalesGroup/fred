@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from _tracer_capability import TracerEchoCapability, install_tracer_entry_point
@@ -689,12 +690,13 @@ def test_undeclared_slot_is_422(tmp_path, monkeypatch) -> None:
 def test_valid_upload_reaches_capability_and_only_keys_persist(
     tmp_path, monkeypatch
 ) -> None:
+    monkeypatch.setattr(agent_app_module, "require_permission", AsyncMock())
     DECK_VALIDATE_CALLS.clear()
     client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
     try:
         response = client.post(
             "/pod/v1/agents/capabilities/deck_filler/validate-config",
-            data={"config": json.dumps({"title": "Q3 review"})},
+            data={"config": json.dumps({"title": "Q3 review"}), "team_id": "space-1"},
             files={"template": ("deck.pptx", b"\x50\x4b\x03\x04", "application/pptx")},
         )
         assert response.status_code == 200

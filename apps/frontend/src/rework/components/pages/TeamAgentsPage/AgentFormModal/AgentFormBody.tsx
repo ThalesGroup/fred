@@ -37,18 +37,22 @@ import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/Capabilit
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
 import {
+  BETA_CAPABILITY_IDS,
   CAP_DOCUMENT_ACCESS,
+  CAP_PPT_BUILDER,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
   DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
+import { PptBuilderConfigForm } from "../../../../features/capabilities/ppt_builder/PptBuilderConfigForm.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
+import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
 
@@ -341,6 +345,20 @@ export function AgentFormBody({
         />
       );
     }
+    // Presentation builder → the same widget as the Advanced card.
+    if (pack.enablesCapabilityIds.includes(CAP_PPT_BUILDER) && availableCapabilityIds.has(CAP_PPT_BUILDER)) {
+      return (
+        <PptBuilderConfigForm
+          disabled={isSubmitting}
+          teamId={teamId}
+          agentInstanceId={editInstance?.agent_instance_id}
+          configValues={capabilityConfigValues[CAP_PPT_BUILDER] ?? {}}
+          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_PPT_BUILDER, key, value)}
+          assetFiles={capabilityAssetFiles[CAP_PPT_BUILDER] ?? {}}
+          onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_BUILDER, slotKey, file)}
+        />
+      );
+    }
     return undefined;
   };
 
@@ -512,6 +530,7 @@ export function AgentFormBody({
                           checked={checked}
                           disabled={isSubmitting}
                           onToggle={toggle}
+                          badge={BETA_CAPABILITY_IDS.has(capability.id) && <BetaBadge />}
                           subForm={checked && renderConfigForm(capability)}
                         />
                       );

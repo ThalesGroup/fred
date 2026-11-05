@@ -83,6 +83,12 @@ vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
 // The offers panel has its own suite; a marker is enough to see which panel the page chose.
 vi.mock("./OrganizationCapabilities", () => ({ OrganizationCapabilities: () => <p>organization-offers</p> }));
 
+// Only ppt_builder declares a platform panel here; the drawer is exercised by its panel's own tests.
+vi.mock("../../../../features/capabilities/platformPanelRegistry", () => ({
+  platformPanelFor: (id: string) => (id === "ppt_builder" ? () => null : undefined),
+}));
+vi.mock("./CapabilityPlatformDrawer", () => ({ CapabilityPlatformDrawer: () => null }));
+
 import FeaturesPage from "./FeaturesPage";
 
 function cap(over: Partial<CapabilityEnablementItem> & Pick<CapabilityEnablementItem, "id">): CapabilityEnablementItem {

@@ -24,6 +24,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Mapping
 from typing import Annotated
+from unittest.mock import AsyncMock
 
 import pytest
 from _tracer_capability import TracerEchoCapability
@@ -52,6 +53,11 @@ from pydantic import BaseModel
 from test_capability_endpoints_1974 import _app_with_capabilities
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
+
+@pytest.fixture(autouse=True)
+def capability_cp_authorization(monkeypatch):
+    monkeypatch.setattr(agent_app_module, "require_permission", AsyncMock())
 
 
 class _MemoryAssets(AgentAssetPort):
@@ -402,5 +408,30 @@ def test_export_endpoint_unreadable_file_is_422(tmp_path, monkeypatch) -> None:
         response = _post_export(client, "deck_copy")
         assert response.status_code == 422
         assert "deck.pptx" in response.json()["detail"]
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_copy_does_not_accept_legacy_model_routing_from_query(
+    tmp_path, monkeypatch
+) -> None:
+    routing_by_team: dict[str, object] = {}
+
+    def _services(**kwargs):
+        routing_by_team[kwargs["team_id"]] = kwargs.get("routing")
+        return RuntimeServices(agent_assets=_MemoryAssets({"deck.pptx": b"pptx-bytes"}))
+
+    monkeypatch.setattr(agent_app_module, "_build_capability_save_services", _services)
+    client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
+    try:
+        response = client.post(
+            "/pod/v1/agents/capabilities/deck_copy/copy-config",
+            json=_request("team-b").model_dump(mode="json"),
+            params={"template_agent_id": "deck", "chat_default_profile_id": "p1"},
+        )
+        assert response.status_code == 200
+        target = routing_by_team["team-b"]
+        assert target is None
+        assert routing_by_team["team-a"] is None
     finally:
         client.__exit__(None, None, None)

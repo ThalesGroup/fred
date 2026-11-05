@@ -305,13 +305,16 @@ SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 # tree is exercised by nothing until it is added to all three targets below.
 RT_DIR               := libs/fred-runtime
 WD_DIR               := libs/capabilities/fred-capability-writable-document
+PB_DIR               := libs/capabilities/fred-capability-ppt-filler
 RT_UV                := $(RT_DIR)/.venv/bin/uv
 WD_UV                := $(WD_DIR)/.venv/bin/uv
+PB_UV                := $(PB_DIR)/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
 db-check-combined-heads: ## assert each Alembic tree has exactly one head (no branch conflicts)
 	$(MAKE) -C $(RT_DIR) db-check-heads
 	$(MAKE) -C $(WD_DIR) db-check-heads
+	$(MAKE) -C $(PB_DIR) db-check-heads
 
 .PHONY: db-check-combined-postgres-up
 db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
@@ -327,10 +330,13 @@ db-check-combined-sqlite: ## upgrade every Alembic tree against the same SQLite 
 	@rm -f $(SQLITE_COMBINED_DB)
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(PB_UV) run --directory $(PB_DIR) alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(PB_UV) run --directory $(PB_DIR) alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(PB_UV) run --directory $(PB_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic downgrade base
 	@rm -f $(SQLITE_COMBINED_DB)
@@ -341,10 +347,13 @@ db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-po
 	@echo "=== Combined migration check: upgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(PB_UV) run --directory $(PB_DIR) alembic upgrade head
 	@echo "=== Combined migration check: drift check ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(PB_UV) run --directory $(PB_DIR) alembic check
 	@echo "=== Combined migration check: downgrade ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(PB_UV) run --directory $(PB_DIR) alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic downgrade base
 	@echo "=== Combined migration check passed ==="

@@ -246,7 +246,7 @@ jobs:
              "triggers": ["documents", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-document-access", "directory": "libs/capabilities/fred-capability-document-access", "needs-pandoc": false, "integration-target": "",
              "triggers": ["document-access", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
-            {"name": "fred-capability-ppt-filler", "directory": "libs/capabilities/fred-capability-ppt-filler", "needs-pandoc": false, "integration-target": "",
+            {"name": "fred-capability-ppt-filler", "directory": "libs/capabilities/fred-capability-ppt-filler", "needs-pandoc": false, "needs-office-fonts": true, "integration-target": "",
              "triggers": ["ppt-filler", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-team-wiki", "directory": "libs/capabilities/fred-capability-team-wiki", "needs-pandoc": false, "integration-target": "",
              "triggers": ["team-wiki", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
@@ -335,6 +335,15 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends pandoc
+
+      # ppt_builder measures text with the substitute fonts of the fred-agents image.
+      - name: Install office substitute fonts
+        if: ${{ matrix.needs-office-fonts }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fontconfig \
+            fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35
+          fc-match Arial; fc-match Calibri
 
       - name: Setup Python environment
         uses: ./.github/actions/setup-python-env

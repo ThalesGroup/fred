@@ -62,6 +62,10 @@ jobs:
         run: uv sync
         working-directory: libs/capabilities/fred-capability-writable-document
 
+      - name: Install dependencies (fred-capability-ppt-filler)
+        run: uv sync
+        working-directory: libs/capabilities/fred-capability-ppt-filler
+
       - name: Check single Alembic head per tree
         run: make db-check-combined-heads
 
@@ -94,6 +98,10 @@ jobs:
         run: uv sync
         working-directory: libs/capabilities/fred-capability-writable-document
 
+      - name: Install dependencies (fred-capability-ppt-filler)
+        run: uv sync
+        working-directory: libs/capabilities/fred-capability-ppt-filler
+
       - name: Run combined SQLite migration checks
         run: make db-check-combined-sqlite
 
@@ -125,6 +133,10 @@ jobs:
       - name: Install dependencies (fred-capability-writable-document)
         run: uv sync
         working-directory: libs/capabilities/fred-capability-writable-document
+
+      - name: Install dependencies (fred-capability-ppt-filler)
+        run: uv sync
+        working-directory: libs/capabilities/fred-capability-ppt-filler
 
       - name: Run combined PostgreSQL migration checks
         run: make db-check-combined-postgres

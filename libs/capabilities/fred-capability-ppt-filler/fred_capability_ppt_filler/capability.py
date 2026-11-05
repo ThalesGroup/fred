@@ -89,6 +89,10 @@ from fred_capability_ppt_filler.parser import (
     SlideSchema,
     TemplateError,
 )
+from fred_capability_ppt_filler.pptx_archive import (
+    UnsafeArchiveError,
+    sanitize_template,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -309,7 +313,7 @@ class PptFillerCapability(
 
     manifest = CapabilityManifest(
         id=PPT_FILLER_CAPABILITY_ID,
-        version="0.1.0",
+        version="0.1.1",
         name="capability.ppt_filler.name",
         description="capability.ppt_filler.description",
         icon="slideshow",
@@ -378,9 +382,13 @@ class PptFillerCapability(
                 raise RuntimeError(_BUSY_MESSAGE)
             try:
                 try:
+                    # Stored sanitised: nothing in it reaches outside the file.
+                    pptx_bytes = await asyncio.to_thread(sanitize_template, pptx_bytes)
                     result = await asyncio.to_thread(
                         run_heavy_ppt_job, analyze_template, pptx_bytes
                     )
+                except UnsafeArchiveError:
+                    raise  # its own message says why the file is refused
                 except Exception as exc:  # noqa: BLE001 - any unreadable .pptx is a 422 reject
                     logger.warning(
                         "PowerPoint validation failed: exception_type=%s",

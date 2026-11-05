@@ -1,10 +1,11 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Dernière tranche intégrée : Swift `059ae1c91b959692f6a0fb61ddc9824c67c90355`.**
-Le merge suivant part de Weaver `6adc65bf41d10e56202797a529443a67f8dbe191` et
-reprend deux nouveaux commits ; voir la section 11. Cette borne est celle à utiliser
-pour inventorier les prochaines arrivées Swift. Les repères `53e39f6f7` ci-dessous
-restent ceux de la tranche initiale et de ses portages différés.
+**Dernière tranche intégrée : Swift `3d18384205a469f691bbf3ca3cb697911bc6b257`.**
+Le dernier merge part de Weaver `e017f869ea5d5668a47d04da3c2de572e97af8b7` et
+reprend quatre nouveaux commits ; voir la section 12. Cette borne sert à
+inventorier les prochaines arrivées Swift. Les réceptions et portages différés
+restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
+validation produit. Les repères `53e39f6f7` ci-dessous concernent la tranche initiale.
 
 **Etat consolidé de la tranche initiale, le 4 novembre 2026.** Les portages DOCX, titres, skills et
 métadonnées e-mail de la tranche initiale sont intégrés. Mistral #3321 est mis de
@@ -639,3 +640,94 @@ espace ; changement d'identité ; demande humaine pending/unavailable/unknown ap
 reload ; refus avant acceptation et absence de fausse annulation d'outil ; détails
 de traces. Aucune validation navigateur k3d/plateforme ni appel fournisseur ici.
 Les lots DOCX, titres, skills et e-mails précédents ne sont pas réouverts par ce merge.
+
+
+## 12. PowerPoint et quatre commits Swift — 5 novembre 2026
+
+### Références et décisions
+
+- Branche locale : `weaver`, initialement propre ; aucun push.
+- Parent Weaver : `e017f869ea5d5668a47d04da3c2de572e97af8b7`.
+- Borne Swift précédente : `059ae1c91b959692f6a0fb61ddc9824c67c90355`.
+- Cible Swift figée : `3d18384205a469f691bbf3ca3cb697911bc6b257`.
+- Le merge contenant cette section a ces parents Weaver/cible Swift. La méthode
+  de récupération du commit reste `git log --merges --oneline -- ce-fichier`.
+
+| Commit Swift | Décision Weaver |
+| --- | --- |
+| `de9192157ea898fe9bb8873362b858fca3e7295d` (#3290) | Intégrer le moteur PowerPoint, graphiques, images, aperçu, téléchargement, analyse structurelle, corrections de slides et template partagé. Adapter autorisation, inventaire, UI et ports ; différer les raccords explicités ci-dessous. |
+| `d850bdce63a69854ecc77d13ebb7fdb98fa33187` (#3470) | Intégrer le délai Trivy 15 minutes et l'ordre des preuves ; préserver la matrice et les contrôles des trois images Knowledge Flow Weaver. |
+| `541f3275d9908732a4b7c5d99a7302756fce2171` (#3433) | Reprendre les notes produit et opérateur utiles ; garder les versions Weaver 5.0.0, sans restaurer le Control Plane Python, son chart ou les anciens corpus. |
+| `3d18384205a469f691bbf3ca3cb697911bc6b257` (#3471) | Intégrer les cibles exactes de downgrade et refus des offsets ambigus ; adapter le test à la révision runtime Weaver supplémentaire. |
+
+Le besoin de template global est conservé comme dans Swift : pas de nouvelle
+propriété par organisation. L'édition exige `manage_platform` du CP Rust ; les
+opérations d'espace exigent ses droits `write`. Le champ historique SDK `team_id`
+transporte le UUID canonique d'espace. Les routes navigateur viennent de
+`public_base_url` configuré côté CP, jamais d'une URL annoncée par le pod.
+Export et copie des assets vérifient les droits des espaces concernés ; la
+validation avec assets ou instance exige un espace, contrairement au contrôle
+JSON pur utilisé par le CP. Le binder est installé sur les routeurs de capabilities et les tests vérifient
+les refus comme les autorisations ; désactiver la validation locale du JWT ne
+supprime pas l'autorisation CP.
+
+Les contrats CP, runtime et PowerPoint sont générés depuis leurs sources finales.
+Les manifests, verrous, migrations et fonts du pod sont adaptés sans réintroduire
+catalogue de profils YAML, OpenFGA, ancienne ingestion, état Redux de l'ancien CP
+ou routes de readiness sans consommateur Weaver.
+
+### Inventaire séparé des reports
+
+- **Vision hors tour** : aucun contrat Weaver d'admission, quota et sélection
+  de modèle n'est disponible ici. Le port refuse explicitement l'inférence ;
+  l'UI explique l'indisponibilité et envoie l'analyse structurelle sans vision.
+  Ne pas réintroduire les profils Swift pour activer ce chemin.
+- **Template par agent et readiness persistée** : l'API Weaver de sauvegarde
+  accepte une configuration JSON, pas les fichiers multipart et l'état
+  `capability_pending` de Swift. Les hooks de bibliothèque restent disponibles,
+  mais le formulaire refuse une sauvegarde avec nouveaux fichiers au lieu de
+  les perdre silencieusement. Le template intégré/partagé reste utilisable.
+  Un futur lot doit définir ensemble propriétaire, transfert d'assets, état
+  durable, reprise et UI avant de raccorder ces chemins.
+- **Cycle de vie et exploitation** : valider le nettoyage des nouvelles données
+  de plans/assets lors de la purge de leur propriétaire et la cohérence du
+  template partagé avec plusieurs replicas/pods. Les tests locaux ne prouvent
+  ni ces parcours déployés, ni la propagation d'un template à plusieurs pods.
+- **Réceptions** : parcours administrateur global, refus hors espace, analyse
+  et correction, export réel LibreOffice/fonts, téléchargement et rendu navigateur
+  restent à recevoir sur le déploiement. Aucun appel fournisseur, benchmark,
+  migration de données vivantes ou déploiement n'a été réalisé.
+- **Anciennes tranches** : Mistral reste écarté ; les réceptions DOCX, titres,
+  skills, e-mails et HITL des sections précédentes ne sont pas relancées.
+  Les corpus docs/swift/OpenSpec et autorités supprimées restent supprimés.
+
+Notes opérateur : [PowerPoint](deploy/release-notes/changes/ppt-builder-capability.md),
+[versions](deploy/release-notes/changes/3433-prepare-v3-10-0-release.md),
+[Trivy](deploy/release-notes/changes/3469-trivy-sbom-timeout.md),
+[downgrade](deploy/release-notes/changes/target-runtime-capability-downgrade.md).
+Le README de capability et l'aide EN/FR distinguent les chemins disponibles des
+reports. Pas de description arc42 de fonctionnement déployé avant réception.
+
+### Preuves locales
+
+- `make code-quality` sur CP Rust, frontend, fred-agents, fred-runtime, fred-sdk,
+  fred-core, PowerPoint et writable-document ; clients RTK régénérés.
+- PowerPoint : `pytest -q`, **1119 réussis, 6 ignorés** faute de template de
+  référence facultatif. SDK : **58 réussis** ; conversion office core : **20**.
+- Runtime : tests ciblés ports/authz/copy/endpoints, migrations, récupération
+  d'outils, admission skills et résolution des modèles : **143 réussis**.
+  Le sous-ensemble de montage des routeurs se recouvre : ne pas additionner.
+- fred-agents : boot de capabilities et downgrade : **8 réussis**, y compris
+  refus d'un offset ambigu et maintien de l'autre arbre lors du downgrade.
+- CP : test PostgreSQL jetable `capability_browser_route_uses_approved_ingress`,
+  **1 réussi**, URL de descriptor hostile ignorée au profit de l'ingress approuvé.
+- Sélection des images CI : **20 réussis** ; YAML des workflows relu et parsé.
+- `make db-check-combined-heads db-check-combined-sqlite` sur une base SQLite
+  jetable : upgrade de runtime/document/PowerPoint, drift et downgrade réussis.
+- Déclarations opérateur : `scripts/migration_guides.py check-pr --base e017f869e
+  --worktree`, quatre déclarations valides ; aucune migration SQL existante réécrite.
+- Frontend : **385 tests distincts sur 21 fichiers**, incluant le parcours Weaver
+  agents. Le dernier passage groupé a réussi 384 tests ; le seul échec, une attente
+  de hint vision Swift, a été corrigé puis le fichier entier a réussi (13 tests,
+  inclus dans les 385). Contrôles type/format/lint réussis ; revue des résolutions
+  envers les deux parents. Aucun test ignoré ajouté pour masquer un échec.

@@ -97,6 +97,10 @@ function SpaceAgents({ space }: { space: MySpace }) {
   };
   const handleSave = async (payload: AgentFormPayload) => {
     if (!canManageAgents || busy) return;
+    if (Object.values(payload.capabilityAssetFiles).some((slots) => Object.keys(slots).length > 0)) {
+      showError({ summary: t("rework.weaverAgents.templateUploadsUnavailable") });
+      return;
+    }
     try {
       if (editing) {
         await update({

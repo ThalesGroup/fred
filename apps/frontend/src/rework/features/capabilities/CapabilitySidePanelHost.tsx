@@ -33,7 +33,7 @@ import { useDispatch } from "react-redux";
 import type { TFunction } from "i18next";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
-import { sidePanelsForCapabilities, type SidePanelEntry } from "./sidePanelRegistry";
+import { findSidePanel, sidePanelsForCapabilities, type SidePanelEntry } from "./sidePanelRegistry";
 import { requestSidePanelOpen } from "./sidePanelOpenRequestSlice";
 import { wasPanelOpen } from "./capabilityPanelMemory";
 import { useOpenSessionId } from "./useOpenSessionId";
@@ -118,7 +118,7 @@ class PaneErrorBoundary extends Component<{ fallback: ReactNode; children: React
 export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyChange }: CapabilitySidePanelHostProps) {
   const { t } = useTranslation();
   const entries = useMemo(() => sidePanelsForCapabilities(capabilityIds), [capabilityIds]);
-  const active = entries.find((entry) => entryKey(entry) === activeKey) ?? null;
+  const active = findSidePanel(entries, activeKey);
   const open = active !== null;
   const { makeRoom, releaseRoom } = useChatNavRoom();
   useEffect(() => (open ? releaseRoom : undefined), [open, releaseRoom]);
@@ -134,6 +134,9 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
     },
     [makeRoom],
   );
+  useEffect(() => {
+    if (active && entryKey(active) !== activeKey) onActiveKeyChange(entryKey(active));
+  }, [active, activeKey, onActiveKeyChange]);
 
   // `active` drives the drawer open/close; `rendered` is what is mounted inside
   // it, and lags at BOTH ends of the slide — a closing panel leaves with the
