@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   access: {
     isAdmin: true,
+    isFeatureManager: false,
     isLoading: false,
     isFetching: false,
     isError: false,
@@ -56,6 +57,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 beforeEach(() => {
   Object.assign(h.access, {
     isAdmin: true,
+    isFeatureManager: false,
     isLoading: false,
     isFetching: false,
     isError: false,
@@ -104,6 +106,7 @@ function render(path = "/home") {
               }
             />
             <Route path="/admin/provisioning" element={<p>Provisioning</p>} />
+            <Route path="/admin/skills" element={<p>Skills</p>} />
             <Route path="/settings" element={<p>Profile</p>} />
           </Route>
         </Routes>
@@ -135,6 +138,14 @@ it("keeps platform pages out of the business area for a member platform admin", 
   member();
   render("/admin/organizations");
   expect(host.textContent).toContain("Organizations");
+  expect(host.querySelector("[data-business]")).toBeNull();
+});
+it("opens global skills in the platform area for a feature manager with an organization", () => {
+  h.access.isAdmin = false;
+  h.access.isFeatureManager = true;
+  member();
+  render("/admin/skills");
+  expect(host.textContent).toContain("Skills");
   expect(host.querySelector("[data-business]")).toBeNull();
 });
 it("waits for the membership before deciding a platform admin's area", () => {
@@ -201,6 +212,19 @@ it("does not mount platform business navigation or its bootstrap hooks", () => {
     "/admin/monitor",
   ]);
   expect(host.textContent).not.toContain("rework.mainNav.home");
+});
+
+it("offers only the global skills page to a delegated feature manager", () => {
+  h.access.isAdmin = false;
+  h.access.isFeatureManager = true;
+  act(() =>
+    root.render(
+      <MemoryRouter initialEntries={["/admin/skills"]}>
+        <AdminNavbar platformArea />
+      </MemoryRouter>,
+    ),
+  );
+  expect([...host.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual(["/admin/skills"]);
 });
 
 it("keeps a failed authority check blocked while retry is pending with cached data", () => {

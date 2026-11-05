@@ -94,6 +94,7 @@ function BusinessMainNavBar() {
   if (
     supervision.offered ||
     manager.isAdmin ||
+    manager.isFeatureManager ||
     canEnterAdminSection({ ...capabilities, canManageFeatures: organization.isOwner })
   ) {
     entries.push({
@@ -116,6 +117,7 @@ export default function MainNavBar({ platformOnly = false }: { platformOnly?: bo
 function PlatformMainNavBar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const manager = useManagerPlatformAdmin();
   return (
     <NavRail
       entries={[
@@ -124,7 +126,7 @@ function PlatformMainNavBar() {
           icon: "admin_panel_settings",
           label: t("rework.mainNav.adminConsole"),
           active: true,
-          onClick: () => navigate("/admin/organizations"),
+          onClick: () => navigate(manager.isAdmin ? "/admin/organizations" : "/admin/skills"),
         },
       ]}
     />

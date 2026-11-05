@@ -9,5 +9,7 @@ export function useManagerPlatformAdmin(skip = false) {
   return {
     ...query,
     isAdmin: !query.isError && !query.error && query.currentData?.platform_roles.includes("platform_admin") === true,
+    isFeatureManager:
+      !query.isError && !query.error && query.currentData?.platform_roles.includes("feature_manager") === true,
   };
 }

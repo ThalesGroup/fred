@@ -397,6 +397,9 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision/teams/${queryArg.teamId}`,
       }),
     }),
+    getSkills: build.query<GetSkillsApiResponse, GetSkillsApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills` }),
+    }),
     getPolicy: build.query<GetPolicyApiResponse, GetPolicyApiArg>({
       query: () => ({ url: `/control-plane/v1/platform/skills/policy` }),
     }),
@@ -1048,6 +1051,8 @@ export type TeamSupervisionApiArg = {
   organizationId: string;
   teamId: string;
 };
+export type GetSkillsApiResponse = /** status 200 undefined */ PlatformSkillInventory;
+export type GetSkillsApiArg = void;
 export type GetPolicyApiResponse = /** status 200 undefined */ SkillPolicy;
 export type GetPolicyApiArg = void;
 export type SetSkillApiResponse = /** status 200 undefined */ SkillEnabled;
@@ -2233,6 +2238,20 @@ export type TeamSupervisionDetail = {
   organization_id: string;
   team: TeamSupervision;
 };
+export type PlatformSkillEntry = {
+  enabled: boolean;
+  runtime_ids: string[];
+  skill: SkillSummary;
+};
+export type PlatformSkillInventory = {
+  conflicting_skill_names: string[];
+  custom_runtime_ids: string[];
+  disabled_runtime_ids: string[];
+  disabled_skill_names: string[];
+  skills: PlatformSkillEntry[];
+  unavailable_runtime_ids: string[];
+  unsupported_runtime_ids: string[];
+};
 export type SkillPolicy = {
   disabled_skill_names: string[];
 };
@@ -2874,6 +2893,8 @@ export const {
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
   useLazyTeamSupervisionQuery,
+  useGetSkillsQuery,
+  useLazyGetSkillsQuery,
   useGetPolicyQuery,
   useLazyGetPolicyQuery,
   useSetSkillMutation,

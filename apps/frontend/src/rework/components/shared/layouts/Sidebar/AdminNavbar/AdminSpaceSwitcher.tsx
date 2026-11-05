@@ -34,7 +34,7 @@ export default function AdminSpaceSwitcher({
   organizations,
   organizationId,
   onSelectOrganization,
-  platformAdmin,
+  platformHome,
 }: {
   current: AdminSpace;
   /** The current space as the read-only header shows it. */
@@ -42,7 +42,7 @@ export default function AdminSpaceSwitcher({
   organizations: MySpace[];
   organizationId?: string;
   onSelectOrganization: (id: string) => void;
-  platformAdmin: boolean;
+  platformHome: string | null;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -78,7 +78,8 @@ export default function AdminSpaceSwitcher({
     setOpen(false);
     triggerRef.current?.focus();
     if (id) onSelectOrganization(id);
-    if (space !== current) navigate(SPACE_HOME[space]);
+    if (space !== current)
+      navigate(space === "platform" ? (platformHome ?? SPACE_HOME.platform) : SPACE_HOME.organization);
     // Supervision handles a denied decision in place. Other pages may require
     // Owner, so re-enter through the landing guard when their context changes.
     else if (id && id !== organizationId && pathname.replace(/\/$/, "") !== "/admin/supervision")
@@ -108,7 +109,7 @@ export default function AdminSpaceSwitcher({
               ref={menuRef}
               aria-label={t("rework.sidebar.admin.spaces.switch")}
               groups={[
-                ...(platformAdmin
+                ...(platformHome
                   ? [
                       [
                         <div key="platform" role="group" aria-labelledby={`${groupId}-platform`}>

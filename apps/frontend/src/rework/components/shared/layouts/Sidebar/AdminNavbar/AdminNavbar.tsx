@@ -74,7 +74,8 @@ function AdminSpaceHeader({ current }: { current: AdminSpace }) {
     eyebrow: current === "platform" ? t("rework.sidebar.admin.platformTitle") : organization?.name,
     title: t("rework.sidebar.admin.title"),
   };
-  if (organizations.length + Number(manager.isAdmin) > 1)
+  const platformHome = manager.isAdmin ? "/admin/organizations" : manager.isFeatureManager ? "/admin/skills" : null;
+  if (organizations.length + Number(platformHome !== null) > 1)
     return (
       <AdminSpaceSwitcher
         current={current}
@@ -82,7 +83,7 @@ function AdminSpaceHeader({ current }: { current: AdminSpace }) {
         organizations={organizations}
         organizationId={organization?.id}
         onSelectOrganization={selectOrganization}
-        platformAdmin={manager.isAdmin}
+        platformHome={platformHome}
       />
     );
   return <SpaceHeader {...identity} />;
@@ -91,28 +92,37 @@ function AdminSpaceHeader({ current }: { current: AdminSpace }) {
 /** Platform pages only: organization pages are reached through the switcher. */
 function PlatformAdminNavbar() {
   const { t } = useTranslation();
-  return (
-    <NavigationMenu
-      items={[
-        {
-          type: "link",
-          label: t("rework.organizations.title"),
-          icon: { category: "outlined", type: "groups", filled: false },
-          linkProps: { to: "/admin/organizations" },
-        },
-        {
-          type: "link",
-          label: t("rework.provisioning.title"),
-          icon: { category: "outlined", type: "upload", filled: false },
-          linkProps: { to: "/admin/provisioning" },
-        },
-        {
-          type: "link",
-          label: t("rework.monitor.title"),
-          icon: { category: "outlined", type: "monitoring", filled: false },
-          linkProps: { to: "/admin/monitor" },
-        },
-      ]}
-    />
-  );
+  const manager = useManagerPlatformAdmin();
+  const items: NavigationMenuItemProps[] = [];
+  if (manager.isAdmin) {
+    items.push(
+      {
+        type: "link",
+        label: t("rework.organizations.title"),
+        icon: { category: "outlined", type: "groups", filled: false },
+        linkProps: { to: "/admin/organizations" },
+      },
+      {
+        type: "link",
+        label: t("rework.provisioning.title"),
+        icon: { category: "outlined", type: "upload", filled: false },
+        linkProps: { to: "/admin/provisioning" },
+      },
+      {
+        type: "link",
+        label: t("rework.monitor.title"),
+        icon: { category: "outlined", type: "monitoring", filled: false },
+        linkProps: { to: "/admin/monitor" },
+      },
+    );
+  }
+  if (manager.isFeatureManager) {
+    items.push({
+      type: "link",
+      label: t("rework.admin.skills.title"),
+      icon: { category: "outlined", type: "auto_awesome", filled: false },
+      linkProps: { to: "/admin/skills" },
+    });
+  }
+  return <NavigationMenu items={items} />;
 }

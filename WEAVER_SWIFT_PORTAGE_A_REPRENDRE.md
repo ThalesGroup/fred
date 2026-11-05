@@ -122,8 +122,13 @@ prompts, est un chantier produit distinct et n'est pas du code oublié du merge.
 La politique globale par nom et son administration, présentes dans Swift #3342,
 ne sont pas couvertes par les plafonds Weaver par organisation et espace. Le
 suivi de ce comportement différé est la draft #3448, reconstruite sur le merge
-Weaver `e71bc96ac` ; son API, son inventaire et ses raccords restent à valider
-avant toute activation. Le changement Swift #3426 sur `grounded-research`
+Weaver `e71bc96ac`. Elle ajoute une politique PostgreSQL unique, la consolidation
+des inventaires de skills empaquetés des pods, un écran global pour le gestionnaire
+de fonctionnalités et le filtrage à la préparation comme à l'exécution. Les
+configurations `skills: null` et les répertoires personnalisés restent propres
+aux pods et sont distingués dans l'écran. Les vérifications locales ne remplacent
+pas la réception multi-réplicas et le déploiement coordonné. Le changement Swift
+#3426 sur `grounded-research`
 est déjà inclus dans #3342 et dans le catalogue Weaver intégré.
 
 Pour retrouver les sources historiques, lire le commit Swift ci-dessus et sa note

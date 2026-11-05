@@ -21,6 +21,7 @@ import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPag
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
+import PlatformSkillsPage from "@components/pages/admin/PlatformSkillsPage/PlatformSkillsPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
 import MarketplacesPage from "@components/pages/admin/MarketplacesPage/MarketplacesPage.tsx";
@@ -123,7 +124,7 @@ const AdminIndexRoute = () => {
     platformAccessEnabled: !!getConfig()?.platform_access_enabled,
     platformOwner: manager.isAdmin,
   });
-  return <Navigate to={target} replace />;
+  return <Navigate to={target === "/unauthorized" && manager.isFeatureManager ? "/admin/skills" : target} replace />;
 };
 
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
@@ -260,6 +261,14 @@ const applicationRoutes: RouteObject[] = [
       {
         path: "admin/organizations",
         element: <OrganizationsPage />,
+      },
+      {
+        path: "admin/skills",
+        element: (
+          <Protected requires="platformSkills">
+            <PlatformSkillsPage />
+          </Protected>
+        ),
       },
       {
         path: "admin/monitor",

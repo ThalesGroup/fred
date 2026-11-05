@@ -1689,6 +1689,36 @@
           "confirm": "Turn off",
           "cancel": "Cancel"
         }
+      },
+      "skills": {
+        "title": "Platform skills",
+        "scope": "Packaged skills shared by users and agents across the platform.",
+        "skill": "Skill",
+        "description": "Description",
+        "invocation": "Invocation",
+        "sources": "Sources",
+        "enabled": "Enabled",
+        "userInvocable": "User",
+        "modelInvocable": "Agent",
+        "noInvocation": "No direct invocation",
+        "refresh": "Refresh",
+        "loading": "Loading platform skills...",
+        "loadError": "Could not load platform skills.",
+        "empty": "No packaged skills are currently advertised.",
+        "unavailableSources": "Unavailable sources: {{runtimes}}. Global enforcement cannot be verified for these sources.",
+        "unsupportedSources": "Sources requiring an update: {{runtimes}}. These sources do not support global skill controls.",
+        "disabledSources": "Skills are disabled in these runtime configurations: {{runtimes}}.",
+        "customSources": "These runtime sources publish no packaged skills (a custom directory or empty catalog): {{runtimes}}.",
+        "conflictingMetadata": "These skills have different descriptions or invocation settings across runtimes: {{skills}}. The table shows the first runtime by ID; check the versions before relying on these details.",
+        "toggle": "Enable {{name}} for everyone",
+        "disableBlocked": "Restore all sources and update older runtimes before disabling a skill.",
+        "effect": "Changes apply to new loads from the next turn, including existing conversations. Instructions already loaded remain in the conversation.",
+        "saveUnsupported": "This skill could not be disabled because a source does not support global skill controls.",
+        "saveUnavailable": "This skill could not be disabled because a source is unavailable.",
+        "saveError": "The global skill setting could not be saved. Refresh and try again.",
+        "refreshAfterSaveError": "The setting was saved, but the catalog could not be refreshed. Refresh to confirm its state.",
+        "absentDisabled": "These disabled packaged skills are no longer advertised. You can restore them for future loads.",
+        "restore": "Re-enable {{name}}"
       }
     },
     "agentCard": {

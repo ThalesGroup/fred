@@ -18,15 +18,23 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-const h = vi.hoisted(() => ({ pathname: "/admin/organizations", bootstrapSkipped: [] as boolean[] }));
+const h = vi.hoisted(() => ({
+  pathname: "/admin/organizations",
+  bootstrapSkipped: [] as boolean[],
+  isAdmin: true,
+  isFeatureManager: false,
+  isOwner: true,
+  supervisionOffered: true,
+  navigate: vi.fn(),
+}));
 vi.mock("react-router-dom", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => h.navigate,
   useLocation: () => ({ pathname: h.pathname }),
   useHref: () => "/help",
 }));
-vi.mock("@core/hooks/useOrganizationOwner", () => ({ useOrganizationOwner: () => ({ isOwner: true }) }));
+vi.mock("@core/hooks/useOrganizationOwner", () => ({ useOrganizationOwner: () => ({ isOwner: h.isOwner }) }));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
-  useOrganizationSupervisionAccess: () => ({ allowed: true, offered: true }),
+  useOrganizationSupervisionAccess: () => ({ allowed: h.supervisionOffered, offered: h.supervisionOffered }),
 }));
 vi.mock("@hooks/useUserCapabilities.ts", () => ({
   useUserCapabilities: (skip: boolean) => {
@@ -34,7 +42,9 @@ vi.mock("@hooks/useUserCapabilities.ts", () => ({
     return { canAdmin: false };
   },
 }));
-vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({ useManagerPlatformAdmin: () => ({ isAdmin: true }) }));
+vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({
+  useManagerPlatformAdmin: () => ({ isAdmin: h.isAdmin, isFeatureManager: h.isFeatureManager }),
+}));
 
 import MainNavBar from "./MainNavBar";
 
@@ -49,7 +59,14 @@ const pointer = (coarse: boolean) =>
       }) as unknown as MediaQueryList,
   );
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  h.isAdmin = true;
+  h.isFeatureManager = false;
+  h.isOwner = true;
+  h.supervisionOffered = true;
+  h.navigate.mockClear();
+});
 
 const render = (platformOnly = true) => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -99,5 +116,35 @@ describe("MainNavBar rail", () => {
     h.bootstrapSkipped = [];
     render(false);
     expect(h.bootstrapSkipped).not.toContain(false);
+  });
+
+  it("opens skills from the platform rail for a feature manager without platform admin rights", () => {
+    pointer(true);
+    h.isAdmin = false;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => root.render(<MainNavBar platformOnly />));
+    act(() => container.querySelector<HTMLButtonElement>("button")!.click());
+    expect(h.navigate).toHaveBeenCalledWith("/admin/skills");
+    act(() => root.unmount());
+  });
+
+  it("shows Admin from Home for a feature manager who is an organization member but not its owner", () => {
+    pointer(true);
+    h.pathname = "/home";
+    h.isAdmin = false;
+    h.isFeatureManager = true;
+    h.isOwner = false;
+    h.supervisionOffered = false;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => root.render(<MainNavBar platformOnly={false} />));
+    const admin = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("rework.mainNav.adminConsole"),
+    );
+    expect(admin).toBeDefined();
+    act(() => admin!.click());
+    expect(h.navigate).toHaveBeenCalledWith("/admin");
+    act(() => root.unmount());
   });
 });

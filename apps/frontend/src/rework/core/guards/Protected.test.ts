@@ -38,6 +38,7 @@ const REQUIREMENTS: [ProtectedRequirement, keyof ProtectedCapabilities][] = [
   ["teams", "canManageTeams"],
   ["platformAccess", "canManagePlatformAccess"],
   ["features", "canManageFeatures"],
+  ["platformSkills", "canManageFeatures"],
   ["platformPrompt", "canEditPlatformPrompt"],
 ];
 
@@ -47,7 +48,9 @@ describe("isProtectedAllowed", () => {
   });
 
   it.each(REQUIREMENTS)('limits a platform_admin to platform requirements: "%s"', (requires) => {
-    expect(isProtectedAllowed(requires, caps({ canAdmin: true }))).toBe(requires !== "features");
+    expect(isProtectedAllowed(requires, caps({ canAdmin: true }))).toBe(
+      requires !== "features" && requires !== "platformSkills",
+    );
   });
 
   it.each(REQUIREMENTS)('denies a user with no role for requires="%s"', (requires) => {

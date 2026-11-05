@@ -299,7 +299,7 @@ describe("organization agent default", () => {
 
   it("uses the organization mutation and waits for server data to change the switch", async () => {
     renderOrganization(false);
-    expect(container.querySelectorAll('[role="radio"]').length).toBe(4);
+    expect(container.querySelectorAll('[role="radio"]').length).toBe(5);
     await act(async () => defaultOnSwitch()!.click());
     expect(h.organizationWrites).toEqual([
       {

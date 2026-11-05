@@ -15,6 +15,7 @@
 import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
 import { Navigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
+import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import type { UserCapabilities } from "../../types/conversation.ts";
 
 /**
@@ -33,6 +34,7 @@ export type ProtectedRequirement =
   | "teamRoster"
   | "platformAccess"
   | "features"
+  | "platformSkills"
   | "platformPrompt";
 
 export type ProtectedCapabilities = Pick<
@@ -54,6 +56,7 @@ const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabi
   teamRoster: "canManageTeams",
   platformAccess: "canManagePlatformAccess",
   features: "canManageFeatures",
+  platformSkills: "canManageFeatures",
   platformPrompt: "canEditPlatformPrompt",
 };
 
@@ -61,7 +64,7 @@ const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabi
  * Legacy platform requirements accept `canAdmin`. Features is independently
  * organization-scoped; callers supply its manager-derived capability. */
 export function isProtectedAllowed(requires: ProtectedRequirement, capabilities: ProtectedCapabilities): boolean {
-  if (requires === "features") return capabilities.canManageFeatures;
+  if (requires === "features" || requires === "platformSkills") return capabilities.canManageFeatures;
   if (requires === "teamRoster") {
     return capabilities.canAdmin || capabilities.canManageTeams || capabilities.canManagePlatformAccess;
   }
@@ -91,9 +94,18 @@ interface ProtectedProps {
 export const Protected = ({ children, requires }: ProtectedProps) =>
   requires === "features" ? (
     <OrganizationFeaturesGuard>{children}</OrganizationFeaturesGuard>
+  ) : requires === "platformSkills" ? (
+    <PlatformSkillsGuard>{children}</PlatformSkillsGuard>
   ) : (
     <LegacyProtected requires={requires}>{children}</LegacyProtected>
   );
+
+function PlatformSkillsGuard({ children }: { children: React.ReactNode }) {
+  const access = useManagerPlatformAdmin();
+  if (access.isLoading || (access.isFetching && !access.currentData)) return null;
+  if (!access.isFeatureManager) return <Navigate to="/unauthorized" replace />;
+  return <>{children}</>;
+}
 
 function OrganizationFeaturesGuard({ children }: { children: React.ReactNode }) {
   const access = useOrganizationOwner();

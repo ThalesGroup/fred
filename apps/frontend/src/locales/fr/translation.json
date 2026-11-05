@@ -1689,6 +1689,36 @@
           "confirm": "Désactiver",
           "cancel": "Annuler"
         }
+      },
+      "skills": {
+        "title": "Skills plateforme",
+        "scope": "Skills fournis avec Fred et partagés entre les utilisateurs et les agents de la plateforme.",
+        "skill": "Skill",
+        "description": "Description",
+        "invocation": "Invocation",
+        "sources": "Sources",
+        "enabled": "Activé",
+        "userInvocable": "Utilisateur",
+        "modelInvocable": "Agent",
+        "noInvocation": "Aucune invocation directe",
+        "refresh": "Actualiser",
+        "loading": "Chargement des skills plateforme...",
+        "loadError": "Impossible de charger les skills plateforme.",
+        "empty": "Aucun skill fourni avec Fred n'est actuellement annoncé.",
+        "unavailableSources": "Sources indisponibles : {{runtimes}}. La politique globale ne peut pas être vérifiée pour ces sources.",
+        "unsupportedSources": "Sources à mettre à jour : {{runtimes}}. Ces sources ne prennent pas en charge les contrôles globaux des skills.",
+        "disabledSources": "Les skills sont désactivés dans la configuration de ces runtimes : {{runtimes}}.",
+        "customSources": "Ces runtimes ne publient aucun skill fourni avec Fred (répertoire personnalisé ou catalogue vide) : {{runtimes}}.",
+        "conflictingMetadata": "Ces skills ont des descriptions ou des modes d'invocation différents selon les runtimes : {{skills}}. Le tableau montre le premier runtime par identifiant ; vérifiez les versions avant de vous fier à ces détails.",
+        "toggle": "Activer {{name}} pour tous",
+        "disableBlocked": "Rétablissez les sources et mettez à jour les anciens runtimes avant de désactiver un skill.",
+        "effect": "Les changements s'appliquent aux nouveaux chargements dès le prochain tour, y compris dans les conversations existantes. Les instructions déjà chargées restent dans la conversation.",
+        "saveUnsupported": "Ce skill n'a pas pu être désactivé car une source ne prend pas en charge les contrôles globaux.",
+        "saveUnavailable": "Ce skill n'a pas pu être désactivé car une source est indisponible.",
+        "saveError": "Impossible d'enregistrer le réglage global du skill. Actualisez puis réessayez.",
+        "refreshAfterSaveError": "Le réglage a été enregistré, mais le catalogue n'a pas pu être actualisé. Actualisez pour confirmer son état.",
+        "absentDisabled": "Ces skills désactivés ne sont plus annoncés. Vous pouvez les réactiver pour les prochains chargements.",
+        "restore": "Réactiver {{name}}"
       }
     },
     "agentCard": {

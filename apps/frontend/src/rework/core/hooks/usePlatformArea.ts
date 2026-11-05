@@ -7,7 +7,12 @@ import { useMySpacesQuery, usePromptMarketplacesQuery } from "../../../slices/co
 import { useManagerPlatformAdmin } from "./useManagerPlatformAdmin";
 
 /** Pages of the platform admin space; every other admin page belongs to the organization. */
-const PLATFORM_ADMIN_ROUTES = new Set(["/admin/organizations", "/admin/provisioning", "/admin/monitor"]);
+const PLATFORM_ADMIN_ROUTES = new Set([
+  "/admin/organizations",
+  "/admin/provisioning",
+  "/admin/monitor",
+  "/admin/skills",
+]);
 
 export const isPlatformAdminRoute = (pathname: string) => PLATFORM_ADMIN_ROUTES.has(pathname.replace(/\/$/, ""));
 
@@ -18,7 +23,8 @@ export const isPlatformAdminRoute = (pathname: string) => PLATFORM_ADMIN_ROUTES.
 export function usePlatformArea(skip = false) {
   const { pathname } = useLocation();
   const manager = useManagerPlatformAdmin(skip);
-  const spaces = useMySpacesQuery(undefined, { skip: skip || !manager.isAdmin });
+  const platformRole = manager.isAdmin || manager.isFeatureManager;
+  const spaces = useMySpacesQuery(undefined, { skip: skip || !platformRole });
   // Last known membership: a failed refetch keeps it; an error before any data means none.
   const member = !!spaces.data?.length;
   const publications = usePromptMarketplacesQuery(
@@ -31,11 +37,11 @@ export function usePlatformArea(skip = false) {
   const promptReader = !publications.isError && !!publications.currentData?.items.length;
   return {
     platformArea:
-      manager.isAdmin &&
-      (isPlatformAdminRoute(pathname) || (!member && !(promptReader && isPromptPublicationRoute(pathname)))),
-    platformOnly: manager.isAdmin && !member && !promptReader,
+      (manager.isFeatureManager && pathname.replace(/\/$/, "") === "/admin/skills") ||
+      (manager.isAdmin &&
+        (isPlatformAdminRoute(pathname) || (!member && !(promptReader && isPromptPublicationRoute(pathname))))),
+    platformOnly: platformRole && !member && !promptReader,
     loading:
-      manager.isAdmin &&
-      (spaces.isLoading || (spaces.isFetching && !spaces.data) || (!member && publications.isLoading)),
+      platformRole && (spaces.isLoading || (spaces.isFetching && !spaces.data) || (!member && publications.isLoading)),
   };
 }
