@@ -54,6 +54,7 @@ from fred_sdk.contracts.runtime import (
     DocumentSummaryResult,
     RuntimeServices,
 )
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
 _ENTRY_POINT_VALUE = (
     "fred_capability_documents.document_summarize:DocumentSummarizeCapability"
@@ -107,6 +108,21 @@ def _capability_tools(
     middleware = cap.middleware(ctx)
     assert len(middleware) == 1
     return {t.name: t for t in middleware[0].tools}  # type: ignore[attr-defined]
+
+
+def test_summary_uid_guidance_reaches_provider_schema() -> None:
+    cap = DocumentSummarizeCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_services(), config={}
+    )
+    schema = convert_to_openai_tool(_capability_tools(cap, ctx)["summarize_document"])
+    field = schema["function"]["parameters"]["properties"]["document_uid"]
+
+    assert field["type"] == "string"
+    assert "pattern" not in field
+    description = field.get("description", "").lower()
+    for guidance in ("unchanged", "search", "file name", "folder", "first"):
+        assert guidance in description
 
 
 async def _invoke_named_tool(
@@ -310,10 +326,9 @@ async def test_summarize_403_failure_teaches_uid_recovery() -> None:
     assert message.artifact.is_error is True
     assert "opaque uid" in message.content
     assert "list_document_tree" in message.content
-    # Issue #2244: the other live-observed 403 cause is a FOLDER tag id taken
-    # from a tree folder line — the hint must cover it so the model summarizes
-    # the folder's documents instead of retrying the same bad id.
-    assert "[folder:...]" in message.content
+    # Distinguish the current tree's document references from folder records.
+    assert "folder_id" in message.content
+    assert "document entry's 'uid'" in message.content
     assert "summarize each document" in message.content
     # CAPAB-02: the recovery hint is appended to `message` AFTER
     # `_document_tool_failure` already built the artifact — it must also
