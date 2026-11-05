@@ -1,9 +1,10 @@
 ---
 schema: 1
 title: "Authenticate model discovery through Azure APIM"
-impact: minor
+impact: none
 configuration: none
 configuration_reason: "Bundled Fred configuration is unchanged; operators can enable an optional Azure APIM discovery source after upgrading the agent image."
+no_action_reason: "Existing catalogs, data and APIs remain unchanged. C2 discovery stays commented, so this change needs no migration or operator action during a normal Fred deployment."
 ---
 ## Applicability
 
