@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from typing import Annotated
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -77,7 +78,10 @@ from fred_sdk.contracts.runtime import (
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
 
-from fred_capability_documents.document_read_common import document_scope_refusal
+from fred_capability_documents.document_read_common import (
+    DOCUMENT_UID_DESCRIPTION,
+    document_scope_refusal,
+)
 
 _KF_SERVICE = "Knowledge Flow"
 
@@ -235,17 +239,16 @@ class DocumentSummarizeCapability(
 
         @tool("summarize_document", response_format="content_and_artifact")
         async def summarize_document(
-            document_uid: str,
+            document_uid: Annotated[str, Field(description=DOCUMENT_UID_DESCRIPTION)],
             instruction: str | None = None,
             max_chars: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:
-            """Generate a fresh, on-demand summary of one document by its uid.
+            """Summarize the content of one already identified document.
 
-            Use this when you need to understand a document's content in depth —
-            e.g. to decide whether it's relevant, or to extract specific
-            information — without pulling its full text into your own context. A
-            fresh model reads the whole document (using map-reduce for large
-            documents) and returns just the summary.
+            Discover its uid first if it is not available in context. A fresh
+            model reads the whole document (using map-reduce for large documents)
+            and returns the summary. Use read_document for exact wording and
+            extract_from_document for exhaustive extraction.
 
             `document_uid` MUST be the document's opaque uid, not its name or
             title. Get it from a prior search_documents_using_vectorization

@@ -630,9 +630,10 @@ class DocumentAccessCapability(
             dataset (a "dataset pointer"), do not answer from it directly — pivot
             to the tabular/SQL tool it names instead.
 
-            Returns ranked hits with title and content. Only use information
-            actually present in the returned hits; never invent facts beyond
-            them.
+            Returns ranked passages with title, content and uid. Copy a hit's
+            uid unchanged into read_document or summarize_document's document_uid
+            argument; file_name and title are display names, not identifiers.
+            Only use information actually present in the returned hits.
             """
 
             port = services.document_search
