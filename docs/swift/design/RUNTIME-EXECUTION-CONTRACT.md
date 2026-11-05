@@ -4679,7 +4679,7 @@ uids and a model that carried that habit over would read the empty result as
 **Frontend.** It rides the **team-resources** pack (`toolPacks.ts`), corpus-only,
 not the document-reading one. Two reasons, and the first is what settles it: the
 tool takes document uids it cannot produce, and `document_access` - the pack's
-uid source, through `list_document_tree` and the `uid` on every search hit -
+uid source, through `list_document_tree` and the `document_uid` on native vector-search hits -
 lives here. A document-reading pack that carried it alone would hand an agent
 three uid-taking tools and no way to obtain one. Second, it belongs here anyway:
 Knowledge Flow runs this mode over the corpus with `include_session_scope=False`,
@@ -7394,11 +7394,13 @@ cause. Model recovery guidance remains outside this explanatory drawer.
 
 ### Document tool reliability (2026-11-05)
 
-Native read and summary parameter schemas now describe exact UID reuse; search
-retains its existing `uid` field. Writable-document tools reject NUL title or
-Markdown values before accessing storage and return a non-empty failure result.
+Native vector-search model results expose `document_uid`, matching read and
+summary arguments and their exact-copy guidance. Typed citation/backend hits
+retain `uid`. Writable-document tools remove U+0000 from title and Markdown
+before title matching and storage, save the cleaned text and disclose removal
+counts in successful tool content. Editor output uses the same cleaned text.
 The history store represents NUL in serialized string values as `[U+0000]`,
 attributed by `history_text_normalization` metadata, without changing live tool
-arguments. Existing field names, scope checks and database schemas are retained.
+arguments. Scope checks and database schemas are retained.
 The `document-tool-reliability` specification owns the acceptance contract; see
 the corresponding migration note for validation and compatibility limits.

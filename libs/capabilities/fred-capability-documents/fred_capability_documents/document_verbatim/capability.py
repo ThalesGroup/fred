@@ -107,7 +107,7 @@ class DocumentVerbatimCapability(
               document ("all the requirements") → extract_from_document.
 
             `document_uid` MUST be the document's opaque uid, not its name — get
-            it from a search hit's 'uid', the document tree, or the
+            it from a vector-search hit's 'document_uid', the document tree, or the
             conversation's attached-files list. The uid is an internal working
             identifier for YOUR tool calls only: NEVER repeat it in your answer;
             always refer to the document by its display name.

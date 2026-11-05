@@ -165,23 +165,14 @@ async def save_writable_document(
             ToolInvocationResult(tool_ref=tool_ref, is_error=True),
         )
 
-    invalid_fields = [
-        f"{name}: {count} NUL character(s)"
+    removed_nul = [
+        f"{name}: {count}"
         for name, value in (("title", title), ("content_markdown", content_markdown))
         if (count := value.count("\x00"))
     ]
-    if invalid_fields:
-        message = (
-            "INVALID_DOCUMENT_CONTENT: Cannot save the document ("
-            + "; ".join(invalid_fields)
-            + "). Remove U+0000 NUL characters and resubmit corrected text. "
-            "No document was saved or changed."
-        )
-        return message, ToolInvocationResult(
-            tool_ref=tool_ref,
-            is_error=True,
-            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
-        )
+    if removed_nul:
+        title = title.replace("\x00", "")
+        content_markdown = content_markdown.replace("\x00", "")
 
     store = get_writable_document_store()
     doc_id = document_id
@@ -227,11 +218,17 @@ async def save_writable_document(
         title[:80],
         len(content_markdown),
     )
+    message = f"Document '{title}' saved (id={doc_id})."
+    blocks: tuple[ToolContentBlock, ...] = ()
+    if removed_nul:
+        message += " Removed U+0000 NUL characters (" + "; ".join(removed_nul) + ")."
+        blocks = (ToolContentBlock(kind=ToolContentKind.TEXT, text=message),)
     artifact = ToolInvocationResult(
         tool_ref=tool_ref,
+        blocks=blocks,
         ui_parts=(cast(UiPart, part),),
     )
-    return f"Document '{title}' saved (id={doc_id}).", artifact
+    return message, artifact
 
 
 class _WritableDocumentMiddleware(AgentMiddleware):
