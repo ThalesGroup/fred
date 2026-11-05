@@ -6,7 +6,7 @@
   {{- $key = $secrets.controlPlaneKey -}}
 {{- else if hasPrefix "knowledge-flow" .name -}}
   {{- $key = $secrets.knowledgeKey -}}
-{{- else if eq .name "fred-agents" -}}
+{{- else if or (eq .name "fred-agents") (eq .name "fred-agents-worker") -}}
   {{- $key = $secrets.runtimeKey -}}
 {{- else if eq .name "monitor" -}}
   {{- $key = $secrets.monitorUrlKey -}}

@@ -29,10 +29,10 @@ interface QueryState {
 }
 const analysis = vi.hoisted(() => ({
   state: {} as QueryState,
+  cpState: "ready" as "ready" | "pending" | "failed",
   options: [] as { skip?: boolean; pollingInterval?: number }[],
   refetch: vi.fn(),
   readinessCheck: vi.fn(),
-  platform: { data: undefined, isLoading: false } as { data?: unknown; isLoading: boolean },
   builtinOptions: [] as { skip?: boolean }[],
   builtin: undefined as unknown,
   configValues: { template_sha256: "abc" } as Record<string, unknown>,
@@ -51,12 +51,18 @@ vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
     analysis.builtinOptions.push(options);
     return { data: options.skip ? undefined : analysis.builtin };
   },
-  useGetPptBuilderPlatformQuery: () => analysis.platform,
 }));
 vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
 vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => true }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useAgentReadinessCheckMutation: () => [analysis.readinessCheck],
+  useResolvePowerpointTemplateQuery: () => ({
+    currentData: {
+      file: analysis.configValues.template_sha256 ? { sha256: analysis.configValues.template_sha256 } : null,
+      analysis_reference: "prep:reference",
+      preparation_state: analysis.cpState,
+      preparation_error: analysis.cpState === "failed" ? "No layouts" : null,
+    },
+  }),
 }));
 
 import { usePptBuilderAnalysis, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
@@ -111,10 +117,10 @@ function show(state: QueryState) {
 const polling = () => analysis.options[analysis.options.length - 1].pollingInterval;
 
 beforeEach(() => {
+  analysis.cpState = "ready";
   analysis.options = [];
   analysis.builtinOptions = [];
   analysis.builtin = undefined;
-  analysis.platform = { data: undefined, isLoading: false };
   analysis.configValues = { template_sha256: SHA };
   analysis.assetFiles = {};
   analysis.configChange.mockReset();
@@ -133,6 +139,16 @@ afterEach(() => {
 });
 
 describe("usePptBuilderAnalysis", () => {
+  it("shows the canonical CP pending or failed state after reload, without an analysis read", () => {
+    analysis.cpState = "pending";
+    show({});
+    expect(result.phase).toBe("pending");
+    analysis.cpState = "failed";
+    show({});
+    expect(result.phase).toBe("failed");
+    expect(result.error).toBe("No layouts");
+    expect(result.canRerun).toBe(true);
+  });
   it("removes a saved template and staged replacement without changing other settings", () => {
     const stagedFile = new File(["deck"], "replacement.pptx");
     analysis.configValues = {
@@ -149,6 +165,7 @@ describe("usePptBuilderAnalysis", () => {
     act(() => result.handleUsePlatformTemplate());
     expect(analysis.assetChange).toHaveBeenCalledWith("template", null);
     expect(analysis.configChange.mock.calls).toEqual([
+      ["remove_template", true],
       ["template_sha256", null],
       ["template_key", null],
       ["overrides", []],
@@ -156,6 +173,7 @@ describe("usePptBuilderAnalysis", () => {
 
     analysis.configValues = {
       ...analysis.configValues,
+      remove_template: true,
       template_sha256: null,
       template_key: null,
       overrides: [],
@@ -227,45 +245,13 @@ describe("usePptBuilderAnalysis", () => {
     expect(polling()).toBe(0);
   });
 
-  it("builds on the administrator's template, with its slide edits, when the agent has none", () => {
-    analysis.configValues = { overrides: [{ pattern_id: "slide:1", label: "Agent edit" }] };
-    analysis.platform = {
-      isLoading: false,
-      data: {
-        analysis: status({
-          status: "succeeded",
-          has_thumbnails: true,
-          inventory: { slide_width: 1, slide_height: 1, patterns: [PATTERN] },
-        }),
-        template_filename: "brand.pptx",
-        overrides: [{ pattern_id: "slide:1", label: "Admin edit" }],
-      },
-    };
-    show({});
-    expect(result.phase).toBe("builtin");
-    expect(result.platformTemplate).toEqual({ filename: "brand.pptx" });
-    expect(result.effective?.patterns?.[0].label).toBe("Admin edit");
-    expect(result.previewSource).toEqual({ kind: "platform" });
-    expect(analysis.builtinOptions[analysis.builtinOptions.length - 1].skip).toBe(true);
-  });
-
-  it("falls back to the built-in template while no platform template is in effect", () => {
-    analysis.configValues = {};
-    analysis.platform = { isLoading: false, data: { analysis: null, replacement: status({ status: "pending" }) } };
-    show({});
-    expect(result.platformTemplate).toBeNull();
-    expect(result.previewSource).toEqual({ kind: "builtin" });
-    expect(analysis.builtinOptions[analysis.builtinOptions.length - 1].skip).toBe(false);
-  });
-
-  it("applies the administrator's edits of the built-in template", () => {
+  it("uses the built-in file until CP-owned templates are prepared and activated", () => {
     analysis.configValues = {};
     analysis.builtin = { inventory: { slide_width: 1, slide_height: 1, patterns: [PATTERN] } };
-    analysis.platform = {
-      isLoading: false,
-      data: { analysis: null, overrides: [{ pattern_id: "slide:1", label: "Admin edit" }] },
-    };
     show({});
-    expect(result.effective?.patterns?.[0].label).toBe("Admin edit");
+    expect(result.phase).toBe("builtin");
+    expect(result.previewSource).toEqual({ kind: "builtin" });
+    expect(result.effective?.patterns?.[0].label).toBe(PATTERN.label);
+    expect(analysis.builtinOptions[analysis.builtinOptions.length - 1].skip).toBe(false);
   });
 });

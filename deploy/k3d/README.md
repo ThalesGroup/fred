@@ -1,23 +1,23 @@
-# Weaver: local ingestion and Python agent catalog deployment
+# Weaver on the local k3d instance
 
 ## Local installation
 
-Use the factory's single command interface: `make k3d-up` for Swift and Weaver
-together, `make k3d-up-weaver` for Weaver alone. The factory's
-`local-checkouts.json` holds the two source paths; the factory never changes Git
-branches. Do not pass ENV, INSTANCE, DIR or a second profile selector.
+This directory only holds the image build (`build`). The deployment itself is standard
+Helm and lives in [fred-deployment-factory](https://github.com/fred-agent/fred-deployment-factory):
+`k3d-apps/fred/values-weaver.yaml` is this instance's plain values for this checkout's
+chart, and `k3d/values.yaml` (`lines.weaver`) is what the infrastructure provisions for it.
 
-Weaver always uses context `k3d-fred`, namespace `fred-weaver`, database
+From the factory, `make k3d-up` prepares the infrastructure, then
+`make k3d-app FRED=weaver APP=fred DIR=<this checkout>` builds and deploys this checkout.
+`FRED` is required and the only selector; this checkout is verified against it. The factory
+never changes Git branches. `make k3d-app-validate FRED=weaver APP=fred DIR=<this checkout>`
+renders without building or changing the cluster.
+
+`FRED=weaver` gives context `k3d-fred`, namespace `fred-weaver`, database
 `fred_weaver`, Temporal namespace `fred-weaver`, and <http://weaver.localhost:8088>.
-Infrastructure is in namespace `fred`. Swift, when selected, keeps its own namespace,
+Infrastructure is in namespace `fred-infra`. Swift, when deployed, has its own namespace,
 database and OpenSearch indexes (Weaver: `document-vectors`, `weaver-app-logs`,
 `weaver-kpi`). Login accounts and the S3 document bucket are shared; no users, grants, documents or conversations are migrated by deployment.
-
-The factory and these hooks must be updated together. `make k3d-validate-weaver`
-renders first without building or changing the cluster. `make k3d-up-weaver` prepares
-infrastructure and reports any missing operator-owned model Secret before building.
-Supply that Secret and repeat the same command. Use the corresponding migration
-commands when both applications are selected.
 
 On `weaver`, `deploy/k3d/build` builds `apps/control-plane` as the
 `control-plane-backend` image. The ingestion profile runs it as `control-plane serve`:
@@ -29,32 +29,22 @@ The k3d profile enables `scheduler.lifecycle.enabled` for deletion admission and
 lifecycle processing through `temporal:7233` in the same control-plane process.
 Its purge retention is one minute (`PT1M`); physical cleanup follows worker execution.
 
-This checkout owns the complete profile in `deploy/k3d/helmfile.yaml.gotmpl`,
-`values.yaml.gotmpl` and its `prepare` hook. `base-values.yaml.gotmpl` imports
-the shared factory values while removing the worker's legacy MinIO storage
-blocks before Helm merges the local worker configuration. `browser-values.yaml.gotmpl`
-renders the factory's derived browser URLs. Both drop any factory control-plane
-configuration: the control-plane gets the chart defaults plus the k3d addresses in
-`values.yaml.gotmpl`. The factory supplies infrastructure,
-URLs, its shared base values and the generic build/import/sync sequence. Its internal application engine selects the checkout's Helmfile when present.
-No Rust-specific profile is added to the factory.
-
 ## Technical monitor
 
 The profile builds `apps/monitor` and exposes `/admin/monitor` to platform admins.
-`prepare` passes this checkout's `deploy/postgres/bootstrap.sql` to the factory's
-`monitor-database` hook (the historical filename now provisions all four roles).
-The hook retains four passwords in `fred-secrets`: `POSTGRES_CP_PASSWORD`,
-`POSTGRES_KF_PASSWORD`, `POSTGRES_RUNTIME_PASSWORD`, `POSTGRES_MONITOR_PASSWORD`.
-It also stores the derived `POSTGRES_MONITOR_DATABASE_URL`. No password is printed
-or passed in argv. `finish` no longer grants tables; SQLx owns all `cp_read` grants.
+The chart's `postgresBootstrap` hook runs this chart's `files/bootstrap.sql` with the
+administrator password of the `postgres-admin` Secret, then sets the four role passwords of
+`fred-secrets`: `POSTGRES_CP_PASSWORD`, `POSTGRES_KF_PASSWORD`,
+`POSTGRES_RUNTIME_PASSWORD`, `POSTGRES_MONITOR_PASSWORD`. The factory also provides
+`POSTGRES_MONITOR_DATABASE_URL`. No password is printed or passed in argv; SQLx owns all
+`cp_read` grants.
 
 The application bootstrap installs vector in Weaver's knowledge schema, inside
 `fred_weaver`. Swift's separate database keeps its infrastructure initialization.
 A deployment does not convert old incompatible schemas or reset data. For a
 separately authorized disposable reset, use `make k3d-wipe` from the factory; this
-removes the entire cluster and every application's data. Then use the chosen k3d-up-*
-command and recreate the operator-owned Secrets.
+removes the entire cluster and every application's data. Then run `make k3d-up` again
+and recreate the operator-owned Secrets.
 
 Never reset a database containing data to keep. See the
 [DBA procedure](../postgres/README.md) for managed installations and role cleanup.
@@ -73,15 +63,15 @@ API key.
 **1. Cluster and Fred.** From the factory checkout:
 
 ```sh
-make k3d-up-weaver  # on first start, prepares the namespace and reports the missing Secret
+make k3d-up   # the infrastructure, and the namespace, database and identities of each line
 kubectl --context k3d-fred -n fred-weaver create secret generic fred-model-credentials \
   --from-file=OPENAI_API_KEY=/absolute/path/to/mistral-key
-make k3d-up-weaver
+make k3d-app FRED=weaver APP=fred DIR=/absolute/path/to/this/checkout
 kubectl --context k3d-fred -n fred-weaver get deploy
 ```
 
 `control-plane-backend`, `knowledge-flow-backend`, `knowledge-flow-worker`,
-`fred-agents` and `frontend` must be `1/1`. `make k3d-up-weaver` ends by printing the
+`fred-agents`, `fred-agents-worker` and `frontend` must be `1/1`. `make k3d-app` ends by printing the
 command that reads the bootstrap token.
 
 **2. Platform admin.** Open <http://weaver.localhost:8088>, sign in with the intended
@@ -117,7 +107,7 @@ applications, marketplace and most platform administration pages. Among agent
 capabilities, only document search is wired. [AGENTS.md](../../AGENTS.md#weaver-fred-5x-current-state-versus-target)
 states the current and target state of each component.
 
-**Day to day.** `make k3d-app-validate APP=fred DIR=../fred` renders and lints
+**Day to day.** `make k3d-app-validate FRED=weaver APP=fred DIR=../fred` renders
 without building. Read a component's logs with
 `kubectl --context k3d-fred -n fred-weaver logs deploy/<name>`. The root
 `make test` needs network access: it installs each component's dependencies and
@@ -128,8 +118,7 @@ the frontend packages' consumer caches before running offline tests.
 The profile enables the real `fred-agents` Python deployment and its runtime /
 installed-capability migration job. `deploy/k3d/build` already builds that image
 through its existing `docker-build` target and supplies its content-derived tag
-through `images.txt` and `images.yaml`. The preparation hook accepts the four
-application deployments, including this pod.
+through `images.txt` and `images.yaml`.
 
 The Control Plane is configured with runtime ID `fred-agents` and base URL
 `http://fred-agents/fred/agents/v2`. It reads the existing public
@@ -143,15 +132,15 @@ history to give the browser approved runtime URLs.
 The pod validates identity and obtains the admitted turn context from Control Plane.
 Control Plane evaluates permissions from PostgreSQL roles. Knowledge Flow API
 requests the authorized document scope with its own M2M bearer and the verified
-person/run/agent triplet. Preparation grants its service account the configured
-delegation caller role, which conveys no content or platform-admin rights.
+person/run/agent triplet. The infrastructure's Keycloak post-install grants its service
+account the configured delegation caller role, which conveys no content or platform-admin rights.
 C3 and the configured terms acceptance remain required.
 
 The inherited factory settings are retained:
 
 | Dependency | Effective profile |
 | --- | --- |
-| PostgreSQL / migrations | Database `fred`, host `postgres`; runtime login `fred_runtime`, schema `runtime`, password from `fred-secrets/POSTGRES_RUNTIME_PASSWORD`. The enabled job runs `python -m fred_runtime migrate`, including installed capabilities, without old Python Control Plane migrations. |
+| PostgreSQL / migrations | Database `fred_weaver`, host `postgres`; API and preparation worker use runtime login `fred_runtime`, schema `runtime`, password from `fred-secrets/POSTGRES_RUNTIME_PASSWORD`. The API's enabled migration job runs `python -m fred_runtime migrate`, including installed capabilities, after CP schema initialization. The worker runs no migration. |
 | Keycloak | Secondary issuer/origins, user and M2M authentication; workload client `agentic` and secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Existing outgoing delegation is retained. |
 | Storage / observability | SeaweedFS runtime object store, OpenSearch logs/KPI, Prometheus and node CA mount; their inherited credential references are retained. |
 | Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
@@ -162,7 +151,7 @@ After deploying, use organization administration -> Agents to find and activate
 not enable templates in organizations or alter instance settings. The explicit
 organization model declarations below initialize model policy once.
 Ralph runs embedded in Control Plane. Its document search calls Knowledge Flow
-with the `control-plane` service account, to which preparation grants the same
+with the `control-plane` service account, to which the same post-install grants the
 delegation caller role. Unavailable template
 dependencies still prevent their activation. Discovery still fails globally if
 an enabled catalog source cannot be reached, including while the pod is starting.
@@ -181,57 +170,46 @@ These are deployment prerequisites, not evidence of a working end-to-end chat.
 ## Corpus search configuration on k3d
 
 Agent pods search the corpus through Knowledge Flow API, enabled here as the
-capability backend. It searches `document-vectors`, the index the worker writes;
-preparation refuses a render where the two differ. Its embedding model is the
+capability backend. It searches `document-vectors`, the index the worker writes: both are
+set in `values-weaver.yaml`, and `k3d/values.yaml` grants those names. Its embedding model is the
 shared KF configuration, so queries and chunks use the same vector space.
 
 The API reads with `fred-kf-api` and `fred-ingestion/kf-api-opensearch-password`,
-created by preparation without putting its value in Helm values. That identity
+created by the infrastructure chart (`k3d/values.yaml`, `opensearch.identities`). That identity
 can read the corpus, its mapping and the hybrid pipeline, but cannot modify corpus
-data, mappings or pipelines; its separate logs/KPI permissions keep writes there. Preparation rejects
-an observability index equal to the corpus index.
+data, mappings or pipelines; its separate logs/KPI permissions keep writes there.
 
 PostgreSQL remains `postgres:5432/fred_weaver`, with login `fred_kf` and schema `knowledge`. The API reads publication and lifecycle facts through `cp_read`; it runs no KF migration. The role writes only knowledge tables and reads publication facts through SELECT-only `cp_read` views.
 
 ## Prepare and deploy
 
-From the factory, use `make k3d-validate-weaver` to render or `make k3d-up-weaver` to
-build and deploy. Use `make k3d-validate` and `make k3d-up` when Swift is also installed.
-The factory exports the fixed placement and `K3D_FACTORY_ROOT` to the hooks;
-there is no secondary environment. The model key must already exist in the
-`fred-weaver` namespace's `fred-model-credentials/OPENAI_API_KEY`. The hook never
-copies it from a checkout. Host Python needs PyYAML.
+From the factory, use `make k3d-app-validate FRED=weaver APP=fred DIR=<this checkout>` to
+render or `make k3d-app FRED=weaver APP=fred DIR=<this checkout>` to build and deploy. The
+model key must already exist in the `fred-weaver` namespace's
+`fred-model-credentials/OPENAI_API_KEY`; the deployment stops before syncing without it.
 
-The six application deployments are `control-plane-backend`, `knowledge-flow-backend`,
-`knowledge-flow-worker`, `frontend`, `fred-agents` and `monitor`. The manager image occupies the
+The seven application deployments are `control-plane-backend`, `knowledge-flow-backend`,
+`knowledge-flow-worker`, `frontend`, `fred-agents`, `fred-agents-worker` and `monitor`. The manager image occupies the
 chart's `control-plane-backend` key and runs `control-plane serve`; the separate
 control-plane worker and the KF SQL migration remain disabled. Manager schema initialization
 and Python runtime migrations are enabled. Manager and the Python agent runtime access
 PostgreSQL; Control Plane owns permission decisions, and the ingestion worker keeps
 its scoped storage credentials.
 
-The generic identity hook provisions `knowledge-flow-worker`. The checkout's
-`prepare` hook bootstraps PostgreSQL roles and schemas before it:
+Everything this profile needs from the backing services is declared in the factory's
+`k3d/values.yaml` and applied by `make k3d-up`, by the infrastructure chart and its
+post-install Jobs: the database and Temporal namespace, the `fred-ingestion` credentials,
+the SeaweedFS identities and manager/input and worker/output policies, the
+`app-content-documents` bucket, the worker's OIDC client (audience and claims), and the
+scoped OpenSearch accounts of the worker, the Knowledge Flow API and the agent runtime.
 
-- exports the processing contract from the separately built KF worker image and effective config;
-- creates retained application credentials in `fred-ingestion`;
-- supplies SeaweedFS with an application-owned Secret containing its existing
-  identities plus manager/input and worker/output policies, and waits for its
-  rollout; creates `app-content-documents` if absent;
-- configures the worker's OIDC audience/claims and scoped OpenSearch identity;
-- provisions the Knowledge Flow API corpus reader and its logs/KPI permissions;
-- provisions the agent runtime's `fred-agents` account, limited to its logs/KPI indexes;
-- creates the contract ConfigMap and a digest annotation to restart manager
-  when the worker image or contract changes.
+The processing contract comes from the worker's own image: with
+`workerContract.exportFromWorkerImage`, the chart runs
+`knowledge_flow_worker.features.scheduler.export_contract` in an init container of the
+control plane, on the worker's ConfigMap, and restarts the control plane when the worker's
+image or configuration changes. The dedicated Temporal queue is `manager-ingestion`.
 
-This local hook changes the SeaweedFS deployment's configuration volume in the
-selected cluster. A later `make k3d-up` can restore the factory configuration;
-rerun `make k3d-app APP=fred DIR=../fred` afterwards to reapply the ingestion
-setup. It does not change the factory chart or reset existing data. Secrets and
-the contract remain outside Helm's application release so they survive an app
-uninstall. The dedicated Temporal queue is `manager-ingestion`.
-
-OpenSearch admin credentials are used by preparation, not by the worker or the API. KF receives its
+OpenSearch admin credentials stay in the infrastructure, not in the worker or the API. KF receives its
 manager service identity, output-only S3 credentials and scoped OpenSearch
 credentials. The frontend receives no infrastructure credentials.
 
@@ -239,15 +217,45 @@ This profile does not migrate existing persisted resources. Application data res
 is unsupported for the Rust ingestion profile and is refused before mutation.
 Recreating a disposable local installation is a separate operator action.
 
-The vector index is configured in `manager_processing.vector_store.index`.
-Preparation reads that same rendered value to grant index permissions. It also
-reads the configured KPI index when its OpenSearch sink is enabled. Wildcards and
-invalid index names are rejected before provisioning; no index name is embedded
-in the preparation script.
+The vector index is configured in `manager_processing.vector_store.index`. Its name, and
+the KPI and log indexes, must match the permissions in the factory's `k3d/values.yaml`.
+
+## PowerPoint preparation worker: configuration and reception
+
+The factory's `k3d-apps/fred/values-weaver.yaml` enables `fred-agents-worker` and
+binds runtime `fred-agents` to issuer `http://keycloak:8080/realms/app`, audience
+`app`, client `agentic`. Confirm these claims on the actual workload token during
+reception; never record the token. Both processes inherit the same content-tagged
+image, PostgreSQL capability results and workload Secret references. They use
+Temporal namespace `fred-weaver`; the CP supplies their installation-specific
+preparation queue. Verify namespace retention exceeds the two-hour deadline.
+
+Use the existing factory commands from [Prepare and deploy](#prepare-and-deploy).
+No additional build, chart or local stack is required. The chart's worker has no
+HTTP or metrics endpoint: a Kubernetes Ready status is not proof of polling or
+completed preparation. Check the CP/worker logs and Temporal poller, then save a
+small template through the UI and record its preparation ID and final CP/UI state.
+
+For a deterministic pending state, temporarily set
+`applications.fred-agents-worker.replicaCount: 0` in the normal `VALUES` override;
+restore it to `1` to resume. A stopped worker before delivery proves waiting, not
+interruption of an active preparation. The latter needs an activity observed as
+running before stopping its process and observing retry on another replica.
+
+The 5 November 2026 deployment reached seven available workloads with matching
+API/worker images, verified workload claims and active Temporal pollers. The chart
+also mounts its generated processing contract only in the Deployment, so migration
+Jobs no longer inherit an undefined volume. Keep the updated factory overlay and
+chart together. The developer then took over reinstallation and reception before
+bootstrap. Office conversion, worker recovery and all browser scenarios remain
+unverified. Do not perform inference merely to validate deployment: the profile uses
+Mistral, and the embedded test provider is not yet wired through Weaver's catalog.
+See the [operator note](../release-notes/changes/weaver-powerpoint-file-ownership.md)
+and the existing porting status for the reception boundary.
 
 ## Models for local testing
 
-The checkout declares the `mistral` source in the control plane, using
+The profile declares the `mistral` source in the control plane, using
 `https://api.mistral.ai/v1/models` for discovery and
 `https://api.mistral.ai/v1` for inference. This local profile explicitly reuses
 the existing `fred-model-credentials/OPENAI_API_KEY` for both operations; no

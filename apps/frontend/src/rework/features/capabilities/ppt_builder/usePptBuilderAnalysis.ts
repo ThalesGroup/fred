@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Reads template analysis and writes slide overrides. Persistent agent readiness
-// and per-agent template uploads are not connected to Weaver's save contract.
+// CP owns the accepted file and preparation state; the capability owns previews.
 
 import { useEffect, useMemo, useState } from "react";
+import { useResolvePowerpointTemplateQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   useGetPptBuilderAnalysisQuery,
   useGetPptBuilderBuiltinQuery,
-  useGetPptBuilderPlatformQuery,
   type AnalysisStatusResponse,
   type TemplateInventory,
 } from "./api/pptBuilderCapabilityOpenApi";
@@ -48,7 +47,7 @@ const NO_OVERRIDES: PatternOverride[] = [];
 
 /** What the panel shows about the template. */
 export type AnalysisPhase =
-  | "builtin" // no template: the platform default is used (the built-in one unless replaced)
+  | "builtin" // no template: the built-in template is used until CP preparation is connected
   | "staged" // a file is picked; it is analysed after the save
   | "unknown" // a template is saved but its analysis cannot be read (yet)
   | AnalysisStatusResponse["status"];
@@ -83,6 +82,7 @@ interface Args {
 }
 
 export interface PptBuilderAnalysis {
+  templateSource?: "agent" | "organization" | "builtin";
   phase: AnalysisPhase;
   /** The saved template's status is still being fetched for the first time. */
   statusLoading: boolean;
@@ -93,8 +93,6 @@ export interface PptBuilderAnalysis {
   canRerun: boolean;
   /** An outdated analysis is being re-read; its old inventory is shown meanwhile. */
   refreshing: boolean;
-  /** No template of its own and the administrator's is in effect (else the built-in one). */
-  platformTemplate: { filename: string | null } | null;
   /** The inventory with the overrides applied (what the agent will see). */
   effective: TemplateInventory | null;
   summary: InventorySummary | null;
@@ -109,6 +107,7 @@ export interface PptBuilderAnalysis {
 }
 
 export function usePptBuilderAnalysis({
+  teamId,
   agentInstanceId,
   configValues,
   onConfigChange,
@@ -117,27 +116,38 @@ export function usePptBuilderAnalysis({
 }: Args): PptBuilderAnalysis {
   const routed = useCapabilityRouted(CAPABILITY_ID);
   const stagedFile = assetFiles[TEMPLATE_SLOT];
-  const templateSha = readTemplateSha(configValues);
+  const saved = useResolvePowerpointTemplateQuery(
+    { spaceId: teamId ?? "", agentInstanceId: agentInstanceId ?? "" },
+    { skip: !teamId || !agentInstanceId, pollingInterval: POLL_MS, refetchOnMountOrArgChange: true },
+  );
+  const removed = configValues.remove_template === true;
+  const templateSha = removed ? null : (saved.currentData?.file?.sha256 ?? readTemplateSha(configValues));
+  const analysisId = saved.currentData?.analysis_reference;
   const overrides = readOverrides(configValues);
 
   const [pollingInterval, setPollingInterval] = useState(0);
   const statusQuery = useGetPptBuilderAnalysisQuery(
-    { instanceId: agentInstanceId ?? "" },
-    { skip: !routed || !agentInstanceId || !templateSha, pollingInterval },
+    { instanceId: analysisId ?? "", spaceId: teamId, agentInstanceId },
+    { skip: !routed || !analysisId || !templateSha, pollingInterval },
   );
   // A failed poll keeps the last answer (RTK keeps `data`): one network blip must
   // neither hide the analysis nor stop the polling of one in progress.
   const status = statusQuery.data;
-  const phase = analysisPhase({ stagedFile, templateSha, status });
+  const phase: AnalysisPhase = stagedFile
+    ? "staged"
+    : !removed && saved.currentData?.preparation_state === "pending"
+      ? "pending"
+      : !removed && saved.currentData?.preparation_state === "failed"
+        ? "failed"
+        : analysisPhase({ stagedFile, templateSha, status });
   const refreshing = phase === "succeeded" && status?.refreshing === true;
   const usesBuiltin = phase === "builtin";
-  // Without a template of its own the agent builds on the platform default:
-  // the administrator's once analysed, else the built-in one.
-  const platformQuery = useGetPptBuilderPlatformQuery(undefined, { skip: !usesBuiltin || !routed });
-  const platform = platformQuery.data?.analysis?.inventory ? platformQuery.data : undefined;
-  const { data: builtin } = useGetPptBuilderBuiltinQuery(undefined, {
-    skip: !usesBuiltin || !routed || platformQuery.isLoading || platform !== undefined,
-  });
+  const { data: builtin } = useGetPptBuilderBuiltinQuery(
+    {},
+    {
+      skip: !usesBuiltin || !routed,
+    },
+  );
 
   // A refresh keeps the row succeeded: poll it too, so its new inventory shows when it ends.
   useEffect(() => {
@@ -145,19 +155,8 @@ export function usePptBuilderAnalysis({
   }, [phase, refreshing]);
 
   const inventory: TemplateInventory | null =
-    phase === "succeeded"
-      ? (status?.inventory ?? null)
-      : usesBuiltin
-        ? (platform?.analysis?.inventory ?? builtin?.inventory ?? null)
-        : null;
-  // The administrator's slide edits apply to the default template in effect (the platform
-  // one, else the Fred template), never to the agent's own.
-  const defaultOverrides = platform
-    ? platform.overrides
-    : platformQuery.data?.analysis
-      ? undefined
-      : platformQuery.data?.overrides;
-  const appliedOverrides = usesBuiltin ? (defaultOverrides ?? NO_OVERRIDES) : overrides;
+    phase === "succeeded" ? (status?.inventory ?? null) : usesBuiltin ? (builtin?.inventory ?? null) : null;
+  const appliedOverrides = usesBuiltin ? NO_OVERRIDES : overrides;
   const effective = useMemo(
     () => (inventory ? effectiveInventory(inventory, appliedOverrides) : null),
     [inventory, appliedOverrides],
@@ -168,33 +167,36 @@ export function usePptBuilderAnalysis({
   );
 
   const previewSource: PreviewSource = usesBuiltin
-    ? platform
-      ? platform.analysis?.has_thumbnails
-        ? { kind: "platform" }
-        : null
-      : { kind: "builtin" }
-    : phase === "succeeded" && status?.has_thumbnails && agentInstanceId
-      ? { kind: "analysis", instanceId: agentInstanceId }
+    ? { kind: "builtin" }
+    : phase === "succeeded" && status?.has_thumbnails && analysisId
+      ? { kind: "analysis", instanceId: analysisId, spaceId: teamId, agentInstanceId }
       : null;
 
   return {
+    templateSource: removed ? "builtin" : saved.currentData?.source,
     phase,
-    statusLoading: statusQuery.isLoading,
+    statusLoading: statusQuery.isLoading || saved.isLoading,
     stagedFile,
     hasPersistedTemplate: templateSha !== null,
-    error: phase === "failed" || phase === "interrupted" ? (status?.error ?? null) : null,
+    error:
+      phase === "failed" || phase === "interrupted"
+        ? (saved.currentData?.preparation_error ?? status?.error ?? null)
+        : null,
     canRerun: Boolean(agentInstanceId) && canRerun(phase, status),
     refreshing,
-    platformTemplate: platform ? { filename: platform.template_filename ?? null } : null,
     effective,
     summary: effective ? summarize(effective) : null,
     droppedOverrides,
     previewSource,
     overrides,
     updateOverride: (patternId, patch) => onConfigChange(OVERRIDES_KEY, upsertOverride(overrides, patternId, patch)),
-    handlePick: (file) => onAssetFileChange(TEMPLATE_SLOT, file),
+    handlePick: (file) => {
+      onConfigChange("remove_template", false);
+      onAssetFileChange(TEMPLATE_SLOT, file);
+    },
     handleClear: () => onAssetFileChange(TEMPLATE_SLOT, null),
     handleUsePlatformTemplate: () => {
+      onConfigChange("remove_template", true);
       onAssetFileChange(TEMPLATE_SLOT, null);
       onConfigChange(TEMPLATE_SHA_KEY, null);
       onConfigChange("template_key", null);

@@ -372,7 +372,7 @@
       }
     },
     "ppt_builder": {
-      "preparing": "lecture du template PowerPoint en cours.",
+      "preparing": "En préparation — lecture du modèle PowerPoint en cours",
       "name": "Générer une présentation",
       "description": "Génère une présentation PowerPoint à partir d'une demande, sur le template de l'équipe ou un thème intégré.",
       "fields": {
@@ -418,7 +418,7 @@
         "uploadAria": "Fichier de template PowerPoint",
         "clearAria": "Retirer le fichier sélectionné",
         "currentTemplate": "Un template est configuré pour cet agent.",
-        "usePlatformTemplate": "Revenir au template de la plateforme",
+        "usePlatformTemplate": "Retirer le modèle propre",
         "builtInTemplate": "Template intégré (aucun template téléversé)",
         "summary": "{{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté.",
         "summaryBuiltin": "Template intégré : {{patterns}} slides prêtes à l'emploi.",
@@ -427,7 +427,8 @@
         "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce template et seront abandonnées au prochain enregistrement.",
         "adminTemplate": "Template défini par l'administrateur : {{name}}",
         "adminTemplateUnnamed": "Template défini par l'administrateur",
-        "summaryPlatform": "Template de l'administrateur : {{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté."
+        "summaryPlatform": "Template de l'administrateur : {{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté.",
+        "organizationTemplate": "Modèle commun de ce pod"
       },
       "analysis": {
         "staged": "Le template sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
@@ -553,15 +554,15 @@
         }
       },
       "platform": {
-        "intro": "Les agents qui n'ont pas de template à eux construisent leurs présentations sur celui-ci.",
-        "loading": "Chargement du template de la plateforme…",
-        "loadError": "Le template de la plateforme n'a pas pu être chargé.",
+        "intro": "Dans cette organisation, les agents utilisant l'offre du pod {{runtimeId}} sans template propre construisent leurs présentations sur celui-ci.",
+        "loading": "Chargement du template de l'organisation…",
+        "loadError": "Le template de l'organisation n'a pas pu être chargé.",
         "unavailable": "Les réglages des présentations ne sont pas disponibles pour le moment : le service qui construit les présentations est injoignable.",
-        "current": "Template de la plateforme : {{name}}",
+        "current": "Template de l'organisation : {{name}}",
         "fredTemplate": "Template Fred (intégré)",
         "upload": "Téléverser un template .pptx",
         "replace": "Remplacer le template",
-        "uploadAria": "Fichier de template PowerPoint de la plateforme",
+        "uploadAria": "Fichier de template PowerPoint de l'organisation",
         "uploaded": "Template envoyé : sa lecture a commencé.",
         "uploadError": "Le template n'a pas été accepté.",
         "uploadFailed": "Un problème est survenu pendant l'envoi du fichier. Réessayez dans un instant.",
@@ -585,7 +586,7 @@
         "resetError": "Le template n'a pas pu être réinitialisé.",
         "resetConfirm": {
           "title": "Revenir au template Fred ?",
-          "message": "Le template de la plateforme et toutes vos corrections de slides, y compris celles du template Fred, seront supprimés. Les agents sans template à eux reviendront au template Fred.",
+          "message": "Le template commun de cette organisation pour ce pod et toutes ses corrections de slides, y compris celles du template Fred, seront supprimés. Les agents concernés sans template propre reviendront au template Fred.",
           "confirm": "Réinitialiser",
           "cancel": "Annuler"
         },
@@ -1770,9 +1771,9 @@
           "unavailableHint": "Le pod n'a pas répondu au dernier relevé. Inventaire affiché : celui reçu le {{date}}.",
           "neverAnsweredHint": "Le pod n'a jamais répondu."
         },
-        "platformSettings": "Réglages de la plateforme",
+        "platformSettings": "Réglages de l'organisation",
         "platformDrawer": {
-          "title": "{{name}} : réglages de la plateforme"
+          "title": "{{name}} : réglages de l'organisation"
         }
       },
       "platformModelBindings": {

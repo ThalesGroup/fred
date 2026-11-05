@@ -18,28 +18,33 @@
 
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { useDispatch } from "react-redux";
 import { setCapabilityBaseUrls } from "../../../../../common/capabilityRoutingSlice";
-import { useUserCapabilities } from "../../../../core/hooks/useUserCapabilities";
+import { useTranslation } from "react-i18next";
+import { useSpaceAccess } from "../../../../core/hooks/useSpaceAccess";
 import { platformPanelFor } from "../../../../features/capabilities/platformPanelRegistry";
 
 interface Props {
   capability: { id: string; name: string; route_base_url?: string | null } | null;
+  organizationId: string;
+  runtimeId?: string;
   onClose: () => void;
 }
 
-export function CapabilityPlatformDrawer({ capability, onClose }: Props) {
+export function CapabilityPlatformDrawer({ capability, organizationId, runtimeId, onClose }: Props) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const { canAdmin } = useUserCapabilities();
+  const access = useSpaceAccess(organizationId, "write");
   const Panel = capability ? platformPanelFor(capability.id) : undefined;
 
   useEffect(() => {
-    if (capability?.route_base_url) {
-      dispatch(setCapabilityBaseUrls({ [capability.id]: capability.route_base_url }));
-    }
-  }, [capability?.id, capability?.route_base_url, dispatch]);
+    if (capability?.route_base_url && runtimeId)
+      dispatch(
+        setCapabilityBaseUrls({
+          [`${organizationId}/${runtimeId}/${capability.id}`]: capability.route_base_url,
+        }),
+      );
+  }, [capability?.id, capability?.route_base_url, organizationId, runtimeId, dispatch]);
 
   return (
     <InlineDrawer
@@ -54,7 +59,16 @@ export function CapabilityPlatformDrawer({ capability, onClose }: Props) {
       }
       width="480px"
     >
-      {capability && Panel && <Panel capability={capability} canManage={canAdmin} />}
+      {capability && Panel && (
+        <Panel
+          key={`${organizationId}/${runtimeId}/${capability.id}`}
+          capability={capability}
+          organizationId={organizationId}
+          runtimeId={runtimeId ?? ""}
+          baseUrl={capability.route_base_url ?? null}
+          canManage={access.allowed}
+        />
+      )}
     </InlineDrawer>
   );
 }

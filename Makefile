@@ -86,7 +86,7 @@ validation-report: ## Run the live cross-app validation suite (requires infra + 
 integration-test-docker: ## Validate running local Docker-backed services and Fred apps using their direct ports
 	$(MAKE) -C validation $@
 
-integration-test-k3d: ## Validate an existing local k3d deployment through its ingress (localhost:8088)
+integration-test-k3d: ## Validate an existing local k3d deployment through its ingress (weaver.localhost:8088)
 	$(MAKE) -C validation $@
 
 ##@ Setup
@@ -363,7 +363,7 @@ include scripts/makefiles/help.mk
 include scripts/makefiles/chart-schema.mk
 
 # k3d: fred-deployment-factory deploys this chart on its local k3d instance
-# (`make k3d-up`, then `make k3d-app APP=fred DIR=<this checkout>`), with the
+# (`make k3d-up`, then `make k3d-app FRED=weaver APP=fred DIR=<this checkout>`), with the
 # images deploy/k3d/build makes from this checkout.
 
 .PHONY: k3d-tests k3d-reset-storage-tests

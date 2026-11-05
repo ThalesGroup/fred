@@ -333,6 +333,7 @@ async fn resolve_runtime_binding(
         .0
         .as_object()
         .context("invalid saved agent tuning")?;
+    crate::capability_preparation::bind_result(&mut tx, &mut record, space.organization).await?;
     let models = models::resolve(&mut tx, space.organization, &record.tuning.0).await?;
     let choice = match (&query.model_source_id, &query.model_upstream_id) {
         (None, None) => None,
@@ -498,6 +499,20 @@ pub(crate) fn require_executable(
             StatusCode::CONFLICT,
             "agent_instance_disabled",
             "The agent instance is disabled.",
+        ));
+    }
+    if record.preparation_state != "ready" {
+        return Err(AppError::problem(
+            StatusCode::CONFLICT,
+            if record.preparation_state == "failed" {
+                "agent_capability_failed"
+            } else {
+                "agent_capability_pending"
+            },
+            record
+                .preparation_error
+                .clone()
+                .unwrap_or_else(|| "PowerPoint template preparation is in progress".into()),
         ));
     }
     Ok(())

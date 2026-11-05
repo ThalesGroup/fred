@@ -4,6 +4,7 @@
 
 import asyncio
 from dataclasses import dataclass
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -342,3 +343,20 @@ async def test_missing_or_forged_scope_cannot_admit(
     assert error.value.status_code == 403
     assert admission.request._turn_authority is None
     assert len(calls) == (0 if not value else 1)
+
+
+@pytest.mark.parametrize("state", ["pending", "failed"])
+async def test_direct_pod_admission_preserves_preparation_refusal(admission, state):
+    code = f"agent_capability_{state}"
+
+    def refused(request):
+        return httpx.Response(
+            409, json={"code": code, "detail": "Template unavailable"}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(refused)) as client:
+        with pytest.raises(HTTPException) as error:
+            await admission.resolve(client)
+    assert error.value.status_code == 409
+    assert cast(dict[str, Any], error.value.detail)["code"] == code
+    assert admission.request._turn_authority is None

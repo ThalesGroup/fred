@@ -454,6 +454,7 @@ def _base_app_props(extra: dict | None = None) -> dict:
         "configurationFileName": _STRING,
         "deployment": _obj({"enabled": _BOOL}),
         "replicaCount": _INT,
+        "terminationGracePeriodSeconds": {"type": "integer", "minimum": 1},
         "autoscaling": _AUTOSCALING,
         # Name of another application this one deep-merges itself over, resolved by
         # templates/_apps.tpl at render time so a -f override of the base also
@@ -553,6 +554,19 @@ def _fred_agents_app(fa_config: dict) -> dict:
     )
 
 
+def _fred_agents_worker_app() -> dict:
+    # Identity, image, credentials and SQL have one owner: the logical pod API.
+    props = _base_app_props()
+    for key in ("image", "env", "extraEnvVars", "envFrom"):
+        props.pop(key)
+    props["inheritFrom"] = {"const": "fred-agents"}
+    props["replicaCount"] = {"type": "integer", "minimum": 0}
+    props["terminationGracePeriodSeconds"] = {"type": "integer", "minimum": 60}
+    props["migration"] = _obj({"enabled": {"const": False}})
+    props["configuration"] = _obj({"scheduler": _obj({"enabled": {"const": True}})})
+    return _obj(_drop_required(props))
+
+
 def _frontend_app() -> dict:
     _frontend_config = _obj(
         {
@@ -637,6 +651,8 @@ def _manager_app(config: dict) -> dict:
             {
                 "configuration": config,
                 "lifecycle_policy_catalog": {"type": ["object", "null"]},
+                # Export the worker contract from the worker's image in an init container.
+                "workerContract": _obj({"exportFromWorkerImage": {"type": "boolean"}}),
                 "dotenv": _obj({}, additional=True),
             }
         )
@@ -745,6 +761,7 @@ def build(
             "applications": _obj(
                 {
                     "fred-agents": _fred_agents_app(fa_config),
+                    "fred-agents-worker": _fred_agents_worker_app(),
                     "frontend": _frontend_app(),
                     "monitor": _obj(_base_app_props()),
                     "knowledge-flow-backend": _kf_app(kf_config),

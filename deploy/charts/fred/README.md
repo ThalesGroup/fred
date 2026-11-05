@@ -15,7 +15,8 @@ setting.
 | --- | --- | --- |
 | `control-plane-backend` | admission, governance, spaces, folders and authorization API | yes |
 | `control-plane-worker` | manager lifecycle work | yes |
-| `fred-agents` | legacy agent runtime | no |
+| `fred-agents` | agent pod API and conversations | no |
+| `fred-agents-worker` | durable preparation of the pod's installed capabilities | no |
 | `monitor` | read-only namespaced technical status for platform administrators | no |
 | `frontend` | web UI, behind your ingress | yes |
 | `knowledge-flow-backend` | authorized search and published-content API | yes |
@@ -92,6 +93,37 @@ The security profile (`c3`) is described in
 To brand the frontend without rebuilding it, see
 [Theme overlay](https://github.com/ThalesGroup/fred/blob/swift/apps/frontend/README.md#theme-overlay-branding-assets-without-a-rebuild).
 
+## Capability preparation worker
+
+Enable `applications.fred-agents-worker.enabled` alongside `fred-agents`. The worker
+inherits the API's final image (including build overlays), runtime ID, SQL storage,
+CP URL, workload configuration and Secret references through `inheritFrom`. Set
+those on `fred-agents` only: the worker schema rejects separate image, configuration
+or credential overrides, except for enabling its scheduler. The API's scheduler
+setting is preserved. No second image build or capability migration is needed.
+
+Bind the runtime ID in the CP's `platform.capability_preparation.workers` to the
+verified issuer, audience and client ID of its workload. The worker and
+`scheduler.lifecycle.temporal` on the CP must use the same host and namespace;
+the chart rejects missing bindings or mismatched connections. The CP supplies the
+actual queue; the inherited `scheduler.temporal.task_queue` does not select it.
+See the [operator note](../../release-notes/changes/weaver-powerpoint-file-ownership.md)
+for the retention, identity and migration contracts.
+
+The separate Deployment runs `python -m fred_agents --mode worker`, without ports,
+Service, ingress, metrics endpoint or API probes. It shares the API's `.env` Secret
+and creates only its configuration, service account (without Kubernetes permissions)
+and Deployment. Startup errors terminate the process; Kubernetes restarts it.
+Container readiness alone does not prove Temporal polling: verify the poller and
+one preparation before declaring the worker operational.
+
+Each replica runs at most two preparation activities. Defaults bound it to 2 CPUs,
+2 GiB RAM and 2 GiB ephemeral storage; these are initial limits, not measured
+capacity. `terminationGracePeriodSeconds: 60` leaves time for the runtime's
+30-second graceful shutdown. Replica count and resources remain configurable;
+`replicaCount: 0` deliberately pauses processing while leaving the API available.
+Retain workers for cleanup when disabling new preparation admissions.
+
 ## Horizontal Pod Autoscaling
 
 Applications can opt into an `autoscaling/v2` HorizontalPodAutoscaler under
@@ -127,8 +159,8 @@ fred-agents can inspect the cluster it runs in. It reads a kubeconfig from
 ## Local deployment
 
 [fred-deployment-factory](https://github.com/fred-agent/fred-deployment-factory) installs
-this chart on a local k3d cluster: `make k3d-app APP=fred` the published release,
-`DIR=<fred checkout>` added to build the three images from source (`deploy/k3d/build`)
+this chart on a local k3d cluster: `make k3d-app FRED=swift APP=fred` the published Swift
+release; `make k3d-app FRED=swift|weaver APP=fred DIR=<fred checkout>` to build the three images from source (`deploy/k3d/build`)
 and deploy the checkout's chart with the same values.
 
 ## Pods built on Fred's libraries

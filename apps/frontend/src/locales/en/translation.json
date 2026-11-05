@@ -372,7 +372,7 @@
       }
     },
     "ppt_builder": {
-      "preparing": "reading the PowerPoint template.",
+      "preparing": "Preparing — reading the PowerPoint template",
       "name": "Generate a presentation",
       "description": "Builds a PowerPoint deck from a chat request, on the team's template or a built-in theme.",
       "fields": {
@@ -418,7 +418,7 @@
         "uploadAria": "PowerPoint template file",
         "clearAria": "Remove the selected file",
         "currentTemplate": "A template is configured for this agent.",
-        "usePlatformTemplate": "Use platform template",
+        "usePlatformTemplate": "Remove the agent template",
         "builtInTemplate": "Built-in template (no template uploaded)",
         "summary": "{{patterns}} slides ready to use, {{excluded}} set aside.",
         "summaryBuiltin": "Built-in template: {{patterns}} slides ready to use.",
@@ -427,7 +427,8 @@
         "droppedOverrides": "{{count}} earlier correction(s) no longer match this template and will be dropped on the next save.",
         "adminTemplate": "Template set by the administrator: {{name}}",
         "adminTemplateUnnamed": "Template set by the administrator",
-        "summaryPlatform": "Administrator's template: {{patterns}} slides ready to use, {{excluded}} set aside."
+        "summaryPlatform": "Administrator's template: {{patterns}} slides ready to use, {{excluded}} set aside.",
+        "organizationTemplate": "Shared template for this pod"
       },
       "analysis": {
         "staged": "The template will be read once you save the agent. The agent becomes available when that is done.",
@@ -553,15 +554,15 @@
         }
       },
       "platform": {
-        "intro": "Agents without a template of their own build their presentations on this one.",
-        "loading": "Loading the platform template…",
-        "loadError": "The platform template could not be loaded.",
+        "intro": "In this organization, agents using the {{runtimeId}} pod offer without their own template build their presentations on this one.",
+        "loading": "Loading the organization template…",
+        "loadError": "The organization template could not be loaded.",
         "unavailable": "Presentation settings are not available right now: the service that builds presentations cannot be reached.",
-        "current": "Platform template: {{name}}",
+        "current": "Organization template: {{name}}",
         "fredTemplate": "Fred template (built-in)",
         "upload": "Upload a .pptx template",
         "replace": "Replace the template",
-        "uploadAria": "Platform PowerPoint template file",
+        "uploadAria": "Organization PowerPoint template file",
         "uploaded": "Template uploaded: its analysis has started.",
         "uploadError": "The template was not accepted.",
         "uploadFailed": "Something went wrong while sending the file. Try again in a moment.",
@@ -585,7 +586,7 @@
         "resetError": "The template could not be reset.",
         "resetConfirm": {
           "title": "Go back to the Fred template?",
-          "message": "The platform template and all your slide edits, including those of the Fred template, will be deleted. Agents without a template of their own will go back to the Fred template.",
+          "message": "The common template for this organization and pod and all its slide edits, including those of the Fred template, will be deleted. Affected agents without their own template will return to the Fred template.",
           "confirm": "Reset",
           "cancel": "Cancel"
         },
@@ -1770,9 +1771,9 @@
           "unavailableHint": "The pod did not answer the last check. Showing the inventory received on {{date}}.",
           "neverAnsweredHint": "The pod has never answered."
         },
-        "platformSettings": "Platform settings",
+        "platformSettings": "Organization settings",
         "platformDrawer": {
-          "title": "{{name}}: platform settings"
+          "title": "{{name}}: organization settings"
         }
       },
       "platformModelBindings": {

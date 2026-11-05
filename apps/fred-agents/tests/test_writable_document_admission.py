@@ -22,6 +22,12 @@ from fred_runtime.common.outbound_credentials import (
     get_delegation_runtime,
     set_delegation_runtime,
 )
+from fred_runtime.runtime_context import (
+    RuntimeConfig,
+    RuntimeContext,
+    get_runtime_context_or_none,
+    set_runtime_context,
+)
 from test_app_security import DELEGATED, PERSON, SERVICE, terms_app
 
 BASE = "/pod/capabilities/writable_document/sessions/session-a/documents"
@@ -36,6 +42,7 @@ REQUESTS = [
 @pytest.fixture
 def pod(monkeypatch):
     previous = get_delegation_runtime()
+    previous_context = get_runtime_context_or_none()
     registry = CapabilityRegistry()
     registry.register(WritableDocumentCapability())
     monkeypatch.setattr(
@@ -66,11 +73,19 @@ def pod(monkeypatch):
     store.upsert.side_effect = lambda record: record
     monkeypatch.setattr(store_module, "_provider", lambda: store)
     try:
+        set_runtime_context(
+            RuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url="http://unused.invalid", service_name="test-pod"
+                )
+            )
+        )
         app = agent_app.create_agent_app({}, config)
         assert set(app.dependency_overrides) == {get_config}
         yield app, store
     finally:
         set_delegation_runtime(previous)
+        set_runtime_context(previous_context)
 
 
 @pytest.mark.parametrize("method,path", REQUESTS)

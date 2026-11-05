@@ -202,7 +202,11 @@ export type CapabilityHitlRenderer = ComponentType<CapabilityHitlRendererProps>;
 export interface CapabilityPlatformPanelProps {
   /** This capability's row of the admin catalogue. */
   capability: { id: string; name: string; description?: string | null };
-  /** A platform admin or feature manager: write actions are shown. */
+  /** Explicit offer scope: neither routes nor caches are keyed by capability alone. */
+  organizationId: string;
+  runtimeId: string;
+  baseUrl: string | null;
+  /** The organization write permission, checked by Control Plane. */
   canManage: boolean;
 }
 

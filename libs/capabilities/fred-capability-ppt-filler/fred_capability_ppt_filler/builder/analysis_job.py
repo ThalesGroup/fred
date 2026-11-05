@@ -21,9 +21,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Literal, Optional, Tuple
@@ -39,12 +38,9 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
-    case,
-    delete,
     select,
     update,
 )
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -52,16 +48,11 @@ from fred_capability_ppt_filler.builder.analysis import (
     ANALYSIS_VERSION,
     analyze_template,
 )
-from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.labelling import label_inventory
 from fred_capability_ppt_filler.builder.models import (
     AnalysisSummary,
     PatternOverride,
     TemplateInventory,
-)
-from fred_capability_ppt_filler.builder.overrides import (
-    apply_overrides,
-    prune_overrides,
 )
 from fred_capability_ppt_filler.builder.preview import build_patterns_deck
 from fred_capability_ppt_filler.concurrency import (
@@ -75,14 +66,13 @@ LEASE_SECONDS = 90
 HEARTBEAT_SECONDS = 30
 # Automatic restarts after an interruption; a template that keeps killing the
 # job then fails instead of looping. A save that re-runs it starts the count again.
-MAX_ATTEMPTS = 3
 JOB_TIMEOUT_SECONDS = 20 * 60
 # Nobody waits on the job, and a large template's patterns deck exceeds the
 # 60 s turn default: without a PDF there are no thumbnails and no vision labels.
 PATTERNS_PDF_TIMEOUT_SECONDS = 300.0
 _SLOT_POLL_SECONDS = 1.0
 # Background work takes at most this many of the pod's heavy-job slots: a burst
-# of refreshes (a version bump) must not leave the turns' builds busy.
+# of preparations must not leave the turns' builds busy.
 MAX_BACKGROUND_SLOTS = 2
 # An outdated inventory is served from memory, re-read after this long: its
 # refresh may land on another pod, or never (a failed one, no vision port).
@@ -90,18 +80,12 @@ OUTDATED_RECHECK_SECONDS = 60.0
 
 RULES_KEY = "rules"
 _AGENT_DEFAULT = "agent-default"
-# The platform default template's rows: instance ids are UUIDs, so no collision.
-# The first is in effect (always succeeded); a replacement is analysed in the
-# second and moved onto the first when it succeeds, so agents keep the previous one.
+# Legacy row identifiers are retained only to reject them as agent identities.
 PLATFORM_ID = "__platform__"
 PLATFORM_NEXT_ID = "__platform_next__"
-# The manager's edits of the Fred template: a row holding only overrides_json,
-# used whenever no platform template is in effect.
 BUILTIN_ID = "__builtin__"
-# How long a pod builds on its last read of the platform default.
-PLATFORM_REFRESH_SECONDS = 30.0
 
-RowStatus = Literal["pending", "running", "succeeded", "failed"]
+RowStatus = Literal["pending", "running", "succeeded", "failed", "retired"]
 ViewStatus = Literal["pending", "running", "succeeded", "failed", "interrupted"]
 
 _INTERRUPTED_DETAIL = (
@@ -110,15 +94,6 @@ _INTERRUPTED_DETAIL = (
 _MISSING_DETAIL = (
     "The template analysis was not found. Save the agent again or upload the "
     "template again."
-)
-
-
-class AnalysisOwnershipError(ValueError):
-    """The analysis row of this agent id belongs to another team."""
-
-
-_OWNED_ELSEWHERE = (
-    "This agent's template belongs to another team; the template was not changed."
 )
 
 
@@ -208,6 +183,7 @@ class AnalysisRecord:
     inventory_json: Optional[str] = None
     template_filename: Optional[str] = None
     overrides_json: Optional[str] = None
+    saved_by: Optional[str] = None
 
     def matches(self, sha: str, key: str) -> bool:
         # A vision run without the model port labels and stores `rules`: it
@@ -224,7 +200,11 @@ class AnalysisRecord:
         return self.outdated() and self.lease_until >= now
 
     def view_status(self, now: datetime) -> ViewStatus:
-        return "interrupted" if self.interrupted(now) else self.status
+        return (
+            "failed"
+            if self.status == "retired"
+            else ("interrupted" if self.interrupted(now) else self.status)
+        )
 
     def inventory(self) -> Optional[TemplateInventory]:
         if self.status != "succeeded" or not self.inventory_json:
@@ -282,35 +262,6 @@ class AnalysisStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def start(
-        self,
-        *,
-        instance_id: str,
-        team_id: str,
-        saved_by: Optional[str],
-        template_sha256: str,
-        labelling_key: str,
-        template: Optional[bytes],
-        template_filename: Optional[str] = None,
-    ) -> str:
-        """Make the row a fresh pending analysis and return its job id.
-        ``template=None`` keeps the stored bytes and file name (a re-run).
-        Raises :class:`AnalysisOwnershipError` when the row is another team's."""
-
-    @abstractmethod
-    async def delete(self, instance_id: str) -> None:
-        """Remove the row; a job still running on it is superseded."""
-
-    @abstractmethod
-    async def claim_interrupted(self, instance_id: str) -> Optional[str]:
-        """Take over an interrupted analysis with attempts left; one replica wins."""
-
-    @abstractmethod
-    async def claim_refresh(self, instance_id: str, *, force: bool) -> Optional[str]:
-        """Take an outdated succeeded analysis for a re-run that keeps it in use
-        meanwhile; ``force`` (an author's action) ignores the attempts spent."""
-
-    @abstractmethod
     async def heartbeat(self, instance_id: str, job_id: str) -> bool:
         raise NotImplementedError
 
@@ -322,23 +273,8 @@ class AnalysisStore(ABC):
         inventory: TemplateInventory,
         patterns_pdf: Optional[bytes],
         labelling_key: Optional[str] = None,
-        promote_to: Optional[str] = None,
     ) -> bool:
-        """Store the result; ``labelling_key``, when given, is the one used.
-        ``promote_to`` moves the row onto that id in the same transaction,
-        replacing it and keeping its pattern edits for the same file."""
-
-    @abstractmethod
-    async def set_overrides(
-        self, instance_id: str, overrides_json: Optional[str]
-    ) -> bool:
-        """Store the platform template's pattern edits on a succeeded row."""
-
-    @abstractmethod
-    async def set_builtin_overrides(
-        self, template_sha256: str, overrides_json: Optional[str]
-    ) -> None:
-        """Store the Fred template's pattern edits; ``None`` removes them."""
+        """Store the result; ``labelling_key``, when given, is the one used."""
 
     @abstractmethod
     async def fail(self, instance_id: str, job_id: str, error: str) -> bool:
@@ -369,6 +305,7 @@ class SqlAnalysisStore(AnalysisStore):
             row.updated_at,
             row.template_filename,
             row.overrides_json,
+            row.saved_by,
         ]
         if with_inventory:
             columns.append(row.inventory_json)
@@ -395,7 +332,8 @@ class SqlAnalysisStore(AnalysisStore):
             updated_at=_aware(found[10]),
             template_filename=found[11],
             overrides_json=found[12],
-            inventory_json=found[13] if with_inventory else None,
+            inventory_json=found[14] if with_inventory else None,
+            saved_by=found[13],
         )
 
     async def _scalar(self, column: Any, instance_id: str, *where: Any) -> Any:
@@ -427,114 +365,12 @@ class SqlAnalysisStore(AnalysisStore):
                 )
         return bool(getattr(result, "rowcount", 0))
 
-    async def start(
-        self,
-        *,
-        instance_id: str,
-        team_id: str,
-        saved_by: Optional[str],
-        template_sha256: str,
-        labelling_key: str,
-        template: Optional[bytes],
-        template_filename: Optional[str] = None,
-    ) -> str:
-        job_id = str(uuid.uuid4())
-        now = _utcnow()
-        values: dict[str, Any] = {
-            "team_id": team_id,
-            "template_sha256": template_sha256,
-            "labelling_key": labelling_key,
-            "analysis_version": ANALYSIS_VERSION,
-            "status": "pending",
-            "job_id": job_id,
-            "attempts": 1,
-            "lease_until": now + timedelta(seconds=LEASE_SECONDS),
-            "inventory_json": None,
-            "patterns_pdf": None,
-            "error": None,
-        }
-        if saved_by:
-            values["saved_by"] = saved_by
-        if template is not None:
-            values["template_pptx"] = template
-            values["template_filename"] = template_filename
-        # Only the row's own team rewrites it: an id sent by another team's save
-        # must not replace its template.
-        mine = AnalysisRow.team_id == team_id
-        if await self._update(instance_id, mine, **values):
-            return job_id
-        if await self._scalar(AnalysisRow.team_id, instance_id) is not None:
-            raise AnalysisOwnershipError(_OWNED_ELSEWHERE)
-        if template is None:
-            raise LookupError(f"No stored template for {instance_id}.")
-        try:
-            async with self._sessionmaker() as session:
-                async with session.begin():
-                    session.add(
-                        AnalysisRow(
-                            **{"saved_by": "unknown", **values},
-                            agent_instance_id=instance_id,
-                            created_at=now,
-                            updated_at=now,
-                        )
-                    )
-        except IntegrityError:  # a concurrent save inserted it first
-            if not await self._update(instance_id, mine, **values):
-                raise AnalysisOwnershipError(_OWNED_ELSEWHERE) from None
-        return job_id
-
-    async def delete(self, instance_id: str) -> None:
-        async with self._sessionmaker() as session:
-            async with session.begin():
-                await session.execute(
-                    delete(AnalysisRow).where(
-                        AnalysisRow.agent_instance_id == instance_id
-                    )
-                )
-
-    async def claim_interrupted(self, instance_id: str) -> Optional[str]:
-        job_id = str(uuid.uuid4())
-        now = _utcnow()
-        claimed = await self._update(
-            instance_id,
-            AnalysisRow.status.in_(("pending", "running")),
-            AnalysisRow.lease_until < now,
-            AnalysisRow.attempts < MAX_ATTEMPTS,
-            job_id=job_id,
-            status="pending",
-            attempts=AnalysisRow.attempts + 1,
-            lease_until=now + timedelta(seconds=LEASE_SECONDS),
-        )
-        return job_id if claimed else None
-
-    async def claim_refresh(self, instance_id: str, *, force: bool) -> Optional[str]:
-        job_id = str(uuid.uuid4())
-        now = _utcnow()
-        where = [
-            AnalysisRow.status == "succeeded",
-            AnalysisRow.analysis_version < ANALYSIS_VERSION,
-            AnalysisRow.lease_until < now,
-        ]
-        if not force:
-            where.append(AnalysisRow.attempts < MAX_ATTEMPTS)
-        claimed = await self._update(
-            instance_id,
-            *where,
-            job_id=job_id,
-            attempts=1 if force else AnalysisRow.attempts + 1,
-            lease_until=now + timedelta(seconds=LEASE_SECONDS),
-        )
-        return job_id if claimed else None
-
     async def heartbeat(self, instance_id: str, job_id: str) -> bool:
-        # A refresh keeps its row succeeded: the old inventory stays in use.
         return await self._update(
             instance_id,
             AnalysisRow.job_id == job_id,
-            AnalysisRow.status.in_(("pending", "running", "succeeded")),
-            status=case(
-                (AnalysisRow.status == "succeeded", "succeeded"), else_="running"
-            ),
+            AnalysisRow.status.in_(("pending", "running")),
+            status="running",
             lease_until=_utcnow() + timedelta(seconds=LEASE_SECONDS),
         )
 
@@ -545,108 +381,30 @@ class SqlAnalysisStore(AnalysisStore):
         inventory: TemplateInventory,
         patterns_pdf: Optional[bytes],
         labelling_key: Optional[str] = None,
-        promote_to: Optional[str] = None,
     ) -> bool:
         key = {} if labelling_key is None else {"labelling_key": labelling_key}
         values = dict(
             key,
-            updated_at=_utcnow(),
             status="succeeded",
             analysis_version=ANALYSIS_VERSION,
             inventory_json=inventory.model_dump_json(),
             patterns_pdf=patterns_pdf,
             error=None,
         )
-        row = AnalysisRow
-        async with self._sessionmaker() as session:
-            async with session.begin():
-                result = await session.execute(
-                    update(row)
-                    .where(row.agent_instance_id == instance_id, row.job_id == job_id)
-                    .values(**values)
-                )
-                if not getattr(result, "rowcount", 0) or promote_to is None:
-                    return bool(getattr(result, "rowcount", 0))
-                previous = (
-                    await session.execute(
-                        select(row.template_sha256, row.overrides_json).where(
-                            row.agent_instance_id == promote_to
-                        )
-                    )
-                ).first()
-                kept: List[PatternOverride] = []
-                sha = (
-                    await session.execute(
-                        select(row.template_sha256).where(
-                            row.agent_instance_id == instance_id
-                        )
-                    )
-                ).scalar_one()
-                if previous is not None and previous[0] == sha:
-                    kept, _ = prune_overrides(parse_overrides(previous[1]), inventory)
-                await session.execute(
-                    delete(row).where(row.agent_instance_id == promote_to)
-                )
-                await session.execute(
-                    update(row)
-                    .where(row.agent_instance_id == instance_id)
-                    .values(
-                        agent_instance_id=promote_to,
-                        overrides_json=dump_overrides(kept),
-                    )
-                )
-        return True
-
-    async def set_overrides(
-        self, instance_id: str, overrides_json: Optional[str]
-    ) -> bool:
-        return await self._update(
-            instance_id,
-            AnalysisRow.status == "succeeded",
-            overrides_json=overrides_json,
-        )
-
-    async def set_builtin_overrides(
-        self, template_sha256: str, overrides_json: Optional[str]
-    ) -> None:
-        if overrides_json is None:
-            await self.delete(BUILTIN_ID)
-            return
-        values = {"template_sha256": template_sha256, "overrides_json": overrides_json}
-        if await self._update(BUILTIN_ID, **values):
-            return
-        now = _utcnow()
-        try:
-            async with self._sessionmaker() as session:
-                async with session.begin():
-                    session.add(
-                        AnalysisRow(
-                            agent_instance_id=BUILTIN_ID,
-                            team_id=PLATFORM_ID,
-                            saved_by="unknown",
-                            labelling_key=RULES_KEY,
-                            analysis_version=ANALYSIS_VERSION,
-                            status="succeeded",
-                            job_id=str(uuid.uuid4()),
-                            attempts=1,
-                            lease_until=now,
-                            template_pptx=b"",
-                            created_at=now,
-                            updated_at=now,
-                            **values,
-                        )
-                    )
-        except IntegrityError:  # a concurrent write inserted it first
-            await self._update(BUILTIN_ID, **values)
-
-    async def fail(self, instance_id: str, job_id: str, error: str) -> bool:
-        # A failed refresh keeps the old result and is not retried automatically.
-        refresh = AnalysisRow.status == "succeeded"
         return await self._update(
             instance_id,
             AnalysisRow.job_id == job_id,
-            status=case((refresh, "succeeded"), else_="failed"),
-            attempts=case((refresh, MAX_ATTEMPTS), else_=AnalysisRow.attempts),
+            AnalysisRow.status.in_(("pending", "running")),
+            AnalysisRow.lease_until > _utcnow(),
+            **values,
+        )
+
+    async def fail(self, instance_id: str, job_id: str, error: str) -> bool:
+        return await self._update(
+            instance_id,
+            AnalysisRow.job_id == job_id,
+            AnalysisRow.status.in_(("pending", "running")),
+            status="failed",
             lease_until=_utcnow(),
             error=error[:2000],
         )
@@ -694,18 +452,9 @@ def clear_store_provider() -> None:
 _inventories: ThreadSafeLRUCache[
     Tuple[str, str, str], Tuple[TemplateInventory, Optional[float]]
 ] = ThreadSafeLRUCache(max_size=64)
-# The last save's model port per instance: only a save carries one, so a job
-# this pod starts later (refresh, recovery) labels with vision only while cached.
-_ports: ThreadSafeLRUCache[str, CapabilityModelPort] = ThreadSafeLRUCache(max_size=256)
-_running: set[asyncio.Task[Any]] = set()
 _background_slots = 0
 # Template bytes by sha are immutable too; only a few, they are large.
 _templates: ThreadSafeLRUCache[str, bytes] = ThreadSafeLRUCache(max_size=4)
-
-
-def remember_port(instance_id: str, port: Optional[CapabilityModelPort]) -> None:
-    if port is not None:
-        _ports.set(instance_id, port)
 
 
 def cached_inventory(
@@ -733,17 +482,11 @@ def forget_inventories(instance_id: str) -> None:
     for cache_key in _inventories.keys():
         if cache_key[0] == instance_id:
             _inventories.delete(cache_key)
-    if instance_id == PLATFORM_ID:
-        forget_platform_default()
 
 
 def clear_caches() -> None:
-    global _platform_inventory
-    _platform_inventory = None
     _inventories.clear()
-    _ports.clear()
     _templates.clear()
-    forget_platform_default()
 
 
 async def analysed_template(instance_id: str, sha: str) -> bytes:
@@ -772,118 +515,12 @@ async def ready_inventory(
     inventory = record.inventory()
     if inventory is None:
         return None
-    if record.outdated():
-        await _refresh_quietly(store, record)
     # A rules row serving a vision key is re-read too: another replica's save re-runs it.
     stand_in = record.labelling_key != key
     remember_inventory(
         instance_id, sha, key, inventory, outdated=record.outdated() or stand_in
     )
     return inventory
-
-
-# --- Platform default template: one snapshot per pod --------------------------------
-
-
-@dataclass(frozen=True)
-class PlatformDefault:
-    """The platform default template in effect, with its pattern edits applied.
-    ``sha`` is None for the Fred template carrying the manager's edits."""
-
-    sha: Optional[str]
-    inventory: TemplateInventory
-
-
-# (monotonic expiry, value) of this pod's last read; None until the first one.
-_platform: Optional[Tuple[float, Optional[PlatformDefault]]] = None
-_platform_read: Optional[asyncio.Task[Optional[PlatformDefault]]] = None
-# Bumped by a write: a read started before it does not store its stale value.
-_platform_generation = 0
-# (job id, inventory) of the row last read: a job id names one analysis result.
-_platform_inventory: Optional[Tuple[str, TemplateInventory]] = None
-
-
-def platform_snapshot() -> Tuple[bool, Optional[PlatformDefault]]:
-    """``(known, value)`` with no I/O. Once expired, the value still serves and a
-    background read replaces it: a turn never waits on the platform row."""
-    snapshot = _platform
-    if snapshot is None:
-        return False, None
-    if time.monotonic() >= snapshot[0]:
-        _start_platform_read()
-    return True, snapshot[1]
-
-
-def forget_platform_default() -> None:
-    """A write on this pod: its next turn reads the row again."""
-    global _platform, _platform_generation, _platform_read
-    _platform = None
-    _platform_generation += 1
-    _platform_read = None
-
-
-def _start_platform_read() -> Optional[asyncio.Task[Optional[PlatformDefault]]]:
-    global _platform_read
-    if _platform_read is None or _platform_read.done():
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return None
-        _platform_read = loop.create_task(_read_platform_default(_platform_generation))
-        _running.add(_platform_read)  # held until it ends
-        _platform_read.add_done_callback(_running.discard)
-    return _platform_read
-
-
-async def refresh_platform_default() -> Optional[PlatformDefault]:
-    """Read the platform default now, sharing a read already in flight."""
-    task = _start_platform_read()
-    if task is None:  # pragma: no cover - always called from a running loop
-        return await _read_platform_default(_platform_generation)
-    return await asyncio.shield(task)
-
-
-async def _platform_row_inventory(
-    store: AnalysisStore, record: AnalysisRecord
-) -> Optional[TemplateInventory]:
-    global _platform_inventory
-    if _platform_inventory is not None and _platform_inventory[0] == record.job_id:
-        return _platform_inventory[1]
-    full = await store.get(PLATFORM_ID)
-    inventory = full.inventory() if full is not None else None
-    if full is not None and inventory is not None:
-        _platform_inventory = (full.job_id, inventory)
-    return inventory
-
-
-async def _read_platform_default(generation: int) -> Optional[PlatformDefault]:
-    """One primary-key read (two without a platform template: the Fred
-    template's edits); the inventory is re-read only for a new result.
-    Only the row in effect counts, never a replacement being analysed."""
-    global _platform
-    previous = _platform[1] if _platform is not None else None
-    value: Optional[PlatformDefault] = None
-    try:
-        store = get_analysis_store()
-        record = await store.get(PLATFORM_ID, with_inventory=False)
-        if record is not None and record.status == "succeeded":
-            inventory = await _platform_row_inventory(store, record)
-            if record.outdated():
-                await _refresh_quietly(store, record)
-            if inventory is not None:
-                effective, _ = apply_overrides(inventory, record.overrides())
-                value = PlatformDefault(record.template_sha256, effective)
-        else:
-            edits = await store.get(BUILTIN_ID, with_inventory=False)
-            if edits is not None and edits.overrides():
-                effective, _ = apply_overrides(builtin_template()[1], edits.overrides())
-                value = PlatformDefault(None, effective)
-    except Exception:  # the last value serves until the next read
-        logger.warning("Platform default template unreadable", exc_info=True)
-        value = previous
-    if generation == _platform_generation:
-        _platform = (time.monotonic() + PLATFORM_REFRESH_SECONDS, value)
-    return value
 
 
 # --- Job ---------------------------------------------------------------------------
@@ -997,11 +634,8 @@ async def run_analysis(
     finally:
         if not work.done():
             work.cancel()
-    promote_to = PLATFORM_ID if instance_id == PLATFORM_NEXT_ID else None
-    if await store.finish(instance_id, job_id, inventory, pdf, key, promote_to):
+    if await store.finish(instance_id, job_id, inventory, pdf, key):
         forget_inventories(instance_id)
-        if promote_to is not None:
-            forget_inventories(promote_to)
         logger.info(
             "Template analysis of %s done in %.0fs",
             instance_id,
@@ -1009,126 +643,19 @@ async def run_analysis(
         )
 
 
-def _spawn(coro: Coroutine[Any, Any, None]) -> None:
-    # The loop keeps only weak references to tasks: hold each until it ends.
-    task = asyncio.get_running_loop().create_task(coro)
-    _running.add(task)
-    task.add_done_callback(_running.discard)
-
-
-def spawn_analysis(
-    store: AnalysisStore,
-    instance_id: str,
-    job_id: str,
-    template: bytes,
-    key: str,
-) -> None:
-    _spawn(
-        run_analysis(store, instance_id, job_id, template, _ports.get(instance_id), key)
-    )
-
-
-async def restart_from_stored(
-    store: AnalysisStore,
-    record: AnalysisRecord,
-    *,
-    labelling_key: str,
-) -> None:
-    """Re-run the analysis from the template already in the row (a save)."""
-    template = await store.template(record.agent_instance_id)
-    if template is None:
-        raise LookupError(f"No stored template for {record.agent_instance_id}.")
-    key = labelling_key
-    job_id = await store.start(
-        instance_id=record.agent_instance_id,
-        team_id=record.team_id,
-        saved_by=None,
-        template_sha256=record.template_sha256,
-        labelling_key=key,
-        template=None,
-    )
-    spawn_analysis(store, record.agent_instance_id, job_id, template, key)
-
-
-async def recover_interrupted(store: AnalysisStore, instance_id: str) -> bool:
-    """Restart an interrupted analysis if this replica wins the claim. A vision
-    one is recovered only where the save left its model port: elsewhere it
-    stays interrupted until a save re-runs it, instead of turning into rules."""
-    record = await store.get(instance_id, with_inventory=False)
-    if record is None or not _port_for(record):
-        return False
-    job_id = await store.claim_interrupted(instance_id)
-    if job_id is None:
-        return False
-    template = await store.template(instance_id)
-    if template is None:
-        return False
-    logger.info("Restarting interrupted analysis of %s", instance_id)
-    spawn_analysis(store, instance_id, job_id, template, record.labelling_key)
-    return True
-
-
-def _port_for(record: AnalysisRecord) -> bool:
-    """Whether a job started here can label the way the row says."""
-    return (
-        record.labelling_key == RULES_KEY
-        or _ports.get(record.agent_instance_id) is not None
-    )
-
-
-async def refresh_outdated(
-    store: AnalysisStore, record: AnalysisRecord, *, force: bool = False
-) -> bool:
-    """Re-run an analysis made by older rules, its result staying in use meanwhile.
-    One replica wins the claim; a failure is retried only with ``force``. A vision-
-    labelled one is refreshed automatically only where the save left its model port."""
-    if not record.outdated() or record.refreshing(_utcnow()):
-        return False
-    instance_id = record.agent_instance_id
-    if not force and record.attempts >= MAX_ATTEMPTS:
-        return False  # checked before the claim: no write on every turn
-    # Without this pod's vision port the re-run would label by rules: keep the old one.
-    if not force and not _port_for(record):
-        return False
-    job_id = await store.claim_refresh(instance_id, force=force)
-    if job_id is None:
-        return False
-    template = await store.template(instance_id)
-    if template is None:
-        return False
-    logger.info("Refreshing the outdated analysis of %s", instance_id)
-    spawn_analysis(store, instance_id, job_id, template, record.labelling_key)
-    return True
-
-
-async def _refresh_quietly(store: AnalysisStore, record: AnalysisRecord) -> None:
-    try:
-        await refresh_outdated(store, record)
-    except Exception:  # the outdated result still serves; the next check retries
-        logger.warning("Outdated analysis refresh not started", exc_info=True)
-
-
 async def analysis_readiness(
     store: AnalysisStore, instance_id: str, sha: str, key: str
 ) -> CapabilityReadiness:
-    """Readiness of the analysis for this template and labelling; restarts an
-    interrupted one (bounded by ``MAX_ATTEMPTS``) and refreshes an outdated one."""
+    """Consult only. Temporal owns retries independently of list/form reads."""
     record = await store.get(instance_id, with_inventory=False)
     if record is None or not record.matches(sha, key):
         return CapabilityReadiness.failed(_MISSING_DETAIL)
     if record.status == "succeeded":
-        await _refresh_quietly(store, record)
         return CapabilityReadiness.ready()
-    if record.status == "failed":
+    if record.status in ("failed", "retired"):
         return CapabilityReadiness.failed(
             record.error or "The template analysis failed."
         )
-    if record.interrupted(_utcnow()):
-        if await recover_interrupted(store, instance_id):
-            return CapabilityReadiness.pending()
-        again = await store.get(instance_id, with_inventory=False)
-        if again is None or again.interrupted(_utcnow()):
-            return CapabilityReadiness.failed(_INTERRUPTED_DETAIL)
     return CapabilityReadiness.pending()
 
 

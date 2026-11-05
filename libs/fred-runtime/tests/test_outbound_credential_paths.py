@@ -24,6 +24,7 @@ run-stopping error that reaches the engine instead of the model.
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import pathlib
@@ -412,6 +413,48 @@ async def test_workspace_child_uses_live_person_bearer_without_grant():
     assert all(GRANT_PARAM_PERSON not in request.url.params for request in seen)
 
 
+def _has_authorization_outside_header_reads(source: str) -> bool:
+    tree = ast.parse(source)
+    # Reading an inbound bearer for a CP decision does not construct a header.
+    # Exclude only that expression, never the whole module containing the read.
+    header_reads = {
+        node.args[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "get"
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "headers"
+        and node.args
+    }
+    return any(
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.lower() == "authorization"
+        and node not in header_reads
+        for node in ast.walk(tree)
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ('bearer = request.headers.get("Authorization")', False),
+        ("bearer = request.headers.get('authorization')", False),
+        ('headers = {"Authorization": bearer}', True),
+        ("headers = {'authorization': bearer}", True),
+        ('client.headers["Authorization"] = bearer', True),
+        (
+            'bearer = request.headers.get("Authorization")\n'
+            'headers = {"Authorization": bearer}',
+            True,
+        ),
+    ],
+)
+def test_header_guard_distinguishes_reads_from_construction(source, expected):
+    assert _has_authorization_outside_header_reads(source) is expected
+
+
 def test_no_outbound_path_builds_an_authorization_header_of_its_own():
     """The enumeration above covers the paths that exist today; this covers the
     one added tomorrow. A module that sets an Authorization header must be a
@@ -424,12 +467,14 @@ def test_no_outbound_path_builds_an_authorization_header_of_its_own():
         runtime_root / "app" / "agent_app.py",
     ]
 
-    offenders = [
-        path.name
-        for path in searched
-        if '"Authorization"' in path.read_text()
-        and "outbound_credentials" not in path.read_text()
-    ]
+    offenders = []
+    for path in searched:
+        source = path.read_text()
+        if (
+            "outbound_credentials" not in source
+            and _has_authorization_outside_header_reads(source)
+        ):
+            offenders.append(path.name)
 
     assert offenders == []
 

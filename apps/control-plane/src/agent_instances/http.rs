@@ -34,6 +34,7 @@ use super::{AgentInstance, NewAgentInstance, PAGE_SIZE, tuning};
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreateAgentInstanceRequest {
+    pub powerpoint: Option<crate::capability_preparation::FileChange>,
     /// Canonical UUID returned by this space's template catalog.
     pub template_id: Uuid,
     /// Unique within the space, ignoring case. Surrounding whitespace is trimmed.
@@ -67,6 +68,7 @@ pub struct CreateAgentInstanceRequest {
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateAgentInstanceRequest {
+    pub powerpoint: Option<crate::capability_preparation::FileChange>,
     /// Omitted/null metadata leaves the saved value unchanged.
     /// A new display name must remain unique within the space, ignoring case.
     #[schema(min_length = 1, max_length = 255)]
@@ -118,6 +120,10 @@ pub enum TuningValue {
 
 #[derive(Serialize, ToSchema)]
 pub struct ManagedAgentInstanceSummary {
+    pub configuration_revision: i64,
+    pub preparation_state: String,
+    #[schema(required = true)]
+    pub preparation_error: Option<String>,
     pub agent_instance_id: Uuid,
     pub space_id: Uuid,
     pub template_id: Uuid,
@@ -169,6 +175,9 @@ fn record_to_summary(record: AgentInstance) -> AppResult<ManagedAgentInstanceSum
     let tuning: SavedTuning =
         serde_json::from_value(record.tuning.0).context("invalid saved agent tuning")?;
     Ok(ManagedAgentInstanceSummary {
+        configuration_revision: record.configuration_revision,
+        preparation_state: record.preparation_state,
+        preparation_error: record.preparation_error,
         agent_instance_id: record.agent_instance_id,
         space_id: record.space_id,
         template_id: record.template_id,
@@ -263,8 +272,25 @@ async fn create_agent_instance(
         &body,
     )
     .await?;
+    let draft_id = if let Some(change) = &body.powerpoint {
+        crate::documents::powerpoint::acceptance::preflight(
+            &s,
+            &user,
+            crate::documents::powerpoint::PowerPointTarget {
+                space_id,
+                agent: None,
+                runtime: &template.source_runtime_id,
+            },
+            change,
+            crate::documents::powerpoint::acceptance::slice(&tuning),
+            headers.get(header::AUTHORIZATION),
+        )
+        .await?
+    } else {
+        None
+    };
     let instance = NewAgentInstance {
-        agent_instance_id: Uuid::new_v4(),
+        agent_instance_id: draft_id.unwrap_or_else(Uuid::new_v4),
         space_id,
         template_id: template.template_id,
         source_runtime_id: template.source_runtime_id,
@@ -287,6 +313,16 @@ async fn create_agent_instance(
     let record = super::create(&mut *tx, &instance)
         .await
         .map_err(instance_write_error)?;
+    crate::documents::powerpoint::acceptance::saved_agent(
+        &mut tx,
+        &user,
+        &record,
+        body.powerpoint.as_ref(),
+    )
+    .await?;
+    let record = super::get_for_space(&mut *tx, space_id, record.agent_instance_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     let summary = record_to_summary(record)?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(summary)))
@@ -475,6 +511,26 @@ async fn update_agent_instance(
         }
         _ => None,
     };
+    if let Some(change) = &body.powerpoint {
+        let config = capabilities
+            .as_ref()
+            .and_then(|c| c.config.get("ppt_builder"))
+            .and_then(|v| v.get("config"))
+            .unwrap_or_else(|| crate::documents::powerpoint::acceptance::slice(&record.tuning.0));
+        crate::documents::powerpoint::acceptance::preflight(
+            &s,
+            &user,
+            crate::documents::powerpoint::PowerPointTarget {
+                space_id,
+                agent: Some(agent_instance_id),
+                runtime: &record.source_runtime_id,
+            },
+            change,
+            config,
+            headers.get(header::AUTHORIZATION),
+        )
+        .await?;
+    }
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
@@ -484,6 +540,12 @@ async fn update_agent_instance(
         .ok_or(AppError::NotFound)?;
     if !authorization::can_use_agent(&mut *tx, current.template_id, &space).await? {
         return Err(AppError::NotFound);
+    }
+    if body.powerpoint.is_some() && record.configuration_revision != current.configuration_revision
+    {
+        return Err(AppError::Conflict(
+            "The agent changed during file validation; reload before saving".into(),
+        ));
     }
     let previous = SavedModelSettings::read(&current.tuning.0)?;
     let new_recommendation = body
@@ -503,9 +565,23 @@ async fn update_agent_instance(
         .await?;
     }
 
+    if body.powerpoint.is_some() {
+        sqlx::query("update agent_instance set configuration_revision=configuration_revision+1 where agent_instance_id=$1")
+            .bind(agent_instance_id).execute(&mut *tx).await?;
+    }
     let record = super::update(&mut *tx, &current, &user.uid)
         .await
         .map_err(instance_write_error)?;
+    crate::documents::powerpoint::acceptance::saved_agent(
+        &mut tx,
+        &user,
+        &record,
+        body.powerpoint.as_ref(),
+    )
+    .await?;
+    let record = super::get_for_space(&mut *tx, space_id, record.agent_instance_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     let summary = record_to_summary(record)?;
     tx.commit().await?;
     Ok(Json(summary))
@@ -515,7 +591,8 @@ async fn update_agent_instance(
     delete, path = "/spaces/{space_id}/agent-instances/{agent_instance_id}",
     params(("space_id" = Uuid, Path), ("agent_instance_id" = Uuid, Path)),
     responses(
-        (status = 204, description = "Agent instance deleted"),
+        (status = 204, description = "Agent instance deleted; no CP file cleanup pending"),
+        (status = 202, description = "Agent removed; original and prepared template cleanup pending"),
         (status = 400, body = crate::error::ErrorBody),
         (status = 401, body = crate::error::ErrorBody),
         (status = 403, body = crate::error::ErrorBody),
@@ -539,6 +616,12 @@ async fn delete_agent_instance(
     if !super::delete(&mut *tx, space_id, agent_instance_id).await? {
         return Err(AppError::NotFound);
     }
+    let files_pending: bool = sqlx::query_scalar("select exists(select 1 from powerpoint_file where agent_instance_id=$1 and cleaned_at is null) or exists(select 1 from capability_preparation where agent_instance_id=$1 and state='obsolete' and cleaned_at is null)")
+        .bind(agent_instance_id).fetch_one(&mut *tx).await?;
     tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(if files_pending {
+        StatusCode::ACCEPTED
+    } else {
+        StatusCode::NO_CONTENT
+    })
 }

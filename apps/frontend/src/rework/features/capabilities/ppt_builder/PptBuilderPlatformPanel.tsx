@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Admin drawer for the platform default template. A replacement is analysed while
-// the current one stays in use; only capability managers see the write actions.
-// Without a platform template, the manager reviews and corrects the Fred template.
+// Swift admin drawer for the organization/pod default template. A replacement is analysed while
+// the current one stays in use; the organization write permission gates actions.
+// Without a common template, the manager reviews and corrects the Fred template.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import Button from "@shared/atoms/Button/Button";
@@ -28,173 +28,185 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
 import { downloadAuthed } from "../../../../utils/downloadUtils";
 import { normalizeApiError } from "../../../core/errors/normalizeApiError";
-import type { CapabilityPlatformPanelProps } from "../types";
-import { useCapabilityRouted } from "../useCapabilityRouted";
-import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
 import {
-  useDeletePptBuilderPlatformTemplateMutation,
-  useGetPptBuilderBuiltinQuery,
-  useGetPptBuilderPlatformQuery,
-  usePutPptBuilderPlatformOverridesMutation,
-  useRerunPptBuilderPlatformAnalysisMutation,
-  type AnalysisStatusResponse,
-  type PlatformTemplateResponse,
-} from "./api/pptBuilderCapabilityOpenApi";
+  useGetPowerpointSettingsQuery,
+  usePutPowerpointSettingsMutation,
+  useRerunPowerpointTemplateMutation,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PowerPointSettings } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import {
+  useUploadPowerpointTemplateMutation,
+  useRemovePowerpointTemplateMutation,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { CapabilityPlatformPanelProps } from "../types";
+import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
+import { useGetPptBuilderBuiltinQuery, useGetPptBuilderAnalysisQuery } from "./api/pptBuilderCapabilityOpenApi";
+import type { TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
+import type { PreviewSource } from "./usePatternsPreview";
 import { PatternReviewDialog } from "./PatternReviewDialog";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
-import { effectiveInventory, LABELLING_MODEL_KEY, summarize, upsertOverride, USE_VISION_KEY } from "./types";
+import { effectiveInventory, summarize, upsertOverride, readOverrides } from "./types";
 import type { PatternOverride } from "./types";
 import { TemplateGuideLink } from "./PptBuilderTemplatePanel";
-import { uploadPlatformTemplate } from "./uploadPlatformTemplate";
-import { usePlatformVisionProfiles } from "./useVisionAvailability";
 import styles from "./PptBuilderTemplatePanel.module.css";
 
 const POLL_MS = 3000;
 const K = "capability.ppt_builder.platform";
 
-const inProgress = (analysis: AnalysisStatusResponse | null | undefined) =>
-  analysis?.status === "pending" || analysis?.status === "running";
-
-export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelProps) {
+export function PptBuilderPlatformPanel({
+  canManage,
+  organizationId,
+  runtimeId,
+  baseUrl,
+}: CapabilityPlatformPanelProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
-  const routed = useCapabilityRouted(CAPABILITY_ID);
-  const baseUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
-    selectCapabilityBaseUrl(state, CAPABILITY_ID),
+  const routedUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
+    selectCapabilityBaseUrl(state, `${organizationId}/${runtimeId}/${CAPABILITY_ID}`),
   );
-  // Routing known for other capabilities but not this one: its pod is not reachable.
-  const routingKnown = useSelector(
-    (state: { capabilityRouting: CapabilityRoutingState }) => Object.keys(state.capabilityRouting.baseUrls).length > 0,
+  const routed = Boolean(baseUrl && routedUrl === baseUrl);
+  const target = { spaceId: organizationId, runtimeId };
+  const query = useGetPowerpointSettingsQuery(target, {
+    skip: !canManage || !runtimeId,
+    pollingInterval: POLL_MS,
+    refetchOnMountOrArgChange: true,
+  });
+  const platform = query.currentData;
+  const reference = platform?.current.analysis_reference;
+  const analysisQuery = useGetPptBuilderAnalysisQuery(
+    { ...target, instanceId: reference ?? "" },
+    { skip: !routed || !reference, refetchOnMountOrArgChange: true },
   );
-  const [pollingInterval, setPollingInterval] = useState(0);
-  const query = useGetPptBuilderPlatformQuery(undefined, { skip: !routed, pollingInterval });
-  const platform: PlatformTemplateResponse | undefined = query.data;
-  const current = platform?.analysis ?? null;
-  const replacement = platform?.replacement ?? null;
-  const analysing = inProgress(replacement) || current?.refreshing === true;
-  const { data: builtin } = useGetPptBuilderBuiltinQuery(undefined, { skip: !routed || !platform || current !== null });
-  useEffect(() => setPollingInterval(analysing ? POLL_MS : 0), [analysing]);
-
-  const [rerun, { isLoading: rerunning }] = useRerunPptBuilderPlatformAnalysisMutation();
-  const [resetTemplate, { isLoading: resetting }] = useDeletePptBuilderPlatformTemplateMutation();
-  const [saveOverrides] = usePutPptBuilderPlatformOverridesMutation();
-  const [uploading, setUploading] = useState(false);
+  const current = analysisQuery.currentData ?? null;
+  const builtinQuery = useGetPptBuilderBuiltinQuery(target, { skip: !routed || !platform || !!reference });
+  const replacement = platform?.replacement;
+  const [rerun, { isLoading: rerunning }] = useRerunPowerpointTemplateMutation();
+  const [resetTemplate, { isLoading: resetting }] = useRemovePowerpointTemplateMutation();
+  const [saveOverrides, { isLoading: saving }] = usePutPowerpointSettingsMutation();
+  const [uploadTemplate, { isLoading: uploading }] = useUploadPowerpointTemplateMutation();
   const [confirmReset, setConfirmReset] = useState(false);
-  const [reviewOpen, setReviewOpen] = useState(false);
+  const [review, setReview] = useState<{
+    inventory: TemplateInventory;
+    previewSource: PreviewSource;
+    fileId?: string;
+    overrides: PatternOverride[];
+  } | null>(null);
   const [draft, setDraft] = useState<PatternOverride[] | null>(null);
-  // The vision choice applies at the next upload or re-run; until edited, the stored one.
-  const [visionDraft, setVisionDraft] = useState<Record<string, unknown> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const visionProfiles = usePlatformVisionProfiles(!canManage);
-  const visionValues = visionDraft ?? {
-    [USE_VISION_KEY]: platform?.use_vision ?? true,
-    [LABELLING_MODEL_KEY]: platform?.vision_profile_id ?? null,
-  };
-  const visionChoice = {
-    use_vision: visionProfiles.length > 0 && visionValues[USE_VISION_KEY] !== false,
-    vision_profile_id:
-      visionProfiles.length > 0 ? ((visionValues[LABELLING_MODEL_KEY] as string | null) ?? null) : null,
-  };
-
-  const savedOverrides = (platform?.overrides ?? []) as PatternOverride[];
-  // The overrides edit the template in effect: the platform one, else the Fred template.
-  const inventory = current ? (current.inventory ?? null) : (builtin?.inventory ?? null);
+  const savedOverrides = readOverrides((platform?.config ?? {}) as Record<string, unknown>);
+  const inventory = reference ? current?.inventory : builtinQuery.currentData?.inventory;
   const effective = useMemo(
     () => (inventory ? effectiveInventory(inventory, draft ?? savedOverrides) : null),
     [inventory, draft, savedOverrides],
   );
   const summary = effective ? summarize(effective) : null;
-  const busy = uploading || rerunning || resetting;
-  const hasTemplate = current !== null || replacement !== null;
+  const busy = uploading || rerunning || resetting || saving;
+  const hasTemplate = Boolean(platform?.current.file || replacement?.file);
+  const expectedFileId = replacement?.file?.id ?? platform?.current.file?.id;
+  const previewSource = reference
+    ? current?.has_thumbnails
+      ? { kind: "analysis" as const, instanceId: reference, spaceId: organizationId, baseUrl: baseUrl ?? undefined }
+      : null
+    : { kind: "builtin" as const, baseUrl: baseUrl ?? undefined };
 
   const handlePick = async (file: File) => {
-    if (!baseUrl) return;
-    setUploading(true);
     try {
-      await uploadPlatformTemplate(baseUrl, file, visionChoice);
+      await uploadTemplate({
+        ...target,
+        expectedFileId,
+        "Idempotency-Key": crypto.randomUUID(),
+        fileUpload: { file },
+      }).unwrap();
       showSuccess({ summary: t(`${K}.uploaded`) });
-      setVisionDraft(null);
-      void query.refetch();
+      await query.refetch();
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      showError({ summary: t(`${K}.uploadError`), detail: detail || t(`${K}.uploadFailed`) });
+      showError({ summary: t(`${K}.uploadError`), detail: normalizeApiError(error).detail });
     } finally {
-      setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
-
   const handleRerun = async () => {
     try {
-      await rerun({ platformAnalysisRequest: visionChoice }).unwrap();
+      await rerun({ ...target, powerPointChange: { expected_file_id: expectedFileId } }).unwrap();
       showSuccess({ summary: t(`${K}.rerunStarted`) });
-      setVisionDraft(null);
-      void query.refetch();
+      await query.refetch();
     } catch (error) {
       showError({ summary: t(`${K}.rerunError`), detail: normalizeApiError(error).detail });
     }
   };
-
   const handleReset = async () => {
     setConfirmReset(false);
     try {
-      await resetTemplate().unwrap();
+      await resetTemplate({ ...target, expectedFileId }).unwrap();
       showSuccess({ summary: t(`${K}.resetDone`) });
-      setVisionDraft(null);
-      void query.refetch();
+      setDraft(null);
+      await query.refetch();
     } catch (error) {
       showError({ summary: t(`${K}.resetError`), detail: normalizeApiError(error).detail });
     }
   };
-
-  // Edits are kept while the review is open and saved once, when it closes.
+  // Swift saves corrections when the slide review closes; a failure keeps the edits open.
   const handleReviewClose = async () => {
-    setReviewOpen(false);
-    if (!draft || JSON.stringify(draft) === JSON.stringify(savedOverrides)) {
-      setDraft(null);
-      return;
+    if (saving) return;
+    if (draft && JSON.stringify(draft) !== JSON.stringify(review?.overrides)) {
+      try {
+        await saveOverrides({
+          ...target,
+          powerPointSettingsChange: {
+            expected_file_id: review?.fileId,
+            config: { overrides: draft },
+          },
+        }).unwrap();
+        showSuccess({ summary: t(`${K}.overridesSaved`) });
+        await query.refetch();
+      } catch (error) {
+        showError({ summary: t(`${K}.overridesError`), detail: normalizeApiError(error).detail });
+        return;
+      }
     }
-    try {
-      await saveOverrides({ platformOverridesRequest: { overrides: draft } }).unwrap();
-      showSuccess({ summary: t(`${K}.overridesSaved`) });
-      void query.refetch();
-    } catch (error) {
-      showError({ summary: t(`${K}.overridesError`), detail: normalizeApiError(error).detail });
-    } finally {
-      setDraft(null);
-    }
+    setReview(null);
+    setDraft(null);
   };
-
   const handleDownload = async () => {
-    if (!baseUrl) return;
+    if (!baseUrl || !reference) return;
     try {
-      const stem = (platform?.template_filename ?? "template").replace(/\.pptx$/i, "");
-      await downloadAuthed(`${baseUrl}/platform/patterns.pdf`, `${stem}-slides.pdf`);
+      const stem = (platform?.current.file?.name ?? "template").replace(/\.pptx$/i, "");
+      await downloadAuthed(
+        `${baseUrl}/analysis/${encodeURIComponent(reference)}/patterns.pdf?space_id=${encodeURIComponent(organizationId)}`,
+        `${stem}-slides.pdf`,
+      );
     } catch (error) {
       showError({ summary: t(`${K}.pdfError`), detail: error instanceof Error ? error.message : String(error) });
     }
   };
-
-  if (!routed && routingKnown) return <p className={styles.status}>{t(`${K}.unavailable`)}</p>;
-  if (query.isError && !platform) return <p className={styles.error}>{t(`${K}.loadError`)}</p>;
-  if (!platform) {
+  if (!canManage) return <p className={styles.status}>{t("rework.weaverAgents.errors.forbidden")}</p>;
+  if (!baseUrl) return <p className={styles.status}>{t(`${K}.unavailable`)}</p>;
+  if (query.isError && !platform)
+    return (
+      <p className={styles.error} role="alert">
+        {t(`${K}.loadError`)}
+      </p>
+    );
+  if (!platform)
     return (
       <p className={styles.status} role="status">
         <Spinner size={16} /> {t(`${K}.loading`)}
       </p>
     );
-  }
 
   return (
     <div className={styles.root}>
-      <p className={styles.hint}>{t(`${K}.intro`)}</p>
+      <p className={styles.hint}>{t(`${K}.intro`, { runtimeId })}</p>
 
       <div className={`${styles.settingCard} ${styles.stacked}`}>
         <div className={styles.uploadRow}>
           <Chip
-            label={current ? t(`${K}.current`, { name: platform.template_filename ?? "" }) : t(`${K}.fredTemplate`)}
-            leading={<Icon category="outlined" type={current ? "slideshow" : "palette"} />}
+            label={
+              platform.current.file
+                ? t(`${K}.current`, { name: platform.current.file?.name ?? "" })
+                : t(`${K}.fredTemplate`)
+            }
+            leading={<Icon category="outlined" type={platform.current.file ? "slideshow" : "palette"} />}
           />
           {canManage && (
             <>
@@ -225,6 +237,12 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
         </div>
 
         <PlatformStatus platform={platform} uploading={uploading} />
+        {current && !current.current && !replacement && <p className={styles.status}>{t(`${K}.outdated`)}</p>}
+        {(query.isError || analysisQuery.isError || builtinQuery.isError) && (
+          <p className={styles.error} role="alert">
+            {t(`${K}.loadError`)}
+          </p>
+        )}
 
         {summary && (
           <div className={styles.summaryRow}>
@@ -237,7 +255,15 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
                 variant="text"
                 size="small"
                 icon={{ category: "outlined", type: "grid_view" }}
-                onClick={() => setReviewOpen(true)}
+                onClick={() => {
+                  if (inventory)
+                    setReview({
+                      inventory,
+                      previewSource,
+                      fileId: platform.current.file?.id,
+                      overrides: savedOverrides,
+                    });
+                }}
               >
                 {t("capability.ppt_builder.form.review")}
               </Button>
@@ -262,9 +288,9 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
         <>
           <PptBuilderVisionSettings
             disabled={busy}
-            configValues={visionValues}
-            onConfigChange={(key, value) => setVisionDraft({ ...visionValues, [key]: value })}
-            vision={{ available: visionProfiles.length > 0, visionProfiles }}
+            configValues={{ use_vision: false }}
+            onConfigChange={() => {}}
+            vision={{ available: false, visionProfiles: [] }}
             defaultModelLabel={t(`${K}.defaultModel`)}
             changeHint={t(`${K}.visionRereads`)}
           />
@@ -275,7 +301,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
                   color="on-surface"
                   variant="outlined"
                   size="small"
-                  disabled={busy || inProgress(replacement)}
+                  disabled={busy || replacement?.preparation_state === "pending"}
                   icon={{ category: "outlined", type: "refresh" }}
                   onClick={() => void handleRerun()}
                 >
@@ -296,13 +322,13 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
         </>
       )}
 
-      {reviewOpen && effective && (
+      {review && (
         <PatternReviewDialog
-          open={reviewOpen}
-          inventory={effective}
-          previewSource={current ? (current.has_thumbnails ? { kind: "platform" } : null) : { kind: "builtin" }}
-          readOnly={!canManage}
-          onOverride={(patternId, patch) => setDraft(upsertOverride(draft ?? savedOverrides, patternId, patch))}
+          open
+          inventory={effectiveInventory(review.inventory, draft ?? review.overrides)}
+          previewSource={review.previewSource}
+          readOnly={!canManage || saving}
+          onOverride={(patternId, patch) => setDraft(upsertOverride(draft ?? review.overrides, patternId, patch))}
           onClose={() => void handleReviewClose()}
         />
       )}
@@ -321,36 +347,24 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   );
 }
 
-/** What happens to the platform template next; a replacement never stops the current one. */
-export function PlatformStatus({ platform, uploading }: { platform: PlatformTemplateResponse; uploading: boolean }) {
+/** The candidate never hides the effective template or its slide review. */
+export function PlatformStatus({ platform, uploading }: { platform: PowerPointSettings; uploading: boolean }) {
   const { t } = useTranslation();
-  const current = platform.analysis ?? null;
-  const replacement = platform.replacement ?? null;
-  const keeps = current ? "keepCurrent" : "keepFred";
-  const name = platform.replacement_filename ?? "";
-
-  if (uploading || inProgress(replacement)) {
+  const replacement = platform.replacement;
+  const keeps = platform.current.file ? "keepCurrent" : "keepFred";
+  const name = replacement?.file?.name ?? "";
+  if (uploading || replacement?.preparation_state === "pending")
     return (
       <p className={styles.status} role="status">
         <Spinner size={16} /> {t(`${K}.analysing.${keeps}`, { name })}
       </p>
     );
-  }
-  if (replacement) {
+  if (replacement?.preparation_state === "failed")
     return (
       <div className={styles.failure} role="alert">
         <p className={styles.error}>{t(`${K}.failed.${keeps}`, { name })}</p>
-        {replacement.error && <p className={styles.error}>{replacement.error}</p>}
+        {replacement.preparation_error && <p className={styles.error}>{replacement.preparation_error}</p>}
       </div>
     );
-  }
-  if (current?.refreshing) {
-    return (
-      <p className={styles.status} role="status">
-        <Spinner size={16} /> {t(`${K}.refreshing`)}
-      </p>
-    );
-  }
-  if (current && !current.current) return <p className={styles.status}>{t(`${K}.outdated`)}</p>;
   return null;
 }

@@ -64,6 +64,7 @@ from pydantic import BaseModel, ConfigDict
 from .context import CapabilityContext, CapabilityIdentity, EmptyModel, SaveContext
 from .hitl import HitlSpec
 from .manifest import CapabilityManifest, ChatControlSpec, UploadedFile
+from .preparation import PreparationContext, PreparationResult
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -150,6 +151,14 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
         del uploads, ctx
         return cast(StoredT, self.StoredConfigModel.model_validate(config.model_dump()))
 
+    async def prepare(self, ctx: PreparationContext) -> PreparationResult:
+        """Persist/reuse the result for the exact CP preparation, without a turn."""
+        raise NotImplementedError("This capability has no durable preparation")
+
+    async def retire_preparation(self, ctx: PreparationContext) -> None:
+        """Fence late writes and release derived bytes; replay must be harmless."""
+        raise NotImplementedError("This capability has no durable preparation")
+
     def chat_controls(self, config: StoredT) -> list[ChatControlSpec]:
         """
         Computed chat-time control descriptors for one agent instance
@@ -177,7 +186,7 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
         Whether this instance's saved slice is ready to serve turns, for a
         capability whose save starts background work. Asked by control-plane
         after a save, on listings and on re-checks, so it must return quickly:
-        it may start or refresh that work but never waits for it. Default: ready.
+        it only consults persisted results and never starts work. Default: ready.
         The UI names the pending work from the frontend locale key
         `capability.<id>.preparing` when the capability ships one.
         """

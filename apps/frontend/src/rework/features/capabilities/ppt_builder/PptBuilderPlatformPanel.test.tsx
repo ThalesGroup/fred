@@ -1,292 +1,233 @@
 // @vitest-environment happy-dom
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// The platform template drawer: what it says in each state (the previous
-// template stays in use while a replacement is analysed or failed), which
-// actions only capability managers get, the reset confirmation, the upload
-// error, and the slide edits saved when the review closes.
-
-import { act } from "react";
+// SPDX-License-Identifier: Apache-2.0
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AnalysisStatusResponse, PlatformTemplateResponse } from "./api/pptBuilderCapabilityOpenApi";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import type { PowerPointSettings, PowerPointFile } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { PatternReviewDialog } from "./PatternReviewDialog";
+import type { TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
 
 const h = vi.hoisted(() => ({
-  platform: undefined as PlatformTemplateResponse | undefined,
-  routed: true,
-  builtin: undefined as { inventory: AnalysisStatusResponse["inventory"] } | undefined,
+  settings: undefined as PowerPointSettings | undefined,
+  inventory: { patterns: [] } as TemplateInventory,
+  review: null as ComponentProps<typeof PatternReviewDialog> | null,
+  calls: [] as { name: string; arg: unknown }[],
+  queryArgs: [] as unknown[],
+  fail: false,
   refetch: vi.fn(),
-  rerun: vi.fn(),
-  reset: vi.fn(),
-  saveOverrides: vi.fn(),
-  upload: vi.fn(),
-  showSuccess: vi.fn(),
-  showError: vi.fn(),
-  platformModels: vi.fn(),
-  selectOptions: undefined as undefined | { label: string; value: string }[],
-  review: undefined as
-    | undefined
-    | {
-        readOnly: boolean;
-        previewSource: unknown;
-        onOverride: (id: string, patch: object) => void;
-        onClose: () => void;
-      },
 }));
-
-const ok = (fn: (arg?: unknown) => void) =>
-  vi.fn((arg?: unknown) => {
-    fn(arg);
-    return { unwrap: () => Promise.resolve({}) };
-  });
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "fr" } }),
-}));
-vi.mock("react-redux", () => ({ useSelector: () => "/pod/capabilities/ppt_builder" }));
-vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => h.routed }));
-vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
-vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
-  useGetPptBuilderPlatformQuery: () => ({ data: h.platform, isError: false, refetch: h.refetch }),
-  useGetPptBuilderBuiltinQuery: (_arg: unknown, options: { skip?: boolean }) => ({
-    data: options.skip ? undefined : h.builtin,
-  }),
-  useRerunPptBuilderPlatformAnalysisMutation: () => [ok(h.rerun), { isLoading: false }],
-  useDeletePptBuilderPlatformTemplateMutation: () => [ok(h.reset), { isLoading: false }],
-  usePutPptBuilderPlatformOverridesMutation: () => [ok(h.saveOverrides)],
-}));
-vi.mock("./uploadPlatformTemplate", () => ({ uploadPlatformTemplate: h.upload }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
+vi.mock("react-redux", () => ({ useSelector: () => "/pod-a/ppt_builder" }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError }),
-}));
-vi.mock("@shared/molecules/Select/Select.tsx", () => ({
-  default: (props: { options: { label: string; value: string }[] }) => {
-    h.selectOptions = props.options;
-    return null;
-  },
-}));
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePlatformAvailableModelProfilesQuery: h.platformModels,
+  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
 }));
 vi.mock("./PatternReviewDialog", () => ({
-  PatternReviewDialog: (props: NonNullable<typeof h.review>) => {
+  PatternReviewDialog: (props: ComponentProps<typeof PatternReviewDialog>) => {
     h.review = props;
-    return <div data-testid="review" />;
+    return <div role="dialog">slide-review</div>;
   },
 }));
-vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialog", () => ({
-  ConfirmationDialog: ({ open, onConfirm, title }: { open: boolean; onConfirm: () => void; title: string }) =>
-    open ? (
-      <div role="dialog">
-        {title}
-        <button onClick={onConfirm}>confirm</button>
-      </div>
-    ) : null,
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => {
+  const mutation = (name: string) => () => [
+    (arg: unknown) => ({
+      unwrap: async () => {
+        h.calls.push({ name, arg });
+        if (h.fail) throw { status: 409, data: { detail: "changed" } };
+      },
+    }),
+    { isLoading: false },
+  ];
+  return {
+    useGetPowerpointSettingsQuery: (arg: unknown) => {
+      h.queryArgs.push(arg);
+      return { currentData: h.settings, refetch: h.refetch };
+    },
+    usePutPowerpointSettingsMutation: mutation("corrections"),
+    useRerunPowerpointTemplateMutation: mutation("rerun"),
+  };
+});
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => {
+  const mutation = (name: string) => () => [
+    (arg: unknown) => ({
+      unwrap: async () => {
+        h.calls.push({ name, arg });
+      },
+    }),
+    { isLoading: false },
+  ];
+  return {
+    useUploadPowerpointTemplateMutation: mutation("upload"),
+    useRemovePowerpointTemplateMutation: mutation("reset"),
+  };
+});
+vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
+  useGetPptBuilderBuiltinQuery: (arg: unknown) => {
+    h.queryArgs.push(arg);
+    return { currentData: { inventory: h.inventory } };
+  },
+  useGetPptBuilderAnalysisQuery: (arg: unknown) => {
+    h.queryArgs.push(arg);
+    return { currentData: { inventory: h.inventory, has_thumbnails: true, current: true } };
+  },
 }));
-
 import { PptBuilderPlatformPanel } from "./PptBuilderPlatformPanel";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var IS_REACT_ACT_ENVIRONMENT: boolean;
-}
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-const K = "capability.ppt_builder.platform";
-const CAPABILITY = {
-  id: "ppt_builder",
-  name: "n",
-  version: "1",
-  icon: "x",
-  team_scope: "admin_gated",
-  default_on: true,
-};
-
-const analysis = (fields: Partial<AnalysisStatusResponse> = {}): AnalysisStatusResponse => ({
-  status: "succeeded",
-  template_sha256: "sha",
-  labelling_key: "rules",
-  analysis_version: 1,
-  current: true,
-  updated_at: "t",
-  has_thumbnails: true,
-  inventory: {
-    slide_width: 1,
-    slide_height: 1,
-    patterns: [{ id: "slide:1", source: "slide", source_index: 1, name: "A", label: "A", kind: "cover" }],
-  },
-  ...fields,
-});
-
-let container: HTMLDivElement;
 let root: Root;
-
-function show(platform: PlatformTemplateResponse, canManage = true) {
-  h.platform = platform;
-  act(() =>
-    root.render(
-      <MemoryRouter>
-        <PptBuilderPlatformPanel capability={CAPABILITY} canManage={canManage} />
-      </MemoryRouter>,
-    ),
-  );
-}
-
-const text = () => container.textContent ?? "";
-const button = (label: string) =>
-  [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(label)) as HTMLButtonElement;
-
+let container: HTMLDivElement;
+const K = "capability.ppt_builder.platform";
+const file = (id: string) => ({ id, name: `${id}.pptx` }) as PowerPointFile;
 beforeEach(() => {
-  for (const fn of [h.refetch, h.rerun, h.reset, h.saveOverrides, h.upload, h.showSuccess, h.showError]) fn.mockReset();
-  h.platformModels.mockReset().mockReturnValue({ data: undefined });
-  h.review = undefined;
-  h.routed = true;
-  h.builtin = { inventory: analysis().inventory };
-  h.selectOptions = undefined;
+  h.calls = [];
+  h.queryArgs = [];
+  h.review = null;
+  h.fail = false;
+  h.settings = {
+    current: {
+      source: "builtin",
+      file: null,
+      activation_ready: true,
+      preparation_state: "ready",
+      preparation_error: null,
+      analysis_reference: null,
+    },
+    replacement: null,
+    config: {},
+  };
   container = document.createElement("div");
-  document.body.appendChild(container);
+  document.body.append(container);
   root = createRoot(container);
 });
-
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
 });
-
-describe("PptBuilderPlatformPanel", () => {
-  it("shows the Fred template, and no write action to someone who is not a capability manager", () => {
-    show({ analysis: null }, false);
-    expect(text()).toContain(`${K}.fredTemplate`);
-    for (const action of [`${K}.upload`, `${K}.rerun`, `${K}.reset`, "use_vision.title"]) {
-      expect(text()).not.toContain(action);
-    }
+const render = (organizationId = "org-a", runtimeId = "pod-a", canManage = true) =>
+  act(async () =>
+    root.render(
+      <MemoryRouter>
+        <PptBuilderPlatformPanel
+          key={`${organizationId}/${runtimeId}`}
+          capability={{ id: "ppt_builder", name: "Builder" }}
+          organizationId={organizationId}
+          runtimeId={runtimeId}
+          baseUrl="/pod-a/ppt_builder"
+          canManage={canManage}
+        />
+      </MemoryRouter>,
+    ),
+  );
+const click = (label: string) =>
+  act(async () => {
+    const button = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes(label));
+    expect(button).toBeDefined();
+    button!.click();
   });
 
-  it("keeps the current template in use while a replacement is analysed", () => {
-    show({
-      analysis: analysis(),
-      template_filename: "brand.pptx",
-      replacement: analysis({ status: "pending", inventory: null }),
-      replacement_filename: "next.pptx",
-    });
-    expect(text()).toContain(`${K}.current`);
-    expect(text()).toContain(`${K}.analysing.keepCurrent`);
-    expect(text()).toContain(`${K}.replace`);
-    expect(button(`${K}.rerun`).disabled).toBe(true);
-  });
-
-  it("says a failed first replacement leaves the Fred template in use", () => {
-    show({ analysis: null, replacement: analysis({ status: "failed", error: "Broken file.", inventory: null }) });
-    expect(text()).toContain(`${K}.failed.keepFred`);
-    expect(text()).toContain("Broken file.");
-    expect(button(`${K}.rerun`).disabled).toBe(false);
-  });
-
-  it("resets to the Fred template only once confirmed", async () => {
-    show({ analysis: analysis(), template_filename: "brand.pptx" });
-    act(() => button(`${K}.reset`).click());
-    expect(h.reset).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="dialog"]')?.textContent).toContain(`${K}.resetConfirm.title`);
-    await act(async () => button("confirm").click());
-    expect(h.reset).toHaveBeenCalledTimes(1);
-    expect(h.showSuccess).toHaveBeenCalledWith({ summary: `${K}.resetDone` });
-  });
-
-  it("shows the backend's reason when an upload is refused", async () => {
-    h.upload.mockRejectedValue(new Error("The uploaded .pptx exceeds the 50 MB limit."));
-    show({ analysis: null });
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    Object.defineProperty(input, "files", { value: [new File(["x"], "big.pptx")] });
+describe("Swift common-template drawer on Weaver", () => {
+  it("uploads immediately on selection, keeps the guide/review and locks unavailable vision", async () => {
+    await render();
+    expect(container.textContent).toContain(`${K}.fredTemplate`);
+    expect(container.textContent).toContain("capability.ppt_builder.form.review");
+    expect(container.querySelector('a[target="_blank"]')?.getAttribute("href")).toContain(
+      "prepare-powerpoint-template",
+    );
+    const vision = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(vision.disabled).toBe(true);
+    expect(vision.checked).toBe(false);
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const selected = new File(["deck"], "new.pptx");
+    Object.defineProperty(input, "files", { value: [selected] });
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
-    expect(h.upload).toHaveBeenCalledWith("/pod/capabilities/ppt_builder", expect.any(File), {
-      use_vision: false,
-      vision_profile_id: null,
+    expect(h.calls).toEqual([
+      {
+        name: "upload",
+        arg: expect.objectContaining({ spaceId: "org-a", runtimeId: "pod-a", fileUpload: { file: selected } }),
+      },
+    ]);
+    expect(container.textContent).not.toContain("common.save");
+  });
+
+  it("keeps the effective slides during a failed replacement and retries the candidate", async () => {
+    h.settings!.current = {
+      ...h.settings!.current,
+      source: "organization",
+      file: file("effective"),
+      analysis_reference: "prep:effective",
+    };
+    h.settings!.replacement = {
+      ...h.settings!.current,
+      file: file("candidate"),
+      preparation_state: "failed",
+      preparation_error: "Cannot convert",
+      analysis_reference: null,
+    };
+    await render();
+    expect(container.textContent).toContain("Cannot convert");
+    await click("capability.ppt_builder.form.review");
+    expect(h.review?.previewSource).toEqual({
+      kind: "analysis",
+      instanceId: "prep:effective",
+      spaceId: "org-a",
+      baseUrl: "/pod-a/ppt_builder",
     });
-    expect(h.showError).toHaveBeenCalledWith({
-      summary: `${K}.uploadError`,
-      detail: "The uploaded .pptx exceeds the 50 MB limit.",
-    });
-  });
-
-  it("says when the upload fails without a reason from the server", async () => {
-    h.upload.mockRejectedValue(new Error(""));
-    show({ analysis: null });
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    Object.defineProperty(input, "files", { value: [new File(["x"], "big.pptx")] });
-    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
-    expect(h.showError).toHaveBeenCalledWith({ summary: `${K}.uploadError`, detail: `${K}.uploadFailed` });
-  });
-
-  it("says the settings are unavailable when the capability cannot be reached", () => {
-    h.routed = false;
-    show({ analysis: null });
-    expect(text()).toContain(`${K}.unavailable`);
-    expect(text()).not.toContain(`${K}.loading`);
-  });
-
-  it("explains that optional vision is unavailable instead of promising a model switch", () => {
-    show({ analysis: analysis(), template_filename: "brand.pptx" });
-    expect(text()).not.toContain(`${K}.visionRereads`);
-    expect(text()).toContain("capability.ppt_builder.fields.use_vision.unavailable");
-  });
-
-  it("lets a manager edit the slides and saves the edits when the review closes", async () => {
-    show({ analysis: analysis(), template_filename: "brand.pptx", overrides: [] });
-    act(() => button("capability.ppt_builder.form.review").click());
-    expect(h.review?.readOnly).toBe(false);
-    act(() => h.review?.onOverride("slide:1", { included: false }));
     await act(async () => h.review?.onClose());
-    expect(h.saveOverrides).toHaveBeenCalledWith({
-      platformOverridesRequest: { overrides: [{ pattern_id: "slide:1", included: false }] },
+    await click(`${K}.rerun`);
+    expect(h.calls[0]).toEqual({
+      name: "rerun",
+      arg: { spaceId: "org-a", runtimeId: "pod-a", powerPointChange: { expected_file_id: "candidate" } },
+    });
+    await click(`${K}.reset`);
+    expect(h.calls).toHaveLength(1);
+    await click(`${K}.resetConfirm.confirm`);
+    expect(h.calls[1]).toEqual({
+      name: "reset",
+      arg: { spaceId: "org-a", runtimeId: "pod-a", expectedFileId: "candidate" },
     });
   });
 
-  it("lets a manager correct the Fred template's slides, cleared by the reset", async () => {
-    show({ analysis: null, overrides: [] });
-    expect(text()).not.toContain(`${K}.reset`);
-    act(() => button("capability.ppt_builder.form.review").click());
-    expect(h.review?.readOnly).toBe(false);
-    expect(h.review?.previewSource).toEqual({ kind: "builtin" });
-    act(() => h.review?.onOverride("slide:1", { label: "Opening" }));
+  it("saves builtin corrections on review close, retaining edits on conflict and the reviewed file identity", async () => {
+    await render();
+    await click("capability.ppt_builder.form.review");
+    await act(async () => h.review?.onOverride("slide:1", { label: "Cover" }));
+    h.settings!.current.file = file("promoted-while-reviewing");
+    h.fail = true;
+    await render();
     await act(async () => h.review?.onClose());
-    expect(h.saveOverrides).toHaveBeenCalledWith({
-      platformOverridesRequest: { overrides: [{ pattern_id: "slide:1", label: "Opening" }] },
+    expect(container.textContent).toContain("slide-review");
+    expect(h.calls[0]).toEqual({
+      name: "corrections",
+      arg: {
+        spaceId: "org-a",
+        runtimeId: "pod-a",
+        powerPointSettingsChange: {
+          expected_file_id: undefined,
+          config: { overrides: [{ pattern_id: "slide:1", label: "Cover" }] },
+        },
+      },
     });
-
-    show({ analysis: null, overrides: [{ pattern_id: "slide:1", label: "Opening" }] });
-    expect(text()).toContain(`${K}.reset`);
-    expect(text()).not.toContain(`${K}.rerun`);
+    h.fail = false;
+    await act(async () => h.review?.onClose());
+    expect(container.textContent).not.toContain("slide-review");
   });
 
-  it("shows the review read only to someone who is not a capability manager", () => {
-    show({ analysis: analysis(), template_filename: "brand.pptx" }, false);
-    act(() => button("capability.ppt_builder.form.review").click());
-    expect(h.review?.readOnly).toBe(true);
-  });
-});
-
-describe("Weaver labelling availability", () => {
-  it("does not query Swift profiles for a platform administrator", () => {
-    show({ analysis: analysis(), template_filename: "brand.pptx" });
-    expect(h.platformModels).not.toHaveBeenCalled();
-    expect(text()).toContain("capability.ppt_builder.fields.use_vision.unavailable");
+  it("changes every query scope when another organization or pod is opened", async () => {
+    await render();
+    await click("capability.ppt_builder.form.review");
+    await act(async () => h.review?.onOverride("slide:1", { included: false }));
+    h.queryArgs = [];
+    await render("org-b", "pod-b");
+    expect(h.queryArgs.length).toBeGreaterThan(0);
+    for (const arg of h.queryArgs) expect(arg).toMatchObject({ spaceId: "org-b", runtimeId: "pod-b" });
+    expect(container.textContent).not.toContain("slide-review");
+    expect(h.calls).toHaveLength(0);
   });
 
-  it("does not query Swift profiles for a read-only viewer", () => {
-    show({ analysis: analysis(), template_filename: "brand.pptx" }, false);
-    expect(h.platformModels).not.toHaveBeenCalled();
+  it("offers no write control without organization permission", async () => {
+    await render("org-a", "pod-a", false);
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(h.calls).toHaveLength(0);
   });
 });

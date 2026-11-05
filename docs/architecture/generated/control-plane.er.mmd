@@ -43,6 +43,12 @@ erDiagram
 "control_plane.organization_model_source" }o--|| "control_plane.space" : "organization_id"
 "control_plane.organization_model_source" }o--|| "control_plane.model_source" : "source_id"
 "control_plane.organization_model_initialization" |o--|| "control_plane.space" : "organization_id"
+"control_plane.space_capability_policy" }o--|| "control_plane.space" : "space_id"
+"control_plane.space_capability_policy" }o--|| "control_plane.runtime_catalog" : "runtime_id"
+"control_plane.space_capability_permission" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
+"control_plane.space_capability_permission" }o--|| "control_plane.space_capability_policy" : "space_id, runtime_id"
+"control_plane.powerpoint_file" }o--o| "control_plane.space" : "live_space_id"
+"control_plane.powerpoint_file" }o--o| "control_plane.agent_instance" : "live_agent_id, live_space_id"
 
 "control_plane.deletion" {
   uuid id
@@ -253,6 +259,8 @@ erDiagram
   boolean reachable
   timestamp_with_time_zone checked_at
   timestamp_with_time_zone observed_at
+  text skills_revision
+  text skills_availability
 }
 "control_plane.runtime_capability" {
   text runtime_id FK
@@ -456,4 +464,42 @@ erDiagram
 "cp_read.platform_role_grant" {
   text subject
   text role
+}
+"control_plane.space_capability_policy" {
+  uuid space_id FK
+  text runtime_id FK
+  bigint revision
+  boolean restricted
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+"control_plane.space_capability_permission" {
+  uuid space_id FK
+  text runtime_id FK
+  text capability_id FK
+}
+"control_plane.powerpoint_file" {
+  uuid id
+  uuid request_key
+  text actor
+  uuid organization_id
+  uuid space_id
+  uuid agent_instance_id
+  uuid live_space_id FK
+  uuid live_agent_id FK
+  uuid quota_owner
+  uuid expected_file_id
+  text name
+  text mime
+  bigint size
+  text sha256
+  text object_key
+  text status
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  timestamp_with_time_zone published_at
+  timestamp_with_time_zone cleanup_due_at
+  integer cleanup_attempts
+  timestamp_with_time_zone cleaned_at
+  text error_code
 }

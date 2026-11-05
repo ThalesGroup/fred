@@ -170,7 +170,7 @@ pub(super) async fn enroll(
 pub(super) struct CapabilityUpdate {
     basis: [Option<Value>; 2],
     selected: Vec<String>,
-    config: serde_json::Map<String, Value>,
+    pub(super) config: serde_json::Map<String, Value>,
 }
 
 fn capability_basis(tuning: &Value) -> [Option<Value>; 2] {
@@ -296,11 +296,28 @@ async fn validate_capability(
     id: &str,
     config: Value,
 ) -> AppResult<Value> {
+    validate_capability_config(
+        platform,
+        &template.source_runtime_id,
+        authorization,
+        id,
+        config,
+    )
+    .await
+}
+
+pub(crate) async fn validate_capability_config(
+    platform: &PlatformConfig,
+    runtime_id: &str,
+    authorization: Option<&HeaderValue>,
+    id: &str,
+    config: Value,
+) -> AppResult<Value> {
     let unavailable = || AppError::Unavailable("Pod capability validation unavailable.".into());
     // Weaver sends neither assets nor a team_id alias: the pod validates config alone.
     let request = capability_request(
         platform,
-        &template.source_runtime_id,
+        runtime_id,
         authorization,
         &format!("{id}/validate-config"),
     )?
@@ -350,7 +367,7 @@ async fn validate_capability(
 }
 
 /// Shared authenticated transport for capability operations on the configured pod.
-pub(super) fn capability_request(
+pub(crate) fn capability_request(
     platform: &PlatformConfig,
     runtime_id: &str,
     authorization: Option<&HeaderValue>,
@@ -385,7 +402,7 @@ pub(super) fn capability_request(
 }
 
 /// The body, or `None` when it exceeds `max` bytes or the stream fails.
-pub(super) async fn read_limited(response: &mut reqwest::Response, max: usize) -> Option<Vec<u8>> {
+pub(crate) async fn read_limited(response: &mut reqwest::Response, max: usize) -> Option<Vec<u8>> {
     if response
         .content_length()
         .is_some_and(|size| size > max as u64)

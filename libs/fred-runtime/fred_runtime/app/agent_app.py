@@ -1682,6 +1682,19 @@ async def _resolve_agent_instance(
                     },
                 )
             if isinstance(problem, dict) and problem.get("code") in {
+                "agent_capability_pending",
+                "agent_capability_failed",
+            }:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": problem["code"],
+                        "message": "PowerPoint template preparation is in progress."
+                        if problem["code"] == "agent_capability_pending"
+                        else "PowerPoint template preparation failed. Edit the agent to inspect the error and retry or replace its template.",
+                    },
+                )
+            if isinstance(problem, dict) and problem.get("code") in {
                 "model_selection_missing",
                 "model_reselection_required",
                 "model_offer_unknown",

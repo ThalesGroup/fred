@@ -27,7 +27,7 @@ an operation or field without one shows no description. Regenerate with
 <!-- generated: openapi apps/control-plane/openapi.json -->
 Paths are relative to `/control-plane/v1`.
 
-Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes). [Schemas](#schemas).
+Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes). [Schemas](#schemas).
 
 ## /admin routes
 
@@ -444,8 +444,10 @@ Operation `preview`.
 | --- | --- | --- | --- | --- |
 | `id` | path | string (uuid) | yes |  |
 | `artifact` | query | string |  | native, raw, metadata, or a relative path from the published manifest. |
+| `session_id` | query | string (uuid) |  | Required for a conversation attachment; ownership is checked server-side. |
 
-- 200, 206: string (`text/plain`)
+- 200: [`MetadataPreview`](#metadatapreview) or string (`text/plain`)
+- 206: string (`text/plain`)
 - 401, 403, 404, 409, 416, 503: [`ErrorBody`](#errorbody)
 - 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
 
@@ -938,6 +940,25 @@ Operation `team_supervision`.
 - 200: [`TeamSupervisionDetail`](#teamsupervisiondetail)
 - 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
+## /powerpoint-uploads routes
+
+| Method | Path | Summary |
+| --- | --- | --- |
+| GET | [/powerpoint-uploads/{request_key}](#get-powerpoint-uploadsrequest_key) | The depositor can follow one operation, including after the agent is removed |
+
+### GET /powerpoint-uploads/{request_key}
+
+The depositor can follow one operation, including after the agent is removed. This receipt grants no download right and is not a template/version catalogue.
+
+Operation `powerpoint_upload_receipt`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `request_key` | path | string (uuid) | yes |  |
+
+- 200: [`PowerPointFile`](#powerpointfile)
+- 401, 404, 422, 503: [`ErrorBody`](#errorbody)
+
 ## /spaces routes
 
 | Method | Path | Summary |
@@ -960,6 +981,12 @@ Operation `team_supervision`.
 | GET | [/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime](#get-spacesspace_idagent-instancesagent_instance_idruntime) |  |
 | POST | [/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime](#post-spacesspace_idagent-instancesagent_instance_idruntime) | A trusted runtime admits an actual execution; read-only resolution never claims a title |
 | GET | [/spaces/{space_id}/agent-templates](#get-spacesspace_idagent-templates) |  |
+| GET | [/spaces/{space_id}/capability-policies](#get-spacesspace_idcapability-policies) |  |
+| PUT | [/spaces/{space_id}/capability-policies/{runtime_id}](#put-spacesspace_idcapability-policiesruntime_id) |  |
+| GET | [/spaces/{space_id}/powerpoint-template](#get-spacesspace_idpowerpoint-template) | Resolve the stored file for this usage |
+| PUT | [/spaces/{space_id}/powerpoint-template](#put-spacesspace_idpowerpoint-template) | Persist and attach one immutable original |
+| DELETE | [/spaces/{space_id}/powerpoint-template](#delete-spacesspace_idpowerpoint-template) | Detach the own file; physical cleanup is asynchronous and durably recorded |
+| GET | [/spaces/{space_id}/powerpoint-template/{file_id}/content](#get-spacesspace_idpowerpoint-templatefile_idcontent) | File identity is checked against the authorized, currently resolved usage |
 | GET | [/spaces/{space_id}/prompt-categories](#get-spacesspace_idprompt-categories) |  |
 | POST | [/spaces/{space_id}/prompt-categories](#post-spacesspace_idprompt-categories) |  |
 | PATCH | [/spaces/{space_id}/prompt-categories/{category_id}](#patch-spacesspace_idprompt-categoriescategory_id) |  |
@@ -1165,7 +1192,8 @@ Operation `delete_agent_instance`.
 | `space_id` | path | string (uuid) | yes |  |
 | `agent_instance_id` | path | string (uuid) | yes |  |
 
-- 204: no body — Agent instance deleted
+- 202: no body — Agent removed; CP file cleanup pending; pod-derived data is not purged by this operation
+- 204: no body — Agent instance deleted; no CP file cleanup pending
 - 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
 ### POST /spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution
@@ -1236,6 +1264,94 @@ Operation `space_agent_templates`.
 - 200: array of [`AgentTemplateSummary`](#agenttemplatesummary)
 - 400, 401, 403, 404, 409, 500, 503: [`ErrorBody`](#errorbody)
 - 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /spaces/{space_id}/capability-policies
+
+Operation `space_capability_policies`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+
+- 200: array of [`SpaceCapabilityPolicy`](#spacecapabilitypolicy)
+- 401, 403, 404, 422: [`ErrorBody`](#errorbody)
+
+### PUT /spaces/{space_id}/capability-policies/{runtime_id}
+
+Operation `replace_space_capability_policy`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `runtime_id` | path | string | yes |  |
+
+Request: [`ReplaceSpaceCapabilityPolicy`](#replacespacecapabilitypolicy).
+
+- 204: no body
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 401, 403, 404, 409, 422: [`ErrorBody`](#errorbody)
+
+### GET /spaces/{space_id}/powerpoint-template
+
+Resolve the stored file for this usage. An omitted instance targets only an organization. The result is persistence metadata, not capability readiness or runtime activation.
+
+Operation `resolve_powerpoint_template`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `agent_instance_id` | query | string (uuid) |  |  |
+
+- 200: [`PowerPointResolution`](#powerpointresolution)
+- 401, 403, 404, 409, 422, 503: [`ErrorBody`](#errorbody)
+
+### PUT /spaces/{space_id}/powerpoint-template
+
+Persist and attach one immutable original. The previous file survives transfer errors. Neither this endpoint nor its response activates the file in an executing agent.
+
+Operation `upload_powerpoint_template`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `agent_instance_id` | query | string (uuid) |  |  |
+| `expected_file_id` | query | string (uuid) |  | Current own attachment; omit only if absent |
+| `Idempotency-Key` | header | string (uuid) | yes |  |
+
+Request: [`FileUpload`](#fileupload) (`multipart/form-data`).
+
+- 200: [`PowerPointFile`](#powerpointfile)
+- 400, 401, 403, 404, 408, 409, 413, 422, 429, 503: [`ErrorBody`](#errorbody)
+
+### DELETE /spaces/{space_id}/powerpoint-template
+
+Detach the own file; physical cleanup is asynchronous and durably recorded.
+
+Operation `remove_powerpoint_template`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `agent_instance_id` | query | string (uuid) |  |  |
+| `expected_file_id` | query | string (uuid) |  |  |
+
+- 202: no body — Detached; cleanup pending
+- 401, 403, 404, 409, 422, 503: [`ErrorBody`](#errorbody)
+
+### GET /spaces/{space_id}/powerpoint-template/{file_id}/content
+
+File identity is checked against the authorized, currently resolved usage.
+
+Operation `download_powerpoint_template`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `file_id` | path | string (uuid) | yes |  |
+| `agent_instance_id` | query | string (uuid) |  |  |
+
+- 200: string (`application/octet-stream`)
+- 401, 403, 404, 409, 422, 429, 503: [`ErrorBody`](#errorbody)
 
 ### GET /spaces/{space_id}/prompt-categories
 
@@ -1838,6 +1954,7 @@ One of: `string`, `text`, `text-multiline`, `number`, `integer`, `boolean`, `sel
 | `capability_id` | string | yes |  |
 | `default_on` | boolean | yes | Enabled for every space of this organization. |
 | `descriptor` | [`PodCapabilityDescriptor`](#podcapabilitydescriptor) | yes |  |
+| `route_base_url` | string or null |  | Browser route derived from the platform-approved pod ingress. |
 | `runtime_id` | string | yes |  |
 | `unusable_instances` | array of [`AffectedAgentInstance`](#affectedagentinstance) | yes | Instances that select this offer and may no longer use it. |
 | `version` | string | yes |  |
@@ -2045,6 +2162,15 @@ One of: `organization`, `team`, `project`.
 | `temperature` | number (double) or null |  |  |
 | `top_p` | number (double) or null |  |  |
 
+### EmailHeaders
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cc` | array of string | yes |  |
+| `in_reply_to` | string or null |  |  |
+| `message_id` | string or null |  |  |
+| `to` | array of string | yes |  |
+
 ### Entry
 
 One of:
@@ -2104,6 +2230,8 @@ JSON error envelope shared by application, authentication and import failures.
 | `model_error` | [`ModelPreparationError`](#modelpreparationerror) or null | yes |  |
 | `models` | [`PreparationModels`](#preparationmodels) | yes |  |
 | `runtime_id` | string | yes |  |
+| `skill_detail_url_template` | string or null |  |  |
+| `skills` | [`SkillCatalog`](#skillcatalog) or null |  |  |
 | `space_id` | string (uuid) | yes |  |
 | `supports_hitl` | boolean | yes | False until the managed Weaver HITL journey is connected. |
 | `supports_streaming` | boolean | yes |  |
@@ -2112,6 +2240,14 @@ JSON error envelope shared by application, authentication and import failures.
 ### ExecutionTransport
 
 One of: `sse`.
+
+### ExtractedFacts
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `author` | string or null |  |  |
+| `created` | string (date-time) or null |  |  |
+| `title` | string or null |  |  |
 
 ### Failure
 
@@ -2202,6 +2338,16 @@ Browser-safe result; attribution to person/space/instance stays in RuntimeBindin
 
 One of: `en`, `fr`.
 
+### LocalOffer
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `advertised` | boolean | yes |  |
+| `capability_id` | string | yes |  |
+| `descriptor` | [`PodCapabilityDescriptor`](#podcapabilitydescriptor) | yes |  |
+| `parent_permitted` | boolean | yes |  |
+| `permitted` | boolean | yes |  |
+
 ### ManagedAgentInstanceSummary
 
 | Field | Type | Required | Description |
@@ -2246,6 +2392,15 @@ One of: `en`, `fr`.
 | `platform_roles` | array of [`PlatformRole`](#platformrole) | yes |  |
 | `user_id` | string | yes |  |
 | `username` | string | yes |  |
+
+### MetadataPreview
+
+The descriptive subset of metadata.json consumed by the document viewer. Extra fields in the artifact belong to their existing owners.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `extensions` | [`PreviewExtensions`](#previewextensions) or null |  |  |
+| `identity` | [`ExtractedFacts`](#extractedfacts) | yes |  |
 
 ### ModelConnection
 
@@ -2466,6 +2621,7 @@ One of: `platform_admin`, `platform_observer`, `feature_manager`, `prompt_editor
 | `name` | string | yes |  |
 | `public_version` | string or null |  |  |
 | `runtime_id` | string or null |  |  |
+| `skill` | [`SkillSummary`](#skillsummary) or null |  |  |
 | `source_id` | string or null |  |  |
 | `team_settings_fields` | array of [`CapabilityFieldDescription`](#capabilityfielddescription) |  |  |
 | `version` | string | yes |  |
@@ -2480,11 +2636,13 @@ One of: `platform_admin`, `platform_observer`, `feature_manager`, `prompt_editor
 | `observation` | [`CatalogObservationState`](#catalogobservationstate) | yes |  |
 | `observed_at` | string (date-time) or null |  |  |
 | `runtime_id` | string | yes |  |
+| `skills_availability` | string or null |  |  |
+| `skills_supported` | boolean | yes |  |
 | `template_capabilities` | array of [`PodTemplateCapability`](#podtemplatecapability) | yes | Links from the last successful snapshot, all scoped to this runtime. |
 
 ### PodCapabilityKind
 
-One of: `tool`.
+One of: `tool`, `skill`.
 
 ### PodTemplateCapability
 
@@ -2493,6 +2651,39 @@ One of: `tool`.
 | `capability_id` | string | yes |  |
 | `default_selected` | boolean | yes |  |
 | `source_agent_id` | string | yes |  |
+
+### PowerPointFile
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent_instance_id` | string (uuid) or null | yes |  |
+| `cleaned_at` | string (date-time) or null | yes |  |
+| `error_code` | string or null | yes |  |
+| `id` | string (uuid) | yes |  |
+| `mime` | string | yes |  |
+| `name` | string | yes |  |
+| `published_at` | string (date-time) or null | yes |  |
+| `request_key` | string (uuid) | yes |  |
+| `sha256` | string | yes |  |
+| `size` | integer (int64) | yes |  |
+| `space_id` | string (uuid) | yes |  |
+| `status` | [`PowerPointFileStatus`](#powerpointfilestatus) | yes | Stored means attached in CP, not prepared or activated in the pod. |
+
+### PowerPointFileStatus
+
+One of: `pending`, `stored`, `retired`.
+
+### PowerPointResolution
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `activation_ready` | boolean | yes | This lot does not prepare or activate configurable files in the runtime. |
+| `file` | [`PowerPointFile`](#powerpointfile) or null | yes |  |
+| `source` | [`PowerPointSource`](#powerpointsource) | yes | agent, organization, or builtin; no configurable platform default. |
+
+### PowerPointSource
+
+One of: `agent`, `organization`, `builtin`.
 
 ### Predecessor
 
@@ -2539,6 +2730,12 @@ The previous stage's result and the stored prefix that holds its artifacts.
 | `options` | [`ModelOptions`](#modeloptions) | yes |  |
 | `recommendation` | [`ModelOfferKey`](#modelofferkey) or null | yes |  |
 | `requires_reselection` | boolean | yes |  |
+
+### PreviewExtensions
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `email` | [`EmailHeaders`](#emailheaders) or null |  |  |
 
 ### ProcessingCount
 
@@ -2756,6 +2953,14 @@ One of: `high`.
 | `reasoning_enabled` | array of [`ModelOfferKey`](#modelofferkey), max items 4096 | yes | Organization ceiling, independent of the user's per-question choice. |
 | `title` | [`ModelOfferKey`](#modelofferkey) or null | yes |  |
 
+### ReplaceSpaceCapabilityPolicy
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `expected_revision` | integer (int64) | yes |  |
+| `permitted_ids` | array of string, max items 4096 | yes |  |
+| `restricted` | boolean | yes |  |
+
 ### Report
 
 | Field | Type | Required | Description |
@@ -2831,6 +3036,7 @@ One of: `member`, `editor`, `owner`, `analyst`, `organization_admin`.
 | `inference` | [`InferenceAdmission`](#inferenceadmission) or null |  |  |
 | `models` | [`RuntimeModels`](#runtimemodels) | yes |  |
 | `run_id` | string or null | yes |  |
+| `skills` | [`SkillCatalog`](#skillcatalog) or null |  |  |
 | `space` | [`RuntimeSpace`](#runtimespace) | yes |  |
 | `subject_id` | string | yes |  |
 | `title` | [`TitleAdmission`](#titleadmission) or null |  |  |
@@ -2838,6 +3044,55 @@ One of: `member`, `editor`, `owner`, `analyst`, `organization_admin`.
 ### RuntimeEvent
 
 One of:
+
+- `kind` = `thought_start`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `thought_start` | yes |  |
+| `phase` | string | yes |  |
+| `sequence` | integer (int64), >= 0 | yes |  |
+| `source` | string | yes |  |
+| `thought_id` | string | yes |  |
+
+- `kind` = `thought_delta`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `delta` | string | yes |  |
+| `kind` | `thought_delta` | yes |  |
+| `sequence` | integer (int64), >= 0 | yes |  |
+| `thought_id` | string | yes |  |
+
+- `kind` = `thought_end`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `thought_end` | yes |  |
+| `sequence` | integer (int64), >= 0 | yes |  |
+| `thought_id` | string | yes |  |
+
+- `kind` = `tool_call`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `arguments` | map of any | yes |  |
+| `call_id` | string | yes |  |
+| `kind` | `tool_call` | yes |  |
+| `sequence` | integer (int64), >= 0 | yes |  |
+| `tool_name` | string | yes |  |
+
+- `kind` = `tool_result`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `call_id` | string | yes |  |
+| `content` | string | yes |  |
+| `is_error` | boolean | yes |  |
+| `kind` | `tool_result` | yes |  |
+| `latency_ms` | integer (int64), >= 0 | yes |  |
+| `sequence` | integer (int64), >= 0 | yes |  |
+| `tool_name` | string | yes |  |
 
 - `kind` = `status`
 
@@ -2879,6 +3134,7 @@ One of:
 | `finish_reason` | string | yes |  |
 | `kind` | `final` | yes |  |
 | `sequence` | integer (int64), >= 0 | yes |  |
+| `sources` | array of [`SearchHit`](#searchhit) | yes |  |
 
 ### RuntimeModelOffer
 
@@ -2920,6 +3176,21 @@ One of:
 | `space_id` | string (uuid) | yes |  |
 | `space_ids` | array of string (uuid) | yes | Filter for chunks and metadata: `space_id` must be one of these. The space and its ancestors, never descendants: a team conversation never sees its projects' content. A personal space's scope is itself. |
 
+### SearchHit
+
+One hit of KF's `POST /documents/search` (fred_core's VectorSearchHit). Only what this agent reads is typed; the rest reaches the source viewer unchanged.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `chunk_kind` | string or null |  |  |
+| `content` | string | yes |  |
+| `file_name` | string or null |  |  |
+| `page` | integer (int64) or null |  |  |
+| `score` | number (double) | yes |  |
+| `section` | string or null |  |  |
+| `title` | string | yes |  |
+| `uid` | string | yes |  |
+
 ### SessionDetails
 
 | Field | Type | Required | Description |
@@ -2953,6 +3224,31 @@ Organization "enabled for all" decision, shared by agents and capability offers.
 | --- | --- | --- | --- |
 | `retrievable` | boolean | yes |  |
 
+### SkillAvailability
+
+One of: `available`, `disabled`, `unavailable`.
+
+### SkillCatalog
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `availability` | [`SkillAvailability`](#skillavailability) | yes |  |
+| `policy_supported` | boolean | yes |  |
+| `revision` | string | yes |  |
+| `skills` | array of [`SkillSummary`](#skillsummary) | yes |  |
+| `supported` | boolean | yes |  |
+
+### SkillSummary
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `argument_hint` | string or null |  |  |
+| `builtin` | boolean | yes |  |
+| `description` | string | yes |  |
+| `disable_model_invocation` | boolean | yes |  |
+| `name` | string | yes |  |
+| `user_invocable` | boolean | yes |  |
+
 ### Space
 
 A space with its immutable placement and derived search path.
@@ -2965,6 +3261,20 @@ A space with its immutable placement and derived search path.
 | `parent_id` | string (uuid) or null | yes |  |
 | `path` | array of string (uuid) | yes | Ancestors then self: the search scope. A personal space's path is itself. |
 | `personal_owner` | string or null | yes |  |
+
+### SpaceCapabilityPolicy
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `offers` | array of [`LocalOffer`](#localoffer) | yes |  |
+| `permitted_ids` | array of string | yes |  |
+| `reachable` | boolean | yes |  |
+| `restricted` | boolean | yes |  |
+| `revision` | integer (int64) | yes |  |
+| `runtime_id` | string | yes |  |
+| `skills_availability` | string or null |  |  |
+| `skills_supported` | boolean | yes |  |
+| `source_enabled` | boolean | yes |  |
 
 ### SpaceCheck
 

@@ -332,15 +332,26 @@ def build_delegation_runtime(
             "turn act_for_people on as well."
         )
 
-    token_provider: M2MTokenProvider | None = None
+    return DelegationRuntime(
+        config=config,
+        token_provider=build_workload_token_provider(security)
+        if config.act_for_people
+        else None,
+    )
+
+
+def build_workload_token_provider(
+    security: SecurityConfiguration | None,
+) -> M2MTokenProvider | None:
+    """The pod identity, also usable by workers without a delegated person/run."""
     m2m = getattr(security, "m2m", None)
-    if config.act_for_people and m2m is not None and m2m.enabled and m2m.client_id:
+    if m2m is not None and m2m.enabled and m2m.client_id:
         token_endpoint = resolve_endpoints(
             provider=m2m.provider,
             realm_url=str(m2m.realm_url).rstrip("/"),
             token_url=str(m2m.token_url) if m2m.token_url else None,
         ).token_endpoint
-        token_provider = M2MTokenProvider(
+        return M2MTokenProvider(
             M2MAuthConfig(
                 keycloak_realm_url=str(m2m.realm_url).rstrip("/"),
                 client_id=m2m.client_id,
@@ -349,7 +360,7 @@ def build_delegation_runtime(
                 secret_env=m2m.secret_env_var,
             )
         )
-    return DelegationRuntime(config=config, token_provider=token_provider)
+    return None
 
 
 _DELEGATION_RUNTIME: DelegationRuntime | None = None

@@ -102,6 +102,58 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bootstrapRequest,
       }),
     }),
+    capabilityPreparationCleanup: build.query<
+      CapabilityPreparationCleanupApiResponse,
+      CapabilityPreparationCleanupApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/capability-preparations/cleanup`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
+    capabilityPreparationWorker: build.query<CapabilityPreparationWorkerApiResponse, CapabilityPreparationWorkerApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/capability-preparations/worker`,
+          params: {
+            runtime_id: queryArg.runtimeId,
+          },
+        }),
+      },
+    ),
+    capabilityPreparationContext: build.query<
+      CapabilityPreparationContextApiResponse,
+      CapabilityPreparationContextApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/capability-preparations/${queryArg.id}` }),
+    }),
+    capabilityPreparationCleaned: build.mutation<
+      CapabilityPreparationCleanedApiResponse,
+      CapabilityPreparationCleanedApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/capability-preparations/${queryArg.id}/cleaned`,
+        method: "POST",
+      }),
+    }),
+    capabilityPreparationConfirm: build.mutation<
+      CapabilityPreparationConfirmApiResponse,
+      CapabilityPreparationConfirmApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/capability-preparations/${queryArg.id}/confirm`,
+        method: "POST",
+        body: queryArg.resultConfirmation,
+      }),
+    }),
+    capabilityPreparationContent: build.query<
+      CapabilityPreparationContentApiResponse,
+      CapabilityPreparationContentApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/capability-preparations/${queryArg.id}/content` }),
+    }),
     deletionStatus: build.query<DeletionStatusApiResponse, DeletionStatusApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/deletions/${queryArg.operationId}` }),
     }),
@@ -397,6 +449,9 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision/teams/${queryArg.teamId}`,
       }),
     }),
+    powerpointUploadReceipt: build.query<PowerpointUploadReceiptApiResponse, PowerpointUploadReceiptApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/powerpoint-uploads/${queryArg.requestKey}` }),
+    }),
     createSpace: build.mutation<CreateSpaceApiResponse, CreateSpaceApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces`, method: "POST", body: queryArg.createSpace }),
     }),
@@ -545,6 +600,79 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/capability-policies/${queryArg.runtimeId}`,
         method: "PUT",
         body: queryArg.replaceSpaceCapabilityPolicy,
+      }),
+    }),
+    resolvePowerpointTemplate: build.query<ResolvePowerpointTemplateApiResponse, ResolvePowerpointTemplateApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/powerpoint-template`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
+    uploadPowerpointTemplate: build.mutation<UploadPowerpointTemplateApiResponse, UploadPowerpointTemplateApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/powerpoint-template`,
+        method: "PUT",
+        body: queryArg.fileUpload,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          runtime_id: queryArg.runtimeId,
+          template_id: queryArg.templateId,
+          expected_file_id: queryArg.expectedFileId,
+        },
+      }),
+    }),
+    removePowerpointTemplate: build.mutation<RemovePowerpointTemplateApiResponse, RemovePowerpointTemplateApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/powerpoint-template`,
+        method: "DELETE",
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          runtime_id: queryArg.runtimeId,
+          expected_file_id: queryArg.expectedFileId,
+        },
+      }),
+    }),
+    rerunPowerpointTemplate: build.mutation<RerunPowerpointTemplateApiResponse, RerunPowerpointTemplateApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/powerpoint-template/prepare`,
+        method: "POST",
+        body: queryArg.powerPointChange,
+        params: {
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
+    getPowerpointSettings: build.query<GetPowerpointSettingsApiResponse, GetPowerpointSettingsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/powerpoint-template/settings`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
+    putPowerpointSettings: build.mutation<PutPowerpointSettingsApiResponse, PutPowerpointSettingsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/powerpoint-template/settings`,
+        method: "PUT",
+        body: queryArg.powerPointSettingsChange,
+        params: {
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
+    downloadPowerpointTemplate: build.query<DownloadPowerpointTemplateApiResponse, DownloadPowerpointTemplateApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/powerpoint-template/${queryArg.fileId}/content`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          runtime_id: queryArg.runtimeId,
+        },
       }),
     }),
     listPromptCategories: build.query<ListPromptCategoriesApiResponse, ListPromptCategoriesApiArg>({
@@ -800,6 +928,31 @@ export type BootstrapPlatformAdminApiResponse = /** status 200 Success */ Bootst
 export type BootstrapPlatformAdminApiArg = {
   bootstrapRequest: BootstrapRequest;
 };
+export type CapabilityPreparationCleanupApiResponse = /** status 200 undefined */ string[];
+export type CapabilityPreparationCleanupApiArg = {
+  runtimeId: string;
+};
+export type CapabilityPreparationWorkerApiResponse = /** status 200 undefined */ WorkerBinding;
+export type CapabilityPreparationWorkerApiArg = {
+  runtimeId: string;
+};
+export type CapabilityPreparationContextApiResponse = /** status 200 undefined */ Work;
+export type CapabilityPreparationContextApiArg = {
+  id: string;
+};
+export type CapabilityPreparationCleanedApiResponse = unknown;
+export type CapabilityPreparationCleanedApiArg = {
+  id: string;
+};
+export type CapabilityPreparationConfirmApiResponse = unknown;
+export type CapabilityPreparationConfirmApiArg = {
+  id: string;
+  resultConfirmation: ResultConfirmation;
+};
+export type CapabilityPreparationContentApiResponse = /** status 200 undefined */ string;
+export type CapabilityPreparationContentApiArg = {
+  id: string;
+};
 export type DeletionStatusApiResponse = /** status 200 undefined */ Receipt;
 export type DeletionStatusApiArg = {
   operationId: string;
@@ -1038,6 +1191,10 @@ export type TeamSupervisionApiArg = {
   organizationId: string;
   teamId: string;
 };
+export type PowerpointUploadReceiptApiResponse = /** status 200 undefined */ PowerPointFile;
+export type PowerpointUploadReceiptApiArg = {
+  requestKey: string;
+};
 export type CreateSpaceApiResponse = /** status 201 Success */ Space;
 export type CreateSpaceApiArg = {
   createSpace: CreateSpace;
@@ -1179,6 +1336,55 @@ export type ReplaceSpaceCapabilityPolicyApiArg = {
   spaceId: string;
   runtimeId: string;
   replaceSpaceCapabilityPolicy: ReplaceSpaceCapabilityPolicy;
+};
+export type ResolvePowerpointTemplateApiResponse = /** status 200 undefined */ PowerPointResolution;
+export type ResolvePowerpointTemplateApiArg = {
+  spaceId: string;
+  agentInstanceId?: string;
+  runtimeId?: string;
+};
+export type UploadPowerpointTemplateApiResponse = /** status 200 undefined */ PowerPointFile;
+export type UploadPowerpointTemplateApiArg = {
+  spaceId: string;
+  agentInstanceId?: string;
+  runtimeId?: string;
+  /** Only for a new draft instance */
+  templateId?: string;
+  /** Current own attachment; omit only if absent */
+  expectedFileId?: string;
+  "Idempotency-Key": string;
+  fileUpload: FileUpload;
+};
+export type RemovePowerpointTemplateApiResponse = unknown;
+export type RemovePowerpointTemplateApiArg = {
+  spaceId: string;
+  agentInstanceId?: string;
+  runtimeId?: string;
+  expectedFileId?: string;
+};
+export type RerunPowerpointTemplateApiResponse = unknown;
+export type RerunPowerpointTemplateApiArg = {
+  spaceId: string;
+  runtimeId: string;
+  powerPointChange: PowerPointChange;
+};
+export type GetPowerpointSettingsApiResponse = /** status 200 undefined */ PowerPointSettings;
+export type GetPowerpointSettingsApiArg = {
+  spaceId: string;
+  runtimeId: string;
+};
+export type PutPowerpointSettingsApiResponse = unknown;
+export type PutPowerpointSettingsApiArg = {
+  spaceId: string;
+  runtimeId: string;
+  powerPointSettingsChange: PowerPointSettingsChange;
+};
+export type DownloadPowerpointTemplateApiResponse = /** status 200 undefined */ string;
+export type DownloadPowerpointTemplateApiArg = {
+  spaceId: string;
+  fileId: string;
+  agentInstanceId?: string;
+  runtimeId?: string;
 };
 export type ListPromptCategoriesApiResponse = /** status 200 undefined */ PromptCategoryPage;
 export type ListPromptCategoriesApiArg = {
@@ -1523,6 +1729,29 @@ export type BootstrapResponse = {
 export type BootstrapRequest = {
   token: string;
 };
+export type WorkerBinding = {
+  installation_id: string;
+  task_queue: string;
+};
+export type Work = {
+  agent_instance_id: string | null;
+  capability_id: string;
+  config: object;
+  configuration_revision: number | null;
+  file_id: string;
+  filename: string;
+  installation_id: string;
+  preparation_id: string;
+  runtime_id: string;
+  sha256: string;
+  size: number;
+  space_id: string;
+  state: string;
+};
+export type ResultConfirmation = {
+  error?: string | null;
+  reference?: string | null;
+};
 export type Status = "queued" | "running" | "retrying" | "blocked" | "completed";
 export type TargetKind = "organization" | "team" | "project" | "document" | "session";
 export type Receipt = {
@@ -1541,15 +1770,6 @@ export type Receipt = {
   target_id: string;
   target_kind: TargetKind;
   target_parent_id?: string | null;
-};
-export type Profile = "fast" | "medium" | "rich";
-export type Work = {
-  contract_version: number;
-  document_id: string;
-  installation_id: string;
-  original_sha256: string;
-  processing_id: string;
-  profile: Profile;
 };
 export type Cleanup = {
   batch: number;
@@ -1598,6 +1818,7 @@ export type RetrievalConfirmation = {
   retrievable: boolean;
   step: RetrievalStep;
 };
+export type Profile = "fast" | "medium" | "rich";
 export type Stage = "queued" | "preparation" | "extraction" | "indexing" | "done";
 export type ProcessingStatus = "pending" | "running" | "succeeded" | "failed";
 export type Summary = {
@@ -2218,6 +2439,23 @@ export type TeamSupervisionDetail = {
   organization_id: string;
   team: TeamSupervision;
 };
+export type PowerPointFileStatus = "pending" | "stored" | "retired";
+export type PowerPointFile = {
+  agent_instance_id: string | null;
+  cleaned_at: string | null;
+  error_code: string | null;
+  id: string;
+  mime: string;
+  name: string;
+  published_at: string | null;
+  request_key: string;
+  runtime_id: string | null;
+  sha256: string;
+  size: number;
+  space_id: string;
+  /** Stored means attached in CP, not prepared or activated in the pod. */
+  status: PowerPointFileStatus;
+};
 export type CreateSpace = {
   kind: SpaceKind;
   name: string;
@@ -2273,12 +2511,15 @@ export type ManagedAgentInstanceSummary = {
       [key: string]: any;
     };
   };
+  configuration_revision: number;
   created_at: string;
   created_by: string;
   description?: string | null;
   display_name: string;
   logical_name: string;
   model_options?: ModelOptions | null;
+  preparation_error: string | null;
+  preparation_state: string;
   /** Diagnostic only; requires explicit re-selection if no recommended_model is saved. */
   recommended_chat_profile_id?: string | null;
   recommended_model?: ModelOfferKey | null;
@@ -2302,6 +2543,11 @@ export type AgentInstancePage = {
   items: ManagedAgentInstanceSummary[];
   /** Follow until null. Pages are current reads, not a snapshot. */
   next_cursor: string | null;
+};
+export type FileChange = {
+  expected_file_id?: string | null;
+  /** A staged CP receipt for this exact space, logical pod and instance; null removes. */
+  file_id?: string | null;
 };
 export type TuningScalar = string | number | boolean;
 export type TuningValue =
@@ -2333,6 +2579,7 @@ export type CreateAgentInstanceRequest = {
     Explicit references are preserved; collisions return 409 agent_name_conflict. */
   logical_name?: string | null;
   model_options?: ModelOptions | null;
+  powerpoint?: FileChange | null;
   /** Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key. */
   recommended_chat_profile_id?: string | null;
   recommended_model?: ModelOfferKey | null;
@@ -2371,6 +2618,7 @@ export type UpdateAgentInstanceRequest = {
     A new display name must remain unique within the space, ignoring case. */
   display_name?: string | null;
   model_options?: ModelOptions | null;
+  powerpoint?: FileChange | null;
   /** Omitted keeps the recommendation; null clears it; other values return 422. */
   recommended_chat_profile_id?: string | null;
   recommended_model?: ModelOfferKey | null;
@@ -2615,6 +2863,30 @@ export type ReplaceSpaceCapabilityPolicy = {
   permitted_ids: string[];
   restricted: boolean;
 };
+export type PowerPointSource = "agent" | "organization" | "builtin";
+export type PowerPointResolution = {
+  activation_ready: boolean;
+  /** Opaque reference owned by the capability on the resolved logical pod. */
+  analysis_reference: string | null;
+  file: PowerPointFile | null;
+  preparation_error: string | null;
+  preparation_state: string;
+  /** agent, organization, or builtin; no configurable platform default. */
+  source: PowerPointSource;
+};
+export type PowerPointChange = {
+  /** Compare-and-swap: omit only when no own file is currently attached. */
+  expected_file_id?: string | null;
+};
+export type PowerPointSettings = {
+  config: object;
+  current: PowerPointResolution;
+  replacement: PowerPointResolution | null;
+};
+export type PowerPointSettingsChange = {
+  config: object;
+  expected_file_id?: string | null;
+};
 export type PromptCategory = {
   id: string;
   name: string;
@@ -2773,6 +3045,16 @@ export const {
   useAuthorizeScopeMutation,
   useAuthorizeSpaceMutation,
   useBootstrapPlatformAdminMutation,
+  useCapabilityPreparationCleanupQuery,
+  useLazyCapabilityPreparationCleanupQuery,
+  useCapabilityPreparationWorkerQuery,
+  useLazyCapabilityPreparationWorkerQuery,
+  useCapabilityPreparationContextQuery,
+  useLazyCapabilityPreparationContextQuery,
+  useCapabilityPreparationCleanedMutation,
+  useCapabilityPreparationConfirmMutation,
+  useCapabilityPreparationContentQuery,
+  useLazyCapabilityPreparationContentQuery,
   useDeletionStatusQuery,
   useLazyDeletionStatusQuery,
   useCleanupQuery,
@@ -2848,6 +3130,8 @@ export const {
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
   useLazyTeamSupervisionQuery,
+  usePowerpointUploadReceiptQuery,
+  useLazyPowerpointUploadReceiptQuery,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
   useReceiptsQuery,
@@ -2878,6 +3162,16 @@ export const {
   useSpaceCapabilityPoliciesQuery,
   useLazySpaceCapabilityPoliciesQuery,
   useReplaceSpaceCapabilityPolicyMutation,
+  useResolvePowerpointTemplateQuery,
+  useLazyResolvePowerpointTemplateQuery,
+  useUploadPowerpointTemplateMutation,
+  useRemovePowerpointTemplateMutation,
+  useRerunPowerpointTemplateMutation,
+  useGetPowerpointSettingsQuery,
+  useLazyGetPowerpointSettingsQuery,
+  usePutPowerpointSettingsMutation,
+  useDownloadPowerpointTemplateQuery,
+  useLazyDownloadPowerpointTemplateQuery,
   useListPromptCategoriesQuery,
   useLazyListPromptCategoriesQuery,
   useCreatePromptCategoryMutation,

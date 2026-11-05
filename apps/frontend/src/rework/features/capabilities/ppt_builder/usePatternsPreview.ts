@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // The patterns PDF (one page per inventory pattern) behind the review
-// thumbnails, as a blob URL: the agent's analysed template, the platform
-// default or the built-in one. Binary responses are the sanctioned raw-fetch exception.
+// thumbnails, as a blob URL: the agent's analysed template or the built-in file.
+// Binary responses are the sanctioned raw-fetch exception.
 
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
@@ -23,9 +23,9 @@ import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../.
 import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
 
 export type PreviewSource =
-  | { kind: "analysis"; instanceId: string }
-  | { kind: "builtin" }
-  | { kind: "platform" }
+  | (({ kind: "analysis"; instanceId: string; spaceId?: string; agentInstanceId?: string } | { kind: "builtin" }) & {
+      baseUrl?: string;
+    })
   | null;
 
 export interface PatternsPreview {
@@ -35,20 +35,25 @@ export interface PatternsPreview {
 }
 
 export function usePatternsPreview(source: PreviewSource): PatternsPreview {
-  const baseUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
+  const routedBaseUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
     selectCapabilityBaseUrl(state, CAPABILITY_ID),
   );
+  const baseUrl = source?.baseUrl ?? routedBaseUrl;
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const params = new URLSearchParams();
+  if (source?.kind === "analysis") {
+    if (source.spaceId) params.set("space_id", source.spaceId);
+    if (source.agentInstanceId) params.set("agent_instance_id", source.agentInstanceId);
+  }
+  const suffix = params.size ? `?${params}` : "";
   const path = !source
     ? null
     : source.kind === "analysis"
-      ? `/analysis/${encodeURIComponent(source.instanceId)}/patterns.pdf`
-      : source.kind === "platform"
-        ? "/platform/patterns.pdf"
-        : "/builtin/patterns.pdf";
+      ? `/analysis/${encodeURIComponent(source.instanceId)}/patterns.pdf${suffix}`
+      : "/builtin/patterns.pdf";
 
   useEffect(() => {
     if (!path || !baseUrl) {

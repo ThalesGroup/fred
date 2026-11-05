@@ -123,6 +123,47 @@ struct Documents {
     app: Router,
     folder: Folder,
     _spool: tempfile::TempDir,
+    _pod: PreparationPod,
+}
+struct PreparationPod {
+    base: String,
+    task: tokio::task::JoinHandle<()>,
+}
+impl Drop for PreparationPod {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+impl PreparationPod {
+    async fn start() -> Self {
+        let app = Router::new().route(
+            "/agents/capabilities/ppt_builder/validate-config",
+            axum::routing::post(|body: axum::body::Bytes| async move {
+                if body.windows(6).any(|part| part == b"reject") {
+                    (
+                        axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                        axum::Json(json!({"detail":"Unreadable test template"})),
+                    )
+                } else {
+                    (
+                        axum::http::StatusCode::OK,
+                        axum::Json(json!({"schema_version":"1","config":{"use_vision":false}})),
+                    )
+                }
+            }),
+        );
+        let app=app.route("/agents/templates",axum::routing::get(|| async {axum::Json(json!([{
+            "template_agent_id":"assistant","title":"Assistant","description":"Test","kind":"react","supports_capabilities":true,
+            "default_capability_ids":["ppt_builder"],"available_capabilities":[{"id":"ppt_builder","kind":"tool","config_fields":[]}],
+            "default_tuning":{"role":"Assistant","description":"Test","usage_statement":"Test","tags":[],"values":{},"fields":[]}
+        }]))}));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        Self { base, task }
+    }
 }
 impl Documents {
     async fn start(quota: i64) -> Self {
@@ -206,9 +247,39 @@ impl Documents {
         .await
         .unwrap();
         let identity = crate::support::IdentityServer::start().await;
+        let pod = PreparationPod::start().await;
+        let mut platform = control_plane::agents::PlatformConfig::default();
+        platform
+            .runtime_catalog_sources
+            .push(control_plane::agents::RuntimeCatalogSource {
+                runtime_id: "fixture".into(),
+                base_url: pod.base.clone(),
+                public_base_url: Some("/fixture/v1".into()),
+                enabled: true,
+            });
+        platform.capability_preparation.workers.insert(
+            "fixture".into(),
+            control_plane::processing::config::WorkerIdentity {
+                issuer: identity.realm.clone(),
+                audience: "app".into(),
+                client_id: "preparation-worker".into(),
+            },
+        );
+        for statement in [
+            "insert into runtime_catalog(runtime_id,reachable) values('fixture',true)",
+            "insert into runtime_capability(runtime_id,capability_id,version,descriptor,advertised) values('fixture','ppt_builder','1','{}',true)",
+            "insert into organization_capability(organization_id,runtime_id,capability_id,enabled_by) values($1,'fixture','ppt_builder','writer')",
+        ] {
+            let query = sqlx::query(statement);
+            if statement.contains("$1") {
+                query.bind(org.id).execute(&e.pool).await.unwrap();
+            } else {
+                query.execute(&e.pool).await.unwrap();
+            }
+        }
         let app = api::router(
             api::AppState {
-                agent_catalog: Default::default(),
+                agent_catalog: platform,
                 pool: e.pool.clone(),
                 auth: Arc::new(identity.auth().await),
                 content: Some(storage.clone()),
@@ -229,6 +300,7 @@ impl Documents {
             app,
             folder,
             _spool: spool,
+            _pod: pod,
         }
     }
     async fn request(
@@ -1319,4 +1391,965 @@ async fn cleanup_inaccessible_original_does_not_starve_other_objects() {
     d.proxy.fault.lock().await.deny_head_path = None;
     d.storage.cleanup_tick().await.unwrap();
     assert!(d.bucket.store.get(&failed[0].1).await.is_err());
+}
+
+// The same real S3 fixture and fault proxy as document uploads exercise CP-owned
+// PowerPoint originals; byte validation belongs to the capability, not this API.
+impl Documents {
+    async fn stage_ppt(&self, user: &str, path: &str, bytes: &[u8], key: Uuid) -> (u16, Value) {
+        let mut body = b"--fixture\r\nContent-Disposition: form-data; name=\"file\"; filename=\"template.pptx\"\r\nContent-Type: application/octet-stream\r\n\r\n".to_vec();
+        body.extend_from_slice(bytes);
+        body.extend_from_slice(b"\r\n--fixture--\r\n");
+        json_response(
+            self.request(
+                user,
+                "PUT",
+                path,
+                Body::from(body),
+                "multipart/form-data; boundary=fixture",
+                Some(key),
+            )
+            .await,
+        )
+        .await
+    }
+    async fn ppt_agent(&self) -> Uuid {
+        let id = Uuid::new_v4();
+        let org: Uuid = sqlx::query_scalar("select organization_id from space where id=$1")
+            .bind(self.folder.space_id)
+            .fetch_one(&self.e.pool)
+            .await
+            .unwrap();
+        sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$3,'fixture','assistant',$1::text,'{\"role\":\"Assistant\",\"usage_statement\":\"Test\",\"selected_capability_ids\":[\"ppt_builder\"],\"capability_config\":{\"ppt_builder\":{\"schema_version\":\"1\",\"config\":{\"use_vision\":false}}}}','writer',$1::text)")
+            .bind(id).bind(self.folder.space_id).bind(control_plane::agents::template_id(org,"fixture","assistant")).execute(&self.e.pool).await.unwrap();
+        sqlx::query("insert into agent_template_policy(organization_id,template_id) values($1,$2) on conflict do nothing")
+            .bind(org)
+            .bind(control_plane::agents::template_id(org,"fixture","assistant"))
+            .execute(&self.e.pool)
+            .await
+            .unwrap();
+        id
+    }
+    async fn ppt_sweep(&self) {
+        // Advance only the fixture's cleanup clock; immutable upload expiry stays intact.
+        sqlx::query("update powerpoint_file set cleanup_due_at=clock_timestamp()-interval '1 second' where status='retired'").execute(&self.e.pool).await.unwrap();
+        self.storage.cleanup_tick().await.unwrap();
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and SeaweedFS"]
+async fn powerpoint_ownership_fallback_replacement_and_cleanup() {
+    let d = Documents::start(100_000).await;
+    let space = d.folder.space_id;
+    let org: Uuid = sqlx::query_scalar("select organization_id from space where id=$1")
+        .bind(space)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    crate::grant(&d.e, org, Role::Editor, "org-writer").await;
+    let agent = d.ppt_agent().await;
+    let other_agent = d.ppt_agent().await;
+    let path = format!("/spaces/{space}/powerpoint-template?agent_instance_id={agent}");
+    let org_path = format!("/spaces/{org}/powerpoint-template?runtime_id=fixture");
+    assert_eq!(d.ppt("reader", &path, b"a", Uuid::new_v4()).await.0, 403);
+    assert_eq!(
+        d.ppt("writer", &org_path, b"a", Uuid::new_v4()).await.0,
+        403
+    );
+    assert_eq!(
+        d.ppt(
+            "writer",
+            &format!("/spaces/{space}/powerpoint-template?runtime_id=fixture"),
+            b"a",
+            Uuid::new_v4()
+        )
+        .await
+        .0,
+        404
+    );
+    let (status, organization) = d
+        .ppt("org-writer", &org_path, b"organization", Uuid::new_v4())
+        .await;
+    assert_eq!(status, 200, "{organization}");
+    // A direct role on the usage space suffices; the file does not grant an org read role.
+    sqlx::query("delete from space_role_grant where space_id=$1 and subject='reader'")
+        .bind(org)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    let (status, resolution) = d.json("reader", "GET", &path, json!({})).await;
+    assert_eq!(status, 200, "{resolution}");
+    assert_eq!(resolution["source"], "organization");
+    assert_eq!(resolution["file"]["id"], organization["id"]);
+    assert_eq!(resolution["activation_ready"], true);
+    let key = Uuid::new_v4();
+    let (status, own) = d.ppt("writer", &path, b"own", key).await;
+    assert_eq!(status, 200, "{own}");
+    assert_eq!(d.ppt("writer", &path, b"own", key).await.1["id"], own["id"]);
+    assert_eq!(d.ppt("writer", &path, b"different", key).await.0, 409);
+    let own_id = own["id"].as_str().unwrap();
+    let content =
+        format!("/spaces/{space}/powerpoint-template/{own_id}/content?agent_instance_id={agent}");
+    let response = d
+        .request("reader", "GET", &content, Body::empty(), "", None)
+        .await;
+    assert_eq!(response.status(), 200);
+    assert_eq!(to_bytes(response.into_body(), 100).await.unwrap(), "own");
+    let wrong = format!(
+        "/spaces/{space}/powerpoint-template/{own_id}/content?agent_instance_id={other_agent}"
+    );
+    assert_eq!(
+        d.request("reader", "GET", &wrong, Body::empty(), "", None)
+            .await
+            .status(),
+        404
+    );
+    assert_eq!(d.ppt("writer", &path, b"new", Uuid::new_v4()).await.0, 409);
+    let replace = format!("{path}&expected_file_id={own_id}");
+    let (a, b) = tokio::join!(
+        d.ppt("writer", &replace, b"first", Uuid::new_v4()),
+        d.ppt("writer", &replace, b"second", Uuid::new_v4())
+    );
+    assert!(
+        (a.0 == 200 && b.0 == 409) || (b.0 == 200 && a.0 == 409),
+        "{a:?} {b:?}"
+    );
+    let winner = if a.0 == 200 { a.1 } else { b.1 };
+    let remove = format!("{path}&expected_file_id={}", winner["id"].as_str().unwrap());
+    assert_eq!(
+        d.request("writer", "DELETE", &remove, Body::empty(), "", None)
+            .await
+            .status(),
+        202
+    );
+    assert_eq!(
+        d.json("reader", "GET", &path, json!({})).await.1["source"],
+        "organization"
+    );
+    d.ppt_sweep().await;
+    let receipt = d
+        .json(
+            "writer",
+            "GET",
+            &format!("/powerpoint-uploads/{key}"),
+            json!({}),
+        )
+        .await
+        .1;
+    assert_eq!(receipt["status"], "retired");
+    assert!(receipt["cleaned_at"].is_string());
+    // Logical ownership is independent of the depositor; cleanup survives agent deletion.
+    let (status, last) = d.ppt("writer", &path, b"last", Uuid::new_v4()).await;
+    assert_eq!(status, 200, "{last}");
+    let deleted = d
+        .request(
+            "writer",
+            "DELETE",
+            &format!("/spaces/{space}/agent-instances/{agent}"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await;
+    assert_eq!(deleted.status(), 202);
+    d.ppt_sweep().await;
+    let live: (Option<Uuid>, Option<chrono::DateTime<chrono::Utc>>) =
+        sqlx::query_as("select live_agent_id,cleaned_at from powerpoint_file where id=$1")
+            .bind(Uuid::parse_str(last["id"].as_str().unwrap()).unwrap())
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert!(live.0.is_none() && live.1.is_some());
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and SeaweedFS"]
+async fn powerpoint_interruption_replay_and_cleanup_retry() {
+    let d = Arc::new(Documents::start(100_000).await);
+    let agent = d.ppt_agent().await;
+    let space = d.folder.space_id;
+    let path = format!("/spaces/{space}/powerpoint-template?agent_instance_id={agent}");
+    let (_, original) = d.ppt("writer", &path, b"original", Uuid::new_v4()).await;
+    let replace = format!(
+        "{path}&expected_file_id={}",
+        original["id"].as_str().unwrap()
+    );
+    let key = Uuid::new_v4();
+    let gate = Arc::new(crate::support::Gate::default());
+    d.proxy.fault.lock().await.hold_put = Some(gate.clone());
+    let sending = {
+        let d = d.clone();
+        let replace = replace.clone();
+        tokio::spawn(async move { d.ppt("writer", &replace, b"replacement", key).await })
+    };
+    tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
+        .await
+        .unwrap();
+    let org = control_plane::spaces::load(&d.e.pool, space)
+        .await
+        .unwrap()
+        .organization;
+    let lock = tokio::time::timeout(
+        Duration::from_secs(1),
+        crate::hold_organization_lock(&d.e, org),
+    )
+    .await
+    .expect("PowerPoint transfer retained a SQL lock");
+    lock.rollback().await.unwrap();
+    // Crash after durable reservation and before receiving S3's answer.
+    sending.abort();
+    assert!(sending.await.unwrap_err().is_cancelled());
+    assert_eq!(
+        d.json("reader", "GET", &path, json!({})).await.1["file"]["id"],
+        original["id"]
+    );
+    gate.release.notify_one();
+    let (status, resumed) = d.ppt("writer", &replace, b"replacement", key).await;
+    assert_eq!(status, 200, "{resumed}");
+    let count: i64 =
+        sqlx::query_scalar("select count(*) from powerpoint_file where request_key=$1")
+            .bind(key)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 1);
+    let object_key: String =
+        sqlx::query_scalar("select object_key from powerpoint_file where id=$1")
+            .bind(Uuid::parse_str(original["id"].as_str().unwrap()).unwrap())
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    d.proxy.fault.lock().await.deny_head_path = Some(format!("/originals/{object_key}"));
+    d.ppt_sweep().await;
+    let (cleaned, error): (Option<chrono::DateTime<chrono::Utc>>, Option<String>) =
+        sqlx::query_as("select cleaned_at,error_code from powerpoint_file where object_key=$1")
+            .bind(&object_key)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert!(cleaned.is_none());
+    assert_eq!(error.as_deref(), Some("cleanup_failed"));
+    assert!(d.bucket.store.get(&object_key).await.is_ok());
+    d.proxy.fault.lock().await.deny_head_path = None;
+    d.ppt_sweep().await;
+    assert!(d.bucket.store.get(&object_key).await.is_err());
+    let attempts: i32 =
+        sqlx::query_scalar("select cleanup_attempts from powerpoint_file where object_key=$1")
+            .bind(&object_key)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(attempts, 2);
+    // A rejected network write keeps the last saved attachment and is replayable.
+    d.proxy.fault.lock().await.deny_put = true;
+    let next = format!(
+        "{path}&expected_file_id={}",
+        resumed["id"].as_str().unwrap()
+    );
+    let next_key = Uuid::new_v4();
+    assert_eq!(d.ppt("writer", &next, b"third", next_key).await.0, 503);
+    assert_eq!(
+        d.json("reader", "GET", &path, json!({})).await.1["file"]["id"],
+        resumed["id"]
+    );
+    d.proxy.fault.lock().await.deny_put = false;
+    assert_eq!(d.ppt("writer", &next, b"third", next_key).await.0, 200);
+    // A process that never returns leaves a durable reservation and immutable key.
+    let abandoned = Uuid::new_v4();
+    let abandoned_key: String = sqlx::query_scalar("insert into powerpoint_file(id,request_key,actor,organization_id,space_id,agent_instance_id,live_space_id,live_agent_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,cleanup_due_at) select $1,$1,actor,organization_id,space_id,agent_instance_id,live_space_id,live_agent_id,quota_owner,name,mime,size,sha256,replace(object_key,id::text,$1::text),'pending',clock_timestamp()-interval '1 second',clock_timestamp()-interval '1 second' from powerpoint_file where request_key=$2 returning object_key")
+        .bind(abandoned).bind(next_key).fetch_one(&d.e.pool).await.unwrap();
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), b"third").unwrap();
+    let hash: [u8; 32] = Sha256::digest(b"third").into();
+    d.storage
+        .objects
+        .put_verified(&abandoned_key, file.path(), 5, &hash)
+        .await
+        .unwrap();
+    d.storage.cleanup_tick().await.unwrap();
+    let abandoned_receipt = d
+        .json(
+            "writer",
+            "GET",
+            &format!("/powerpoint-uploads/{abandoned}"),
+            json!({}),
+        )
+        .await
+        .1;
+    assert_eq!(abandoned_receipt["status"], "retired");
+    assert!(abandoned_receipt["cleaned_at"].is_string());
+    assert!(d.bucket.store.get(&abandoned_key).await.is_err());
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and SeaweedFS"]
+async fn powerpoint_space_deletion_waits_for_original_and_derived_cleanup() {
+    use control_plane::lifecycle::{Lifecycle, Status, cleanup, store};
+    let d = Documents::start(100_000).await;
+    let agent = d.ppt_agent().await;
+    let space = d.folder.space_id;
+    let org = control_plane::spaces::load(&d.e.pool, space)
+        .await
+        .unwrap()
+        .organization;
+    crate::grant(&d.e, org, Role::Editor, "org-writer").await;
+    assert_eq!(
+        d.ppt(
+            "org-writer",
+            &format!("/spaces/{org}/powerpoint-template?runtime_id=fixture"),
+            b"org",
+            Uuid::new_v4()
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        d.ppt(
+            "writer",
+            &format!("/spaces/{space}/powerpoint-template?agent_instance_id={agent}"),
+            b"agent",
+            Uuid::new_v4()
+        )
+        .await
+        .0,
+        200
+    );
+    let mut lifecycle = Lifecycle::default();
+    lifecycle.config.enabled = true;
+    lifecycle.catalog.space_policies.purge.default.retention =
+        serde_yaml_ng::from_str("PT0S").unwrap();
+    let receipt = lifecycle
+        .accept(&d.e.pool, "fixture-root", org)
+        .await
+        .unwrap();
+    for _ in 0..4 {
+        cleanup::batch(&d.e.pool, receipt.id).await.unwrap();
+    }
+    assert_ne!(
+        store::status(&d.e.pool, "fixture-root", receipt.id)
+            .await
+            .unwrap()
+            .status,
+        Status::Completed
+    );
+    for _ in 0..10 {
+        d.ppt_sweep().await;
+        let (_, obsolete) = d
+            .worker(
+                "GET",
+                "/cleanup?runtime_id=fixture",
+                json!(null),
+                "preparation-worker",
+            )
+            .await;
+        for preparation in obsolete.as_array().unwrap() {
+            assert_eq!(
+                d.worker(
+                    "POST",
+                    &format!("/{}/cleaned", preparation.as_str().unwrap()),
+                    json!(null),
+                    "preparation-worker"
+                )
+                .await
+                .0,
+                204
+            );
+        }
+        cleanup::batch(&d.e.pool, receipt.id).await.unwrap();
+        if store::status(&d.e.pool, "fixture-root", receipt.id)
+            .await
+            .unwrap()
+            .status
+            == Status::Completed
+        {
+            break;
+        }
+    }
+    assert_eq!(
+        store::status(&d.e.pool, "fixture-root", receipt.id)
+            .await
+            .unwrap()
+            .status,
+        Status::Completed
+    );
+    let pending: i64 = sqlx::query_scalar("select count(*) from powerpoint_file where cleaned_at is null or live_space_id is not null or live_agent_id is not null").fetch_one(&d.e.pool).await.unwrap();
+    assert_eq!(pending, 0);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from powerpoint_file")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap(),
+        2
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres"]
+async fn powerpoint_upgrade_and_sql_ownership_constraints() {
+    let mut previous = sqlx::migrate!();
+    previous.migrations =
+        std::borrow::Cow::Owned(previous.iter().filter(|m| m.version < 6).cloned().collect());
+    let pool = crate::environment::database::database_with_migrator(previous).await;
+    let org = crate::support::member_organization(&pool, "Existing organization", "alice")
+        .await
+        .unwrap();
+    let agent = Uuid::new_v4();
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$1,'fixture','assistant','Existing agent','{}','alice',$1::text)").bind(agent).bind(org.id).execute(&pool).await.unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    assert!(
+        control_plane::agent_instances::get_for_space(&pool, org.id, agent)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from powerpoint_file")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    let insert = "insert into powerpoint_file(id,request_key,actor,organization_id,space_id,agent_instance_id,live_space_id,live_agent_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,cleanup_due_at) values($1,$1,'alice',$2,$3,$4,$3,$4,$3,'template.pptx','application/octet-stream',3,repeat('a',64),$1::text,'pending',clock_timestamp()+interval '5 minutes',clock_timestamp())";
+    let id = Uuid::new_v4();
+    sqlx::query(insert)
+        .bind(id)
+        .bind(org.id)
+        .bind(org.id)
+        .bind(agent)
+        .execute(&pool)
+        .await
+        .unwrap();
+    // Neither a foreign organization nor a guessed agent can become the owner.
+    for (organization, instance) in [(Uuid::new_v4(), agent), (org.id, Uuid::new_v4())] {
+        assert!(
+            sqlx::query(insert)
+                .bind(Uuid::new_v4())
+                .bind(organization)
+                .bind(org.id)
+                .bind(instance)
+                .execute(&pool)
+                .await
+                .is_err()
+        );
+    }
+    sqlx::query(
+        "update powerpoint_file set status='stored',published_at=clock_timestamp() where id=$1",
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let second = Uuid::new_v4();
+    sqlx::query(insert)
+        .bind(second)
+        .bind(org.id)
+        .bind(org.id)
+        .bind(agent)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let error = sqlx::query(
+        "update powerpoint_file set status='stored',published_at=clock_timestamp() where id=$1",
+    )
+    .bind(second)
+    .execute(&pool)
+    .await
+    .unwrap_err();
+    assert_eq!(
+        error.as_database_error().unwrap().code().as_deref(),
+        Some("23505")
+    );
+    assert!(
+        sqlx::query("update powerpoint_file set agent_instance_id=$2 where id=$1")
+            .bind(id)
+            .bind(Uuid::new_v4())
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    sqlx::query("delete from agent_instance where agent_instance_id=$1")
+        .bind(agent)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (historical, live, status): (Uuid, Option<Uuid>, String) = sqlx::query_as(
+        "select agent_instance_id,live_agent_id,status from powerpoint_file where id=$1",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(historical, agent);
+    assert!(live.is_none());
+    assert_eq!(status, "retired");
+    assert!(
+        sqlx::query("update powerpoint_file set status='pending' where id=$1")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+}
+
+impl Documents {
+    async fn save_ppt(&self, agent: Uuid, file: Uuid, expected: Option<Uuid>) -> (u16, Value) {
+        self.json(
+            "writer",
+            "PATCH",
+            &format!("/spaces/{}/agent-instances/{agent}", self.folder.space_id),
+            json!({"powerpoint":{"file_id":file,"expected_file_id":expected}}),
+        )
+        .await
+    }
+    async fn preparation(&self, file: &Value) -> Uuid {
+        sqlx::query_scalar("select id from capability_preparation where file_id=$1 and state<>'obsolete' order by created_at desc limit 1").bind(file["id"].as_str().unwrap().parse::<Uuid>().unwrap()).fetch_one(&self.e.pool).await.unwrap()
+    }
+    async fn worker(&self, method: &str, path: &str, body: Value, client: &str) -> (u16, Value) {
+        let now = chrono::Utc::now().timestamp();
+        let token=self.identity.sign(json!({"sub":"worker","preferred_username":format!("service-account-{client}"),"iss":self.identity.realm,"aud":"app","azp":client,"client_id":client,"iat":now,"exp":now+600}));
+        json_response(
+            self.app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(format!("/v1/capability-preparations{path}"))
+                        .header("authorization", format!("Bearer {token}"))
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap(),
+        )
+        .await
+    }
+    async fn confirm_ppt(&self, id: Uuid, error: Option<&str>) -> (u16, Value) {
+        self.worker("POST",&format!("/{id}/confirm"),json!({"reference":if error.is_none(){Some(format!("prep:{id}"))}else{None},"error":error}),"preparation-worker").await
+    }
+    // Persistence regressions use the full stage -> save -> authenticated callback
+    // journey; tests below stop between these boundaries to exercise interruption.
+    async fn ppt(&self, user: &str, path: &str, bytes: &[u8], key: Uuid) -> (u16, Value) {
+        let (status, file) = self.stage_ppt(user, path, bytes, key).await;
+        if status != 200 {
+            return (status, file);
+        }
+        let url = reqwest::Url::parse(&format!("http://fixture{path}")).unwrap();
+        let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
+        if let Some(agent) = query.get("agent_instance_id")
+            && file["status"] != "stored"
+        {
+            let saved = self
+                .save_ppt(
+                    agent.parse().unwrap(),
+                    file["id"].as_str().unwrap().parse().unwrap(),
+                    query.get("expected_file_id").map(|id| id.parse().unwrap()),
+                )
+                .await;
+            if saved.0 != 200 {
+                return saved;
+            }
+        }
+        let id = self.preparation(&file).await;
+        let confirmation = self.confirm_ppt(id, None).await;
+        assert_eq!(confirmation.0, 204, "{confirmation:?}");
+        (status, file)
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn powerpoint_durable_preparation_acceptance_and_fencing() {
+    let d = Documents::start(100_000).await;
+    let agent = d.ppt_agent().await;
+    let space = d.folder.space_id;
+    let path = format!("/spaces/{space}/powerpoint-template?agent_instance_id={agent}");
+    let (_, file) = d.stage_ppt("writer", &path, b"model", Uuid::new_v4()).await;
+    assert_eq!(
+        d.json("reader", "GET", &path, json!({})).await.1["source"],
+        "builtin"
+    );
+    let id = file["id"].as_str().unwrap().parse().unwrap();
+    let saved = d.save_ppt(agent, id, None).await;
+    assert_eq!(saved.0, 200, "{saved:?}");
+    assert_eq!(saved.1["preparation_state"], "pending");
+    let prep = d.preparation(&file).await;
+    let admission = d
+        .json(
+            "reader",
+            "GET",
+            &format!("/spaces/{space}/agent-instances/{agent}/runtime"),
+            json!({}),
+        )
+        .await;
+    assert_eq!(admission.0, 409, "{admission:?}");
+    assert_eq!(admission.1["code"], "agent_capability_pending");
+    assert_eq!(
+        d.worker("GET", &format!("/{prep}"), json!(null), "wrong-pod")
+            .await
+            .0,
+        403
+    );
+    assert_eq!(
+        d.worker(
+            "GET",
+            &format!("/{prep}"),
+            json!(null),
+            "preparation-worker"
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(d.confirm_ppt(prep, None).await.0, 204);
+    assert_eq!(d.confirm_ppt(prep, None).await.0, 204);
+    assert_eq!(
+        d.json("reader", "GET", &path, json!({})).await.1["activation_ready"],
+        true
+    );
+    let replace = format!("{path}&expected_file_id={id}");
+    let (_, bad) = d
+        .stage_ppt("writer", &replace, b"reject", Uuid::new_v4())
+        .await;
+    let refused = d
+        .save_ppt(
+            agent,
+            bad["id"].as_str().unwrap().parse().unwrap(),
+            Some(id),
+        )
+        .await;
+    assert_eq!(refused.0, 422, "{refused:?}");
+    assert_eq!(
+        d.json("reader", "GET", &path, json!({})).await.1["file"]["id"],
+        file["id"]
+    );
+    let (_, next) = d
+        .stage_ppt("writer", &replace, b"replacement", Uuid::new_v4())
+        .await;
+    assert_eq!(
+        d.save_ppt(
+            agent,
+            next["id"].as_str().unwrap().parse().unwrap(),
+            Some(id)
+        )
+        .await
+        .0,
+        200
+    );
+    let second = d.preparation(&next).await;
+    assert_eq!(d.confirm_ppt(prep, None).await.0, 204); // obsolete acknowledgement cannot validate the replacement
+    assert_eq!(
+        d.json("reader", "GET", &path, json!({})).await.1["preparation_state"],
+        "pending"
+    );
+    assert_eq!(
+        d.confirm_ppt(second, Some("No usable layouts")).await.0,
+        204
+    );
+    assert_eq!(
+        d.json("reader", "GET", &path, json!({})).await.1["preparation_state"],
+        "failed"
+    );
+    let retried = d
+        .json(
+            "writer",
+            "PATCH",
+            &format!("/spaces/{space}/agent-instances/{agent}"),
+            json!({}),
+        )
+        .await;
+    assert_eq!(retried.1["preparation_state"], "pending", "{retried:?}");
+    let third = d.preparation(&next).await;
+    assert_ne!(third, second);
+    assert_eq!(
+        d.json(
+            "writer",
+            "DELETE",
+            &format!("/spaces/{space}/agent-instances/{agent}"),
+            json!({})
+        )
+        .await
+        .0,
+        202
+    );
+    assert_eq!(d.confirm_ppt(third, None).await.0, 204);
+    assert_eq!(
+        d.worker(
+            "GET",
+            &format!("/{third}/content"),
+            json!(null),
+            "preparation-worker"
+        )
+        .await
+        .0,
+        409
+    );
+    let obsolete: String =
+        sqlx::query_scalar("select state from capability_preparation where id=$1")
+            .bind(third)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(obsolete, "obsolete");
+}
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn powerpoint_organization_candidate_and_pod_isolation() {
+    let d = Documents::start(100_000).await;
+    let agent = d.ppt_agent().await;
+    let space = d.folder.space_id;
+    let org = control_plane::spaces::load(&d.e.pool, space)
+        .await
+        .unwrap()
+        .organization;
+    crate::grant(&d.e, org, Role::Editor, "org-writer").await;
+    let path = format!("/spaces/{org}/powerpoint-template?runtime_id=fixture");
+    let own = format!("/spaces/{space}/powerpoint-template?agent_instance_id={agent}");
+    let (_, first) = d
+        .stage_ppt("org-writer", &path, b"first", Uuid::new_v4())
+        .await;
+    assert_eq!(
+        d.json("reader", "GET", &own, json!({})).await.1["source"],
+        "builtin"
+    );
+    assert_eq!(
+        d.confirm_ppt(d.preparation(&first).await, None).await.0,
+        204
+    );
+    let first_id = first["id"].as_str().unwrap();
+    let replace = format!("{path}&expected_file_id={first_id}");
+    let (_, second) = d
+        .stage_ppt("org-writer", &replace, b"second", Uuid::new_v4())
+        .await;
+    assert_eq!(
+        d.json("reader", "GET", &own, json!({})).await.1["file"]["id"],
+        first["id"]
+    );
+    assert_eq!(
+        d.confirm_ppt(d.preparation(&second).await, Some("Unusable layouts"))
+            .await
+            .0,
+        204
+    );
+    assert_eq!(
+        d.json("reader", "GET", &own, json!({})).await.1["file"]["id"],
+        first["id"]
+    );
+    let (_, third) = d
+        .stage_ppt(
+            "org-writer",
+            &format!("{path}&expected_file_id={}", second["id"].as_str().unwrap()),
+            b"third",
+            Uuid::new_v4(),
+        )
+        .await;
+    assert_eq!(
+        d.confirm_ppt(d.preparation(&third).await, None).await.0,
+        204
+    );
+    assert_eq!(
+        d.json("reader", "GET", &own, json!({})).await.1["file"]["id"],
+        third["id"]
+    );
+    // Another logical pod never resolves this organization's template.
+    let other = Uuid::new_v4();
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) select $2,space_id,$3,'other-pod',source_agent_id,$2::text,tuning,created_by,$2::text from agent_instance where agent_instance_id=$1")
+        .bind(agent).bind(other).bind(control_plane::agents::template_id(org,"other-pod","assistant")).execute(&d.e.pool).await.unwrap();
+    sqlx::query("insert into agent_template_policy(organization_id,template_id) values($1,$2)")
+        .bind(org)
+        .bind(control_plane::agents::template_id(
+            org,
+            "other-pod",
+            "assistant",
+        ))
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        d.json(
+            "reader",
+            "GET",
+            &format!("/spaces/{space}/powerpoint-template?agent_instance_id={other}"),
+            json!({})
+        )
+        .await
+        .1["source"],
+        "builtin"
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn powerpoint_creation_commits_file_configuration_and_intention_together() {
+    let d = Documents::start(100_000).await;
+    d.ppt_agent().await;
+    let space = d.folder.space_id;
+    let org = control_plane::spaces::load(&d.e.pool, space)
+        .await
+        .unwrap()
+        .organization;
+    let template = control_plane::agents::template_id(org, "fixture", "assistant");
+    let draft = Uuid::new_v4();
+    let path = format!(
+        "/spaces/{space}/powerpoint-template?agent_instance_id={draft}&template_id={template}"
+    );
+    let (status, file) = d
+        .stage_ppt("writer", &path, b"new-agent", Uuid::new_v4())
+        .await;
+    assert_eq!(status, 200, "{file:?}");
+    let mut body = json!({"template_id":template,"display_name":"Prepared assistant","usage_statement":"Test","powerpoint":{"file_id":file["id"]}});
+    // Rejected user configuration leaves the draft unattached and no intention.
+    body["display_name"] = json!("");
+    assert_eq!(
+        d.json(
+            "writer",
+            "POST",
+            &format!("/spaces/{space}/agent-instances"),
+            body.clone()
+        )
+        .await
+        .0,
+        422
+    );
+    let count: i64 =
+        sqlx::query_scalar("select count(*) from capability_preparation where file_id=$1")
+            .bind(file["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+    body["display_name"] = json!("Prepared assistant");
+    let accepted = d
+        .json(
+            "writer",
+            "POST",
+            &format!("/spaces/{space}/agent-instances"),
+            body,
+        )
+        .await;
+    assert_eq!(accepted.0, 201, "{accepted:?}");
+    assert_eq!(accepted.1["agent_instance_id"], draft.to_string());
+    assert_eq!(accepted.1["preparation_state"], "pending");
+    let preparation = d.preparation(&file).await;
+    // The durable deadline also settles work whose worker never appeared.
+    sqlx::query("update capability_preparation set deadline_at=clock_timestamp()-interval '1 second' where id=$1").bind(preparation).execute(&d.e.pool).await.unwrap();
+    let task = tokio::spawn(control_plane::capability_preparation::dispatch::run(
+        d.e.pool.clone(),
+        Default::default(),
+    ));
+    for _ in 0..50 {
+        let state: String = sqlx::query_scalar(
+            "select preparation_state from agent_instance where agent_instance_id=$1",
+        )
+        .bind(draft)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+        if state == "failed" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    task.abort();
+    let _ = task.await;
+    let state: String = sqlx::query_scalar(
+        "select preparation_state from agent_instance where agent_instance_id=$1",
+    )
+    .bind(draft)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(state, "failed");
+    assert_eq!(d.confirm_ppt(preparation, None).await.0, 409);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs disposable PostgreSQL, SeaweedFS and Temporal"]
+async fn powerpoint_dispatch_replays_one_workflow_and_reconciles_disappeared_worker() {
+    use control_plane::capability_preparation::dispatch;
+    use temporalio_client::{grpc::WorkflowService, tonic::Request as GrpcRequest};
+    use temporalio_common::protos::temporal::api::{
+        common::v1::WorkflowExecution, workflowservice::v1::TerminateWorkflowExecutionRequest,
+    };
+    let d = Documents::start(100_000).await;
+    let agent = d.ppt_agent().await;
+    let path = format!(
+        "/spaces/{}/powerpoint-template?agent_instance_id={agent}",
+        d.folder.space_id
+    );
+    let (_, file) = d
+        .stage_ppt("writer", &path, b"dispatch", Uuid::new_v4())
+        .await;
+    assert_eq!(
+        d.save_ppt(agent, file["id"].as_str().unwrap().parse().unwrap(), None)
+            .await
+            .0,
+        200
+    );
+    let id = d.preparation(&file).await;
+    let (_temporal, host) = processing::start_temporal();
+    let mut client = processing::ready_temporal(&host).await;
+    let config = control_plane::lifecycle::policy::TemporalConfig {
+        host,
+        ..Default::default()
+    };
+    dispatch::tick(&d.e.pool, &config, &client).await.unwrap();
+    let first: (String, String, String) = sqlx::query_as(
+        "select workflow_id,run_id,task_queue from capability_preparation where id=$1",
+    )
+    .bind(id)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert!(first.2.ends_with("-fixture"));
+    let (_, binding) = d
+        .worker(
+            "GET",
+            "/worker?runtime_id=fixture",
+            json!(null),
+            "preparation-worker",
+        )
+        .await;
+    assert_eq!(binding["task_queue"], first.2);
+    // Simulate an uncertain delivery after Temporal accepted, before SQL recorded it.
+    sqlx::query("update capability_preparation set run_id=null,delivered_at=null,dispatch_until=null,delivery_due_at=clock_timestamp() where id=$1").bind(id).execute(&d.e.pool).await.unwrap();
+    dispatch::tick(&d.e.pool, &config, &client).await.unwrap();
+    let replay: String =
+        sqlx::query_scalar("select run_id from capability_preparation where id=$1")
+            .bind(id)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(replay, first.1);
+    client
+        .terminate_workflow_execution(GrpcRequest::new(TerminateWorkflowExecutionRequest {
+            namespace: "default".into(),
+            workflow_execution: Some(WorkflowExecution {
+                workflow_id: first.0,
+                run_id: first.1,
+            }),
+            reason: "Disposable test: worker vanished".into(),
+            ..Default::default()
+        }))
+        .await
+        .unwrap();
+    sqlx::query("update capability_preparation set delivery_due_at=clock_timestamp() where id=$1")
+        .bind(id)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    dispatch::tick(&d.e.pool, &config, &client).await.unwrap();
+    let state: (String, Option<String>) = sqlx::query_as(
+        "select preparation_state,preparation_error from agent_instance where agent_instance_id=$1",
+    )
+    .bind(agent)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(state.0, "failed");
+    assert!(state.1.unwrap().contains("Retry or replace"));
 }

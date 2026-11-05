@@ -2,16 +2,31 @@
 # SPDX-License-Identifier: Apache-2.0
 """Capability routes use CP decisions; optional vision never bypasses admission."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import HTTPException, Request
 from fred_runtime.capabilities import platform_ports
+from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
 from fred_sdk.contracts.runtime import (
     CAPABILITY_PLATFORM_MODEL_STATE,
     CAPABILITY_TEAM_AUTHORIZER_STATE,
     CapabilityModelUnavailableError,
 )
+
+
+@pytest.fixture(autouse=True)
+def runtime_context(monkeypatch):
+    config = RuntimeConfig(
+        knowledge_flow_url="http://unused.invalid", service_name="pod-a"
+    )
+    monkeypatch.setattr(
+        platform_ports, "get_runtime_context", lambda: RuntimeContext(config)
+    )
+    return config
 
 
 @pytest.mark.asyncio
@@ -101,3 +116,56 @@ def test_mounted_capability_router_receives_the_weaver_authorizer(monkeypatch):
         assert client.put(
             "/capabilities/test/settings", headers={"Authorization": "Bearer user"}
         ).json() == {"saved": True}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("organization", [False, True])
+@pytest.mark.parametrize("reference", ["current", "foreign-or-obsolete"])
+@pytest.mark.parametrize("authorization", ["Bearer person", "bearer person"])
+async def test_prepared_preview_uses_current_cp_resolution_and_server_pod(
+    monkeypatch, runtime_context, reference, authorization, organization
+):
+    space, agent = str(uuid4()), None if organization else str(uuid4())
+    check = AsyncMock()
+    monkeypatch.setattr(platform_ports, "require_permission", check)
+
+    def cp(request):
+        assert request.url.path == f"/spaces/{space}/powerpoint-template" + (
+            "/settings" if organization else ""
+        )
+        assert request.url.params["runtime_id"] == "pod-a"
+        if agent:
+            assert request.url.params["agent_instance_id"] == agent
+        else:
+            assert "agent_instance_id" not in request.url.params
+        assert request.headers["authorization"] == "Bearer person"
+        payload = {"analysis_reference": "current"}
+        return httpx.Response(
+            200,
+            json={
+                "current": payload,
+                "replacement": {"analysis_reference": "candidate"},
+            }
+            if organization
+            else payload,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(cp), auth=httpx.BasicAuth("workload", "unused")
+    ) as client:
+        configured = replace(
+            runtime_context,
+            control_plane_url="http://cp.invalid",
+            control_plane_http_client=client,
+        )
+        monkeypatch.setattr(
+            platform_ports, "get_runtime_context", lambda: RuntimeContext(configured)
+        )
+        authorizer = platform_ports.WeaverCapabilityAuthorizer(authorization)
+        if reference == "current":
+            await authorizer.require_preparation_access(reference, space, agent)
+        else:
+            with pytest.raises(HTTPException) as error:
+                await authorizer.require_preparation_access(reference, space, agent)
+            assert error.value.status_code == 403
+        check.assert_awaited_once_with(authorization, "write", space_id=space)

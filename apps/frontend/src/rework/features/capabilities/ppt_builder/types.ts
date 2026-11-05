@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The ppt_builder config widget's own types; the inventory and the override
-// come from the generated client.
+// The config widget edits the opaque capability configuration. Inventory types
+// come from the router contract; overrides belong to PptBuilderConfig.
 
-import type { Pattern, PatternOverride, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
+import type { Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
 
-export type { PatternOverride };
+export interface PatternOverride {
+  pattern_id: string;
+  label?: string | null;
+  kind?: Pattern["kind"] | null;
+  included?: boolean | null;
+}
 
 export type SlideKind = Pattern["kind"];
 

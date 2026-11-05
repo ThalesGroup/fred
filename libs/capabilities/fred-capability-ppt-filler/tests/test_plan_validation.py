@@ -474,7 +474,7 @@ def test_the_working_rules_name_the_template_and_keep_revisions_truthful():
     another is set; a revision does only what was asked and is described from its result."""
     builtin = capability_mod.build_instructions(True)
     uploaded = capability_mod.build_instructions(False)
-    assert "the platform's default template" in builtin
+    assert "the built-in template" in builtin
     assert "default template" not in uploaded
     assert "uploaded in this agent's settings" in uploaded
     for rules in (builtin, uploaded):

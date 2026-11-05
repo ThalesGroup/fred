@@ -75,7 +75,7 @@ fn malformed(error: axum::extract::multipart::MultipartError) -> AppError {
     }
 }
 
-fn token_current(user: &CurrentUser) -> AppResult<()> {
+pub(super) fn token_current(user: &CurrentUser) -> AppResult<()> {
     if user
         .valid_until
         .is_some_and(|deadline| Utc::now().timestamp_millis() as f64 / 1000.0 >= deadline)
@@ -180,7 +180,7 @@ impl Storage {
         }
     }
 
-    async fn spool(&self, mut multipart: Multipart) -> AppResult<Spool> {
+    pub(super) async fn spool(&self, mut multipart: Multipart) -> AppResult<Spool> {
         let path = self.temp.path().to_owned();
         let file = tokio::task::spawn_blocking(move || tempfile::NamedTempFile::new_in(path))
             .await
@@ -396,8 +396,7 @@ impl Storage {
             }
         }
         let (owner, limit) = self.quota(space)?;
-        let usage: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document where deletion_id is null and quota_owner=$1),0)::bigint + coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint")
-            .bind(owner).fetch_one(&mut *tx).await?;
+        let usage = Self::occupied_bytes(&mut *tx, owner).await?;
         if file.size > limit.saturating_sub(usage) {
             return Err(AppError::problem(
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -405,10 +404,7 @@ impl Storage {
                 "The destination storage quota is exhausted",
             ));
         }
-        let backlog: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document_upload where status='failed' and cleaned_at is null),0)::bigint + coalesce((select orphan_bytes from document_storage where singleton),0)").fetch_one(&mut *tx).await?;
-        if backlog >= self.config.limits.cleanup_backlog_bytes {
-            return Err(unavailable());
-        }
+        self.require_cleanup_capacity(&mut *tx).await?;
         let id = Uuid::new_v4();
         let object_key = format!("{}{id}/input/{}", self.prefix, file.name);
         if object_key.len() > 1024 {

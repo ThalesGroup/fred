@@ -62,7 +62,7 @@ export interface AgentCardProps {
     | "suspension_reason"
     | "catalog_warnings"
     | "marketplace"
-  > & { logical_name?: string };
+  > & { logical_name?: string; preparation_state?: string; preparation_error?: string | null };
   templateDisplayName?: string;
   runtimeId?: string;
   /** Needed to build the managed-chat route for the Chat button. */
@@ -119,10 +119,12 @@ export default function AgentCard({
   // distinct from the editor's enable toggle: it never counts as enabled (no
   // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
   const isSuspended = !!instance.suspension_reason;
-  const isEnabled = !offline && !isSuspended && instance.status === "enabled";
+  const preparing = instance.preparation_state === "pending";
+  const preparationFailed = instance.preparation_state === "failed";
+  const isEnabled = !offline && !isSuspended && !preparing && !preparationFailed && instance.status === "enabled";
   const toggleLabel = isSuspended
     ? t("rework.agentCard.suspendedToggleLocked")
-    : isEnabled
+    : instance.status === "enabled"
       ? t("rework.agentCard.deactivate")
       : t("rework.agentCard.activate");
   // Best-effort keyword guess from the agent's own identity, falling back to
@@ -215,7 +217,7 @@ export default function AgentCard({
         key: "toggle",
         value: "toggle",
         label: toggleLabel,
-        icon: { category: "outlined", type: isEnabled ? "visibility_off" : "visibility" },
+        icon: { category: "outlined", type: instance.status === "enabled" ? "visibility_off" : "visibility" },
         disabled: isSuspended || managementBusy,
       },
       {
@@ -309,6 +311,12 @@ export default function AgentCard({
       )}
 
       <div className={styles.footer}>
+        {preparing && <div className={styles.suspensionWarning}>{t("capability.ppt_builder.preparing")}</div>}
+        {preparationFailed && (
+          <div className={styles.suspensionWarning}>
+            {instance.preparation_error || t("capability.ppt_builder.form.failed")}
+          </div>
+        )}
         {isSuspended && <div className={styles.suspensionWarning}>{t("rework.agentCard.suspended")}</div>}
         <div className={styles.actions}>
           <Tooltip content={infoTooltipContent}>

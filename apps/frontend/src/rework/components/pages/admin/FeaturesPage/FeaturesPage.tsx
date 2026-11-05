@@ -16,6 +16,7 @@
 // with their organization default-on switch, models in their own panel. The
 // Knowledge Bases and Apps tabs still read the legacy enablement catalog.
 
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import Button from "@shared/atoms/Button/Button.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -128,6 +129,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   useEffect(() => {
     setPendingDefaultOff(null);
     setSuspendedKey(null);
+    setPlatformOffer(null);
   }, [organizationId, kindFilter]);
 
   // Synchronous, ref-backed guard against double-invoking applyDefaultOn for
@@ -440,25 +442,32 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       ) : column.field === "health" ? (
         healthCell(offer.unusable_instances.length, () => setSuspendedKey(defaultOnKey(offer)))
       ) : column.field === "actions" ? (
-        <div className={styles.actionsCell}>
-          {manageTeamsCell(!offer.advertised)}
-          {platformPanelFor(offer.capability_id) && (
-            <Button
-              color="on-surface"
-              variant="outlined"
-              size="small"
-              icon={{ category: "outlined", type: "settings" }}
-              onClick={() => setPlatformOffer(offer)}
-              disabled={!offer.advertised}
-            >
-              {t("rework.admin.capabilities.platformSettings")}
-            </Button>
-          )}
-        </div>
+        manageTeamsCell(!offer.advertised)
       ) : (
         <div className={styles.centered} />
       ),
   }));
+  if (activeKindFilter === "tool")
+    offerColumns.push({
+      label: t("rework.admin.capabilities.col.settings"),
+      size: "5rem",
+      cellRenderer: (offer) => (
+        <div className={styles.centered}>
+          {platformPanelFor(offer.capability_id) && (
+            <Tooltip text={t("rework.admin.capabilities.platformSettings")}>
+              <IconButton
+                variant="icon"
+                size="medium"
+                icon={{ category: "outlined", type: "settings" }}
+                aria-label={t("rework.admin.capabilities.platformSettings")}
+                disabled={!offer.advertised}
+                onClick={() => setPlatformOffer(offer)}
+              />
+            </Tooltip>
+          )}
+        </div>
+      ),
+    });
   const rowCount = discoveringAgents ? agents.length : capabilities.length;
   const suspendedDrawer = suspendedOffer
     ? {
@@ -474,6 +483,8 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   return (
     <div className={styles.page}>
       <CapabilityPlatformDrawer
+        organizationId={organizationId}
+        runtimeId={platformOffer?.runtime_id}
         capability={
           platformOffer
             ? {

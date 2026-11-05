@@ -22,14 +22,14 @@ import { describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   dispatch: vi.fn(),
-  canAdmin: false,
+  allowed: false,
   panelProps: undefined as undefined | { canManage: boolean },
 }));
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-redux", () => ({ useDispatch: () => h.dispatch }));
-vi.mock("../../../../core/hooks/useUserCapabilities", () => ({
-  useUserCapabilities: () => ({ canAdmin: h.canAdmin }),
+vi.mock("../../../../core/hooks/useSpaceAccess", () => ({
+  useSpaceAccess: () => ({ allowed: h.allowed }),
 }));
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({
   InlineDrawer: ({ open, children }: { open: boolean; children: React.ReactNode }) => (open ? children : null),
@@ -63,18 +63,22 @@ const capability = {
 };
 
 function mount(manager: boolean) {
-  h.canAdmin = manager;
+  h.allowed = manager;
   h.panelProps = undefined;
   const root = createRoot(document.createElement("div"));
-  act(() => root.render(<CapabilityPlatformDrawer capability={capability} onClose={() => {}} />));
+  act(() =>
+    root.render(
+      <CapabilityPlatformDrawer organizationId="org-a" runtimeId="pod-a" capability={capability} onClose={() => {}} />,
+    ),
+  );
   act(() => root.unmount());
 }
 
 describe("CapabilityPlatformDrawer", () => {
-  it("routes the panel to the capability pod and gates its writes on the manager role", () => {
+  it("routes the panel to the capability pod and gates its writes on the organization permission", () => {
     mount(true);
     expect(h.dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: { ppt_builder: "/pod/capabilities/ppt_builder" } }),
+      expect.objectContaining({ payload: { "org-a/pod-a/ppt_builder": "/pod/capabilities/ppt_builder" } }),
     );
     expect(h.panelProps?.canManage).toBe(true);
     mount(false);

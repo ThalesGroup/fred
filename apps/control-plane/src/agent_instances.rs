@@ -16,7 +16,7 @@ pub mod http;
 pub(crate) mod preparation;
 mod runtime;
 pub(crate) use runtime::{TitleAdmission, require_executable, resolve_person_runtime_binding};
-mod tuning;
+pub(crate) mod tuning;
 
 const PAGE_SIZE: usize = 100;
 
@@ -50,6 +50,8 @@ pub struct AgentInstance {
     pub created_by: String,
     pub updated_by: String,
     pub configuration_revision: i64,
+    pub preparation_state: String,
+    pub preparation_error: Option<String>,
     pub tuning: Json<Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -72,7 +74,7 @@ pub async fn create<'e>(
             display_name, description, enabled, created_by, tuning, logical_name
         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         returning agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at",
+            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, preparation_state, preparation_error, created_at, updated_at",
     )
     .bind(instance.agent_instance_id)
     .bind(instance.space_id)
@@ -96,7 +98,7 @@ pub async fn get_for_space<'e>(
 ) -> sqlx::Result<Option<AgentInstance>> {
     sqlx::query_as(
         "select agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at
+            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, preparation_state, preparation_error, created_at, updated_at
         from agent_instance where space_id = $1 and agent_instance_id = $2",
     )
     .bind(space_id)
@@ -116,7 +118,7 @@ pub(super) async fn list_by_space<'e>(
     sqlx::query_as(
         "select a.agent_instance_id, a.space_id, a.template_id, a.source_runtime_id, a.source_agent_id,
             a.logical_name, a.display_name, a.description, a.enabled, a.created_by, a.updated_by,
-            a.tuning, a.configuration_revision, a.created_at, a.updated_at
+            a.tuning, a.configuration_revision, a.preparation_state, a.preparation_error, a.created_at, a.updated_at
         from agent_instance a join agent_template_policy policy
             on policy.template_id = a.template_id and policy.organization_id = $2
         where a.space_id = $1 and a.logical_name > coalesce($3, '')
@@ -196,7 +198,7 @@ pub async fn update<'e>(
             updated_by = $7
         where space_id = $1 and agent_instance_id = $2
         returning agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, created_at, updated_at",
+            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, preparation_state, preparation_error, created_at, updated_at",
     )
     .bind(instance.space_id)
     .bind(instance.agent_instance_id)

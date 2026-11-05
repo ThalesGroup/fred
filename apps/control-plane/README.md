@@ -61,9 +61,9 @@ same schema is already installed. It refuses an incompatible database.
 **In the cluster, after `make k3d-up`**, from fred-deployment-factory:
 
 ```
-make k3d-app APP=fred DIR=../fred            # build, import, sync
-make k3d-app-validate APP=fred DIR=../fred   # lint and render only
-make k3d-logs SVC=control-plane-backend
+make k3d-app FRED=weaver APP=fred DIR=../fred            # build, import, sync
+make k3d-app-validate FRED=weaver APP=fred DIR=../fred   # lint and render only
+kubectl --context k3d-fred -n fred-weaver logs deploy/control-plane-backend
 ```
 
 Use `ENV=secondary` for this checkout's local profile. It deploys

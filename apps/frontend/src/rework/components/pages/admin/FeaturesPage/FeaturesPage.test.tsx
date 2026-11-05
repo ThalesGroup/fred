@@ -31,6 +31,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
   applicationsEnabled: false,
+  drawer: undefined as
+    | undefined
+    | { organizationId: string; runtimeId?: string; capability: { id: string; route_base_url?: string } | null },
   list: { data: undefined, isLoading: false, isError: false } as {
     data?: { items?: CapabilityEnablementItem[] };
     isLoading: boolean;
@@ -81,13 +84,48 @@ vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
 }));
 
 // The offers panel has its own suite; a marker is enough to see which panel the page chose.
-vi.mock("./OrganizationCapabilities", () => ({ OrganizationCapabilities: () => <p>organization-offers</p> }));
+vi.mock("./OrganizationCapabilities", () => ({
+  OrganizationCapabilities: ({
+    capabilityColumns,
+  }: {
+    capabilityColumns: import("@shared/molecules/DataTable/LocalizedDataTable").DataTableColumn<
+      import("../../../../../slices/controlPlane/controlPlaneOpenApi").CapabilityInventoryOffer
+    >[];
+  }) => (
+    <>
+      <p>organization-offers</p>
+      {capabilityColumns
+        .filter((c) => c.label === "rework.admin.capabilities.col.settings")
+        .map((c) => (
+          <section key={c.label}>
+            {c.label}
+            {["ppt_builder", "ppt_filler"].map((id) => (
+              <div key={id} data-offer={id}>
+                {c.cellRenderer?.({
+                  capability_id: id,
+                  runtime_id: "pod-b",
+                  advertised: true,
+                  route_base_url: "/pod-b/ppt_builder",
+                  descriptor: { name: id },
+                } as import("../../../../../slices/controlPlane/controlPlaneOpenApi").CapabilityInventoryOffer)}
+              </div>
+            ))}
+          </section>
+        ))}
+    </>
+  ),
+}));
 
 // Only ppt_builder declares a platform panel here; the drawer is exercised by its panel's own tests.
 vi.mock("../../../../features/capabilities/platformPanelRegistry", () => ({
   platformPanelFor: (id: string) => (id === "ppt_builder" ? () => null : undefined),
 }));
-vi.mock("./CapabilityPlatformDrawer", () => ({ CapabilityPlatformDrawer: () => null }));
+vi.mock("./CapabilityPlatformDrawer", () => ({
+  CapabilityPlatformDrawer: (props: typeof h.drawer) => {
+    h.drawer = props;
+    return null;
+  },
+}));
 
 import FeaturesPage from "./FeaturesPage";
 
@@ -279,5 +317,23 @@ describe("FeaturesPage kind filter", () => {
     expect(container.textContent).toContain("organization-offers");
     expect(container.textContent).not.toContain("cap.legacy_tool");
     expect(container.textContent).not.toContain("kindFilter.app");
+  });
+});
+
+it("opens the common-template drawer from the Swift settings gear on ppt_builder alone", async () => {
+  await act(async () => root.render(<FeaturesPage organizationId="org-a" />));
+  const tab = [...container.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("kindFilter.tool"),
+  );
+  expect(tab).toBeDefined();
+  await act(async () => tab!.click());
+  const gear = container.querySelector<HTMLButtonElement>('[data-offer="ppt_builder"] button');
+  expect(gear?.getAttribute("aria-label")).toBe("rework.admin.capabilities.platformSettings");
+  expect(container.querySelector('[data-offer="ppt_filler"] button')).toBeNull();
+  await act(async () => gear!.click());
+  expect(h.drawer).toMatchObject({
+    organizationId: "org-a",
+    runtimeId: "pod-b",
+    capability: { id: "ppt_builder", route_base_url: "/pod-b/ppt_builder" },
   });
 });

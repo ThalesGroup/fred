@@ -16,7 +16,7 @@
 // moves out of the collapsed advanced section when the analysis set slides
 // aside itself. Nothing here is mandatory.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
@@ -44,6 +44,10 @@ interface Props {
 
 export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValues, onConfigChange }: Props) {
   const { t } = useTranslation();
+  useEffect(() => {
+    if (!disabled && vision.available === false && configValues.use_vision === true)
+      onConfigChange("use_vision", false);
+  }, [disabled, vision.available, configValues, onConfigChange]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const { phase, stagedFile, hasPersistedTemplate, effective, summary } = analysis;
@@ -57,11 +61,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
       <div className={styles.summaryRow}>
         <p className={styles.summary}>
           {t(
-            phase !== "builtin"
-              ? "capability.ppt_builder.form.summary"
-              : analysis.platformTemplate
-                ? "capability.ppt_builder.form.summaryPlatform"
-                : "capability.ppt_builder.form.summaryBuiltin",
+            phase !== "builtin" ? "capability.ppt_builder.form.summary" : "capability.ppt_builder.form.summaryBuiltin",
             { patterns: summary.patterns, excluded: summary.excluded },
           )}
         </p>
@@ -124,17 +124,12 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
             />
           ) : hasPersistedTemplate ? (
             <Chip
-              label={t("capability.ppt_builder.form.currentTemplate")}
+              label={t(
+                analysis.templateSource === "organization"
+                  ? "capability.ppt_builder.form.organizationTemplate"
+                  : "capability.ppt_builder.form.currentTemplate",
+              )}
               leading={<Icon category="outlined" type="check_circle" />}
-            />
-          ) : analysis.platformTemplate ? (
-            <Chip
-              label={
-                analysis.platformTemplate.filename
-                  ? t("capability.ppt_builder.form.adminTemplate", { name: analysis.platformTemplate.filename })
-                  : t("capability.ppt_builder.form.adminTemplateUnnamed")
-              }
-              leading={<Icon category="outlined" type="admin_panel_settings" />}
             />
           ) : (
             <Chip
@@ -142,7 +137,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
               leading={<Icon category="outlined" type="palette" />}
             />
           )}
-          {hasPersistedTemplate && (
+          {hasPersistedTemplate && analysis.templateSource !== "organization" && (
             <Button
               type="button"
               color="on-surface"

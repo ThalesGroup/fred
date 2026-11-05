@@ -209,22 +209,23 @@ def test_a_clean_template_is_left_byte_for_byte():
 async def test_the_builder_stores_and_analyses_the_sanitised_template(
     monkeypatch, analysis_db
 ):
-    from fred_capability_ppt_filler.builder import capability as builder
+    from analysis_db import preparation_context
+    from fred_capability_ppt_filler.builder import analysis_job as jobs
+    from fred_capability_ppt_filler.builder.builtin import builtin_template
 
-    launched: list[bytes] = []
+    launched = []
 
-    async def _launch(_config, content, _ctx):
+    async def analyse(content, _port, _key):
         launched.append(content)
-        return "sha"
+        return builtin_template()[1], None
 
-    monkeypatch.setattr(builder.PptBuilderCapability, "_launch", staticmethod(_launch))
-    ctx = _ctx()
-    await PptBuilderCapability().validate_config(
-        PptBuilderConfig(), _uploads(_linked_template()), ctx
+    monkeypatch.setattr(jobs, "_analyse", analyse)
+    result = await PptBuilderCapability().prepare(
+        preparation_context(analysis_db, _linked_template())
     )
-    assets = ctx.services.agent_assets
-    assert isinstance(assets, FakeAssets)
-    (stored,) = assets.blobs.values()
+    assert result.reference is not None
+    stored = await jobs.get_analysis_store().template(result.reference)
+    assert stored is not None
     assert launched == [stored]
     assert b"http://x/" not in _parts(stored)["ppt/slides/_rels/slide1.xml.rels"]
 

@@ -649,9 +649,20 @@ CAPABILITY_PLATFORM_MODEL_STATE: Final = "fred_capability_platform_model"
 class CapabilityTeamAuthorizer(ABC):
     """Team-scoped authorization for capability routes, bound to the caller."""
 
+    # Server-bound logical pod identity, never supplied by a route parameter.
+    runtime_id: str | None = None
+
     @abstractmethod
     async def require_agent_editor(self, team_id: str) -> None:
         """Raise HTTP 403 unless the caller may edit the agents of `team_id`."""
+
+    async def require_preparation_access(
+        self, reference: str, space_id: str, agent_instance_id: str | None
+    ) -> None:
+        """Verify a result against the CP's current resolution for its usage space."""
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail="Preparation access unavailable")
 
     async def require_capability_manager(self) -> None:
         """Raise HTTP 403 unless the caller may manage capabilities platform-wide

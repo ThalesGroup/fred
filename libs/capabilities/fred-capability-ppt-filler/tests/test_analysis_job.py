@@ -1,560 +1,213 @@
 # Copyright Thales 2026
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
+"""SQL preparation receipts, attempt fencing and bounded preflight.
 
-"""Background template analysis: the save returns at once, the result lives in
-the shared table every replica reads, interrupted jobs are recovered, and a
-superseded job never writes."""
-
-from __future__ import annotations
+Swift's save/list-triggered asyncio recovery tests are replaced by the durable
+preparation contract. Cancellation/CPU capacity protections remain covered.
+"""
 
 import asyncio
 import hashlib
 import threading
+from dataclasses import replace
+from datetime import timedelta
+from uuid import uuid4
 
 import pytest
-from analysis_db import age_row, drain
 from builder_decks import build_showcase_template
 from fred_capability_ppt_filler import concurrency
-from fred_capability_ppt_filler.builder import analysis_job
-from fred_capability_ppt_filler.builder.analysis import ANALYSIS_VERSION
-from fred_capability_ppt_filler.builder.analysis_job import (
-    MAX_ATTEMPTS,
-    SqlAnalysisStore,
-    analysis_readiness,
-    get_analysis_store,
-    labelling_key,
-    parse_labelling_key,
-    ready_inventory,
-    status_response,
-)
+from fred_capability_ppt_filler.builder import analysis_job as jobs
+from fred_capability_ppt_filler.builder import preparation
+from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.capability import (
-    PPT_BUILDER_TEMPLATE_KEY,
     PptBuilderCapability,
     PptBuilderConfig,
 )
-from fred_capability_ppt_filler.builder.models import AnalysisError, AnalyzeResult
-from fred_capability_ppt_filler.capability import TEMPLATE_SLOT
-from fred_sdk.contracts.capability import (
-    CapabilityIdentity,
-    SaveContext,
-    UploadedFile,
+from fred_sdk.contracts.capability import CapabilityIdentity, SaveContext, UploadedFile
+from fred_sdk.contracts.capability.preparation import (
+    PreparationContext,
+    PreparationWork,
 )
-from fred_sdk.contracts.runtime import CapabilityModelPort, RuntimeServices
-from port_fakes import FakeAssets
+from fred_sdk.contracts.runtime import RuntimeServices
+from sqlalchemy import select
 
+analysis_job = jobs
 TEMPLATE = build_showcase_template()
 SHA = hashlib.sha256(TEMPLATE).hexdigest()
-INSTANCE = "00000000-0000-4000-8000-000000000007"
-IDENTITY = CapabilityIdentity(
-    user_id="u-1", team_id="team-42", agent_instance_id=INSTANCE
-)
 
 
-class _Port(CapabilityModelPort):
-    """A save's model port; labelling itself is replaced in these tests."""
-
-    async def ainvoke(self, messages, *, profile_id=None, require_vision=False):
-        raise AssertionError("label_inventory is faked here")
-
-
-PORT = _Port()
-
-
-def _save_ctx(assets: FakeAssets | None = None, port=PORT) -> SaveContext:
-    return SaveContext(
-        identity=IDENTITY,
-        services=RuntimeServices(
-            agent_assets=assets or FakeAssets(), capability_model=port
+def context(maker):
+    return PreparationContext(
+        work=PreparationWork(
+            preparation_id=uuid4(),
+            installation_id=uuid4(),
+            runtime_id="pod-a",
+            capability_id="ppt_builder",
+            space_id=uuid4(),
+            agent_instance_id=uuid4(),
+            configuration_revision=1,
+            file_id=uuid4(),
+            sha256=SHA,
+            filename="model.pptx",
+            size=len(TEMPLATE),
+            config={"use_vision": False},
+            state="pending",
         ),
+        database=maker.kw["bind"],
+        content=TEMPLATE,
     )
 
 
-def _uploads(content: bytes = TEMPLATE):
-    return {TEMPLATE_SLOT: [UploadedFile(filename="template.pptx", content=content)]}
+@pytest.fixture
+def calculate(monkeypatch):
+    calls = []
+
+    async def analyse(content, port, key):
+        calls.append((content, port, key))
+        return builtin_template()[1], b"%PDF-thumbnails"
+
+    monkeypatch.setattr(jobs, "_analyse", analyse)
+    return calls
 
 
-@pytest.fixture(autouse=True)
-def offline_conversion(monkeypatch):
-    async def _pdf(_bytes: bytes, *, suffix: str, **_options):
-        return b"%PDF-thumbs"
-
-    async def _labels(inventory, template, pdf, port, *, profile_id, use_vision):
-        return inventory
-
-    monkeypatch.setattr(analysis_job, "convert_office_bytes_to_pdf", _pdf)
-    monkeypatch.setattr(analysis_job, "label_inventory", _labels)
-
-
-async def _save(config: PptBuilderConfig, uploads=None, assets=None, port=PORT):
-    return await PptBuilderCapability().validate_config(
-        config, uploads or {}, _save_ctx(assets, port)
+@pytest.mark.asyncio
+async def test_preflight_has_no_writes_and_does_not_trust_client_results(analysis_db):
+    ctx = SaveContext(
+        identity=CapabilityIdentity(user_id="editor", team_id="space"),
+        services=RuntimeServices(),
     )
-
-
-def test_labelling_key_round_trips():
-    assert labelling_key(False, "gpt") == "rules"
-    assert labelling_key(True, None) == "vision:agent-default"
-    assert parse_labelling_key("vision:agent-default") == (True, None)
-    assert parse_labelling_key("vision:chat.gpt4o") == (True, "chat.gpt4o")
-    assert parse_labelling_key("rules") == (False, None)
-
-
-@pytest.mark.asyncio
-async def test_save_returns_before_the_job_ends(analysis_db, monkeypatch):
-    release = asyncio.Event()
-    seen: dict = {}
-
-    async def _slow_label(inventory, template, pdf, port, *, profile_id, use_vision):
-        seen.update(pdf=pdf, use_vision=use_vision, profile_id=profile_id)
-        await release.wait()
-        return inventory
-
-    monkeypatch.setattr(analysis_job, "label_inventory", _slow_label)
-    assets = FakeAssets()
-    stored = await _save(
-        PptBuilderConfig(labelling_model="chat.vision"), _uploads(), assets
+    capability = PptBuilderCapability()
+    result = await capability.validate_config(
+        PptBuilderConfig(template_sha256=SHA, analysis_id="forged"),
+        {"template": [UploadedFile(filename="model.pptx", content=TEMPLATE)]},
+        ctx,
     )
-
-    assert stored.template_sha256 == SHA
-    assert assets.blobs == {stored.template_key: TEMPLATE}
-    store = get_analysis_store()
-    record = await store.get(INSTANCE)
-    assert record is not None and record.status in ("pending", "running")
-    readiness = await PptBuilderCapability().readiness(stored, IDENTITY)
-    assert readiness.state == "pending"
-
-    release.set()
-    await drain()
-    record = await store.get(INSTANCE)
-    assert record is not None and record.status == "succeeded"
-    assert record.analysis_version == ANALYSIS_VERSION and record.has_thumbnails
-    assert await store.patterns_pdf(INSTANCE) == b"%PDF-thumbs"
-    assert seen == {
-        "pdf": b"%PDF-thumbs",
-        "use_vision": True,
-        "profile_id": "chat.vision",
-    }
-    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
-    assert status_response(record).summary is not None
-
-
-@pytest.mark.asyncio
-async def test_any_replica_reads_the_stored_result(analysis_db):
-    stored = await _save(PptBuilderConfig(), _uploads())
-    await drain()
-    key = stored.labelling_key()
-    first = await ready_inventory(get_analysis_store(), INSTANCE, SHA, key)
-    assert first is not None
-
-    analysis_job.clear_caches()  # another pod: nothing in memory
-    other_replica = SqlAnalysisStore(analysis_db)
-    second = await ready_inventory(other_replica, INSTANCE, SHA, key)
-    assert second == first
-    assert await ready_inventory(other_replica, INSTANCE, SHA, "rules") is None
-
-
-@pytest.mark.asyncio
-async def test_a_rules_row_serving_a_vision_key_is_cached_for_a_recheck(analysis_db):
-    await _save(PptBuilderConfig(use_vision=False), _uploads())
-    await drain()
-    vision_key = PptBuilderConfig(use_vision=True).labelling_key()
-    store = get_analysis_store()
-    assert await ready_inventory(store, INSTANCE, SHA, vision_key) is not None
-    entry = analysis_job._inventories.get((INSTANCE, SHA, vision_key))
-    assert entry is not None and entry[1] is not None  # another replica may re-run it
-    assert await ready_inventory(store, INSTANCE, SHA, "rules") is not None
-    rules = analysis_job._inventories.get((INSTANCE, SHA, "rules"))
-    assert rules is not None and rules[1] is None
-
-
-@pytest.mark.asyncio
-async def test_interrupted_analysis_is_reported_and_recovered(analysis_db):
-    stored = await _save(PptBuilderConfig(use_vision=False), _uploads())
-    await drain()
-    await age_row(analysis_db, INSTANCE, status="running", inventory_json=None)
-    store = get_analysis_store()
-    record = await store.get(INSTANCE)
-    assert record is not None
-    response = status_response(record)
-    assert response.status == "interrupted" and "Save the agent" in (
-        response.error or ""
-    )
-
-    readiness = await analysis_readiness(store, INSTANCE, SHA, "rules")
-    assert readiness.state == "pending"
-    await drain()
-    record = await store.get(INSTANCE)
-    assert record is not None and record.status == "succeeded"
-    assert record.attempts == 2
-    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
-
-
-@pytest.mark.asyncio
-async def test_an_analysis_that_keeps_dying_fails_instead_of_looping(analysis_db):
-    await _save(PptBuilderConfig(use_vision=False), _uploads())
-    await drain()
-    await age_row(analysis_db, INSTANCE, status="running", attempts=MAX_ATTEMPTS)
-    readiness = await analysis_readiness(get_analysis_store(), INSTANCE, SHA, "rules")
-    assert readiness.state == "failed" and "interrupted" in (readiness.detail or "")
-
-
-@pytest.mark.asyncio
-async def test_a_superseded_job_never_writes(analysis_db):
-    store = get_analysis_store()
-    common = dict(
-        instance_id=INSTANCE,
-        team_id="team-42",
-        saved_by="u-1",
-        template_sha256=SHA,
-        labelling_key="rules",
-    )
-    first = await store.start(template=TEMPLATE, **common)
-    second = await store.start(template=None, **common)
-    inventory = (
-        await asyncio.to_thread(analysis_job.analyze_template, TEMPLATE)
-    ).inventory
-    assert inventory is not None
-    assert not await store.finish(INSTANCE, first, inventory, None)
-    assert not await store.heartbeat(INSTANCE, first)
-    assert await store.finish(INSTANCE, second, inventory, None)
-
-
-@pytest.mark.asyncio
-async def test_a_failed_analysis_reports_its_error(analysis_db, monkeypatch):
-    def _broken(_content):
-        return AnalyzeResult(
-            errors=[AnalysisError(code="invalid_upload", message="No slide master.")]
+    assert result.template_sha256 is None and result.analysis_id is None
+    async with analysis_db() as session:
+        assert (await session.execute(select(jobs.AnalysisRow))).first() is None
+    with pytest.raises(ValueError):
+        await capability.validate_config(
+            PptBuilderConfig(),
+            {"template": [UploadedFile(filename="bad.pptx", content=b"not pptx")]},
+            ctx,
         )
-
-    monkeypatch.setattr(analysis_job, "analyze_template", _broken)
-    stored = await _save(PptBuilderConfig(), _uploads())
-    await drain()
-    readiness = await PptBuilderCapability().readiness(stored, IDENTITY)
-    assert readiness.state == "failed" and readiness.detail == "No slide master."
+    with pytest.raises(ValueError, match="vision"):
+        await capability.validate_config(PptBuilderConfig(use_vision=True), {}, ctx)
 
 
 @pytest.mark.asyncio
-async def test_changing_the_toggle_or_the_rules_re_runs_the_analysis(
+async def test_written_result_is_reused_on_another_replica_before_reconfirmation(
+    analysis_db, calculate
+):
+    ctx = context(analysis_db)
+    first = await preparation.prepare(ctx)
+    jobs.clear_caches()
+    second = await preparation.prepare(replace(ctx))
+    assert first == second and first.reference == preparation.analysis_identity(ctx)
+    assert len(calculate) == 1 and calculate[0][1:] == (None, "rules")
+    store = jobs.SqlAnalysisStore(analysis_db)
+    assert first.reference is not None
+    assert await store.patterns_pdf(first.reference) == b"%PDF-thumbnails"
+    assert (
+        await jobs.analysis_readiness(store, first.reference, SHA, "rules")
+    ).state == "ready"
+
+
+@pytest.mark.asyncio
+async def test_readiness_does_not_restart_an_expired_attempt(analysis_db, calculate):
+    ctx = context(analysis_db)
+    store = await preparation._reserve(ctx)
+    identity = preparation.analysis_identity(ctx)
+    assert (
+        await jobs.analysis_readiness(store, identity, SHA, "rules")
+    ).state == "pending"
+    assert not calculate
+    result = await preparation.prepare(ctx)
+    assert result.reference and len(calculate) == 1
+
+
+@pytest.mark.asyncio
+async def test_retirement_before_first_activity_prevents_recreation(
+    analysis_db, calculate
+):
+    ctx = context(analysis_db)
+    await preparation.retire(ctx)
+    await preparation.retire(ctx)
+    with pytest.raises(ValueError, match="retired"):
+        await preparation.prepare(ctx)
+    assert not calculate
+    store = jobs.SqlAnalysisStore(analysis_db)
+    assert await store.template(preparation.analysis_identity(ctx)) == b""
+
+
+@pytest.mark.asyncio
+async def test_retirement_during_calculation_fences_final_write(
     analysis_db, monkeypatch
 ):
-    keys: list = []
-    original = analysis_job.run_analysis
-
-    async def _recording(store, instance_id, job_id, template, port, key):
-        keys.append(key)
-        await original(store, instance_id, job_id, template, port, key)
-
-    monkeypatch.setattr(analysis_job, "run_analysis", _recording)
-    stored = await _save(PptBuilderConfig(), _uploads())
-    await drain()
-
-    # An ordinary save of a current analysis starts nothing.
-    await _save(stored)
-    await drain()
-    assert keys == ["vision:agent-default"]
-
-    rules = await _save(stored.model_copy(update={"use_vision": False}))
-    await drain()
-    assert keys[-1] == "rules"
-    record = await get_analysis_store().get(INSTANCE)
-    assert record is not None and record.matches(SHA, "rules")
-    assert record.status == "succeeded"
-
-    await age_row(analysis_db, INSTANCE, status="succeeded", analysis_version=0)
-    await _save(rules)
-    await drain()
-    record = await get_analysis_store().get(INSTANCE)
-    assert record is not None and record.analysis_version == ANALYSIS_VERSION
-    assert len(keys) == 3
-
-
-@pytest.mark.asyncio
-async def test_a_lost_row_is_rebuilt_from_the_stored_template(analysis_db):
-    stored = PptBuilderConfig(template_sha256=SHA, use_vision=False)
-    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
-    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "failed"
-    await _save(stored, assets=assets)
-    await drain()
-    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
-
-
-async def _outdated(analysis_db, monkeypatch) -> tuple[PptBuilderConfig, list]:
-    """A succeeded analysis made by older rules; records each job started."""
-    stored = await _save(PptBuilderConfig(use_vision=False), _uploads())
-    await drain()
-    await age_row(analysis_db, INSTANCE, analysis_version=ANALYSIS_VERSION - 1)
-    analysis_job.clear_caches()
-    jobs: list = []
-    original = analysis_job.run_analysis
-
-    async def _recording(store, instance_id, job_id, template, port, key):
-        jobs.append(job_id)
-        await original(store, instance_id, job_id, template, port, key)
-
-    monkeypatch.setattr(analysis_job, "run_analysis", _recording)
-    return stored, jobs
-
-
-@pytest.mark.asyncio
-async def test_an_outdated_analysis_stays_ready_and_is_refreshed_once(
-    analysis_db, monkeypatch
-):
-    stored, jobs = await _outdated(analysis_db, monkeypatch)
+    ctx = context(analysis_db)
+    entered = asyncio.Event()
     release = asyncio.Event()
 
-    async def _slow_label(inventory, template, pdf, port, *, profile_id, use_vision):
+    async def analyse(*args):
+        entered.set()
         await release.wait()
-        return inventory
+        return builtin_template()[1], b"pdf"
 
-    monkeypatch.setattr(analysis_job, "label_inventory", _slow_label)
-    store = get_analysis_store()
-    capability = PptBuilderCapability()
-    # Readiness checks and a turn notice it together: one refresh starts.
-    states = await asyncio.gather(
-        capability.readiness(stored, IDENTITY),
-        capability.readiness(stored, IDENTITY),
-        ready_inventory(store, INSTANCE, SHA, "rules"),
-    )
-    assert [s.state for s in states[:2]] == ["ready", "ready"]
-    assert states[2] is not None  # the old inventory still serves the turn
-    await asyncio.sleep(0)
-    assert len(jobs) == 1
-    record = await store.get(INSTANCE)
-    assert record is not None and record.status == "succeeded"
-    view = status_response(record)
-    assert view.current and view.refreshing  # being refreshed: no re-run offered
-    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
-    assert len(jobs) == 1
-
+    monkeypatch.setattr(jobs, "_analyse", analyse)
+    task = asyncio.create_task(preparation.prepare(ctx))
+    await entered.wait()
+    await preparation.retire(ctx)
     release.set()
-    await drain()
-    record = await store.get(INSTANCE)
-    assert record is not None and record.analysis_version == ANALYSIS_VERSION
-    assert not status_response(record).refreshing  # the form stops polling
-    assert await ready_inventory(store, INSTANCE, SHA, "rules") is not None
-    assert analysis_job.cached_inventory(INSTANCE, SHA, "rules") is not None
-
-
-@pytest.mark.asyncio
-async def test_a_failed_refresh_keeps_the_old_analysis_and_is_not_retried(
-    analysis_db, monkeypatch
-):
-    stored, jobs = await _outdated(analysis_db, monkeypatch)
-
-    def _broken(_content):
-        return AnalyzeResult(
-            errors=[AnalysisError(code="invalid_upload", message="No slide master.")]
-        )
-
-    monkeypatch.setattr(analysis_job, "analyze_template", _broken)
-    capability = PptBuilderCapability()
-    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
-    await drain()
-    store = get_analysis_store()
-    record = await store.get(INSTANCE)
-    assert record is not None and record.status == "succeeded"
-    assert record.analysis_version == ANALYSIS_VERSION - 1
-    assert record.inventory() is not None and record.attempts == MAX_ATTEMPTS
-    view = status_response(record)
-    assert not view.current and not view.refreshing  # the author may re-run it
-
-    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
-    assert await ready_inventory(store, INSTANCE, SHA, "rules") is not None
-    await drain()
-    assert len(jobs) == 1
-    # The author's save still starts one, and the agent stays ready meanwhile.
-    assert await analysis_job.refresh_outdated(store, record, force=True)
-    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
-    await drain()
-    assert len(jobs) == 2
-
-
-@pytest.mark.asyncio
-async def test_a_vision_analysis_is_refreshed_only_where_its_model_port_is(
-    analysis_db, monkeypatch
-):
-    async def _labels(inventory, template, pdf, port, *, profile_id, use_vision):
-        return inventory
-
-    monkeypatch.setattr(analysis_job, "label_inventory", _labels)
-    stored = await _save(PptBuilderConfig(), _uploads())
-    await drain()
-    await age_row(analysis_db, INSTANCE, analysis_version=ANALYSIS_VERSION - 1)
-    analysis_job.clear_caches()  # a pod that did not take the save: no port
-    jobs: list = []
-    original = analysis_job.run_analysis
-
-    async def _recording(store, instance_id, job_id, template, port, key):
-        jobs.append(port)
-        await original(store, instance_id, job_id, template, port, key)
-
-    monkeypatch.setattr(analysis_job, "run_analysis", _recording)
-    capability = PptBuilderCapability()
-    store = get_analysis_store()
-    key = stored.labelling_key()
-    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
-    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
-    await drain()
-    assert jobs == []
-    record = await store.get(INSTANCE)
-    assert record is not None and not status_response(record).current
-
-    port = object()
-    analysis_job.remember_port(INSTANCE, port)  # type: ignore[arg-type]
-    assert (await capability.readiness(stored, IDENTITY)).state == "ready"
-    await drain()
-    assert jobs == [port]
-    record = await store.get(INSTANCE)
-    assert record is not None and record.analysis_version == ANALYSIS_VERSION
-
-
-class _CountingStore(SqlAnalysisStore):
-    def __init__(self, maker) -> None:
-        super().__init__(maker)
-        self.reads = 0
-
-    async def get(self, instance_id, *, with_inventory=True):
-        self.reads += 1
-        return await super().get(instance_id, with_inventory=with_inventory)
-
-
-@pytest.mark.asyncio
-async def test_an_outdated_inventory_whose_refresh_never_lands_is_served_from_memory(
-    analysis_db, monkeypatch
-):
-    """A failed refresh (attempts spent) never lands: turns must not each pay a
-    row read and a JSON parse, yet the row is re-read now and then."""
-    stored, jobs = await _outdated(analysis_db, monkeypatch)
-    await age_row(analysis_db, INSTANCE, attempts=MAX_ATTEMPTS)
-    store = _CountingStore(analysis_db)
-    key = stored.labelling_key()
-    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
-    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
-    assert analysis_job.cached_inventory(INSTANCE, SHA, key) is not None
-    assert store.reads == 1 and jobs == []
-
-    monkeypatch.setattr(analysis_job, "OUTDATED_RECHECK_SECONDS", 0.0)
-    analysis_job.clear_caches()
-    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
-    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
-    assert store.reads == 3  # due for a re-read on every call now
-
-
-@pytest.mark.asyncio
-async def test_a_refresh_that_lands_here_replaces_the_cached_outdated_inventory(
-    analysis_db, monkeypatch
-):
-    stored, jobs = await _outdated(analysis_db, monkeypatch)
-    store = get_analysis_store()
-    key = stored.labelling_key()
-    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
-    await drain()
-    assert len(jobs) == 1
-    assert analysis_job.cached_inventory(INSTANCE, SHA, key) is None
-    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
-    record = await store.get(INSTANCE)
-    assert record is not None and not record.outdated()
-
-
-def _record_ports(monkeypatch) -> list:
-    """The port each job started with, in order."""
-    jobs: list = []
-    original = analysis_job.run_analysis
-
-    async def _recording(store, instance_id, job_id, template, port, key):
-        jobs.append(port)
-        await original(store, instance_id, job_id, template, port, key)
-
-    monkeypatch.setattr(analysis_job, "run_analysis", _recording)
-    return jobs
-
-
-@pytest.mark.asyncio
-async def test_an_interrupted_vision_analysis_waits_for_a_save_without_the_port(
-    analysis_db, monkeypatch
-):
-    """After a restart (no cached port) a turn or a readiness check must not
-    recover a vision analysis by rules: it stays interrupted until a save,
-    which brings the port, re-runs it with vision."""
-    stored = await _save(PptBuilderConfig(), _uploads())
-    await drain()
-    await age_row(analysis_db, INSTANCE, status="running", inventory_json=None)
-    analysis_job.clear_caches()  # fred-agents restarted: no port
-    jobs = _record_ports(monkeypatch)
-    store = get_analysis_store()
-    readiness = await analysis_readiness(store, INSTANCE, SHA, "vision:agent-default")
-    assert readiness.state == "failed" and "interrupted" in (readiness.detail or "")
-    assert await ready_inventory(store, INSTANCE, SHA, stored.labelling_key()) is None
-    await drain()
-    assert jobs == []
-    record = await store.get(INSTANCE)
-    assert record is not None and status_response(record).status == "interrupted"
-    assert record.attempts == 1
-
-    await _save(stored)
-    await drain()
-    assert jobs == [PORT]
-    record = await store.get(INSTANCE)
-    assert record is not None and record.status == "succeeded"
-    assert record.labelling_key == "vision:agent-default"
-
-
-@pytest.mark.asyncio
-async def test_a_save_after_a_restart_reruns_with_vision(analysis_db, monkeypatch):
-    """The form's re-run is a save: failed and outdated vision analyses come
-    back labelled with the save's port, even with nothing cached on the pod."""
-    stored = await _save(PptBuilderConfig(), _uploads())
-    await drain()
-    store = get_analysis_store()
-    for aged in ({"status": "failed"}, {"analysis_version": ANALYSIS_VERSION - 1}):
-        await age_row(analysis_db, INSTANCE, **aged)
-        analysis_job.clear_caches()
-        jobs = _record_ports(monkeypatch)
-        await _save(stored)
-        await drain()
-        assert jobs == [PORT]
-        record = await store.get(INSTANCE)
-        assert record is not None and record.status == "succeeded"
-        assert record.labelling_key == "vision:agent-default"
-        assert record.analysis_version == ANALYSIS_VERSION
-
-
-@pytest.mark.asyncio
-async def test_a_vision_job_without_the_port_stores_rules_and_warns(
-    analysis_db, caplog
-):
-    stored = await _save(PptBuilderConfig(), _uploads())
-    await drain()
-    await age_row(analysis_db, INSTANCE, analysis_version=ANALYSIS_VERSION - 1)
-    analysis_job.clear_caches()
-    store = get_analysis_store()
-    record = await store.get(INSTANCE)
+    with pytest.raises(RuntimeError, match="lost ownership"):
+        await task
+    store = jobs.SqlAnalysisStore(analysis_db)
+    record = await store.get(preparation.analysis_identity(ctx))
     assert record is not None
-    with caplog.at_level("WARNING", logger=analysis_job.logger.name):
-        assert await analysis_job.refresh_outdated(store, record, force=True)
-        await drain()
-    assert any(
-        r.levelname == "WARNING" and "labels by rules" in r.getMessage()
-        for r in caplog.records
-    )
-    record = await store.get(INSTANCE)
-    assert record is not None and record.analysis_version == ANALYSIS_VERSION
-    assert record.labelling_key == "rules"
-    await _save(stored)
-    await drain()
-    record = await store.get(INSTANCE)
-    assert record is not None and record.labelling_key == "vision:agent-default"
+    assert record.status == "retired" and record.inventory_json is None
+    assert await store.patterns_pdf(record.agent_instance_id) is None
+
+
+@pytest.mark.asyncio
+async def test_expired_writer_cannot_publish_after_takeover(analysis_db, calculate):
+    ctx = context(analysis_db)
+    store = await preparation._reserve(ctx)
+    identity = preparation.analysis_identity(ctx)
+    record = await store.get(identity)
+    assert record is not None
+    old_job = record.job_id
+    await preparation.prepare(ctx)
+    assert not await store.finish(identity, old_job, builtin_template()[1], b"late")
+    assert await store.patterns_pdf(identity) == b"%PDF-thumbnails"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_attempt_waits_for_lease_and_expiry_allows_recovery(
+    analysis_db, calculate
+):
+    ctx = context(analysis_db)
+    store = await preparation._reserve(ctx)
+    identity = preparation.analysis_identity(ctx)
+    await store._update(identity, lease_until=jobs._utcnow() + timedelta(seconds=90))
+    with pytest.raises(RuntimeError, match="Another attempt"):
+        await preparation.prepare(ctx)
+    await store._update(identity, lease_until=jobs._utcnow() - timedelta(seconds=1))
+    assert (await preparation.prepare(ctx)).reference
+    assert len(calculate) == 1
+
+
+@pytest.mark.asyncio
+async def test_analysis_failure_is_persisted_without_inference_or_list_retry(
+    analysis_db, monkeypatch
+):
+    ctx = context(analysis_db)
+
+    async def fail(*args):
+        raise jobs.AnalysisFailed("No usable layouts")
+
+    monkeypatch.setattr(jobs, "_analyse", fail)
+    first = await preparation.prepare(ctx)
+    assert first.reference is None and first.error == "No usable layouts"
+    assert await preparation.prepare(ctx) == first
 
 
 @pytest.mark.asyncio
@@ -606,109 +259,13 @@ async def test_background_work_leaves_heavy_slots_to_the_turns(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_a_rebuilt_row_returns_the_sha_of_the_file_it_analysed(analysis_db):
-    """The client's sha names a file the asset no longer holds: the saved
-    config names the analysed one, so readiness can match it."""
-    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
-    stale = PptBuilderConfig(template_sha256="0" * 64, use_vision=False)
-    stored = await _save(stale, assets=assets)
-    assert stored.template_sha256 == SHA
-    await drain()
-    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
-
-
-@pytest.mark.asyncio
-async def test_uploading_the_same_file_again_keeps_its_analysis(analysis_db):
-    stored = await _save(PptBuilderConfig(use_vision=False), _uploads())
-    await drain()
-    store = get_analysis_store()
-    before = await store.get(INSTANCE)
-    assert before is not None and before.status == "succeeded"
-    again = await _save(stored, _uploads())
-    assert again.template_sha256 == SHA
-    after = await store.get(INSTANCE)
-    assert after is not None and after.status == "succeeded"
-    assert after.job_id == before.job_id
-
-
-def _other_team_ctx(instance_id: str, assets: FakeAssets | None = None) -> SaveContext:
-    return SaveContext(
-        identity=CapabilityIdentity(
-            user_id="u-9", team_id="team-other", agent_instance_id=instance_id
-        ),
-        services=RuntimeServices(
-            agent_assets=assets or FakeAssets(), capability_model=PORT
-        ),
-    )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "instance_id",
-    [analysis_job.PLATFORM_ID, analysis_job.PLATFORM_NEXT_ID, "__builtin__", "inst-7"],
-)
-async def test_a_team_save_never_reaches_a_platform_row_or_a_non_agent_id(
-    analysis_db, instance_id
-):
-    assets = FakeAssets()
-    with pytest.raises(ValueError, match="does not name a saved agent"):
-        await PptBuilderCapability().validate_config(
-            PptBuilderConfig(), _uploads(), _other_team_ctx(instance_id, assets)
-        )
-    assert assets.blobs == {}
-    assert await get_analysis_store().get(instance_id) is None
-
-
-@pytest.mark.asyncio
-async def test_another_team_cannot_rewrite_an_agent_s_template(analysis_db):
-    await _save(PptBuilderConfig(use_vision=False), _uploads())
-    await drain()
-    store = get_analysis_store()
-    before = await store.get(INSTANCE)
-    assert before is not None and before.team_id == "team-42"
-
-    with pytest.raises(analysis_job.AnalysisOwnershipError):
-        await store.start(
-            instance_id=INSTANCE,
-            team_id="team-other",
-            saved_by="u-9",
-            template_sha256="other",
-            labelling_key="rules",
-            template=b"another team's deck",
-        )
-    theirs = FakeAssets()
-    with pytest.raises(ValueError, match="another team"):
-        await PptBuilderCapability().validate_config(
-            PptBuilderConfig(use_vision=False),
-            _uploads(),
-            _other_team_ctx(INSTANCE, theirs),
-        )
-    assert theirs.blobs == {}
-    with pytest.raises(ValueError, match="another team"):
-        await PptBuilderCapability().validate_config(
-            PptBuilderConfig(use_vision=False, template_sha256=SHA),
-            {},
-            _other_team_ctx(INSTANCE),
-        )
-    await drain()
-    after = await store.get(INSTANCE)
-    assert after is not None
-    assert (after.team_id, after.job_id, after.template_sha256) == (
-        "team-42",
-        before.job_id,
-        SHA,
-    )
-
-
-@pytest.mark.asyncio
-async def test_the_analysis_converts_on_the_background_worker(analysis_db, monkeypatch):
-    seen: list[dict] = []
-
-    async def _pdf(_bytes: bytes, *, suffix: str, **options):
-        seen.append(options)
-        return b"%PDF-thumbs"
-
-    monkeypatch.setattr(analysis_job, "convert_office_bytes_to_pdf", _pdf)
-    await _save(PptBuilderConfig(use_vision=False), _uploads())
-    await drain()
-    assert seen and all(o.get("background") is True for o in seen)
+async def test_other_pod_cannot_reuse_or_retire_the_result(analysis_db, calculate):
+    ctx = context(analysis_db)
+    first = await preparation.prepare(ctx)
+    wrong = replace(ctx, work=ctx.work.model_copy(update={"runtime_id": "another-pod"}))
+    with pytest.raises(ValueError, match="identity mismatch"):
+        await preparation.prepare(wrong)
+    with pytest.raises(ValueError, match="identity mismatch"):
+        await preparation.retire(wrong)
+    assert await preparation.prepare(ctx) == first
+    assert len(calculate) == 1

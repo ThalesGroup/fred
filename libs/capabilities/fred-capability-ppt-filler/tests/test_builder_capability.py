@@ -24,11 +24,11 @@ from typing import Any, cast
 
 import httpx
 import pytest
-from analysis_db import age_row, drain
+from analysis_db import age_row, preparation_context
 from builder_decks import build_showcase_template
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from fred_capability_ppt_filler.builder import analysis_job
+from fred_capability_ppt_filler.builder import analysis_job, preparation
 from fred_capability_ppt_filler.builder import capability as capability_mod
 from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis_job import get_analysis_store
@@ -63,7 +63,7 @@ SHA = hashlib.sha256(TEMPLATE).hexdigest()
 IDENTITY = CapabilityIdentity(
     user_id="u-1",
     session_id="s-1",
-    team_id="team-42",
+    team_id="00000000-0000-4000-8000-000000000042",
     agent_instance_id="00000000-0000-4000-8000-000000000007",
 )
 
@@ -89,27 +89,34 @@ def offline_conversion(monkeypatch):
     monkeypatch.setattr(analysis_job, "convert_office_bytes_to_pdf", _pdf)
 
 
-async def _analysed(config: PptBuilderConfig | None = None) -> PptBuilderConfig:
+async def _analysed(
+    analysis_db, config: PptBuilderConfig | None = None
+) -> PptBuilderConfig:
     stored = await PptBuilderCapability().validate_config(
         config or PptBuilderConfig(use_vision=False),
         _uploads(TEMPLATE),
         _save_ctx(FakeAssets()),
     )
-    await drain()
-    return stored
+    result = await PptBuilderCapability().prepare(
+        preparation_context(analysis_db, TEMPLATE)
+    )
+    assert result.error is None
+    return stored.model_copy(
+        update={"template_sha256": SHA, "analysis_id": result.reference}
+    )
 
 
 # --- validate_config -----------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_upload_stores_the_template_and_keeps_only_its_hash(analysis_db):
+async def test_upload_preflight_never_stores_a_template_or_a_result(analysis_db):
     assets = FakeAssets()
     stored = await PptBuilderCapability().validate_config(
         PptBuilderConfig(), _uploads(TEMPLATE), _save_ctx(assets)
     )
-    assert stored.template_sha256 == SHA
-    assert set(assets.blobs) == {PPT_BUILDER_TEMPLATE_KEY}
+    assert stored.template_sha256 is None
+    assert assets.blobs == {}
     dumped = stored.model_dump()
     assert "inventory" not in dumped and "patterns_path" not in dumped
 
@@ -129,17 +136,13 @@ async def test_unreadable_or_oversized_upload_rejects_without_storing(
             PptBuilderConfig(), _uploads(TEMPLATE), _save_ctx(assets)
         )
     assert assets.blobs == {}
-    assert (
-        await get_analysis_store().get("00000000-0000-4000-8000-000000000007") is None
-    )
+    assert await get_analysis_store().get(REFERENCE) is None
 
 
 @pytest.mark.asyncio
-async def test_overrides_are_pruned_once_the_analysis_is_known(analysis_db):
-    stored = await _analysed()
-    first = (
-        await get_analysis_store().get("00000000-0000-4000-8000-000000000007")
-    ).inventory()  # type: ignore[union-attr]
+async def test_unknown_overrides_cannot_change_the_prepared_inventory(analysis_db):
+    stored = await _analysed(analysis_db)
+    first = (await get_analysis_store().get(REFERENCE)).inventory()  # type: ignore[union-attr]
     assert first is not None
     config = stored.model_copy(
         update={
@@ -150,11 +153,13 @@ async def test_overrides_are_pruned_once_the_analysis_is_known(analysis_db):
         }
     )
     kept = await PptBuilderCapability().validate_config(config, {}, _save_ctx())
-    assert [o.pattern_id for o in kept.overrides] == [first.patterns[0].id]
+    effective, dropped = capability_mod.apply_overrides(first, kept.overrides)
+    assert dropped == ["slide:999"]
+    assert effective.patterns[0].label == "Cover"
 
 
 @pytest.mark.asyncio
-async def test_no_template_drops_every_pattern_edit(analysis_db):
+async def test_builtin_template_ignores_every_pattern_edit(analysis_db, monkeypatch):
     """Pattern ids are positional: edits made on the agent's own template would
     hit unrelated slides of whichever default template is in effect."""
     inventory = builtin_template()[1]
@@ -166,20 +171,27 @@ async def test_no_template_drops_every_pattern_edit(analysis_db):
     )
     stored = await PptBuilderCapability().validate_config(config, {}, _save_ctx())
     assert stored.template_sha256 is None
-    assert stored.overrides == []
+    seen = []
+    monkeypatch.setattr(
+        capability_mod,
+        "build_builder_tools",
+        lambda _ctx, _load, inventory, *_args: seen.append(inventory) or [],
+    )
+    PptBuilderCapability().middleware(_turn_ctx(stored))
+    assert seen == [inventory]
 
 
 @pytest.mark.asyncio
 async def test_a_revalidation_without_an_instance_has_no_side_effect(analysis_db):
     config = PptBuilderConfig(template_sha256=SHA)
-    anonymous = CapabilityIdentity(user_id="anonymous", team_id="team-42")
+    anonymous = CapabilityIdentity(
+        user_id="anonymous", team_id="00000000-0000-4000-8000-000000000042"
+    )
     stored = await PptBuilderCapability().validate_config(
         config, {}, _save_ctx(identity=anonymous)
     )
-    assert stored == config
-    assert (
-        await get_analysis_store().get("00000000-0000-4000-8000-000000000007") is None
-    )
+    assert stored.template_sha256 is None and stored.analysis_id is None
+    assert await get_analysis_store().get(REFERENCE) is None
 
 
 # --- Copy to another scope ---------------------------------------------------------
@@ -199,47 +211,19 @@ def test_the_built_in_template_has_no_file_to_copy():
 
 
 @pytest.mark.asyncio
-async def test_copy_to_another_scope_recreates_the_template_and_its_analysis(
-    analysis_db,
-):
-    """What the runtime's copy-config does: reset scope-private settings, fetch the
-    AssetKey files in the source, re-submit them to validate_config in the target."""
-    source_assets = FakeAssets()
-    stored = await PptBuilderCapability().validate_config(
-        PptBuilderConfig(use_vision=True, labelling_model="vision-profile"),
-        _uploads(TEMPLATE),
-        _save_ctx(source_assets),
-    )
-    await drain()
-    reset = reset_scope_private(stored)
-    assert reset.labelling_model == "vision-profile"
-    assert asset_keys(reset) == {TEMPLATE_SLOT: [PPT_BUILDER_TEMPLATE_KEY]}
-
-    target_assets = FakeAssets()
-    target = CapabilityIdentity(
-        user_id="u-2",
-        team_id="team-99",
-        agent_instance_id="00000000-0000-4000-8000-0000000000c0",
-    )
+async def test_copy_cannot_authorize_an_analysis_from_another_scope(analysis_db):
+    stored = await _analysed(analysis_db)
+    assert reset_scope_private(stored).analysis_id is None
+    target = CapabilityIdentity(user_id="u-2", team_id="team-99")
+    assets = FakeAssets()
     copied = await PptBuilderCapability().validate_config(
-        PptBuilderConfig.model_validate(reset.model_dump(mode="json")),
-        {
-            TEMPLATE_SLOT: [
-                UploadedFile(
-                    filename=PPT_BUILDER_TEMPLATE_KEY,
-                    content=await source_assets.fetch(PPT_BUILDER_TEMPLATE_KEY),
-                )
-            ]
-        },
-        _save_ctx(target_assets, identity=target),
+        stored, {}, _save_ctx(assets, identity=target)
     )
-    await drain()
-
-    assert target_assets.blobs == {PPT_BUILDER_TEMPLATE_KEY: TEMPLATE}
-    assert copied.template_sha256 == SHA
-    record = await get_analysis_store().get("00000000-0000-4000-8000-0000000000c0")
-    assert record is not None and record.team_id == "team-99"
-    assert record.template_sha256 == SHA
+    assert copied.analysis_id is None and copied.template_sha256 is None
+    assert assets.blobs == {}
+    assert stored.analysis_id is not None
+    record = await get_analysis_store().get(stored.analysis_id)
+    assert record is not None and record.team_id == IDENTITY.team_id
 
 
 @pytest.mark.asyncio
@@ -252,6 +236,14 @@ async def test_readiness_without_a_template_is_ready_at_once():
 
 
 class _Authorizer(CapabilityTeamAuthorizer):
+    runtime_id = "pod-a"
+
+    async def require_preparation_access(self, reference, space_id, agent_instance_id):
+        await self.require_agent_editor(space_id)
+        assert (
+            reference == REFERENCE and agent_instance_id == IDENTITY.agent_instance_id
+        )
+
     def __init__(self, editor_of: set[str]) -> None:
         self.editor_of = editor_of
 
@@ -269,16 +261,22 @@ def _async_client(editor_of: set[str]) -> httpx.AsyncClient:
         editor_of
     )
     return httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://pod"
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://pod",
+        params={
+            "space_id": IDENTITY.team_id,
+            "agent_instance_id": IDENTITY.agent_instance_id,
+        },
     )
 
 
-_BASE = "/capabilities/ppt_builder/analysis/00000000-0000-4000-8000-000000000007"
+REFERENCE = "prep:00000000-0000-4000-8000-000000000007"
+_BASE = f"/capabilities/ppt_builder/analysis/{REFERENCE}"
 
 
 @pytest.mark.asyncio
 async def test_a_non_editor_is_refused_everywhere(analysis_db):
-    await _analysed()
+    await _analysed(analysis_db)
     async with _async_client({"other-team"}) as client:
         for response in (
             await client.get(_BASE),
@@ -289,8 +287,8 @@ async def test_a_non_editor_is_refused_everywhere(analysis_db):
 
 @pytest.mark.asyncio
 async def test_an_editor_sees_status_thumbnails_and_inventory(analysis_db):
-    await _analysed()
-    async with _async_client({"team-42"}) as client:
+    await _analysed(analysis_db)
+    async with _async_client({"00000000-0000-4000-8000-000000000042"}) as client:
         body = (await client.get(_BASE)).json()
         assert body["status"] == "succeeded" and body["current"] is True
         assert body["template_sha256"] == SHA and body["labelling_key"] == "rules"
@@ -323,19 +321,17 @@ def _middleware(ctx: CapabilityContext) -> Any:
 @pytest.mark.asyncio
 async def test_the_tool_refuses_while_the_analysis_is_pending(analysis_db):
     stored = PptBuilderConfig(template_sha256=SHA, use_vision=False)
-    await get_analysis_store().start(
-        instance_id="00000000-0000-4000-8000-000000000007",
-        team_id="team-42",
-        saved_by="u-1",
-        template_sha256=SHA,
-        labelling_key="rules",
-        template=TEMPLATE,
-    )
+    ctx = preparation_context(analysis_db, TEMPLATE)
+    store = await preparation._reserve(ctx)
+    row = await store.get(REFERENCE)
+    assert row is not None
+    await store.heartbeat(REFERENCE, row.job_id)
+    stored.analysis_id = REFERENCE
     tools = {t.name: t for t in _middleware(_turn_ctx(stored)).tools}
     text, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[{"title": "Hi"}])
     assert result.is_error and "still being analysed" in text
 
-    await age_row(analysis_db, "00000000-0000-4000-8000-000000000007", status="failed")
+    await age_row(analysis_db, REFERENCE, status="failed")
     tools = {t.name: t for t in _middleware(_turn_ctx(stored)).tools}
     text, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[{"title": "Hi"}])
     assert result.is_error and "re-run the analysis" in text
@@ -345,7 +341,7 @@ async def test_the_tool_refuses_while_the_analysis_is_pending(analysis_db):
 async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
     analysis_db, monkeypatch
 ):
-    stored = await _analysed()
+    stored = await _analysed(analysis_db)
     analysis_job.clear_caches()  # a pod that has not read it yet
     # The template comes from the analysis row, never from the asset.
     middleware = _middleware(_turn_ctx(stored, FakeAssets()))
@@ -408,24 +404,20 @@ async def test_a_turn_never_renders_a_template_other_than_the_analysed_one(
     """A save stores a new template before its config commits: a turn still on
     the old config refuses instead of rendering the new bytes."""
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
-    stored = await _analysed()
+    stored = await _analysed(analysis_db)
     plan = {"slides": [{"title": "Kick-off"}, {"title": "Plan", "bullets": ["a"]}]}
     newer = builtin_template()[0]  # a valid deck: rendering it would succeed
-    record = await get_analysis_store().get("00000000-0000-4000-8000-000000000007")
+    record = await get_analysis_store().get(REFERENCE)
     inventory = record.inventory() if record else None
     assert inventory is not None
-    await get_analysis_store().start(
-        instance_id="00000000-0000-4000-8000-000000000007",
-        team_id="team-42",
-        saved_by="u-1",
+    await age_row(
+        analysis_db,
+        REFERENCE,
         template_sha256="sha-of-a-newer-upload",
-        labelling_key="rules",
-        template=newer,
+        template_pptx=newer,
     )
     analysis_job.clear_caches()
-    analysis_job.remember_inventory(
-        "00000000-0000-4000-8000-000000000007", SHA, "rules", inventory
-    )
+    analysis_job.remember_inventory(REFERENCE, SHA, "rules", inventory)
     assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: newer})
     tools = {t.name: t for t in _middleware(_turn_ctx(stored, assets)).tools}
     text, result = await tools[BUILD_TOOL_NAME].coroutine(**plan)
@@ -497,3 +489,46 @@ def test_builtin_route_lists_the_template_kinds():
         "process",
         "closing",
     } <= kinds
+
+
+@pytest.mark.asyncio
+async def test_only_cp_can_supply_common_corrections_and_builtin_uses_them(
+    analysis_db, monkeypatch
+):
+    inventory = builtin_template()[1]
+    common = capability_mod.CommonTemplateConfig(
+        overrides=[
+            PatternOverride(
+                pattern_id=inventory.patterns[0].id, label="Organization cover"
+            )
+        ]
+    )
+    submitted = PptBuilderConfig(common_template_config=common)
+    validated = await PptBuilderCapability().validate_config(submitted, {}, _save_ctx())
+    assert validated.common_template_config is None
+    seen = []
+    monkeypatch.setattr(
+        capability_mod,
+        "build_builder_tools",
+        lambda _ctx, _load, inventory, *_args: seen.append(inventory) or [],
+    )
+    # The canonical execution snapshot is enriched by CP after validation.
+    PptBuilderCapability().middleware(
+        _turn_ctx(validated.model_copy(update={"common_template_config": common}))
+    )
+    assert seen[0].patterns[0].label == "Organization cover"
+    assert builtin_template()[1].patterns[0].label != "Organization cover"
+
+
+def test_agent_corrections_override_common_fields_without_erasing_other_fields():
+    config = PptBuilderConfig(
+        common_template_config=capability_mod.CommonTemplateConfig(
+            overrides=[
+                PatternOverride(pattern_id="slide:1", label="Common", included=False),
+            ]
+        ),
+        overrides=[PatternOverride(pattern_id="slide:1", label="Agent")],
+    )
+    assert config.effective_overrides() == [
+        PatternOverride(pattern_id="slide:1", label="Agent", included=False)
+    ]

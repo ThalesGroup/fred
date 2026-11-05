@@ -397,7 +397,8 @@ class PodSchedulerConfig(BaseModel):
     """
     Temporal scheduler settings for an agent pod.
 
-    Disabled by default — only needed for Story B (deep/durable agents).
+    Disabled by default. Capability worker mode uses this existing Temporal
+    connection; it obtains its installation/pod queue from the Control Plane.
     Reuses TemporalSchedulerConfig from fred-core.
     """
 

@@ -283,6 +283,18 @@ async fn serve(config: Config) -> Result<()> {
             }
         }));
     }
+    {
+        // Drain and expire accepted preparations even after admission is disabled.
+        let pool = pool.clone();
+        let stopping = stopping.clone();
+        let settings = config.scheduler.lifecycle.temporal.clone();
+        tasks.push(Box::pin(async move {
+            tokio::select! {
+                _ = stopping => Ok(()),
+                _ = control_plane::capability_preparation::dispatch::run(pool, settings) => anyhow::bail!("capability dispatcher stopped"),
+            }
+        }));
+    }
     if let Some(settings) = config.scheduler.processing {
         let pool = pool.clone();
         let stopping = stopping.clone();

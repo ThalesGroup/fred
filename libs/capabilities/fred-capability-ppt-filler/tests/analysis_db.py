@@ -16,19 +16,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 
-from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder.analysis_job import AnalysisRow
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-
-async def drain() -> None:
-    """Wait for every background analysis this process started."""
-    while analysis_job._running:
-        await asyncio.gather(*list(analysis_job._running), return_exceptions=True)
 
 
 async def age_row(
@@ -43,3 +35,34 @@ async def age_row(
                 .where(AnalysisRow.agent_instance_id == instance_id)
                 .values(lease_until=expired, **values)
             )
+
+
+def preparation_context(maker, content: bytes):
+    """Canonical, disposable CP work shared by capability tests."""
+    import hashlib
+    from uuid import UUID
+
+    from fred_sdk.contracts.capability.preparation import (
+        PreparationContext,
+        PreparationWork,
+    )
+
+    return PreparationContext(
+        work=PreparationWork(
+            preparation_id=UUID("00000000-0000-4000-8000-000000000007"),
+            installation_id=UUID("00000000-0000-4000-8000-000000000001"),
+            runtime_id="pod-a",
+            capability_id="ppt_builder",
+            space_id=UUID("00000000-0000-4000-8000-000000000042"),
+            agent_instance_id=UUID("00000000-0000-4000-8000-000000000007"),
+            configuration_revision=1,
+            file_id=UUID("00000000-0000-4000-8000-000000000002"),
+            sha256=hashlib.sha256(content).hexdigest(),
+            filename="template.pptx",
+            size=len(content),
+            config={"use_vision": False},
+            state="pending",
+        ),
+        database=maker.kw["bind"],
+        content=content,
+    )

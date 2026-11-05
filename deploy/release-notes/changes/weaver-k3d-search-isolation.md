@@ -25,9 +25,8 @@ Apply the username, secret reference and provisioning hooks together.
 
 ## Upgrade
 
-From the matching factory, render with `make k3d-validate-weaver`, then deploy with
-`make k3d-up-weaver`. The combined Swift/Weaver commands are `make k3d-validate`
-and `make k3d-up`. Normal preparation provisions the required identities.
+From the matching factory, prepare with `make k3d-up`, render with `make k3d-app-validate FRED=weaver APP=fred DIR=<checkout>`,
+then deploy with `make k3d-app FRED=weaver APP=fred DIR=<checkout>`. Normal preparation provisions the required identities.
 Existing data in formerly shared indexes is not copied or migrated automatically.
 Do not delete shared indexes as an incidental upgrade step.
 

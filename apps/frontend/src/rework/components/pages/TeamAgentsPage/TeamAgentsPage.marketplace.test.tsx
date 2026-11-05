@@ -134,6 +134,15 @@ beforeEach(() => {
           failure.status,
         );
       }
+      if (path.endsWith("/powerpoint-template"))
+        return json({
+          source: "builtin",
+          file: null,
+          preparation_state: "ready",
+          preparation_error: null,
+          analysis_reference: null,
+          activation_ready: true,
+        });
       if (path.endsWith("/me/spaces")) return json(emptyContext ? [] : SPACES);
       if (target === "authorize") return json({ allowed: writable });
       if (target === "catalog") return json(catalogEmpty ? [] : [TEMPLATE]);
@@ -188,7 +197,7 @@ afterEach(() => {
   host.remove();
   expect(
     calls.every(({ path }) =>
-      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/(agent-(instances|templates)|prompts|prompt-categories))/.test(
+      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/(agent-(instances|templates)|prompts|prompt-categories|powerpoint-template))/.test(
         path,
       ),
     ),

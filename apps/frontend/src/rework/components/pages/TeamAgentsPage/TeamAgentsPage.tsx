@@ -23,6 +23,8 @@ import {
   useCreateAgentInstanceMutation,
   useUpdateAgentInstanceMutation,
   useDeleteAgentInstanceMutation,
+  useUploadPowerpointTemplateMutation,
+  useResolvePowerpointTemplateQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { ManagedAgentInstanceSummary, MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import AgentFormModal, { type AgentFormPayload } from "./AgentFormModal/AgentFormModal";
@@ -66,7 +68,16 @@ function SpaceAgents({ space }: { space: MySpace }) {
       live.current = false;
     };
   }, []);
-  const instances = useListAgentInstancesQuery({ spaceId }, { refetchOnMountOrArgChange: true });
+  const [preparationPolling, setPreparationPolling] = useState(0);
+  const instances = useListAgentInstancesQuery(
+    { spaceId },
+    { refetchOnMountOrArgChange: true, pollingInterval: preparationPolling },
+  );
+  useEffect(() => {
+    setPreparationPolling(
+      instances.currentData?.items.some((instance) => instance.preparation_state === "pending") ? 5000 : 0,
+    );
+  }, [instances.currentData]);
   const catalog = useSpaceAgentTemplatesQuery(
     { spaceId },
     { skip: !offersManagement, refetchOnMountOrArgChange: true },
@@ -89,7 +100,14 @@ function SpaceAgents({ space }: { space: MySpace }) {
     },
   );
   const editing = !detail.isError && !detail.isFetching ? detail.currentData : undefined;
-  const busy = creating.isLoading || updating.isLoading || removing.isLoading;
+  const [uploadTemplate, uploadingTemplate] = useUploadPowerpointTemplateMutation();
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const templateFile = useResolvePowerpointTemplateQuery(
+    { spaceId, agentInstanceId: editingId ?? "" },
+    { skip: !editingId, refetchOnMountOrArgChange: true },
+  );
+  const busy =
+    creating.isLoading || updating.isLoading || removing.isLoading || uploadingTemplate.isLoading || savingTemplate;
   const unavailable = t("rework.weaverAgents.notConnected");
   const notifyError = (error: unknown) => {
     if (!live.current) return;
@@ -97,19 +115,42 @@ function SpaceAgents({ space }: { space: MySpace }) {
   };
   const handleSave = async (payload: AgentFormPayload) => {
     if (!canManageAgents || busy) return;
-    if (Object.values(payload.capabilityAssetFiles).some((slots) => Object.keys(slots).length > 0)) {
+    if (
+      Object.entries(payload.capabilityAssetFiles).some(
+        ([id, slots]) => id !== "ppt_builder" && Object.keys(slots).length > 0,
+      )
+    ) {
       showError({ summary: t("rework.weaverAgents.templateUploadsUnavailable") });
       return;
     }
+    setSavingTemplate(true);
     try {
+      const file = payload.capabilityAssetFiles.ppt_builder?.template;
+      const removeTemplate = payload.capabilityConfigValues.ppt_builder?.remove_template === true;
+      const own = templateFile.currentData?.source === "agent" ? templateFile.currentData.file : null;
+      if (editing && (file || removeTemplate) && !templateFile.currentData) {
+        throw new Error("Saved PowerPoint attachment is unavailable");
+      }
+      const staged = file
+        ? await uploadTemplate({
+            spaceId,
+            agentInstanceId: editing?.agent_instance_id ?? crypto.randomUUID(),
+            templateId: editing ? undefined : payload.templateId,
+            expectedFileId: own?.id,
+            "Idempotency-Key": crypto.randomUUID(),
+            fileUpload: { file },
+          }).unwrap()
+        : undefined;
+      const powerpoint =
+        staged || removeTemplate ? { file_id: staged?.id ?? null, expected_file_id: own?.id ?? null } : undefined;
       if (editing) {
         await update({
           spaceId,
           agentInstanceId: editing.agent_instance_id,
-          updateAgentInstanceRequest: updateAgentRequest(payload, editing),
+          updateAgentInstanceRequest: { ...updateAgentRequest(payload, editing), powerpoint },
         }).unwrap();
       } else if (isEnrollOpen) {
-        await create({ spaceId, createAgentInstanceRequest: createAgentRequest(payload) }).unwrap();
+        await create({ spaceId, createAgentInstanceRequest: { ...createAgentRequest(payload), powerpoint } }).unwrap();
       } else return;
       if (!live.current) return;
       // As on swift: tag invalidation alone has left the list stale after a save.
@@ -125,6 +166,8 @@ function SpaceAgents({ space }: { space: MySpace }) {
       if (live.current && isAgentNameConflict(error))
         setRefusedNames((names) => new Set([...names, normalizeAgentName(payload.displayName)]));
       notifyError(error);
+    } finally {
+      setSavingTemplate(false);
     }
   };
   const handleToggle = async (instance: ManagedAgentInstanceSummary) => {

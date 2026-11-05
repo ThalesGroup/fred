@@ -287,6 +287,16 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         { type: "Attachments", id: `${spaceId}:${sessionId}` },
       ],
     },
+    uploadPowerpointTemplate(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.fileUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 120_000 };
+      };
+    },
     uploadAttachment(endpoint) {
       endpoint.extraOptions = { retryUnauthorized: false };
       const query = endpoint.query!;
@@ -499,6 +509,9 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useUploadPowerpointTemplateMutation,
+  useRemovePowerpointTemplateMutation,
+  useResolvePowerpointTemplateQuery,
   useSpaceMembersQuery,
   useSpaceMemberCandidatesQuery,
   useGrantMutation,

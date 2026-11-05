@@ -41,6 +41,8 @@ const NATIVE_RUNTIME_ID: &str = fred_rust_agent::DEFINITION.provider;
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PlatformConfig {
+    #[serde(default)]
+    pub capability_preparation: crate::capability_preparation::Config,
     /// Optional server-owned KF base URL; enables Ralph's fixed document search tool.
     #[serde(default)]
     pub knowledge_flow_url: Option<String>,
@@ -120,6 +122,32 @@ impl PlatformConfig {
                     && url.query().is_none()
                     && url.fragment().is_none(),
                 "runtime {id} base_url must be HTTP(S), without credentials, query or fragment"
+            );
+        }
+        let mut worker_identities = std::collections::HashSet::new();
+        for (runtime, worker) in &self.capability_preparation.workers {
+            ensure!(
+                self.runtime_catalog_sources
+                    .iter()
+                    .any(|source| &source.runtime_id == runtime),
+                "Preparation worker requires a configured logical pod"
+            );
+            ensure!(
+                runtime.len() <= 64
+                    && runtime
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_')),
+                "Invalid preparation runtime identity"
+            );
+            ensure!(
+                !worker.client_id.is_empty()
+                    && !worker.issuer.is_empty()
+                    && !worker.audience.is_empty(),
+                "Preparation workload identity is incomplete"
+            );
+            ensure!(
+                worker_identities.insert((worker.issuer.trim_end_matches('/'), &worker.client_id)),
+                "Preparation workers on different logical pods require separate workload identities"
             );
         }
         Ok(())

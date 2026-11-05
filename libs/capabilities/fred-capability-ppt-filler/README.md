@@ -2,15 +2,16 @@
 
 Fred agent capability that fills an uploaded PowerPoint template from chat.
 
-> Weaver integration (Swift `3d1838420`): deck generation, the built-in/shared
-> platform template, structural analysis, manual slide labeling, previews and
-> downloads are integrated. Platform writes require the Rust control plane's
-> `manage_platform` permission; scoped administration uses canonical space rights.
-> The package also contains portable Swift hooks described below, but Weaver does
-> not yet connect turn-free vision inference or per-agent multipart uploads and
-> persistent readiness. These are explicit follow-ups, not operational promises.
-> See [the merge inventory](../../../WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md#12-powerpoint-et-quatre-commits-swift--5-novembre-2026)
-> for validation limits and lifecycle/multi-replica acceptance still required.
+> Weaver integration: deck generation, the built-in template, structural analysis,
+> manual slide labeling, previews and downloads are integrated. The configurable
+> platform default is removed. Control Plane stores organization and agent originals
+> with explicit ownership and retryable cleanup, but their capability preparation
+> and runtime activation are not connected yet. The agent form continues to refuse
+> saving new multipart assets. Turn-free vision and persistent readiness also remain
+> deferred. Existing pod analyses, thumbnails and plans are not purged by the CP
+> original-file cleanup. See [the porting inventory](../../../WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md#12-powerpoint-et-quatre-commits-swift--5-novembre-2026)
+> and [operator note](../../../deploy/release-notes/changes/weaver-powerpoint-file-ownership.md).
+
 
 An author uploads a `.pptx` whose slides carry `{key}` or `{{key}}` placeholders and whose
 slide notes describe each key (a `{key}:` or `{{key}}:` header plus prose, optional

@@ -660,9 +660,12 @@ Les lots DOCX, titres, skills et e-mails précédents ne sont pas réouverts par
 | `541f3275d9908732a4b7c5d99a7302756fce2171` (#3433) | Reprendre les notes produit et opérateur utiles ; garder les versions Weaver 5.0.0, sans restaurer le Control Plane Python, son chart ou les anciens corpus. |
 | `3d18384205a469f691bbf3ca3cb697911bc6b257` (#3471) | Intégrer les cibles exactes de downgrade et refus des offsets ambigus ; adapter le test à la révision runtime Weaver supplémentaire. |
 
-Le besoin de template global est conservé comme dans Swift : pas de nouvelle
-propriété par organisation. L'édition exige `manage_platform` du CP Rust ; les
-opérations d'espace exigent ses droits `write`. Le champ historique SDK `team_id`
+La décision de défaut configurable global est remplacée par le lot CP du
+5 novembre : fichier propre à l'agent, sinon fichier commun de son organisation,
+sinon fichier intégré. Les fichiers configurables sont persistés et résolus par
+le CP, mais leur préparation et activation dans le pod restent à raccorder.
+L'édition exige `write` sur l'espace propriétaire, sans privilège implicite
+administrateur. Le champ historique SDK `team_id`
 transporte le UUID canonique d'espace. Les routes navigateur viennent de
 `public_base_url` configuré côté CP, jamais d'une URL annoncée par le pod.
 Export et copie des assets vérifient les droits des espaces concernés ; la
@@ -686,13 +689,16 @@ ou routes de readiness sans consommateur Weaver.
   accepte une configuration JSON, pas les fichiers multipart et l'état
   `capability_pending` de Swift. Les hooks de bibliothèque restent disponibles,
   mais le formulaire refuse une sauvegarde avec nouveaux fichiers au lieu de
-  les perdre silencieusement. Le template intégré/partagé reste utilisable.
-  Un futur lot doit définir ensemble propriétaire, transfert d'assets, état
-  durable, reprise et UI avant de raccorder ces chemins.
+  les perdre silencieusement. Le fichier intégré reste utilisable. Le lot CP
+  définit désormais les rattachements SQL, le transfert S3, le remplacement
+  concurrent et la purge reprise des originaux. Il reste à raccorder validation,
+  préparation, activation d'une révision exacte et readiness avant l'ouverture UI.
 - **Cycle de vie et exploitation** : valider le nettoyage des nouvelles données
   de plans/assets lors de la purge de leur propriétaire et la cohérence du
-  template partagé avec plusieurs replicas/pods. Les tests locaux ne prouvent
-  ni ces parcours déployés, ni la propagation d'un template à plusieurs pods.
+  modèle d'organisation avec plusieurs replicas/pods. Les originaux CP sont
+  couverts par le balayage S3 ; les analyses, miniatures et plans du pod ne sont
+  pas purgés par ce lot. Les tests locaux ne prouvent ni ces parcours déployés,
+  ni l'activation d'un modèle dans plusieurs pods.
 - **Réceptions** : parcours administrateur global, refus hors espace, analyse
   et correction, export réel LibreOffice/fonts, téléchargement et rendu navigateur
   restent à recevoir sur le déploiement. Aucun appel fournisseur, benchmark,
@@ -731,3 +737,477 @@ reports. Pas de description arc42 de fonctionnement déployé avant réception.
   de hint vision Swift, a été corrigé puis le fichier entier a réussi (13 tests,
   inclus dans les 385). Contrôles type/format/lint réussis ; revue des résolutions
   envers les deux parents. Aucun test ignoré ajouté pour masquer un échec.
+
+### Lot de persistance CP PowerPoint - 5 novembre 2026 (état historique avant raccord)
+
+Migration additive `0006_powerpoint_files.sql`, registre ciblé dans le stockage CP,
+FK de rattachement, reçus rejouables et clés S3 immuables. Le remplacement compare
+le fichier attendu puis rattache le nouveau dans une transaction courte, après
+vérification S3. Les lectures contrôlent l'usage (instance/espace/organisation) ;
+un identifiant de fichier ne permet ni adoption ni accès à un autre agent.
+Le balayage de stockage existant nettoie abandons et retraits ; le manifeste de
+suppression d'espace attend les originaux CP. Aucun index OpenSearch ni ancien
+endpoint Knowledge Flow n'est ajouté.
+
+Les routes, le cache et le panneau du défaut global sont retirés. Le formulaire
+existant et le blocage de sauvegarde de nouveaux assets sont préservés. La
+résolution CP n'annonce pas une préparation/activation opérationnelle. Les
+analyses et plans du pod restent hors purge raccordée.
+
+Voir [la note opérateur du lot](deploy/release-notes/changes/weaver-powerpoint-file-ownership.md)
+pour l'upgrade, les contrats et les limites. Aucune base vivante, commit, publication
+ou déploiement n'a été effectué.
+
+Preuves locales du lot CP :
+
+- `make code-quality` : CP Rust, frontend (Node 24.22.2) et bibliothèque PowerPoint.
+- CP : 38 tests du groupe `document_storage::` réussis, dont les 4 scénarios
+  PowerPoint ; le scénario coupure/rejeu a ensuite été complété par un abandon
+  expiré et revérifié. Les 17 tests OpenAPI passent. PostgreSQL et S3 jetables
+  uniquement ; initialisation fraîche et upgrade 0001-0005 vers 0006 vérifiés.
+- PowerPoint : 47 tests ciblés réussis ; frontend : 52 tests du widget et 16
+  tests des formulaires, sur des fichiers distincts. Les contrats CP et
+  PowerPoint et leurs clients RTK sont régénérés depuis les sources.
+- Références SQL/API régénérées et contrôles ciblés des annexes A2/A12 réussis.
+  Le contrôle documentaire global rencontre le bloc généré périmé d'A3, déjà
+  modifié par un autre auteur. Le contrôle global des notes rencontre les
+  changements de configuration hors lot ; la nouvelle note seule est valide.
+- Bilan propre au lot : production (migration incluse) +714/-978 lignes,
+  tests +527/-964, contrats/graphes générés +482/-132. Les suppressions portent
+  principalement sur le défaut plateforme abandonné et ses tests devenus caducs.
+
+
+### Raccord de préparation durable PowerPoint — 5 novembre 2026 (non commité)
+
+Prolongement autorisé du lot précédent, sur `weaver` à
+`394a9150f7e5c6ac6abeb803775ca2a0a16377e8`. Le texte précédent décrit son état
+historique ; les limites de sauvegarde/préparation mentionnées là sont remplacées
+par le présent raccord. Les changements k3d/Helm et autres travaux voisins ne
+font pas partie de ce lot. Aucun autre assistant, commit, push, déploiement ou
+changement de base vivante.
+
+- **CP et PostgreSQL** : migration additive 0007, 0006 inchangée ; dépôt provisoire,
+  validation de lisibilité via la capability, acceptation atomique configuration /
+  fichier / intention, état de préparation et refus d'admission. Les transactions
+  libèrent leurs connexions avant S3, validation ou Temporal. La confirmation
+  vérifie révision, rattachement, état et identité du workload.
+- **Temporal et runtime** : livraison SQL durable, primitives de transport et
+  réconciliation extraites du dispatcher existant sans détourner document_processing.
+  Mode worker partagé dans fred-runtime, branchement `fred_agents --mode worker` ;
+  l'API reste le défaut. Même image/bibliothèques et stockage partagé, file définie
+  par installation et pod logique, UUID seul dans l'historique. Aucun workflow de
+  conversation ni appel Knowledge Flow ajouté.
+- **Bibliothèque PowerPoint** : validation sans écriture, résultat persistant avant
+  confirmation, tentatives protégées par les leases SQL existants, reprise sur
+  autre replica sans recalcul, tombstone contre les écritures tardives. Retrait des
+  relances asyncio depuis sauvegarde/readiness et des anciennes méthodes de reprise.
+  La readiness reste consultative ; la vision hors tour est refusée explicitement.
+- **UI** : fichier joint au save existant, état CP relu après reload, préparation /
+  échec distincts de la désactivation, aperçu autorisé par la résolution courante.
+  Le modèle commun reste strictement `(organisation, pod logique)` : ancien actif
+  conservé jusqu'à réussite du candidat, jamais un plugin/service d'organisation.
+- **Cycle de vie** : nettoyage des nouveaux résultats abandonnés par le worker
+  propriétaire ; suppression d'espace attend également cet acquittement. Plans,
+  conversations et anciennes lignes Swift restent hors purge générale.
+
+**Décision de portée prise pendant ce lot** : conserver un tour simple et inchangé.
+Le suivi durable des usages par tour et les cas de remplacement/suppression pendant
+un tour actif sont reportés à une étude transversale ultérieure. Le nettoyage peut
+rendre l'ancien modèle indisponible à un tour déjà admis ; aucune garantie générale
+de survie des ressources en cours n'est annoncée. Pas de nouvelle réautorisation
+par outil ou appel LLM.
+
+La [note opérateur](deploy/release-notes/changes/weaver-powerpoint-file-ownership.md)
+détaille configuration, upgrade, démarrage, résolution et limites. La réception
+avec navigateur et composants réellement déployés reste à effectuer ; les preuves
+ci-dessous sont locales et ne valent pas réception déployée de bout en bout.
+
+
+#### Réception locale observée
+
+Commandes exécutées depuis le composant concerné, sans base vivante ni fournisseur.
+Les résultats ci-dessous se recouvrent ; ils ne constituent pas un total cumulé.
+
+| Composant / commande | Résultat observé et portée |
+| --- | --- |
+| CP : `make code-quality` | Clippy tous targets et rustfmt conformes. |
+| CP : `make test-integration CARGO_TEST_OPTS=powerpoint_` | **8 réussis** ; PostgreSQL, SeaweedFS et Temporal jetables, initialisation fraîche et upgrade, acceptation atomique, refus, concurrence, cloisonnement, livraison rejouée, réconciliation et nettoyage. |
+| CP : `cargo test --lib` | **68 réussis, 1 ignoré**. |
+| CP : `cargo test --test openapi` | **17 réussis**, après déclaration des réponses 401 et des six routes internes de préparation dans le contrat. |
+| Runtime : `make code-quality` puis `pytest -q tests/test_capability_preparation.py tests/test_capability_platform_ports.py tests/test_authorization_startup.py tests/test_weaver_resolver_credentials.py tests/test_outbound_credentials.py -m 'not integration'` | Qualité conforme ; **88 réussis**, test Temporal volontairement désélectionné dans ce passage. |
+| Runtime : `FRED_PREPARATION_TEMPORAL_TEST=1 pytest -q tests/test_capability_preparation.py` | **6 réussis** lors du passage avec Temporal réel jetable ; redémarrage du worker après résultat SQL et confirmation interrompue, sans recalcul. Le cas supplémentaire de perte d'acquittement après commit CP est couvert dans le passage à 88 tests. |
+| Bibliothèque PowerPoint : `make code-quality`, puis `pytest -q tests/test_analysis_job.py tests/test_builder_capability.py tests/test_pptx_archive.py tests/test_platform_template.py tests/test_plan_validation.py` | Qualité conforme, **58 réussis** ; warning préexistant `builder_decks.py/__all__`. |
+| SDK et fred-agents : `make code-quality` dans chacun | Conformes ; `pytest -q tests/test_worker_entrypoint.py` dans fred-agents : **2 réussis**. |
+| Frontend : `make code-quality`, puis `npx vitest run src/rework/features/capabilities/ppt_builder src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.marketplace.test.tsx src/rework/components/pages/admin/FeaturesPage/OrganizationCapabilities.test.tsx src/rework/components/shared/organisms/AgentCard/AgentCard.test.tsx src/rework/components/pages/TeamAgentsPage/AgentFormModal/AgentFormModal.pptBuilder.test.tsx` | TypeScript/Prettier conformes ; **11 fichiers, 111 tests réussis** : formulaire réel, états après reload, carte agent, aperçu et modèle commun. |
+| Contrats : CP `make generate-openapi generate-config-schema`, frontend `make update-control-plane-api update-ppt-builder-capability-api` | Régénérations depuis les sources effectuées. |
+
+Un premier passage de la suite PowerPoint complète avait donné 1070 réussis,
+6 ignorés et 11 échecs sur les anciens contrats Swift de sauvegarde/relance et de
+fixture. Ces cas ont été adaptés au contrat de préparation durable et font partie
+du passage ciblé vert à 58 tests ; la suite complète n'a pas été relancée. Le
+warning LangChain beta du runtime est préexistant.
+
+Les hashes des migrations 0001 à 0006 sont identiques à la capture initiale.
+La réception déployée reste ouverte : navigateur, ingress, vrais claims workload,
+images concordantes API/worker, conversion Office et arrêt du worker dans ce
+parcours complet. Les tests locaux ne prouvent pas ce parcours de bout en bout.
+
+#### Réemploi, convergence et bilan propre à ce lot
+
+Le CP reste propriétaire de l'acceptation et de l'admission. La bibliothèque
+reste propriétaire du calcul, du stockage dérivé et de son effacement. Le runtime
+possède l'exécution worker commune. Les primitives de connexion/livraison Temporal
+sont partagées avec le dispatcher existant ; ses tables d'ingestion ne sont pas
+réutilisées pour ce nouveau métier. SQL/S3, quotas, validation authentifiée et
+composants d'interface existants sont conservés.
+
+Le chemin supprimé est la relance locale depuis sauvegarde/readiness (`spawn_analysis`,
+`restart_from_stored`, `recover_interrupted`, `refresh_outdated`, `_refresh_quietly`
+et lanceurs associés). La recherche de consommateurs dans les sources capability,
+runtime et application est vide. Les tests remplacés vérifient désormais la reprise
+par préparation persistée et la lecture sans effet de bord. Les tombstones sont
+conservés pour empêcher une écriture tardive ; les migrations appliquées et les
+anciennes données hors périmètre ne sont pas supprimées pour réduire artificiellement
+le bilan.
+
+Comparaison avec la **capture du checkout sale au début de ce lot**, et non avec
+HEAD : les changements du lot précédent et des autres auteurs sont exclus. Le
+code de production augmente pour l'acceptation transactionnelle, le transport
+worker et le nettoyage durable ; ce lot ne prétend pas être une réduction nette.
+Les documents sont exclus des comptes et les contrats générés sont séparés.
+
+| Catégorie | Ajouts | Suppressions | Net | Fichiers |
+| --- | ---: | ---: | ---: | ---: |
+| Production | +2066 | −638 | +1428 | 41 |
+| Migration SQL | +105 | −0 | +105 | 1 |
+| Tests et fixtures | +1276 | −727 | +549 | 19 |
+| Contrats générés mesurables | +174 | −12 | +162 | 3 |
+| Configuration et dépendances | +9 | −1 | +8 | 2 |
+
+Le bilan généré mesurable couvre les deux clients TypeScript et le schéma de
+configuration CP ; OpenAPI est régénéré mais son instantané initial ignoré par Git
+n'est pas disponible pour un delta fiable. Aucun changement k3d/Helm voisin n'est
+attribué à ce lot.
+
+<details>
+<summary>Inventaire des fichiers modifiés par ce lot</summary>
+
+- `apps/control-plane/Cargo.toml`
+- `apps/control-plane/config/configuration.yaml`
+- `apps/control-plane/config/schema/configuration.schema.json`
+- `apps/control-plane/migrations/0007_capability_preparation.sql`
+- `apps/control-plane/src/agent_instances.rs`
+- `apps/control-plane/src/agent_instances/http.rs`
+- `apps/control-plane/src/agent_instances/runtime.rs`
+- `apps/control-plane/src/agent_instances/tuning.rs`
+- `apps/control-plane/src/agents.rs`
+- `apps/control-plane/src/api.rs`
+- `apps/control-plane/src/capability_preparation/dispatch.rs`
+- `apps/control-plane/src/capability_preparation/http.rs`
+- `apps/control-plane/src/capability_preparation/mod.rs`
+- `apps/control-plane/src/documents/powerpoint.rs`
+- `apps/control-plane/src/documents/powerpoint/acceptance.rs`
+- `apps/control-plane/src/documents/powerpoint/http.rs`
+- `apps/control-plane/src/lib.rs`
+- `apps/control-plane/src/lifecycle/cleanup.rs`
+- `apps/control-plane/src/main.rs`
+- `apps/control-plane/src/processing/dispatch.rs`
+- `apps/control-plane/tests/openapi.rs`
+- `apps/control-plane/tests/support/document_processing.rs`
+- `apps/control-plane/tests/support/document_storage.rs`
+- `apps/fred-agents/fred_agents/__main__.py`
+- `apps/fred-agents/tests/test_worker_entrypoint.py`
+- `apps/frontend/src/locales/en/translation.json`
+- `apps/frontend/src/locales/fr/translation.json`
+- `apps/frontend/src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.marketplace.test.tsx`
+- `apps/frontend/src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx`
+- `apps/frontend/src/rework/components/pages/TeamAgentsPage/weaverAgentFixtures.ts`
+- `apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationCapabilities.tsx`
+- `apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationPowerPointTemplate.tsx`
+- `apps/frontend/src/rework/components/shared/organisms/AgentCard/AgentCard.test.tsx`
+- `apps/frontend/src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
+- `apps/frontend/src/rework/features/capabilities/ppt_builder/PptBuilderTemplatePanel.test.tsx`
+- `apps/frontend/src/rework/features/capabilities/ppt_builder/PptBuilderTemplatePanel.tsx`
+- `apps/frontend/src/rework/features/capabilities/ppt_builder/api/pptBuilderCapabilityOpenApi.ts`
+- `apps/frontend/src/rework/features/capabilities/ppt_builder/usePatternsPreview.ts`
+- `apps/frontend/src/rework/features/capabilities/ppt_builder/usePptBuilderAnalysis.test.tsx`
+- `apps/frontend/src/rework/features/capabilities/ppt_builder/usePptBuilderAnalysis.ts`
+- `apps/frontend/src/slices/controlPlane/controlPlaneApiEnhancements.ts`
+- `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts`
+- `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/analysis_job.py`
+- `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/capability.py`
+- `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/preparation.py`
+- `libs/capabilities/fred-capability-ppt-filler/tests/analysis_db.py`
+- `libs/capabilities/fred-capability-ppt-filler/tests/conftest.py`
+- `libs/capabilities/fred-capability-ppt-filler/tests/test_analysis_job.py`
+- `libs/capabilities/fred-capability-ppt-filler/tests/test_builder_capability.py`
+- `libs/capabilities/fred-capability-ppt-filler/tests/test_plan_validation.py`
+- `libs/capabilities/fred-capability-ppt-filler/tests/test_pptx_archive.py`
+- `libs/fred-runtime/fred_runtime/app/agent_app.py`
+- `libs/fred-runtime/fred_runtime/app/config.py`
+- `libs/fred-runtime/fred_runtime/app/context.py`
+- `libs/fred-runtime/fred_runtime/app/preparation_worker.py`
+- `libs/fred-runtime/fred_runtime/app/security.py`
+- `libs/fred-runtime/fred_runtime/capabilities/platform_ports.py`
+- `libs/fred-runtime/fred_runtime/capabilities/preparation_workflow.py`
+- `libs/fred-runtime/fred_runtime/common/outbound_credentials.py`
+- `libs/fred-runtime/tests/test_authorization_startup.py`
+- `libs/fred-runtime/tests/test_capability_platform_ports.py`
+- `libs/fred-runtime/tests/test_capability_preparation.py`
+- `libs/fred-runtime/tests/test_weaver_resolver_credentials.py`
+- `libs/fred-sdk/fred_sdk/contracts/capability/base.py`
+- `libs/fred-sdk/fred_sdk/contracts/capability/preparation.py`
+- `libs/fred-sdk/fred_sdk/contracts/runtime.py`
+- `WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md`
+- `docs/SWIFT_WEAVER_MERGES.md`
+- `deploy/release-notes/changes/weaver-powerpoint-file-ownership.md`
+
+</details>
+
+### Raccord Helm du worker PowerPoint - 5 novembre 2026 (réception développeur)
+
+**Périmètre ajusté à la demande de l'utilisateur : le développeur garde le build,
+le déploiement et les tests fonctionnels.** Le présent lot prépare uniquement le
+raccord et ses contrôles statiques. Les ajouts ciblés dans les fichiers déjà
+modifiés ont été autorisés ; les changements voisins sont conservés. Base Fred :
+branche `weaver`, HEAD `394a9150f7e5c6ac6abeb803775ca2a0a16377e8` ; factory : branche
+`weaver`, HEAD `f2db3463601426b03f857552fbe7cae6d6d10d0d`. Aucun nouveau commit.
+
+Le chart réutilise `inheritFrom` pour un Deployment `fred-agents-worker` distinct,
+avec `python -m fred_agents --mode worker`. Image et version de capability, runtime
+ID, SQL, URL CP, identité et références de secrets restent définis sur l'API ;
+le schéma interdit leurs surcharges indépendantes sur le worker. Le scheduler du
+worker est activé sans changer celui de l'API. La liaison workload CP est obligatoire
+et les connexions Temporal doivent concorder. Le schéma du chart est régénéré depuis
+les sources, incluant la configuration CP de préparation du lot précédent.
+
+Le worker ne crée ni service/ingress, ni endpoint métriques, ni sonde API, ni RBAC
+Kubernetes, ni migration supplémentaire. Il partage le Secret `.env` de l'API.
+Il dispose de 60 secondes d'arrêt pour les 30 secondes de fermeture Temporal et
+de limites initiales de 2 CPU / 2 GiB RAM / 2 GiB éphémères pour deux activités.
+La valeur explicite `replicaCount: 0` est maintenant respectée par le template
+Deployment, ce qui permet une pause sans arrêter l'API. Aucun tuning mesuré annoncé.
+
+Fichiers du raccord dans Fred : `deploy/charts/fred/values.yaml`, templates
+`_apps.tpl`, `_postgres.tpl`, `main.yaml`, `deployment.yaml`,
+`scripts/generate_chart_schema.py`, `deploy/charts/fred/values.schema.json`,
+`deploy/charts/test_manager_chart.py`, README du chart et de k3d, cette section et
+la [note opérateur](deploy/release-notes/changes/weaver-powerpoint-file-ownership.md).
+Dans la factory, seul `k3d-apps/fred/values-weaver.yaml` est prolongé : activation
+du worker et liaison `fred-agents` à `agentic`, issuer local, audience `app`.
+Les valeurs d'image existantes de l'API suffisent pour les deux processus.
+Les modifications applicatives PowerPoint antérieures ne sont pas attribuées à ce lot.
+
+Contrôles effectués, sans serveur applicatif ni mutation de cluster/base :
+
+| Contrôle | Résultat et portée |
+| --- | --- |
+| `helm lint deploy/charts/fred --strict` | Conforme sur les valeurs du chart. |
+| `make check-chart-values check-chart-schema-drift` | Conforme ; génération reproductible depuis les schémas sources. |
+| `python3 -m unittest deploy.charts.test_manager_chart.PreparationWorkerChartTests -v` | 3 contrôles de rendu réussis, dont 9 configurations incohérentes refusées. Vérifie image/secrets/SQL après surcharge, commande, absence de réseau/sondes, ordre CP puis capability, pause à zéro replica. |
+| Factory : `make k3d-app-validate FRED=weaver APP=fred DIR=<checkout Weaver>` | Conforme ; aucune construction d'image ou installation. |
+| Comparaison des manifestes du profil avant/après | Ajout du Deployment, ConfigMap et ServiceAccount worker uniquement ; seules la configuration CP et son checksum changent parmi les ressources existantes. API, frontend et KF inchangés. |
+| Ruff ciblé et vérification du diff | Générateur et bloc de contrôles ajouté conformes ; pas de reformatage des travaux voisins. |
+| Empreintes des migrations 0001 à 0007 | Identiques à la capture initiale. Aucune migration ajoutée. |
+
+Limites préexistantes conservées : `helm lint` avec le fichier de valeurs factory
+signale les `collection_name: null` des deux vector stores KF, alors que le rendu
+Helmfile avec validation du schéma passe. Ces nulls retirent le paramètre pgvector
+hérité lors du rendu OpenSearch ; ils ne sont pas supprimés pour masquer le lint.
+Le fichier de contrôles voisin contient aussi un import `tempfile` inutilisé et
+du formatage antérieur ; le bloc ajouté est vérifié isolément. Aucun composant
+applicatif n'étant modifié, aucun `make code-quality` applicatif ni suite runtime
+n'a été relancé.
+
+**Réception A-G : non exécutée, laissée au développeur.** Aucune image de ce lot
+n'a été construite ou déployée. La cible identifiée est `k3d-fred` / `fred-weaver`,
+base `fred_weaver`, namespace Temporal `fred-weaver`, avec S3 et Keycloak partagés
+avec Swift ; l'utilisateur a autorisé de dédier Weaver à la réception, puis a
+repris la main sur son exécution. Les ressources vivantes sont laissées inchangées.
+Seuls des instantanés de sources et rendus temporaires non secrets ont été créés
+pour comparer le lot. Aucun appel fournisseur, assistant supplémentaire, commit,
+push ou déploiement partagé.
+
+Premier point de test utile après déploiement : vérifier les images API/worker
+identiques, la rétention Temporal supérieure à deux heures et les claims workload,
+puis sauvegarder A et constater la convergence préparation -> disponibilité CP/UI.
+La conversion Office doit encore être observée dans l'image construite. Une pause
+avant livraison ne prouve pas la reprise d'une activité en cours. Le fournisseur
+déterministe intégré n'est pas raccordé au catalogue Weaver ; aucune conversation
+facturable n'est autorisée par ce raccord. Les autres scénarios, la plateforme
+d'intégration et la qualification arc42 restent explicitement non reçus.
+
+Bilan propre au raccord, contre la capture du checkout déjà modifié : templates et
+générateur **+43/-3** lignes ; valeurs Fred/factory **+75/-0** ; contrôles de rendu
+**+118/-0** ; schéma généré **+1126/-176** (inclut la projection du contrat CP déjà
+implémenté). Documentation exclue. L'ajout correspond au processus manquant et
+réemploie le chart, les hooks et l'héritage existants ; aucun second chemin local.
+
+### Reprise de la réception déployée PowerPoint - 5 novembre 2026
+
+La nouvelle mission autorise la construction, le déploiement et la réception
+navigateur sur la cible locale déjà convenue. Elle remplace, pour cette reprise,
+la restriction précédente laissant l'exécution au développeur. Les lots
+applicatifs acceptés ne sont pas remis en revue.
+
+**Déploiement effectué ; réception fonctionnelle reprise par le développeur à
+sa demande, avant bootstrap. Aucun scénario 1 à 7 reçu.** Checkouts Fred et factory sur les mêmes HEAD
+que le raccord ci-dessus, avec leurs modifications préexistantes conservées.
+Cible vérifiée : contexte `k3d-fred`, namespace/base/Temporal
+`fred-weaver` / `fred_weaver` / `fred-weaver`, ingress
+`http://weaver.localhost:8088`. Au départ, aucune application dans le namespace
+et aucune table applicative dans la base. Infrastructure existante et secrets
+référencés présents ; aucune recréation de cluster ni suppression de données.
+
+Préparation observée : sauvegarde PostgreSQL au format custom avant installation,
+catalogue lisible avec `pg_restore` 17 (celui de l'hôte est trop ancien), rétention
+Temporal de 72 heures, `helm lint --strict`, valeurs et dérive du schéma conformes,
+trois tests `PreparationWorkerChartTests` réussis et rendu factory conforme.
+Construction lancée par `make k3d-app FRED=weaver APP=fred
+DIR=/home/dimi/Work/weaver/fred` depuis la factory. Les sept migrations sources
+ont leurs empreintes conservées pour comparaison après initialisation.
+
+Les fixtures synthétiques `RECEPTION-PPT-20261105-{A,B,ORG-A,ORG-B}.pptx`
+portent trois diapositives, un marquage et des couleurs distincts ; leurs tailles
+et SHA-256 sont conservés pour corrélation avec CP, worker et stockage.
+Aucun scénario utilisateur 1 à 7 n'est encore validé à ce stade.
+
+Le premier essai a échoué avant SQLx : le Job `schema-init` héritait du montage
+`processing-contract` sans son volume, créé uniquement dans le Deployment.
+Correction ciblée : le template Deployment monte désormais lui-même ce volume
+quand `workerContract.exportFromWorkerImage` est actif ; suppression du montage
+explicite dans l'exemple et les valeurs Weaver de la factory. Aucun changement
+applicatif ou de migration. Delta de cette reprise hors documentation : template
+**+3/-0**, valeurs/exemple **+0/-7**, test **+28/-0**, soit **-4 lignes** de
+configuration/template au total. Le test vérifie les références de volumes et
+l'absence de chemins de montage dupliqués dans les Deployments et Jobs.
+
+Après correction : quatre tests `PreparationWorkerChartTests` et le test du Secret
+`schema-init` réussis, lint et rendu conformes, validation Kubernetes
+`create --dry-run=server` du Job et des sept Deployments réussie. Reprise par le
+même Helmfile avec `DIR` et le `K3D_IMAGE_VALUES` construit, sans reconstruire les
+images. Release `fred-app`, chart/application `5.0.0`, révision **2**, déployée
+le 5 novembre 2026 à 11:12 CET ; sept Deployments disponibles sans redémarrage
+à l'observation. SQLx 0001 à 0007 appliquées, SHA-384 identiques aux sources ;
+hook runtime/capabilities réussi.
+
+| Image | Tag réellement déployé |
+| --- | --- |
+| Control Plane | `k3d-e3c02a088958be8c` |
+| API et worker agents | `k3d-d5ef1437f5b8223e` |
+| Frontend | `k3d-de4d783094182910` |
+| Knowledge Flow API | `k3d-d8ed532c15f0e0d6` |
+| Knowledge Flow worker | `k3d-e68472f44ce296c8` |
+| Monitor | `k3d-a2316b36d365d5b8` |
+
+API et worker ont le même digest exécuté
+`sha256:2da23a5bb0bafb1c907647774a4525d44a095d9e227722755ced3fced0babd13`.
+Claims workload observés sans conserver le jeton : issuer
+`http://keycloak:8080/realms/app`, audience `app`, client `agentic`, rôle
+`service_agent`. Le CP retourne l'installation
+`0f7b2ff0-ec9f-4d9b-b969-e580a451e089` et sa file
+`capability-0f7b2ff0-ec9f-4d9b-b969-e580a451e089-fred-agents` ; les pollers
+workflow et activité du worker y sont visibles. LibreOffice `24.2.7.2` est présent.
+La tentative de vérification directe de conversion s'est arrêtée avant conversion
+car le script de diagnostic importait `fitz`, absent de l'image ; cela ne prouve
+pas un défaut de la capability. Conversion réelle et aperçus restent non vérifiés.
+
+Le navigateur a atteint Keycloak, puis l'écran de bootstrap connecté comme
+`admin`. Aucun bootstrap, acceptation des CGU, agent de test, préparation,
+conversation, appel d'inférence, contrôle de droits ou nettoyage fonctionnel
+n'a été effectué. L'utilisateur reprend la réinstallation, le bootstrap et
+l'ensemble de la réception. Le cluster est laissé déployé ; aucun reset,
+effacement, commit ou push. Les fixtures et la sauvegarde sont conservées hors
+checkout dans `../sauvegardes/reception-ppt-20261105/`. Leur existence ne constitue
+pas une réception ; une réinstallation peut changer l'UUID et la file Temporal.
+
+Correction ciblée après le retour `make test` du développeur : le contrôle CP
+des aperçus PowerPoint construisait directement son en-tête d'authentification,
+ce que le garde-fou `test_no_outbound_path_builds_an_authorization_header_of_its_own`
+refusait. Le test reste inchangé. `WeaverCapabilityAuthorizer` réutilise désormais
+`static_person_provider`, comme l'accès privé à l'historique, et désactive
+l'authentification par défaut du client HTTP pour conserver le bearer utilisateur.
+Le test des aperçus couvre `Bearer` et `bearer`, un client préconfiguré avec une
+autre authentification, et le refus d'une référence étrangère ou obsolète.
+Échec initial reproduit ; les fichiers `test_outbound_credential_paths.py` et
+`test_capability_platform_ports.py` passent ensuite : **54 réussis**, sockets
+interdits. `make code-quality` dans `libs/fred-runtime` est conforme, analyse de
+types sans erreur ni avertissement. Delta propre à cette correction : production
+**+5/-1**, tests **+7/-4** ; modifications voisines conservées. La suite complète
+n'a pas été relancée et aucun build d'image, déploiement, commit ou push n'accompagne
+cette correction. La réception fonctionnelle reste à la main du développeur.
+
+### Tiroir Swift du modèle commun PowerPoint - 5 novembre 2026 (local, non reçu)
+
+Base : branche `weaver`, HEAD `394a9150f7e5c6ac6abeb803775ca2a0a16377e8`,
+checkout déjà modifié par les lots acceptés. Référence UI : Swift
+`3d18384205a469f691bbf3ca3cb697911bc6b257` et les deux captures fournies.
+Le checkout Swift courant ne contenait plus ces panneaux ; leur source Git a
+été utilisée. Aucune borne de fusion déplacée, aucun commit ni push.
+
+`FeaturesPage` retrouve l'engrenage Swift dans sa colonne Réglages, exclusivement
+sur l'offre `ppt_builder`. La navigation Weaver par pod reste en place.
+`CapabilityPlatformDrawer` et `PptBuilderPlatformPanel` reprennent le parcours
+Swift : upload immédiat, template courant/intégré, état du remplacement, résumé,
+`PatternReviewDialog`, PDF, aide, corrections à la fermeture, relance et
+confirmation de réinitialisation. `TemplateGuideLink` et les composants/CSS Swift
+sont réutilisés ; `OrganizationPowerPointTemplate`, son raccord au-dessus du
+tableau et ses traductions inutilisées sont supprimés. Le formulaire agent reste
+séparé. `PptBuilderVisionSettings` reste à sa place, verrouillé avec l'explication
+Weaver existante. Aucun appel d'inférence hors tour ajouté.
+
+La permission d'écriture de l'organisation remplace le rôle plateforme dans le
+tiroir. Les arguments RTK et les routes incluent organisation/espace et pod ; les
+aperçus reçoivent la route de l'offre. Une revue ouverte conserve le fichier
+qu'elle corrige et refuse une sauvegarde si le modèle effectif a changé. Les
+corrections restent affichées si la sauvegarde échoue.
+
+**Schéma des fichiers conservé.** Lecture ciblée de 0006/0007, du dépôt, de
+l'acceptation, de la confirmation et de la résolution : provenance organisation,
+instance et pod, capability `ppt_builder`, candidat distinct de l'effectif et
+préparation persistée sont cohérents avec le périmètre décidé. Les migrations
+0001 à 0007 sont identiques à l'instantané initial ; aucune réécriture.
+
+**Manque concret raccordé :** 0006/0007 ne stockaient pas les corrections du
+modèle commun, notamment celles du template intégré sans fichier. La migration
+additive `0008_powerpoint_template_settings.sql` crée uniquement ces réglages
+organisation/pod, avec capability fixe, JSON validé par la bibliothèque, fichier
+effectif facultatif, contraintes de rattachement et effacement lors du remplacement,
+de la réinitialisation ou de la suppression de l'organisation. Aucun original ni
+résultat de préparation existant n'est transformé. Le CP projette les corrections
+communes dans le contexte admis ; les corrections propres de l'agent gardent leur
+priorité. Les valeurs communes fournies par un client sont neutralisées par la
+validation de la bibliothèque.
+
+Le CP expose la lecture courant/candidat et l'écriture des réglages sous
+`powerpoint-template/settings`, et la relance sous `powerpoint-template/prepare`.
+La relance réutilise l'intention durable et le worker existants ; le résultat
+courant reste utilisable jusqu'au succès. Pas de nouvelle orchestration, stockage
+ou version métier. Validation de configuration et projection de préparation
+réutilisent les fonctions existantes, étendues pour ces consommateurs.
+
+Contrôles locaux :
+
+- `make code-quality` : CP, frontend, bibliothèque PowerPoint et runtime conformes.
+  Le warning Basedpyright préexistant sur `tests/builder_decks.py` reste présent.
+- Frontend : 59 tests réussis dans les sept fichiers ciblés (page, navigation par
+  pod, tiroir, panneau commun, formulaire agent, analyse et routage/cache RTK).
+- Bibliothèque : `tests/test_builder_capability.py`, 19 réussis.
+- Runtime : `tests/test_capability_platform_ports.py` et
+  `tests/test_outbound_credential_paths.py`, 58 réussis ; warning LangChain beta
+  préexistant. Python exécuté avec `--disable-socket --allow-unix-socket` : aucun
+  réseau ; les sockets Unix sont nécessaires à la boucle asyncio.
+- CP : `cargo test --test openapi`, 17 réussis. OpenAPI CP et capability exportés
+  sans serveur, puis clients TypeScript régénérés depuis ces sources.
+- Comparaison à l'instantané initial : production +746/-228 lignes (dont 370
+  lignes de panneau Swift restauré), migration +42/-0, tests +435/-14,
+  clients générés +87/-12. Documentation exclue ; travaux voisins non attribués.
+
+**Limites et réception développeur :** aucun accès cluster, démarrage de service,
+déploiement, migration sur base ni navigateur. L'exécution SQL de 0008 en base
+neuve et en mise à niveau reste à valider ; le diagramme ER nécessitant PostgreSQL
+n'a pas été régénéré. Les tests locaux ne prouvent ni la réception visuelle ni le
+parcours complet. Après déploiement par le développeur : comparer les captures
+Swift en FR/EN, déposer/remplacer puis observer préparation/échec/relance, corriger
+et rouvrir les slides (intégré et uploadé), réinitialiser, vérifier deux pods et
+deux organisations, les permissions et la priorité du modèle propre à l'agent.

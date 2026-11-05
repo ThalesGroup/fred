@@ -15,16 +15,15 @@
 import type { CapabilityUiPlugin } from "../types";
 import { PptPreviewPane } from "../ppt_filler/PptPreviewPane";
 import { useHasPptPreview } from "../ppt_filler/useSessionPptPreview";
-import { PptBuilderConfigForm } from "./PptBuilderConfigForm";
 import { PptBuilderPlatformPanel } from "./PptBuilderPlatformPanel";
+import { PptBuilderConfigForm } from "./PptBuilderConfigForm";
 
 export const pptBuilderCapability: CapabilityUiPlugin = {
   id: "ppt_builder",
+  platformPanel: PptBuilderPlatformPanel,
   // The deck arrives as ppt_filler's `ppt_preview` part, drawn by that plugin. The
   // same pane is declared here for when this one is active alone (offered once).
   configWidgets: { ppt_builder_template: PptBuilderConfigForm },
-  // The platform default template, set in Admin > Features.
-  platformPanel: PptBuilderPlatformPanel,
   sidePanels: {
     ppt_preview_pane: {
       Component: PptPreviewPane,

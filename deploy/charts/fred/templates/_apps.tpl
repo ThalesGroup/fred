@@ -18,7 +18,23 @@ Returns the resolved application as YAML; callers pipe it through `fromYaml`.
 {{- if hasKey $base "inheritFrom" -}}
 {{- fail (printf "applications.%s.inheritFrom: %q inherits too, which is not supported" .name .app.inheritFrom) -}}
 {{- end -}}
-{{- mergeOverwrite (deepCopy $base) (deepCopy $app) | toYaml -}}
+{{- $resolved := mergeOverwrite (deepCopy $base) (deepCopy $app) -}}
+{{- if and (eq .name "fred-agents-worker") $resolved.enabled -}}
+  {{- if not $base.enabled -}}
+    {{- fail "fred-agents-worker requires applications.fred-agents.enabled" -}}
+  {{- end -}}
+  {{- $cp := include "fred.managerConfiguration" .root | fromYaml -}}
+  {{- $runtime := $base.configuration.app.runtime_id -}}
+  {{- if not (hasKey (dig "capability_preparation" "workers" dict $cp.platform) $runtime) -}}
+    {{- fail "fred-agents-worker requires a CP platform.capability_preparation.workers binding for the API runtime_id" -}}
+  {{- end -}}
+  {{- range $key := list "host" "namespace" -}}
+    {{- if ne (index $resolved.configuration.scheduler.temporal $key) (index $cp.scheduler.lifecycle.temporal $key) -}}
+      {{- fail (printf "fred-agents preparation and CP scheduler.lifecycle.temporal.%s must match" $key) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $resolved | toYaml -}}
 {{- end -}}
 
 {{/* Share manager runtime configuration; factory's Temporal connection also serves lifecycle work. */}}

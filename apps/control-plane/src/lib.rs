@@ -56,3 +56,5 @@ pub mod users;
 pub mod provisioning;
 
 pub mod blueprint;
+
+pub mod capability_preparation;

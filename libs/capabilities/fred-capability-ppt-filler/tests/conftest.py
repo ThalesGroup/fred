@@ -22,7 +22,6 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from analysis_db import drain
 from fred_capability_ppt_filler.builder import analysis_job, deck_plans
 from fred_capability_ppt_filler.builder.analysis_job import (
     PptBuilderBase,
@@ -44,15 +43,6 @@ def deck_plan_store() -> Iterator[deck_plans.MemoryDeckPlanStore]:
     deck_plans.clear_deck_plan_store_provider()
 
 
-@pytest.fixture(autouse=True)
-def no_platform_default() -> Iterator[None]:
-    """The Fred template as the platform default, known without a read: a turn
-    never reaches the pod's Postgres in tests. ``analysis_db`` clears it."""
-    analysis_job._platform = (float("inf"), None)
-    yield
-    analysis_job.forget_platform_default()
-
-
 @pytest_asyncio.fixture
 async def analysis_db(
     tmp_path: Path,
@@ -66,7 +56,6 @@ async def analysis_db(
     analysis_job.set_store_provider(lambda: SqlAnalysisStore(maker))
     analysis_job.clear_caches()
     yield maker
-    await drain()
     analysis_job.clear_store_provider()
     analysis_job.clear_caches()
     await engine.dispose()
