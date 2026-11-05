@@ -1,0 +1,534 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""``ppt_builder`` save, readiness, analysis routes and turn wiring, fully
+offline on the port fakes and an in-memory SQLite analysis table (the tools:
+``test_build_tool.py``; the job: ``test_analysis_job.py``)."""
+
+from __future__ import annotations
+
+import hashlib
+import io
+from typing import Any, cast
+
+import httpx
+import pytest
+from analysis_db import age_row, preparation_context
+from builder_decks import build_showcase_template
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
+from fred_capability_ppt_filler.builder import analysis_job, preparation
+from fred_capability_ppt_filler.builder import capability as capability_mod
+from fred_capability_ppt_filler.builder import tools as tools_mod
+from fred_capability_ppt_filler.builder.analysis_job import get_analysis_store
+from fred_capability_ppt_filler.builder.builtin import builtin_template
+from fred_capability_ppt_filler.builder.capability import (
+    PPT_BUILDER_TEMPLATE_KEY,
+    PptBuilderCapability,
+    PptBuilderConfig,
+)
+from fred_capability_ppt_filler.builder.models import PatternOverride
+from fred_capability_ppt_filler.builder.tools import BUILD_TOOL_NAME
+from fred_capability_ppt_filler.capability import TEMPLATE_SLOT
+from fred_sdk.contracts.capability import (
+    CapabilityContext,
+    CapabilityIdentity,
+    EmptyModel,
+    SaveContext,
+    UploadedFile,
+    asset_keys,
+    reset_scope_private,
+)
+from fred_sdk.contracts.runtime import (
+    CapabilityTeamAuthorizer,
+    RuntimeServices,
+    capability_team_authorizer,
+)
+from port_fakes import FakeAssets, FakeWorkspace
+from pptx import Presentation
+
+TEMPLATE = build_showcase_template()
+SHA = hashlib.sha256(TEMPLATE).hexdigest()
+IDENTITY = CapabilityIdentity(
+    user_id="u-1",
+    session_id="s-1",
+    team_id="00000000-0000-4000-8000-000000000042",
+    agent_instance_id="00000000-0000-4000-8000-000000000007",
+)
+
+
+def _save_ctx(assets=None, identity: CapabilityIdentity = IDENTITY) -> SaveContext:
+    return SaveContext(identity=identity, services=RuntimeServices(agent_assets=assets))
+
+
+def _uploads(content: bytes):
+    return {TEMPLATE_SLOT: [UploadedFile(filename="template.pptx", content=content)]}
+
+
+async def _pdf(_bytes: bytes, *, suffix: str, **_options):
+    return b"%PDF-fake"
+
+
+async def _no_pdf(_bytes: bytes, *, suffix: str, **_options):
+    return None
+
+
+@pytest.fixture(autouse=True)
+def offline_conversion(monkeypatch):
+    monkeypatch.setattr(analysis_job, "convert_office_bytes_to_pdf", _pdf)
+
+
+async def _analysed(
+    analysis_db, config: PptBuilderConfig | None = None
+) -> PptBuilderConfig:
+    stored = await PptBuilderCapability().validate_config(
+        config or PptBuilderConfig(use_vision=False),
+        _uploads(TEMPLATE),
+        _save_ctx(FakeAssets()),
+    )
+    result = await PptBuilderCapability().prepare(
+        preparation_context(analysis_db, TEMPLATE)
+    )
+    assert result.error is None
+    return stored.model_copy(
+        update={"template_sha256": SHA, "analysis_id": result.reference}
+    )
+
+
+# --- validate_config -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upload_preflight_never_stores_a_template_or_a_result(analysis_db):
+    assets = FakeAssets()
+    stored = await PptBuilderCapability().validate_config(
+        PptBuilderConfig(), _uploads(TEMPLATE), _save_ctx(assets)
+    )
+    assert stored.template_sha256 is None
+    assert assets.blobs == {}
+    dumped = stored.model_dump()
+    assert "inventory" not in dumped and "patterns_path" not in dumped
+
+
+@pytest.mark.asyncio
+async def test_unreadable_or_oversized_upload_rejects_without_storing(
+    analysis_db, monkeypatch
+):
+    assets = FakeAssets()
+    with pytest.raises(ValueError, match="could not be read"):
+        await PptBuilderCapability().validate_config(
+            PptBuilderConfig(), _uploads(b"nope"), _save_ctx(assets)
+        )
+    monkeypatch.setattr(capability_mod, "MAX_TEMPLATE_UPLOAD_BYTES", 10)
+    with pytest.raises(ValueError, match="exceeds"):
+        await PptBuilderCapability().validate_config(
+            PptBuilderConfig(), _uploads(TEMPLATE), _save_ctx(assets)
+        )
+    assert assets.blobs == {}
+    assert await get_analysis_store().get(REFERENCE) is None
+
+
+@pytest.mark.asyncio
+async def test_unknown_overrides_cannot_change_the_prepared_inventory(analysis_db):
+    stored = await _analysed(analysis_db)
+    first = (await get_analysis_store().get(REFERENCE)).inventory()  # type: ignore[union-attr]
+    assert first is not None
+    config = stored.model_copy(
+        update={
+            "overrides": [
+                PatternOverride(pattern_id=first.patterns[0].id, label="Cover"),
+                PatternOverride(pattern_id="slide:999", included=False),
+            ]
+        }
+    )
+    kept = await PptBuilderCapability().validate_config(config, {}, _save_ctx())
+    effective, dropped = capability_mod.apply_overrides(first, kept.overrides)
+    assert dropped == ["slide:999"]
+    assert effective.patterns[0].label == "Cover"
+
+
+@pytest.mark.asyncio
+async def test_builtin_template_ignores_every_pattern_edit(analysis_db, monkeypatch):
+    """Pattern ids are positional: edits made on the agent's own template would
+    hit unrelated slides of whichever default template is in effect."""
+    inventory = builtin_template()[1]
+    config = PptBuilderConfig(
+        overrides=[
+            PatternOverride(pattern_id=inventory.patterns[0].id, label="x"),
+            PatternOverride(pattern_id="gone"),
+        ]
+    )
+    stored = await PptBuilderCapability().validate_config(config, {}, _save_ctx())
+    assert stored.template_sha256 is None
+    seen = []
+    monkeypatch.setattr(
+        capability_mod,
+        "build_builder_tools",
+        lambda _ctx, _load, inventory, *_args: seen.append(inventory) or [],
+    )
+    PptBuilderCapability().middleware(_turn_ctx(stored))
+    assert seen == [inventory]
+
+
+@pytest.mark.asyncio
+async def test_a_revalidation_without_an_instance_has_no_side_effect(analysis_db):
+    config = PptBuilderConfig(template_sha256=SHA)
+    anonymous = CapabilityIdentity(
+        user_id="anonymous", team_id="00000000-0000-4000-8000-000000000042"
+    )
+    stored = await PptBuilderCapability().validate_config(
+        config, {}, _save_ctx(identity=anonymous)
+    )
+    assert stored.template_sha256 is None and stored.analysis_id is None
+    assert await get_analysis_store().get(REFERENCE) is None
+
+
+# --- Copy to another scope ---------------------------------------------------------
+
+
+def test_the_built_in_template_has_no_file_to_copy():
+    """A stale key never survives a return to the built-in template: a copy
+    would otherwise re-submit a file the agent no longer uses."""
+    config = PptBuilderConfig.model_validate(
+        {"template_key": PPT_BUILDER_TEMPLATE_KEY, "template_sha256": None}
+    )
+    assert config.template_key is None
+    assert asset_keys(reset_scope_private(config)) == {}
+    assert PptBuilderConfig.model_validate({"template_sha256": SHA}).template_key == (
+        PPT_BUILDER_TEMPLATE_KEY
+    )
+
+
+@pytest.mark.asyncio
+async def test_copy_cannot_authorize_an_analysis_from_another_scope(analysis_db):
+    stored = await _analysed(analysis_db)
+    assert reset_scope_private(stored).analysis_id is None
+    target = CapabilityIdentity(user_id="u-2", team_id="team-99")
+    assets = FakeAssets()
+    copied = await PptBuilderCapability().validate_config(
+        stored, {}, _save_ctx(assets, identity=target)
+    )
+    assert copied.analysis_id is None and copied.template_sha256 is None
+    assert assets.blobs == {}
+    assert stored.analysis_id is not None
+    record = await get_analysis_store().get(stored.analysis_id)
+    assert record is not None and record.team_id == IDENTITY.team_id
+
+
+@pytest.mark.asyncio
+async def test_readiness_without_a_template_is_ready_at_once():
+    verdict = await PptBuilderCapability().readiness(PptBuilderConfig(), IDENTITY)
+    assert verdict.state == "ready"
+
+
+# --- analysis routes -------------------------------------------------------------------------
+
+
+class _Authorizer(CapabilityTeamAuthorizer):
+    runtime_id = "pod-a"
+
+    async def require_preparation_access(self, reference, space_id, agent_instance_id):
+        await self.require_agent_editor(space_id)
+        assert (
+            reference == REFERENCE and agent_instance_id == IDENTITY.agent_instance_id
+        )
+
+    def __init__(self, editor_of: set[str]) -> None:
+        self.editor_of = editor_of
+
+    async def require_agent_editor(self, team_id: str) -> None:
+        if team_id not in self.editor_of:
+            raise HTTPException(status_code=403, detail="Not an agent editor.")
+
+
+def _async_client(editor_of: set[str]) -> httpx.AsyncClient:
+    app = FastAPI()
+    router = PptBuilderCapability.manifest.router
+    assert router is not None
+    app.include_router(router, prefix="/capabilities/ppt_builder")
+    app.dependency_overrides[capability_team_authorizer] = lambda: _Authorizer(
+        editor_of
+    )
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://pod",
+        params={
+            "space_id": IDENTITY.team_id,
+            "agent_instance_id": IDENTITY.agent_instance_id,
+        },
+    )
+
+
+REFERENCE = "prep:00000000-0000-4000-8000-000000000007"
+_BASE = f"/capabilities/ppt_builder/analysis/{REFERENCE}"
+
+
+@pytest.mark.asyncio
+async def test_a_non_editor_is_refused_everywhere(analysis_db):
+    await _analysed(analysis_db)
+    async with _async_client({"other-team"}) as client:
+        for response in (
+            await client.get(_BASE),
+            await client.get(f"{_BASE}/patterns.pdf"),
+        ):
+            assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_an_editor_sees_status_thumbnails_and_inventory(analysis_db):
+    await _analysed(analysis_db)
+    async with _async_client({"00000000-0000-4000-8000-000000000042"}) as client:
+        body = (await client.get(_BASE)).json()
+        assert body["status"] == "succeeded" and body["current"] is True
+        assert body["template_sha256"] == SHA and body["labelling_key"] == "rules"
+        assert body["has_thumbnails"] is True and body["summary"]["layouts"] == 10
+        assert any(p["kind"] == "agenda" for p in body["inventory"]["patterns"])
+        pdf = await client.get(f"{_BASE}/patterns.pdf")
+        assert pdf.status_code == 200 and pdf.content == b"%PDF-fake"
+        assert (
+            await client.get("/capabilities/ppt_builder/analysis/x")
+        ).status_code == 404
+
+
+# --- turn wiring -------------------------------------------------------------------------------
+
+
+def _turn_ctx(config: PptBuilderConfig, assets=None) -> CapabilityContext:
+    return CapabilityContext(
+        identity=IDENTITY,
+        config=config,
+        turn_options=EmptyModel(),
+        services=RuntimeServices(agent_assets=assets, workspace_fs=FakeWorkspace()),
+    )
+
+
+def _middleware(ctx: CapabilityContext) -> Any:
+    (middleware,) = PptBuilderCapability().middleware(ctx)
+    return cast(Any, middleware)
+
+
+@pytest.mark.asyncio
+async def test_the_tool_refuses_while_the_analysis_is_pending(analysis_db):
+    stored = PptBuilderConfig(template_sha256=SHA, use_vision=False)
+    ctx = preparation_context(analysis_db, TEMPLATE)
+    store = await preparation._reserve(ctx)
+    row = await store.get(REFERENCE)
+    assert row is not None
+    await store.heartbeat(REFERENCE, row.job_id)
+    stored.analysis_id = REFERENCE
+    tools = {t.name: t for t in _middleware(_turn_ctx(stored)).tools}
+    text, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[{"title": "Hi"}])
+    assert result.is_error and "still being analysed" in text
+
+    await age_row(analysis_db, REFERENCE, status="failed")
+    tools = {t.name: t for t in _middleware(_turn_ctx(stored)).tools}
+    text, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[{"title": "Hi"}])
+    assert result.is_error and "re-run the analysis" in text
+
+
+@pytest.mark.asyncio
+async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
+    analysis_db, monkeypatch
+):
+    stored = await _analysed(analysis_db)
+    analysis_job.clear_caches()  # a pod that has not read it yet
+    # The template comes from the analysis row, never from the asset.
+    middleware = _middleware(_turn_ctx(stored, FakeAssets()))
+    deferred = next(t for t in middleware.tools if t.name == BUILD_TOOL_NAME)
+    assert "still being analysed" in deferred.description
+
+    seen: list = []
+
+    class _Request:
+        system_prompt = "base"
+        tools = middleware.tools
+        messages: list = []
+
+        def override(self, **update):
+            seen.append(update)
+            return self
+
+    async def _handler(request):
+        return request
+
+    await middleware.awrap_model_call(_Request(), _handler)
+    (update,) = seen
+    shown = next(t for t in update["tools"] if t.name == BUILD_TOOL_NAME)
+    assert "- process (" in shown.description
+    assert "optionally its kind" in update["system_message"].content
+    assert "Build directly" in update["system_message"].content
+    # After a revision the turn must go on with the fixed call, not end on prose.
+    assert (
+        "If the tool returns needs_revision, nothing was built yet: your very next message "
+        "MUST be a new 'build_presentation' call with the fixes applied"
+    ) in update["system_message"].content
+    # Models wrote the retry as JSON in the chat instead of calling the tool.
+    assert "never write the call, its JSON" in update["system_message"].content
+
+    # The registered tool executes with the template's tool, from validated args.
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    message = await deferred.ainvoke(
+        {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": BUILD_TOOL_NAME,
+            "args": {
+                "slides": [{"title": "Kick-off"}, {"title": "Plan", "bullets": ["a"]}]
+            },
+        }
+    )
+    assert "2 slides" in message.content and not message.artifact.is_error
+
+    # The next turn on this pod builds the template's tools without a DB read.
+    analysis_job.set_store_provider(lambda: (_ for _ in ()).throw(AssertionError()))
+    again = _middleware(_turn_ctx(stored, FakeAssets()))
+    built = next(t for t in again.tools if t.name == BUILD_TOOL_NAME)
+    assert "- process (" in built.description
+
+
+@pytest.mark.asyncio
+async def test_a_turn_never_renders_a_template_other_than_the_analysed_one(
+    analysis_db, monkeypatch
+):
+    """A save stores a new template before its config commits: a turn still on
+    the old config refuses instead of rendering the new bytes."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    stored = await _analysed(analysis_db)
+    plan = {"slides": [{"title": "Kick-off"}, {"title": "Plan", "bullets": ["a"]}]}
+    newer = builtin_template()[0]  # a valid deck: rendering it would succeed
+    record = await get_analysis_store().get(REFERENCE)
+    inventory = record.inventory() if record else None
+    assert inventory is not None
+    await age_row(
+        analysis_db,
+        REFERENCE,
+        template_sha256="sha-of-a-newer-upload",
+        template_pptx=newer,
+    )
+    analysis_job.clear_caches()
+    analysis_job.remember_inventory(REFERENCE, SHA, "rules", inventory)
+    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: newer})
+    tools = {t.name: t for t in _middleware(_turn_ctx(stored, assets)).tools}
+    text, result = await tools[BUILD_TOOL_NAME].coroutine(**plan)
+    assert result.is_error and "could not be loaded" in text
+
+
+# --- routes ---------------------------------------------------------------------------------
+
+
+def _client() -> TestClient:
+    app = FastAPI()
+    router = PptBuilderCapability.manifest.router
+    assert router is not None
+    app.include_router(router, prefix="/capabilities/ppt_builder")
+    return TestClient(app)
+
+
+def test_builtin_patterns_returns_pdf_or_503(monkeypatch):
+    monkeypatch.setattr(capability_mod, "convert_office_bytes_to_pdf", _pdf)
+    assert (
+        _client().get("/capabilities/ppt_builder/builtin/patterns.pdf").status_code
+        == 200
+    )
+
+
+def test_builtin_patterns_are_converted_once_per_process(monkeypatch):
+    calls = []
+
+    async def _counting(_bytes: bytes, *, suffix: str, **_options):
+        calls.append(suffix)
+        return b"%PDF-builtin"
+
+    monkeypatch.setattr(capability_mod, "convert_office_bytes_to_pdf", _counting)
+    monkeypatch.setattr(capability_mod, "_builtin_pdf", None)
+    client = _client()
+    assert (
+        client.get("/capabilities/ppt_builder/builtin/patterns.pdf").content
+        == b"%PDF-builtin"
+    )
+    assert (
+        client.get("/capabilities/ppt_builder/builtin/patterns.pdf").content
+        == b"%PDF-builtin"
+    )
+    assert calls == [".pptx"]
+
+
+def test_patterns_preview_keeps_one_page_per_pattern_even_for_uncopyable_slides():
+    from fred_capability_ppt_filler.builder.analysis import analyze_template
+    from fred_capability_ppt_filler.builder.preview import build_patterns_deck
+
+    inventory = analyze_template(TEMPLATE).inventory
+    assert inventory is not None
+    chart = next(p for p in inventory.patterns if p.exclusion_reason == "chart")
+    chart.exclusion_reason = "unsupported_parts"
+    deck = Presentation(io.BytesIO(build_patterns_deck(TEMPLATE, inventory)))
+    assert len(deck.slides) == len(inventory.patterns)
+
+
+def test_builtin_route_lists_the_template_kinds():
+    body = _client().get("/capabilities/ppt_builder/builtin").json()
+    kinds = {p["kind"] for p in body["inventory"]["patterns"] if p["included"]}
+    assert {
+        "section",
+        "agenda",
+        "bullets",
+        "two_columns",
+        "comparison",
+        "figures",
+        "process",
+        "closing",
+    } <= kinds
+
+
+@pytest.mark.asyncio
+async def test_only_cp_can_supply_common_corrections_and_builtin_uses_them(
+    analysis_db, monkeypatch
+):
+    inventory = builtin_template()[1]
+    common = capability_mod.CommonTemplateConfig(
+        overrides=[
+            PatternOverride(
+                pattern_id=inventory.patterns[0].id, label="Organization cover"
+            )
+        ]
+    )
+    submitted = PptBuilderConfig(common_template_config=common)
+    validated = await PptBuilderCapability().validate_config(submitted, {}, _save_ctx())
+    assert validated.common_template_config is None
+    seen = []
+    monkeypatch.setattr(
+        capability_mod,
+        "build_builder_tools",
+        lambda _ctx, _load, inventory, *_args: seen.append(inventory) or [],
+    )
+    # The canonical execution snapshot is enriched by CP after validation.
+    PptBuilderCapability().middleware(
+        _turn_ctx(validated.model_copy(update={"common_template_config": common}))
+    )
+    assert seen[0].patterns[0].label == "Organization cover"
+    assert builtin_template()[1].patterns[0].label != "Organization cover"
+
+
+def test_agent_corrections_override_common_fields_without_erasing_other_fields():
+    config = PptBuilderConfig(
+        common_template_config=capability_mod.CommonTemplateConfig(
+            overrides=[
+                PatternOverride(pattern_id="slide:1", label="Common", included=False),
+            ]
+        ),
+        overrides=[PatternOverride(pattern_id="slide:1", label="Agent")],
+    )
+    assert config.effective_overrides() == [
+        PatternOverride(pattern_id="slide:1", label="Agent", included=False)
+    ]

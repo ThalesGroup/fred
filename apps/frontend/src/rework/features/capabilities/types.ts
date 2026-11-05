@@ -199,6 +199,23 @@ export interface CapabilityHitlRendererProps {
  */
 export type CapabilityHitlRenderer = ComponentType<CapabilityHitlRendererProps>;
 
+export interface CapabilityPlatformPanelProps {
+  /** This capability's row of the admin catalogue. */
+  capability: { id: string; name: string; description?: string | null };
+  /** Explicit offer scope: neither routes nor caches are keyed by capability alone. */
+  organizationId: string;
+  runtimeId: string;
+  baseUrl: string | null;
+  /** The organization write permission, checked by Control Plane. */
+  canManage: boolean;
+}
+
+/**
+ * Platform-wide settings of a capability, opened from its row in Admin >
+ * Features. Only capabilities with platform state of their own declare one.
+ */
+export type CapabilityPlatformPanel = ComponentType<CapabilityPlatformPanelProps>;
+
 export interface CapabilityUiPlugin {
   /** Backend capability id (`manifest.id`), e.g. "demo_echo". */
   id: string;
@@ -242,4 +259,6 @@ export interface CapabilityUiPlugin {
    * side-panel and config-widget registries.
    */
   hitlRenderers?: Record<string, CapabilityHitlRenderer>;
+  /** Platform-wide settings panel, opened from Admin > Features. */
+  platformPanel?: CapabilityPlatformPanel;
 }

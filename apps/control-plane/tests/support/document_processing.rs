@@ -664,7 +664,7 @@ async fn processing_admission_fences_publication_and_original_survival() {
     assert_eq!(usage["used_bytes"], 11);
 }
 
-struct TemporalFixture(String);
+pub(super) struct TemporalFixture(String);
 impl Drop for TemporalFixture {
     fn drop(&mut self) {
         let _ = std::process::Command::new("docker")
@@ -672,7 +672,7 @@ impl Drop for TemporalFixture {
             .output();
     }
 }
-fn start_temporal() -> (TemporalFixture, String) {
+pub(super) fn start_temporal() -> (TemporalFixture, String) {
     let name = format!("fred-processing-temporal-{}", Uuid::new_v4().simple());
     let temporal = TemporalFixture(name.clone());
     let result = std::process::Command::new("docker")
@@ -1283,7 +1283,7 @@ async fn processing_existing_worker_journey_without_kf_http() {
     drop(temporal);
 }
 
-async fn ready_temporal(host: &str) -> temporalio_client::Client {
+pub(super) async fn ready_temporal(host: &str) -> temporalio_client::Client {
     use temporalio_client::{
         Client, ClientOptions, ConnectionOptions, Url, grpc::WorkflowService, tonic::Request,
     };

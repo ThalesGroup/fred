@@ -80,3 +80,12 @@ def test_lifespan_refuses_sqlite_authorization(startup):
         with boot(startup):
             pytest.fail("SQLite is not the Weaver authority")
     startup.sql.dispose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_worker_boot_requests_sql_without_conversation_stores(startup):
+    from fred_runtime.app.security import prepare_authorization
+
+    await prepare_authorization(startup.container, conversations=False)
+    startup.container.initialize_sql.assert_awaited_once_with(conversations=False)
+    startup.container.initialize_filesystem.assert_not_awaited()

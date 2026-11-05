@@ -56,14 +56,15 @@ from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast
 
 from langchain.agents.middleware import AgentMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from .context import CapabilityContext, EmptyModel, SaveContext
+from .context import CapabilityContext, CapabilityIdentity, EmptyModel, SaveContext
 from .hitl import HitlSpec
 from .manifest import CapabilityManifest, ChatControlSpec, UploadedFile
+from .preparation import PreparationContext, PreparationResult
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -71,6 +72,31 @@ if TYPE_CHECKING:
 ConfigT = TypeVar("ConfigT", bound=BaseModel)
 StoredT = TypeVar("StoredT", bound=BaseModel)
 TurnOptionsT = TypeVar("TurnOptionsT", bound=BaseModel)
+
+
+class CapabilityReadiness(BaseModel):
+    """
+    Whether a saved capability slice can serve turns yet. `pending` and
+    `failed` keep the agent suspended (`capability_pending`); `detail` is the
+    plain-language failure shown to the editor.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    state: Literal["ready", "pending", "failed"]
+    detail: str | None = None
+
+    @classmethod
+    def ready(cls) -> "CapabilityReadiness":
+        return cls(state="ready")
+
+    @classmethod
+    def pending(cls) -> "CapabilityReadiness":
+        return cls(state="pending")
+
+    @classmethod
+    def failed(cls, detail: str) -> "CapabilityReadiness":
+        return cls(state="failed", detail=detail)
 
 
 class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
@@ -125,6 +151,14 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
         del uploads, ctx
         return cast(StoredT, self.StoredConfigModel.model_validate(config.model_dump()))
 
+    async def prepare(self, ctx: PreparationContext) -> PreparationResult:
+        """Persist/reuse the result for the exact CP preparation, without a turn."""
+        raise NotImplementedError("This capability has no durable preparation")
+
+    async def retire_preparation(self, ctx: PreparationContext) -> None:
+        """Fence late writes and release derived bytes; replay must be harmless."""
+        raise NotImplementedError("This capability has no durable preparation")
+
     def chat_controls(self, config: StoredT) -> list[ChatControlSpec]:
         """
         Computed chat-time control descriptors for one agent instance
@@ -144,6 +178,21 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
 
         del from_version
         return cast(StoredT, self.StoredConfigModel.model_validate(stored))
+
+    async def readiness(
+        self, stored: StoredT, identity: CapabilityIdentity
+    ) -> CapabilityReadiness:
+        """
+        Whether this instance's saved slice is ready to serve turns, for a
+        capability whose save starts background work. Asked by control-plane
+        after a save, on listings and on re-checks, so it must return quickly:
+        it only consults persisted results and never starts work. Default: ready.
+        The UI names the pending work from the frontend locale key
+        `capability.<id>.preparing` when the capability ships one.
+        """
+
+        del stored, identity
+        return CapabilityReadiness.ready()
 
     def hitl_specs(self) -> Sequence[HitlSpec]:
         """

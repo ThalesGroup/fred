@@ -33,10 +33,10 @@ export const createCapabilityBaseQuery = (
     typeof args === "string" ? { url: args, cache: "no-store" } : { ...args, cache: "no-store" };
 
   return async (args, api, extraOptions) => {
-    const baseUrl = selectCapabilityBaseUrl(
-      api.getState() as { capabilityRouting: CapabilityRoutingState },
-      capabilityId,
-    );
+    const params = typeof args === "string" ? undefined : args.params;
+    const routeKey =
+      params?.runtime_id && params?.space_id ? `${params.space_id}/${params.runtime_id}/${capabilityId}` : capabilityId;
+    const baseUrl = selectCapabilityBaseUrl(api.getState() as { capabilityRouting: CapabilityRoutingState }, routeKey);
     if (!baseUrl) {
       return {
         error: {

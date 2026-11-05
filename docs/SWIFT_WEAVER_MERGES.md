@@ -95,3 +95,19 @@ de récupérabilité et d'absence de travail actif. Pas de git clean/reset autom
 La stratégie et le suivi restent hors arc42. Après validation du parcours selon
 le skill architecture, mettre à jour les chapitres existants et leurs annexes ;
 jusque-là, conserver les propositions dans le rapport de travail.
+
+
+## Décision PowerPoint — 5 novembre 2026
+
+Le raccord durable décrit dans `WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md` remplace le
+lancement asyncio à la sauvegarde et la réparation par polling Swift. CP accepte
+et décide la disponibilité ; Temporal orchestre ; le worker du pod appelle sa
+bibliothèque installée et confirme après persistance. Les modèles communs sont
+scopés à l'organisation **et au pod logique**, sans activation transverse aux pods.
+
+Décision explicite pour cette première version : ne pas enrichir le tour avec
+un suivi des usages, des interruptions ou du décommissionnement. Les usages
+simultanés à une suppression/remplacement et leur rétention feront l'objet d'un
+lot transversal. Ne pas assimiler refus de nouveaux échanges et protection de
+tous les tours déjà admis. Aucun chapitre arc42 ne décrit ce parcours comme reçu
+en déploiement sur la seule base des tests locaux.

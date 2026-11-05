@@ -121,6 +121,98 @@ dupliqué ou copié dans une autre équipe emporte son propre exemplaire du mod�
 **Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.
 
+### Générer une présentation
+
+**Ce qu'elle fait** — l'agent construit une présentation PowerPoint à partir de
+votre demande, sur le template de votre entreprise ou, à défaut, sur le
+template de la plateforme. Pour chaque slide, il choisit la slide du template qui
+convient le mieux au contenu et la remplit. Quand le template a une
+slide qui peut recevoir un graphique, les chiffres deviennent des
+graphiques modifiables, aux couleurs du template, des barres et secteurs
+jusqu'aux radars, nuages de points et bulles ; un graphique en secteurs
+affiche des pourcentages, sauf si vous donnez une unité (M€, personnes…) :
+il affiche alors les valeurs. La présentation s'affiche dans un
+aperçu à côté de la conversation et se télécharge en `.pptx`. Le bouton
+d'information à côté du téléchargement montre **Ce qui a été construit** :
+chaque slide, son type, et ce qui a été raccourci, laissé de côté ou
+continué sur une autre slide.
+
+**Comment la configurer** — activez la génération de présentations sur l'agent.
+Il utilise le modèle partagé choisi par un administrateur plateforme, ou le modèle
+Fred intégré. L'administrateur peut déposer un `.pptx`, suivre son analyse en
+arrière-plan et vérifier les diapositives dans
+[Administration](/help/fr/features/administration#le-template-de-présentation-de-la-plateforme).
+Le dépôt d'un modèle propre à l'agent et son statut de préparation ne sont pas
+encore raccordés.
+
+**Utiliser un modèle de vision** — cette option n'est pas disponible dans Weaver.
+L'analyse et les noms reposent sur des règles de structure. Les administrateurs
+peuvent corriger les noms et les types détectés à la main.
+
+Pour préparer un modèle partagé, consultez
+[Préparer votre template PowerPoint](/help/fr/guides/prepare-powerpoint-template).
+
+**Forcer de la variété** — limite le nombre de fois qu'une même slide
+revient dans une présentation. **Par nom de slide** (par défaut) : chaque
+slide du template sert au plus le nombre de fois choisi. **Par type de slide
+identifié** : chaque type (des listes à puces, par exemple) revient au plus ce
+nombre de fois, même sur des slides différentes. Avec **1**, chaque
+slide est différente ; avec **2** (par défaut), une slide peut
+revenir une fois. La limite compte dans chaque section : une section (un pays,
+par exemple) peut reprendre les mêmes slides qu'une autre. Des
+slides identiques à la suite ne sont faites que si vous le demandez. Quand le template contient trop peu de slides pour la
+présentation demandée, l'agent fait au mieux. Sur la première présentation
+d'une conversation, l'agent est invité à revoir celles qui se répètent trop.
+Interrupteur coupé : aucune limite. Le changement vaut dès la présentation
+suivante, sans relire le template.
+
+**Le fil de la présentation** — pour chaque slide, l'agent décide
+d'abord ce que le public doit en retenir, en une phrase, puis choisit ce qu'il
+montre pour le prouver. Cette phrase ouvre les notes de l'orateur, et le
+titre la résume en quelques mots. Elle n'est affichée sur les slides que
+si vous demandez les messages clés sur les slides, et seulement sur
+celles dont le template prévoit une place pour elle.
+Quand le contenu vient de vos documents ou de ce que vous avez écrit dans la
+conversation, les notes disent d'où il vient ; les connaissances générales
+n'ont pas de source. L'agent n'invente des chiffres que si vous demandez
+des données d'exemple ou fictives ; le graphique l'indique alors
+(« illustratif »). L'agent ne vérifie pas les chiffres : vérifiez-les avant de
+présenter.
+
+**Valider le plan avant de construire** — désactivé par défaut. Activé, l'agent
+montre d'abord son plan pour la première présentation d'une conversation : le
+public, le message principal, une ligne par slide et ce que la
+construction changerait (une slide construite sous un autre type, par
+exemple). Il attend votre
+réponse : validez-le ou dites ce qu'il faut changer, et il construit. Pour
+passer cette étape une fois, demandez-lui de construire directement, sans plan.
+Une fois le plan validé, les slides restent telles que convenu : l'agent
+n'est pas invité à revoir celles qui se répètent. Les modifications d'une
+présentation déjà livrée n'attendent jamais.
+
+**Modifier une présentation livrée** — demandez-le dans la même conversation :
+l'agent modifie la dernière présentation qu'il y a livrée, jamais une plus
+ancienne. Désignez les slides par leur numéro dans le fichier : changez
+le texte de la slide 4, ajoutez une slide après la 2, déplacez la
+6 après la 3, supprimez la 5. Pour donner à une slide l'apparence d'une
+autre, demandez « la même mise en page que la slide 3 ». Les autres
+slides restent telles quelles.
+
+**Les images** — l'agent prend les images dans un dossier des ressources de
+votre équipe : nommez le dossier dans votre demande (« les images de
+Images/Sites »). Seules les slides du template qui ont une zone d'image
+en affichent une. Un fichier qui n'est pas une image utilisable est laissé de
+côté, et **Ce qui a été construit** le signale.
+
+**Ses limites** — l'agent n'utilise que les slides que le template
+contient : il n'en dessine pas de nouvelles. Quand un contenu ne tient dans
+aucune slide (trop d'éléments, par exemple), il le découpe ou le
+raccourcit. Si la lecture du template échoue, l'agent reste indisponible : le
+formulaire en donne la raison ; enregistrez l'agent pour le relire.
+
+**Un exemple** — « Prépare une présentation de dix slides sur nos
+résultats trimestriels pour le comité de direction. »
+
 ### Générer une page web (HTML/CSS)
 
 **Ce qu'elle fait** — l'agent produit une page ou un composant web, affiché

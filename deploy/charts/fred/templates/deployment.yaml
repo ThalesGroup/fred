@@ -6,12 +6,13 @@
 {{- $applicationName := .app.applicationName }}                         # we will use it in a loop
 {{- $isFrontend := eq .app.applicationName "frontend" }}
 {{- $isFredAgents := eq .app.applicationName "fred-agents" }}
-{{- $replicaCount := .app.replicaCount | default 1 | int }}
+{{- $replicaCount := dig "replicaCount" 1 .app | int }}
 {{- $maxReplicas := $replicaCount }}
 {{- if and .app.autoscaling .app.autoscaling.enabled }}
 {{- $maxReplicas = .app.autoscaling.maxReplicas | int }}
 {{- end }}
 {{- $configuration := .app.configuration | default dict }}
+{{- $exportsWorkerContract := and (eq .app.applicationName "control-plane-backend") (dig "workerContract" "exportFromWorkerImage" false .app) }}
 {{- $runtimeFilesystemType := dig "storage" "object_store" "type" "local" $configuration }}
 {{- if and $isFredAgents (gt $maxReplicas 1) (eq $runtimeFilesystemType "local") }}
 {{- fail "applications.fred-agents.configuration.storage.object_store must select a shared backend (gcs or minio) when replicaCount or enabled autoscaling maxReplicas is greater than 1" }}
@@ -59,6 +60,10 @@ spec:
         {{- else if .app.configuration }}
         configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"
         {{- end }}
+        {{- if $exportsWorkerContract }}
+        {{- $worker := index .root.Values.applications "knowledge-flow-worker" }}
+        configmap.worker-contract.checksum: {{ list $worker.image $worker.configuration | toJson | sha256sum | quote }}
+        {{- end }}
         {{- if .app.kubeconfig.enabled }}
         configmap.kubeconfig.checksum: "{{ .root.Values.global.kubeconfig | join "," | sha256sum }}"
         {{- end }}
@@ -66,6 +71,9 @@ spec:
       labels:
         app: {{ .app.applicationName }}
     spec:
+      {{- with .app.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
       {{- if .app.imagePullSecrets }}
       imagePullSecrets:
 {{ toYaml .app.imagePullSecrets | nindent 8 }}
@@ -81,6 +89,22 @@ spec:
 {{ toYaml . | nindent 8 }}
       {{- end }}
 
+      {{- if $exportsWorkerContract }}
+      {{- $worker := index .root.Values.applications "knowledge-flow-worker" }}
+      initContainers:
+        # What the worker accepts comes from the worker's own image and configuration,
+        # so the two cannot disagree. No credential: this container reads no Secret.
+        - name: worker-contract
+          image: "{{ $worker.image.repository }}:{{ $worker.image.tag | default .root.Chart.AppVersion }}"
+          imagePullPolicy: {{ default "IfNotPresent" $worker.image.pullPolicy }}
+          command: [sh, -ec]
+          args:
+            - python -m knowledge_flow_worker.features.scheduler.export_contract --configuration /worker-config/configuration.yaml > /app/processing-contract/worker-contract.json
+          volumeMounts:
+            - {name: worker-config, mountPath: /worker-config, readOnly: true}
+            - {name: processing-contract, mountPath: /app/processing-contract}
+      {{- end }}
+
       containers:
         - name: {{ .app.applicationName }}
           image: "{{ .app.image.repository }}:{{ .app.image.tag | default .root.Chart.AppVersion }}"
@@ -91,12 +115,14 @@ spec:
 {{ toYaml . | nindent 12 }}
           {{- end }}
 
+          {{- if .app.ports }}
           ports:
           {{- range .app.ports }}
             - containerPort: {{ .containerPort }}
               {{- if .name }}
               name: {{ .name }}
               {{- end }}
+          {{- end }}
           {{- end }}
 
           {{- if .app.command.enabled }}
@@ -177,6 +203,9 @@ spec:
           {{- end }}
 
           volumeMounts:
+          {{- if $exportsWorkerContract }}
+            - {name: processing-contract, mountPath: /app/processing-contract, readOnly: true}
+          {{- end }}
           {{- if eq .app.applicationName "control-plane-backend" }}
           {{- with $configuration.storage.content }}
             - name: manager-document-spool
@@ -216,6 +245,12 @@ spec:
           emptyDir:
             sizeLimit: {{ (get (.limits | default dict) "temp_bytes") | default 838860800 | int64 | printf "%d" | quote }}
       {{- end }}
+      {{- end }}
+      {{- if $exportsWorkerContract }}
+        - name: worker-config
+          configMap: {name: {{ (index .root.Values.applications "knowledge-flow-worker").applicationName }}-back}
+        - name: processing-contract
+          emptyDir: {}
       {{- end }}
 {{ toYaml .app.volumes | nindent 8 }}
       {{- if and .app.extraVolumes (gt (len .app.extraVolumes) 0) }}

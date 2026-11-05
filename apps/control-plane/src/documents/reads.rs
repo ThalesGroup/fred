@@ -96,7 +96,7 @@ impl Storage {
             .execute(&mut *tx)
             .await?;
         // The quota counts attachments; the space's own document figures do not.
-        let (used_bytes,reserved_bytes,documents,bytes): (i64,i64,i64,i64) = sqlx::query_as("select coalesce((select sum(size) from document where quota_owner=$1 and deletion_id is null),0)::bigint, coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint, (select count(*) from document where space_id=$2 and deletion_id is null and session_id is null), coalesce((select sum(size) from document where space_id=$2 and deletion_id is null and session_id is null),0)::bigint")
+        let (used_bytes,reserved_bytes,documents,bytes): (i64,i64,i64,i64) = sqlx::query_as("select coalesce((select sum(size) from document where quota_owner=$1 and deletion_id is null),0)::bigint + coalesce((select sum(size) from powerpoint_file where quota_owner=$1 and status='stored'),0)::bigint, coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint + coalesce((select sum(size) from powerpoint_file where quota_owner=$1 and status='pending'),0)::bigint, (select count(*) from document where space_id=$2 and deletion_id is null and session_id is null), coalesce((select sum(size) from document where space_id=$2 and deletion_id is null and session_id is null),0)::bigint")
             .bind(owner).bind(space.id).fetch_one(&mut *tx).await?;
         let types = sqlx::query_as("with grouped as (select mime,count(*)::bigint as documents,sum(size)::bigint as bytes from document where space_id=$1 and deletion_id is null and session_id is null group by mime), ranked as (select *,row_number() over(order by bytes desc,mime) as rank from grouped) select case when rank<=20 then mime else 'other' end as mime,sum(documents)::bigint as documents,sum(bytes)::bigint as bytes from ranked group by 1 order by bytes desc,mime")
             .bind(space.id).fetch_all(&mut *tx).await?;
@@ -250,6 +250,25 @@ impl Storage {
     /// The caller has already checked the document's exact owning-space authority.
     pub(crate) async fn stream_original(&self, document: Document) -> AppResult<Response> {
         let id = document.id;
+        let key: String = sqlx::query_scalar(
+            "select object_key from document where id=$1 and deletion_id is null",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+        self.stream_file(id, &key, &document.name, document.size, &document.sha256)
+            .await
+    }
+
+    /// The caller resolves the immutable key and authorizes its exact usage first.
+    pub(super) async fn stream_file(
+        &self,
+        id: Uuid,
+        key: &str,
+        name: &str,
+        size: i64,
+        sha256: &str,
+    ) -> AppResult<Response> {
         let permit = self.downloads.clone().try_acquire_owned().map_err(|_| {
             AppError::problem(
                 StatusCode::TOO_MANY_REQUESTS,
@@ -257,24 +276,17 @@ impl Storage {
                 "All document transfer slots are busy",
             )
         })?;
-        let key: String = sqlx::query_scalar(
-            "select object_key from document where id=$1 and deletion_id is null",
-        )
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
         if !key.starts_with(&self.prefix) {
             return Err(unavailable());
         }
-        let object = self.objects.get(&key).await.map_err(|_| unavailable())?;
-        if object.content_length() != Some(document.size) {
+        let object = self.objects.get(key).await.map_err(|_| unavailable())?;
+        if object.content_length() != Some(size) {
             return Err(unavailable());
         }
         let reader = object.body.into_async_read();
         let deadline = tokio::time::Instant::now() + self.deadline();
         let idle = self.idle();
-        let expected = document.sha256.clone();
-        let size = document.size;
+        let expected = sha256.to_owned();
         let (sender, receiver) = tokio::sync::mpsc::channel(1);
         let task = tokio::spawn(async move {
             let _permit = permit;
@@ -322,15 +334,12 @@ impl Storage {
         );
         let disposition = format!(
             "attachment; filename=\"document\"; filename*=UTF-8''{}",
-            percent_encoding::utf8_percent_encode(
-                &document.name,
-                percent_encoding::NON_ALPHANUMERIC
-            )
+            percent_encoding::utf8_percent_encode(name, percent_encoding::NON_ALPHANUMERIC)
         );
         Ok((
             [
                 (header::CONTENT_TYPE, "application/octet-stream".to_owned()),
-                (header::CONTENT_LENGTH, document.size.to_string()),
+                (header::CONTENT_LENGTH, size.to_string()),
                 (header::CONTENT_DISPOSITION, disposition),
                 (header::CACHE_CONTROL, "private, no-store".to_owned()),
                 (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),

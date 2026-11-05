@@ -1,0 +1,5 @@
+# Generated files: GitHub collapses them in pull request diffs.
+apps/frontend/src/slices/**/*OpenApi.ts linguist-generated
+apps/frontend/src/rework/features/capabilities/*/api/*OpenApi.ts linguist-generated
+libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/assets/*.inventory.json linguist-generated
+libs/capabilities/fred-capability-ppt-filler/tests/replays/*.json linguist-generated

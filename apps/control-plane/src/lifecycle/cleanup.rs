@@ -318,6 +318,21 @@ pub async fn batch(
         if kind == SpaceKind::Organization && manifest_count != 1 {
             return Err(anyhow::anyhow!("organization is not last").into());
         }
+        // Storage sweeps perform network cleanup outside this SQL transaction.
+        sqlx::query("update powerpoint_file set status='retired',cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=$1 and status<>'retired'")
+            .bind(space).execute(&mut *tx).await?;
+        let files_pending: bool = sqlx::query_scalar(
+            "select exists(select 1 from powerpoint_file where space_id=$1 and cleaned_at is null) or exists(select 1 from capability_preparation where space_id=$1 and state='obsolete' and cleaned_at is null)",
+        )
+        .bind(space)
+        .fetch_one(&mut *tx)
+        .await?;
+        if files_pending {
+            sqlx::query("update deletion set status='running',error_code='powerpoint_cleanup_pending' where id=$1")
+                .bind(id).execute(&mut *tx).await?;
+            tx.commit().await?;
+            return Ok(());
+        }
         sqlx::query("delete from agent_instance where space_id = $1")
             .bind(space)
             .execute(&mut *tx)

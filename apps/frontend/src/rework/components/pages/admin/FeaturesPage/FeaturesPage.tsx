@@ -16,6 +16,7 @@
 // with their organization default-on switch, models in their own panel. The
 // Knowledge Bases and Apps tabs still read the legacy enablement catalog.
 
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import Button from "@shared/atoms/Button/Button.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -49,6 +50,8 @@ import type {
 import styles from "./FeaturesPage.module.css";
 import { skillPresentation } from "@rework/utils/skillPresentation";
 import { OrganizationCapabilities } from "./OrganizationCapabilities";
+import { CapabilityPlatformDrawer } from "./CapabilityPlatformDrawer";
+import { platformPanelFor } from "../../../../features/capabilities/platformPanelRegistry";
 import { OrganizationModels } from "./OrganizationModels";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
@@ -107,6 +110,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   const [fetchOfferRevokeImpact, offerRevokeImpact] = useLazyOrganizationCapabilityRevokeImpactQuery();
 
   // A pod offer's defaultOnKey.
+  const [platformOffer, setPlatformOffer] = useState<CapabilityInventoryOffer | null>(null);
   const [suspendedKey, setSuspendedKey] = useState<string | null>(null);
   const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<DefaultOnRow | null>(null);
@@ -125,6 +129,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   useEffect(() => {
     setPendingDefaultOff(null);
     setSuspendedKey(null);
+    setPlatformOffer(null);
   }, [organizationId, kindFilter]);
 
   // Synchronous, ref-backed guard against double-invoking applyDefaultOn for
@@ -442,6 +447,27 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         <div className={styles.centered} />
       ),
   }));
+  if (activeKindFilter === "tool")
+    offerColumns.push({
+      label: t("rework.admin.capabilities.col.settings"),
+      size: "5rem",
+      cellRenderer: (offer) => (
+        <div className={styles.centered}>
+          {platformPanelFor(offer.capability_id) && (
+            <Tooltip text={t("rework.admin.capabilities.platformSettings")}>
+              <IconButton
+                variant="icon"
+                size="medium"
+                icon={{ category: "outlined", type: "settings" }}
+                aria-label={t("rework.admin.capabilities.platformSettings")}
+                disabled={!offer.advertised}
+                onClick={() => setPlatformOffer(offer)}
+              />
+            </Tooltip>
+          )}
+        </div>
+      ),
+    });
   const rowCount = discoveringAgents ? agents.length : capabilities.length;
   const suspendedDrawer = suspendedOffer
     ? {
@@ -456,6 +482,20 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
 
   return (
     <div className={styles.page}>
+      <CapabilityPlatformDrawer
+        organizationId={organizationId}
+        runtimeId={platformOffer?.runtime_id}
+        capability={
+          platformOffer
+            ? {
+                id: platformOffer.capability_id,
+                name: offerName(platformOffer),
+                route_base_url: platformOffer.route_base_url,
+              }
+            : null
+        }
+        onClose={() => setPlatformOffer(null)}
+      />
       <PageHeader
         title={t("rework.admin.capabilities.title")}
         subtitle={t("rework.admin.capabilities.subtitle")}

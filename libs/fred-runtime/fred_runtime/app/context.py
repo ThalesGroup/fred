@@ -168,7 +168,7 @@ class PodApplicationContext:
             require_erasure=self.session_fence is not None,
         )
 
-    async def initialize_sql(self) -> None:
+    async def initialize_sql(self, *, conversations: bool = True) -> None:
         """Build SQL engine, checkpointer, and history store.
 
         Durable storage is mandatory for every fred-runtime pod — dev uses a
@@ -179,13 +179,9 @@ class PodApplicationContext:
         routes traffic to this replica — see RUNTIME-EXECUTION-CONTRACT.md §8
         (dated entries) for the incidents this closes.
         """
-        from fred_core.history.history_models import SessionHistoryRow
-        from fred_core.history.postgres_history_store import PostgresHistoryStore
         from fred_core.sql.base_sql import create_async_engine_from_config
         from fred_core.sql.schema_guard import require_tables
         from sqlalchemy import text
-
-        from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
         postgres_config = self.configuration.storage.postgres
         engine = create_async_engine_from_config(postgres_config)
@@ -212,6 +208,14 @@ class PodApplicationContext:
                 type(exc).__name__,
             )
             raise
+
+        if not conversations:
+            return
+
+        from fred_core.history.history_models import SessionHistoryRow
+        from fred_core.history.postgres_history_store import PostgresHistoryStore
+
+        from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
         # Runtime migrations own history/checkpoints, never the Python manager.
         await require_tables(

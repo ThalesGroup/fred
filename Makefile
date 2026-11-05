@@ -86,7 +86,7 @@ validation-report: ## Run the live cross-app validation suite (requires infra + 
 integration-test-docker: ## Validate running local Docker-backed services and Fred apps using their direct ports
 	$(MAKE) -C validation $@
 
-integration-test-k3d: ## Validate an existing local k3d deployment through its ingress (localhost:8088)
+integration-test-k3d: ## Validate an existing local k3d deployment through its ingress (weaver.localhost:8088)
 	$(MAKE) -C validation $@
 
 ##@ Setup
@@ -309,13 +309,16 @@ SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 # tree is exercised by nothing until it is added to all three targets below.
 RT_DIR               := libs/fred-runtime
 WD_DIR               := libs/capabilities/fred-capability-writable-document
+PB_DIR               := libs/capabilities/fred-capability-ppt-filler
 RT_UV                := $(RT_DIR)/.venv/bin/uv
 WD_UV                := $(WD_DIR)/.venv/bin/uv
+PB_UV                := $(PB_DIR)/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
 db-check-combined-heads: ## assert each Alembic tree has exactly one head (no branch conflicts)
 	$(MAKE) -C $(RT_DIR) db-check-heads
 	$(MAKE) -C $(WD_DIR) db-check-heads
+	$(MAKE) -C $(PB_DIR) db-check-heads
 
 .PHONY: db-check-combined-postgres-up
 db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
@@ -331,10 +334,13 @@ db-check-combined-sqlite: ## upgrade every Alembic tree against the same SQLite 
 	@rm -f $(SQLITE_COMBINED_DB)
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(PB_UV) run --directory $(PB_DIR) alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(PB_UV) run --directory $(PB_DIR) alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(PB_UV) run --directory $(PB_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic downgrade base
 	@rm -f $(SQLITE_COMBINED_DB)
@@ -348,15 +354,17 @@ db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-po
 	DATABASE_URL="postgresql://fred_cp:test@localhost:$(FRED_MIGRATION_PG_PORT)/test_migrations" $(MIGRATION_CARGO) run --locked -p control-plane -- initialize-schema; \
 	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(RT_UV) run --directory $(RT_DIR) alembic upgrade head; \
 	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(WD_UV) run --directory $(WD_DIR) alembic upgrade head; \
+	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(PB_UV) run --directory $(PB_DIR) alembic upgrade head; \
 	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(RT_UV) run --directory $(RT_DIR) alembic check; \
 	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(WD_UV) run --directory $(WD_DIR) alembic check; \
+	DATABASE_URL="$(PG_COMBINED_URL)" DATABASE_SCHEMA=runtime $(PB_UV) run --directory $(PB_DIR) alembic check; \
 	FRED_TEST_POSTGRES_URL="$(PG_COMBINED_ADMIN)" FRED_TEST_ROLE_PASSWORD=test $(RT_UV) run --directory $(RT_DIR) pytest tests/test_session_ownership.py tests/test_session_filesystem_postgres.py -q
 
 include scripts/makefiles/help.mk
 include scripts/makefiles/chart-schema.mk
 
 # k3d: fred-deployment-factory deploys this chart on its local k3d instance
-# (`make k3d-up`, then `make k3d-app APP=fred DIR=<this checkout>`), with the
+# (`make k3d-up`, then `make k3d-app FRED=weaver APP=fred DIR=<this checkout>`), with the
 # images deploy/k3d/build makes from this checkout.
 
 .PHONY: k3d-tests k3d-reset-storage-tests

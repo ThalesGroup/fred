@@ -82,8 +82,8 @@ and derived buckets retain their existing corresponding checks.
 
 1. Keep lifecycle cleanup paused through the normal configuration/deployment
    procedure while performing the prerequisite drain and coordinated backup.
-2. Apply CP migrations 0008–0010 with the normal `initialize-schema` command.
-   Never edit migrations 0001–0007 or existing SQLx checksums.
+2. Apply CP migrations 0011–0013 with the normal `initialize-schema` command.
+   Never edit migrations 0001–0010 or existing SQLx checksums.
 3. Run the normal runtime migration command, `python -m fred_runtime migrate`,
    with the runtime role/schema and all applicable capability migrations. New
    runtime revisions adopt checkpoint tables, add validated cascading ownership

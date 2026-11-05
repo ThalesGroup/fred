@@ -1,0 +1,302 @@
+// @vitest-environment happy-dom
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The dialog words the tool's note codes with the real fr/en strings: a
+// missing key or a raw code on screen fails here, not in front of a user.
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import i18next, { type i18n as I18n } from "i18next";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import en from "../../../../locales/en/translation.json";
+import fr from "../../../../locales/fr/translation.json";
+import type { BuiltSlide } from "./types";
+
+const i18n = vi.hoisted(() => ({ current: null as I18n | null }));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: i18n.current!.t.bind(i18n.current), i18n: i18n.current }),
+}));
+
+const { default: DeckSummaryButton } = await import("./DeckSummaryButton");
+
+const summary: BuiltSlide[] = [
+  { number: 1, part: 1, parts: 1, title: "Kick-off", kind: "cover", template: "Cover", notes: [] },
+  {
+    number: 2,
+    part: 1,
+    parts: 2,
+    title: "Agenda (1/2)",
+    kind: "agenda",
+    template: "SOMMAIRE",
+    notes: [{ code: "list_continued" }],
+  },
+  {
+    number: 2,
+    part: 2,
+    parts: 2,
+    title: "Agenda (2/2)",
+    kind: "agenda",
+    template: "SOMMAIRE",
+    notes: [{ code: "list_continued" }],
+  },
+  {
+    number: 3,
+    part: 1,
+    parts: 1,
+    title: "",
+    kind: "bullets",
+    template: "Planche à puces",
+    notes: [
+      { code: "other_kind", kind: "timeline" },
+      { code: "text_shortened" },
+      { code: "image_unusable", count: 2 },
+      { code: "some_future_code" },
+    ],
+  },
+];
+
+let root: Root | null = null;
+
+async function mount(lng: "en" | "fr", data: BuiltSlide[] | null | undefined): Promise<HTMLElement> {
+  const instance = i18next.createInstance();
+  await instance.init({ lng, resources: { en: { translation: en }, fr: { translation: fr } } });
+  i18n.current = instance;
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => root!.render(<DeckSummaryButton summary={data} />));
+  return container;
+}
+
+function open(container: HTMLElement): HTMLElement {
+  act(() => container.querySelector("button")!.click());
+  return document.querySelector('[role="dialog"]') as HTMLElement;
+}
+
+afterEach(() => {
+  act(() => root?.unmount());
+  root = null;
+  document.body.innerHTML = "";
+});
+
+describe("DeckSummaryButton", () => {
+  it("is absent without a summary (ppt_filler decks, older parts)", async () => {
+    expect((await mount("en", undefined)).querySelector("button")).toBeNull();
+    act(() => root?.unmount());
+    expect((await mount("en", [])).querySelector("button")).toBeNull();
+  });
+
+  it("lists every slide with its kind and plain notes, in English", async () => {
+    const container = await mount("en", summary);
+    const button = container.querySelector("button")!;
+    expect(button.getAttribute("aria-label")).toBe("What was built");
+    expect(button.getAttribute("aria-haspopup")).toBe("dialog");
+    // The size of the download and close buttons it sits beside.
+    expect(button.className).toMatch(/btn-small/);
+
+    const dialog = open(container);
+    expect(dialog.textContent).toContain("What was built");
+    expect(dialog.textContent).toContain("This presentation has 4 slides.");
+    const items = [...dialog.querySelectorAll("ol > li")].map((li) => li.textContent);
+    expect(items).toHaveLength(4);
+    expect(items[0]).toContain("Kick-off");
+    expect(items[0]).toContain("Cover");
+    expect(items[1]).toContain("The list continues on the next slide.");
+    expect(items[2]).toContain("Continuation of the list from the previous slide.");
+    // No title: the template slide's label names it.
+    expect(items[3]).toContain("Planche à puces");
+    expect(items[3]).toContain("Built as “Bullet points” instead of “Timeline”.");
+    expect(items[3]).toContain("Some text was shortened to fit.");
+    expect(items[3]).toContain("2 images could not be used.");
+    expect(dialog.textContent).not.toContain("some_future_code");
+    expect(dialog.textContent).not.toContain("capability.ppt_builder");
+  });
+
+  it("speaks French", async () => {
+    const container = await mount("fr", summary);
+    expect(container.querySelector("button")!.getAttribute("aria-label")).toBe("Ce qui a été construit");
+    const dialog = open(container);
+    expect(dialog.textContent).toContain("Cette présentation compte 4 slides.");
+    expect(dialog.textContent).toContain("Sommaire");
+    expect(dialog.textContent).toContain("La liste continue sur la slide suivante.");
+    expect(dialog.textContent).toContain("Construite en « Liste à puces » au lieu de « Frise chronologique ».");
+    expect(dialog.textContent).toContain("2 images n'ont pas pu être utilisées.");
+    expect(dialog.textContent).not.toContain("capability.ppt_builder");
+  });
+
+  it("names a chart built in a content area, a chart type it could not draw and hidden numbers", async () => {
+    const charts: BuiltSlide[] = [
+      {
+        number: 1,
+        part: 1,
+        parts: 1,
+        title: "Revenue",
+        kind: "chart",
+        template: "Chart",
+        notes: [{ code: "chart_type_changed", kind: "radar" }],
+      },
+      {
+        number: 2,
+        part: 1,
+        parts: 1,
+        title: "Headcount",
+        kind: "chart",
+        template: "Chart",
+        notes: [{ code: "chart_shows_shares" }],
+      },
+      {
+        number: 3,
+        part: 1,
+        parts: 1,
+        title: "Shares",
+        kind: "bullets",
+        template: "Title and Content",
+        notes: [{ code: "other_kind", kind: "chart" }],
+      },
+    ];
+    const dialog = open(await mount("fr", charts));
+    const items = [...dialog.querySelectorAll("ol > li")].map((li) => li.textContent);
+    expect(items[0]).toContain("Graphique");
+    expect(items[0]).toContain(
+      "Le graphique « radar » n'est pas disponible : les données sont affichées en histogramme.",
+    );
+    expect(items[2]).toContain("Construite en « Liste à puces » au lieu de « Graphique ».");
+    expect(items[1]).toContain("Le graphique affiche des pourcentages : les nombres eux-mêmes ne sont pas affichés.");
+  });
+
+  it("names a known chart type in the user's language, and leaves an unknown one unnamed", async () => {
+    const slide = (kind: string): BuiltSlide => ({
+      number: 1,
+      part: 1,
+      parts: 1,
+      title: "Flow",
+      kind: "chart",
+      template: "Chart",
+      notes: [{ code: "chart_type_changed", kind }],
+    });
+    const dialog = open(await mount("fr", [slide("waterfall"), slide("sankey ribbon")]));
+    const items = [...dialog.querySelectorAll("ol > li")].map((li) => li.textContent);
+    expect(items[0]).toContain("Le graphique « cascade » n'est pas disponible");
+    expect(items[1]).toContain(
+      "Ce type de graphique n'est pas disponible : les données sont affichées en histogramme.",
+    );
+    expect(items[1]).not.toContain("sankey");
+  });
+
+  it("words an intent the chart could not show by its field", async () => {
+    const slide: BuiltSlide = {
+      number: 1,
+      part: 1,
+      parts: 1,
+      title: "Revenue",
+      kind: "chart",
+      template: "Chart",
+      notes: [
+        { code: "intent_not_shown", field: "highlight" },
+        { code: "intent_not_shown", field: "sort" },
+        { code: "intent_not_shown", field: "target" },
+      ],
+    };
+    const dialog = open(await mount("en", [slide]));
+    const notes = [...dialog.querySelectorAll("ol > li li")].map((li) => li.textContent);
+    expect(notes).toEqual([
+      "The emphasis asked on one part of the chart could not be shown.",
+      "The chart keeps the order given: it could not be sorted as asked.",
+      "An emphasis you asked for could not be shown.",
+    ]);
+  });
+
+  it("words a table or figure intent shown otherwise or not at all", async () => {
+    const slide: BuiltSlide = {
+      number: 3,
+      part: 1,
+      parts: 1,
+      title: "Offres",
+      kind: "table",
+      template: "Table",
+      notes: [
+        { code: "intent_shown_otherwise", field: "total_row" },
+        { code: "intent_not_shown", field: "trend" },
+        { code: "intent_not_shown", field: "takeaway" },
+        { code: "intent_shown_otherwise", field: "takeaway" },
+      ],
+    };
+    const dialog = open(await mount("en", [slide]));
+    const notes = [...dialog.querySelectorAll("ol > li li")].map((li) => li.textContent);
+    expect(notes).toEqual([
+      "The total row is shown in bold: the table's style has no total formatting.",
+      "The rising or falling arrows asked on the figures could not be shown.",
+      "The key message could not be shown on this slide: it stays in the speaker notes.",
+      "An emphasis you asked for is shown in bold instead.",
+    ]);
+  });
+
+  it("says a slide's figures are illustrative", async () => {
+    const slide: BuiltSlide = {
+      number: 2,
+      part: 1,
+      parts: 1,
+      title: "Ventes",
+      kind: "chart",
+      template: "Chart",
+      notes: [{ code: "illustrative_data" }],
+    };
+    const dialog = open(await mount("fr", [slide]));
+    const notes = [...dialog.querySelectorAll("ol > li li")].map((li) => li.textContent);
+    expect(notes).toEqual([fr.capability.ppt_builder.summary.notes.illustrative_data]);
+  });
+
+  it("has a wording for every note code the backend sends", () => {
+    const codes = [
+      "text_shortened",
+      "content_left_out",
+      "items_left_out_one",
+      "items_left_out_other",
+      "image_unusable_one",
+      "image_unusable_other",
+      "table_left_out",
+      "table_text_smaller",
+      "text_overflows",
+      "left_empty",
+      "fixed_slide",
+      "list_continues",
+      "list_continuation",
+      "other_kind",
+      "chart_type_changed",
+      "chart_type_changed_unnamed",
+      "chart_shows_shares",
+      "layout_repeated",
+      "layout_not_repeated",
+      "intent_not_shown",
+      "intent_not_shown_highlight",
+      "intent_not_shown_sort",
+      "intent_not_shown_stacked_as",
+      "intent_not_shown_total_row",
+      "intent_not_shown_highlight_row",
+      "intent_not_shown_highlight_column",
+      "intent_not_shown_trend",
+      "intent_not_shown_takeaway",
+      "intent_shown_otherwise",
+      "intent_shown_otherwise_total_row",
+      "intent_shown_otherwise_highlight_row",
+      "intent_shown_otherwise_highlight_column",
+      "illustrative_data",
+    ];
+    for (const locale of [en, fr]) {
+      expect(Object.keys(locale.capability.ppt_builder.summary.notes).sort()).toEqual([...codes].sort());
+    }
+  });
+});

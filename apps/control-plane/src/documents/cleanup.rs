@@ -75,6 +75,25 @@ impl Storage {
             self.renew(owner).await?;
             self.expire_or_defer(id, org).await?;
         }
+        // Publication and expiry arbitrate on the same row; retirement is terminal.
+        sqlx::query("update powerpoint_file set status='retired',error_code='upload_expired' where id in (select id from powerpoint_file where status='pending' and expires_at<=clock_timestamp() order by cleanup_due_at,id limit $1 for update skip locked)")
+            .bind(batch).execute(&self.pool).await?;
+        let files: Vec<(Uuid, String)> = sqlx::query_as("select id,object_key from powerpoint_file where status='retired' and cleaned_at is null and cleanup_due_at<=clock_timestamp() order by cleanup_due_at,id limit $1")
+            .bind(batch).fetch_all(&self.pool).await?;
+        for (id, key) in files {
+            self.renew(owner).await?;
+            ensure!(
+                self.original_id(&key) == Some(id),
+                "cleanup key outside content namespace"
+            );
+            let deleted = match self.objects.owns_original(&key).await {
+                Ok(false) => true,
+                Ok(true) => self.objects.delete(&key).await.is_ok(),
+                Err(_) => false,
+            };
+            sqlx::query("update powerpoint_file set cleaned_at=case when $2 then clock_timestamp() else null end,error_code=case when $2 then null else 'cleanup_failed' end,cleanup_attempts=cleanup_attempts+1,cleanup_due_at=clock_timestamp()+make_interval(secs=>least(3600,30*power(2,least(cleanup_attempts,7)))) where id=$1 and status='retired'")
+                .bind(id).bind(deleted).execute(&self.pool).await?;
+        }
         let failed: Vec<(Uuid,String)> = sqlx::query_as("select id,object_key from document_upload where status='failed' and not put_pending and cleaned_at is null and cleanup_due_at<=clock_timestamp() order by cleanup_due_at,id limit $1")
             .bind(batch).fetch_all(&self.pool).await?;
         for (id, key) in failed {
@@ -118,7 +137,7 @@ impl Storage {
             if let Some((id, org)) = pending {
                 self.expire_or_defer(id, org).await?;
             }
-            let live: bool=sqlx::query_scalar("select exists(select 1 from document where object_key=$1) or exists(select 1 from document_upload where object_key=$1 and (status='pending' or put_pending))")
+            let live: bool=sqlx::query_scalar("select exists(select 1 from document where object_key=$1) or exists(select 1 from document_upload where object_key=$1 and (status='pending' or put_pending)) or exists(select 1 from powerpoint_file where object_key=$1 and (status in ('pending','stored') or cleanup_due_at>clock_timestamp()))")
                 .bind(&key).fetch_one(&self.pool).await?;
             // Unknown ownership never authorizes deletion. Count inaccessible
             // candidates conservatively and advance so one key cannot starve a sweep.

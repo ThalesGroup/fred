@@ -1,6 +1,6 @@
 # Configuration fragment, not a complete deployment overlay. Helm replaces lists:
 # preserve every SQL/identity/model entry and volume already in your deployment.
-# See deploy/k3d/ for the complete factory profile and contract preparation.
+# See fred-deployment-factory's k3d-apps/fred/values-weaver.yaml for a complete profile.
 # Use the same documents bucket as document-storage.yaml; grant only output
 # writes to the worker and input writes plus input/output reads to Control Plane.
 # Knowledge Flow reads the published generation using the configured artifact credentials.
@@ -19,13 +19,8 @@ applications:
       - name: MANAGER_DERIVED_SECRET_KEY
         valueFrom:
           secretKeyRef: {name: manager-processing, key: secret-key}
-    extraVolumes:
-      - name: processing-contract
-        configMap: {name: manager-processing-contract}
-    extraVolumeMounts:
-      - name: processing-contract
-        mountPath: /app/processing-contract
-        readOnly: true
+    # The chart exports the contract from the worker's image, in an init container.
+    workerContract: {exportFromWorkerImage: true}
     configuration:
       scheduler:
         processing:

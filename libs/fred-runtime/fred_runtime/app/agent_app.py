@@ -221,6 +221,7 @@ from fred_runtime.capabilities.errors import (
     TurnOptionsInvalidError,
     UnknownCapabilityError,
 )
+from fred_runtime.capabilities.platform_ports import team_authorizer_binder
 from fred_runtime.common.background_tasks import spawn
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.common.outbound_credentials import (
@@ -1683,6 +1684,19 @@ async def _resolve_agent_instance(
                     detail={
                         "code": "agent_configuration_changed",
                         "message": "This agent has changed since this conversation started. Start a new conversation to use its new configuration.",
+                    },
+                )
+            if isinstance(problem, dict) and problem.get("code") in {
+                "agent_capability_pending",
+                "agent_capability_failed",
+            }:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": problem["code"],
+                        "message": "PowerPoint template preparation is in progress."
+                        if problem["code"] == "agent_capability_pending"
+                        else "PowerPoint template preparation failed. Edit the agent to inspect the error and retry or replace its template.",
                     },
                 )
             if isinstance(problem, dict) and problem.get("code") in {
@@ -4816,6 +4830,7 @@ def _mount_capability_routers(
     from fred_runtime.app.security import current_user
 
     auth_deps = [Depends(current_user)] if security_enabled else []
+    auth_deps.append(Depends(team_authorizer_binder(security_enabled=security_enabled)))
     for cap_id, router in capability_registry.routers():
         api_router.include_router(
             router,
@@ -4869,6 +4884,15 @@ def _build_agent_router(
     _authenticated_user = _make_user_dependency(current_user, security_enabled)
     _execution_subject = _make_execution_dependency(current_user, security_enabled)
     _purge_subject = _make_user_dependency(current_user_or_service, security_enabled)
+
+    async def _require_space(
+        http_request: Request, space_id: str | None, permission: str = "write"
+    ) -> None:
+        if not space_id:
+            raise HTTPException(422, "space_id_required")
+        await require_permission(
+            http_request.headers.get("Authorization"), permission, space_id=space_id
+        )
 
     def _enforce_chat_input_limit(request: RuntimeExecuteRequest) -> None:
         violation = validate_runtime_request(request, max_chat_input_chars)
@@ -5274,6 +5298,11 @@ def _build_agent_router(
         capability = capability_registry.capability(capability_id)
 
         form = await http_request.form()
+        form_team = form.get("team_id")
+        # Config-only validation is used by the Rust CP after its own checks.
+        # Resource-bearing operations must separately establish space authority.
+        if form_team:
+            await _require_space(http_request, str(form_team))
         raw_config = form.get("config") or "{}"
         if not isinstance(raw_config, str):
             raise HTTPException(
@@ -5330,6 +5359,8 @@ def _build_agent_router(
 
         form_team_id = form.get("team_id")
         form_instance_id = form.get("agent_instance_id")
+        if not form_team and (uploads or form_instance_id):
+            await _require_space(http_request, None)
         team_id = form_team_id if isinstance(form_team_id, str) else None
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
@@ -5428,6 +5459,11 @@ def _build_agent_router(
         """
 
         capability = _installed_capability(http_request, capability_id)
+        # Control-plane requires agent editing in both teams for a copy. A
+        # snapshot import sends its files inline and never reads the source.
+        if body.asset_files is None:
+            await _require_space(http_request, body.source_team_id)
+        await _require_space(http_request, body.target_team_id)
         try:
             return await prepare_capability_copy(
                 capability,
@@ -5472,6 +5508,7 @@ def _build_agent_router(
         """
 
         capability = _installed_capability(http_request, capability_id)
+        await _require_space(http_request, body.team_id)
         try:
             return await prepare_capability_export(
                 capability,

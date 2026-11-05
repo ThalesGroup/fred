@@ -530,3 +530,35 @@ async fn pod_skills_ralph_preparation_and_selection_remain_unsupported() {
     .await;
     assert_eq!(status, 422, "{refused}");
 }
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn capability_browser_route_uses_approved_ingress() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let mut advertised = inventory();
+    advertised["capabilities"][0]["route_base_url"] =
+        json!("https://untrusted.invalid/capabilities/tool");
+    catalog.state.lock().await.inventory = advertised;
+    let app = app(&e, &identity, &catalog).await;
+    assert_eq!(observe(&app, &identity, org.id).await, 204);
+    let (status, body) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &format!("/organizations/{}/capabilities", org.id),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let offers = body[0]["capabilities"].as_array().unwrap();
+    let tool = offers
+        .iter()
+        .find(|offer| offer["capability_id"] == "tool")
+        .unwrap();
+    assert_eq!(tool["route_base_url"], "/fixture-pod/capabilities/tool");
+    assert!(tool["descriptor"].get("route_base_url").is_none());
+}

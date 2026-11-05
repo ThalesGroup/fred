@@ -782,6 +782,73 @@ applications:
       #     sse_read_timeout: 2000
       #     auth_mode: "no_token"
 
+  # Installed capabilities run on the API's image, identity and shared SQL.
+  # Inheritance is resolved after instance/image overlays, not at YAML parse time.
+  fred-agents-worker:
+    inheritFrom: fred-agents
+    enabled: false
+    applicationName: fred-agents-worker
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    migration:
+      enabled: false
+    command:
+      enabled: true
+      data: [python, -m, fred_agents, --mode, worker]
+    terminationGracePeriodSeconds: 60
+    ports: []
+    service:
+      enabled: false
+    metricsService:
+      enabled: false
+    ingress:
+      enabled: false
+    httpRoute:
+      enabled: false
+    probes:
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
+      startupProbe:
+        enabled: false
+    kubeconfig:
+      enabled: false
+    serviceAccount:
+      enabled: true
+      name: fred-agents-worker
+      automountServiceAccountToken: false
+      rbac:
+        enabled: false
+    configuration:
+      scheduler:
+        enabled: true
+    volumeMounts:
+      - name: worker-config
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: worker-env
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: worker-config
+        configMap:
+          name: fred-agents-worker-back
+      - name: worker-env
+        secret:
+          secretName: fred-agents-env
+    # Two preparation activities per replica; Office children share these bounds.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+        ephemeral-storage: 512Mi
+      limits:
+        cpu: '2'
+        memory: 2Gi
+        ephemeral-storage: 2Gi
+
   # ── 3.2 Frontend ───────────────────────────────────────────────────
   frontend:
     enabled: true

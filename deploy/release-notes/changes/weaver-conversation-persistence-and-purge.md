@@ -44,8 +44,8 @@ provide it explicitly. An absent URL keeps Ralph text-only.
 1. Review pending deletions and take the coordinated backup before enabling the
    updated worker. Pause lifecycle cleanup during rollout if that review is not
    complete.
-2. Apply additive migrations `0006_embedded_agent_conversations.sql` and
-   `0007_session_retirement_queue.sql` using the normal initialization/deployment
+2. Apply additive migrations `0009_embedded_agent_conversations.sql` and
+   `0010_session_retirement_queue.sql` using the normal initialization/deployment
    procedure. Keep migrations 0001-0005 and SQLx history unchanged. The second
    migration builds an index on existing session metadata; allow a migration
    window for that index build and its write lock. API startup verifies the schema;

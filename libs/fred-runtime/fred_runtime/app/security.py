@@ -79,6 +79,8 @@ async def current_user_or_service(
 
 async def prepare_authorization(
     container: PodApplicationContext,
+    *,
+    conversations: bool = True,
 ) -> None:
     """Validate identity and shared SQL before exposing the pod."""
     security = container.configuration.security
@@ -88,7 +90,7 @@ async def prepare_authorization(
     oidc.initialize_user_security(security.user)
     if not (security.user.audience or security.user.client_id).strip():
         raise ValueError("Weaver agent pods require a JWT audience")
-    await container.initialize_sql()
+    await container.initialize_sql(conversations=conversations)
     sql_engine = container.get_sql_engine()
     if sql_engine is None or sql_engine.dialect.name != "postgresql":
         raise ValueError("Weaver authorization requires shared PostgreSQL")

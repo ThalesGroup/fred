@@ -7,6 +7,7 @@ pub mod config;
 pub mod http;
 pub mod models;
 pub mod object_store;
+pub mod powerpoint;
 mod reads;
 mod upload;
 
@@ -136,6 +137,26 @@ impl Storage {
             temp,
             _temp_lock: lock,
         }))
+    }
+
+    /// Original files and reserved uploads share the existing local storage budget.
+    pub(crate) async fn occupied_bytes<'e>(
+        ex: impl sqlx::PgExecutor<'e>,
+        owner: Uuid,
+    ) -> AppResult<i64> {
+        Ok(sqlx::query_scalar("select coalesce((select sum(size) from document where deletion_id is null and quota_owner=$1),0)::bigint + coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint + coalesce((select sum(size) from powerpoint_file where quota_owner=$1 and status in ('pending','stored')),0)::bigint")
+            .bind(owner).fetch_one(ex).await?)
+    }
+
+    pub(crate) async fn require_cleanup_capacity<'e>(
+        &self,
+        ex: impl sqlx::PgExecutor<'e>,
+    ) -> AppResult<()> {
+        let backlog: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document_upload where status='failed' and cleaned_at is null),0)::bigint + coalesce((select sum(size) from powerpoint_file where status='retired' and cleaned_at is null),0)::bigint + coalesce((select orphan_bytes from document_storage where singleton),0)").fetch_one(ex).await?;
+        if backlog >= self.config.limits.cleanup_backlog_bytes {
+            return Err(unavailable());
+        }
+        Ok(())
     }
 
     pub(crate) fn quota(&self, space: &Space) -> AppResult<(Uuid, i64)> {

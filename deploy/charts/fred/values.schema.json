@@ -137,6 +137,10 @@
             "replicaCount": {
               "type": "integer"
             },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
             "autoscaling": {
               "type": "object",
               "properties": {
@@ -2678,6 +2682,850 @@
           },
           "additionalProperties": false
         },
+        "fred-agents-worker": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "applicationName": {
+              "type": "string"
+            },
+            "configurationFileName": {
+              "type": "string"
+            },
+            "deployment": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            "replicaCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 60
+            },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxReplicas": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "Resource"
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "enum": [
+                              "cpu",
+                              "memory"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "const": "Utilization"
+                              },
+                              "averageUtilization": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "minItems": 1
+                },
+                "behavior": {
+                  "type": "object",
+                  "properties": {
+                    "scaleUp": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "scaleDown": {
+                      "type": "object",
+                      "properties": {
+                        "stabilizationWindowSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3600
+                        },
+                        "selectPolicy": {
+                          "enum": [
+                            "Max",
+                            "Min",
+                            "Disabled"
+                          ]
+                        },
+                        "policies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "enum": [
+                                  "Pods",
+                                  "Percent"
+                                ]
+                              },
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "periodSeconds": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1800
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "inheritFrom": {
+              "const": "fred-agents"
+            },
+            "statefulset": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            "job": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": true
+            },
+            "migration": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "const": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "rollingUpdate": {
+              "type": "object",
+              "properties": {
+                "maxSurge": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "maxUnavailable": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "command": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "ports": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "containerPort": {
+                    "type": "integer"
+                  },
+                  "protocol": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "service": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "extraLabels": {
+                  "type": "object"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "ports": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      },
+                      "targetPort": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "protocol": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "metricsService": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "extraLabels": {
+                  "type": "object"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "targetPort": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "serviceMonitor": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "annotations": {
+                      "type": "object"
+                    },
+                    "labels": {
+                      "type": "object"
+                    },
+                    "interval": {
+                      "type": "string"
+                    },
+                    "scrapeTimeout": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "scheme": {
+                      "type": "string"
+                    },
+                    "honorLabels": {
+                      "type": "boolean"
+                    },
+                    "relabelings": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "metricRelabelings": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "namespaceSelector": {
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "ingress": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "className": {
+                  "type": "string"
+                },
+                "hosts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "host": {
+                        "type": "string"
+                      },
+                      "paths": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string"
+                            },
+                            "pathType": {
+                              "type": "string"
+                            },
+                            "service": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "port": {
+                                  "anyOf": [
+                                    {
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              },
+                              "additionalProperties": true
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "tls": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "secretName": {
+                        "type": "string"
+                      },
+                      "hosts": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "httpRoute": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "parentRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "sectionName": {
+                        "type": "string"
+                      },
+                      "port": {
+                        "type": "integer"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "hostnames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rules": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "additionalProperties": true
+            },
+            "volumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "mountPath": {
+                    "type": "string"
+                  },
+                  "subPath": {
+                    "type": "string"
+                  },
+                  "readOnly": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "volumes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "extraVolumeMounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "mountPath": {
+                    "type": "string"
+                  },
+                  "subPath": {
+                    "type": "string"
+                  },
+                  "readOnly": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "extraVolumes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "resources": {
+              "type": "object",
+              "properties": {
+                "limits": {
+                  "type": "object"
+                },
+                "requests": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "podAnnotations": {
+              "type": "object"
+            },
+            "podSecurityContext": {
+              "type": "object"
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              }
+            },
+            "probes": {
+              "type": "object",
+              "properties": {
+                "lifecycle": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "livenessProbe": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": true
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "readinessProbe": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": true
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "startupProbe": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "securityContext": {
+              "type": "object",
+              "properties": {
+                "allowPrivilegeEscalation": {
+                  "type": "boolean"
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "drop": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "add": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "runAsUser": {
+                  "type": "integer"
+                },
+                "runAsNonRoot": {
+                  "type": "boolean"
+                },
+                "readOnlyRootFilesystem": {
+                  "type": "boolean"
+                },
+                "seccompProfile": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": false
+            },
+            "serviceAccount": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "labels": {
+                  "type": "object"
+                },
+                "automountServiceAccountToken": {
+                  "type": "boolean"
+                },
+                "rbac": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "permissions": {
+                      "type": "object",
+                      "properties": {
+                        "namespaced": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "apiGroups": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "resources": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "verbs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "cluster": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "apiGroups": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "resources": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "verbs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "kubeconfig": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            "configuration_type": {
+              "type": "object",
+              "properties": {
+                "backend": {
+                  "type": "boolean"
+                },
+                "frontend": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            "configuration": {
+              "type": "object",
+              "properties": {
+                "scheduler": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "const": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
         "frontend": {
           "type": "object",
           "properties": {
@@ -2701,6 +3549,10 @@
             },
             "replicaCount": {
               "type": "integer"
+            },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
             },
             "autoscaling": {
               "type": "object",
@@ -3681,6 +4533,10 @@
             "replicaCount": {
               "type": "integer"
             },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
             "autoscaling": {
               "type": "object",
               "properties": {
@@ -4644,6 +5500,10 @@
             },
             "replicaCount": {
               "type": "integer"
+            },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
             },
             "autoscaling": {
               "type": "object",
@@ -6781,6 +7641,10 @@
             },
             "replicaCount": {
               "type": "integer"
+            },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
             },
             "autoscaling": {
               "type": "object",
@@ -9484,6 +10348,10 @@
             "replicaCount": {
               "type": "integer"
             },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
             "autoscaling": {
               "type": "object",
               "properties": {
@@ -12116,6 +12984,10 @@
             },
             "replicaCount": {
               "type": "integer"
+            },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
             },
             "autoscaling": {
               "type": "object",
@@ -14750,6 +15622,10 @@
             "replicaCount": {
               "type": "integer"
             },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
             "autoscaling": {
               "type": "object",
               "properties": {
@@ -17383,6 +18259,10 @@
             "replicaCount": {
               "type": "integer"
             },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
             "autoscaling": {
               "type": "object",
               "properties": {
@@ -18371,6 +19251,39 @@
                 "platform": {
                   "additionalProperties": false,
                   "properties": {
+                    "capability_preparation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "workers": {
+                          "additionalProperties": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "audience": {
+                                "type": "string"
+                              },
+                              "client_id": {
+                                "type": "string"
+                              },
+                              "issuer": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "issuer",
+                              "audience",
+                              "client_id"
+                            ],
+                            "type": "object"
+                          },
+                          "description": "Logical pod -> verified workload. Separate identities prevent cross-pod consumption.",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
                     "inference_credentials": {
                       "items": {
                         "additionalProperties": false,
@@ -19428,6 +20341,15 @@
                 "object",
                 "null"
               ]
+            },
+            "workerContract": {
+              "type": "object",
+              "properties": {
+                "exportFromWorkerImage": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
             },
             "dotenv": {
               "type": "object",
@@ -19461,6 +20383,10 @@
             "replicaCount": {
               "type": "integer"
             },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
             "autoscaling": {
               "type": "object",
               "properties": {
@@ -20449,6 +21375,39 @@
                 "platform": {
                   "additionalProperties": false,
                   "properties": {
+                    "capability_preparation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "workers": {
+                          "additionalProperties": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "audience": {
+                                "type": "string"
+                              },
+                              "client_id": {
+                                "type": "string"
+                              },
+                              "issuer": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "issuer",
+                              "audience",
+                              "client_id"
+                            ],
+                            "type": "object"
+                          },
+                          "description": "Logical pod -> verified workload. Separate identities prevent cross-pod consumption.",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
                     "inference_credentials": {
                       "items": {
                         "additionalProperties": false,
@@ -21506,6 +22465,15 @@
                 "object",
                 "null"
               ]
+            },
+            "workerContract": {
+              "type": "object",
+              "properties": {
+                "exportFromWorkerImage": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
             },
             "dotenv": {
               "type": "object",

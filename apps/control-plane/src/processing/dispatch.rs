@@ -47,22 +47,29 @@ const RECONCILE_INTERVAL: Duration = Duration::from_secs(120);
 const RETRY_DELAY: Duration = Duration::from_secs(15);
 
 async fn connect(config: &ProcessingConfig) -> Result<Client> {
+    connect_temporal(&config.temporal, config.limits.queue_seconds).await
+}
+
+pub(crate) async fn connect_temporal(
+    config: &crate::lifecycle::policy::TemporalConfig,
+    horizon: u32,
+) -> Result<Client> {
     let mut client = tokio::time::timeout(
-        Duration::from_secs(config.temporal.connect_timeout_seconds),
+        Duration::from_secs(config.connect_timeout_seconds),
         Client::connect(
-            ConnectionOptions::new(Url::parse(&format!("http://{}", config.temporal.host))?)
+            ConnectionOptions::new(Url::parse(&format!("http://{}", config.host))?)
                 .identity("control-plane-processing")
                 .build(),
-            ClientOptions::new(&config.temporal.namespace).build(),
+            ClientOptions::new(&config.namespace).build(),
         ),
     )
     .await
     .context("processing Temporal connection timeout")?
     .map_err(|_| anyhow::anyhow!("processing Temporal unavailable"))?;
     let namespace = tokio::time::timeout(
-        Duration::from_secs(config.temporal.rpc_timeout_seconds),
+        Duration::from_secs(config.rpc_timeout_seconds),
         client.describe_namespace(Request::new(DescribeNamespaceRequest {
-            namespace: config.temporal.namespace.clone(),
+            namespace: config.namespace.clone(),
             ..Default::default()
         })),
     )
@@ -74,7 +81,7 @@ async fn connect(config: &ProcessingConfig) -> Result<Client> {
         .map(|d| d.seconds)
         .unwrap_or(0);
     anyhow::ensure!(
-        retention > config.limits.queue_seconds as i64,
+        retention > horizon as i64,
         "Temporal retention must exceed the processing admission horizon"
     );
     Ok(client)
@@ -137,68 +144,104 @@ async fn deliver(
     config: &ProcessingConfig,
     row: &Delivery,
 ) -> Result<(String, bool)> {
-    // On subsequent attempts describe first: even history expiry must not create a second run.
-    if row.first_dispatch_at.is_some() || row.run_id.is_some() {
-        match describe(client, config, row).await {
+    deliver_workflow(
+        client,
+        &config.temporal,
+        WorkflowDelivery {
+            id: row.id,
+            workflow_id: &row.workflow_id,
+            run_id: row.run_id.as_deref(),
+            task_queue: &config.temporal.task_queue,
+            workflow_type: "ProcessPush",
+            submission: &row.submission.0,
+            deadline_at: row.deadline_at,
+            may_start: row.delivered_at.is_none()
+                && row.stage == Stage::Queued
+                && row.created_at + chrono::Duration::seconds(config.limits.queue_seconds as i64)
+                    > Utc::now(),
+            describe_first: row.first_dispatch_at.is_some() || row.run_id.is_some(),
+        },
+    )
+    .await
+}
+
+/// Shared Temporal transport, not a job store: each domain owns admission,
+/// SQL leases, deadlines, callbacks and reconciliation of its own rows.
+pub(crate) struct WorkflowDelivery<'a> {
+    pub id: Uuid,
+    pub workflow_id: &'a str,
+    pub run_id: Option<&'a str>,
+    pub task_queue: &'a str,
+    pub workflow_type: &'a str,
+    pub submission: &'a serde_json::Value,
+    pub deadline_at: DateTime<Utc>,
+    pub may_start: bool,
+    pub describe_first: bool,
+}
+
+pub(crate) async fn deliver_workflow(
+    client: &mut Client,
+    config: &crate::lifecycle::policy::TemporalConfig,
+    row: WorkflowDelivery<'_>,
+) -> Result<(String, bool)> {
+    if row.describe_first {
+        match describe(client, config, &row).await {
             Ok(result) => return Ok(result),
-            Err(error)
-                if error.code() == Code::NotFound
-                    && row.delivered_at.is_none()
-                    && row.stage == Stage::Queued => {}
-            Err(_) => anyhow::bail!("processing history unavailable"),
+            Err(error) if error.code() == Code::NotFound && row.may_start => {}
+            Err(_) => anyhow::bail!("workflow history unavailable"),
         }
     }
-    let now = Utc::now();
     anyhow::ensure!(
-        row.deadline_at > now
-            && row.created_at + chrono::Duration::seconds(config.limits.queue_seconds as i64) > now,
-        "processing admission horizon expired"
+        row.may_start && row.deadline_at > Utc::now(),
+        "workflow admission expired"
     );
     let payload = Payload {
         metadata: [("encoding".into(), b"json/plain".to_vec())].into(),
-        data: serde_json::to_vec(&row.submission.0)?,
+        data: serde_json::to_vec(row.submission)?,
         ..Default::default()
     };
-    let seconds = (row.deadline_at - Utc::now()).num_seconds().max(1) as u64;
     let request = StartWorkflowExecutionRequest {
-        namespace: config.temporal.namespace.clone(),
-        workflow_id: row.workflow_id.clone(),
+        namespace: config.namespace.clone(),
+        workflow_id: row.workflow_id.into(),
         workflow_type: Some(WorkflowType {
-            name: "ProcessPush".into(),
+            name: row.workflow_type.into(),
         }),
         task_queue: Some(TaskQueue {
-            name: config.temporal.task_queue.clone(),
+            name: row.task_queue.into(),
             ..Default::default()
         }),
         input: Some(Payloads {
             payloads: vec![payload],
         }),
-        identity: "control-plane-processing".into(),
+        identity: "control-plane".into(),
         request_id: row.id.to_string(),
-        workflow_id_reuse_policy: 3, // WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, including closed runs.
-        workflow_id_conflict_policy: 1, // FAIL for a running run; reconcile below.
-        workflow_execution_timeout: Some(Duration::from_secs(seconds).try_into()?),
+        workflow_id_reuse_policy: 3,
+        workflow_id_conflict_policy: 1,
+        workflow_execution_timeout: Some(
+            Duration::from_secs((row.deadline_at - Utc::now()).num_seconds().max(1) as u64)
+                .try_into()?,
+        ),
         ..Default::default()
     };
     match client.start_workflow_execution(Request::new(request)).await {
         Ok(reply) => Ok((reply.into_inner().run_id, false)),
         Err(e) if e.code() == Code::AlreadyExists => {
-            describe(client, config, row).await.map_err(Into::into)
+            describe(client, config, &row).await.map_err(Into::into)
         }
-        Err(_) => anyhow::bail!("processing start uncertain"),
+        Err(_) => anyhow::bail!("workflow start uncertain"),
     }
 }
 async fn describe(
     client: &mut Client,
-    config: &ProcessingConfig,
-    row: &Delivery,
+    config: &crate::lifecycle::policy::TemporalConfig,
+    row: &WorkflowDelivery<'_>,
 ) -> std::result::Result<(String, bool), temporalio_client::tonic::Status> {
     let result = client
         .describe_workflow_execution(Request::new(DescribeWorkflowExecutionRequest {
-            namespace: config.temporal.namespace.clone(),
+            namespace: config.namespace.clone(),
             execution: Some(WorkflowExecution {
-                workflow_id: row.workflow_id.clone(),
-                run_id: row.run_id.clone().unwrap_or_default(),
+                workflow_id: row.workflow_id.into(),
+                run_id: row.run_id.unwrap_or_default().into(),
             }),
         }))
         .await?

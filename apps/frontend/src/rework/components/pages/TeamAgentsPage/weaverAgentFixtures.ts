@@ -28,6 +28,9 @@ export const TEMPLATE: AgentTemplateSummary = {
   ],
 };
 export const INSTANCE: ManagedAgentInstanceSummary = {
+  configuration_revision: 1,
+  preparation_state: "ready",
+  preparation_error: null,
   agent_instance_id: "00000000-0000-0000-0000-000000000004",
   space_id: SPACE_A,
   template_id: TEMPLATE.template_id,

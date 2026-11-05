@@ -275,3 +275,19 @@ describe("AgentCard marketplace bar", () => {
     expect(popover?.textContent).not.toContain("removed.hide");
   });
 });
+
+describe("CP preparation state", () => {
+  it.each(["pending", "failed"])("blocks chat while %s without changing the voluntary enabled status", (state) => {
+    const agent = {
+      ...instance(),
+      preparation_state: state,
+      preparation_error: state === "failed" ? "No usable layouts" : null,
+    };
+    render(agent, true);
+    expect(container.querySelector('[data-enabled="false"]')).not.toBeNull();
+    expect(container.textContent).toContain(
+      state === "pending" ? "capability.ppt_builder.preparing" : "No usable layouts",
+    );
+    expect(labels(openMenu())).toContain("rework.agentCard.deactivate");
+  });
+});

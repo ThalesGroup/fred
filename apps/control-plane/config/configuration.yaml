@@ -56,6 +56,14 @@ scheduler:
 
 # Agent discovery and local model test source.
 platform:
+  # Optional: per-pod workload allowed to prepare its installed PowerPoint library.
+  # No organization-wide worker identity or browser-selected task queue.
+  # capability_preparation:
+  #   workers:
+  #     fred-agents:
+  #       issuer: http://localhost:8080/realms/app
+  #       audience: app
+  #       client_id: fred-agents
   # Enable Ralph's fixed search tool after granting the control-plane workload
   # the fred-delegation audience and delegation_caller role accepted by KF.
   # knowledge_flow_url: http://localhost:8111/knowledge-flow/v2

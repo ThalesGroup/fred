@@ -253,12 +253,12 @@ flowchart LR
 
 | | Host run | k3d release |
 | --- | --- | --- |
-| Start | `make run` in `apps/control-plane` | `make k3d-app APP=fred DIR=../fred` in the factory |
+| Start | `make run` in `apps/control-plane` | `make k3d-app FRED=weaver APP=fred DIR=../fred` in the factory |
 | Configuration | `config/configuration.yaml`, `log_format: text` | values `configuration`, rendered to ConfigMap `control-plane-backend-back`, `log_format: json` |
 | Secrets | `config/.env` | `fred-secrets`, as `extraEnvVars` |
 | Addresses | `localhost` ports | `postgres`, `temporal:7233`, `keycloak:8080` |
 | Token issuer accepted | `http://localhost:8080/realms/app` | `http://keycloak:8080/realms/app` (hosts entry `127.0.0.1 keycloak`) |
-| Public URL | `http://localhost:8222/control-plane/v1` | `http://localhost:8088/control-plane/v1` |
+| Public URL | `http://localhost:8222/control-plane/v1` | `http://weaver.localhost:8088/control-plane/v1` |
 | Bootstrap secret | `FRED_BOOTSTRAP_TOKEN` in `.env` | `CONTROL_PLANE_BOOTSTRAP_TOKEN` of `fred-secrets`, generated with the cluster |
 
 The local profile runs the control-plane API and background tasks in one deployment,
@@ -605,12 +605,12 @@ policy does not pin the installed Python implementation.
 ## Complete local ingestion profile
 
 The [k3d entry point](../../deploy/k3d/README.md) uses the factory's complete
-`manager-ingestion.yaml` profile, including retained SQL/identity/model
-references. Its prepare hook renders the effective worker configuration, exports
-from the selected image without service secrets and applies the contract ConfigMap.
-The image ID, configuration and export determine a digest recorded on the
-ConfigMap and manager pod template. Profile/image changes regenerate it and roll
-the API. Export failure stops deployment. This is deployment provenance, not a
+`k3d-apps/fred/values-weaver.yaml`, including retained SQL/identity/model
+references. With `workerContract.exportFromWorkerImage`, an init container of the
+control plane exports the contract from the worker's image and configuration, without
+service secrets. The worker's image and configuration determine a checksum on the
+control-plane pod template: changing either rolls the API, and an export failure stops
+the pod from starting. This is deployment provenance, not a
 runtime comparison with the installed Python code; incompatible changes require
 draining.
 

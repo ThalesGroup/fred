@@ -233,6 +233,8 @@ pub enum CatalogObservationState {
 
 #[derive(Serialize, ToSchema)]
 pub struct CapabilityInventoryOffer {
+    /// Browser route derived from the platform-approved pod ingress.
+    pub route_base_url: Option<String>,
     pub runtime_id: String,
     pub capability_id: String,
     pub version: String,
@@ -364,6 +366,17 @@ pub(super) async fn read_inventory(
                 .into_iter()
                 .map(|offer| {
                     Ok(CapabilityInventoryOffer {
+                        route_base_url: source
+                            .public_base_url
+                            .as_ref()
+                            .filter(|_| source.enabled && offer.advertised)
+                            .map(|base| {
+                                format!(
+                                    "{}/capabilities/{}",
+                                    base.trim_end_matches('/'),
+                                    offer.capability_id
+                                )
+                            }),
                         default_on: policy.default_on(&offer.runtime_id, &offer.capability_id),
                         unusable_instances: instances
                             .iter()

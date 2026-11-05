@@ -27,12 +27,23 @@ Example:
 - `python -m fred_agents`
 """
 
+import argparse
+import asyncio
+
 import uvicorn
 from fred_runtime.app import load_agent_pod_config
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=("api", "worker"), default="api")
+    args = parser.parse_args()
     config = load_agent_pod_config()
+    if args.mode == "worker":
+        from fred_runtime.app.preparation_worker import run_preparation_worker
+
+        asyncio.run(run_preparation_worker(config))
+        return
     uvicorn.run(
         "fred_agents.main:app",
         host=config.app.host,

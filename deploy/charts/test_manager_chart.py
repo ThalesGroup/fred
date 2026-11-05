@@ -27,10 +27,155 @@ def deployments(docs):
     return {d["metadata"]["name"]: d for d in docs if d["kind"] == "Deployment"}
 
 
+class PreparationWorkerChartTests(unittest.TestCase):
+    settings = (
+        "applications.fred-agents.enabled=true",
+        "applications.fred-agents-worker.enabled=true",
+        "applications.control-plane-backend.configuration.platform.capability_preparation.workers.fred-agents.issuer=https://issuer.example/realm",
+        "applications.control-plane-backend.configuration.platform.capability_preparation.workers.fred-agents.audience=app",
+        "applications.control-plane-backend.configuration.platform.capability_preparation.workers.fred-agents.client_id=agentic",
+        "applications.control-plane-backend.configuration.scheduler.lifecycle.temporal.host=temporal:7233",
+        "applications.fred-agents.configuration.scheduler.temporal.host=temporal:7233",
+    )
+
+    def test_worker_inherits_api_image_credentials_and_sql_after_overlays(self):
+        docs = render(
+            *self.settings,
+            "applications.fred-agents.image.tag=reception-content-tag",
+            "applications.fred-agents.configuration.storage.postgres.database=reception",
+            "applications.fred-agents.configuration.scheduler.enabled=false",
+            "applications.fred-agents.extraEnvVars[0].name=KEYCLOAK_AGENTIC_CLIENT_SECRET",
+            "applications.fred-agents.extraEnvVars[0].valueFrom.secretKeyRef.name=workload",
+            "applications.fred-agents.extraEnvVars[0].valueFrom.secretKeyRef.key=client-secret",
+            "applications.fred-agents.migration.enabled=true",
+            "applications.control-plane-backend.migration.enabled=true",
+        )
+        apps = deployments(docs)
+        api = apps["fred-agents"]["spec"]["template"]["spec"]["containers"][0]
+        pod = apps["fred-agents-worker"]["spec"]["template"]["spec"]
+        worker = pod["containers"][0]
+        self.assertEqual(worker["image"], api["image"])
+        self.assertTrue(worker["image"].endswith(":reception-content-tag"))
+        self.assertEqual(worker["env"], api["env"])
+        self.assertEqual(
+            worker["command"], ["python", "-m", "fred_agents", "--mode", "worker"]
+        )
+        self.assertEqual(api["command"], ["python", "-m", "fred_agents"])
+        self.assertEqual(pod["terminationGracePeriodSeconds"], 60)
+        for key in ("ports", "livenessProbe", "readinessProbe", "startupProbe"):
+            self.assertNotIn(key, worker)
+        configs = {
+            d["metadata"]["name"]: yaml.safe_load(d["data"]["configuration.yaml"])
+            for d in docs
+            if d["kind"] == "ConfigMap" and "configuration.yaml" in d.get("data", {})
+        }
+        api_config = configs["fred-agents-back"]
+        worker_config = configs["fred-agents-worker-back"]
+        self.assertFalse(api_config["scheduler"]["enabled"])
+        self.assertTrue(worker_config["scheduler"].pop("enabled"))
+        api_config["scheduler"].pop("enabled")
+        self.assertEqual(worker_config, api_config)
+        self.assertEqual(worker_config["storage"]["postgres"]["database"], "reception")
+        self.assertEqual(
+            {
+                d["kind"]
+                for d in docs
+                if d["metadata"]["name"].startswith("fred-agents-worker")
+            },
+            {"Deployment", "ConfigMap", "ServiceAccount"},
+        )
+        jobs = {d["metadata"]["name"]: d for d in docs if d["kind"] == "Job"}
+        self.assertLess(
+            int(
+                jobs["control-plane-backend-schema-init-1"]["metadata"]["annotations"][
+                    "helm.sh/hook-weight"
+                ]
+            ),
+            int(
+                jobs["fred-agents-migration-1"]["metadata"]["annotations"][
+                    "helm.sh/hook-weight"
+                ]
+            ),
+        )
+
+    def test_worker_can_be_paused_without_changing_api_replicas(self):
+        apps = deployments(
+            render(*self.settings, "applications.fred-agents-worker.replicaCount=0")
+        )
+        self.assertEqual(apps["fred-agents-worker"]["spec"]["replicas"], 0)
+        self.assertEqual(apps["fred-agents"]["spec"]["replicas"], 1)
+
+    def test_contract_export_keeps_migration_volume_mounts_valid(self):
+        docs = render(
+            *self.settings,
+            "applications.control-plane-backend.workerContract.exportFromWorkerImage=true",
+            "applications.control-plane-backend.migration.enabled=true",
+            "applications.fred-agents.migration.enabled=true",
+        )
+        for resource in docs:
+            if resource["kind"] not in {"Deployment", "Job"}:
+                continue
+            with self.subTest(resource=resource["metadata"]["name"]):
+                pod = resource["spec"]["template"]["spec"]
+                volumes = {volume["name"] for volume in pod.get("volumes", [])}
+                for container in pod["containers"] + pod.get("initContainers", []):
+                    mounts = container.get("volumeMounts", [])
+                    self.assertLessEqual({mount["name"] for mount in mounts}, volumes)
+                    paths = [mount["mountPath"] for mount in mounts]
+                    self.assertEqual(len(paths), len(set(paths)))
+        cp = deployments(docs)["control-plane-backend"]["spec"]["template"]["spec"]
+        self.assertIn(
+            {
+                "name": "processing-contract",
+                "mountPath": "/app/processing-contract",
+                "readOnly": True,
+            },
+            cp["containers"][0]["volumeMounts"],
+        )
+
+    def test_invalid_worker_connections_and_overrides_fail_before_deployment(self):
+        for setting, message in (
+            (
+                "applications.fred-agents.enabled=false",
+                "requires applications.fred-agents.enabled",
+            ),
+            (
+                "applications.fred-agents.configuration.app.runtime_id=unbound",
+                "requires a CP",
+            ),
+            (
+                "applications.fred-agents.configuration.scheduler.temporal.namespace=another",
+                "temporal.namespace must match",
+            ),
+            (
+                "applications.fred-agents.configuration.scheduler.temporal.host=another:7233",
+                "temporal.host must match",
+            ),
+            ("applications.fred-agents-worker.image.tag=another", "image"),
+            (
+                "applications.fred-agents-worker.configuration.storage.postgres.database=another",
+                "storage",
+            ),
+            (
+                "applications.fred-agents-worker.extraEnvVars[0].name=OTHER_IDENTITY",
+                "extraEnvVars",
+            ),
+            ("applications.fred-agents-worker.migration.enabled=true", "false"),
+            ("applications.fred-agents-worker.terminationGracePeriodSeconds=10", "60"),
+        ):
+            with self.subTest(setting=setting):
+                command = ["helm", "template", "fred-app", str(CHART)]
+                for value in (*self.settings, setting):
+                    command += ["--set", value]
+                result = subprocess.run(command, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+
+
 class ManagerChartTests(unittest.TestCase):
     def test_cluster_rbac_is_disjoint_between_application_namespaces(self):
         resources = []
-        for namespace in ("fred", "fred-weaver"):
+        for namespace in ("fred-swift", "fred-weaver"):
             docs = render("applications.fred-agents.enabled=true", namespace=namespace)
             roles = {d["metadata"]["name"] for d in docs if d["kind"] == "ClusterRole"}
             bindings = [d for d in docs if d["kind"] == "ClusterRoleBinding"]
@@ -285,35 +430,26 @@ class ManagerChartTests(unittest.TestCase):
         )
         self.assert_manager_upstreams(apps, "fred")
 
-    def test_k3d_profile_owns_manager_configuration_with_unchanged_factory_values(self):
+    def test_factory_weaver_values_render_this_chart(self):
         factory = CHART.resolve().parents[3] / "fred-deployment-factory"
-        if not (factory / "k3d-apps/fred/values.yaml").exists() or not shutil.which(
+        if not (factory / "k3d-apps/fred/values-weaver.yaml").exists() or not shutil.which(
             "helmfile"
         ):
             self.skipTest("sibling factory checkout or helmfile is unavailable")
-        with tempfile.TemporaryDirectory() as out:
-            env = os.environ | {
-                "ENV": "secondary",
-                "K3D_FACTORY_ROOT": str(factory),
-                "K3D_APP_OUT": out,
-                "K3D_NAMESPACE": "fred",
-                "K3D_APP_HOST": "fred.local",
-                "K3D_REALM_URL": "http://keycloak:8080/realms/app",
-                "K3D_PUBLIC_URL": "http://fred.local",
-                "K3D_WEBSOCKET_URL": "ws://fred.local",
-            }
-            rendered = subprocess.check_output(
-                [
-                    "helmfile",
-                    "-f",
-                    str(CHART.parent.parent / "k3d/helmfile.yaml.gotmpl"),
-                    "template",
-                    "--skip-deps",
-                ],
-                text=True,
-                env=env,
-                stderr=subprocess.DEVNULL,
-            )
+        rendered = subprocess.check_output(
+            [
+                "helmfile",
+                "-f",
+                str(factory / "k3d-apps/fred/helmfile.yaml.gotmpl"),
+                "-e",
+                "weaver",
+                "template",
+                "--skip-deps",
+            ],
+            text=True,
+            env=os.environ | {"DIR": str(CHART.resolve().parents[2])},
+            stderr=subprocess.DEVNULL,
+        )
         docs = list(filter(None, yaml.safe_load_all(rendered)))
         apps = deployments(docs)
         self.assertEqual(
@@ -325,6 +461,7 @@ class ManagerChartTests(unittest.TestCase):
                 "knowledge-flow-worker",
                 "frontend",
                 "fred-agents",
+                "fred-agents-worker",
             },
         )
         for deployment in apps.values():
@@ -349,6 +486,19 @@ class ManagerChartTests(unittest.TestCase):
                 self.assertTrue(
                     configuration["security"]["delegation"]["act_for_people"]
                 )
+        # The contract comes from the worker's image and configuration, without credentials.
+        pod = apps["control-plane-backend"]["spec"]["template"]["spec"]
+        init = pod["initContainers"][0]
+        worker = apps["knowledge-flow-worker"]["spec"]["template"]["spec"]["containers"][0]
+        self.assertEqual(init["image"], worker["image"])
+        self.assertNotIn("env", init)
+        self.assertEqual(
+            {v["name"]: v.get("configMap", {}).get("name") for v in pod["volumes"] if v["name"] in ("worker-config", "processing-contract")},
+            {"worker-config": "knowledge-flow-worker-back", "processing-contract": None},
+        )
+        self.assertTrue(
+            any(d["kind"] == "Job" and d["metadata"]["name"] == "fred-app-postgres-bootstrap" for d in docs)
+        )
         job = next(
             d
             for d in docs
@@ -377,7 +527,7 @@ class ManagerChartTests(unittest.TestCase):
             config["security"]["user"]["realm_url"], "http://keycloak:8080/realms/app"
         )
         self.assertEqual(
-            config["security"]["authorized_origins"], ["http://fred.local"]
+            config["security"]["authorized_origins"], ["http://weaver.localhost:8088"]
         )
         self.assertNotIn("rebac", config["security"])
         self.assertEqual(
@@ -385,7 +535,7 @@ class ManagerChartTests(unittest.TestCase):
             "KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET",
         )
         self.assertEqual(config["app"]["base_url"], "/control-plane/v1")
-        self.assertEqual(config["storage"]["postgres"]["database"], "fred")
+        self.assertEqual(config["storage"]["postgres"]["database"], "fred_weaver")
         self.assertEqual(
             config["scheduler"]["lifecycle"]["temporal"]["host"], "temporal:7233"
         )

@@ -604,6 +604,7 @@ export type CapabilityCatalogEntry = {
   };
   model_runtime_ids?: string[];
   model_thinking_profile_ids?: string[];
+  model_vision_profile_ids?: string[];
   /** i18n key */
   name: string;
   public_version?: string | null;

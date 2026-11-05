@@ -78,6 +78,22 @@
       },
       "type": "object"
     },
+    "Config": {
+      "additionalProperties": false,
+      "properties": {
+        "workers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/WorkerIdentity"
+          },
+          "description": "Logical pod -> verified workload. Separate identities prevent cross-pod consumption.",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "Configuration": {
       "additionalProperties": false,
       "properties": {
@@ -607,6 +623,9 @@
     "PlatformConfig": {
       "additionalProperties": false,
       "properties": {
+        "capability_preparation": {
+          "$ref": "#/$defs/Config"
+        },
         "inference_credentials": {
           "items": {
             "$ref": "#/$defs/InferenceCredentialBinding"

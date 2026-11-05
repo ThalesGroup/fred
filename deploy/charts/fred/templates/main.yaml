@@ -28,10 +28,14 @@
   {{- include "common-library.configmap-frontend" $ctx }}
   {{- include "common-library.configmap-kube" $ctx }}
   {{- include "common-library.configmap-backend" $ctx }}
+  {{- if ne $name "fred-agents-worker" }}
   {{- include "common-library.configmap-catalog" $ctx }}
+  {{- end }}
   {{- include "common-library.pvc_pv" $ctx }}
   {{- include "common-library.deployment" $ctx }}
+  {{- if ne $name "fred-agents-worker" }}
   {{- include "common-library.secrets-env" $ctx }}
+  {{- end }}
   {{- include "common-library.job" $ctx }}
   {{- if not (hasPrefix "knowledge-flow" $name) }}
   {{- include "common-library.hook-migration-rbac" $ctx }}

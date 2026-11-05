@@ -44,9 +44,9 @@ integration-test-docker: FRED_CONTROL_PLANE_URL = http://localhost:8222/control-
 integration-test-docker: FRED_KNOWLEDGE_FLOW_URL = http://localhost:8111/knowledge-flow/v2
 integration-test-docker: FRED_RUNTIME_PUBLIC_BASE = http://localhost:8000
 integration-test-k3d: FRED_REALM_URL = http://keycloak:8080/realms/app
-integration-test-k3d: FRED_CONTROL_PLANE_URL = http://localhost:8088/control-plane/v1
-integration-test-k3d: FRED_KNOWLEDGE_FLOW_URL = http://localhost:8088/knowledge-flow/v2
-integration-test-k3d: FRED_RUNTIME_PUBLIC_BASE = http://localhost:8088
+integration-test-k3d: FRED_CONTROL_PLANE_URL = http://weaver.localhost:8088/control-plane/v1
+integration-test-k3d: FRED_KNOWLEDGE_FLOW_URL = http://weaver.localhost:8088/knowledge-flow/v2
+integration-test-k3d: FRED_RUNTIME_PUBLIC_BASE = http://weaver.localhost:8088
 
 integration-test-docker: ## Validate running Docker-backed services and local Fred apps through direct ports
 integration-test-k3d: ## Validate running k3d apps through localhost:8088 and the trusted Keycloak issuer
