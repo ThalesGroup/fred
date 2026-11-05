@@ -252,8 +252,8 @@ class DocumentSummarizeCapability(
 
             `document_uid` MUST be the document's opaque uid, not its name or
             title. Get it from a prior search_documents_using_vectorization
-            hit's 'uid' field, from list_document_tree (the value shown in
-            '[...]' after each document name), or from the conversation's
+            hit's 'uid' field, from a document entry's 'uid' field in
+            list_document_tree, or from the conversation's
             attached-files list (the bracketed value after the file name). If
             you only know a document's name, resolve its uid with one of those
             first — never pass the name here. The uid is an internal working
@@ -314,10 +314,9 @@ class DocumentSummarizeCapability(
                         "opaque uid. If you passed a file name, resolve the "
                         "uid first: it is in the conversation's attached-files "
                         "list (the bracketed value after the file name), in a "
-                        "search hit's 'uid' field, or on a DOCUMENT line of "
-                        "list_document_tree. If you took the id from a FOLDER "
-                        "line (it ends with '/', id shown as [folder:...]), "
-                        "that is a folder id, not a document — summarize each "
+                        "search hit's 'uid' field, or a document entry's 'uid' "
+                        "field in list_document_tree. A 'folder_id' identifies "
+                        "a folder, not a document - summarize each "
                         "document listed under that folder instead. Then call "
                         "summarize_document again with a real document uid; "
                         "if other documents already summarized fine, continue "
