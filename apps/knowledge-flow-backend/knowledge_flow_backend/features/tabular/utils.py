@@ -22,6 +22,8 @@ from typing import Any, Iterable, cast
 import duckdb
 import pandas as pd
 
+from knowledge_flow_backend.features.tabular.diagnostics import VisibleQueryRelation, visible_query_relations
+
 
 def dataframe_to_records(frame: pd.DataFrame) -> list[dict[str, object]]:
     """Return SQL rows with pandas missing values represented by Python None.
@@ -56,10 +58,13 @@ class ValidatedReadQuery:
       `referenced_relations` to narrow the mount set. `referenced_relations`
       holds the caller's own spelling of the aliases (a subset of
       `allowed_relations`), so it can be compared to dataset aliases directly.
+    - `diagnostic_relations` retains a conservative visible scope from that same
+      AST. Pair it only with already mounted schemas when explaining a failure.
     """
 
     sql: str
     referenced_relations: frozenset[str]
+    diagnostic_relations: tuple[VisibleQueryRelation, ...] = ()
 
 
 _BLOCKED_INSPECTION_FUNCTIONS = frozenset({"current_setting", "getvariable", "getenv"})
@@ -190,7 +195,7 @@ def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None =
         referenced = frozenset(allowed_by_normalized[relation_name] for relation_name in referenced_relations if relation_name in allowed_by_normalized)
 
     _validate_query_functions(statement)
-    return ValidatedReadQuery(sql=normalized, referenced_relations=referenced)
+    return ValidatedReadQuery(sql=normalized, referenced_relations=referenced, diagnostic_relations=visible_query_relations(statement))
 
 
 def _validate_query_functions(node: Any) -> None:

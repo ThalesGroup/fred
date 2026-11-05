@@ -2457,6 +2457,19 @@
           "quota_exceeded": "Quota journalier de recherches web atteint, réessayez après minuit UTC.",
           "quota_exceeded_fetch": "Quota journalier de lectures de pages atteint, réessayez après minuit UTC."
         }
+      },
+      "emptyQuerySuccess": "Requête exécutée avec succès : 0 ligne correspondant aux conditions.",
+      "failure": {
+        "arguments": "Arguments de l'appel :",
+        "error": "Erreur :",
+        "invalidArguments": "Les arguments de l'appel ont été refusés.",
+        "authentication": "La demande d'authentification a été refusée (HTTP 401).",
+        "unavailable": "La ressource demandée est indisponible dans ce périmètre d'accès.",
+        "rateLimited": "La limite de requêtes du service a été atteinte (HTTP 429).",
+        "busy": "Le service est temporairement indisponible ou à capacité (HTTP 503).",
+        "timeout": "L'opération a dépassé son délai maximal (HTTP 504).",
+        "service": "Le service n'a pas pu terminer cette opération (HTTP 500).",
+        "unknown": "L'appel a échoué. Aucun diagnostic supplémentaire exploitable n'a été enregistré."
       }
     },
     "collapse": "Réduire",

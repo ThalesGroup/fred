@@ -26,11 +26,12 @@ capability-native), not just `ContextAwareTool`-wrapped ones.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from typing import Any, Literal
 
+import fred_runtime.common.context_aware_tool as context_aware_tool
 import pytest
-from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_sdk.contracts.context import (
     RuntimeContext,
     ToolContentBlock,
@@ -115,7 +116,7 @@ async def test_mcp_success_normalization_handles_sync_and_async_calls(
         async def _arun(self, **kwargs: Any) -> tuple[str, dict[str, object] | None]:
             return self._run(**kwargs)
 
-    wrapper = ContextAwareTool(
+    wrapper = context_aware_tool.ContextAwareTool(
         base_tool=Provider(),
         context_provider=lambda: None,
         agent_settings_provider=_FakeAgentSettings,
@@ -136,26 +137,40 @@ async def test_mcp_success_normalization_handles_sync_and_async_calls(
 
 
 @pytest.mark.asyncio
-async def test_fastapi_mcp_read_query_400_returns_a_typed_sql_failure() -> None:
+@pytest.mark.parametrize(
+    "detail",
+    [
+        "Binder Error: Referenced column amount_typo not found",
+        (
+            'Binder Error: Table "c" does not have a column named "region"\n'
+            'Column "region" does not exist in "Commandes" (SQL qualifier "c"). '
+            'Visible references in the tables already used by this SQL: "cl"."region".'
+        ),
+    ],
+)
+async def test_fastapi_mcp_read_query_400_returns_a_typed_sql_failure(
+    detail: str,
+) -> None:
     """The model keeps a useful tool result while the runtime gets a trusted,
     HTTP-free SQL failure payload for the trace and observability layers."""
-    wrapper = ContextAwareTool(
-        base_tool=_FailingReadQueryTool(),
+    wrapper = context_aware_tool.ContextAwareTool(
+        base_tool=_FailingReadQueryTool(
+            failure_message="Error calling read_query. Status code: 400. Response: "
+            + json.dumps({"detail": detail})
+        ),
         context_provider=lambda: None,
         agent_settings_provider=_FakeAgentSettings,
     )
 
     content, artifact = await wrapper._arun(sql="SELECT amount_typo FROM d_sales")
 
-    assert content == "Error: Binder Error: Referenced column amount_typo not found"
+    assert content == f"Error: {detail}"
     assert "HTTP" not in content
     assert artifact is not None
     assert artifact.is_error is True
     assert len(artifact.blocks) == 1
     assert artifact.blocks[0].kind == ToolContentKind.TEXT
-    assert artifact.blocks[0].text == (
-        "Binder Error: Referenced column amount_typo not found"
-    )
+    assert artifact.blocks[0].text == detail
 
 
 @pytest.mark.asyncio
@@ -172,7 +187,7 @@ async def test_fastapi_mcp_read_query_400_returns_a_typed_sql_failure() -> None:
 async def test_read_query_untrusted_failures_keep_only_the_generic_artifact(
     failure_message: str,
 ) -> None:
-    wrapper = ContextAwareTool(
+    wrapper = context_aware_tool.ContextAwareTool(
         base_tool=_FailingReadQueryTool(failure_message=failure_message),
         context_provider=lambda: None,
         agent_settings_provider=_FakeAgentSettings,
@@ -182,7 +197,9 @@ async def test_read_query_untrusted_failures_keep_only_the_generic_artifact(
 
     assert artifact is not None
     assert artifact.is_error is True
-    assert artifact.blocks == ()
+    assert len(artifact.blocks) == 1
+    assert "internal provider secret" not in (artifact.blocks[0].text or "")
+    assert (artifact.blocks[0].text or "").strip()
 
 
 def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> None:
@@ -193,7 +210,7 @@ def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> N
         search_rag_scope="corpus_only",
     )
 
-    wrapper = ContextAwareTool(
+    wrapper = context_aware_tool.ContextAwareTool(
         base_tool=_FakeSearchTool(),
         context_provider=lambda: runtime_context,
         agent_settings_provider=_FakeAgentSettings,
@@ -218,7 +235,7 @@ def test_context_aware_tool_respects_agent_scoped_document_uids() -> None:
         selected_document_libraries_ids=["lib-1"],
         selected_document_uids=["doc-1", "doc-2"],
     )
-    wrapper = ContextAwareTool(
+    wrapper = context_aware_tool.ContextAwareTool(
         base_tool=_FakeSearchTool(),
         context_provider=lambda: runtime_context,
         agent_settings_provider=_FakeAgentSettings,
@@ -240,7 +257,7 @@ def test_context_aware_tool_respects_agent_scoped_library() -> None:
         selected_document_libraries_ids=["lib-picker"],
         selected_document_uids=["doc-1"],
     )
-    wrapper = ContextAwareTool(
+    wrapper = context_aware_tool.ContextAwareTool(
         base_tool=_FakeSearchTool(),
         context_provider=lambda: runtime_context,
         agent_settings_provider=_FakeAgentSettings,
@@ -282,7 +299,6 @@ class _TabularTool(BaseTool):
 def tabular_wrapper(monkeypatch):
     from types import SimpleNamespace
 
-    import fred_runtime.common.context_aware_tool as module
     import httpx
 
     context = RuntimeContext(
@@ -309,9 +325,9 @@ def tabular_wrapper(monkeypatch):
                 )
             return httpx.Response(200, json=inventory[session])
 
-    monkeypatch.setattr(module, "KfBaseClient", Client)
+    monkeypatch.setattr(context_aware_tool, "KfBaseClient", Client)
     monkeypatch.setattr(
-        module,
+        context_aware_tool,
         "get_runtime_context",
         lambda: SimpleNamespace(
             config=SimpleNamespace(
@@ -327,13 +343,43 @@ def tabular_wrapper(monkeypatch):
     )
     agent.inventory = inventory
     tool = _TabularTool()
-    wrapper = ContextAwareTool(
+    wrapper = context_aware_tool.ContextAwareTool(
         tool,
         lambda: agent.runtime_context,
         lambda: agent.agent_settings,
         agent_context=agent,
     )
     return wrapper, tool, agent, requests
+
+
+@pytest.mark.asyncio
+async def test_tabular_inventory_401_has_safe_feedback_before_invocation(
+    tabular_wrapper, monkeypatch
+):
+    import httpx
+
+    wrapper, tool, _, _ = tabular_wrapper
+    wrapper.response_format = "content_and_artifact"
+
+    async def expired_inventory(*_args, **_kwargs):
+        response = httpx.Response(
+            401,
+            json={"detail": "private token expired"},
+            request=httpx.Request("GET", "https://cp.invalid/private?token=secret"),
+        )
+        response.raise_for_status()
+
+    monkeypatch.setattr(
+        context_aware_tool.KfBaseClient,
+        "_request_with_token_refresh",
+        expired_inventory,
+    )
+    _, artifact = await wrapper._arun()
+    assert not tool.calls
+    assert artifact.is_error
+    assert artifact.blocks[0].text.startswith("AUTHENTICATION_REQUIRED: ")
+    assert "private" not in artifact.blocks[0].text
+    assert "secret" not in artifact.blocks[0].text
 
 
 @pytest.mark.asyncio
@@ -453,7 +499,7 @@ async def test_native_agents_share_tabular_discovery_scope(
     for name in names:
         base = _TabularTool(name=name)
         tools.append(
-            ContextAwareTool(
+            context_aware_tool.ContextAwareTool(
                 base,
                 lambda: agent.runtime_context,
                 lambda: agent.agent_settings,
@@ -540,7 +586,7 @@ async def test_native_agents_share_tabular_discovery_scope(
             )
         ):
             registered_tool = tool_node.tools_by_name[name]
-            assert isinstance(registered_tool, ContextAwareTool)
+            assert isinstance(registered_tool, context_aware_tool.ContextAwareTool)
             assert await registered_tool._arun(**args) == "ok"
     assert len(requests) == 3
     assert [tool.base_tool.calls[0]["attachment_uids"] for tool in tools] == [
