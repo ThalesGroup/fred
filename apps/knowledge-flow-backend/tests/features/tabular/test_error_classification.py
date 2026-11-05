@@ -78,8 +78,10 @@ def test_other_duckdb_io_errors_still_surface_as_server_errors():
 @pytest.mark.parametrize("error", [PermissionError("authority lost"), asyncio.CancelledError()])
 def test_diagnostic_path_preserves_authority_and_cancellation_stops(error):
     """Only SQL-authoring errors receive diagnostics; hard stops pass through."""
-    with pytest.raises(type(error)) as caught:
+
+    def fail_query() -> None:
         with _redacting_query_execution_errors():
             raise error
 
+    caught = pytest.raises(type(error), fail_query)
     assert caught.value is error
