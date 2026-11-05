@@ -12,9 +12,9 @@
 
 ## 3. Operator guidance and integration
 
-- [x] 3.1 Add an operator migration note with C2's tested list URL, existing credential variables, chat-model allowlist, rollout dependency, and rollback; verify the note with the migration checker and the staged C2 YAML separately.
+- [x] 3.1 Add an operator migration note with optional configuration, existing credential variables, chat-model allowlist, rollout dependency, and rollback; verify it with the migration checker.
 - [x] 3.2 Run relevant model-discovery and routing tests, root `make code-quality`, and full branch review against `swift`; record any remaining draft limitations in the PR.
 
 ## Workflow follow-up
 
-- Archive after the implementation is complete and reviewed. A release tag and C2 deployment require a separate later decision.
+- Archive after the implementation is complete and reviewed. A release tag or deployment requires a separate later decision.

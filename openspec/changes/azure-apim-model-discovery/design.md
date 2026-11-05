@@ -2,7 +2,7 @@
 
 ## Context
 
-See `proposal.md`. `ModelCatalog.resolve_discovery`, its async counterpart, and model-detail lookup currently send `OPENAI_API_KEY` to `{base_url}/models`. Generated profiles always use the `openai` provider. Static `azure-apim` profiles already use Entra client credentials and `TrustNest-Apim-Subscription-Key` for inference. C2's confirmed list URL is `https://api.thalesdigital.io/ai-models/openai/v1/models`; its inference provider uses the `/ai-models/openai` resource path. The list and inference paths are related but not identical.
+See `proposal.md`. `ModelCatalog.resolve_discovery`, its async counterpart, and model-detail lookup currently send `OPENAI_API_KEY` to `{base_url}/models`. Generated profiles always use the `openai` provider. Static `azure-apim` profiles already use Entra client credentials and an APIM subscription header for inference. The model-list URL and inference resource path can differ, so discovery needs both settings.
 
 ## Goals / Non-Goals
 
@@ -15,14 +15,14 @@ See `proposal.md`. `ModelCatalog.resolve_discovery`, its async counterpart, and 
 **Non-Goals:**
 
 - Per-source Kubernetes SecretKeyRef wiring or secret rotation policy from the remainder of #3254.
-- Automatically classifying every model in a gateway's inventory. C2 can use `include_model_ids` for known chat models when the upstream omits capabilities.
-- A release tag or C2 deployment.
+- Automatically classifying every model in a gateway's inventory. Operators can use `include_model_ids` for known chat models when the upstream omits capabilities.
+- A release tag or deployment.
 
 ## Decisions
 
 ### Source contract and inference settings
 
-Add an explicit `provider` choice to `ModelDiscoverySource`, defaulting to `openai`. An `azure-apim` source requires a typed, non-secret inference-settings object with the six fields already required by `fred_core.model.factory.get_model()`. Validate its origin and resource path against the source's configured `/v1` base URL. Generated chat profiles use `provider: azure-apim`, the returned wire ID, and those settings. They override inherited `temperature` with `null` so a catalog-wide value is not forced on reasoning models. When a static profile names the same model on the same APIM product, copy only its model-specific request options, including Responses API routing; this preserves C2's working GPT-6 Astra and Sol/Luna behavior without a new override schema. The alternative of reusing an arbitrary `dict` would allow credential-shaped keys and produce unroutable profiles after a successful list response.
+Add an explicit `provider` choice to `ModelDiscoverySource`, defaulting to `openai`. An `azure-apim` source requires a typed, non-secret inference-settings object with the six fields already required by `fred_core.model.factory.get_model()`. Validate its origin and resource path against the source's configured base URL. Generated chat profiles use `provider: azure-apim`, the returned wire ID, and those settings. They override inherited `temperature` with `null` so a catalog-wide value is not forced on reasoning models. When a static profile names the same model on the same APIM product, copy only its model-specific request options, including Responses API routing; this preserves existing model-specific behavior without a new override schema. The alternative of reusing an arbitrary `dict` would allow credential-shaped keys and produce unroutable profiles after a successful list response.
 
 ### Discovery authentication
 
@@ -34,11 +34,11 @@ Keep the existing admin URL edit and refresh flow. For an Azure APIM source, acc
 
 ## Risks / Trade-offs
 
-- [The upstream list includes non-chat models without capability metadata] -> Use `include_model_ids` in C2 values until the gateway supplies trustworthy chat capability flags.
+- [The upstream list includes non-chat models without capability metadata] -> Operators use `include_model_ids` until the gateway supplies trustworthy chat capability flags.
 - [OAuth token acquisition can fail while static profiles still work] -> Preserve the last verified discovery inventory and keep static profiles available, following the existing refresh behavior.
 - [A saved URL override outside the APIM product becomes invalid when a source is switched to Azure APIM] -> Reject it explicitly and require an administrator to clear it; do not send credentials to the saved URL.
 - [Unknown models have no verified model-specific inference settings] -> Reuse matching manual settings for known models and leave new models disabled until an administrator validates them.
 
 ## Migration Plan
 
-Ship the Fred change first, then configure the C2 source with the exact tested `/ai-models/openai/v1` base URL, the existing non-secret APIM settings, and an optional chat-model allowlist when gateway metadata is insufficient. Publish a new Fred image and chart only in a later, separately approved release. Rollback removes the optional source and keeps static profiles; no database migration is required.
+Deployments without the optional source continue unchanged. To enable it, deploy an agent image with this support, then configure the source with its APIM model-list base URL, the existing non-secret inference settings, and a chat-model allowlist when gateway metadata is insufficient. Rollback removes the optional source and keeps static profiles; no database migration is required.
