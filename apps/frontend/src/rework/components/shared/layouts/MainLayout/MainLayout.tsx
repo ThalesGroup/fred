@@ -24,9 +24,9 @@ export default function MainLayout() {
   useTaskPolling();
   return (
     <div className={styles.mainLayout}>
-      <nav className={styles.sidebar}>
+      <div className={styles.sidebar}>
         <Sidebar />
-      </nav>
+      </div>
       <main className={styles.content}>
         <TeamAdminCharterGate>
           <Outlet />

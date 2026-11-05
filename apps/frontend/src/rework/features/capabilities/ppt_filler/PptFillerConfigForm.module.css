@@ -36,7 +36,7 @@
   align-items: center;
   gap: 4px;
   color: var(--on-surface-retreat);
-  font-size: var(--font-size-small, 0.8125rem);
+  font: var(--font-body-medium);
   overflow-wrap: anywhere;
 }
 
@@ -66,14 +66,14 @@
 .hint {
   margin: 0;
   color: var(--on-surface-retreat);
-  font-size: var(--font-size-small, 0.8125rem);
+  font: var(--font-body-medium);
 }
 
 .blocking,
 .error {
   margin: 0;
   color: var(--error, #b3261e);
-  font-size: var(--font-size-small, 0.8125rem);
+  font: var(--font-body-medium);
 }
 
 .errorList {
@@ -89,14 +89,13 @@
   flex-direction: column;
   gap: var(--spacing-2, 8px);
   border: 1px solid var(--outline-variant, #e0e0e0);
-  border-radius: var(--radius-small, 8px);
+  border-radius: var(--radius-s);
   padding: var(--spacing-3, 12px);
 }
 
 .schemaTitle {
   margin: 0;
-  font-weight: 600;
-  font-size: var(--font-size-small, 0.8125rem);
+  font: var(--font-title-small-emphasized);
 }
 
 .slideGroup {
@@ -108,8 +107,7 @@
 .slideTitle {
   margin: 0;
   color: var(--on-surface-retreat);
-  font-weight: 600;
-  font-size: var(--font-size-small, 0.8125rem);
+  font: var(--font-title-small-emphasized);
 }
 
 .keyList {
@@ -126,22 +124,22 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--spacing-2, 8px);
-  font-size: var(--font-size-small, 0.8125rem);
+  font: var(--font-body-medium);
 }
 
 .keyName {
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--surface-container, #f4f4f4);
   padding: 0 4px;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-family-mono);
 }
 
 .imageBadge {
   border: 1px solid var(--outline-variant, #e0e0e0);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   padding: 0 6px;
   color: var(--on-surface-retreat);
-  font-size: var(--font-size-x-small, 0.75rem);
+  font: var(--font-body-small);
 }
 
 .keyDescription {

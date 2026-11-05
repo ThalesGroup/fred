@@ -26,7 +26,7 @@ function StubPanel(_props: CapabilitySidePanelProps) {
 describe("sidePanelRegistry (#1979)", () => {
   const withPanel: CapabilityUiPlugin = {
     id: "demo_echo",
-    sidePanels: { demo_notes: { Component: StubPanel, icon: "edit_note" } },
+    sidePanels: { demo_notes: { Component: StubPanel, icon: "chat" } },
   };
   const withoutPanel: CapabilityUiPlugin = { id: "plain", partRenderers: {} };
 
@@ -39,7 +39,7 @@ describe("sidePanelRegistry (#1979)", () => {
       capabilityId: "demo_echo",
       widget: "demo_notes",
       Component: StubPanel,
-      icon: "edit_note",
+      icon: "chat",
     });
   });
 
@@ -67,7 +67,7 @@ describe("sidePanelRegistry (#1979)", () => {
   it("preserves the order the capabilities are supplied", () => {
     const other: CapabilityUiPlugin = {
       id: "other",
-      sidePanels: { other_panel: { Component: StubPanel, icon: "edit_note" } },
+      sidePanels: { other_panel: { Component: StubPanel, icon: "chat" } },
     };
     const registry = buildSidePanelRegistry([withPanel, other]);
     const entries = sidePanelsForCapabilities(["other", "demo_echo"], registry);

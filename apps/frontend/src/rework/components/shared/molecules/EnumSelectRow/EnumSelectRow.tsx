@@ -58,17 +58,18 @@ export function EnumSelectRow<T extends string>({
   const selected = options.find((option) => option.value === value) ?? options[0];
   const [focusedIndex, setFocusedIndex] = useState(0);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const triggerWrapRef = useRef<HTMLDivElement>(null);
 
+  // MenuPopover moves focus to the selected option on open and back to the row on close;
+  // this only keeps the roving tabindex in step.
   useEffect(() => {
     if (!open) return;
-    const initial = Math.max(
-      0,
-      options.findIndex((option) => option.value === value),
+    setFocusedIndex(
+      Math.max(
+        0,
+        options.findIndex((option) => option.value === value),
+      ),
     );
-    setFocusedIndex(initial);
-    optionRefs.current[initial]?.focus();
-    // Move focus into the listbox only when it transitions to open.
+    // Only when the listbox transitions to open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -78,19 +79,11 @@ export function EnumSelectRow<T extends string>({
     optionRefs.current[clamped]?.focus();
   };
 
-  const closeAndReturnFocus = () => {
-    onToggle();
-    triggerWrapRef.current?.querySelector("button")?.focus();
-  };
-
   // Unlike Escape, selection doesn't call onToggle itself — the caller's own
   // onChange already closes the row (e.g. SearchPolicyControl calls
   // onToggleOpen() after composer.onSearchPolicyChange()). Calling onToggle
   // here too would double-toggle it back open.
-  const selectOption = (optionValue: T) => {
-    onChange(optionValue);
-    triggerWrapRef.current?.querySelector("button")?.focus();
-  };
+  const selectOption = (optionValue: T) => onChange(optionValue);
 
   const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     switch (event.key) {
@@ -112,7 +105,7 @@ export function EnumSelectRow<T extends string>({
         break;
       case "Escape":
         event.preventDefault();
-        closeAndReturnFocus();
+        onToggle();
         break;
       default:
         break;
@@ -121,7 +114,7 @@ export function EnumSelectRow<T extends string>({
 
   return (
     <div className={styles.rowWrap}>
-      <div ref={triggerWrapRef}>
+      <div>
         <MenuPopoverItem
           icon={icon}
           label={label}

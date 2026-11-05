@@ -127,7 +127,7 @@ class PromptWidget extends WidgetType {
     }
     const icon = document.createElement("span");
     icon.className = `material-symbols-outlined ${iconStyles.icon}`;
-    icon.textContent = "edit_note";
+    icon.textContent = "chat";
     icon.setAttribute("aria-hidden", "true");
     const name = document.createElement("span");
     name.className = badgeStyles.name;

@@ -871,6 +871,7 @@ export default function ManagedChatPage() {
     <TraceDrawerProvider value={traceDrawerApi}>
       <div
         className={styles.page}
+        data-shell-inset="none"
         onDragEnter={handleDragOver}
         onDragOver={handleDragOver}
         onDragLeave={(event) => {

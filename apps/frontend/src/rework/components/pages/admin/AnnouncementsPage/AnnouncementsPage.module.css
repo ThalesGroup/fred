@@ -21,7 +21,6 @@
   flex-direction: column;
   gap: var(--spacing-m);
   box-sizing: border-box;
-  padding: var(--spacing-m);
   height: 100%;
   min-height: 0;
 }

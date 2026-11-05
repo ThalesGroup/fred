@@ -4,7 +4,6 @@
   flex-direction: column;
   gap: var(--spacing-m);
   margin: 0 auto;
-  padding: var(--spacing-m);
   width: 100%;
   max-width: 1080px;
   overflow: auto;
@@ -259,8 +258,8 @@
 .linkActions {
   min-width: max-content;
 }
-.linkActions > button:last-child,
-.linkActions > button:last-child:hover:not(:disabled) {
+.linkActions > :last-child button,
+.linkActions > :last-child button:hover:not(:disabled) {
   color: var(--error);
 }
 /* Rows use display: contents; dim cell content without fading their backgrounds. */
