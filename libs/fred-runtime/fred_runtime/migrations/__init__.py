@@ -27,8 +27,8 @@ Why this module exists:
 
 How to use:
 - `python -m fred_runtime migrate` (see `fred_runtime.__main__`)
-- `python -m fred_runtime downgrade runtime -1` rolls back only the runtime tree
-- `python -m fred_runtime downgrade capability:<id> -1` rolls back one capability
+- `python -m fred_runtime downgrade runtime <revision>` targets only the runtime tree
+- `python -m fred_runtime downgrade capability:<id> <revision>` targets one capability
 - the Helm migration job overrides its `command`/`args` to that CLI, so
   deploying the pod applies both fred-runtime's and every installed
   capability's migrations in one hook
@@ -50,7 +50,7 @@ RUNTIME_ALEMBIC_DIR = Path(__file__).resolve().parent
 
 
 class MigrationTreeSelectionError(ValueError):
-    """The requested migration tree is not available for downgrade."""
+    """The requested tree or target is not available for downgrade."""
 
 
 def _upgrade(script_location: str, *, label: str) -> None:
@@ -67,17 +67,25 @@ def _upgrade(script_location: str, *, label: str) -> None:
     logger.info("[MIGRATE] %s at head", label)
 
 
-def _downgrade(script_location: str, *, label: str) -> None:
-    """Run ``alembic downgrade -1`` against one script tree."""
+def _downgrade(script_location: str, *, label: str, revision: str) -> None:
+    """Run Alembic against one tree after resolving its exact target."""
 
     from alembic import command
     from alembic.config import Config
+    from alembic.script import ScriptDirectory
 
-    logger.info("[MIGRATE] downgrading %s (%s)", label, script_location)
     cfg = Config()
     cfg.set_main_option("script_location", script_location)
-    command.downgrade(cfg, "-1")
-    logger.info("[MIGRATE] downgraded %s by one revision", label)
+    if revision != "base" and revision not in {
+        script.revision for script in ScriptDirectory.from_config(cfg).walk_revisions()
+    }:
+        raise MigrationTreeSelectionError(
+            f"revision '{revision}' is not a complete ID in {label}'s migration tree"
+        )
+
+    logger.info("[MIGRATE] downgrading %s to %s (%s)", label, revision, script_location)
+    command.downgrade(cfg, revision)
+    logger.info("[MIGRATE] downgraded %s to %s", label, revision)
 
 
 def run_all_migrations() -> list[str]:
@@ -106,11 +114,11 @@ def run_all_migrations() -> list[str]:
     return upgraded
 
 
-def downgrade_migration_tree(tree: str) -> str:
-    """Downgrade one explicitly selected migration tree by one revision."""
+def downgrade_migration_tree(tree: str, revision: str) -> str:
+    """Downgrade one explicitly selected migration tree to a target."""
 
     if tree == "runtime":
-        _downgrade(str(RUNTIME_ALEMBIC_DIR), label="fred-runtime")
+        _downgrade(str(RUNTIME_ALEMBIC_DIR), label="fred-runtime", revision=revision)
         return "fred-runtime"
 
     prefix = "capability:"
@@ -128,7 +136,7 @@ def downgrade_migration_tree(tree: str) -> str:
             f"(available: {available})"
         )
 
-    _downgrade(locations[cap_id], label=f"capability '{cap_id}'")
+    _downgrade(locations[cap_id], label=f"capability '{cap_id}'", revision=revision)
     return cap_id
 
 
