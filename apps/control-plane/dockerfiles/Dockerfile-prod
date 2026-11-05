@@ -17,7 +17,7 @@ COPY libs/fred-rust-sdk ./libs/fred-rust-sdk
 COPY apps/monitor/Cargo.toml ./apps/monitor/Cargo.toml
 COPY apps/monitor/src ./apps/monitor/src
 COPY apps/control-plane/Cargo.toml ./apps/control-plane/Cargo.toml
-COPY apps/control-plane/agent ./apps/control-plane/agent
+COPY libs/fred-rust-agent ./libs/fred-rust-agent
 WORKDIR /workspace/apps/control-plane
 RUN mkdir src && echo "fn main() {}" > src/main.rs && \
     cargo build --release --locked -p control-plane && \

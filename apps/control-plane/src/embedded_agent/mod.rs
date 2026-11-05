@@ -3,7 +3,9 @@
 
 //! HTTP admission and SSE framing for the embedded agent library.
 
-pub(crate) mod search;
+pub(crate) mod kf_search;
+mod title;
+mod usage;
 
 use axum::{
     extract::State,
@@ -13,11 +15,8 @@ use axum::{
         sse::{Event, KeepAlive},
     },
 };
-use fred_rust_agent::{ExecuteError, ExecuteRequest, RequestedTarget, RuntimeEvent, Usage};
-use fred_rust_sdk::inference::ModelOfferKey;
-use futures::{FutureExt, StreamExt};
-use sqlx::PgPool;
-use tracing::{Instrument, Span};
+use fred_rust_agent::{ExecuteError, ExecuteRequest, RequestedTarget, RuntimeEvent};
+use futures::StreamExt;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
@@ -27,8 +26,12 @@ use crate::{
     error::{AppError, AppResult},
     extract::ApiJson,
     onboarding::AdmittedUser,
-    sessions::{ModelUsage, UsageReport, persist_usage},
 };
+
+/// Whether an agent template is the one this runtime embeds.
+pub(crate) fn serves(runtime_id: &str, template: &str) -> bool {
+    runtime_id == fred_rust_agent::DEFINITION.provider && template == fred_rust_agent::AGENT_ID
+}
 
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new().routes(routes!(execute_stream))
@@ -86,9 +89,7 @@ async fn execute_stream(
             reasoning,
         )
         .await?;
-        if binding.agent.runtime_id != fred_rust_agent::DEFINITION.provider
-            || binding.agent.template_key != fred_rust_agent::AGENT_ID
-        {
+        if !serves(&binding.agent.runtime_id, &binding.agent.template_key) {
             return Err(AppError::problem(
                 StatusCode::CONFLICT,
                 "agent_runtime_mismatch",
@@ -106,7 +107,7 @@ async fn execute_stream(
             .knowledge_flow_url
             .as_deref()
             .map(|url| {
-                search::Search::new(
+                kf_search::Search::new(
                     url,
                     state.directory.clone(),
                     &binding.subject_id,
@@ -122,58 +123,19 @@ async fn execute_stream(
                     "Document search provisioning is unavailable.",
                 )
             })?;
-        let title_input = request.input.clone();
-        let title = binding.title.map(|title| {
-            let pool = state.pool.clone();
-            let span = span.clone();
-            let credentials = state.agent_catalog.inference_credentials.clone();
-            let subject_id = binding.subject_id.clone();
-            async move {
-                let offer = title.inference.selection.key.clone();
-                let turn = match fred_rust_agent::inference::InferenceTurn::admit(
-                    title.inference,
-                    &credentials,
-                ) {
-                    Ok(turn) => turn,
-                    Err(_) => {
-                        tracing::warn!(
-                            event = "session_title",
-                            outcome = "skipped",
-                            reason = "provisioning"
-                        );
-                        return None;
-                    }
-                };
-                let usage_pool = pool.clone();
-                let generated = turn
-                    .title(&title_input, move |usage| {
-                        report_usage(usage_pool, span, space_id, session_id, offer, usage)
-                    })
-                    .await?;
-                let body = crate::sessions::title::GeneratedTitle {
-                    subject_id,
-                    agent_instance_id: instance_id,
-                    attempt_id: title.attempt_id,
-                    title: generated,
-                };
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(2),
-                    crate::sessions::title::persist(&pool, space_id, session_id, &body),
-                )
-                .await
-                {
-                    Ok(Ok(true)) => Some(session_id.to_string()),
-                    _ => {
-                        tracing::info!(
-                            event = "session_title",
-                            outcome = "skipped",
-                            reason = "not_persisted"
-                        );
-                        None
-                    }
-                }
-            }
-            .boxed()
+        let title = binding.title.map(|attempt| {
+            title::generate(
+                &state,
+                span.clone(),
+                title::TitledTurn {
+                    subject_id: binding.subject_id.clone(),
+                    instance_id,
+                    space_id,
+                    session_id,
+                },
+                request.input.clone(),
+                attempt,
+            )
         });
         let admission = binding.inference.ok_or_else(|| {
             AppError::problem(
@@ -185,7 +147,7 @@ async fn execute_stream(
         let offer = admission.selection.key.clone();
         let turn = span
             .in_scope(|| {
-                fred_rust_agent::inference::InferenceTurn::admit(
+                fred_rust_agent::turn::InferenceTurn::admit(
                     admission,
                     &state.agent_catalog.inference_credentials,
                 )
@@ -199,16 +161,16 @@ async fn execute_stream(
             })?;
         let pool = state.pool.clone();
         let space_id = binding.space.id;
-        let events = fred_rust_agent::inference::execute(
+        let events = fred_rust_agent::answer::execute(
             turn,
             request.input,
             search.map(|search| move |query| async move { search.run(query).await }),
-            move |usage| report_usage(pool, span, space_id, session_id, offer, usage),
+            move |tokens| usage::report(pool, span, space_id, session_id, offer, tokens),
         )
         .boxed();
-        crate::sessions::title::stream(events, title)
+        title::stream(events, title)
     } else {
-        fred_rust_agent::execute().boxed()
+        fred_rust_agent::demo::execute().boxed()
     };
     let stream = events.map(|event| Event::default().json_data(event));
     let mut response = Sse::new(stream)
@@ -221,67 +183,4 @@ async fn execute_stream(
         .headers_mut()
         .insert("x-accel-buffering", HeaderValue::from_static("no"));
     Ok(response)
-}
-
-fn report_usage(
-    pool: PgPool,
-    span: Span,
-    space_id: Uuid,
-    session_id: Uuid,
-    offer: ModelOfferKey,
-    usage: Usage,
-) {
-    let report_id = Uuid::new_v4();
-    let exchange_id = Uuid::new_v4().to_string();
-    let tokens = [
-        usage.input_tokens,
-        usage.output_tokens,
-        usage.cached_input_tokens,
-        usage.cache_creation_input_tokens,
-    ]
-    .map(i64::try_from);
-    let [
-        Ok(input_tokens),
-        Ok(output_tokens),
-        Ok(cache_read_tokens),
-        Ok(cache_creation_tokens),
-    ] = tokens
-    else {
-        tracing::warn!(
-            parent: &span,
-            event = "run_usage",
-            outcome = "lost",
-            reason = "token_overflow"
-        );
-        return;
-    };
-    let report = UsageReport {
-        occurred_at: chrono::Utc::now(),
-        models: vec![ModelUsage {
-            model_source_id: offer.source_id,
-            upstream_model_id: offer.upstream_model_id,
-            input_tokens,
-            output_tokens,
-            cache_read_tokens,
-            cache_creation_tokens,
-        }],
-    };
-    // Only the bounded accounting write survives a disconnected browser.
-    // It starts before yielding the response; inference itself is never spawned.
-    tokio::spawn(
-        async move {
-            let failure = match tokio::time::timeout(
-                std::time::Duration::from_secs(2),
-                persist_usage(&pool, space_id, session_id, &exchange_id, report_id, report),
-            )
-            .await
-            {
-                Ok(Ok(())) => return,
-                Ok(Err(_)) => "write_failed",
-                Err(_) => "timeout",
-            };
-            tracing::warn!(event = "run_usage", outcome = "lost", reason = failure, %report_id);
-        }
-        .instrument(span),
-    );
 }

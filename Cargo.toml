@@ -2,8 +2,8 @@
 resolver = "3"
 members = [
     "apps/control-plane",
-    "apps/control-plane/agent",
     "apps/monitor",
+    "libs/fred-rust-agent",
     "libs/fred-rust-sdk",
 ]
 default-members = ["apps/control-plane"]

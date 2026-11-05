@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 fred-rust-sdk = { workspace = true }
-fred-rust-agent = { path = "agent" }
+fred-rust-agent = { path = "../../libs/fred-rust-agent" }
 anyhow.workspace = true
 aws-sdk-s3 = { version = "=1.152.0", default-features = false, features = ["rt-tokio", "rustls", "default-https-client", "http-1x"] }
 base64 = "0.23.1"

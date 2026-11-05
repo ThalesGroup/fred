@@ -235,8 +235,8 @@ async fn prepare_execution(
     if !authorization::can_use_agent(&s.pool, initial.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    let embedded = initial.source_runtime_id == fred_rust_agent::DEFINITION.provider
-        && initial.source_agent_id == fred_rust_agent::AGENT_ID;
+    let embedded =
+        crate::embedded_agent::serves(&initial.source_runtime_id, &initial.source_agent_id);
     // The embedded executor uses this router's configured mount, never a browser
     // authority or a new catalog-source/deployment setting. Unnested tests use "".
     let base = if embedded {

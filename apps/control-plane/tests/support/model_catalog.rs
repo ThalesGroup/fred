@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use axum::response::IntoResponse;
 use control_plane::model_catalog::{
     self,
     config::ModelSource,
@@ -63,12 +64,33 @@ impl Provider {
             let completion_status = completion_status.clone();
             let messages = messages.clone();
             async move {
+                let streamed = body["stream"] == true;
                 completions.lock().await.push((headers, body));
                 let message = messages.lock().await.take().unwrap_or_else(|| json!({"role":"assistant","content":"managed simulated inference"}));
                 let reason = if message.get("tool_calls").is_some() { "tool_calls" } else { "stop" };
-                (axum::http::StatusCode::from_u16(*completion_status.lock().await).unwrap(), Json(json!({"id":"fixture", "object":"chat.completion", "created":0, "model":"chat",
+                let status = axum::http::StatusCode::from_u16(*completion_status.lock().await).unwrap();
+                let usage = json!({"prompt_tokens":2,"completion_tokens":2,"total_tokens":4});
+                if streamed && status.is_success() {
+                    let mut delta = message;
+                    if let Some(calls) = delta["tool_calls"].as_array_mut() {
+                        for (index, call) in calls.iter_mut().enumerate() {
+                            call["index"] = json!(index);
+                        }
+                    }
+                    let chunk = |delta: Value, reason: Value, usage: Value| {
+                        json!({"id":"fixture", "object":"chat.completion.chunk", "created":0, "model":"chat",
+                            "choices":[{"index":0,"delta":delta,"finish_reason":reason}], "usage":usage})
+                    };
+                    let body = format!(
+                        "data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
+                        chunk(delta, Value::Null, Value::Null),
+                        chunk(json!({}), json!(reason), usage),
+                    );
+                    return (status, [("content-type", "text/event-stream")], body).into_response();
+                }
+                (status, Json(json!({"id":"fixture", "object":"chat.completion", "created":0, "model":"chat",
                     "choices":[{"index":0,"message":message,"finish_reason":reason}],
-                    "usage":{"prompt_tokens":2,"completion_tokens":2,"total_tokens":4}})))
+                    "usage":usage}))).into_response()
             }
         }));
         let app = app.route("/documents/search", post(move |headers: HeaderMap,
@@ -1024,11 +1046,12 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     use futures::StreamExt;
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         while let Some(frame) = stream.next().await {
-            if String::from_utf8_lossy(&frame.unwrap()).contains("assistant_delta") {
+            // The provider reports usage when its reply ends, just before this event.
+            if String::from_utf8_lossy(&frame.unwrap()).contains("\"kind\":\"final\"") {
                 return;
             }
         }
-        panic!("missing provider response");
+        panic!("missing final event");
     })
     .await
     .unwrap();
@@ -1042,9 +1065,9 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     search_state.agent_catalog.knowledge_flow_url = Some(provider.url.clone());
     let search_app = routes(search_state);
     let mut hits = vec![
-        json!({"uid":"pointer","title":"Dataset","content":"Not evidence","chunk_kind":"dataset_pointer"}),
+        json!({"uid":"pointer","title":"Dataset","content":"Not evidence","score":0.5,"chunk_kind":"dataset_pointer"}),
     ];
-    hits.extend((0..6).map(|i| json!({"uid":format!("doc-{i}"),"title":"é".repeat(260),"content":"界".repeat(4005),"page":2})));
+    hits.extend((0..6).map(|i| json!({"uid":format!("doc-{i}"),"title":"é".repeat(260),"content":"界".repeat(4005),"score":0.5,"page":2})));
     for (index, (status, hits)) in [
         (200, json!(hits)),
         (200, json!([])),
@@ -1062,16 +1085,14 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
         assert_eq!(response.status(), 200);
         let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
         let body = String::from_utf8_lossy(&body);
-        assert!(body.contains(if status == 200 {
-            "\"kind\":\"final\""
-        } else {
-            "execution_error"
-        }));
+        // The model answers a failed search, as with a Python agent's failed tool.
+        assert!(body.contains("\"kind\":\"final\""));
+        assert_eq!(body.contains("\"is_error\":true"), status != 200);
         assert!(!body.contains("private KF failure") && !body.contains("service-token"));
         let rows = reports(4 + index).await;
         let row = rows.last().unwrap();
-        assert_eq!(row["input_tokens"], if status == 200 { 4 } else { 2 });
-        assert_eq!(row["output_tokens"], if status == 200 { 4 } else { 2 });
+        assert_eq!(row["input_tokens"], 4);
+        assert_eq!(row["output_tokens"], 4);
         assert_eq!(row["agent_instance_id"], instance.to_string());
         assert_eq!(row["model_source_id"], "a");
         let searches = provider.searches.lock().await;
@@ -1090,21 +1111,32 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
             json!({"question":"manual question","top_k":5})
         );
         let calls = provider.inference.lock().await;
-        assert_eq!(calls.len() - before, if status == 200 { 2 } else { 1 });
+        assert_eq!(calls.len() - before, 2);
         if status == 200 {
             let messages = calls.last().unwrap().1["messages"].as_array().unwrap();
             let tool = messages.last().unwrap();
             assert_eq!(tool["role"], "tool");
             assert_eq!(tool["tool_call_id"], "search-1");
-            let sources: Vec<Value> =
-                serde_json::from_str(tool["content"].as_str().unwrap()).unwrap();
-            assert_eq!(sources.len(), if index == 0 { 5 } else { 0 });
-            for source in sources {
-                assert_ne!(source["uid"], "pointer");
-                assert_eq!(source["content"].as_str().unwrap().chars().count(), 4000);
-                assert_eq!(source["title"].as_str().unwrap().chars().count(), 256);
-                assert_eq!(source["page"], 2);
+            let content: Value = serde_json::from_str(tool["content"].as_str().unwrap()).unwrap();
+            assert_eq!(content["query"], "manual question");
+            let model_hits = content["hits"].as_array().unwrap();
+            assert_eq!(model_hits.len(), if index == 0 { 5 } else { 0 });
+            for hit in model_hits {
+                assert_ne!(hit["uid"], "pointer");
+                assert_eq!(hit["content"].as_str().unwrap().chars().count(), 4000);
+                assert_eq!(hit["title"].as_str().unwrap().chars().count(), 256);
+                assert_eq!(hit["page"], 2);
             }
+            let last_event = body
+                .lines()
+                .filter_map(|line| line.strip_prefix("data: "))
+                .next_back()
+                .unwrap();
+            let last_event: Value = serde_json::from_str(last_event).unwrap();
+            assert_eq!(last_event["kind"], "final");
+            let cited = last_event["sources"].as_array().unwrap();
+            assert_eq!(cited.len(), model_hits.len());
+            assert!(cited.iter().all(|source| source["uid"] != "pointer"));
         }
     }
     let after_search = reports(6).await;

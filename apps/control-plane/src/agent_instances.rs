@@ -15,7 +15,7 @@ mod chat_controls;
 pub mod http;
 pub(crate) mod preparation;
 mod runtime;
-pub(crate) use runtime::{require_executable, resolve_person_runtime_binding};
+pub(crate) use runtime::{TitleAdmission, require_executable, resolve_person_runtime_binding};
 mod tuning;
 
 const PAGE_SIZE: usize = 100;
