@@ -656,7 +656,9 @@
       "textOnly": "Seul un message texte simple peut attendre pendant ce tour",
       "forceUnavailable": "Envoi impossible pendant ce tour. Le message reste en attente."
     },
-    "newConversation": "Nouvelle conversation",
+    "newConversation": "Nouvelle conversation avec cet agent",
+    "hideNavPanel": "Masquer le panneau de navigation",
+    "showNavPanel": "Afficher le panneau de navigation",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",
@@ -815,12 +817,13 @@
     "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
+      "uploadedSection": "Pièces jointes",
       "deleteAria": "Supprimer {{name}}",
-      "empty": "Aucune pièce jointe dans cette conversation.",
-      "filePreviewTitle": "Aperçu de la pièce jointe",
-      "loading": "Chargement des pièces jointes...",
+      "empty": "Aucun document dans cette conversation.",
+      "filePreviewTitle": "Aperçu du document",
+      "loading": "Chargement des documents…",
       "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
-      "title": "Pièces jointes"
+      "title": "Documents de la conversation"
     },
     "sessionTitleEditor": {
       "untitled": "Conversation sans titre",

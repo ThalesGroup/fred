@@ -426,6 +426,18 @@ export function RichInputField({
     }
   }, [stopRecording, voiceInputDisabled, voiceInputState]);
 
+  const sendButton = (
+    <IconButton
+      variant="filled"
+      color="primary"
+      size="small"
+      icon={{ category: "outlined", type: "arrow_upward" }}
+      onClick={onSend}
+      disabled={sendDisabled}
+      aria-label={t("chatbot.sendMessage")}
+    />
+  );
+
   const defaultActionSlot = (
     <div className={styles.actionGroup}>
       {canUseVoiceInput &&
@@ -469,17 +481,7 @@ export function RichInputField({
           aria-label={t("chatbot.stopResponse")}
         />
       )}
-      {showSend && (
-        <IconButton
-          variant="filled"
-          color="primary"
-          size="small"
-          icon={{ category: "outlined", type: "arrow_upward" }}
-          onClick={onSend}
-          disabled={sendDisabled}
-          aria-label={t("chatbot.sendMessage")}
-        />
-      )}
+      {showSend && sendButton}
     </div>
   );
 
