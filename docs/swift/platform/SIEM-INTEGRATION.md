@@ -80,31 +80,197 @@ For D01, translate the specification into a native SIEM query: select `logger=fr
 
 ## 5. Real development log chains
 
-These lines were captured on 4 November 2026 from a running local Fred Control Plane and Keycloak development stack. They are copied from the producer logs, with no synthesized fields or syslog envelope. This development Control Plane uses text application logging; the VM deployment should use JSON application logging as described above. Keycloak appears here only to make the example reproducible locally. In the target deployment, use Entra sign-in events for D05-D07.
+The following events were observed on 5 November 2026 in a running local Fred stack. Two test accounts were created: `siem_admin_20261105` (`07f3fafe-39f5-4115-8baf-baa84e055607`) and `siem_analyst_20261105` (`8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1`). A dedicated development client `siem-workload-20261105` was also used. Fred lines are copied verbatim from process stdout. Keycloak failure lines are copied verbatim from container stdout; successful and administrative Keycloak event objects were retrieved through its Admin REST API and serialized as compact JSON without changing their fields. No syslog envelope or SIEM record is shown because neither was used in this local capture. Expand each scenario to inspect its source events.
+
+Keycloak is a development analogue only. D04-D07 require Microsoft Entra ID directory audit, user sign-in, and service principal sign-in exports in the target deployment. These Keycloak events do not establish that Entra emits identical names or fields. The local Docker address `172.18.0.1` is a development origin, not an Internet client IP.
 
 <details>
-<summary>Failed sign-ins: attempts for alice and admin in the Keycloak development realm</summary>
+<summary>D01 - Platform administrator grant</summary>
 
-```text
-2026-11-04 08:28:15,168 WARN  [org.keycloak.events] (executor-thread-5) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="null", ipAddress="172.18.0.1", error="user_not_found", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="alice"
-2026-11-04 08:28:15,210 WARN  [org.keycloak.events] (executor-thread-5) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="null", ipAddress="172.18.0.1", error="user_not_found", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="admin"
-2026-11-04 08:28:40,476 WARN  [org.keycloak.events] (executor-thread-5) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="null", ipAddress="172.18.0.1", error="user_not_found", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="alice"
-2026-11-04 08:28:40,514 WARN  [org.keycloak.events] (executor-thread-5) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="null", ipAddress="172.18.0.1", error="user_not_found", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="admin"
+`siem_admin_20261105` bootstrapped the isolated Fred test organization and received `platform_admin`. The target is in `subject`; `actor_uid` identifies the initiating account.
+
+Fred Control Plane audit stdout
+
+```json
+{"ts": 1793858408.934622, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "control-plane", "msg": "[SECURITY] authz.relation.granted", "extra": {"audit_event": "authz.relation.granted", "actor_uid": "07f3fafe-39f5-4115-8baf-baa84e055607", "subject": "user:07f3fafe-39f5-4115-8baf-baa84e055607", "relation": "platform_admin", "resource": "organization:fred"}}
 ```
-
-The attempted usernames, client, realm, source IP, and rejection reason are visible. Because `userId="null"` and the reason is `user_not_found`, these events cannot establish that either account exists. The two usernames share the same source IP and recur within 25 seconds, making them useful inputs for D06 after local threshold tuning.
 
 </details>
 
 <details>
-<summary>Denied administrative API request: Fred authentication warning and HTTP completion</summary>
+<summary>D02 - Privileged grant followed by a policy change</summary>
 
-```text
-2026-11-04T08:33:47+00:00 WARNING control-plane/fred_core.security.oidc No Bearer token provided on secured endpoint correlation_id=1b188ae9-63b9-4383-8630-312ac4e9b5be request_id=d541e93e-67d1-4728-93cd-0d27388774c7
-2026-11-04T08:33:47+00:00 WARNING control-plane/http GET /admin/platform/access/users → 401 | 82ms http_method=GET duration_ms=81.80919800361153 outcome=responded route=/admin/platform/access/users http_status=401 correlation_id=1b188ae9-63b9-4383-8630-312ac4e9b5be request_id=d541e93e-67d1-4728-93cd-0d27388774c7
+`siem_admin_20261105` granted `platform_access_manager` to `siem_analyst_20261105`. The analyst then changed the platform access policy. The grant target in `subject` matches the policy change `actor_uid`; the audit events themselves have no shared request ID.
+
+Fred Control Plane audit stdout
+
+```json
+{"ts": 1793858502.129384, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "control-plane", "msg": "[SECURITY] authz.relation.granted", "extra": {"audit_event": "authz.relation.granted", "actor_uid": "07f3fafe-39f5-4115-8baf-baa84e055607", "subject": "user:8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", "relation": "platform_access_manager", "resource": "organization:fred"}}
+{"ts": 1793858502.1750476, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "control-plane", "msg": "[SECURITY] platform.access.policy.updated", "extra": {"audit_event": "platform.access.policy.updated", "actor_uid": "8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", "revision": 1}}
 ```
 
-The matching `correlation_id` and `request_id` show that the warning and 401 response belong to one request. No user identity is available because the request had no bearer token. The Fred route is bounded; obtain the client IP from the ingress log when implementing D11.
+</details>
+
+<details>
+<summary>D03 - Platform access filtering disabled</summary>
+
+`siem_analyst_20261105` first enabled, then disabled platform access filtering. The second event is the high-priority detection input; `revision` does not contain the policy body.
+
+Fred Control Plane audit stdout
+
+```json
+{"ts": 1793858517.6366093, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "control-plane", "msg": "[SECURITY] platform.access.filtering.updated", "extra": {"audit_event": "platform.access.filtering.updated", "actor_uid": "8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", "filtering_enabled": true, "revision": 1}}
+{"ts": 1793858526.2727935, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "control-plane", "msg": "[SECURITY] platform.access.filtering.updated", "extra": {"audit_event": "platform.access.filtering.updated", "actor_uid": "8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", "filtering_enabled": false, "revision": 1}}
+```
+
+</details>
+
+<details>
+<summary>D04 - Development identity client created and secret rotated</summary>
+
+The Keycloak development administrator created `siem-workload-20261105` and rotated its secret. The event refers to the internal client UUID; the client name was verified when the test client was created. In production, correlate the corresponding Entra directory audit events with Fred application and service principal IDs. Keycloak Admin REST events are not part of the Fred VM stdout forwarding route.
+
+Keycloak Admin REST `admin-events` response objects
+
+```json
+{"id":"8e238b2d-f9d2-49fe-ab1b-d5782921a56a","time":1793858605221,"realmId":"b0557f70-80bf-407f-9947-cb7c538105c2","authDetails":{"realmId":"4978e402-a173-4b91-9d23-62d10e81a42a","clientId":"8f3155a2-3ed2-4438-9dc3-63dc6c1b3c08","userId":"40344204-c64d-452a-a48f-3bf776c4a5ce","ipAddress":"172.18.0.1"},"operationType":"CREATE","resourceType":"CLIENT","resourcePath":"clients/240a2019-0577-48dd-beeb-614d75c459fe"}
+{"id":"efe3fb5a-c6f2-47eb-a0c6-2daf75864609","time":1793858605268,"realmId":"b0557f70-80bf-407f-9947-cb7c538105c2","authDetails":{"realmId":"4978e402-a173-4b91-9d23-62d10e81a42a","clientId":"8f3155a2-3ed2-4438-9dc3-63dc6c1b3c08","userId":"40344204-c64d-452a-a48f-3bf776c4a5ce","ipAddress":"172.18.0.1"},"operationType":"ACTION","resourceType":"CLIENT","resourcePath":"clients/240a2019-0577-48dd-beeb-614d75c459fe/client-secret"}
+```
+
+</details>
+
+<details>
+<summary>D05 - Failed sign-ins, success, then administrative action</summary>
+
+`siem_analyst_20261105` submitted a wrong password twice, then signed in successfully and changed the access policy. The Keycloak `userId` matches the Fred `actor_uid`. The local password-grant flow is only a development test; production should distinguish interactive sign-ins from non-interactive token activity in Entra.
+
+Keycloak container stdout - failed sign-ins
+
+```text
+2026-11-05 06:03:43,483 WARN  [org.keycloak.events] (executor-thread-1) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", ipAddress="172.18.0.1", error="invalid_user_credentials", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="siem_analyst_20261105"
+2026-11-05 06:03:43,542 WARN  [org.keycloak.events] (executor-thread-1) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", ipAddress="172.18.0.1", error="invalid_user_credentials", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="siem_analyst_20261105"
+```
+
+Keycloak Admin REST `events` response object - successful sign-in
+
+```json
+{"id":"86e5e261-6c26-49d2-9e23-cd5978f8f2c6","time":1793858623571,"type":"LOGIN","realmId":"b0557f70-80bf-407f-9947-cb7c538105c2","clientId":"app","userId":"8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1","sessionId":"c6469772-c939-4627-a9f9-6210206cf94d","ipAddress":"172.18.0.1","details":{"auth_method":"openid-connect","token_id":"onrtro:0a481d41-5976-5fb6-b306-cbb541535524","grant_type":"password","refresh_token_type":"Refresh","scope":"profile email","refresh_token_id":"66210804-010d-46f1-bcb2-510fd6269980","client_auth_method":"client-secret","username":"siem_analyst_20261105"}}
+```
+
+Fred Control Plane audit stdout - subsequent action
+
+```json
+{"ts": 1793858623.6146283, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "control-plane", "msg": "[SECURITY] platform.access.policy.updated", "extra": {"audit_event": "platform.access.policy.updated", "actor_uid": "8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", "revision": 2}}
+```
+
+</details>
+
+<details>
+<summary>D06 - One development origin tries two accounts</summary>
+
+The same development origin attempted both named accounts within 60 ms. These are three observations, not a suggested production threshold. Shared VPN and proxy addresses require threshold tuning.
+
+Keycloak container stdout
+
+```text
+2026-11-05 06:03:43,483 WARN  [org.keycloak.events] (executor-thread-1) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", ipAddress="172.18.0.1", error="invalid_user_credentials", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="siem_analyst_20261105"
+2026-11-05 06:03:43,518 WARN  [org.keycloak.events] (executor-thread-1) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="07f3fafe-39f5-4115-8baf-baa84e055607", ipAddress="172.18.0.1", error="invalid_user_credentials", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="siem_admin_20261105"
+2026-11-05 06:03:43,542 WARN  [org.keycloak.events] (executor-thread-1) type="LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="app", userId="8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", ipAddress="172.18.0.1", error="invalid_user_credentials", auth_method="openid-connect", grant_type="password", client_auth_method="client-secret", username="siem_analyst_20261105"
+```
+
+</details>
+
+<details>
+<summary>D07 - Confidential client failure followed by success</summary>
+
+A wrong secret for `siem-workload-20261105` produced `CLIENT_LOGIN_ERROR`; a correct secret produced `CLIENT_LOGIN`. In production, use Entra service principal sign-in records and validate whether the export aggregates attempts.
+
+Keycloak container stdout - failed client sign-in
+
+```text
+2026-11-05 06:03:43,646 WARN  [org.keycloak.events] (executor-thread-1) type="CLIENT_LOGIN_ERROR", realmId="b0557f70-80bf-407f-9947-cb7c538105c2", realmName="app", clientId="siem-workload-20261105", userId="null", ipAddress="172.18.0.1", error="invalid_client_credentials", grant_type="client_credentials"
+```
+
+Keycloak Admin REST `events` response object - successful client sign-in
+
+```json
+{"id":"3b996d3e-4fef-4c60-9222-09a9b57daa07","time":1793858623660,"type":"CLIENT_LOGIN","realmId":"b0557f70-80bf-407f-9947-cb7c538105c2","clientId":"siem-workload-20261105","userId":"1a7360f5-0048-434e-b0bb-7f1360e3858f","ipAddress":"172.18.0.1","details":{"token_id":"trrtcc:942d7e7c-5f94-3d8f-7477-9442ccd8718c","grant_type":"client_credentials","scope":"profile email","client_auth_method":"client-secret","username":"service-account-siem-workload-20261105"}}
+```
+
+</details>
+
+<details>
+<summary>D08 - Attempt to use another user's session</summary>
+
+`siem_admin_20261105` created the session. `siem_analyst_20261105` then attempted to execute against the same session and received 403. The audit indicates an ownership mismatch; the HTTP log carries the caller `user_id` but neither record names the session owner. Do not assume a shared request ID between the two lines.
+
+Fred Agents audit and application stdout
+
+```json
+{"http_method": "POST", "duration_ms": 420.5819420021726, "outcome": "responded", "route": "/agents/execute/stream", "http_status": 200, "session_id": "siem-d08-owner-session-20261105", "exchange_id": "e7dfb11f-8973-4baf-96fd-6c8e96521a7f", "team_id": "fb8c7430f7624cc397740a26fe74d735", "agent_instance_id": "7831628f-0787-4437-a752-fc7d189a2e0a", "correlation_id": "3bd4d9bb-0089-496b-b833-8b938693204c", "request_id": "70710707-1492-444e-b11b-8ae054e1ab5e", "template_agent_id": "fred.github.test_assistant", "run_id": "93896b31-5add-4a35-be79-3b7419b0c449", "user_id": "07f3fafe-39f5-4115-8baf-baa84e055607", "severity": "INFO", "timestamp": {"seconds": 1793859178, "nanos": 302259922}, "message": "POST /agents/execute/stream → 200 | 421ms", "logger": "http", "service": "fred-agents", "category": "application", "logging.googleapis.com/sourceLocation": {"file": "http.py", "line": "136", "function": "__call__"}, "process": 1314249, "thread": "MainThread", "task_name": "Task-99", "service_role": "api"}
+{"ts": 1793859192.023819, "level": "WARNING", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "fred-agents", "msg": "[SECURITY] session_owner_mismatch", "extra": {"audit_event": "session_owner_mismatch", "outcome": "rejected", "reason": "session_owner_mismatch"}}
+{"http_method": "POST", "duration_ms": 22.925970995856915, "outcome": "responded", "route": "/agents/execute/stream", "http_status": 403, "correlation_id": "41e59eb4-e635-4882-87d4-ce5e0549daf0", "request_id": "56c19d77-03c1-4467-aec2-5420eeca6447", "user_id": "8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", "severity": "WARNING", "timestamp": {"seconds": 1793859192, "nanos": 25154113}, "message": "POST /agents/execute/stream → 403 | 23ms", "logger": "http", "service": "fred-agents", "category": "application", "logging.googleapis.com/sourceLocation": {"file": "http.py", "line": "136", "function": "__call__"}, "process": 1314249, "thread": "MainThread", "task_name": "Task-171", "service_role": "api"}
+```
+
+</details>
+
+<details>
+<summary>D09 - Rejected delegated grant</summary>
+
+`siem_analyst_20261105` called the delegated frontend bootstrap route as an untrusted caller. The audit supplies `caller_not_trusted`; the HTTP completion supplies 403 and a request ID, but the audit has no actor or request ID.
+
+Fred Control Plane audit and application stdout
+
+```json
+{"ts": 1793858726.6196928, "level": "WARNING", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "control-plane", "msg": "[SECURITY] delegation.grant.rejected", "extra": {"audit_event": "delegation.grant.rejected", "outcome": "rejected", "reason": "caller_not_trusted"}}
+{"http_method": "GET", "duration_ms": 19.590803000028245, "outcome": "responded", "route": "/frontend/bootstrap", "http_status": 403, "correlation_id": "5e852d24-de30-4c26-83af-b0218773d30e", "request_id": "670d4f73-6117-4ca7-9eaf-db473d5a59df", "severity": "WARNING", "timestamp": {"seconds": 1793858726, "nanos": 620375633}, "message": "GET /frontend/bootstrap → 403 | 20ms", "logger": "http", "service": "control-plane", "category": "application", "logging.googleapis.com/sourceLocation": {"file": "http.py", "line": "136", "function": "__call__"}, "process": 1287358, "thread": "MainThread", "task_name": "Task-174", "service_role": "api"}
+```
+
+</details>
+
+<details>
+<summary>D10 - Free link revealed and used for enrollment</summary>
+
+`siem_analyst_20261105` revealed the test team Free enrollment link and enrolled with it. The identical `link_id` and `team_id` join the two events. One enrollment is an observed chain, not an unusual-volume alert.
+
+Fred Control Plane audit stdout
+
+```json
+{"ts": 1793858848.8121939, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "control-plane", "msg": "[SECURITY] platform.access.link.revealed", "extra": {"audit_event": "platform.access.link.revealed", "actor_uid": "8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", "team_id": "fb8c7430f7624cc397740a26fe74d735", "link_id": "dc87c837-1caf-4f8e-b748-0f6eec1c2919"}}
+{"ts": 1793858848.8516037, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "control-plane", "msg": "[SECURITY] platform.access.free.enrolled", "extra": {"audit_event": "platform.access.free.enrolled", "actor_uid": "8ba40cdc-0d63-45a2-a3a2-4c5b113ddff1", "team_id": "fb8c7430f7624cc397740a26fe74d735", "link_id": "dc87c837-1caf-4f8e-b748-0f6eec1c2919"}}
+```
+
+</details>
+
+<details>
+<summary>D11 - Burst of unauthenticated administrative requests</summary>
+
+Five requests without a bearer token hit the same administrative route within one second; Fred returned 401 each time. These are Fred application logs only. The local test bypassed the production ingress, so no WAF decision or external client IP was observed.
+
+Fred Control Plane application stdout
+
+```json
+{"http_method": "GET", "duration_ms": 3.954758998588659, "outcome": "responded", "route": "/admin/platform/access/users", "http_status": 401, "correlation_id": "c9da2d5a-6064-4013-994a-21f0f3855e56", "request_id": "4e8d3131-603a-4d16-a1bc-91b4df26b757", "severity": "WARNING", "timestamp": {"seconds": 1793858858, "nanos": 279309272}, "message": "GET /admin/platform/access/users → 401 | 4ms", "logger": "http", "service": "control-plane", "category": "application", "logging.googleapis.com/sourceLocation": {"file": "http.py", "line": "136", "function": "__call__"}, "process": 1287358, "thread": "MainThread", "task_name": "Task-305", "service_role": "api"}
+{"http_method": "GET", "duration_ms": 2.0708259980892763, "outcome": "responded", "route": "/admin/platform/access/users", "http_status": 401, "correlation_id": "1c21bb96-5352-49d0-9ddc-e8cf10d69ef7", "request_id": "428f3e11-6edd-489b-9e7a-d2b7a4a1fe5b", "severity": "WARNING", "timestamp": {"seconds": 1793858858, "nanos": 281939506}, "message": "GET /admin/platform/access/users → 401 | 2ms", "logger": "http", "service": "control-plane", "category": "application", "logging.googleapis.com/sourceLocation": {"file": "http.py", "line": "136", "function": "__call__"}, "process": 1287358, "thread": "MainThread", "task_name": "Task-307", "service_role": "api"}
+{"http_method": "GET", "duration_ms": 3.825194995442871, "outcome": "responded", "route": "/admin/platform/access/users", "http_status": 401, "correlation_id": "97c7cc9b-3b03-4166-826a-8289ed10d7a6", "request_id": "3c6bc9fe-a443-44f7-b94d-a36ec9d982df", "severity": "WARNING", "timestamp": {"seconds": 1793858858, "nanos": 286276340}, "message": "GET /admin/platform/access/users → 401 | 4ms", "logger": "http", "service": "control-plane", "category": "application", "logging.googleapis.com/sourceLocation": {"file": "http.py", "line": "136", "function": "__call__"}, "process": 1287358, "thread": "MainThread", "task_name": "Task-309", "service_role": "api"}
+{"http_method": "GET", "duration_ms": 1.7857999991974793, "outcome": "responded", "route": "/admin/platform/access/users", "http_status": 401, "correlation_id": "ed805d02-cf9c-421f-805b-5f083022d41d", "request_id": "e09f64aa-1a9d-4e77-b078-e82c7c585866", "severity": "WARNING", "timestamp": {"seconds": 1793858858, "nanos": 288530826}, "message": "GET /admin/platform/access/users → 401 | 2ms", "logger": "http", "service": "control-plane", "category": "application", "logging.googleapis.com/sourceLocation": {"file": "http.py", "line": "136", "function": "__call__"}, "process": 1287358, "thread": "MainThread", "task_name": "Task-311", "service_role": "api"}
+{"http_method": "GET", "duration_ms": 4.705740000645164, "outcome": "responded", "route": "/admin/platform/access/users", "http_status": 401, "correlation_id": "e0a756e9-1bdd-4b62-87a6-710488f6c2bc", "request_id": "7e76e35f-676d-457f-840d-707b78c684d9", "severity": "WARNING", "timestamp": {"seconds": 1793858858, "nanos": 294335842}, "message": "GET /admin/platform/access/users → 401 | 5ms", "logger": "http", "service": "control-plane", "category": "application", "logging.googleapis.com/sourceLocation": {"file": "http.py", "line": "136", "function": "__call__"}, "process": 1287358, "thread": "MainThread", "task_name": "Task-313", "service_role": "api"}
+```
+
+</details>
+
+<details>
+<summary>D12 - Runtime tool invocation started and completed</summary>
+
+`siem_admin_20261105` ran the development test assistant and answered its `ask_user` question. The audit records the start and successful completion; the application log names the tool and user. Under current delegation settings, the audit lines omit both identifiers, so the SIEM should not claim a reliable audit-to-application join from these lines alone.
+
+Fred Agents audit and application stdout
+
+```json
+{"ts": 1793859428.204237, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "fred-agents", "msg": "[SECURITY] agent.tool.invocation.started", "extra": {"audit_event": "agent.tool.invocation.started", "outcome": "started", "reason": "tool_invocation"}}
+{"ts": 1793859428.209212, "level": "INFO", "logger": "fred.security.audit", "file": "audit_log.py", "line": 63, "service": "fred-agents", "msg": "[SECURITY] agent.tool.invocation.completed", "extra": {"audit_event": "agent.tool.invocation.completed", "outcome": "succeeded", "reason": "tool_completed"}}
+{"outcome": "succeeded", "duration_ms": 5.7370389986317605, "session_id": "siem-d12-tool-complete-20261105", "task_id": null, "document_uid": null, "tool_name": "ask_user", "exchange_id": "889dc56b-6e43-443d-a99f-d447e93e3689", "team_id": "fb8c7430f7624cc397740a26fe74d735", "agent_instance_id": "7831628f-0787-4437-a752-fc7d189a2e0a", "correlation_id": "6e572d89-3acc-41d8-a0fc-4fa6c18cdf49", "request_id": "1649c645-1020-44b9-9611-612668cc3f49", "template_agent_id": "fred.github.test_assistant", "run_id": "efa70342-b074-4c35-afac-8f23a0811a3f", "user_id": "07f3fafe-39f5-4115-8baf-baa84e055607", "severity": "INFO", "timestamp": {"seconds": 1793859428, "nanos": 209930658}, "message": "Tool invocation completed", "logger": "fred_runtime.runtime_support.tool_execution", "service": "fred-agents", "category": "application", "logging.googleapis.com/sourceLocation": {"file": "tool_execution.py", "line": "144", "function": "run"}, "process": 1314249, "thread": "MainThread", "task_name": "Task-427", "service_role": "api"}
+```
 
 </details>
 
