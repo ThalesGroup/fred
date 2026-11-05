@@ -397,6 +397,16 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision/teams/${queryArg.teamId}`,
       }),
     }),
+    getPolicy: build.query<GetPolicyApiResponse, GetPolicyApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills/policy` }),
+    }),
+    setSkill: build.mutation<SetSkillApiResponse, SetSkillApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/skills/${queryArg.name}`,
+        method: "PUT",
+        body: queryArg.setSkillEnabled,
+      }),
+    }),
     createSpace: build.mutation<CreateSpaceApiResponse, CreateSpaceApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces`, method: "POST", body: queryArg.createSpace }),
     }),
@@ -1037,6 +1047,13 @@ export type TeamSupervisionApiResponse = /** status 200 undefined */ TeamSupervi
 export type TeamSupervisionApiArg = {
   organizationId: string;
   teamId: string;
+};
+export type GetPolicyApiResponse = /** status 200 undefined */ SkillPolicy;
+export type GetPolicyApiArg = void;
+export type SetSkillApiResponse = /** status 200 undefined */ SkillEnabled;
+export type SetSkillApiArg = {
+  name: string;
+  setSkillEnabled: SetSkillEnabled;
 };
 export type CreateSpaceApiResponse = /** status 201 Success */ Space;
 export type CreateSpaceApiArg = {
@@ -2216,6 +2233,16 @@ export type TeamSupervisionDetail = {
   organization_id: string;
   team: TeamSupervision;
 };
+export type SkillPolicy = {
+  disabled_skill_names: string[];
+};
+export type SkillEnabled = {
+  enabled: boolean;
+  name: string;
+};
+export type SetSkillEnabled = {
+  enabled: boolean;
+};
 export type CreateSpace = {
   kind: SpaceKind;
   name: string;
@@ -2549,6 +2576,7 @@ export type RuntimeBinding = {
   agent: RuntimeAgent;
   attachments: RuntimeAttachment[];
   conversation_id: string | null;
+  disabled_platform_skills: string[];
   inference?: InferenceAdmission | null;
   models: RuntimeModels;
   run_id: string | null;
@@ -2846,6 +2874,9 @@ export const {
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
   useLazyTeamSupervisionQuery,
+  useGetPolicyQuery,
+  useLazyGetPolicyQuery,
+  useSetSkillMutation,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
   useReceiptsQuery,
