@@ -144,8 +144,15 @@ async def test_nul_write_is_controlled_and_preserves_existing_document(
     fake_store: FakeWritableDocumentStore, monkeypatch, field: str, count: int
 ) -> None:
     tool = _tool()
-    _, saved = await tool.coroutine(title="Report", content_markdown="Original")
-    document_id = saved.ui_parts[0].document_id
+    saved = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "original-write",
+            "args": {"title": "Report", "content_markdown": "Original"},
+        }
+    )
+    document_id = saved.artifact.ui_parts[0].document_id
     upsert = AsyncMock(side_effect=AssertionError("Invalid text reached storage"))
     monkeypatch.setattr(fake_store, "upsert", upsert)
     args = {"title": "Report", "content_markdown": "New text"}
@@ -176,10 +183,17 @@ async def test_valid_unicode_markdown_is_preserved(
     fake_store: FakeWritableDocumentStore,
 ) -> None:
     text = "# Décisions\n\nCafé\t東京\nLiteral [U+0000] and \\u0000"
-    _, result = await _tool().coroutine(title="Résumé", content_markdown=text)
+    result = await _tool().ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "unicode-write",
+            "args": {"title": "Résumé", "content_markdown": text},
+        }
+    )
 
-    assert not result.is_error
-    assert result.ui_parts[0].content_md == text
+    assert not result.artifact.is_error
+    assert result.artifact.ui_parts[0].content_md == text
 
 
 @pytest.mark.asyncio
@@ -190,9 +204,18 @@ async def test_nul_create_does_not_acquire_a_document_store(monkeypatch) -> None
     monkeypatch.setattr(
         capability_module, "get_writable_document_store", forbidden_store
     )
-    content, artifact = await _tool().coroutine(
-        title="Invalid\x00title", content_markdown="Invalid\x00content"
+    result = await _tool().ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "invalid-create",
+            "args": {
+                "title": "Invalid\x00title",
+                "content_markdown": "Invalid\x00content",
+            },
+        }
     )
 
-    assert artifact.is_error and artifact.blocks[0].text == content
-    assert "title" in content and "content_markdown" in content
+    assert result.artifact.is_error
+    assert result.artifact.blocks[0].text == result.content
+    assert "title" in result.content and "content_markdown" in result.content
