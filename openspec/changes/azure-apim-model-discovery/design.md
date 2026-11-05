@@ -30,13 +30,13 @@ Centralize request-header construction for list and detail calls. For Azure APIM
 
 ### Administrator URL override
 
-For an Azure APIM source, reject a URL change before acquiring credentials or sending an HTTP request. The Models admin view marks its URL read-only and still permits refresh at the configured URL. Existing editable URL behavior remains for standard sources. A previously persisted override for a source converted to Azure APIM is rejected until cleared, keeping the last verified inventory rather than redirecting credentials. Allowing arbitrary admin URLs would create a credential-exfiltration path; restricting only the hostname would still permit untrusted routes on the same gateway.
+Keep the existing admin URL edit and refresh flow. For an Azure APIM source, accept a changed `/models` URL only when its scheme, host, and port match the configured source and its path remains below the configured APIM resource path. Validate this before acquiring credentials or sending any request. The inference settings remain fixed to the configured APIM product. A previously persisted override outside that boundary is rejected until corrected or cleared, keeping the last verified inventory. Allowing arbitrary admin URLs would create a credential-exfiltration path; restricting only the hostname would still permit unrelated routes on the gateway.
 
 ## Risks / Trade-offs
 
 - [The upstream list includes non-chat models without capability metadata] -> Use `include_model_ids` in C2 values until the gateway supplies trustworthy chat capability flags.
 - [OAuth token acquisition can fail while static profiles still work] -> Preserve the last verified discovery inventory and keep static profiles available, following the existing refresh behavior.
-- [A saved URL override becomes invalid when a source is switched to Azure APIM] -> Reject it explicitly and require an administrator to clear it; do not send credentials to the saved URL.
+- [A saved URL override outside the APIM product becomes invalid when a source is switched to Azure APIM] -> Reject it explicitly and require an administrator to clear it; do not send credentials to the saved URL.
 - [Using one source-wide model-settings object cannot tune every heterogeneous model] -> Keep the first PR focused on known chat IDs and retain manual profiles for model-specific settings.
 
 ## Migration Plan

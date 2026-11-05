@@ -44,7 +44,7 @@ An Azure APIM source SHALL generate chat profiles with the existing `azure-apim`
 
 ### Requirement: A model catalog can discover chat models from a compatible endpoint
 
-The catalog SHALL combine static YAML profiles and optional named OpenAI-compatible discovery sources. When present, `discovery` SHALL be a nonempty list of sources, including for one endpoint; source IDs SHALL be unique. An explicitly configured pod chat default SHALL remain in `default_profile_by_capability` and refer to a manually declared profile. When no chat default is configured and exactly one manual chat profile exists, the pod SHALL use that profile as its effective chat default. Discovered profiles SHALL NOT count toward this inference; zero or multiple manual chat profiles SHALL leave the pod without an inferred chat default. By default, each configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. A platform administrator MAY override a standard source URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for that source's generated profiles. An Azure APIM source SHALL use its configured `/models` URL and its configured Azure APIM inference settings; changing that source URL SHALL be rejected. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL remain usable without a discovery request.
+The catalog SHALL combine static YAML profiles and optional named OpenAI-compatible discovery sources. When present, `discovery` SHALL be a nonempty list of sources, including for one endpoint; source IDs SHALL be unique. An explicitly configured pod chat default SHALL remain in `default_profile_by_capability` and refer to a manually declared profile. When no chat default is configured and exactly one manual chat profile exists, the pod SHALL use that profile as its effective chat default. Discovered profiles SHALL NOT count toward this inference; zero or multiple manual chat profiles SHALL leave the pod without an inferred chat default. By default, each configured source SHALL request `GET {base_url}/models` and read identifiers from `data[].id`. A platform administrator MAY override a standard source URL; the effective URL MUST end in `/models`, and its parent SHALL become the inference base for that source's generated profiles. An Azure APIM source MAY use an administrator override only when its URL remains on the configured origin and under the configured APIM resource path. Its configured Azure APIM inference settings SHALL remain authoritative. The pod SHALL produce stable identities for valid identifiers. Static-only catalogs SHALL remain usable without a discovery request.
 
 #### Scenario: Mixed catalog
 
@@ -115,7 +115,7 @@ The catalog SHALL combine static YAML profiles and optional named OpenAI-compati
 
 ### Requirement: Platform administrators can override a discovery URL
 
-The Models admin view SHALL show each source's YAML and effective URL, last successful check, and refresh result. Opening the view SHALL request a fresh inventory. Only a platform administrator SHALL edit a standard source URL; an Azure APIM source URL SHALL be read-only; a feature manager MAY refresh its active URL. The pod SHALL independently reject a changed URL from a caller without platform management permission. Overrides SHALL persist and take effect without restarting pods. The view SHALL show new and confirmed removed model counts before model rows. New models SHALL start without a platform default-on grant. Confirmed removed models SHALL remain visible as unavailable, without new activation or selection. A failed refresh SHALL preserve the last successful inventory and SHALL NOT mark any model removed. If an agent pod catalog cannot be verified, the view SHALL show its identity and URL as a warning without persisting a source error; it SHALL still flag unregistered sources advertised by verified pods. Clearing an override SHALL restore the YAML URL.
+The Models admin view SHALL show each source's YAML and effective URL, last successful check, and refresh result. Opening the view SHALL request a fresh inventory. Only a platform administrator SHALL edit a source URL; an Azure APIM override SHALL remain on the configured origin and under the configured APIM resource path; a feature manager MAY refresh its active URL. The pod SHALL independently reject a changed URL from a caller without platform management permission. Overrides SHALL persist and take effect without restarting pods. The view SHALL show new and confirmed removed model counts before model rows. New models SHALL start without a platform default-on grant. Confirmed removed models SHALL remain visible as unavailable, without new activation or selection. A failed refresh SHALL preserve the last successful inventory and SHALL NOT mark any model removed. If an agent pod catalog cannot be verified, the view SHALL show its identity and URL as a warning without persisting a source error; it SHALL still flag unregistered sources advertised by verified pods. Clearing an override SHALL restore the YAML URL.
 
 #### Scenario: Save a URL
 
@@ -177,8 +177,14 @@ The Models admin view SHALL show each source's YAML and effective URL, last succ
 - **WHEN** an administrator refreshes the Models view
 - **THEN** the view warns which pod catalog could not be checked, retains the last verified inventory, and confirms no removals or source failure from this outage
 
-#### Scenario: Azure APIM URL cannot be redirected
+#### Scenario: Azure APIM URL changes within its gateway
 
 - **GIVEN** an Azure APIM source and a platform administrator
-- **WHEN** the administrator submits a different discovery URL
+- **WHEN** the administrator submits another `/models` URL under the configured APIM resource path on the same origin
+- **THEN** the pod refreshes that URL with the existing APIM credentials and keeps the configured inference route
+
+#### Scenario: Azure APIM URL cannot redirect credentials
+
+- **GIVEN** an Azure APIM source and a platform administrator
+- **WHEN** the administrator submits a `/models` URL outside the configured origin or resource path
 - **THEN** the pod rejects the change before acquiring or sending any credentials, and the current inventory remains available

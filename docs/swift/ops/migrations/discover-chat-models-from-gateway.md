@@ -3,7 +3,7 @@ schema: 1
 title: "Discover chat models from an OpenAI-compatible gateway"
 impact: minor
 configuration: production
-configuration_reason: "The Fred chart's models_catalog gains an optional discovery source; enabling it requires a gateway URL, model selection and an OPENAI_API_KEY available to the agent pod."
+configuration_reason: "The Fred chart's models_catalog gains an optional discovery source; enabling it requires a gateway URL, model selection and the credential required by the selected discovery provider."
 ---
 ## Applicability
 
@@ -15,7 +15,26 @@ The gateway must serve an authenticated `GET /models` under its inference base U
 
 ## Configuration
 
-Set `applications.fred-agents.models_catalog.discovery` in the Fred chart values to a list of sources. Each entry needs a stable `source_id` and the gateway's `base_url`, and may set `include_model_ids`. A one-endpoint deployment still uses a one-item list. Provide `OPENAI_API_KEY` in the agent pod environment through the deployment's secret mechanism. All discovery URLs on that pod share this key. A sole manual chat profile becomes the pod default automatically; with multiple manual profiles, set `default_profile_by_capability.chat` explicitly. In Features > Models > Model defaults > Agent pods, the administrator can replace that YAML default with a chat profile advertised by the pod whose model is enabled platform-wide. A discovery-only pod can leave the YAML default unset and require an administrator to select one. Each pod can also select an enabled manual chat profile as its fallback when a selected discovered profile disappears. The Platform tab retains the existing provider/name/settings form for a global override that forces one model across managed turns. Existing catalogs without `discovery` require no change.
+Set `applications.fred-agents.models_catalog.discovery` in the Fred chart values to a list of sources. Each entry needs a stable `source_id` and the gateway's `base_url`, and may set `include_model_ids`. A one-endpoint deployment still uses a one-item list. For standard OpenAI-compatible sources, provide `OPENAI_API_KEY` in the agent pod environment through the deployment's secret mechanism; those sources share this key. A sole manual chat profile becomes the pod default automatically; with multiple manual profiles, set `default_profile_by_capability.chat` explicitly. In Features > Models > Model defaults > Agent pods, the administrator can replace that YAML default with a chat profile advertised by the pod whose model is enabled platform-wide. A discovery-only pod can leave the YAML default unset and require an administrator to select one. Each pod can also select an enabled manual chat profile as its fallback when a selected discovered profile disappears. The Platform tab retains the existing provider/name/settings form for a global override that forces one model across managed turns. Existing catalogs without `discovery` require no change.
+
+For an Azure APIM gateway, set `provider: azure-apim` on that source and add `azure_apim_settings` with the same six non-secret fields as a static `azure-apim` model. PRISM C2's verified discovery base URL is `https://api.thalesdigital.io/ai-models/openai/v1`; its configured inference resource path remains `/ai-models/openai`. For example:
+
+```yaml
+discovery:
+  - source_id: trustnest
+    base_url: https://api.thalesdigital.io/ai-models/openai/v1
+    provider: azure-apim
+    azure_apim_settings:
+      azure_tenant_id: <existing-tenant-id>
+      azure_ad_client_id: <existing-client-id>
+      azure_ad_client_scope: <existing-api-scope>
+      azure_apim_base_url: https://api.thalesdigital.io
+      azure_apim_resource_path: /ai-models/openai
+      azure_openai_api_version: "2024-06-01"
+      stream_usage: false
+```
+
+The agent pod must already receive `AZURE_AD_CLIENT_SECRET` and `AZURE_APIM_SUBSCRIPTION_KEY` through its existing secret-backed environment. Discovery uses these for OAuth and the APIM header; it does not use `OPENAI_API_KEY`. No new credential is needed. An administrator may edit the discovery URL only within the same HTTPS origin and APIM resource path. The provider's inference route remains the configured resource path. If the gateway does not report `capabilities.completion_chat`, consider `include_model_ids` to list known chat models; unlisted embeddings must not be enabled as chat models. Upgrade Fred before enabling this source in C2 values. To roll back, remove the source and keep the existing static profiles.
 
 ## Upgrade
 

@@ -87,10 +87,67 @@ def base_url_from_models_url(models_url: str) -> str:
     ).rstrip("/")
 
 
+class AzureApimDiscoverySettings(FrozenModel):
+    azure_tenant_id: str = Field(min_length=1)
+    azure_ad_client_id: str = Field(min_length=1)
+    azure_ad_client_scope: str = Field(min_length=1)
+    azure_apim_base_url: str
+    azure_apim_resource_path: str
+    azure_openai_api_version: str = Field(min_length=1)
+    request_timeout: float | None = Field(default=None, gt=0)
+    stream_usage: bool | None = None
+
+    @model_validator(mode="after")
+    def _validate_endpoint(self) -> "AzureApimDiscoverySettings":
+        parts = urlsplit(self.azure_apim_base_url)
+        if (
+            parts.scheme != "https"
+            or not parts.hostname
+            or parts.username is not None
+            or parts.password is not None
+            or parts.path not in {"", "/"}
+            or parts.query
+            or parts.fragment
+            or self.azure_apim_base_url != self.azure_apim_base_url.strip()
+        ):
+            raise ValueError("Azure APIM base URL must be an HTTPS origin")
+        path = self.azure_apim_resource_path
+        if (
+            not path.startswith("/")
+            or path.endswith("/")
+            or "//" in path
+            or "%" in path
+            or "?" in path
+            or "#" in path
+            or any(segment in {".", ".."} for segment in path.split("/"))
+        ):
+            raise ValueError("Azure APIM resource path is invalid")
+        return self
+
+
+def _validate_azure_apim_url(
+    base_url: str, settings: AzureApimDiscoverySettings
+) -> None:
+    url = urlsplit(base_url)
+    approved = urlsplit(settings.azure_apim_base_url)
+    if (
+        url.scheme != approved.scheme
+        or url.hostname != approved.hostname
+        or url.port != approved.port
+        or not url.path.startswith(settings.azure_apim_resource_path + "/")
+        or "%" in url.path
+        or "//" in url.path
+        or any(segment in {".", ".."} for segment in url.path.split("/"))
+    ):
+        raise ValueError("Azure APIM discovery URL is outside the configured gateway")
+
+
 class ModelDiscoverySource(FrozenModel):
     source_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
     base_url: str
     include_model_ids: tuple[str, ...] | None = None
+    provider: Literal["openai", "azure-apim"] = "openai"
+    azure_apim_settings: AzureApimDiscoverySettings | None = None
 
     @field_validator("base_url")
     @classmethod
@@ -123,7 +180,82 @@ class ModelDiscoverySource(FrozenModel):
             raise ValueError(
                 "discovery include_model_ids must contain distinct nonblank ids"
             )
+        if self.provider == "azure-apim":
+            if self.azure_apim_settings is None:
+                raise ValueError("Azure APIM discovery settings are required")
+            _validate_azure_apim_url(self.base_url, self.azure_apim_settings)
+        elif self.azure_apim_settings is not None:
+            raise ValueError("Azure APIM settings require the azure-apim provider")
         return self
+
+
+def _azure_apim_secrets() -> tuple[str, str]:
+    client_secret = os.getenv("AZURE_AD_CLIENT_SECRET")
+    subscription_key = os.getenv("AZURE_APIM_SUBSCRIPTION_KEY")
+    if not client_secret or not subscription_key:
+        raise ValueError("Azure APIM discovery credentials are unavailable")
+    return client_secret, subscription_key
+
+
+def _discovery_headers(source: ModelDiscoverySource) -> dict[str, str]:
+    if source.provider == "openai":
+        credential = os.getenv("OPENAI_API_KEY")
+        if not credential:
+            raise ValueError(
+                f"Model discovery source {source.source_id!r} requires OPENAI_API_KEY"
+            )
+        return {"Authorization": f"Bearer {credential}"}
+    from azure.identity import ClientSecretCredential
+
+    settings = source.azure_apim_settings
+    assert settings is not None
+    client_secret, subscription_key = _azure_apim_secrets()
+    try:
+        with ClientSecretCredential(
+            tenant_id=settings.azure_tenant_id,
+            client_id=settings.azure_ad_client_id,
+            client_secret=client_secret,
+        ) as credential:
+            token = credential.get_token(settings.azure_ad_client_scope).token
+    except Exception:
+        raise ValueError("Azure APIM discovery token acquisition failed") from None
+    return {
+        "Authorization": f"Bearer {token}",
+        "TrustNest-Apim-Subscription-Key": subscription_key,
+    }
+
+
+async def _discovery_headers_async(source: ModelDiscoverySource) -> dict[str, str]:
+    if source.provider == "openai":
+        return _discovery_headers(source)
+    from azure.identity.aio import ClientSecretCredential
+
+    settings = source.azure_apim_settings
+    assert settings is not None
+    client_secret, subscription_key = _azure_apim_secrets()
+    try:
+        async with ClientSecretCredential(
+            tenant_id=settings.azure_tenant_id,
+            client_id=settings.azure_ad_client_id,
+            client_secret=client_secret,
+        ) as credential:
+            token = (await credential.get_token(settings.azure_ad_client_scope)).token
+    except Exception:
+        raise ValueError("Azure APIM discovery token acquisition failed") from None
+    return {
+        "Authorization": f"Bearer {token}",
+        "TrustNest-Apim-Subscription-Key": subscription_key,
+    }
+
+
+def _discovered_model_settings(
+    source: ModelDiscoverySource, base_url: str
+) -> dict[str, Any]:
+    if source.provider == "openai":
+        return {"base_url": base_url}
+    settings = source.azure_apim_settings
+    assert settings is not None
+    return {**settings.model_dump(exclude_none=True), "temperature": None}
 
 
 def _positive_int(value: object) -> int | None:
@@ -298,9 +430,10 @@ class ModelCatalog(FrozenModel):
             for profile in self.profiles
         ):
             raise ValueError("Unknown discovered model")
-        credential = os.getenv("OPENAI_API_KEY")
-        if not credential:
-            raise ValueError("Model discovery credential is unavailable")
+        if source.provider == "azure-apim":
+            assert source.azure_apim_settings is not None
+            _validate_azure_apim_url(source.base_url, source.azure_apim_settings)
+        headers = await _discovery_headers_async(source)
         try:
             async with httpx.AsyncClient(
                 timeout=5.0, follow_redirects=False, transport=transport
@@ -308,7 +441,7 @@ class ModelCatalog(FrozenModel):
                 async with client.stream(
                     "GET",
                     f"{source.base_url}/models/{quote(model_id, safe='')}",
-                    headers={"Authorization": f"Bearer {credential}"},
+                    headers=headers,
                 ) as response:
                     if response.status_code != 200:
                         raise ValueError(f"HTTP {response.status_code}")
@@ -365,11 +498,10 @@ class ModelCatalog(FrozenModel):
             if models_url is not None
             else source.base_url
         )
-        credential = os.getenv("OPENAI_API_KEY")
-        if not credential:
-            raise ValueError(
-                f"Model discovery source {source.source_id!r} requires OPENAI_API_KEY"
-            )
+        if source.provider == "azure-apim":
+            assert source.azure_apim_settings is not None
+            _validate_azure_apim_url(base_url, source.azure_apim_settings)
+        headers = _discovery_headers(source)
         try:
             with httpx.Client(
                 timeout=5.0, follow_redirects=False, transport=transport
@@ -377,7 +509,7 @@ class ModelCatalog(FrozenModel):
                 with client.stream(
                     "GET",
                     f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {credential}"},
+                    headers=headers,
                 ) as response:
                     if response.status_code != 200:
                         raise ValueError(f"HTTP {response.status_code}")
@@ -435,11 +567,10 @@ class ModelCatalog(FrozenModel):
         base_url = (
             base_url_from_models_url(models_url) if models_url else source.base_url
         )
-        credential = os.getenv("OPENAI_API_KEY")
-        if not credential:
-            raise ValueError(
-                f"Model discovery source {source.source_id!r} requires OPENAI_API_KEY"
-            )
+        if source.provider == "azure-apim":
+            assert source.azure_apim_settings is not None
+            _validate_azure_apim_url(base_url, source.azure_apim_settings)
+        headers = await _discovery_headers_async(source)
         try:
             async with httpx.AsyncClient(
                 timeout=5.0, follow_redirects=False, transport=transport
@@ -447,7 +578,7 @@ class ModelCatalog(FrozenModel):
                 async with client.stream(
                     "GET",
                     f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {credential}"},
+                    headers=headers,
                 ) as response:
                     if response.status_code != 200:
                         raise ValueError(f"HTTP {response.status_code}")
@@ -567,9 +698,9 @@ class ModelCatalog(FrozenModel):
                 max_input_tokens=_positive_int(item.get("max_input_tokens")),
                 max_output_tokens=_positive_int(item.get("max_output_tokens")),
                 model=ModelConfiguration(
-                    provider="openai",
+                    provider=source.provider,
                     name=wire_id,
-                    settings={"base_url": base_url},
+                    settings=_discovered_model_settings(source, base_url),
                 ),
             )
             if (
