@@ -477,7 +477,7 @@ impl PythonPurge {
                                 {
                                     json!({"detail":"session_writes_pending"})
                                 } else if purged.load(Ordering::SeqCst) {
-                                    json!({"purged":true,"sql_cascade":true})
+                                    json!({"purged":true})
                                 } else {
                                     json!({"deleted":3})
                                 },

@@ -8,37 +8,31 @@ configuration_reason: "Configure a distinct workload identity for each logical p
 
 ## Applicability
 
-Weaver Control Plane, fred-runtime, fred-agents, the installed ppt_builder library
-and frontend. This supersedes the configurable platform default described in
+New installations of Weaver Control Plane, fred-runtime, fred-agents, the installed
+ppt_builder library and frontend. This supersedes the configurable platform default described in
 ppt-builder-capability.md. A capability remains an installed library of a logical
 pod. An organization default is scoped to `(organization, logical pod)`; different
 pods can use different library versions and templates. Replicas of one logical
 pod share its queue and capability results. Knowledge Flow is not involved.
 
+## Prerequisites
+
+Use the same PostgreSQL database for CP and runtime/capability tables, with their
+separate roles. Provide the configured object storage and Temporal services.
+API and worker replicas of one logical pod must share capability storage.
+
 ## Upgrade
 
-Preserve the CP database, S3 bucket and capability database. Run the normal CP
-initialization hook through additive SQLx migrations 0006_powerpoint_files.sql and
-0007_capability_preparation.sql. Migration 0006 remains unchanged. API startup
-verifies migrations; it does not apply them. No live database operation accompanies
-this source change.
+Only fresh installations are supported. Run the normal CP initialization hook
+through the complete SQLx migration chain. API startup verifies migrations; it
+does not apply them. No live database operation accompanies this source change.
 
-0006 records original ownership, immutable S3 keys, replay receipts and cleanup.
-0007 adds staged attachment acceptance, pod scope, preparation intentions and the
-agent's preparation state. Previously stored agent originals have verified bytes
-and canonical pod provenance; they require an explicit save to prepare before
-new exchanges can use them. Organization files from the storage-only increment
-remain unbound: upload an explicit pod-scoped replacement. No legacy Swift
-`__platform__` file or result is automatically adopted.
+Run the installed capability migrations with `python -m fred_runtime migrate`
+using the target pod image and its SQL configuration. The preparation path reuses
+cap_ppt_builder_analysis; its preparation receipts are keyed by opaque preparation
+identity, retain attempt leases and become tombstones when retired.
 
-Run the existing capability migrations with `python -m fred_runtime migrate`
-using the target pod image and its SQL configuration. No additional capability
-migration is introduced. The preparation path reuses cap_ppt_builder_analysis;
-its preparation receipts are keyed by opaque preparation identity, retain attempt
-leases and become tombstones when retired. Historical platform rows and
-cap_ppt_builder_deck_plan are not migrated or generally purged by this change.
-
-## Configuration and worker startup
+## Configuration
 
 The CP continues using existing content storage, transfer limits, quotas and
 cleanup. Configure the approved runtime source as before and bind its workload:
@@ -172,7 +166,7 @@ binaries, inventory and thumbnails, retaining a tombstone that fences late write
 including a delayed first activity. Space deletion waits for original and derived
 cleanup acknowledgements. A missing owning worker leaves cleanup visibly pending.
 
-## Deliberate first-version boundary
+## Limitations
 
 Following the scope decision for this increment, the agent turn remains unchanged:
 no per-tool reauthorization, durable per-turn template lease or new interruption
@@ -180,14 +174,14 @@ protocol. New exchanges are gated by CP. A replacement or removal during an
 already admitted turn can make its former template unavailable during cleanup.
 Resolving that edge case belongs to a subsequent, cross-resource turn-lifecycle
 review. This increment does not claim to preserve every in-flight resource usage.
-Conversations, presentation plans and historical legacy rows are outside its purge
-scope. Template preparation and presentation generation remain separate operations.
+Conversations and presentation plans are outside its purge scope. Template
+preparation and presentation generation remain separate operations.
 
-## Validation and reception
+## Validation
 
 Local checks cover disposable PostgreSQL/SeaweedFS acceptance, draft creation,
-upgrade, rejection without replacement, replay, concurrent replacement, organization
-candidate activation, pod isolation, late confirmations and cleanup. A disposable
+SQL ownership constraints, rejection without replacement, replay, concurrent
+replacement, organization candidate activation, pod isolation, late confirmations and cleanup. A disposable
 Temporal test restarts the worker after persisted result/failed confirmation; a
 separate CP delivery test checks uncertain-delivery replay and terminal reconciliation.
 Python and frontend tests cover preparation fences, CP admission, readonly readiness,
@@ -232,8 +226,5 @@ establish reception on the integration platform or qualify this journey for arc4
 
 ## Rollback
 
-Stop new writers, settle accepted intentions, and retain the owning workers and
-storage sweeper until obsolete results/originals are cleaned. Restore a coordinated
-backup if reverting the SQL chain; do not alter checksums or drop receipt tables
-while retained objects/results depend on them. Restoring old software can restore
-abandoned global-template behavior and is a separate operational decision.
+Migration to or from an older Weaver version is unsupported. Retain the owning
+workers and storage sweeper until obsolete results/originals are cleaned.

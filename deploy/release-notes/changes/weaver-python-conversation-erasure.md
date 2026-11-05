@@ -9,42 +9,18 @@ after:
 ---
 ## Applicability
 
-Weaver installations using Python/ReAct, Deep conversation files, writable
-documents or PPT outputs, including receipts already blocked with
-`session_purge_unavailable`. This implements their effective deletion through the
-existing Control Plane lifecycle. It does not migrate Swift conversation content.
+New Weaver installations using Python/ReAct, Deep conversation files, writable
+documents or PPT outputs. This implements their effective deletion through the
+existing Control Plane lifecycle. Migration from Swift or an older Weaver is
+unsupported.
 The changes are locally validated; this note is not evidence of a deployment.
 
 ## Prerequisites
 
-Back up Control Plane, runtime and capability SQL and their matching object stores
-together. All conversation SQL must share one PostgreSQL database: CP owns
+All conversation SQL must share one PostgreSQL database: CP owns
 `control_plane.session_metadata`, runtime/capabilities own their private tables.
 The normal bootstrap and CP migration grant runtime only `USAGE` on the CP schema
 and `REFERENCES(session_id)` on the root, never SELECT or mutation privileges.
-
-Every historical session identifier must be a UUID with an existing CP root.
-For derived checkpoint threads, the UUID is the prefix before `:`. Migrations fail
-atomically on malformed identities or orphaned content; they neither invent roots
-nor silently delete data. Diagnose and resolve such legacy content through an
-explicit recovery decision before retrying the supported migration command.
-Audit existing `conversations/{id}/` object prefixes before activation as well:
-legacy code accepted UUID aliases (uppercase/compact spellings). New filesystem producers
-canonicalize the UUID, but this does not rename previously written object keys.
-Consolidate any historical aliases into their canonical conversation prefix
-through an explicit storage recovery before resuming cleanup; do not assume that
-SQL migration scans or repairs a bucket. Orphaned prefixes likewise require an
-explicit ownership decision.
-
-Uninstalled capabilities can leave data: writable-document's migration remains
-required if its table exists, even when its plugin is no longer installed.
-
-Stop and drain **all old producers** before activation, including CP uploads, KF
-processing/visibility work and Python runtime writes/conversions. Stopping a pod
-alone does not prove an already dispatched remote write has ended. Establish
-storage-side quiescence of old requests and multipart uploads as part of this
-transition. The new journal cannot retroactively describe old network requests.
-Do not enable cleanup during a mixed old/new rollout.
 
 ## Configuration
 
@@ -80,21 +56,15 @@ and derived buckets retain their existing corresponding checks.
 
 ## Upgrade
 
-1. Keep lifecycle cleanup paused through the normal configuration/deployment
-   procedure while performing the prerequisite drain and coordinated backup.
-2. Apply CP migrations 0011–0013 with the normal `initialize-schema` command.
-   Never edit migrations 0001–0010 or existing SQLx checksums.
-3. Run the normal runtime migration command, `python -m fred_runtime migrate`,
-   with the runtime role/schema and all applicable capability migrations. New
-   runtime revisions adopt checkpoint tables, add validated cascading ownership
-   and create the durable filesystem manifest. Writable-document adds the same
-   root FK. PostgreSQL startup verifies these constraints; it no longer creates
-   checkpoint tables implicitly.
-4. Replace all CP, KF and runtime producers with compatible binaries and verify
-   shared storage settings and M2M authorization. Keep any uncertain old storage
-   operation under investigation; a missing response is not success.
-5. Resume the existing lifecycle worker. Past-due blocked receipts are selected
-   automatically. No SQL status reset or manual deletion is required.
+Only fresh installations are supported.
+
+1. Initialize the complete CP schema with the normal `initialize-schema` command.
+2. Run `python -m fred_runtime migrate` with the runtime role/schema and all
+   installed capability migrations. Runtime migrations create checkpoint tables,
+   cascading ownership and the durable filesystem manifest. Writable-document
+   adds the same root FK.
+3. Verify shared storage settings and M2M authorization, then start the existing
+   lifecycle worker.
 
 No deployment or push is performed by this change itself.
 
@@ -140,11 +110,9 @@ and [object-list contract](https://docs.cloud.google.com/storage/docs/json_api/v
 
 ## Rollback
 
-Effective deletion is irreversible. Restoring only CP SQL without its matching
-runtime/capability/object snapshot breaks ownership and is unsupported.
-PostgreSQL ownership migrations deliberately refuse downgrade: removing their FKs
-would reopen the write-after-purge race. Stop cleanup and producers before any
-coordinated recovery; do not restore old writing binaries into the new lifecycle.
+Effective deletion is irreversible. PostgreSQL ownership migrations deliberately
+refuse downgrade: removing their FKs would reopen the write-after-purge race.
+Migration to or from an older Weaver version is unsupported.
 
 ## Limitations
 

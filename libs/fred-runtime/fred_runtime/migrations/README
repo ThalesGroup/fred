@@ -3,19 +3,6 @@ runtime activity/steering tables. The packaged migration runner is
 `python -m fred_runtime migrate`; it also walks installed capability trees.
 Use the owning application's configured migration command for deployment.
 
-For a reviewed rollback, `python -m fred_runtime downgrade runtime <revision>`
-or `python -m fred_runtime downgrade capability:<id> <revision>` targets one
-tree by its complete revision ID. Use `base` only when the previous release had
-no revision in that tree. Relative targets such as `-1` are rejected.
-
-Execution-space schema (revision a7b8c9d0e1f2):
-- runtime_turn_steering.team_id already contained an admitted space. It is renamed
-  to space_id, preserving that value and the mailbox's identity/lease lifecycle.
-- session_history.team_id contained team ancestry. It is dropped; a nullable
-  space_id and its index are added. Existing rows receive NULL, never a copied
-  team ID. New managed turns write their admitted space. Downgrade likewise does
-  not reconstruct ancestry from space. Session/rank keys are unchanged.
-
 PostgreSQL conversation ownership (revision b8c9d0e1f2a3):
 - Control Plane session_metadata is the lifecycle root. Runtime history, steering,
   and all five v2_ checkpoint tables have generated UUID conversation_id columns
@@ -30,18 +17,9 @@ PostgreSQL conversation ownership (revision b8c9d0e1f2a3):
   direct access to runtime content. A concurrent insert either commits before
   root deletion and is cascaded, or fails its FK after deletion. Old admitted SQL
   producers cannot recreate content after a crash or on another replica.
-- This migration adopts the existing v2_ checkpoint tables and creates them on a
-  fresh installation. PostgreSQL startup verifies generated expressions and the
-  validated, nondeferrable cascade constraints; it no longer creates or repairs
-  checkpoint tables. A remaining writable_document table must also have its
-  ownership migration even when the capability is no longer installed; startup
-  refuses an unmigrated table rather than promising an incomplete cascade.
-  The previously supported execution-space columns remain a
-  prerequisite. Custom PostgreSQL prefixes are not part of the Weaver schema.
-- Backfill is strict: invalid UUIDs, missing conversation roots or incompatible
-  existing tables fail the whole migration. No row is silently removed, and no
-  missing root is manufactured from content. Resolve such data through an explicit
-  operator decision before retrying; never rewrite applied migration history.
+- Runtime migrations create the v2_ checkpoint tables on a fresh installation.
+  PostgreSQL startup checks table availability; it does not create or repair them.
+  Custom PostgreSQL prefixes are not part of the Weaver schema.
 - SQLite remains a standalone SDK/test store. Its checkpoint tables still initialize
   locally, and these cross-service FK migrations are no-ops. It does not implement
   the Weaver physical-purge endpoint. PostgreSQL ownership migrations deliberately

@@ -481,8 +481,6 @@ class _ConversationFilesystemPurgeResponse(BaseModel):
 class _SessionPurgeResponse(_ConversationFilesystemPurgeResponse):
     """Filesystem erased; SQL ownership is enforced by CP-rooted foreign keys."""
 
-    sql_cascade: bool
-
 
 class _RuntimeErrorPayload(BaseModel):
     """
@@ -5650,7 +5648,7 @@ def _build_agent_router(
             raise HTTPException(
                 status_code=503, detail="session_purge_unavailable"
             ) from exc
-        return _SessionPurgeResponse(purged=True, sql_cascade=True)
+        return _SessionPurgeResponse(purged=True)
 
     @router.get("/sessions/{session_id}/filesystem/exports/{path:path}")
     async def download_session_export(

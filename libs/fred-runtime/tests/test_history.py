@@ -1010,7 +1010,7 @@ def test_session_purge_requires_platform_authority(
     assert response.status_code == expected_status, response.text
     mock_store.delete_session.assert_not_awaited()
     if expected_status == 200:
-        assert response.json() == {"purged": True, "sql_cascade": True}
+        assert response.json() == {"purged": True}
         fence.close.assert_awaited_once_with("session-liam")
         filesystem.delete.assert_awaited_once_with("conversations/session-liam")
         fence.acknowledge_purge.assert_awaited_once_with("session-liam")

@@ -1,6 +1,6 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Real PostgreSQL ownership, role boundaries, upgrade and deletion races.
+"""Real PostgreSQL ownership, role boundaries and deletion races.
 
 FRED_TEST_POSTGRES_URL must name an isolated local admin database. Each test
 creates a separate database, with the same restricted roles as deployment.
@@ -24,8 +24,6 @@ from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_runtime.app.web_research_activity import WebResearchActivityStore
 from fred_runtime.migrations import RUNTIME_ALEMBIC_DIR
 from fred_runtime.runtime_support.checkpoints import graph_thread_id
-from fred_runtime.runtime_support.session_fence import SessionFence
-from fred_runtime.runtime_support.session_ownership import verify_conversation_ownership
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_runtime.runtime_support.turn_steering import TurnSteeringMailbox
 from langgraph.checkpoint.base import empty_checkpoint
@@ -123,7 +121,7 @@ async def database(monkeypatch):
             "DATABASE_URL", runtime_url.render_as_string(hide_password=False)
         )
         monkeypatch.setenv("DATABASE_SCHEMA", "runtime")
-        await asyncio.to_thread(_upgrade, "a7b8c9d0e1f2")  # pragma: allowlist secret
+        await asyncio.to_thread(_upgrade, "head")
         yield cp, runtime
     finally:
         await cp.dispose()
@@ -140,14 +138,6 @@ async def _migrate(runtime):
         await conn.run_sync(_capability_migrations)
     cp = FredSqlCheckpointer(runtime)
     await cp._ensure_tables()
-    async with runtime.connect() as conn:
-        await verify_conversation_ownership(
-            conn,
-            {
-                table: "thread_id" if table.startswith("v2_") else "session_id"
-                for table in TABLES
-            },
-        )
     return cp
 
 
@@ -196,26 +186,9 @@ async def _counts(runtime, session):
         ]
 
 
-async def test_upgrade_adopts_existing_content_and_cascade_isolated_and_idempotent(
-    database,
-):
+async def test_fresh_content_cascade_isolated_and_idempotent(database):
     control, runtime = database
-    await PostgresHistoryStore(runtime).save(SESSION, [_message(SESSION)], "alice")
-    old = FredSqlCheckpointer(runtime)
-    async with runtime.begin() as conn:
-        await conn.run_sync(old._metadata.create_all)
-        await conn.execute(
-            old.blobs_table.insert().values(
-                thread_id=f"{SESSION}:orphan",
-                checkpoint_ns="",
-                channel="x",
-                version="1",
-                value_type="str",
-                value_blob=b"private",
-            )
-        )
     cp = await _migrate(runtime)
-    assert len(await PostgresHistoryStore(runtime).get(SESSION, "alice")) == 1
     await _seed(runtime, cp, SESSION)
     await _seed(runtime, cp, OTHER)
     await WebResearchActivityStore(runtime, 7).begin(
@@ -228,16 +201,6 @@ async def test_upgrade_adopts_existing_content_and_cascade_isolated_and_idempote
     )
     before = await _counts(runtime, OTHER)
     assert all(before)
-    # Upgrade conservatively retains an object manifest for existing content.
-    with pytest.raises(IntegrityError):
-        async with control.begin() as conn:
-            await conn.execute(
-                text("DELETE FROM session_metadata WHERE session_id=:id"),
-                {"id": SESSION},
-            )
-    files = SessionFence(runtime)
-    await files.close(SESSION)
-    await files.acknowledge_purge(SESSION)  # This fixture has no object storage.
     for _ in range(2):
         async with control.begin() as conn:
             await conn.execute(
@@ -382,70 +345,6 @@ async def test_runtime_cannot_read_or_create_roots_and_cp_cannot_read_content(da
     with pytest.raises(DBAPIError):
         async with control.begin() as conn:
             await conn.execute(text("SELECT * FROM runtime.session_history"))
-
-
-async def test_orphan_backfill_fails_without_data_loss(database):
-    _, runtime = database
-    orphan = str(uuid4())
-    await PostgresHistoryStore(runtime).save(orphan, [_message(orphan)], "alice")
-    with pytest.raises(IntegrityError):
-        await asyncio.to_thread(_upgrade, "head")
-    assert len(await PostgresHistoryStore(runtime).get(orphan, "alice")) == 1
-    async with runtime.connect() as conn:
-        assert (
-            await conn.scalar(text("SELECT version_num FROM alembic_version_runtime"))
-            == "a7b8c9d0e1f2"  # pragma: allowlist secret
-        )
-
-
-@pytest.mark.parametrize("invalid", ["unvalidated", "wrong_expression"])
-async def test_startup_rejects_unvalidated_or_wrong_ownership(database, invalid):
-    _, runtime = database
-    await _migrate(runtime)
-    async with runtime.begin() as conn:
-        await conn.execute(
-            text(
-                "ALTER TABLE v2_langgraph_checkpoint DROP CONSTRAINT v2_langgraph_checkpoint_conversation_fk"
-            )
-        )
-        if invalid == "wrong_expression":
-            await conn.execute(
-                text("ALTER TABLE v2_langgraph_checkpoint DROP COLUMN conversation_id")
-            )
-            # A valid FK to a real root is insufficient if ownership can point
-            # at another conversation instead of the thread's UUID prefix.
-            await conn.execute(
-                text(
-                    "ALTER TABLE v2_langgraph_checkpoint ADD COLUMN conversation_id UUID "
-                    f"GENERATED ALWAYS AS ('{OTHER}'::uuid) STORED NOT NULL"
-                )
-            )
-        await conn.execute(
-            text(
-                "ALTER TABLE v2_langgraph_checkpoint ADD CONSTRAINT v2_langgraph_checkpoint_conversation_fk "
-                "FOREIGN KEY (conversation_id) REFERENCES control_plane.session_metadata(session_id) "
-                "ON DELETE CASCADE" + (" NOT VALID" if invalid == "unvalidated" else "")
-            )
-        )
-    with pytest.raises(RuntimeError, match="ownership schema"):
-        await FredSqlCheckpointer(runtime)._ensure_tables()
-
-
-async def test_uninstalled_writable_capability_still_requires_ownership(database):
-    _, runtime = database
-    await asyncio.to_thread(_upgrade, "head")
-    optional = {"cap_writable_document_docs": "session_id"}
-    async with runtime.begin() as conn:
-        # The capability need not be installed on this pod or in its database.
-        await verify_conversation_ownership(conn, {}, optional_tables=optional)
-        await conn.execute(
-            text("CREATE TABLE cap_writable_document_docs (session_id text)")
-        )
-    # A legacy table survives plugin removal. It must never be silently omitted
-    # from the sql_cascade promise merely because no plugin migration ran.
-    async with runtime.connect() as conn:
-        with pytest.raises(RuntimeError, match="cap_writable_document_docs"):
-            await verify_conversation_ownership(conn, {}, optional_tables=optional)
 
 
 async def test_runtime_metadata_matches_migrated_schema(database):

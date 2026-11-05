@@ -233,7 +233,6 @@ class PodApplicationContext:
         await checkpointer._ensure_tables()
         if engine.dialect.name == "postgresql":
             self.session_fence = SessionFence(engine)
-            await self.session_fence.check_ready()
             await require_tables(
                 engine,
                 ["runtime_session_filesystem", "runtime_session_file_write"],
@@ -241,21 +240,6 @@ class PodApplicationContext:
                 migrate_command=_MIGRATE_COMMAND,
                 version_table=_RUNTIME_VERSION_TABLE,
             )
-            from fred_runtime.runtime_support.session_ownership import (
-                verify_conversation_ownership,
-            )
-
-            async with engine.connect() as connection:
-                await verify_conversation_ownership(
-                    connection,
-                    {
-                        "session_history": "session_id",
-                        "runtime_turn_steering": "session_id",
-                    },
-                    # Uninstalling a capability does not relinquish its stored
-                    # content. Its migration must run before erasure is enabled.
-                    optional_tables={"cap_writable_document_docs": "session_id"},
-                )
         history_store = PostgresHistoryStore(engine, kpi=self.get_kpi_writer())
         self._checkpointer = checkpointer
         self._history_store = history_store

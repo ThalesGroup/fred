@@ -1,9 +1,7 @@
 """Make the Control Plane conversation the root of runtime content.
 
 PostgreSQL is the Weaver lifecycle boundary. SQLite remains a standalone SDK
-store and does not implement cross-service conversation deletion. Existing
-content must have a valid Control Plane root: invalid IDs and orphans fail this
-transaction, without silently deleting or adopting any data.
+store and does not implement cross-service conversation deletion.
 """
 
 from alembic import op
@@ -17,8 +15,6 @@ depends_on = None
 def upgrade() -> None:
     if op.get_bind().dialect.name != "postgresql":
         return
-    # Adopt the existing v2_ checkpoint tables, previously self-initialized.
-    # Immutable DDL here also initializes a fresh database before pod startup.
     definitions = {
         "v2_langgraph_checkpoint": """
             thread_id varchar NOT NULL, checkpoint_ns varchar NOT NULL,
@@ -48,13 +44,7 @@ def upgrade() -> None:
             PRIMARY KEY (thread_id, checkpoint_ns, interrupt_id)""",
     }
     for table, definition in definitions.items():
-        op.execute(f"CREATE TABLE IF NOT EXISTS {table} ({definition})")
-    # Supported existing tables already carry space_id. Do not reinterpret a
-    # retired team_id or derive missing ownership from persisted message data.
-    op.execute("SELECT space_id FROM v2_checkpoint_thread_owner LIMIT 0")
-    op.execute(
-        "ALTER TABLE v2_checkpoint_thread_owner ADD COLUMN IF NOT EXISTS binding_json jsonb"
-    )
+        op.execute(f"CREATE TABLE {table} ({definition})")
     for table in ("session_history", "runtime_turn_steering", *definitions):
         source = (
             "split_part(thread_id, ':', 1)" if table in definitions else "session_id"
@@ -69,17 +59,17 @@ def upgrade() -> None:
             f"CREATE INDEX {table}_conversation_idx ON {table} (conversation_id)"
         )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS v2_langgraph_checkpoint_thread_created_idx ON v2_langgraph_checkpoint (thread_id, checkpoint_ns, created_at DESC)"
+        "CREATE INDEX v2_langgraph_checkpoint_thread_created_idx ON v2_langgraph_checkpoint (thread_id, checkpoint_ns, created_at DESC)"
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS v2_checkpoint_thread_owner_user_idx ON v2_checkpoint_thread_owner (user_id)"
+        "CREATE INDEX v2_checkpoint_thread_owner_user_idx ON v2_checkpoint_thread_owner (user_id)"
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS v2_checkpoint_thread_owner_activity_idx ON v2_checkpoint_thread_owner (last_activity_at)"
+        "CREATE INDEX v2_checkpoint_thread_owner_activity_idx ON v2_checkpoint_thread_owner (last_activity_at)"
     )
     for table in ("v2_langgraph_checkpoint", "v2_langgraph_checkpoint_write"):
         op.execute(
-            f"CREATE INDEX IF NOT EXISTS {table}_session_idx ON {table} (split_part(thread_id, ':', 1))"
+            f"CREATE INDEX {table}_session_idx ON {table} (split_part(thread_id, ':', 1))"
         )
 
 

@@ -62,8 +62,6 @@ impl RuntimeStorage {
             let token = directory.access_token().await?;
             let mut response = client.delete(url).bearer_auth(token).send().await?;
             let status = response.status();
-            // A former runtime returned success after deleting history alone. Only
-            // the explicit durable-purge result allows metadata removal.
             let mut body = Vec::new();
             while let Some(chunk) = response.chunk().await? {
                 ensure!(
@@ -87,12 +85,11 @@ impl RuntimeStorage {
             #[derive(Deserialize)]
             struct Purged {
                 purged: bool,
-                sql_cascade: bool,
             }
             ensure!(
                 {
                     let result = serde_json::from_slice::<Purged>(&body)?;
-                    result.purged && result.sql_cascade
+                    result.purged
                 },
                 "runtime purge incomplete"
             );

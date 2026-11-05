@@ -23,7 +23,6 @@ from sqlalchemy import (
     delete,
     insert,
     select,
-    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -88,47 +87,6 @@ class SessionWritesPending(RuntimeError):
 class SessionFence:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
-
-    async def check_ready(self) -> None:
-        """Fail startup rather than claim erasure with an unowned object store."""
-        async with self.engine.connect() as conn:
-            rows = await conn.execute(
-                text("""
-                SELECT t.relname, c.conname, c.confdeltype::text AS confdeltype
-                FROM pg_constraint c
-                JOIN pg_class t ON t.oid = c.conrelid
-                JOIN pg_namespace n ON n.oid = t.relnamespace
-                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attname = 'session_id'
-                JOIN pg_attribute parent ON parent.attrelid = c.confrelid
-                    AND c.confkey = ARRAY[parent.attnum]
-                WHERE n.nspname = current_schema()
-                    AND t.relname IN ('runtime_session_filesystem', 'runtime_session_file_write')
-                    AND c.contype = 'f' AND c.convalidated AND NOT c.condeferrable
-                    AND c.conkey = ARRAY[a.attnum] AND a.atttypid = 'uuid'::regtype
-                    AND a.attnotnull AND parent.attname = 'session_id'
-                    AND c.confrelid = 'control_plane.session_metadata'::regclass
-            """)
-            )
-            ownership = {(row.relname, row.conname, row.confdeltype) for row in rows}
-            required = {
-                ("runtime_session_filesystem", _ROOT_FK, "c"),
-                (
-                    "runtime_session_file_write",
-                    "runtime_session_file_write_root_fk",
-                    "r",
-                ),
-            }
-            cascading = await conn.scalar(
-                text("""
-                SELECT count(*) FROM pg_constraint
-                WHERE conrelid = 'runtime_session_file_write'::regclass
-                    AND contype = 'f' AND confdeltype = 'c'
-            """)
-            )
-            if ownership != required or cascading:
-                raise RuntimeError(
-                    "Conversation filesystem ownership migration required"
-                )
 
     async def _lock(self, conn: AsyncConnection, session_id: str) -> bool:
         # The FK rejects creation after root deletion. ON CONFLICT plus the row

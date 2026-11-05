@@ -11,8 +11,6 @@ depends_on = None
 def upgrade() -> None:
     if op.get_bind().dialect.name != "postgresql":
         return
-    # The cast and immediate FK validation reject inconsistent old rows. No
-    # backfill creates roots, loses content or infers authority from user IDs.
     op.execute(
         "ALTER TABLE cap_writable_document_docs ADD COLUMN conversation_id uuid GENERATED ALWAYS AS (session_id::uuid) STORED NOT NULL"
     )

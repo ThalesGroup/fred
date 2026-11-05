@@ -1805,18 +1805,13 @@ async fn powerpoint_space_deletion_waits_for_original_and_derived_cleanup() {
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres"]
-async fn powerpoint_upgrade_and_sql_ownership_constraints() {
-    let mut previous = sqlx::migrate!();
-    previous.migrations =
-        std::borrow::Cow::Owned(previous.iter().filter(|m| m.version < 6).cloned().collect());
-    let pool = crate::environment::database::database_with_migrator(previous).await;
+async fn powerpoint_sql_ownership_constraints() {
+    let pool = crate::environment::database::database().await;
     let org = crate::support::member_organization(&pool, "Existing organization", "alice")
         .await
         .unwrap();
     let agent = Uuid::new_v4();
     sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$1,'fixture','assistant','Existing agent','{}','alice',$1::text)").bind(agent).bind(org.id).execute(&pool).await.unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
     assert!(
         control_plane::agent_instances::get_for_space(&pool, org.id, agent)
             .await

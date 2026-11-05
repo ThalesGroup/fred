@@ -371,18 +371,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             return
         async with self.phase("v2_checkpoint_ensure_tables"):
             if self.store.engine.dialect.name == "postgresql":
-                from fred_runtime.runtime_support.session_ownership import (
-                    verify_conversation_ownership,
-                )
-
                 async with self.store.engine.connect() as connection:
-                    await verify_conversation_ownership(
-                        connection,
-                        {
-                            table.name: "thread_id"
-                            for table in self._metadata.tables.values()
-                        },
-                    )
                     for table in self._metadata.tables.values():
                         await connection.execute(select(table).limit(0))
             else:

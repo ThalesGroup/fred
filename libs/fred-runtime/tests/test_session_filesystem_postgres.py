@@ -39,7 +39,6 @@ async def test_root_restricted_until_objects_are_erased_and_cannot_reopen(databa
     cp, runtime = database
     await _migrate(runtime)
     fence = SessionFence(runtime)
-    await fence.check_ready()
     token = await fence.begin_filesystem_write(SESSION)
     with pytest.raises(IntegrityError):
         await _delete_root(cp)

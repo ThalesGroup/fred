@@ -194,10 +194,9 @@ Conversation removal and retention belong to the Control Plane lifecycle, not to
 Rig. Removing access hides history immediately; physical deletion follows the
 retention receipt and attachment cleanup. The stored log follows the session row's
 foreign-key cascade only at physical deletion. `model_usage` is independent and
-survives. Python receipts remain blocked with `session_purge_unavailable`: an
-already admitted Python turn can still write after retention, and its runtime
-does not yet durably coordinate those writes with erasure. A successful DELETE
-alone cannot prove final erasure. The Control Plane never accesses Python's schema.
+survives. Python conversation deletion uses runtime filesystem write coordination
+and SQL ownership cascades. Unacknowledged writes keep deletion pending. The
+Control Plane never accesses Python's schema.
 
 ## Direct demonstration
 

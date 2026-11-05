@@ -5969,7 +5969,7 @@ def test_complete_session_purge_retries_storage_failure(monkeypatch, tmp_path):
         for _ in range(2):
             response = client.delete("/pod/v1/agents/sessions/erased")
             assert response.status_code == 200, response.text
-            assert response.json() == {"purged": True, "sql_cascade": True}
+            assert response.json() == {"purged": True}
         assert asyncio.run(filesystem.list("conversations/erased/")) == []
         assert asyncio.run(other.scratchpad().read_text("file")) == "retain"
         assert fence.acknowledge_purge.await_count == 2

@@ -1231,7 +1231,6 @@ export type PlatformPromptFileResponse = {
 };
 export type SessionPurgeResponse = {
   purged: boolean;
-  sql_cascade: boolean;
 };
 export type ConversationFilesystemPurgeResponse = {
   purged: boolean;
