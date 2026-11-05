@@ -639,3 +639,15 @@ espace ; changement d'identité ; demande humaine pending/unavailable/unknown ap
 reload ; refus avant acceptation et absence de fausse annulation d'outil ; détails
 de traces. Aucune validation navigateur k3d/plateforme ni appel fournisseur ici.
 Les lots DOCX, titres, skills et e-mails précédents ne sont pas réouverts par ce merge.
+
+## 12. Arrivées Swift après la borne 059ae1c91
+
+Inventaire fixé sur Weaver `e71bc96ac1d0ac94043b47bf7f0c762f69228e79` et
+Swift `541f3275d9908732a4b7c5d99a7302756fce2171`. La borne intégrée reste
+`059ae1c91b959692f6a0fb61ddc9824c67c90355` : un cherry-pick isolé ne la déplace pas.
+
+| Commit Swift | Apport | Etat Weaver |
+| --- | --- | --- |
+| `de9192157ea898fe9bb8873362b858fca3e7295d` (#3290) | Construction de présentations depuis un modèle, avec administration et catalogue de capacité | Adaptation requise : le commit modifie le Control Plane Python retiré ; examiner le contrat dans le Control Plane Rust et les mécanismes de capacités avant portage. |
+| `d850bdce63a69854ecc77d13ebb7fdb98fa33187` (#3470) | Conserver le rapport CVE et laisser 15 minutes au SBOM Trivy de l'image PyMuPDF | Cherry-pick adapté dans la draft PR #3472 : matrice Weaver et contrôle d'import conservés, note opérateur déplacée. CI en attente. |
+| `541f3275d9908732a4b7c5d99a7302756fce2171` (#3436) | Préparation de la version Swift 3.10.0 | Exclu du backport fonctionnel Weaver : versionnement propre à Swift. |
