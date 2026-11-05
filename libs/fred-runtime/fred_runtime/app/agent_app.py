@@ -4488,21 +4488,23 @@ async def _iterate_runtime_event_payloads_inner(
         reasoning=ctx.get("reasoning"),
     )
 
-    skill_source = get_runtime_context().config.skills
-    packaged_names = (
-        {skill.name for skill in skill_source.catalog.skills if skill.builtin}
-        if skill_source is not None
-        else set()
-    )
+    disabled_platform_skills = current_turn().binding.disabled_platform_skills
+    unavailable_skill_names: tuple[str, ...] = ()
+    if disabled_platform_skills:
+        skill_source = get_runtime_context().config.skills
+        packaged_names = (
+            {skill.name for skill in skill_source.catalog.skills if skill.builtin}
+            if skill_source is not None
+            else set()
+        )
+        unavailable_skill_names = tuple(
+            name for name in disabled_platform_skills if name in packaged_names
+        )
     binding = BoundRuntimeContext(
         runtime_context=runtime_context,
         portable_context=portable_context,
         platform_prompt=platform_prompt,
-        unavailable_skill_names=tuple(
-            name
-            for name in current_turn().binding.disabled_platform_skills
-            if name in packaged_names
-        ),
+        unavailable_skill_names=unavailable_skill_names,
         is_resuming=request.resume_payload is not None,
     )
 
