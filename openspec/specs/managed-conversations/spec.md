@@ -198,7 +198,7 @@ The runtime SHALL give an eligible submitted message to the active ReAct or Deep
 
 ### Requirement: In-progress updates receive separate assistant replies
 
-The agent SHALL send a visible assistant message responding to an in-progress update before continuing ordinary model or tool work. User delivery and reply persistence SHALL commit atomically before that work resumes. The reply SHALL have its own canonical rank and survive history reload and checkpoint recovery. A progress question SHALL receive current status when the model produces a visible reply. If two completed reply calls produce no usable answer, the agent SHALL send an explicit, localized failure notice through the same delivery path. A failed model call or persistence SHALL leave the user message pending.
+The agent SHALL send a concise, user-facing assistant message responding to an in-progress update before continuing ordinary model or tool work. User delivery and reply persistence SHALL commit atomically before that work resumes. The reply SHALL have its own canonical rank and survive history reload and checkpoint recovery. A progress question SHALL receive current status when the model produces a visible reply. If two completed reply calls produce no usable answer, the agent SHALL send an explicit, localized failure notice through the same delivery path. A failed model call or persistence SHALL leave the user message pending.
 
 #### Scenario: Progress question during a tool call
 
@@ -219,6 +219,13 @@ The agent SHALL send a visible assistant message responding to an in-progress up
 - **WHEN** the model returns only reasoning, no assistant message, or an unexpected tool call on two attempts
 - **THEN** the agent sends a visible failure notice in the conversation language through the normal reply and delivery path
 - **AND** the original task continues without losing or duplicating the user message
+
+#### Scenario: Reply is tool data or the completed task
+
+- **GIVEN** a steered user message is waiting at a model boundary
+- **WHEN** the reply model emits tool arguments as a JSON object or a long answer to the original task
+- **THEN** the runtime retries instead of displaying that output as the interim assistant reply
+- **AND** the original task continues after a usable reply or the localized failure notice
 
 #### Scenario: Checkpoint recovery after reply persistence
 

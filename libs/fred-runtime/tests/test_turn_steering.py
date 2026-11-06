@@ -855,7 +855,19 @@ async def test_failed_steered_reply_does_not_emit_delivery(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("invalid_kind", ["empty", "reasoning", "tool", "missing"])
+@pytest.mark.parametrize(
+    "invalid_kind",
+    [
+        "empty",
+        "reasoning",
+        "tool",
+        "missing",
+        "structured",
+        "embedded_structured",
+        "fenced_structured",
+        "long",
+    ],
+)
 async def test_invalid_interim_reply_falls_back_and_continues(
     monkeypatch, invalid_kind
 ):
@@ -890,6 +902,20 @@ async def test_invalid_interim_reply_falls_back_and_continues(
         )
     elif invalid_kind == "missing":
         invalid = ModelResponse(result=[])
+    elif invalid_kind == "structured":
+        invalid = ModelResponse(
+            result=[AIMessage(content='{"document_uid": "doc-1", "max_chars": 500}')]
+        )
+    elif invalid_kind == "embedded_structured":
+        invalid = ModelResponse(
+            result=[AIMessage(content='I will ask. {"question": "Which one?"}')]
+        )
+    elif invalid_kind == "fenced_structured":
+        invalid = ModelResponse(
+            result=[AIMessage(content='```json\n{"document_uid": "doc-1"}\n```')]
+        )
+    elif invalid_kind == "long":
+        invalid = ModelResponse(result=[AIMessage(content="A long answer. " * 50)])
     else:
         invalid = ModelResponse(result=[AIMessage(content="")])
     for message in invalid.result:
@@ -945,8 +971,16 @@ async def test_invalid_interim_reply_falls_back_and_continues(
     )
 
 
+def test_visible_reply_accepts_bracketed_document_references() -> None:
+    text = "Je prends les documents [1, 2] en compte."
+    assert turn_steering._visible_reply_text(AIMessage(content=text)) == (text, "")
+
+
 @pytest.mark.asyncio
-async def test_valid_retry_replies_without_fallback(monkeypatch):
+@pytest.mark.parametrize(
+    "first_reply", ["", '{"document_uid": "doc-1", "max_chars": 500}']
+)
+async def test_valid_retry_replies_without_fallback(monkeypatch, first_reply):
     events = []
     scope_holder = []
 
@@ -969,7 +1003,7 @@ async def test_valid_retry_replies_without_fallback(monkeypatch):
             return ModelResponse(
                 result=[
                     AIMessage(
-                        content="",
+                        content=first_reply,
                         usage_metadata={
                             "input_tokens": 12,
                             "output_tokens": 5,

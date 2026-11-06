@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from typing import cast
@@ -31,6 +32,36 @@ from fred_runtime.runtime_support.run_scope import RunScope
 from fred_runtime.support.thinking import content_to_text, strip_reasoning_from_history
 
 logger = logging.getLogger(__name__)
+MAX_STEERED_REPLY_CHARS = 600
+
+
+def _visible_reply_text(message: AIMessage | None) -> tuple[str | None, str]:
+    if message is None:
+        return None, "missing_assistant"
+    if message.tool_calls:
+        return None, "unexpected_tool_calls"
+    text = content_to_text(message.content).strip()
+    if not text:
+        return None, "empty_visible_text"
+    if len(text) > MAX_STEERED_REPLY_CHARS:
+        return None, "reply_too_long"
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            structured, _ = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(structured, dict):
+            return None, "structured_reply"
+    try:
+        structured = json.loads(text)
+    except json.JSONDecodeError:
+        structured = None
+    if isinstance(structured, list):
+        return None, "structured_reply"
+    return text, ""
 
 
 def _usage_metadata(usage: dict[str, int]) -> UsageMetadata:
@@ -281,8 +312,9 @@ class TurnSteeringMiddleware(AgentMiddleware):
                 "If it asks for status, explain the actual progress from the conversation "
                 "and tool results; do not claim unfinished work is done. "
                 "If it changes the task, acknowledge the change. "
-                "This is a visible assistant message before work resumes. "
-                "Do not call tools or give a final answer to the original task."
+                "This is a short, plain-language assistant message before work resumes. "
+                "Do not output tool arguments or JSON. "
+                "Do not call tools or complete the original task."
             )
         )
         reply_request = _visible_reply_request(request, instruction)
@@ -301,25 +333,21 @@ class TurnSteeringMiddleware(AgentMiddleware):
             if candidate is not None:
                 _, usage, _ = runtime_metadata_from_message(candidate)
                 reply_usage = sum_token_usage(reply_usage, usage)
-            if candidate is not None and not candidate.tool_calls:
-                visible_text = content_to_text(candidate.content).strip()
-                if visible_text:
-                    reply = candidate
-                    break
+            visible_text, invalid_reason = _visible_reply_text(candidate)
+            if visible_text is not None and candidate is not None:
+                reply = candidate
+                break
             logger.warning(
                 "event=steered_reply_invalid attempt=%d reason=%s",
                 attempt + 1,
-                "missing_assistant"
-                if candidate is None
-                else "unexpected_tool_calls"
-                if candidate.tool_calls
-                else "empty_visible_text",
+                invalid_reason,
             )
             reply_request = reply_request.override(
                 system_message=SystemMessage(
                     content=(
                         f"{request.system_prompt or ''}\n\n"
-                        "Reply briefly in plain visible text to the latest user update. "
+                        "Reply in one short plain-language sentence to the latest user update. "
+                        "Do not output JSON, tool arguments, or the completed task. "
                         "Do not call tools. The user is waiting for this reply."
                     )
                 )
