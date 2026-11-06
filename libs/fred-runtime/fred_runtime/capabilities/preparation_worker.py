@@ -29,6 +29,10 @@ from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import ApplicationError
 from temporalio.worker import Worker
+from temporalio.worker.workflow_sandbox import (
+    SandboxedWorkflowRunner,
+    SandboxRestrictions,
+)
 
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.filesystem_factory import build_runtime_filesystem
@@ -40,6 +44,15 @@ from fred_runtime.capabilities.registry import (
 from fred_runtime.capabilities.vision_client import KnowledgeFlowVisionClient
 
 logger = logging.getLogger(__name__)
+
+
+def build_workflow_runner() -> SandboxedWorkflowRunner:
+    # The package initializer imports HTTP clients, which Temporal cannot reload in its sandbox.
+    return SandboxedWorkflowRunner(
+        restrictions=SandboxRestrictions.default.with_passthrough_modules(
+            "fred_runtime"
+        )
+    )
 
 
 class WorkerAssetReader:
@@ -313,6 +326,7 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
             workflows=[CapabilityPreparationWorkflow],
             activities=[activities.prepare_capability],
             max_concurrent_activities=config.preparation.max_concurrent_jobs,
+            workflow_runner=build_workflow_runner(),
         )
         logger.info(
             "Capability preparation worker ready: runtime=%s concurrency=%s",

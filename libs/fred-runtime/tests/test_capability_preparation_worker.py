@@ -15,7 +15,9 @@ from fred_runtime.capabilities import preparation_worker
 from fred_runtime.capabilities.preparation_worker import (
     CapabilityPreparationActivities,
     WorkerAssetReader,
+    build_workflow_runner,
 )
+from fred_runtime.capabilities.preparation_workflow import CapabilityPreparationWorkflow
 from fred_runtime.capabilities.registry import CapabilityRegistry
 from fred_sdk.contracts.capability.preparation import (
     PreparationAsset,
@@ -24,6 +26,14 @@ from fred_sdk.contracts.capability.preparation import (
     PreparationWork,
 )
 from temporalio.exceptions import ApplicationError
+from temporalio.workflow import _Definition
+
+
+@pytest.mark.asyncio
+async def test_workflow_imports_under_temporal_sandbox() -> None:
+    build_workflow_runner().prepare_workflow(
+        _Definition.must_from_class(CapabilityPreparationWorkflow)
+    )
 
 
 class MemoryFilesystem:
