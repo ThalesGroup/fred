@@ -674,6 +674,33 @@ def test_runtime_context_rejects_ambiguous_or_malformed_skills(payload):
         RuntimeContext.model_validate(payload)
 
 
+def test_runtime_context_carries_the_turn_attachments() -> None:
+    context = RuntimeContext.model_validate(
+        {"attachments": [{"attachment_id": "a-1", "name": "brief.pdf"}]}
+    )
+
+    assert context.attachments is not None
+    assert context.attachments[0].model_dump() == {
+        "attachment_id": "a-1",
+        "name": "brief.pdf",
+        "mime": None,
+    }
+    assert RuntimeContext().attachments is None
+
+
+@pytest.mark.parametrize(
+    "attachment",
+    [
+        {"name": "brief.pdf"},
+        {"attachment_id": "a-1", "name": ""},
+        {"attachment_id": "a-1", "name": "x" * 256},
+    ],
+)
+def test_runtime_context_rejects_malformed_attachments(attachment) -> None:
+    with pytest.raises(ValidationError):
+        RuntimeContext.model_validate({"attachments": [attachment]})
+
+
 def _turn_prompt(index: int = 0, **overrides: Any) -> dict[str, Any]:
     return {
         "command": f"cmd{index}",

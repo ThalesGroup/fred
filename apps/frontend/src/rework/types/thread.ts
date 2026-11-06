@@ -21,6 +21,7 @@ import type {
   HitlRequestPart,
   CommandDescriptor,
   SkillInvocation,
+  TurnAttachment,
   VectorSearchHit,
 } from "../../slices/runtime/runtimeOpenApi";
 import type { TokenUsage } from "./conversation";
@@ -70,4 +71,6 @@ export interface ThreadMessage {
   skillNames?: SkillInvocation["name"][];
   /** Trusted provenance from successful loads; absent on older history. */
   builtinSkillNames?: string[];
+  /** The files sent with this user turn; absent on older history. */
+  attachments?: TurnAttachment[];
 }
