@@ -21,64 +21,39 @@ initiale ; ce n'est pas une liste de missions à relancer intégralement.
 > à eux seuls la borne Swift. Celle de la tranche initiale était `53e39f6f7` ;
 > la borne actuelle après les tranches suivantes est `3d1838420`.
 
-## 1. Point de reprise consolidé au 5 novembre 2026
+## 1. Point de reprise consolidé au 6 novembre 2026
 
-**Priorité actuelle : le développeur teste les premiers jalons PowerPoint.**
-Les lots applicatifs sont acceptés sur leurs preuves locales ; ne pas refaire leur
-revue générale. Leur réception déployée reste ouverte. Aucun nouveau chantier
-d'architecture n'est lancé. Cet état consolidé prime sur les instantanés historiques
-ci-dessous, notamment les mentions « non commité », « fichiers bloqués » ou
-« préparation à raccorder » de la section 12.
+**Priorité actuelle : finir la réception du merge, puis ouvrir la tranche Swift suivante.**
+Le développeur rapporte le 6 novembre une génération PowerPoint menée jusqu'au bout
+sur son déploiement. Il reste à préciser les scénarios couverts ci-dessous. Les lots
+applicatifs sont acceptés sur leurs preuves locales ; ne pas refaire leur revue
+générale. Cet état consolidé prime sur les instantanés historiques ci-dessous,
+notamment les mentions « non commité », « fichiers bloqués » ou « préparation à
+raccorder » de la section 12.
 
-### Où se trouve le travail et ce que le dernier merge a conservé
+### Où se trouve le travail
 
-Vérification locale après la fusion du 5 novembre à 15:45 CET :
+Vérification locale du 6 novembre, sans nouveau fetch :
 
 | Elément | Emplacement et état constatés |
 | --- | --- |
-| Code Fred | `/home/dimi/Work/weaver/fred`, branche `weaver` |
-| Lots PowerPoint et Temporal | Commit `ad97b244008929913781b768fed84dee7b9c5c53`, créé à 15:11 CET : fichiers CP, migrations 0006/0007/0008, préparation, worker, admission, chart et correctif UI |
-| Fusion des backports | HEAD `dfa19a3ccb31963de9091e6707dacb3867e7c925`, parents `ad97b2440` et `df5c45c9b` ; le commit PowerPoint est conservé dans l'ascendance |
-| Effet de cette fusion | Six fichiers de CI, documentation et notes opérateur diffèrent de `ad97b2440` ; aucun fichier applicatif PowerPoint ne diffère |
-| Etat Fred | Checkout propre juste avant cette mise à jour documentaire ; plus de fusion en cours. Branche en avance de 7 commits sur la référence locale `origin/weaver`, sans nouveau fetch |
-| Configuration de déploiement | `/home/dimi/Work/common/fred-deployment-factory`, branche `weaver`, HEAD `f2db3463601426b03f857552fbe7cae6d6d10d0d` |
-| Travail encore non commité dans la factory | `k3d-apps/fred/values-weaver.yaml` : liaison CP du worker, activation `fred-agents-worker`, retrait du montage incorrect `processing-contract`. Modifications voisines : `CLAUDE.md`, `README.md`, `docs/SWIFT-WEAVER.md` ; `docs/HOW-IT-WORKS.md` non suivi |
+| Code Fred | `/home/dimi/Work/weaver/fred`, branche `weaver`, HEAD `47b08f41c`, identique à la référence locale `origin/weaver` |
+| Lots PowerPoint et Temporal | Commit `ad97b2440` : fichiers CP, migrations 0006/0007/0008, préparation, worker, admission, chart et correctif UI |
+| Conversations | `chore/conversations` fusionnée par `20779ca75` ; ses migrations portent les numéros 0009 à 0013 |
+| Installations neuves seules | Chemins d'upgrade retirés à partir de `8f19b6a95` ; aucune reprise depuis un ancien Weaver ou Swift |
+| Logs uniformes | Inclus dans `47b08f41c`, avec le reste de ce commit ; voir la [note opérateur](deploy/release-notes/changes/weaver-logs-stdout-only.md) |
+| Configuration de déploiement | `/home/dimi/Work/common/fred-deployment-factory`, branche `weaver`, HEAD `9a884c6`, propre ; `fred-agents-worker` y est activé |
 
-**Le travail PowerPoint n'a pas été perdu lors du checkout/merge observé.** Le
-reflog montre un checkout de `weaver` vers `weaver`, puis la fusion ci-dessus.
-Les réglages de la factory restent séparés et non commités : un clone du seul
-dépôt Fred ne les récupère pas. Aucun commit, push, checkout ou changement de la
-factory n'a été effectué pour rédiger ce point de reprise. Ce document n'est pas
-une sauvegarde des modifications de la factory.
+### Branches locales
 
-### Branches locales à conserver et chantier conversations séparé
-
-Vérification complémentaire du 5 novembre, HEAD Weaver `dfa19a3cc` :
-
-- Conserver `weaver` et `swift`.
-- **Conserver aussi `chore/conversations`**, pointe `eccc5abc9`. Elle porte
-  **35 commits absents de Weaver** ; `git cherry weaver chore/conversations`
-  les marque tous `+` (pas de patch équivalent détecté). Ils concernent notamment
-  mémoire/historique de l'agent Rust, propriété des conversations, effacement,
-  fichiers générés et acquittements des producteurs. Leur réception et leur
-  intégration ne sont pas établies par le suivi PowerPoint.
-- `chore/rust-agent`, `codex/merge-swift-20261104`,
-  `codex/port-conversation-titles`, `codex/port-email-metadata` et
-  `codex/weaver-skills` sont entièrement ancêtres de `weaver`. Leurs références
-  locales peuvent être supprimées sans perdre de commits accessibles depuis
-  `weaver`. Aucune branche n'a été supprimée pendant cette vérification.
+Conserver `weaver` et `swift`. `chore/conversations`, `chore/rust-agent`,
+`codex/merge-swift-20261104`, `codex/port-conversation-titles`,
+`codex/port-email-metadata` et `codex/weaver-skills` sont toutes ancêtres de `weaver` :
+leurs références locales peuvent être supprimées sans perdre de commit accessible.
+Aucune branche n'a été supprimée.
 
 Le chantier `chore/conversations` ne doit pas être confondu avec le sujet différé
-« conversations sous Temporal ». Il existe déjà du code distinct à préserver.
-Son inventaire/intégration formera un lot séparé après stabilisation du jalon
-PowerPoint, sans merge automatique pendant la réception.
-
-**Point concret à résoudre avant cette future intégration :** les deux branches
-utilisent les numéros SQLx 0006 à 0008 pour des migrations différentes. Conversations
-ajoute aussi 0009/0010. Il faudra établir quelles histoires ont été appliquées dans
-quelles bases et préparer une convergence explicite ; ne pas simplement juxtaposer
-les fichiers, renuméroter une migration déjà déployée ou modifier ses empreintes.
-Cette constatation repose sur les arbres Git, pas sur une inspection des bases.
+« conversations sous Temporal ». Sa fusion n'en établit pas la réception déployée.
 
 Repères de code pour retrouver le lot sans le réauditer :
 
@@ -140,7 +115,7 @@ Repères de code pour retrouver le lot sans le réauditer :
 | Persistance | 0006, dépôt/remplacement/retrait/résolution, droits et nettoyage des originaux | Parcours réel UI/CP/S3 |
 | Préparation et readiness | 0007, intention durable, Temporal, mode worker, admission, reprise et nettoyage des nouveaux résultats abandonnés | Parcours déployé complet, échec/reprise et redémarrage |
 | Raccord worker | Chart et correction du montage `processing-contract` ; valeurs complémentaires dans la factory | Déploiement cohérent des deux checkouts par le développeur |
-| Parité UI Swift | Tiroir et composants réutilisés, corrections persistées ; 0008 pour les réglages communs, y compris intégré sans fichier | Comparaison FR/EN, SQL 0008 neuf/upgrade, persistance et isolation |
+| Parité UI Swift | Tiroir et composants réutilisés, corrections persistées ; 0008 pour les réglages communs, y compris intégré sans fichier | Comparaison FR/EN, SQL 0008 sur base neuve, persistance et isolation |
 
 Les résultats locaux détaillés restent en section 12. Dernier correctif UI :
 59 tests frontend, 19 bibliothèque, 58 runtime, 17 contrat CP rapportés réussis et
@@ -157,7 +132,8 @@ sur l'état actuel du navigateur du développeur.
 Préparer deux fichiers `.pptx` valides A et B avec un marquage visuel différent,
 un agent de test et, pour l'isolation, deux organisations et deux pods si disponibles.
 Noter la révision Fred et l'état de la factory réellement utilisés au déploiement.
-Tous les points ci-dessous restent à renseigner ; aucun n'est déclaré reçu ici.
+Tous les points ci-dessous restent à renseigner : la génération rapportée le 6 novembre
+n'est rattachée à aucun d'eux tant que le modèle utilisé n'est pas précisé.
 
 - [ ] **P1 - Interface Swift.** Administration de l'organisation, Fonctionnalités,
   Capacités, pod concerné : engrenage sur `ppt_builder`, même tiroir et disposition
@@ -197,8 +173,8 @@ Tous les points ci-dessous restent à renseigner ; aucun n'est déclaré reçu i
 
 Contrôles techniques distincts, à la main du développeur :
 
-- [ ] 0008 : initialisation neuve et upgrade supporté, conservation des migrations
-  précédentes ; régénération de la référence ER depuis le schéma vérifié.
+- [ ] Migrations 0001 à 0013 : initialisation sur base neuve ; régénération de la
+  référence ER depuis le schéma vérifié.
 - [ ] Images API/worker concordantes, file Temporal et identité de workload correctes,
   préparation/reprise après redémarrage sans activation d'une ancienne révision.
 - [ ] Nettoyage effectif des originaux et nouveaux résultats abandonnés ; suppression
@@ -216,13 +192,14 @@ Contrôles techniques distincts, à la main du développeur :
 | Chat et ingestion déjà adaptés | Arrière-plan, file/steering, refus d'accès, DOCX invalide, retry mail/DOCX, extraction PPTX légère, MCP/tabulaire | Contrôles ciblés si ces usages sont exercés ; ne pas les considérer à réimplémenter |
 | Isolation OpenSearch | `8134c78a5` intégré : vérifier la séparation effective Swift/Weaver dans le déploiement | Exploitation ; aucune migration des anciennes données annoncée |
 | Backports CI et downgrade | Fusion `dfa19a3cc`, détails et preuves en section 13 | CI réelle et rollback isolé non reçus ; ne pas les tester sur la base vivante par défaut |
-| Note opérateur PowerPoint | `check-pr` rapporté bloqué : section `Prerequisites` absente de la note PowerPoint | Correction documentaire ciblée avant PR, puis relancer le contrôle qui pourra révéler d'autres écarts |
+| Conversations | Fusion `20779ca75` : mémoire et historique de l'agent Rust, propriété, effacement, fichiers générés et acquittements des producteurs | Réception |
+| Logs uniformes | Tout sur stdout au format commun, sans écriture directe dans OpenSearch ; voir la [note opérateur](deploy/release-notes/changes/weaver-logs-stdout-only.md) | Réception : lire une ligne de chaque processus dans `k3d-logs-*`. Factory : `weaver-app-logs` reste dans les droits de `k3d/values.yaml` |
+| Déclarations opérateur | `make migration-check` (base `origin/swift`) valide 31 déclarations le 6 novembre | Aucune correction. Une PR ciblant `weaver` devra ajouter sa propre note |
 | Architecture arc42 | Actualiser seulement les parcours effectivement reçus et leurs limites | Documentation après réception, pas preuve de fonctionnement |
 
-La majorité de cette liste correspond donc à des **réceptions**. Une correction
-documentaire est identifiée ; la durée des éventuelles corrections fonctionnelles
-ne peut pas être garantie avant les tests. Ne pas confondre nombre de contrôles et
-nombre de développements restant à financer.
+La majorité de cette liste correspond donc à des **réceptions**. La durée des
+éventuelles corrections fonctionnelles ne peut pas être garantie avant les tests. Ne
+pas confondre nombre de contrôles et nombre de développements restant à financer.
 
 ### Sujets différés ou exclus qui ne bloquent pas ces premiers jalons
 
@@ -238,13 +215,17 @@ nombre de développements restant à financer.
 - Mistral Large 4 / PR #3321 : mis de côté ; aucune relance sans demande.
 - Erreurs MCP brutes, CP Python, OpenFGA et anciennes voies supprimées : exclusions
   volontaires, pas backlog à restaurer.
-- Nouveaux commits Swift après `3d1838420` : futur inventaire séparé. Aucun nouveau
-  fetch/merge n'est nécessaire pour recevoir le lot actuel.
+- Nouveaux commits Swift après `3d1838420` : inventaire séparé. Le fetch du 6 novembre
+  en montre six, jusqu'à `89baab5b6` : `b00551906` (#3460, schémas tabulaires, prochain
+  sujet choisi), `a2ebfe48c` (#3476, Azure APIM), `d9eb3738f` (#3453, test React),
+  `303b7456e` (#3483, références de documents et écritures NUL), `507866562` (#3475,
+  modèle Zabbix) et `89baab5b6` (#3455, SIEM). Aucun n'est intégré ni nécessaire pour
+  recevoir le lot actuel.
 
 ### Reprendre après une interruption
 
 1. Lire cette section, puis vérifier les deux checkouts sans changer de branche.
-   Comparer les nouveaux HEAD aux repères ci-dessus ; ne pas réappliquer `ad97b2440`.
+   Comparer les nouveaux HEAD aux repères ci-dessus ; aucun lot n'est à réappliquer.
 2. Recueillir les résultats P1-P11 et techniques du développeur. Pour chaque défaut :
    scénario, compte/rôle, organisation/pod/espace, modèle, action, attendu/observé,
    heure, capture ou message, révision déployée. Aucun secret ni jeton dans le suivi.
@@ -253,19 +234,18 @@ nombre de développements restant à financer.
 4. Après PowerPoint, recevoir titres/DOCX, e-mails, skills, notifications/HITL ;
    consigner les preuves ici. Cet ordre est proposé pour réduire la charge, pas une
    dépendance technique entre ces lots.
-5. Avant PR : corriger la note opérateur, vérifier les contrôles documentaires,
+5. Avant PR : lancer `make migration-check`, vérifier les contrôles documentaires,
    puis traiter les adaptations arc42 justifiées. Aucun push automatique.
 
 Texte à transmettre à un prochain assistant :
 
 > Nous travaillons dans /home/dimi/Work/weaver/fred, branche weaver. Lis AGENTS.md
-> et la section 1 de WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md avant toute action. Le lot
-> PowerPoint/Temporal/UI est commité en ad97b2440, conservé par dfa19a3cc. La factory
-> /home/dimi/Work/common/fred-deployment-factory porte encore des réglages locaux
-> non commités ; vérifie son état sans les modifier. Conserve chore/conversations :
-> 35 commits séparés non intégrés, avec des numéros de migrations SQLx en collision ;
-> ce chantier est à traiter séparément, sans merge automatique. Les lots PowerPoint sont
-> acceptés localement, la réception est à ma main. Aucun cluster, service démarré,
+> et la section 1 de WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md avant toute action. Les lots
+> PowerPoint/Temporal/UI, conversations et logs uniformes sont intégrés dans weaver ;
+> seules les installations neuves sont prises en charge. La factory
+> /home/dimi/Work/common/fred-deployment-factory porte les réglages de déploiement ;
+> vérifie son état sans le modifier. Les lots sont acceptés localement, la réception
+> est à ma main. Aucun cluster, service démarré,
 > déploiement, base vivante, campagne navigateur, commit ou push. L'UI Swift reste
 > l'invariant ; commun PowerPoint par organisation/pod, aucun défaut plateforme.
 > Ne refais pas la revue générale. Pars uniquement du résultat de test que je te
@@ -462,6 +442,8 @@ Côté Weaver : [décision de modèle](apps/control-plane/src/model_catalog/inst
 
 ### Validation fonctionnelle restante sur installation
 
+6 novembre 2026 : OK rapporté par le développeur sur le cas nominal (titre au premier tour, pas de nouveau titre au tour suivant, renommage conservé après un message et un rechargement), selon le protocole prévu avec agent Python sans modèle dédié ; agent, modèle et révision non relevés, Ralph et cases ci-dessous non couverts.
+
 - [ ] Première conversation, tours suivants et reprises : aucune génération répétée injustifiée.
 - [ ] Renommage manuel concurrent prioritaire, y compris dans un autre onglet.
 - [ ] Fin en arrière-plan et retour sur la conversation sans écriture dans une autre session.
@@ -554,7 +536,7 @@ Côté Weaver : [identité assertée](libs/fred-core/fred_core/security/delegati
 - [x] Auteur et dernière modification cohérents ; propriétés du modèle effacées.
 - [x] Refus d'accès préservé dans les tests ; nom fourni par le client ignoré.
 - [x] Fallback vide documenté et testé sans profil ; aucun service de profil ajouté.
-- [ ] Validation fonctionnelle humaine de l'export depuis l'interface et du déploiement.
+- [x] Validation fonctionnelle humaine de l'export depuis l'interface et du déploiement.
 
 <a id="mistral"></a>
 
@@ -883,6 +865,12 @@ espace ; changement d'identité ; demande humaine pending/unavailable/unknown ap
 reload ; refus avant acceptation et absence de fausse annulation d'outil ; détails
 de traces. Aucune validation navigateur k3d/plateforme ni appel fournisseur ici.
 Les lots DOCX, titres, skills et e-mails précédents ne sont pas réouverts par ce merge.
+
+6 novembre 2026, notification de réponse terminée : OK rapporté par le développeur, y
+compris clic sur « Ouvrir » et retour à la bonne conversation et au bon espace depuis un
+autre espace ; révision déployée non précisée. Restent à recevoir : changement d'identité ;
+demande humaine pending/unavailable/unknown après reload ; refus avant acceptation et
+absence de fausse annulation d'outil ; détails de traces.
 
 
 ## 12. PowerPoint et quatre commits Swift — 5 novembre 2026
@@ -1481,9 +1469,6 @@ Preuves locales, sans recouvrement entre elles : `test_migrations_downgrade.py`
 `test_select_docker_images.py` **20 réussis**, YAML du workflow parsé. GitHub Actions
 et rollback sur installation isolée non exécutés.
 
-**Reste à corriger avant la prochaine PR :** `scripts/migration_guides.py check-pr
---base origin/weaver --worktree` échoue sur `weaver-powerpoint-file-ownership.md`
-(section `## Prerequisites` absente), note de `ad97b2440` que ce merge ne modifie
-pas. Les autres notes modifiées depuis `origin/weaver` passent `parse_note`, mais les
-contrôles suivants de `check-pr` n'ont pas pu s'exécuter tant que cette note échoue.
+**Résolu le 6 novembre :** `weaver-powerpoint-file-ownership.md` a reçu sa section
+`## Prerequisites` et `make migration-check` passe sur sa base par défaut `origin/swift`.
 

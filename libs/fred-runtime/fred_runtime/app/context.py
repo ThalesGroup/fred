@@ -163,9 +163,12 @@ class PodApplicationContext:
         """Build the one pod-wide runtime filesystem selected by configuration."""
         from fred_runtime.app.filesystem_factory import build_runtime_filesystem
 
+        # Shared PostgreSQL means shared lifecycles, including on the conversation-less
+        # preparation worker: no SDK retry may hide the outcome of an object write.
         self._filesystem = await build_runtime_filesystem(
             self.configuration.storage.object_store,
-            require_erasure=self.session_fence is not None,
+            require_erasure=self._sql_engine is not None
+            and self._sql_engine.dialect.name == "postgresql",
         )
 
     async def initialize_sql(self, *, conversations: bool = True) -> None:

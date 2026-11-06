@@ -96,8 +96,8 @@ To brand the frontend without rebuilding it, see
 ## Capability preparation worker
 
 Enable `applications.fred-agents-worker.enabled` alongside `fred-agents`. The worker
-inherits the API's final image (including build overlays), runtime ID, SQL storage,
-CP URL, workload configuration and Secret references through `inheritFrom`. Set
+inherits the API's final image (including build overlays), runtime ID, SQL and
+object storage, CP URL, workload configuration and Secret references through `inheritFrom`. Set
 those on `fred-agents` only: the worker schema rejects separate image, configuration
 or credential overrides, except for enabling its scheduler. The API's scheduler
 setting is preserved. No second image build or capability migration is needed.

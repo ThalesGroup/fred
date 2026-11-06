@@ -137,7 +137,7 @@ async def test_retirement_before_first_activity_prevents_recreation(
         await preparation.prepare(ctx)
     assert not calculate
     store = jobs.SqlAnalysisStore(analysis_db)
-    assert await store.template(preparation.analysis_identity(ctx)) == b""
+    assert await store.template(preparation.analysis_identity(ctx)) is None
 
 
 @pytest.mark.asyncio
@@ -176,7 +176,9 @@ async def test_expired_writer_cannot_publish_after_takeover(analysis_db, calcula
     assert record is not None
     old_job = record.job_id
     await preparation.prepare(ctx)
-    assert not await store.finish(identity, old_job, builtin_template()[1], b"late")
+    assert not await store.finish(
+        identity, old_job, builtin_template()[1], "late", None
+    )
     assert await store.patterns_pdf(identity) == b"%PDF-thumbnails"
 
 

@@ -1,6 +1,10 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Temporal owns retries; SQL leases fence attempts and retirement fences late writers."""
+"""Temporal owns retries; SQL leases fence attempts and retirement fences late writers.
+
+The files live in the pod's object store. SQL is what makes them usable (a
+succeeded row names them) and what lets them go (no unfinished write remains).
+"""
 
 import asyncio
 import uuid
@@ -46,7 +50,6 @@ async def _reserve(
                     job_id=str(uuid.uuid4()),
                     attempts=0,
                     lease_until=now,
-                    template_pptx=b"",
                     template_filename=ctx.work.filename,
                     created_at=now,
                     updated_at=now,
@@ -66,9 +69,9 @@ async def retire(ctx: PreparationContext) -> None:
         jobs.AnalysisRow.template_sha256 == ctx.work.sha256,
         status="retired",
         job_id=str(uuid.uuid4()),
-        template_pptx=b"",
         inventory_json=None,
-        patterns_pdf=None,
+        template_digest=None,
+        patterns_digest=None,
         overrides_json=None,
         error=None,
         lease_until=jobs._utcnow(),
@@ -76,6 +79,8 @@ async def retire(ctx: PreparationContext) -> None:
     if not updated:
         raise ValueError("Preparation identity mismatch")
     jobs.forget_inventories(analysis_identity(ctx))
+    # The committed retirement refuses new writes, so this also sees every earlier one.
+    await store.erase_files(analysis_identity(ctx))
 
 
 async def prepare(ctx: PreparationContext) -> PreparationResult:
@@ -110,10 +115,6 @@ async def prepare(ctx: PreparationContext) -> PreparationResult:
         row.lease_until = jobs._utcnow() + timedelta(seconds=jobs.LEASE_SECONDS)
     # No SQL transaction is retained over parsing, Office conversion or callbacks.
     template = await asyncio.to_thread(sanitize_template, ctx.content)
-    if not await store._update(
-        identity, jobs.AnalysisRow.job_id == job_id, template_pptx=template
-    ):
-        raise ValueError("Preparation superseded")
     await jobs.run_analysis(store, identity, job_id, template, None, jobs.RULES_KEY)
     record = await store.get(identity, with_inventory=False)
     if (

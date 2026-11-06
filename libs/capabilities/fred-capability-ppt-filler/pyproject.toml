@@ -65,7 +65,10 @@ include = ["fred_capability_ppt_filler*"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra"
-markers = ["integration: marks tests that require external services"]
+markers = [
+  "integration: marks tests that require external services",
+  "integration_postgres: integration tests that specifically need a real PostgreSQL",
+]
 testpaths = ["tests"]
 
 [tool.uv.sources]

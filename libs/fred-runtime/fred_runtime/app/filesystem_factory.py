@@ -40,7 +40,7 @@ async def build_runtime_filesystem(
     if isinstance(config, LocalRuntimeFilesystemConfig):
         if require_erasure:
             raise RuntimeError(
-                "Conversation erasure requires shared MinIO or GCS storage; local filesystems cannot prove deletion across replicas"
+                "Object erasure requires shared MinIO or GCS storage; local filesystems cannot prove deletion across replicas"
             )
         return await asyncio.to_thread(LocalFilesystem, root=config.root)
     if isinstance(config, MinioRuntimeFilesystemConfig):

@@ -227,7 +227,7 @@ The factory's `k3d-apps/fred/values-weaver.yaml` enables `fred-agents-worker` an
 binds runtime `fred-agents` to issuer `http://keycloak:8080/realms/app`, audience
 `app`, client `agentic`. Confirm these claims on the actual workload token during
 reception; never record the token. Both processes inherit the same content-tagged
-image, PostgreSQL capability results and workload Secret references. They use
+image, PostgreSQL capability results, object store and workload Secret references. They use
 Temporal namespace `fred-weaver`; the CP supplies their installation-specific
 preparation queue. Verify namespace retention exceeds the two-hour deadline.
 

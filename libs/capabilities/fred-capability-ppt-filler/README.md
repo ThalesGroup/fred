@@ -52,8 +52,9 @@ has none.
 - **Save** stores the template and returns at once; a background job
   (`analysis_job.py`) analyses it (layouts, example slides, slots, capacities)
   and, unless "Use a vision model" is off, labels each example slide with a
-  vision model (`labelling.py`). The result lives in the owned table
-  `cap_ppt_builder_analysis`; the agent stays unavailable until it succeeds.
+  vision model (`labelling.py`). The owned table `cap_ppt_builder_analysis`
+  holds the result; the prepared template and preview live in the pod's object
+  store. The agent stays unavailable until both are published.
 - **Chat**: the model sends content per slide, `assign.py` picks the template
   slide under deck rules (cover once first, closing last, no three identical
   in a row), and a slide that fits nothing returns `needs_revision` instead of

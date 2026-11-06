@@ -43,6 +43,7 @@ the annexes. Validation records live in each lot's PR; remaining work in GitHub 
 | Upload/process a PDF | [Document journey](02.2-document-journey.md), [Documents](05-documents.md) | Source map section beyond folder creation |
 | Assistant answering from a space's documents | [Journey](02.3-agent-administration.md#bobs-assistant-answers-from-researchs-documents), [Security](03-security.md#36-documents-used-by-an-assistant) | [Document search annex](A6-security.md#document-search-within-a-turn) |
 | Draft, revise and export a conversation document | [Bob's report](02.3-agent-administration.md#bob-prepares-a-report-with-his-assistant), [Document concepts](05-documents.md#55-documents-authored-in-a-conversation) | [Conversation-document implementation](A9-documents.md#documents-authored-in-a-conversation) |
+| Generate PowerPoint from a reusable template | [PowerPoint journey](02.3-agent-administration.md#4-generate-a-powerpoint-presentation) | [Data ownership and storage](A9-documents.md#powerpoint-builder-data) |
 
 Follow this map to locate current behavior and its implementation.
 For an audit, trace the named UI consumer through the handler, authorization and

@@ -19,6 +19,7 @@ A lease the job keeps alive tells an interrupted job from a slow one."""
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -30,12 +31,13 @@ from typing import Any, List, Literal, Optional, Tuple
 from fred_core import convert_office_bytes_to_pdf
 from fred_core.common import ThreadSafeLRUCache
 from fred_sdk.contracts.capability import CapabilityReadiness
+from fred_sdk.contracts.capability.preparation import CapabilityObjects
 from fred_sdk.contracts.runtime import CapabilityModelPort
 from pydantic import BaseModel, TypeAdapter, ValidationError
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     Integer,
-    LargeBinary,
     String,
     Text,
     select,
@@ -131,9 +133,21 @@ class PptBuilderBase(DeclarativeBase):
 class AnalysisRow(PptBuilderBase):
     """The analysis of one agent instance's current template: one row per
     instance, replaced by the next save that needs a new analysis. No foreign
-    keys (capability table hygiene)."""
+    keys (capability table hygiene). The files live in the pod's object store,
+    each attempt under its own ``<preparation>/<job_id>/``: a key is derived from
+    this row's identity, never stored or received."""
 
     __tablename__ = "cap_ppt_builder_analysis"
+    __table_args__ = (
+        CheckConstraint(
+            "status <> 'succeeded' OR template_digest IS NOT NULL",
+            name="cap_ppt_builder_analysis_published_check",
+        ),
+        CheckConstraint(
+            "pending_writes >= 0",
+            name="cap_ppt_builder_analysis_pending_writes_check",
+        ),
+    )
 
     agent_instance_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     team_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -148,10 +162,15 @@ class AnalysisRow(PptBuilderBase):
     lease_until: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-    # Kept so a re-run needs no user token to refetch the template.
-    template_pptx: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     inventory_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    patterns_pdf: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    # A succeeded row publishes the files of its job_id; these prove their bytes.
+    template_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    patterns_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Object writes begun and not proven finished. Only their actual return lowers
+    # it: a crash or an unknown outcome keeps erasure blocked, durably.
+    pending_writes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     template_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # The platform template's pattern edits; an agent's live in its config.
@@ -166,7 +185,7 @@ class AnalysisRow(PptBuilderBase):
 
 @dataclass(frozen=True)
 class AnalysisRecord:
-    """A row without its binaries."""
+    """A row's facts, without its files."""
 
     agent_instance_id: str
     team_id: str
@@ -238,6 +257,52 @@ def dump_overrides(overrides: List[PatternOverride]) -> Optional[str]:
 _OVERRIDES: TypeAdapter[List[PatternOverride]] = TypeAdapter(List[PatternOverride])
 
 
+# --- Files ---------------------------------------------------------------------------
+
+_TEMPLATE_OBJECT = "template.pptx"
+_PATTERNS_OBJECT = "patterns.pdf"
+_objects: CapabilityObjects | None = None
+# A cancelled caller leaves its write running: it stays referenced until it ends.
+_uploads: set[asyncio.Task[None]] = set()
+
+
+class ObjectStorageUnavailable(RuntimeError):
+    """A file could not be stored: an outage Temporal retries, not a template problem."""
+
+
+class PreparationWritesPending(RuntimeError):
+    """An object write has no proven end: erasing now could be undone by it."""
+
+
+def bind_objects(objects: CapabilityObjects) -> None:
+    """The pod's object store for this capability, bound once at process startup."""
+    global _objects
+    _objects = objects
+
+
+def _object_store() -> CapabilityObjects:
+    if _objects is None:
+        raise RuntimeError("ppt_builder: the pod bound no object storage.")
+    return _objects
+
+
+def _directory(instance_id: str) -> str:
+    return instance_id.removeprefix("prep:")
+
+
+def _digest(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _upload_ended(task: asyncio.Task[None]) -> None:
+    _uploads.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        logger.warning(
+            "Object write outcome unknown; its preparation cannot be erased until resolved",
+            extra={"error_code": "ppt_builder_object_write_unknown"},
+        )
+
+
 # --- Store ---------------------------------------------------------------------------
 
 
@@ -266,15 +331,23 @@ class AnalysisStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def upload(
+        self, instance_id: str, job_id: str, template: bytes, pdf: Optional[bytes]
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        """Store one attempt's files and return their digests; ``None`` when this
+        job no longer owns the row, in which case nothing was written."""
+
+    @abstractmethod
     async def finish(
         self,
         instance_id: str,
         job_id: str,
         inventory: TemplateInventory,
-        patterns_pdf: Optional[bytes],
+        template_digest: str,
+        patterns_digest: Optional[str],
         labelling_key: Optional[str] = None,
     ) -> bool:
-        """Store the result; ``labelling_key``, when given, is the one used."""
+        """Publish the result; ``labelling_key``, when given, is the one used."""
 
     @abstractmethod
     async def fail(self, instance_id: str, job_id: str, error: str) -> bool:
@@ -301,7 +374,7 @@ class SqlAnalysisStore(AnalysisStore):
             row.attempts,
             row.lease_until,
             row.error,
-            row.patterns_pdf.is_not(None),
+            row.patterns_digest.is_not(None),
             row.updated_at,
             row.template_filename,
             row.overrides_json,
@@ -346,14 +419,45 @@ class SqlAnalysisStore(AnalysisStore):
                 )
             ).scalar_one_or_none()
 
+    async def _published(
+        self, instance_id: str, name: str, digest: Any, *where: Any
+    ) -> Optional[bytes]:
+        """A file of the succeeded attempt, verified against SQL; ``None`` when
+        there is none, including when retirement erases it during this read."""
+        async with self._sessionmaker() as session:
+            found = (
+                await session.execute(
+                    select(AnalysisRow.job_id, digest).where(
+                        AnalysisRow.agent_instance_id == instance_id,
+                        AnalysisRow.status == "succeeded",
+                        *where,
+                    )
+                )
+            ).first()
+        if found is None or found[1] is None:
+            return None
+        try:
+            content = await _object_store().read(
+                f"{_directory(instance_id)}/{found[0]}/{name}"
+            )
+        except FileNotFoundError:
+            return None
+        if await asyncio.to_thread(_digest, content) != found[1]:
+            raise RuntimeError(f"Stored {name} does not match its analysis")
+        return content
+
     async def template(
         self, instance_id: str, *, sha: Optional[str] = None
     ) -> Optional[bytes]:
         where = [] if sha is None else [AnalysisRow.template_sha256 == sha]
-        return await self._scalar(AnalysisRow.template_pptx, instance_id, *where)
+        return await self._published(
+            instance_id, _TEMPLATE_OBJECT, AnalysisRow.template_digest, *where
+        )
 
     async def patterns_pdf(self, instance_id: str) -> Optional[bytes]:
-        return await self._scalar(AnalysisRow.patterns_pdf, instance_id)
+        return await self._published(
+            instance_id, _PATTERNS_OBJECT, AnalysisRow.patterns_digest
+        )
 
     async def _update(self, instance_id: str, *where: Any, **values: Any) -> bool:
         async with self._sessionmaker() as session:
@@ -374,12 +478,60 @@ class SqlAnalysisStore(AnalysisStore):
             lease_until=_utcnow() + timedelta(seconds=LEASE_SECONDS),
         )
 
+    async def upload(
+        self, instance_id: str, job_id: str, template: bytes, pdf: Optional[bytes]
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        objects = _object_store()
+        digests = (
+            await asyncio.to_thread(_digest, template),
+            None if pdf is None else await asyncio.to_thread(_digest, pdf),
+        )
+        try:
+            await objects.check()  # An outage leaves no write of unknown outcome.
+        except Exception as exc:
+            raise ObjectStorageUnavailable(type(exc).__name__) from None
+        # The row lock orders this with retirement: a write begun here is counted
+        # before retirement reads the count, and none can begin after it.
+        if not await self._update(
+            instance_id,
+            AnalysisRow.job_id == job_id,
+            AnalysisRow.status.in_(("pending", "running")),
+            pending_writes=AnalysisRow.pending_writes + 1,
+        ):
+            return None
+        directory = f"{_directory(instance_id)}/{job_id}"
+
+        async def write() -> None:
+            await objects.write(f"{directory}/{_TEMPLATE_OBJECT}", template)
+            if pdf is not None:
+                await objects.write(f"{directory}/{_PATTERNS_OBJECT}", pdf)
+            await self._update(
+                instance_id, pending_writes=AnalysisRow.pending_writes - 1
+            )
+
+        # An SDK call cannot be recalled: only its real end may lower the count.
+        task = asyncio.create_task(write())
+        _uploads.add(task)
+        task.add_done_callback(_upload_ended)
+        try:
+            await asyncio.shield(task)
+        except Exception as exc:
+            raise ObjectStorageUnavailable(type(exc).__name__) from None
+        return digests
+
+    async def erase_files(self, instance_id: str) -> None:
+        """Erase every attempt's files of a row closed to new writes; replayable."""
+        if await self._scalar(AnalysisRow.pending_writes, instance_id):
+            raise PreparationWritesPending(instance_id)
+        await _object_store().delete(_directory(instance_id))
+
     async def finish(
         self,
         instance_id: str,
         job_id: str,
         inventory: TemplateInventory,
-        patterns_pdf: Optional[bytes],
+        template_digest: str,
+        patterns_digest: Optional[str],
         labelling_key: Optional[str] = None,
     ) -> bool:
         key = {} if labelling_key is None else {"labelling_key": labelling_key}
@@ -388,7 +540,8 @@ class SqlAnalysisStore(AnalysisStore):
             status="succeeded",
             analysis_version=ANALYSIS_VERSION,
             inventory_json=inventory.model_dump_json(),
-            patterns_pdf=patterns_pdf,
+            template_digest=template_digest,
+            patterns_digest=patterns_digest,
             error=None,
         )
         return await self._update(
@@ -576,6 +729,18 @@ async def _analyse(
     return inventory, pdf
 
 
+async def _analyse_and_upload(
+    store: AnalysisStore,
+    instance_id: str,
+    job_id: str,
+    template: bytes,
+    port: Optional[CapabilityModelPort],
+    key: str,
+) -> Tuple[TemplateInventory, Optional[Tuple[str, Optional[str]]]]:
+    inventory, pdf = await _analyse(template, port, key)
+    return inventory, await store.upload(instance_id, job_id, template, pdf)
+
+
 async def run_analysis(
     store: AnalysisStore,
     instance_id: str,
@@ -595,7 +760,9 @@ async def run_analysis(
             key,
         )
         key = RULES_KEY  # what the labels really are: a save with the port re-runs
-    work = asyncio.ensure_future(_analyse(template, port, key))
+    work = asyncio.ensure_future(
+        _analyse_and_upload(store, instance_id, job_id, template, port, key)
+    )
     try:
         while True:
             done, _ = await asyncio.wait({work}, timeout=HEARTBEAT_SECONDS)
@@ -618,10 +785,12 @@ async def run_analysis(
                 logger.info("Analysis of %s superseded", instance_id)
                 work.cancel()
                 return
-        inventory, pdf = work.result()
+        inventory, digests = work.result()
     except AnalysisFailed as exc:
         await store.fail(instance_id, job_id, str(exc))
         return
+    except ObjectStorageUnavailable:
+        raise  # Temporal retries as a new attempt: the template is not at fault.
     except Exception:
         logger.exception("Template analysis of %s failed", instance_id)
         await store.fail(
@@ -634,7 +803,10 @@ async def run_analysis(
     finally:
         if not work.done():
             work.cancel()
-    if await store.finish(instance_id, job_id, inventory, pdf, key):
+    if digests is None:
+        logger.info("Analysis of %s superseded", instance_id)
+        return
+    if await store.finish(instance_id, job_id, inventory, *digests, key):
         forget_inventories(instance_id)
         logger.info(
             "Template analysis of %s done in %.0fs",

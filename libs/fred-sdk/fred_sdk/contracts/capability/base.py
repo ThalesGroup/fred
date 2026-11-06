@@ -64,7 +64,7 @@ from pydantic import BaseModel, ConfigDict
 from .context import CapabilityContext, CapabilityIdentity, EmptyModel, SaveContext
 from .hitl import HitlSpec
 from .manifest import CapabilityManifest, ChatControlSpec, UploadedFile
-from .preparation import PreparationContext, PreparationResult
+from .preparation import CapabilityObjects, PreparationContext, PreparationResult
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -156,8 +156,15 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
         raise NotImplementedError("This capability has no durable preparation")
 
     async def retire_preparation(self, ctx: PreparationContext) -> None:
-        """Fence late writes and release derived bytes; replay must be harmless."""
+        """Fence late writes and release derived bytes; replay must be harmless.
+
+        Raise while erasure cannot be established: the preparation stays uncleaned.
+        """
         raise NotImplementedError("This capability has no durable preparation")
+
+    def bind_objects(self, objects: CapabilityObjects) -> None:
+        """Receive this capability's object namespace at pod startup. Default: unused."""
+        del objects
 
     def chat_controls(self, config: StoredT) -> list[ChatControlSpec]:
         """

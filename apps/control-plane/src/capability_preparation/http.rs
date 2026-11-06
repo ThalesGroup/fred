@@ -134,7 +134,8 @@ async fn cleanup(
     ApiQuery(q): ApiQuery<Target>,
 ) -> AppResult<Json<Vec<Uuid>>> {
     worker(&s, &user, &q.runtime_id)?;
-    Ok(Json(sqlx::query_scalar("select id from capability_preparation where runtime_id=$1 and state='obsolete' and cleaned_at is null order by id limit 20").bind(q.runtime_id).fetch_all(&s.pool).await?))
+    // A random page: durably blocked erasures cannot starve the others.
+    Ok(Json(sqlx::query_scalar("select id from capability_preparation where runtime_id=$1 and state='obsolete' and cleaned_at is null order by random() limit 20").bind(q.runtime_id).fetch_all(&s.pool).await?))
 }
 #[utoipa::path(
     operation_id="capability_preparation_cleaned",

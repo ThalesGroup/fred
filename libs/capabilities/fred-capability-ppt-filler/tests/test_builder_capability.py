@@ -393,8 +393,7 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
 
 @pytest.mark.asyncio
 async def test_a_turn_never_renders_a_template_other_than_the_analysed_one(analysis_db):
-    """A save stores a new template before its config commits: a turn still on
-    the old config refuses instead of rendering the new bytes."""
+    """A row describing another template: a turn still on the old config refuses."""
     stored = await _analysed(analysis_db)
     plan = {"slides": [{"title": "Kick-off"}, {"title": "Plan", "bullets": ["a"]}]}
     newer = builtin_template()[0]  # a valid deck: rendering it would succeed
@@ -405,7 +404,6 @@ async def test_a_turn_never_renders_a_template_other_than_the_analysed_one(analy
         analysis_db,
         REFERENCE,
         template_sha256="sha-of-a-newer-upload",
-        template_pptx=newer,
     )
     analysis_job.clear_caches()
     analysis_job.remember_inventory(REFERENCE, SHA, "rules", inventory)

@@ -43,6 +43,7 @@ from fred_sdk.contracts.capability import (
     UploadedFile,
 )
 from fred_sdk.contracts.capability.preparation import (
+    CapabilityObjects,
     PreparationContext,
     PreparationResult,
 )
@@ -707,6 +708,9 @@ class PptBuilderCapability(
                 "common_template_config": None,
             }
         )
+
+    def bind_objects(self, objects: CapabilityObjects) -> None:
+        analysis_job.bind_objects(objects)
 
     async def prepare(self, ctx: PreparationContext) -> PreparationResult:
         from .preparation import prepare

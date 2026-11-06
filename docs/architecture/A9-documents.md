@@ -291,3 +291,45 @@ separately from the Control Plane drive path described above.
 | Authorized download and Word conversion | [`router.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/router.py) and [`docx_export.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/docx_export.py) in the same package |
 | Editor and download controls | Frontend [`features/capabilities/writable_document/`](../../apps/frontend/src/rework/features/capabilities/writable_document/) |
 | Export behavior and profile fallback | [Capability package README](../../libs/capabilities/fred-capability-writable-document/README.md) |
+
+## PowerPoint Builder data
+
+Storage behind the [PowerPoint journey](02.3-agent-administration.md#4-generate-a-powerpoint-presentation).
+SQL names below identify the owning component; bucket names come from deployment
+configuration. A shared database or object store does not transfer ownership.
+
+| Data | Owner and SQL record | Binary location |
+| --- | --- | --- |
+| Uploaded original | Control Plane: `powerpoint_file`, attached to a space, logical pod and optional agent | S3: `<content.prefix>/<file_id>/input/<filename>` |
+| Preparation identity, state and result reference | Control Plane: `capability_preparation`; agent link in `agent_instance.preparation_id` | None |
+| Common-template settings | Control Plane: `organization_powerpoint_settings`, per organization and logical pod | References the original; no additional file |
+| Prepared template and template preview | Pod capability: `cap_ppt_builder_analysis`, identified by `prep:<preparation_id>`; its `job_id` names the published attempt, `template_digest` and `patterns_digest` identify the content | Pod object store: `capabilities/ppt_builder/<preparation_id>/<job_id>/template.pptx` and `patterns.pdf` |
+| Template inventory | Pod capability: `inventory_json` in the same row | None |
+| Presentation working plan | Pod capability: `cap_ppt_builder_deck_plan`, bound to the conversation and agent | None; `plan_json` in SQL |
+| Generated PPTX and PDF preview | Pod runtime: conversation filesystem, owned by the `control_plane.session_metadata` conversation | Pod object store: `conversations/<session_id>/exports/<filename>` |
+
+Control Plane's `content.bucket` and normalized `content.prefix` locate originals.
+The pod's `storage.object_store` selects its filesystem backend (S3-compatible
+MinIO or GCS in Weaver). The built-in template and inventory are package assets.
+Template data is independent of conversation storage; deleting the conversation
+removes its exports and cascades to its working plan.
+
+The pod gives the library a store confined to `capabilities/ppt_builder/`, separate
+from conversation exports. Object paths are derived from the preparation identity
+and `job_id`; SQL retains digests rather than binary content. Readers use the
+published attempt and verify its digests. `pending_writes` tracks unfinished object
+writes; the worker confirms cleanup only after they have finished and the
+preparation's object prefix has been erased. SQL retirement receipts remain to
+prevent later attempts from recreating the files.
+
+Implementation entries:
+
+- [Original storage and resolution](../../apps/control-plane/src/documents/powerpoint.rs),
+  [preparation coordination](../../apps/control-plane/src/capability_preparation/mod.rs).
+- [Python preparation](../../libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/preparation.py)
+  and [analysis storage](../../libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/analysis_job.py).
+- [Capability object namespace](../../libs/fred-runtime/fred_runtime/capabilities/objects.py)
+  and [worker cleanup](../../libs/fred-runtime/fred_runtime/app/preparation_worker.py).
+- [Export adapter (`FredWorkspaceFs`)](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py),
+  [filesystem](../../libs/fred-runtime/fred_runtime/conversation_filesystem.py)
+  and [plan ownership](../../libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/ppt_builder_migrations/versions/r9e4a5b6c7d8_deck_plan_conversation_ownership.py).

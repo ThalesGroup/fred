@@ -1,40 +1,49 @@
 # 0. Introduction
 
 Fred is an open-source platform for working with knowledge and AI assistants.
-Its central concept is the **space**: a work perimeter that brings together
-resources, configured assistants and people's access rights.
+In the UI, people work in an **organization**, join **teams** and collaborate on
+**projects**, with documents and assistants available according to their rights.
 
-## Start with the space
+## Organizations, teams and projects
 
 ```mermaid
 flowchart TB
-    subgraph space["Working space"]
+    subgraph organization["Organization"]
         direction TB
-        person["A person"]
-        roles["Roles here<br/>Manage · contribute · read"]
-        shared["Shared resources<br/>Documents and assistants"]
-        conversation["That person's conversation<br/>Messages and working documents"]
-        person --> roles --> shared
-        shared -->|"Use an authorized assistant"| conversation
+        common["Common knowledge<br/>Assistants and resources"]
+
+        subgraph team["Team"]
+            direction TB
+            shared["Team knowledge<br/>Assistants and resources"]
+
+            subgraph project["Project"]
+                focused["Resources for<br/>a shared objective"]
+            end
+        end
+
+        common -->|"According to access rights"| shared
+        shared -->|"According to access rights"| focused
     end
 
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class person,roles,shared,conversation,space neutral
+    class common,shared,focused,organization,team,project neutral
 ```
 
-**Shared space does not mean shared conversations.** Access to a space's resources
-does not open another person's conversations. Roles apply to the space where they
-are granted; they do not automatically extend to other spaces.
+Each project belongs to a team; each team belongs to an organization.
+Behind these familiar places is one simple concept: a **space** brings together
+resources, configured assistants and access rights. The same model serves all
+three levels and personal spaces, so Fred and its extensions use a consistent
+boundary for their data and permissions.
 
-In a collective space, the **Owner / Responsable** governs business uses. **Editors** contribute,
-**analysts** read and evaluate, and **members** read and use authorized assistants.
-Technical **Admins** have separate, limited duties. Management alone grants no
-content access; people can hold several roles.
+**Sharing a space does not share conversations.** Roles apply where they are
+granted; they do not automatically extend to another space. Access to shared
+resources does not open another person's conversations.
 
-Collective spaces form an organization → team → project hierarchy. A personal
-space is individual. These distinctions matter where a rule depends on the level;
-otherwise the journeys simply speak of a space. [Spaces](04-organizations.md)
-and [security](03-security.md) explain the boundaries.
+In a collective space, the **Owner / Responsable** governs business uses.
+**Editors** contribute, **analysts** read and evaluate, and **members** read and
+use authorized assistants. Technical **Admins** have separate, limited duties.
+Management alone grants no content access; people can hold several roles.
+[Spaces](04-organizations.md) and [security](03-security.md) explain the boundaries.
 
 ## Use Fred or extend it
 

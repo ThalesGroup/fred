@@ -165,9 +165,19 @@ and attachments. Superseded bytes awaiting purge are excluded from logical usage
 this does not activate the separate storage_budget organization-total preparation.
 Keep the S3 sweeper and each owning capability worker available for cleanup.
 Obsolete preparation receipts survive owner deletion; the worker clears their
-binaries, inventory and thumbnails, retaining a tombstone that fences late writes,
+inventory and erases their files under `capabilities/ppt_builder/<preparation_id>/`
+in the pod's `storage.object_store`, retaining a tombstone that fences late writes,
 including a delayed first activity. Space deletion waits for original and derived
 cleanup acknowledgements. A missing owning worker leaves cleanup visibly pending.
+
+A storage write whose end was never proven (a crash or an unknown storage outcome)
+keeps that preparation's cleanup pending: `cap_ppt_builder_analysis.pending_writes`
+stays above zero and the worker logs `capability_cleanup_retry` with reason
+`PreparationWritesPending`. It never expires. Once you have established that no
+writer can still act (its worker process has ended and the object store holds no
+request from it), set that row's `pending_writes` to 0; the next sweep erases the
+prefix and the deletion resumes. A lower count on a live writer would let a file
+survive its erasure.
 
 ## Limitations
 

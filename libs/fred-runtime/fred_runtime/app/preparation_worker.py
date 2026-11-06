@@ -31,6 +31,7 @@ from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.container import build_pod_container
 from fred_runtime.app.security import prepare_authorization
 from fred_runtime.capabilities import CapabilityRegistry, boot_capability_registry
+from fred_runtime.capabilities.objects import bind_capability_objects
 from fred_runtime.capabilities.preparation_workflow import PrepareCapability
 from fred_runtime.common.outbound_credentials import (
     DelegationRuntime,
@@ -189,30 +190,42 @@ class PreparationWorker:
             )
             raise ApplicationError("Capability preparation interrupted") from None
 
+    async def _retire(self, identity: str) -> None:
+        ctx = await self.context(identity)
+        if ctx.work.state != "obsolete":
+            return
+        await self.registry.capability(ctx.work.capability_id).retire_preparation(ctx)
+        await self.request("POST", f"/{ctx.work.preparation_id}/cleaned")
+
+    async def cleanup_once(self) -> None:
+        def retrying(identity: str | None, error: Exception) -> None:
+            logger.warning(
+                "Capability cleanup will retry",
+                extra={
+                    "operation_id": identity,
+                    "error_code": "capability_cleanup_retry",
+                    "reason": failure_summary(error),
+                },
+            )
+
+        try:
+            reply = await self.request(
+                "GET", "/cleanup", params={"runtime_id": self.config.app.runtime_id}
+            )
+            identities = reply.json()
+        except Exception as error:
+            retrying(None, error)
+            return
+        # A preparation whose erasure stays blocked must not hold back the others.
+        for identity in identities:
+            try:
+                await self._retire(identity)
+            except Exception as error:
+                retrying(identity, error)
+
     async def cleanup(self) -> None:
         while True:
-            identity = None
-            try:
-                reply = await self.request(
-                    "GET", "/cleanup", params={"runtime_id": self.config.app.runtime_id}
-                )
-                for identity in reply.json():
-                    ctx = await self.context(identity)
-                    if ctx.work.state != "obsolete":
-                        continue
-                    await self.registry.capability(
-                        ctx.work.capability_id
-                    ).retire_preparation(ctx)
-                    await self.request("POST", f"/{ctx.work.preparation_id}/cleaned")
-            except Exception as error:
-                logger.warning(
-                    "Capability cleanup will retry",
-                    extra={
-                        "operation_id": identity,
-                        "error_code": "capability_cleanup_retry",
-                        "reason": failure_summary(error),
-                    },
-                )
+            await self.cleanup_once()
             await asyncio.sleep(10)
 
 
@@ -243,6 +256,8 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
         engine = container.get_sql_engine()
         if engine is None:
             raise ValueError("Capability worker requires SQL storage")
+        await container.initialize_filesystem()
+        bind_capability_objects(registry, container.get_filesystem())
         runner = PreparationWorker(
             config,
             registry,

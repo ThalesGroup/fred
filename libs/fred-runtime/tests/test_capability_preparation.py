@@ -289,3 +289,64 @@ async def test_lost_acknowledgement_after_cp_commit_needs_no_recalculation(prepa
     await ActivityEnvironment().run(second.prepare, identity)
     assert calculated.calculations == 1 and restarted.calculations == 0
     assert len(confirmations) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_erasure_is_not_confirmed_and_does_not_hold_back_the_others(
+    minimal_config, tmp_path
+):
+    blocked, erased = str(uuid4()), str(uuid4())
+    installation = uuid4()
+    cleaned = []
+
+    async def cp(request):
+        path = request.url.path
+        if path.endswith("/cleanup"):
+            return httpx.Response(200, json=[blocked, erased])
+        if path.endswith("/cleaned"):
+            cleaned.append(path.split("/")[-2])
+            return httpx.Response(204)
+        identity = path.split("/")[-1]
+        return httpx.Response(
+            200,
+            json=dict(
+                preparation_id=identity,
+                installation_id=str(installation),
+                runtime_id="test-pod",
+                capability_id="tracer_echo",
+                space_id=str(uuid4()),
+                agent_instance_id=None,
+                configuration_revision=None,
+                file_id=str(uuid4()),
+                sha256="0" * 64,
+                filename="model.pptx",
+                size=1,
+                config={},
+                state="obsolete",
+            ),
+        )
+
+    class WritesPending(RuntimeError):
+        pass
+
+    class Retiring(TracerEchoCapability):
+        async def retire_preparation(self, ctx: PreparationContext) -> None:
+            if str(ctx.work.preparation_id) == blocked:
+                raise WritesPending()
+
+    minimal_config.platform.control_plane_url = "http://cp.invalid/v1"
+    registry = CapabilityRegistry()
+    registry.register(Retiring())
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'cleanup.db'}")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(cp)) as client:
+        worker = PreparationWorker(
+            minimal_config,
+            registry,
+            client,
+            DelegationRuntime(token_provider=StaticWorkloadTokens()),
+            engine,
+        )
+        worker.installation_id = installation
+        await worker.cleanup_once()
+    await engine.dispose()
+    assert cleaned == [erased]

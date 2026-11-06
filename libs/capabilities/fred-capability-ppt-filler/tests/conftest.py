@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -32,6 +32,42 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+
+
+class MemoryObjects:
+    """The pod's scoped object store, in memory; a test may hold or fail its writes."""
+
+    def __init__(self) -> None:
+        self.files: dict[str, bytes] = {}
+        self.written: list[str] = []
+        self.before_write: Callable[[str], Awaitable[None]] | None = None
+        self.unreachable = False
+
+    async def check(self) -> None:
+        if self.unreachable:
+            raise ConnectionError("store down")
+
+    async def read(self, path: str) -> bytes:
+        if path not in self.files:
+            raise FileNotFoundError(path)
+        return self.files[path]
+
+    async def write(self, path: str, data: bytes) -> None:
+        if self.before_write is not None:
+            await self.before_write(path)
+        self.written.append(path)
+        self.files[path] = data
+
+    async def delete(self, path: str) -> None:
+        for key in [k for k in self.files if k == path or k.startswith(f"{path}/")]:
+            del self.files[key]
+
+
+@pytest.fixture(autouse=True)
+def objects(monkeypatch: pytest.MonkeyPatch) -> MemoryObjects:
+    store = MemoryObjects()
+    monkeypatch.setattr(analysis_job, "_objects", store)
+    return store
 
 
 @pytest.fixture(autouse=True)

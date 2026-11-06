@@ -220,6 +220,7 @@ from fred_runtime.capabilities.errors import (
     TurnOptionsInvalidError,
     UnknownCapabilityError,
 )
+from fred_runtime.capabilities.objects import bind_capability_objects
 from fred_runtime.capabilities.platform_ports import team_authorizer_binder
 from fred_runtime.common.background_tasks import spawn
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
@@ -6653,6 +6654,7 @@ def create_agent_app(
                     "Custom inference adapters are not connected to Weaver"
                 )
             await container.initialize_filesystem()
+            bind_capability_objects(capability_registry, container.get_filesystem())
             turn_steering_mailbox.configure(sql_engine)
             await turn_steering_mailbox.cleanup_expired()
 
