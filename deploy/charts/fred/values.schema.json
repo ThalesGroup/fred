@@ -2384,6 +2384,14 @@
                       },
                       "title": "Per Capability Concurrency",
                       "type": "object"
+                    },
+                    "enabled_capabilities": {
+                      "default": [],
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Enabled Capabilities",
+                      "type": "array"
                     }
                   },
                   "title": "PodPreparationConfig",
@@ -5024,6 +5032,14 @@
                       },
                       "title": "Per Capability Concurrency",
                       "type": "object"
+                    },
+                    "enabled_capabilities": {
+                      "default": [],
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Enabled Capabilities",
+                      "type": "array"
                     }
                   },
                   "title": "PodPreparationConfig",
@@ -32329,6 +32345,11 @@
                             "description": "Verified service client allowed to prepare this runtime's capabilities.",
                             "title": "Preparation Client Id"
                           },
+                          "preparation_enabled": {
+                            "default": false,
+                            "title": "Preparation Enabled",
+                            "type": "boolean"
+                          },
                           "ingress_prefix": {
                             "anyOf": [
                               {
@@ -34843,6 +34864,11 @@
                             "default": null,
                             "description": "Verified service client allowed to prepare this runtime's capabilities.",
                             "title": "Preparation Client Id"
+                          },
+                          "preparation_enabled": {
+                            "default": false,
+                            "title": "Preparation Enabled",
+                            "type": "boolean"
                           },
                           "ingress_prefix": {
                             "anyOf": [

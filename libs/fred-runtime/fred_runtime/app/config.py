@@ -414,6 +414,7 @@ class PodPreparationConfig(BaseModel):
 
     max_concurrent_jobs: int = Field(default=4, ge=1, le=32)
     per_capability_concurrency: dict[str, int] = Field(default_factory=dict)
+    enabled_capabilities: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _validate_budgets(self) -> "PodPreparationConfig":

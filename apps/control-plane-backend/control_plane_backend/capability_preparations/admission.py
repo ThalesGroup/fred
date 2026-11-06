@@ -208,6 +208,14 @@ async def persist_agent_preparations(
                 (asset.id, asset.slot_key, asset.sha256) for asset in new_assets
             )
         config = dict(capability_config.get(cap_id, {}).get("config") or {})
+        if spec.activation_field and not config.get(spec.activation_field):
+            if previous is not None:
+                previous.is_current = False
+                if previous.state in ("pending", "running"):
+                    previous.state = "obsolete"
+            continue
+        if len(assets) < spec.min_assets:
+            raise ValueError("Preparation requires an uploaded asset")
         serialized = json.dumps(config, sort_keys=True, separators=(",", ":"))
         if len(serialized.encode("utf-8")) > 128 * 1024:
             raise ValueError("Preparation config exceeds 128 KiB")

@@ -3212,7 +3212,7 @@ async def enroll_agent_instance(
     )
 
     store = deps.get_agent_instance_store()
-    preparation_enabled = any(
+    preparation_enabled = source.preparation_enabled and any(
         entry.preparation is not None for entry in template.available_capabilities
     )
     staged = []
@@ -3521,8 +3521,9 @@ async def update_agent_instance(
         )
 
     preparation_enabled = any(
-        entry.preparation is not None for entry in preparation_catalog
-    )
+        source.runtime_id == record.source_runtime_id and source.preparation_enabled
+        for source in deps.configuration.platform.runtime_catalog_sources
+    ) and any(entry.preparation is not None for entry in preparation_catalog)
     staged = []
     content_store = (
         deps.get_content_store()

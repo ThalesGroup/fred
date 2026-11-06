@@ -6272,6 +6272,12 @@ def _build_agent_router(
                 or None,
                 routing=parse_save_routing(http_request.query_params),
             ),
+            preparation_enabled=(
+                capability_id
+                in get_pod_container_from_app(
+                    http_request.app
+                ).configuration.preparation.enabled_capabilities
+            ),
         )
         try:
             stored = await capability.validate_config(config, uploads, save_ctx)
@@ -6321,6 +6327,12 @@ def _build_agent_router(
                 access_token=auth.removeprefix("Bearer ").strip() or None,
                 agent_instance_id=agent_instance_id,
                 routing=routing,
+            ),
+            preparation_enabled=(
+                capability_id
+                in get_pod_container_from_app(
+                    http_request.app
+                ).configuration.preparation.enabled_capabilities
             ),
         )
 

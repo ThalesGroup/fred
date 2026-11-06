@@ -24,7 +24,7 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Annotated, Any, List, Optional, get_args
+from typing import Annotated, Any, List, Literal, Optional, get_args
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -44,6 +44,11 @@ from fred_sdk.contracts.capability import (
     UploadedFile,
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
+from fred_sdk.contracts.capability.preparation import (
+    PreparationContext,
+    PreparationResult,
+    PreparationSpec,
+)
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
     CapabilityModelUnavailableError,
@@ -81,18 +86,24 @@ from fred_capability_ppt_filler.builder.analysis_job import (
     status_response,
 )
 from fred_capability_ppt_filler.builder.assign import VarietyCheck
+from fred_capability_ppt_filler.builder.analysis import (
+    ANALYSIS_VERSION,
+    analyze_template,
+)
 from fred_capability_ppt_filler.builder.builtin import builtin_template, sha256_of
 from fred_capability_ppt_filler.builder.deck_plans import DeckPlanRow
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
     AnalyzeResult,
     PatternOverride,
+    TemplateInventory,
 )
 from fred_capability_ppt_filler.builder.overrides import (
     apply_overrides,
     prune_overrides,
 )
 from fred_capability_ppt_filler.builder.preview import build_patterns_deck
+from fred_capability_ppt_filler.builder.labelling import label_inventory
 from fred_capability_ppt_filler.builder.tools import (
     ASK_USER,
     BUILD_TOOL_NAME,
@@ -148,6 +159,7 @@ class PptBuilderConfig(BaseModel):
     # Set only for an uploaded template, so a copy re-submits that file alone.
     template_key: Annotated[Optional[str], AssetKey(TEMPLATE_SLOT)] = None
     template_sha256: Optional[str] = None
+    preparation_mode: Literal["legacy", "shared"] = "legacy"
     use_vision: bool = True
     # A catalogue profile: a team that may not use it falls back to rules.
     labelling_model: Public[Optional[str]] = None
@@ -682,6 +694,8 @@ class _PptBuilderMiddleware(AgentMiddleware):
         self._sha = config.template_sha256
         self._instance = identity.agent_instance_id
         self._key = config.labelling_key()
+        self._shared = config.preparation_mode == "shared" and self._sha is not None
+        self._prepared = ctx.services.preparation_artifacts if self._shared else None
 
         if self._sha is None:
             known, platform = analysis_job.platform_snapshot()
@@ -691,7 +705,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
                 return
         cached = (
             analysis_job.cached_inventory(self._instance, self._sha, self._key)
-            if self._instance and self._sha is not None
+            if not self._shared and self._instance and self._sha is not None
             else None
         )
         if cached is not None:  # the usual turn: no DB read, no indirection
@@ -739,6 +753,15 @@ class _PptBuilderMiddleware(AgentMiddleware):
         )
 
     async def _load_template(self) -> bytes:
+        if self._shared and self._prepared is None:
+            raise LookupError("ppt_builder: prepared template is unavailable.")
+        if self._prepared is not None:
+            content = await self._prepared.read_sibling(
+                PPT_BUILDER_CAPABILITY_ID, "template.pptx"
+            )
+            if content is None or hashlib.sha256(content).hexdigest() != self._sha:
+                raise LookupError("ppt_builder: prepared template is unavailable.")
+            return content
         # The analysed bytes, not the asset: a save rewrites the asset first.
         if self._sha is None or not self._instance:
             raise LookupError("ppt_builder: no analysed template on this turn.")
@@ -754,6 +777,22 @@ class _PptBuilderMiddleware(AgentMiddleware):
             return self._resolved
         if not self._instance:
             return None
+        if self._shared and self._prepared is None:
+            return None
+        if self._prepared is not None:
+            try:
+                raw = await self._prepared.read_result(PPT_BUILDER_CAPABILITY_ID)
+                if raw is None:
+                    return None
+                inventory = TemplateInventory.model_validate_json(raw)
+            except Exception:
+                logger.warning("Prepared template inventory unreadable", exc_info=True)
+                return None
+            effective, _ = apply_overrides(inventory, self._ctx.config.overrides)
+            self._resolved = build_builder_tools(
+                self._ctx, self._load_template, effective, self._messages, self._asks
+            )
+            return self._resolved
         store = get_analysis_store()
         try:
             inventory = await ready_inventory(
@@ -927,6 +966,13 @@ class PptBuilderCapability(
                 key=TEMPLATE_SLOT, accepted_types=[".pptx"], min_count=0, max_count=1
             )
         ],
+        preparation=PreparationSpec(
+            asset_slots=(TEMPLATE_SLOT,),
+            min_assets=1,
+            activation_field="template_sha256",
+            rules_version=str(ANALYSIS_VERSION),
+            max_input_bytes=MAX_TEMPLATE_UPLOAD_BYTES,
+        ),
         # The preview part is declared by ppt_filler (same package, one owner per kind).
         chat_parts=[],
         side_panels=[SidePanelSpec(widget="ppt_preview_pane")],
@@ -943,6 +989,53 @@ class PptBuilderCapability(
         # lands inside a turn.
         builtin_template()
 
+    async def prepare(self, ctx: PreparationContext) -> PreparationResult:
+        """Analyse one immutable template revision on the dedicated worker."""
+        template_asset = next(
+            (asset for asset in ctx.work.assets if asset.slot_key == TEMPLATE_SLOT),
+            None,
+        )
+        if template_asset is None:
+            raise ValueError("A PowerPoint template asset is required")
+        content = await ctx.assets.read(template_asset.asset_id)
+        content = await asyncio.to_thread(_check_readable, content)
+        sha = hashlib.sha256(content).hexdigest()
+        expected_sha = ctx.work.config.get("template_sha256")
+        if expected_sha and expected_sha != sha:
+            raise ValueError("PowerPoint template changed after admission")
+        analysed = await asyncio.to_thread(analyze_template, content)
+        if analysed.inventory is None:
+            raise ValueError("PowerPoint template analysis failed")
+        patterns_deck = await asyncio.to_thread(
+            build_patterns_deck, content, analysed.inventory
+        )
+        patterns_pdf = await convert_office_bytes_to_pdf(
+            patterns_deck,
+            suffix=".pptx",
+            timeout_seconds=analysis_job.PATTERNS_PDF_TIMEOUT_SECONDS,
+            background=True,
+        )
+        inventory = await label_inventory(
+            analysed.inventory,
+            content,
+            patterns_pdf,
+            None,
+            use_vision=ctx.work.config.get("use_vision") is not False,
+            vision=ctx.vision,
+        )
+        prefix = f"capability-results/{ctx.work.preparation_id}/{ctx.work.attempt}/"
+        await ctx.artifacts.write(prefix + "template.pptx", content)
+        if patterns_pdf is not None:
+            await ctx.artifacts.write(prefix + "patterns.pdf", patterns_pdf)
+        reference = prefix + "inventory.json"
+        await ctx.artifacts.write(
+            reference, inventory.model_dump_json().encode("utf-8")
+        )
+        return PreparationResult(
+            reference=reference,
+            summary=f"Analysed {len(inventory.patterns)} layouts",
+        )
+
     @classmethod
     def migrations_location(cls) -> str:
         """Applied under `cap_ppt_builder_alembic_version` by `python -m fred_runtime migrate`."""
@@ -958,6 +1051,28 @@ class PptBuilderCapability(
         waits for it. A re-validation without an instance has no side effect."""
         _require_agent_instance(ctx.identity.agent_instance_id)
         template_uploads = list(uploads.get(TEMPLATE_SLOT, ()))
+        if ctx.preparation_enabled:
+            if len(template_uploads) > 1:
+                raise ValueError("Only one PowerPoint template can be uploaded")
+            if template_uploads:
+                early = _bounded_analysis(template_uploads[0].content)
+                if early is not None:
+                    raise ValueError(early.errors[0].message)
+                content = await asyncio.to_thread(
+                    _check_readable, template_uploads[0].content
+                )
+                return config.model_copy(
+                    update={
+                        "template_sha256": hashlib.sha256(content).hexdigest(),
+                        "template_key": PPT_BUILDER_TEMPLATE_KEY,
+                        "preparation_mode": "shared",
+                    }
+                )
+            if config.template_sha256 is None:
+                return config.model_copy(
+                    update={"overrides": [], "preparation_mode": "shared"}
+                )
+            return config.model_copy(update={"preparation_mode": "shared"})
         if template_uploads:
             return await self._accept_upload(config, template_uploads[0].content, ctx)
         if config.template_sha256 is None:  # pattern edits belong to a template
@@ -1084,6 +1199,8 @@ class PptBuilderCapability(
         """Ready on the built-in template or once the template analysis succeeded."""
         instance = identity.agent_instance_id
         if stored.template_sha256 is None or not instance:
+            return CapabilityReadiness.ready()
+        if stored.preparation_mode == "shared":
             return CapabilityReadiness.ready()
         return await analysis_readiness(
             get_analysis_store(),

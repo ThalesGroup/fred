@@ -708,6 +708,14 @@
           },
           "title": "Per Capability Concurrency",
           "type": "object"
+        },
+        "enabled_capabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Enabled Capabilities",
+          "type": "array"
         }
       },
       "title": "PodPreparationConfig",

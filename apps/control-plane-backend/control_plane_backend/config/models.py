@@ -150,6 +150,7 @@ class RuntimeCatalogSourceConfig(BaseModel):
         min_length=1,
         description="Verified service client allowed to prepare this runtime's capabilities.",
     )
+    preparation_enabled: bool = False
     ingress_prefix: str | None = Field(
         default=None,
         pattern=r"^/[A-Za-z0-9._~/-]+$",

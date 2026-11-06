@@ -16,6 +16,8 @@ class PreparationSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     asset_slots: tuple[str, ...] = ()
+    min_assets: int = Field(default=0, ge=0, le=32)
+    activation_field: str | None = Field(default=None, min_length=1, max_length=128)
     rules_version: str = Field(min_length=1, max_length=64)
     gates_readiness: bool = True
     max_input_bytes: int = Field(default=64 * 1024 * 1024, ge=1, le=64 * 1024 * 1024)
@@ -28,6 +30,8 @@ class PreparationSpec(BaseModel):
             set(self.asset_slots)
         ) != len(self.asset_slots):
             raise ValueError("Preparation asset slots must be nonempty and unique")
+        if self.min_assets and not self.asset_slots:
+            raise ValueError("Preparation assets require a declared slot")
         return self
 
 

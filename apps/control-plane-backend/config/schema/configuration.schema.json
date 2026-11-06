@@ -1090,6 +1090,11 @@
           "description": "Verified service client allowed to prepare this runtime's capabilities.",
           "title": "Preparation Client Id"
         },
+        "preparation_enabled": {
+          "default": false,
+          "title": "Preparation Enabled",
+          "type": "boolean"
+        },
         "ingress_prefix": {
           "anyOf": [
             {
