@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from fred_sdk.contracts.weaver import InferenceAdmission
+from fred_sdk.contracts.weaver import InferenceAdmission, ModelConnection
 from pydantic import ValidationError
 
 
@@ -33,7 +33,10 @@ def test_common_admission_round_trip():
         ("selection", "policy_revision"),
         ("connection", "api_root"),
         ("connection", "credential_binding"),
-        ("connection", "provider"),
+        ("connection", "wire"),
+        ("connection", "route"),
+        ("connection", "dialect"),
+        ("connection", "auth"),
     ],
 )
 def test_incomplete_descriptor_is_refused(parent, field):
@@ -49,3 +52,35 @@ def test_provisioning_revision_is_a_positive_strict_integer(revision):
     data["selection"]["source_revision"] = revision
     with pytest.raises(ValidationError):
         InferenceAdmission.model_validate(data)
+
+
+CONNECTIONS = json.loads(
+    (Path(__file__).parent / "fixtures/inference_connections.json").read_text()
+)
+
+
+@pytest.mark.parametrize("case", CONNECTIONS["valid"], ids=lambda case: case["name"])
+def test_shared_valid_connection_and_its_only_url(case):
+    connection = ModelConnection.model_validate(case["connection"])
+    assert connection.model_dump(mode="json", exclude_none=True) == case["connection"]
+    assert connection.request_url(case["model"]) == case["url"]
+
+
+@pytest.mark.parametrize("case", CONNECTIONS["invalid"], ids=lambda case: case["name"])
+def test_shared_invalid_connection(case):
+    data = dict(CONNECTIONS["invalid_base"])
+    for field, value in case["changes"].items():
+        if value is None:
+            del data[field]
+        else:
+            data[field] = value
+    with pytest.raises(ValidationError):
+        ModelConnection.model_validate(data)
+
+
+def test_shared_invalid_base_is_valid_and_root_length_is_bounded():
+    data = dict(CONNECTIONS["invalid_base"])
+    ModelConnection.model_validate(data)
+    data["api_root"] = "https://gateway.invalid/" + "a" * 2048
+    with pytest.raises(ValidationError):
+        ModelConnection.model_validate(data)

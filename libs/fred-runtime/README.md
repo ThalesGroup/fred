@@ -134,11 +134,12 @@ Selection and reasoning are evaluated once by Control Plane; this runtime suppli
 no independent fallback or model policy. `TurnAuthority` preserves provenance and
 lifetime, and invocation/HTTP guards enforce the admitted model and options.
 
-Each `inference_credentials` entry binds `source_id`, `source_revision`, `api_root`,
-`credential_binding` and `api_key_env`. All four admitted identity/revision fields
-must match before reading the environment variable. The OpenAI-compatible client
-uses that source's credential and the shared bounded HTTP pools. No global-key or
-Swift profile fallback is available. See the Control Plane README's workload
+Each `inference_credentials` entry binds `credential_binding` and `api_root`, and
+names the variables required by the admitted `auth`: `api_key_env`, `client_secret_env`,
+`gateway_key_env`. Both values and that exact set must match before reading any variable.
+Every connection takes one path: one `ChatOpenAI` on the shared bounded HTTP pools,
+whose transport guard accepts one URL and sets the gateway key. No global-key or Swift
+profile fallback is available. See the Control Plane README's inference connection and workload
 provisioning and rotation contract; environment changes require a coordinated
 workload restart, while already-admitted clients retain their context.
 

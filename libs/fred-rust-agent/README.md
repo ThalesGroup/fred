@@ -32,8 +32,9 @@ HITL/UI-parts remain unsupported. Session metadata retains the common ownership
 and instance-association checks. The browser input limit is 16,384 Unicode scalars,
 fitting the 65,536-byte runtime ceiling.
 
-The library checks `platform.inference_credentials` against the admitted source,
-source revision, destination and credential binding before reading the named local
+The library checks `platform.inference_credentials` against the admitted credential
+binding and destination, and refuses any connection other than `openai_chat`, `standard`,
+`api_key` without `api_version` or `gateway_key_header`, before reading the named local
 environment variable. See the [Control Plane README](../../apps/control-plane/README.md) for the common contract and coordinated
 rotation. An absent or mismatched binding returns 503 before opening the event
 stream; forbidden/unknown selections return 409 with the shared decision error.
@@ -41,8 +42,9 @@ No failure substitutes another model, source, account or credential.
 
 The pinned Rig 0.46 crates run one `rig-agent` agent per turn, over its Chat
 Completions wire with an explicit API key and base URL, and a shared reqwest pool
-(redirects disabled; 5-second connect and 60-second read timeouts). A destination
-on `api.mistral.ai` uses Rig's Mistral dialect, which sends no `stream_options`.
+(redirects disabled; 5-second connect and 60-second read timeouts). A connection
+with `dialect: mistral` uses Rig's Mistral dialect, which sends no `stream_options`;
+`api_root` alone fixes the URL, as `{api_root}/chat/completions`.
 The agent consumes the admitted model, temperature, token ceiling, top-p and
 reasoning through Rig's typed options; an option the wire cannot honour fails the
 request instead of being dropped. The 120-second turn deadline starts at local

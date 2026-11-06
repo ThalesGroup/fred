@@ -7,5 +7,12 @@
     "snapshot_revision": 1,
     "policy_revision": 1
   },
-  "connection": {"provider": "openai", "api_root": "https://source.invalid/v1", "credential_binding": "source-account"}
+  "connection": {
+    "credential_binding": "source-account",
+    "api_root": "https://source.invalid/v1",
+    "wire": "openai_chat",
+    "route": "standard",
+    "dialect": "openai",
+    "auth": {"kind": "api_key"}
+  }
 }

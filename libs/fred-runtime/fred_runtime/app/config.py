@@ -81,6 +81,7 @@ from fred_core.scheduler.backend import SchedulerBackend
 from fred_core.security.structure import SecurityConfiguration
 from fred_pod.common import RUNTIME_ID_PATTERN, PodAppIdentity
 from fred_pod.common.structures import LogOutputFormat
+from fred_sdk.contracts.weaver import canonical_api_root
 from fred_sdk.contracts.web_research import WebResearchDeploymentConfig
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
@@ -431,32 +432,23 @@ class PodSkillsConfig(BaseModel):
     directory: str = Field(default="package", min_length=1)
 
 
+_ENV_NAME = r"^[A-Za-z_][A-Za-z0-9_]*$"
+
+
 class InferenceCredentialBinding(BaseModel):
-    """Pod-local provisioning. A resolver cannot redirect an existing secret."""
+    """Attests one admitted destination, even without a secret; holds variable names only."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    source_id: str = Field(min_length=1)
-    source_revision: int = Field(gt=0, strict=True)
-    api_root: str = Field(min_length=1)
-    credential_binding: str = Field(min_length=1)
-    api_key_env: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    credential_binding: str = Field(min_length=1, max_length=128)
+    api_root: str
+    api_key_env: str | None = Field(default=None, pattern=_ENV_NAME)
+    client_secret_env: str | None = Field(default=None, pattern=_ENV_NAME)
+    gateway_key_env: str | None = Field(default=None, pattern=_ENV_NAME)
 
     @model_validator(mode="after")
     def approved_root(self) -> InferenceCredentialBinding:
-        from urllib.parse import urlsplit
-
-        url = urlsplit(self.api_root)
-        if (
-            url.scheme not in {"http", "https"}
-            or not url.hostname
-            or url.username
-            or url.password
-            or url.query
-            or url.fragment
-        ):
-            raise ValueError(
-                "Inference API root must be an explicit HTTP(S) destination without credentials or query"
-            )
+        if not canonical_api_root(self.api_root):
+            raise ValueError("Inference API root must be a canonical HTTP(S) URL")
         return self
 
 

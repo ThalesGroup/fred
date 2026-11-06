@@ -268,7 +268,7 @@ def _apply_openai_stream_usage_default(settings: Dict[str, Any]) -> None:
 def get_model(
     cfg: Optional[ModelConfiguration],
     *,
-    inference_api_key: SecretStr | None = None,
+    inference_api_key: SecretStr | Callable[[], str] | None = None,
     wrap_clients: Callable[
         [httpx.Client, httpx.AsyncClient], tuple[httpx.Client, httpx.AsyncClient]
     ]
@@ -292,7 +292,7 @@ def get_model(
 def _create_model(
     cfg: Optional[ModelConfiguration],
     *,
-    inference_api_key: SecretStr | None = None,
+    inference_api_key: SecretStr | Callable[[], str] | None = None,
     wrap_clients: Callable[
         [httpx.Client, httpx.AsyncClient], tuple[httpx.Client, httpx.AsyncClient]
     ]

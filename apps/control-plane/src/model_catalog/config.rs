@@ -4,6 +4,8 @@
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
+use fred_rust_sdk::inference::ModelConnection;
+pub(super) use fred_rust_sdk::inference::bounded_text;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -17,7 +19,7 @@ pub struct ModelSource {
     #[serde(default)]
     pub enabled: bool,
     pub discovery_url: String,
-    pub inference: InferenceDestination,
+    pub inference: ModelConnection,
     /// Stable provider account, model namespace and list visibility contract.
     /// A changed account/namespace/scope needs a new source_id, even with the same URL.
     pub visibility_scope: String,
@@ -29,16 +31,6 @@ pub struct ModelSource {
     /// Explicit platform approval for internal HTTP routes; HTTPS is the default.
     #[serde(default)]
     pub allow_insecure_http: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub struct InferenceDestination {
-    pub provider: String,
-    /// Separately approved root; never derived from discovery_url.
-    pub api_root: String,
-    /// Source-bound workload provisioning reference; never a credential value.
-    pub credential_binding: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
@@ -69,13 +61,6 @@ pub enum Qualification {
     ChatSource,
     /// Platform trusts the boolean capabilities.completion_chat and reasoning extensions.
     MixedCapabilitiesV1,
-}
-
-pub(super) fn bounded_text(value: &str, max_bytes: usize) -> bool {
-    !value.is_empty()
-        && value.len() <= max_bytes
-        && value.trim() == value
-        && !value.chars().any(char::is_control)
 }
 
 pub(crate) fn valid_source_id(value: &str) -> bool {
@@ -116,11 +101,10 @@ impl ModelSource {
                 && approved_url(&self.inference.api_root, self.allow_insecure_http),
             "model source requires separately approved HTTP(S) destinations without credentials, query or fragment"
         );
+        self.inference.validate()?;
         ensure!(
-            bounded_text(&self.visibility_scope, 256)
-                && bounded_text(&self.inference.provider, 64)
-                && bounded_text(&self.inference.credential_binding, 128),
-            "invalid model source visibility or inference binding"
+            bounded_text(&self.visibility_scope, 256),
+            "invalid model source visibility"
         );
         if let DiscoveryAuthentication::Bearer {
             secret_env_var,
@@ -155,8 +139,82 @@ impl ModelSource {
     pub(super) fn same_identity(&self, other: &Self) -> bool {
         self.source_id == other.source_id
             && self.discovery_url == other.discovery_url
-            && self.inference.provider == other.inference.provider
             && self.inference.api_root == other.inference.api_root
+            && self.inference.wire == other.inference.wire
+            && self.inference.route == other.inference.route
             && self.visibility_scope == other.visibility_scope
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{Value, json};
+
+    fn source(changes: Value) -> Result<ModelSource> {
+        let mut value = json!({"source_id":"s","revision":1,"enabled":true,
+            "discovery_url":"https://catalog.invalid/models",
+            "inference":{"credential_binding":"b","api_root":"https://gateway.invalid/v1",
+                "wire":"openai_chat","route":"standard","dialect":"openai",
+                "auth":{"kind":"api_key"}},
+            "visibility_scope":"account","authentication":{"mode":"public"},
+            "qualification":"chat_source","complete_inventory_guaranteed":true});
+        for (field, change) in changes.as_object().unwrap() {
+            value["inference"][field] = change.clone();
+        }
+        let source: ModelSource = serde_json::from_value(value)?;
+        source.validate()?;
+        Ok(source)
+    }
+
+    #[test]
+    fn insecure_http_needs_the_platform_approval_and_never_serves_entra() {
+        let http = json!({"api_root":"http://ollama:11434/v1","auth":{"kind":"none"}});
+        assert!(source(http.clone()).is_err());
+        let mut approved = serde_json::to_value(source(json!({})).unwrap()).unwrap();
+        approved["allow_insecure_http"] = true.into();
+        approved["discovery_url"] = "http://ollama:11434/v1/models".into();
+        approved["inference"]["api_root"] = "http://ollama:11434/v1".into();
+        approved["inference"]["auth"] = json!({"kind":"none"});
+        let approved: ModelSource = serde_json::from_value(approved.clone()).unwrap();
+        approved.validate().unwrap();
+        let mut entra = approved.clone();
+        entra.inference.auth.kind = fred_rust_sdk::inference::ModelAuthKind::Entra;
+        entra.inference.auth.tenant_id = Some("t".into());
+        entra.inference.auth.client_id = Some("c".into());
+        entra.inference.auth.scope = Some("s".into());
+        assert!(entra.validate().is_err());
+    }
+
+    #[test]
+    fn identity_is_the_destination_and_its_protocol_not_its_authentication() {
+        let base = source(json!({})).unwrap();
+        for changes in [
+            json!({"api_root":"https://other.invalid/v1"}),
+            json!({"wire":"openai_responses"}),
+            json!({"route":"azure_deployment","api_version":"1"}),
+        ] {
+            assert!(
+                !base.same_identity(&source(changes.clone()).unwrap()),
+                "{changes}"
+            );
+        }
+        for changes in [
+            json!({"dialect":"mistral"}),
+            json!({"api_version":"1"}),
+            json!({"credential_binding":"other"}),
+            json!({"auth":{"kind":"none"}}),
+            json!({"auth":{"kind":"api_key","gateway_key_header":"x-key"}}),
+        ] {
+            assert!(
+                base.same_identity(&source(changes.clone()).unwrap()),
+                "{changes}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_former_format_is_refused() {
+        assert!(source(json!({"provider":"openai"})).is_err());
     }
 }

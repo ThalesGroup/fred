@@ -152,12 +152,21 @@ scheduler:
 
 # Agent discovery and local model test source.
 platform:
-  # Workload-local attestation. Source revision and destination must match admission.
+  # Optional: per-pod workload allowed to prepare its installed PowerPoint library.
+  # No organization-wide worker identity or browser-selected task queue.
+  # capability_preparation:
+  #   workers:
+  #     fred-agents:
+  #       issuer: http://localhost:8080/realms/app
+  #       audience: app
+  #       client_id: fred-agents
+  # Enable Ralph's fixed search tool after granting the control-plane workload
+  # the fred-delegation audience and delegation_caller role accepted by KF.
+  # knowledge_flow_url: http://localhost:8111/knowledge-flow/v2
+  # Workload-local attestation. Binding and destination must match admission.
   inference_credentials:
-    - source_id: mistral
-      source_revision: 1
+    - credential_binding: mistral
       api_root: https://api.mistral.ai/v1
-      credential_binding: mistral
       api_key_env: OPENAI_API_KEY
   # Local test source, replacing Swift's Small/Medium static profiles.
   # Discovery lists all offers; authorize mistral-small-latest and
@@ -168,9 +177,13 @@ platform:
       enabled: true
       discovery_url: https://api.mistral.ai/v1/models
       inference:
-        provider: openai
-        api_root: https://api.mistral.ai/v1
         credential_binding: mistral
+        api_root: https://api.mistral.ai/v1
+        wire: openai_chat
+        route: standard
+        dialect: mistral
+        auth:
+          kind: api_key
       visibility_scope: local-test-mistral-account
       authentication:
         mode: bearer

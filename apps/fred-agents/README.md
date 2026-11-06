@@ -68,12 +68,15 @@ Runtime contract:
 
 Model offers, defaults and permissions come exclusively from the central Weaver
 resolver, once per external turn. The pod has no model catalog or discovery.
-`inference_credentials` provisions only local access: each entry binds `source_id`,
-`api_root`, `credential_binding` and `api_key_env` (the name of a locally supplied
-secret environment variable). All three public identifiers must exactly match
-the approved resolver connection. This configuration grants no model permission.
-No source or credential is enabled by default. Only OpenAI-compatible inference
-is connected. A missing binding or unsupported adapter refuses execution.
+`inference_credentials` provisions only local access: each entry binds
+`credential_binding` and `api_root`, and names the locally supplied secret environment
+variables that the connection's authentication requires, among `api_key_env`,
+`client_secret_env` and `gateway_key_env`. An entry is required even without a secret.
+Both values and that exact set of variables must match the approved resolver connection.
+This configuration grants no model permission. No source or credential is enabled by
+default. Connection forms are described in the
+[Control Plane README](../control-plane/README.md#inference-connection). A missing or
+mismatched binding refuses execution.
 
 M4 requires a managed instance and canonical `runtime_context.space_id`, plus
 trusted person/workload delegation. Each turn, including a later HITL resume,

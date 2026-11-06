@@ -389,43 +389,12 @@
         },
         "credential_binding": {
           "type": "string"
-        },
-        "source_id": {
-          "type": "string"
-        },
-        "source_revision": {
-          "format": "int64",
-          "type": "integer"
         }
       },
       "required": [
-        "source_id",
-        "source_revision",
-        "api_root",
         "credential_binding",
-        "api_key_env"
-      ],
-      "type": "object"
-    },
-    "InferenceDestination": {
-      "additionalProperties": false,
-      "properties": {
-        "api_root": {
-          "description": "Separately approved root; never derived from discovery_url.",
-          "type": "string"
-        },
-        "credential_binding": {
-          "description": "Source-bound workload provisioning reference; never a credential value.",
-          "type": "string"
-        },
-        "provider": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "provider",
         "api_root",
-        "credential_binding"
+        "api_key_env"
       ],
       "type": "object"
     },
@@ -496,6 +465,101 @@
       ],
       "type": "object"
     },
+    "ModelAuth": {
+      "additionalProperties": false,
+      "description": "Authentication facts only: the secrets stay in the workload's local binding.",
+      "properties": {
+        "client_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gateway_key_header": {
+          "description": "Name of the header carrying a gateway key, with any kind.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/ModelAuthKind"
+        },
+        "scope": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tenant_id": {
+          "description": "Required with kind `entra`, forbidden otherwise, like `client_id` and `scope`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "ModelAuthKind": {
+      "enum": [
+        "none",
+        "api_key",
+        "entra"
+      ],
+      "type": "string"
+    },
+    "ModelConnection": {
+      "additionalProperties": false,
+      "description": "One destination, independent of the vendor: protocol, address and authentication.\nMirrored by `fred_sdk.contracts.weaver`; `inference_connections.json` pins both.",
+      "properties": {
+        "api_root": {
+          "description": "Separately approved canonical root; never derived from discovery_url.",
+          "type": "string"
+        },
+        "api_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "auth": {
+          "$ref": "#/$defs/ModelAuth"
+        },
+        "credential_binding": {
+          "description": "Source-bound workload provisioning reference; never a credential value.",
+          "type": "string"
+        },
+        "dialect": {
+          "$ref": "#/$defs/ModelDialect"
+        },
+        "route": {
+          "$ref": "#/$defs/ModelRoute"
+        },
+        "wire": {
+          "$ref": "#/$defs/ModelWire"
+        }
+      },
+      "required": [
+        "credential_binding",
+        "api_root",
+        "wire",
+        "route",
+        "dialect",
+        "auth"
+      ],
+      "type": "object"
+    },
+    "ModelDialect": {
+      "enum": [
+        "openai",
+        "mistral"
+      ],
+      "type": "string"
+    },
     "ModelOfferKey": {
       "additionalProperties": false,
       "properties": {
@@ -511,6 +575,13 @@
         "upstream_model_id"
       ],
       "type": "object"
+    },
+    "ModelRoute": {
+      "enum": [
+        "standard",
+        "azure_deployment"
+      ],
+      "type": "string"
     },
     "ModelSource": {
       "additionalProperties": false,
@@ -534,7 +605,7 @@
           "type": "boolean"
         },
         "inference": {
-          "$ref": "#/$defs/InferenceDestination"
+          "$ref": "#/$defs/ModelConnection"
         },
         "qualification": {
           "$ref": "#/$defs/Qualification"
@@ -563,6 +634,13 @@
         "complete_inventory_guaranteed"
       ],
       "type": "object"
+    },
+    "ModelWire": {
+      "enum": [
+        "openai_chat",
+        "openai_responses"
+      ],
+      "type": "string"
     },
     "OrganizationModels": {
       "additionalProperties": false,

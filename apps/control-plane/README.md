@@ -234,9 +234,13 @@ platform:
       enabled: false
       discovery_url: https://catalog.example.invalid/v1/models
       inference:
-        provider: openai
-        api_root: https://inference.example.invalid/v1
         credential_binding: example-gateway-inference
+        api_root: https://inference.example.invalid/v1
+        wire: openai_chat
+        route: standard
+        dialect: openai
+        auth:
+          kind: api_key
       visibility_scope: example-account-namespace-all-models
       authentication:
         mode: bearer
@@ -342,7 +346,7 @@ derived from another and no Fred or pod token is implicitly reused.
 Increase `revision` for every change, including rotation behind the same secret
 reference. Apply the same configuration across replicas: older revisions and
 different content at the same revision are rejected. A changed discovery URL,
-inference provider/root or visibility scope requires a new source ID. The platform
+inference root, wire or route, or visibility scope requires a new source ID. The platform
 must declare account/namespace changes through `visibility_scope`; discovery cannot
 verify them from a bearer token. Disable a source at a higher revision before
 removing its configuration. Disabled SQL rows and offers remain for diagnostics.
@@ -528,43 +532,148 @@ permissions between LLM calls. New admissions observe changes; admitted turns ca
 finish, subject to local cancellation/deadlines and upstream credential rejection.
 The legacy profile remains diagnostic data, never a connection lookup key.
 
+### Inference connection
+
+`inference` separates three questions, without any vendor branch in the runtimes:
+
+| Field | Values | Question |
+| --- | --- | --- |
+| `wire` | `openai_chat`, `openai_responses` | Which protocol |
+| `route`, `api_version` | `standard`, `azure_deployment`; optional version | Which address |
+| `dialect` | `openai`, `mistral` | Which provider quirks |
+| `auth.kind` | `none`, `api_key`, `entra` | Which authentication |
+
+`auth.tenant_id`, `auth.client_id` and `auth.scope` are required with `entra` and
+forbidden otherwise. `auth.gateway_key_header` optionally names a gateway key header
+with any kind, except `Authorization`, `Host`, `Cookie`, `Content-*` and
+`Transfer-Encoding`. `api_root` is canonical: nothing a parser would normalize, no
+credentials, query, fragment, final `/`, percent-encoding, dot segment or IPv6 literal.
+`entra` requires HTTPS; other kinds also accept HTTP under `allow_insecure_http`.
+
+One connection reaches exactly one URL for a given model:
+
+| Route and wire | URL |
+| --- | --- |
+| `standard`, `openai_chat` | `{api_root}/chat/completions` |
+| `standard`, `openai_responses` | `{api_root}/responses` |
+| `azure_deployment`, `openai_chat` (requires `api_version`) | `{api_root}/deployments/{model}/chat/completions` |
+
+`?api-version={api_version}` is added when the version is present. A deployment route
+limits the model identifier to `[A-Za-z0-9._-]+`, without `.` or `..`.
+
+`dialect` never changes the URL. On Chat Completions, `mistral` sends the token ceiling
+as `max_tokens`, asks for no `stream_options` and, on the Python path, replays reasoning.
+
+Connection examples, all implemented and tested on a simulated transport only; none
+was received on a real gateway, Ollama server or Entra tenant, and such a source cannot
+publish offers yet, because discovery does not know this authentication:
+
+```yaml
+# Mistral
+inference:
+  credential_binding: mistral
+  api_root: https://api.mistral.ai/v1
+  wire: openai_chat
+  route: standard
+  dialect: mistral
+  auth: {kind: api_key}
+---
+# Ollama (with allow_insecure_http on its source)
+inference:
+  credential_binding: ollama
+  api_root: http://ollama:11434/v1
+  wire: openai_chat
+  route: standard
+  dialect: openai
+  auth: {kind: none}
+---
+# Azure API Management, chat completions by deployment
+inference:
+  credential_binding: apim-gpt4o
+  api_root: https://gateway.example.invalid/genai-aoai-inference/v2
+  wire: openai_chat
+  route: azure_deployment
+  api_version: "2024-06-01"
+  dialect: openai
+  auth:
+    kind: entra
+    tenant_id: example-tenant
+    client_id: example-client
+    scope: api://example-gateway/.default
+    gateway_key_header: Example-Subscription-Key
+---
+# Azure API Management, Responses: same authentication, `api_root` ending in /v1
+inference:
+  credential_binding: apim-responses
+  api_root: https://gateway.example.invalid/ai-models/v1
+  wire: openai_responses
+  route: standard
+  api_version: preview
+  dialect: openai
+  auth:
+    kind: entra
+    tenant_id: example-tenant
+    client_id: example-client
+    scope: api://example-gateway/.default
+    gateway_key_header: Example-Subscription-Key
+---
+# Gateway subscription key alone
+inference:
+  credential_binding: apim-key
+  api_root: https://gateway.example.invalid/genai-aoai-inference/v2
+  wire: openai_chat
+  route: azure_deployment
+  api_version: "2024-06-01"
+  dialect: openai
+  auth:
+    kind: none
+    gateway_key_header: Example-Subscription-Key
+```
+
 ### Workload provisioning and rotation
 
 Python uses top-level `inference_credentials` in `AgentPodConfig`; the embedded
 Rust workload uses `platform.inference_credentials` in Control Plane configuration.
-Both use the same non-secret entry shape:
+An entry carries only what protects the secrets, by variable name. It is required
+even with `auth.kind: none`, to attest the destination; `credential_binding` is its
+unique key.
 
 ```yaml
 inference_credentials:
-  - source_id: example-gateway
-    source_revision: 3
-    api_root: https://gateway.example.invalid/v1
-    credential_binding: example-account
-    api_key_env: FRED_EXAMPLE_INFERENCE_KEY
+  - credential_binding: apim-gpt4o
+    api_root: https://gateway.example.invalid/genai-aoai-inference/v2
+    client_secret_env: EXAMPLE_ENTRA_CLIENT_SECRET
+    gateway_key_env: EXAMPLE_GATEWAY_KEY
 ```
 
-`source_revision` must equal the admitted source configuration revision, including
-rotation. Before reading the named environment variable, consumers check source,
-exact destination, binding and revision against their local configuration. Missing,
-duplicate, incomplete or inconsistent provisioning fails closed, with no HTTP
-inference request and no global-key/Swift fallback. Only the OpenAI-compatible
-adapter is connected. The variable name is an explicit source mapping, not a default.
-Kubernetes Secrets/environment still provision the value; no secret manager or API
-distribution was added. Deploy Control Plane and Python together for this contract:
-Python now requires the admitted `inference`, and candidate offers no longer carry
-private connections.
+Before reading any variable, Python checks `credential_binding` and `api_root`, then
+that the variables present exactly match `auth`: `api_key_env` with `api_key`,
+`client_secret_env` with `entra`, `gateway_key_env` with `gateway_key_header`, and
+nothing else. Embedded Ralph accepts `api_key_env` only, and only connections with
+`openai_chat`, `standard`, `api_key`, no `api_version` and no `gateway_key_header`;
+it refuses any other. It selects its Rig dialect from `dialect`, never from the host.
+Missing, duplicate, incomplete or inconsistent provisioning fails closed, with no HTTP
+inference request and no global-key/Swift fallback. A variable name is an explicit
+mapping, not a default. Kubernetes Secrets/environment still provision the value;
+no secret manager or API distribution was added.
 
-For rotation, prepare the new Secret and matching workload configuration, increase
-the Control Plane source revision, refresh discovery for that revision, and roll
-both consuming workloads with the same revision and approved connection. Deployment
-ordering must prevent old/new mismatches from admitting work; mismatches fail closed
+An Entra client secret serves one `ClientSecretCredential` per binding, tenant and
+client, on the public Azure authority, which is not configurable. Its tokens are
+accepted only by the model that obtained them. A gateway key is added by the transport
+guard after all its checks and stays off the model and the SDK client.
+
+For rotation, prepare the new Secret, increase the Control Plane source revision,
+refresh discovery for that revision, and roll the consuming workloads. The binding
+carries no revision: `selection.source_revision` remains for audit, and Control Plane
+keeps blocking a source that has not been observed at its current revision. Deployment
+ordering must prevent mismatched connections from admitting work; mismatches fail closed
 while the rollout converges. Environment variables are process snapshots and are
 not automatically reloaded. Drain admitted turns before retiring the old credential
 if continuity matters; the provider may reject an already-admitted revoked key.
 An account/namespace/payer change requires a new source identity, not a fallback.
 
-Targeted tests use a shared fixture in
-`libs/fred-sdk/tests/fixtures/inference_admission.json`, real ChatOpenAI and Rig
+Targeted tests use shared fixtures in `libs/fred-sdk/tests/fixtures/`
+(`inference_admission.json`, `inference_connections.json`), real ChatOpenAI and Rig
 adapters with simulated providers, and disposable SQL for host admission. These
 checks do not establish k3d, provider or selector availability for Ralph.
 

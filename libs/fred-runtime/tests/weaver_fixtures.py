@@ -83,9 +83,12 @@ def resolved_binding(
                     policy_revision=1,
                 ),
                 connection=dict(
-                    provider="openai",
-                    api_root=f"https://{source}.invalid/v1",
                     credential_binding=source,
+                    api_root=f"https://{source}.invalid/v1",
+                    wire="openai_chat",
+                    route="standard",
+                    dialect="openai",
+                    auth=dict(kind="api_key"),
                 ),
             ),
             models=dict(

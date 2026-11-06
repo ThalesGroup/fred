@@ -28,7 +28,9 @@ async def test_ten_calls_retries_and_child_share_one_context():
         with RunScope.open() as scope:
             authority.start(scope)
             scope.turn_authority = authority
-            _, client = checked_clients(authority, "fixture")(httpx.Client(), shared)
+            _, client = checked_clients(
+                authority, binding.inference, {"fixture"}, None
+            )(httpx.Client(), shared)
             for _ in range(10):
                 await client.post(
                     "https://a.invalid/v1/chat/completions",
@@ -78,7 +80,9 @@ async def test_concurrent_sources_keep_credentials_and_destinations_isolated():
             with RunScope.open() as scope:
                 authority.start(scope)
                 scope.turn_authority = authority
-                _, client = checked_clients(authority, source)(httpx.Client(), shared)
+                _, client = checked_clients(
+                    authority, binding.inference, {source}, None
+                )(httpx.Client(), shared)
                 await client.post(
                     f"https://{source}.invalid/v1/chat/completions",
                     headers={"Authorization": f"Bearer {source}"},
@@ -110,7 +114,9 @@ async def test_transformed_requests_cannot_widen_model_or_options(payload):
         with RunScope.open() as scope:
             authority.start(scope)
             scope.turn_authority = authority
-            _, client = checked_clients(authority, "fixture")(httpx.Client(), shared)
+            _, client = checked_clients(
+                authority, binding.inference, {"fixture"}, None
+            )(httpx.Client(), shared)
             with pytest.raises(AuthorityLostError):
                 await client.post(
                     "https://a.invalid/v1/chat/completions",

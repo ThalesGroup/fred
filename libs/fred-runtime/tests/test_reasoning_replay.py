@@ -45,7 +45,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.tools import tool
-from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from langchain_openai import ChatOpenAI
 
 _CALL = {"name": "read_document", "args": {"uid": "doc-1"}, "id": "call-1"}
 
@@ -149,21 +149,14 @@ async def test_recovered_call_keeps_reasoning_in_the_next_request(
     assert original.content[0] == _thinking("read ")
 
 
-def test_only_plain_mistral_chat_openai_replays_reasoning() -> None:
-    mistral = with_mistral_reasoning_replay(_chat("mistral-medium-latest"))
-    other = with_mistral_reasoning_replay(_chat("gpt-4o-mini"))
-    azure = AzureChatOpenAI(
-        model="mistral-medium-latest",
-        api_key=cast(Any, "test-key"),
-        azure_endpoint="https://example.invalid",
-        api_version="2024-10-21",
-    )
-
-    assert isinstance(mistral, MistralReasoningReplayChatOpenAI)
-    assert replays_native_reasoning(mistral)
+def test_replay_follows_the_caller_without_reading_the_model_name() -> None:
+    # The connection's dialect decides, in the routed factory; a name decides nothing.
+    other = _chat("gpt-4o-mini")
     assert type(other) is ChatOpenAI and not replays_native_reasoning(other)
-    assert with_mistral_reasoning_replay(azure) is azure
-    assert not replays_native_reasoning(azure)
+    replayed = with_mistral_reasoning_replay(_chat("gpt-4o-mini"))
+    assert isinstance(replayed, MistralReasoningReplayChatOpenAI)
+    assert replays_native_reasoning(replayed)
+    assert not replays_native_reasoning(_chat("mistral-medium-latest"))
 
 
 def test_keep_native_reasoning_shapes_every_turn_as_one_chunk() -> None:

@@ -6,7 +6,9 @@
 
 use std::{future::Future, sync::LazyLock, time::Duration};
 
-use fred_rust_sdk::inference::{InferenceAdmission, InferenceCredentialBinding, ReasoningEffort};
+use fred_rust_sdk::inference::{
+    InferenceAdmission, InferenceCredentialBinding, ModelConnection, ModelDialect, ReasoningEffort,
+};
 use futures::StreamExt;
 use rig_agent::{
     AgentBuilder,
@@ -86,21 +88,18 @@ pub enum InferenceError {
     ToolCall,
 }
 
-/// Rig's wire facts for an admitted destination. Fred's sources are OpenAI-compatible,
-/// but Rig's Mistral dialect knows better: no `stream_options`, usage on the last chunk,
-/// and paths that carry their own `/v1`.
-fn wire_config(api_root: &str, secret: String) -> Result<OpenAIConfig, InferenceError> {
-    let root = api_root.trim_end_matches('/');
-    let host = reqwest::Url::parse(root)
-        .map_err(|_| InferenceError::Provisioning)?
-        .host_str()
-        .map(str::to_owned);
-    let (dialect, base_url): (&Dialect, &str) = if host.as_deref() == Some("api.mistral.ai") {
-        (&MISTRAL, root.strip_suffix("/v1").unwrap_or(root))
-    } else {
-        (&OPENAI, root)
+/// Rig's wire facts for an admitted connection. Fred's sources are OpenAI-compatible,
+/// but Rig's Mistral dialect knows better: no `stream_options`, usage on the last chunk.
+/// `api_root` alone fixes the destination, so no dialect's own path applies: the Mistral
+/// dialect assumes its bare host, where every path carries `/v1`.
+fn wire_config(connection: &ModelConnection, secret: String) -> OpenAIConfig {
+    let dialect: &Dialect = match connection.dialect {
+        ModelDialect::Mistral => &MISTRAL,
+        ModelDialect::Openai => &OPENAI,
     };
-    Ok(OpenAIConfig::with_key(dialect, secret).with_base_url(base_url))
+    let mut config = OpenAIConfig::with_key(dialect, secret).with_base_url(&connection.api_root);
+    config.dialect.quirks.completion_path = "/chat/completions";
+    config
 }
 
 /// Owned by one turn; the credential and all model options are fixed at construction.
@@ -126,7 +125,7 @@ impl InferenceTurn {
     ) -> Result<Self, InferenceError> {
         let mut matching = bindings
             .iter()
-            .filter(|b| b.source_id == admission.selection.key.source_id);
+            .filter(|b| b.credential_binding == admission.connection.credential_binding);
         let local = matching.next().ok_or(InferenceError::Provisioning)?;
         let selection = &admission.selection;
         let options = &selection.options;
@@ -143,12 +142,12 @@ impl InferenceTurn {
         {
             return Err(InferenceError::Provisioning);
         }
-        // Resolve only after checking source, destination, binding and exact revision.
+        // Resolve only after checking binding, destination and the connection's mode.
         let secret = read(&local.api_key_env)
             .filter(|s| !s.is_empty())
             .ok_or(InferenceError::Credential)?;
         let http = HTTP.as_ref().map_err(|_| InferenceError::Provider)?.clone();
-        let model = wire_config(&admission.connection.api_root, secret)?
+        let model = wire_config(&admission.connection, secret)
             .connect(ReqwestClient::from(http))
             .chat(&selection.key.upstream_model_id)
             .into();
@@ -312,23 +311,87 @@ mod tests {
     use crate::testing::{Provider, admission, provisioning};
     use std::sync::{Arc, Mutex};
 
+    fn connection(api_root: &str, dialect: ModelDialect) -> ModelConnection {
+        ModelConnection {
+            api_root: api_root.into(),
+            dialect,
+            ..admission().connection
+        }
+    }
+
     #[test]
-    fn mistral_uses_rigs_dialect_without_doubling_its_api_version() {
-        let config = wire_config("https://api.mistral.ai/v1/", "key".into()).unwrap();
-        assert_eq!(config.dialect, MISTRAL);
-        assert_eq!(config.base_url, "https://api.mistral.ai");
-        assert!(!config.dialect.quirks.stream_include_usage);
-        assert_eq!(
-            config.dialect.quirks.completion_path,
-            "/v1/chat/completions"
+    fn the_connection_chooses_rigs_dialect_without_reading_the_host() {
+        let config = wire_config(
+            &connection(
+                "https://gateway.example/inference/v2",
+                ModelDialect::Mistral,
+            ),
+            "key".into(),
         );
-        let config = wire_config("https://gateway.example/v1", "key".into()).unwrap();
+        assert_eq!(config.dialect.name, MISTRAL.name);
+        assert_eq!(config.dialect.quirks.rewrite, MISTRAL.quirks.rewrite);
+        assert!(!config.dialect.quirks.stream_include_usage);
+        assert_eq!(config.base_url, "https://gateway.example/inference/v2");
+        let config = wire_config(
+            &connection("https://api.mistral.ai/v1", ModelDialect::Openai),
+            "key".into(),
+        );
         assert_eq!(config.dialect, OPENAI);
-        assert_eq!(config.base_url, "https://gateway.example/v1");
-        assert!(matches!(
-            wire_config("not a url", "key".into()),
-            Err(InferenceError::Provisioning)
-        ));
+        assert_eq!(config.base_url, "https://api.mistral.ai/v1");
+    }
+
+    /// The same fixture gives Python its URLs: here is the path Rig really sends.
+    #[tokio::test]
+    async fn every_shared_connection_is_reached_at_its_url_or_refused_before_any_secret() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../fred-sdk/tests/fixtures/inference_connections.json"
+        ))
+        .unwrap();
+        let mut reached = Vec::new();
+        for case in fixture["valid"].as_array().unwrap() {
+            let mut a = admission();
+            a.connection = serde_json::from_value(case["connection"].clone()).unwrap();
+            if case["ralph"] != true {
+                let local = provisioning(&a);
+                assert!(
+                    matches!(
+                        InferenceTurn::provision(a, &[local], |_| {
+                            panic!("must not read a credential")
+                        }),
+                        Err(InferenceError::Provisioning)
+                    ),
+                    "{}",
+                    case["name"]
+                );
+                continue;
+            }
+            let root = reqwest::Url::parse(&a.connection.api_root).unwrap();
+            let provider = Provider::at(root.path()).await;
+            a.connection.api_root = provider.url.clone();
+            let turn = provider.turn_for(a);
+            assert!(
+                turn.title("question", |_| {}).await.is_some(),
+                "{}",
+                case["name"]
+            );
+            let url = reqwest::Url::parse(case["url"].as_str().unwrap()).unwrap();
+            assert_eq!(
+                *provider.uris.lock().unwrap(),
+                [url.path()],
+                "{}",
+                case["name"]
+            );
+            reached.push(case["name"].as_str().unwrap().to_owned());
+        }
+        assert_eq!(
+            reached,
+            [
+                "mistral",
+                "openai-compatible",
+                "Mistral dialect behind a gateway",
+                "OpenAI dialect on the same gateway root"
+            ]
+        );
     }
 
     #[tokio::test]
@@ -356,21 +419,12 @@ mod tests {
 
     #[test]
     fn mismatch_or_missing_provisioning_is_rejected_before_secret_read() {
-        for field in [
-            "source",
-            "destination",
-            "binding",
-            "revision",
-            "missing",
-            "duplicate",
-        ] {
+        for field in ["destination", "binding", "missing", "duplicate"] {
             let a = admission();
             let mut local = provisioning(&a);
             match field {
-                "source" => local.source_id = "other".into(),
                 "destination" => local.api_root = "https://elsewhere.invalid/v1".into(),
                 "binding" => local.credential_binding = "other".into(),
-                "revision" => local.source_revision = 2,
                 _ => {}
             }
             let locals = match field {
@@ -380,6 +434,25 @@ mod tests {
             };
             assert!(matches!(
                 InferenceTurn::provision(a, &locals, |_| panic!("must not read a credential")),
+                Err(InferenceError::Provisioning)
+            ));
+        }
+        // Outside Ralph's single mode: the same refusal, still before any secret read.
+        for change in [
+            serde_json::json!({"wire": "openai_responses"}),
+            serde_json::json!({"auth": {"kind": "none"}}),
+            serde_json::json!({"auth": {"kind": "api_key", "gateway_key_header": "x-key"}}),
+        ] {
+            let a = admission();
+            let local = provisioning(&a);
+            let mut value = serde_json::to_value(&a).unwrap();
+            for (field, changed) in change.as_object().unwrap() {
+                value["connection"][field] = changed.clone();
+            }
+            assert!(matches!(
+                InferenceTurn::provision(serde_json::from_value(value).unwrap(), &[local], |_| {
+                    panic!("must not read a credential")
+                }),
                 Err(InferenceError::Provisioning)
             ));
         }

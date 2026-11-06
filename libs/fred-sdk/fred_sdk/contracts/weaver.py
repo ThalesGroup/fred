@@ -7,6 +7,9 @@ These are non-secret facts, never a persisted or caller-supplied execution grant
 
 from __future__ import annotations
 
+import ipaddress
+import re
+import unicodedata
 from datetime import datetime
 from typing import Any, Literal, Self
 from uuid import UUID
@@ -35,10 +38,105 @@ class ModelOptions(ResolverFact):
     top_p: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
 
 
+_API_ROOT = re.compile(
+    r"(?P<scheme>https?)://(?P<host>[a-z0-9._~-]+)(?::(?P<port>[1-9][0-9]{0,4}))?"
+    r"(?P<path>(?:/[A-Za-z0-9._~:-]+)*)"
+)
+_NUMERIC_HOST = re.compile(r"(?:.*\.)?(?:[0-9]+|0x[0-9a-f]*)\.?")
+_RESERVED_HEADERS = {"authorization", "host", "cookie", "transfer-encoding"}
+
+
+def _bounded(value: str, max_bytes: int) -> bool:
+    return (
+        bool(value)
+        and len(value.encode()) <= max_bytes
+        and value.strip() == value
+        and not any(unicodedata.category(char) == "Cc" for char in value)
+    )
+
+
+def canonical_api_root(value: str) -> bool:
+    """Runtimes compare this root byte for byte, so nothing may need normalizing.
+
+    An IPv6 literal is refused: use a DNS name. Pinned by `inference_connections.json`.
+    """
+    match = _API_ROOT.fullmatch(value)
+    if match is None or len(value) > 2048:
+        return False
+    port = int(match["port"] or 0)
+    if port > 65535 or port == {"http": 80, "https": 443}[match["scheme"]]:
+        return False
+    if any(part in {".", ".."} for part in match["path"].split("/")):
+        return False
+    if _NUMERIC_HOST.fullmatch(match["host"]):
+        try:
+            ipaddress.IPv4Address(match["host"])
+        except ValueError:
+            return False
+    return True
+
+
+class ModelAuth(ResolverFact):
+    """Authentication facts only: the secrets stay in the pod's local binding."""
+
+    kind: Literal["none", "api_key", "entra"]
+    tenant_id: str | None = None
+    client_id: str | None = None
+    scope: str | None = None
+    gateway_key_header: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,128}$"
+    )
+
+
 class ModelConnection(ResolverFact):
-    provider: Literal["openai"]
-    api_root: str = Field(min_length=1)
-    credential_binding: str = Field(min_length=1)
+    """One destination, independent of the vendor. Mirror of the Rust contract."""
+
+    credential_binding: str
+    api_root: str
+    wire: Literal["openai_chat", "openai_responses"]
+    route: Literal["standard", "azure_deployment"]
+    api_version: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]{1,64}$")
+    dialect: Literal["openai", "mistral"]
+    auth: ModelAuth
+
+    @model_validator(mode="after")
+    def valid_connection(self) -> Self:
+        auth = self.auth
+        entra = auth.kind == "entra"
+        header = (auth.gateway_key_header or "").lower()
+        if (
+            not _bounded(self.credential_binding, 128)
+            or not canonical_api_root(self.api_root)
+            or (entra and not self.api_root.startswith("https://"))
+            or (
+                self.route == "azure_deployment"
+                and (self.wire != "openai_chat" or self.api_version is None)
+            )
+            or header in _RESERVED_HEADERS
+            or header.startswith("content-")
+            or any(
+                (fact is None) == entra
+                or (fact is not None and not _bounded(fact, limit))
+                for fact, limit in (
+                    (auth.tenant_id, 128),
+                    (auth.client_id, 128),
+                    (auth.scope, 256),
+                )
+            )
+        ):
+            raise ValueError("Invalid inference connection")
+        return self
+
+    def base_url(self, model: str) -> str:
+        if self.route == "azure_deployment":
+            return f"{self.api_root}/deployments/{model}"
+        return self.api_root
+
+    def request_url(self, model: str) -> str:
+        """The only URL this connection may reach for one model."""
+        leaf = "responses" if self.wire == "openai_responses" else "chat/completions"
+        query = f"?api-version={self.api_version}" if self.api_version else ""
+        return f"{self.base_url(model)}/{leaf}{query}"
 
 
 class EffectiveModelOptions(ModelOptions):

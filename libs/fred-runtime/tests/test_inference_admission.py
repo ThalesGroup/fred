@@ -37,8 +37,6 @@ def admitted():
 def provision(**changes):
     return InferenceCredentialBinding.model_validate(
         dict(
-            source_id="source",
-            source_revision=1,
             api_root="https://source.invalid/v1",
             credential_binding="source-account",
             # Environment variable name, not a credential.
@@ -190,7 +188,7 @@ async def test_real_python_adapter_uses_shared_decision_for_every_call(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "field",
-    ["source_id", "source_revision", "api_root", "credential_binding", "missing"],
+    ["api_root", "credential_binding", "missing"],
 )
 async def test_provisioning_mismatch_is_refused_before_secret_read(monkeypatch, field):
     def forbidden(*args, **kwargs):
@@ -202,13 +200,7 @@ async def test_provisioning_mismatch_is_refused_before_secret_read(monkeypatch, 
     monkeypatch.setattr("fred_runtime.model_routing.provider.get_model", forbidden)
     local = provision().model_dump()
     if field != "missing":
-        local[field] = (
-            2
-            if field == "source_revision"
-            else "https://other.invalid/v1"
-            if field == "api_root"
-            else "other"
-        )
+        local[field] = "https://other.invalid/v1" if field == "api_root" else "other"
     factory = RoutedChatModelFactory(
         credentials=()
         if field == "missing"

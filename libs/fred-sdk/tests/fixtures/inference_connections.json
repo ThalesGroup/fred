@@ -1,0 +1,167 @@
+{
+  "valid": [
+    {
+      "name": "mistral",
+      "connection": {"credential_binding": "mistral", "api_root": "https://api.mistral.ai/v1", "wire": "openai_chat", "route": "standard", "dialect": "mistral", "auth": {"kind": "api_key"}},
+      "model": "mistral-small-latest",
+      "url": "https://api.mistral.ai/v1/chat/completions",
+      "ralph": true
+    },
+    {
+      "name": "openai-compatible",
+      "connection": {"credential_binding": "gateway", "api_root": "https://gateway.invalid/v1", "wire": "openai_chat", "route": "standard", "dialect": "openai", "auth": {"kind": "api_key"}},
+      "model": "any/model:tag",
+      "url": "https://gateway.invalid/v1/chat/completions",
+      "ralph": true
+    },
+    {
+      "name": "Mistral dialect behind a gateway",
+      "connection": {"credential_binding": "mistral-gateway", "api_root": "https://gateway.invalid/inference/v2", "wire": "openai_chat", "route": "standard", "dialect": "mistral", "auth": {"kind": "api_key"}},
+      "model": "mistral-small-latest",
+      "url": "https://gateway.invalid/inference/v2/chat/completions",
+      "ralph": true
+    },
+    {
+      "name": "OpenAI dialect on the same gateway root",
+      "connection": {"credential_binding": "openai-gateway", "api_root": "https://gateway.invalid/inference/v2", "wire": "openai_chat", "route": "standard", "dialect": "openai", "auth": {"kind": "api_key"}},
+      "model": "model",
+      "url": "https://gateway.invalid/inference/v2/chat/completions",
+      "ralph": true
+    },
+    {
+      "name": "ollama",
+      "connection": {"credential_binding": "ollama", "api_root": "http://ollama:11434/v1", "wire": "openai_chat", "route": "standard", "dialect": "openai", "auth": {"kind": "none"}},
+      "model": "llama3.1:8b",
+      "url": "http://ollama:11434/v1/chat/completions"
+    },
+    {
+      "name": "gateway key alone",
+      "connection": {"credential_binding": "keyed", "api_root": "https://gateway.invalid/inference/v2", "wire": "openai_chat", "route": "standard", "dialect": "openai", "auth": {"kind": "none", "gateway_key_header": "X-Gateway-Key"}},
+      "model": "model",
+      "url": "https://gateway.invalid/inference/v2/chat/completions"
+    },
+    {
+      "name": "APIM chat",
+      "connection": {"credential_binding": "apim-gpt4o", "api_root": "https://passerelle.invalid/genai-aoai-inference/v2", "wire": "openai_chat", "route": "azure_deployment", "api_version": "2024-06-01", "dialect": "openai", "auth": {"kind": "entra", "tenant_id": "tenant", "client_id": "client", "scope": "api://gateway/.default", "gateway_key_header": "TrustNest-Apim-Subscription-Key"}},
+      "model": "gpt-4o",
+      "url": "https://passerelle.invalid/genai-aoai-inference/v2/deployments/gpt-4o/chat/completions?api-version=2024-06-01"
+    },
+    {
+      "name": "APIM Responses",
+      "connection": {"credential_binding": "apim-responses", "api_root": "https://passerelle.invalid/ai-models/v1", "wire": "openai_responses", "route": "standard", "api_version": "preview", "dialect": "openai", "auth": {"kind": "entra", "tenant_id": "tenant", "client_id": "client", "scope": "api://gateway/.default", "gateway_key_header": "TrustNest-Apim-Subscription-Key"}},
+      "model": "gpt-4.1",
+      "url": "https://passerelle.invalid/ai-models/v1/responses?api-version=preview"
+    },
+    {
+      "name": "APIM subscription key alone",
+      "connection": {"credential_binding": "apim-key", "api_root": "https://passerelle.invalid/genai-aoai-inference/v2", "wire": "openai_chat", "route": "azure_deployment", "api_version": "2024-06-01", "dialect": "openai", "auth": {"kind": "none", "gateway_key_header": "Ocp-Apim-Subscription-Key"}},
+      "model": "gpt-4o",
+      "url": "https://passerelle.invalid/genai-aoai-inference/v2/deployments/gpt-4o/chat/completions?api-version=2024-06-01"
+    },
+    {
+      "name": "root without path, standard route with version",
+      "connection": {"credential_binding": "bare", "api_root": "http://localhost:8080", "wire": "openai_responses", "route": "standard", "api_version": "v1.2_a-b", "dialect": "openai", "auth": {"kind": "api_key", "gateway_key_header": "api-key"}},
+      "model": "model",
+      "url": "http://localhost:8080/responses?api-version=v1.2_a-b"
+    },
+    {
+      "name": "address and path characters",
+      "connection": {"credential_binding": "ip", "api_root": "http://127.0.0.1:11434/Az.b_c~d-e:f", "wire": "openai_chat", "route": "standard", "dialect": "mistral", "auth": {"kind": "none"}},
+      "model": "model",
+      "url": "http://127.0.0.1:11434/Az.b_c~d-e:f/chat/completions"
+    }
+  ],
+  "invalid_base": {"credential_binding": "base", "api_root": "https://gateway.invalid/v1", "wire": "openai_chat", "route": "standard", "dialect": "openai", "auth": {"kind": "api_key"}},
+  "invalid": [
+    {"name": "former provider field", "changes": {"provider": "openai"}},
+    {"name": "unknown field", "changes": {"extra": "x"}},
+    {"name": "no credential_binding", "changes": {"credential_binding": null}},
+    {"name": "no api_root", "changes": {"api_root": null}},
+    {"name": "no wire", "changes": {"wire": null}},
+    {"name": "no route", "changes": {"route": null}},
+    {"name": "no dialect", "changes": {"dialect": null}},
+    {"name": "no auth", "changes": {"auth": null}},
+    {"name": "unknown wire", "changes": {"wire": "anthropic"}},
+    {"name": "unknown route", "changes": {"route": "vertex"}},
+    {"name": "unknown dialect", "changes": {"dialect": "gemini"}},
+    {"name": "empty binding", "changes": {"credential_binding": ""}},
+    {"name": "binding with surrounding space", "changes": {"credential_binding": " base"}},
+    {"name": "binding with control character", "changes": {"credential_binding": "ba\nse"}},
+    {"name": "binding too long", "changes": {"credential_binding": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+
+    {"name": "empty root", "changes": {"api_root": ""}},
+    {"name": "other scheme", "changes": {"api_root": "ftp://gateway.invalid/v1"}},
+    {"name": "uppercase scheme", "changes": {"api_root": "HTTPS://gateway.invalid/v1"}},
+    {"name": "no scheme", "changes": {"api_root": "gateway.invalid/v1"}},
+    {"name": "no host", "changes": {"api_root": "https:///v1"}},
+    {"name": "user", "changes": {"api_root": "https://user@gateway.invalid/v1"}},
+    {"name": "user and password", "changes": {"api_root": "https://user:secret@gateway.invalid/v1"}},
+    {"name": "query", "changes": {"api_root": "https://gateway.invalid/v1?a=b"}},
+    {"name": "empty query", "changes": {"api_root": "https://gateway.invalid/v1?"}},
+    {"name": "fragment", "changes": {"api_root": "https://gateway.invalid/v1#a"}},
+    {"name": "empty fragment", "changes": {"api_root": "https://gateway.invalid/v1#"}},
+    {"name": "final slash", "changes": {"api_root": "https://gateway.invalid/v1/"}},
+    {"name": "final slash on origin", "changes": {"api_root": "https://gateway.invalid/"}},
+    {"name": "uppercase host", "changes": {"api_root": "https://Gateway.invalid/v1"}},
+    {"name": "default https port", "changes": {"api_root": "https://gateway.invalid:443/v1"}},
+    {"name": "default http port", "changes": {"api_root": "http://gateway.invalid:80/v1"}},
+    {"name": "port zero", "changes": {"api_root": "http://gateway.invalid:0/v1"}},
+    {"name": "port with leading zero", "changes": {"api_root": "http://gateway.invalid:08080/v1"}},
+    {"name": "port out of range", "changes": {"api_root": "http://gateway.invalid:70000/v1"}},
+    {"name": "empty port", "changes": {"api_root": "http://gateway.invalid:/v1"}},
+    {"name": "double slash", "changes": {"api_root": "https://gateway.invalid//v1"}},
+    {"name": "inner double slash", "changes": {"api_root": "https://gateway.invalid/a//b"}},
+    {"name": "percent", "changes": {"api_root": "https://gateway.invalid/a%2fb"}},
+    {"name": "encoded dot segment", "changes": {"api_root": "https://gateway.invalid/%2e%2e/v1"}},
+    {"name": "dot segment", "changes": {"api_root": "https://gateway.invalid/./v1"}},
+    {"name": "dot dot segment", "changes": {"api_root": "https://gateway.invalid/a/../v1"}},
+    {"name": "final dot segment", "changes": {"api_root": "https://gateway.invalid/v1/.."}},
+    {"name": "space in path", "changes": {"api_root": "https://gateway.invalid/a b"}},
+    {"name": "surrounding space", "changes": {"api_root": " https://gateway.invalid/v1"}},
+    {"name": "tab in path", "changes": {"api_root": "https://gateway.invalid/v\t1"}},
+    {"name": "backslash", "changes": {"api_root": "https://gateway.invalid\\v1"}},
+    {"name": "unicode path", "changes": {"api_root": "https://gateway.invalid/é"}},
+    {"name": "unicode host", "changes": {"api_root": "https://gatéway.invalid/v1"}},
+    {"name": "IPv6 literal", "changes": {"api_root": "http://[::1]:11434/v1"}},
+    {"name": "short IPv4", "changes": {"api_root": "http://127.1:11434/v1"}},
+    {"name": "hexadecimal IPv4", "changes": {"api_root": "http://0x7f.0.0.1:11434/v1"}},
+    {"name": "IPv4 with leading zero", "changes": {"api_root": "http://127.0.0.01:11434/v1"}},
+    {"name": "IPv4 out of range", "changes": {"api_root": "http://256.0.0.1:11434/v1"}},
+
+    {"name": "Entra over HTTP", "changes": {"api_root": "http://gateway.invalid/v1", "auth": {"kind": "entra", "tenant_id": "t", "client_id": "c", "scope": "s"}}},
+    {"name": "deployment route with Responses", "changes": {"route": "azure_deployment", "wire": "openai_responses", "api_version": "1"}},
+    {"name": "deployment route without version", "changes": {"route": "azure_deployment"}},
+    {"name": "empty version", "changes": {"api_version": ""}},
+    {"name": "version with space", "changes": {"api_version": "2024 06"}},
+    {"name": "version with ampersand", "changes": {"api_version": "1&x=2"}},
+    {"name": "version with percent", "changes": {"api_version": "1%20"}},
+    {"name": "version with slash", "changes": {"api_version": "1/2"}},
+    {"name": "version with accent", "changes": {"api_version": "é"}},
+    {"name": "version too long", "changes": {"api_version": "11111111111111111111111111111111111111111111111111111111111111111"}},
+
+    {"name": "unknown auth kind", "changes": {"auth": {"kind": "oauth"}}},
+    {"name": "no auth kind", "changes": {"auth": {}}},
+    {"name": "unknown auth field", "changes": {"auth": {"kind": "none", "extra": "x"}}},
+    {"name": "tenant without Entra", "changes": {"auth": {"kind": "none", "tenant_id": "t"}}},
+    {"name": "client without Entra", "changes": {"auth": {"kind": "api_key", "client_id": "c"}}},
+    {"name": "scope without Entra", "changes": {"auth": {"kind": "api_key", "scope": "s"}}},
+    {"name": "Entra without tenant", "changes": {"auth": {"kind": "entra", "client_id": "c", "scope": "s"}}},
+    {"name": "Entra without client", "changes": {"auth": {"kind": "entra", "tenant_id": "t", "scope": "s"}}},
+    {"name": "Entra without scope", "changes": {"auth": {"kind": "entra", "tenant_id": "t", "client_id": "c"}}},
+    {"name": "Entra with empty scope", "changes": {"auth": {"kind": "entra", "tenant_id": "t", "client_id": "c", "scope": ""}}},
+
+    {"name": "gateway header Authorization", "changes": {"auth": {"kind": "none", "gateway_key_header": "Authorization"}}},
+    {"name": "gateway header lowercase authorization", "changes": {"auth": {"kind": "none", "gateway_key_header": "authorization"}}},
+    {"name": "gateway header Host", "changes": {"auth": {"kind": "none", "gateway_key_header": "Host"}}},
+    {"name": "gateway header Cookie", "changes": {"auth": {"kind": "none", "gateway_key_header": "COOKIE"}}},
+    {"name": "gateway header Content-Type", "changes": {"auth": {"kind": "none", "gateway_key_header": "Content-Type"}}},
+    {"name": "gateway header content-length", "changes": {"auth": {"kind": "none", "gateway_key_header": "content-length"}}},
+    {"name": "gateway header Transfer-Encoding", "changes": {"auth": {"kind": "none", "gateway_key_header": "Transfer-Encoding"}}},
+    {"name": "gateway header empty", "changes": {"auth": {"kind": "none", "gateway_key_header": ""}}},
+    {"name": "gateway header with space", "changes": {"auth": {"kind": "none", "gateway_key_header": "X Key"}}},
+    {"name": "gateway header with colon", "changes": {"auth": {"kind": "none", "gateway_key_header": "X:Key"}}},
+    {"name": "gateway header with newline", "changes": {"auth": {"kind": "none", "gateway_key_header": "X\r\nKey"}}},
+    {"name": "gateway header with accent", "changes": {"auth": {"kind": "none", "gateway_key_header": "X-Clé"}}},
+    {"name": "gateway header too long", "changes": {"auth": {"kind": "none", "gateway_key_header": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"}}}
+  ]
+}

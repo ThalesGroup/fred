@@ -13,18 +13,18 @@
 # limitations under the License.
 
 """
-Replay Mistral reasoning to Mistral in its own `thinking` chunk shape.
+Speak Mistral's Chat Completions payload through the OpenAI-compatible client.
 
 Mistral's docs ask for the assistant's reasoning chunks back in the history.
 `langchain_openai` drops `thinking` blocks from the payload, so a Mistral model
-served through the OpenAI-compatible client gets them re-inserted here.
+served through the OpenAI-compatible client gets them re-inserted here. It also
+renames the token ceiling and asks for usage, which Mistral's request does not list.
 Full rationale: `RUNTIME-EXECUTION-CONTRACT.md` §8.117.
 """
 
 from __future__ import annotations
 
-from typing import Any, TypeVar
-from urllib.parse import urlparse
+from typing import Any
 
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import AIMessage
@@ -43,7 +43,7 @@ def is_mistral_model_name(model_name: str | None) -> bool:
 
 
 class MistralReasoningReplayChatOpenAI(ChatOpenAI):
-    """`ChatOpenAI` that sends assistant reasoning back as Mistral chunks."""
+    """`ChatOpenAI` with Mistral's ceiling and streaming, and its reasoning chunks."""
 
     def _get_request_payload(
         self,
@@ -54,9 +54,16 @@ class MistralReasoningReplayChatOpenAI(ChatOpenAI):
     ) -> dict:
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
         wire = payload.get("messages")
+        # Responses API: leave it as built.
+        if not isinstance(wire, list):
+            return payload
+        if "max_completion_tokens" in payload:
+            payload["max_tokens"] = payload.pop("max_completion_tokens")
+        # Usage comes unasked on the last chunk.
+        payload.pop("stream_options", None)
         messages = self._convert_input(input_).to_messages()
-        # Responses API or an unexpected payload shape: leave it as built.
-        if not isinstance(wire, list) or len(wire) != len(messages):
+        # An unexpected payload shape: leave its messages as built.
+        if len(wire) != len(messages):
             return payload
         for source, entry in zip(messages, wire, strict=True):
             if isinstance(source, AIMessage) and isinstance(source.content, list):
@@ -66,20 +73,9 @@ class MistralReasoningReplayChatOpenAI(ChatOpenAI):
         return payload
 
 
-_ModelT = TypeVar("_ModelT")
+def with_mistral_reasoning_replay(model: ChatOpenAI) -> ChatOpenAI:
+    """Give a `ChatOpenAI` on a connection of the Mistral dialect its replay payload."""
 
-
-def with_mistral_reasoning_replay(model: _ModelT) -> _ModelT:
-    """Give a plain Mistral `ChatOpenAI` the reasoning-replay payload; others pass."""
-
-    if type(model) is not ChatOpenAI:
-        return model
-    # The provider endpoint also covers discovered aliases with arbitrary names.
-    if (
-        not is_mistral_model_name(model.model_name)
-        and urlparse(model.openai_api_base or "").hostname != "api.mistral.ai"
-    ):
-        return model
     # Same fields and clients; only the payload serialisation differs.
     object.__setattr__(model, "__class__", MistralReasoningReplayChatOpenAI)
     return model

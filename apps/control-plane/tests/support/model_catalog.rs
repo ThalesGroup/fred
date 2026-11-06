@@ -125,7 +125,8 @@ impl Provider {
     fn source(&self, id: &str) -> ModelSource {
         serde_json::from_value(json!({"source_id":id,"revision":1,"enabled":true,
             "discovery_url":format!("{}/models",self.url),
-            "inference":{"provider":"openai","api_root":self.url,"credential_binding":id},
+            "inference":{"credential_binding":id,"api_root":self.url,"wire":"openai_chat",
+                "route":"standard","dialect":"openai","auth":{"kind":"api_key"}},
             "visibility_scope":format!("account-{id}"),"authentication":{"mode":"public"},
             "qualification":"mixed_capabilities_v1","complete_inventory_guaranteed":true,
             "allow_insecure_http":true}))
@@ -705,10 +706,8 @@ async fn common_admission_drives_managed_rig_and_delegated_python_contract() {
     platform.model_sources = vec![provider.source("a")];
     platform.organization_models = vec![declaration("TSN", &["a"])];
     platform.inference_credentials = vec![fred_rust_sdk::inference::InferenceCredentialBinding {
-        source_id: "a".into(),
-        source_revision: 1,
-        api_root: provider.url.clone(),
         credential_binding: "a".into(),
+        api_root: provider.url.clone(),
         api_key_env: "FRED_TEST_INFERENCE_CREDENTIAL".into(),
     }];
     model_catalog::configure_sources(&e.pool, &platform.model_sources)

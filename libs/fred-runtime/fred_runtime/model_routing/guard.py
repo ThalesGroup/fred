@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Collection, Iterator
 from typing import Any
 
 import httpx
@@ -24,6 +24,9 @@ from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_runtime.support.reasoning_replay import MistralReasoningReplayChatOpenAI
 
 from .turn import TurnAuthority
+
+# Not a secret. The client requires a key; the guard removes this one before sending.
+NO_AUTH_BEARER = "fred-no-inference-auth"
 
 
 class GuardedChatOpenAI(ChatOpenAI):
@@ -129,9 +132,12 @@ class _CheckedAsyncClient(httpx.AsyncClient):
 
 
 def checked_clients(
-    authority: TurnAuthority, api_key: str, admission: InferenceAdmission | None = None
+    authority: TurnAuthority,
+    admission: InferenceAdmission,
+    bearers: Collection[str],
+    gateway: tuple[str, str] | None,
 ):
-    admission = admission or authority.binding.inference
+    """`bearers` may grow with the model's own Entra tokens; `gateway` is (header, key)."""
     if admission != authority.binding.inference and (
         authority.binding.title is None
         or admission != authority.binding.title.inference
@@ -139,18 +145,19 @@ def checked_clients(
         raise AuthorityLostError()
     selection = admission.selection
     connection = admission.connection
-    allowed_urls = {
-        connection.api_root.rstrip("/") + suffix
-        for suffix in ("/chat/completions", "/responses")
-    }
+    url = connection.request_url(selection.key.upstream_model_id)
     options = selection.options
 
     def check(request: httpx.Request) -> None:
         authority.check()
+        scheme, _, bearer = request.headers.get("authorization", "").partition(" ")
         if (
             request.method != "POST"
-            or str(request.url) not in allowed_urls
-            or request.headers.get("authorization") != f"Bearer {api_key}"
+            or str(request.url) != url
+            or scheme != "Bearer"
+            or bearer not in bearers
+            or "api-key" in request.headers
+            or (gateway is not None and gateway[0] in request.headers)
         ):
             raise AuthorityLostError()
         try:
@@ -184,12 +191,21 @@ def checked_clients(
         if options.max_tokens is not None and not tokens:
             raise AuthorityLostError()
         effort = options.reasoning_effort
+        if connection.wire == "openai_responses":
+            sent, other, expected = "reasoning", "reasoning_effort", {"effort": effort}
+        else:
+            sent, other, expected = "reasoning_effort", "reasoning", effort
         if (
-            "reasoning" in payload
-            or payload.get("reasoning_effort") != effort
-            or (effort is None and "reasoning_effort" in payload)
+            other in payload
+            or (effort is None and sent in payload)
+            or (effort is not None and payload.get(sent) != expected)
         ):
             raise AuthorityLostError()
+        # After every control, immediately before the send.
+        if connection.auth.kind == "none":
+            del request.headers["authorization"]
+        if gateway is not None:
+            request.headers[gateway[0]] = gateway[1]
 
     def wrap(
         sync: httpx.Client, asynchronous: httpx.AsyncClient

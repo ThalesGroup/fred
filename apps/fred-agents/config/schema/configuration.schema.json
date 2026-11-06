@@ -134,40 +134,61 @@
     },
     "InferenceCredentialBinding": {
       "additionalProperties": false,
-      "description": "Pod-local provisioning. A resolver cannot redirect an existing secret.",
+      "description": "Attests one admitted destination, even without a secret; holds variable names only.",
       "properties": {
-        "source_id": {
-          "minLength": 1,
-          "title": "Source Id",
-          "type": "string"
-        },
-        "source_revision": {
-          "exclusiveMinimum": 0,
-          "title": "Source Revision",
-          "type": "integer"
-        },
-        "api_root": {
-          "minLength": 1,
-          "title": "Api Root",
-          "type": "string"
-        },
         "credential_binding": {
+          "maxLength": 128,
           "minLength": 1,
           "title": "Credential Binding",
           "type": "string"
         },
-        "api_key_env": {
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "title": "Api Key Env",
+        "api_root": {
+          "title": "Api Root",
           "type": "string"
+        },
+        "api_key_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key Env"
+        },
+        "client_secret_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Secret Env"
+        },
+        "gateway_key_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gateway Key Env"
         }
       },
       "required": [
-        "source_id",
-        "source_revision",
-        "api_root",
         "credential_binding",
-        "api_key_env"
+        "api_root"
       ],
       "title": "InferenceCredentialBinding",
       "type": "object"

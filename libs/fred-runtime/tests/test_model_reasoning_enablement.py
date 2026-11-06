@@ -36,9 +36,9 @@ async def test_transport_preserves_admitted_reasoning(effort):
         with RunScope.open() as scope:
             authority.start(scope)
             scope.turn_authority = authority
-            client, _ = checked_clients(authority, "fixture")(
-                shared, httpx.AsyncClient()
-            )
+            client, _ = checked_clients(
+                authority, binding.inference, {"fixture"}, None
+            )(shared, httpx.AsyncClient())
             payload = {"model": "first", "max_tokens": 50}
             if effort is not None:
                 payload["reasoning_effort"] = effort

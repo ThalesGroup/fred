@@ -392,8 +392,11 @@ authority. The pod obtains a fresh trusted binding from Control Plane; it does n
 reuse browser preparation as a grant. Control Plane's same `decide` function fixes
 the selected model, effective options and revisions. Python's `TurnAuthority` and
 [Rust execution library](../../apps/control-plane/agent/README.md) retain this
-context through the turn. Both verify the source, destination, binding and exact
-source revision against local provisioning before resolving the credential.
+context through the turn. Both verify the binding, destination and authentication
+against local provisioning before resolving a credential. The
+[connection](../../apps/control-plane/README.md#inference-connection) separates protocol,
+address and authentication. Python implements all its forms on one path, tested only on a
+simulated transport, and Ralph accepts only `openai_chat`, `standard` and `api_key`.
 The [security annex](A6-security.md#managed-agent-turn-authority) describes identity,
 conversation binding and the turn boundary. No per-LLM-call authority refresh is
 added. This implementation contract does not establish Ralph selector availability

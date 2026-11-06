@@ -156,9 +156,12 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
                     "policy_revision": 1,
                 },
                 "connection": {
-                    "provider": "openai",
-                    "api_root": "https://model.invalid/v1",
                     "credential_binding": "offline",
+                    "api_root": "https://model.invalid/v1",
+                    "wire": "openai_chat",
+                    "route": "standard",
+                    "dialect": "openai",
+                    "auth": {"kind": "api_key"},
                 },
             },
             "models": {

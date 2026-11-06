@@ -1174,40 +1174,61 @@
                   "default": [],
                   "items": {
                     "additionalProperties": false,
-                    "description": "Pod-local provisioning. A resolver cannot redirect an existing secret.",
+                    "description": "Attests one admitted destination, even without a secret; holds variable names only.",
                     "properties": {
-                      "source_id": {
-                        "minLength": 1,
-                        "title": "Source Id",
-                        "type": "string"
-                      },
-                      "source_revision": {
-                        "exclusiveMinimum": 0,
-                        "title": "Source Revision",
-                        "type": "integer"
-                      },
-                      "api_root": {
-                        "minLength": 1,
-                        "title": "Api Root",
-                        "type": "string"
-                      },
                       "credential_binding": {
+                        "maxLength": 128,
                         "minLength": 1,
                         "title": "Credential Binding",
                         "type": "string"
                       },
-                      "api_key_env": {
-                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                        "title": "Api Key Env",
+                      "api_root": {
+                        "title": "Api Root",
                         "type": "string"
+                      },
+                      "api_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Api Key Env"
+                      },
+                      "client_secret_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Client Secret Env"
+                      },
+                      "gateway_key_env": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null,
+                        "title": "Gateway Key Env"
                       }
                     },
                     "required": [
-                      "source_id",
-                      "source_revision",
-                      "api_root",
                       "credential_binding",
-                      "api_key_env"
+                      "api_root"
                     ],
                     "title": "InferenceCredentialBinding",
                     "type": "object"
@@ -18887,20 +18908,11 @@
                           },
                           "credential_binding": {
                             "type": "string"
-                          },
-                          "source_id": {
-                            "type": "string"
-                          },
-                          "source_revision": {
-                            "format": "int64",
-                            "type": "integer"
                           }
                         },
                         "required": [
-                          "source_id",
-                          "source_revision",
-                          "api_root",
                           "credential_binding",
+                          "api_root",
                           "api_key_env"
                         ],
                         "type": "object"
@@ -18990,23 +19002,95 @@
                           },
                           "inference": {
                             "additionalProperties": false,
+                            "description": "One destination, independent of the vendor: protocol, address and authentication.\nMirrored by `fred_sdk.contracts.weaver`; `inference_connections.json` pins both.",
                             "properties": {
                               "api_root": {
-                                "description": "Separately approved root; never derived from discovery_url.",
+                                "description": "Separately approved canonical root; never derived from discovery_url.",
                                 "type": "string"
+                              },
+                              "api_version": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "auth": {
+                                "additionalProperties": false,
+                                "description": "Authentication facts only: the secrets stay in the workload's local binding.",
+                                "properties": {
+                                  "client_id": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "gateway_key_header": {
+                                    "description": "Name of the header carrying a gateway key, with any kind.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "none",
+                                      "api_key",
+                                      "entra"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "tenant_id": {
+                                    "description": "Required with kind `entra`, forbidden otherwise, like `client_id` and `scope`.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind"
+                                ],
+                                "type": "object"
                               },
                               "credential_binding": {
                                 "description": "Source-bound workload provisioning reference; never a credential value.",
                                 "type": "string"
                               },
-                              "provider": {
+                              "dialect": {
+                                "enum": [
+                                  "openai",
+                                  "mistral"
+                                ],
+                                "type": "string"
+                              },
+                              "route": {
+                                "enum": [
+                                  "standard",
+                                  "azure_deployment"
+                                ],
+                                "type": "string"
+                              },
+                              "wire": {
+                                "enum": [
+                                  "openai_chat",
+                                  "openai_responses"
+                                ],
                                 "type": "string"
                               }
                             },
                             "required": [
-                              "provider",
+                              "credential_binding",
                               "api_root",
-                              "credential_binding"
+                              "wire",
+                              "route",
+                              "dialect",
+                              "auth"
                             ],
                             "type": "object"
                           },
@@ -21011,20 +21095,11 @@
                           },
                           "credential_binding": {
                             "type": "string"
-                          },
-                          "source_id": {
-                            "type": "string"
-                          },
-                          "source_revision": {
-                            "format": "int64",
-                            "type": "integer"
                           }
                         },
                         "required": [
-                          "source_id",
-                          "source_revision",
-                          "api_root",
                           "credential_binding",
+                          "api_root",
                           "api_key_env"
                         ],
                         "type": "object"
@@ -21114,23 +21189,95 @@
                           },
                           "inference": {
                             "additionalProperties": false,
+                            "description": "One destination, independent of the vendor: protocol, address and authentication.\nMirrored by `fred_sdk.contracts.weaver`; `inference_connections.json` pins both.",
                             "properties": {
                               "api_root": {
-                                "description": "Separately approved root; never derived from discovery_url.",
+                                "description": "Separately approved canonical root; never derived from discovery_url.",
                                 "type": "string"
+                              },
+                              "api_version": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "auth": {
+                                "additionalProperties": false,
+                                "description": "Authentication facts only: the secrets stay in the workload's local binding.",
+                                "properties": {
+                                  "client_id": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "gateway_key_header": {
+                                    "description": "Name of the header carrying a gateway key, with any kind.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "none",
+                                      "api_key",
+                                      "entra"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "tenant_id": {
+                                    "description": "Required with kind `entra`, forbidden otherwise, like `client_id` and `scope`.",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind"
+                                ],
+                                "type": "object"
                               },
                               "credential_binding": {
                                 "description": "Source-bound workload provisioning reference; never a credential value.",
                                 "type": "string"
                               },
-                              "provider": {
+                              "dialect": {
+                                "enum": [
+                                  "openai",
+                                  "mistral"
+                                ],
+                                "type": "string"
+                              },
+                              "route": {
+                                "enum": [
+                                  "standard",
+                                  "azure_deployment"
+                                ],
+                                "type": "string"
+                              },
+                              "wire": {
+                                "enum": [
+                                  "openai_chat",
+                                  "openai_responses"
+                                ],
                                 "type": "string"
                               }
                             },
                             "required": [
-                              "provider",
+                              "credential_binding",
                               "api_root",
-                              "credential_binding"
+                              "wire",
+                              "route",
+                              "dialect",
+                              "auth"
                             ],
                             "type": "object"
                           },

@@ -81,8 +81,8 @@ impl PlatformConfig {
         for binding in &self.inference_credentials {
             binding.validate()?;
             ensure!(
-                bindings.insert(&binding.source_id),
-                "Duplicate inference source provisioning"
+                bindings.insert(&binding.credential_binding),
+                "Duplicate inference credential binding"
             );
         }
         let mut ids = std::collections::HashSet::new();

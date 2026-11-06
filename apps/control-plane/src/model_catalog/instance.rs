@@ -671,22 +671,21 @@ mod preparation_tests {
             max_tokens: Some(50),
         };
         models.policy.reasoning_enabled = vec![key("model")];
-        let connection = ModelConnection {
-            provider: "openai".into(),
-            api_root: "https://source.invalid/v1".into(),
-            credential_binding: "source-account".into(),
-        };
-        let public = decide(&models, None, true).unwrap();
-        let public_json = serde_json::to_string(&public).unwrap();
-        assert!(!public_json.contains("api_root") && !public_json.contains("credential_binding"));
-        let admitted = InferenceAdmission {
-            selection: public,
-            connection,
-        };
         let fixture: Value = serde_json::from_str(include_str!(
             "../../../../libs/fred-sdk/tests/fixtures/inference_admission.json"
         ))
         .unwrap();
+        let connection: ModelConnection =
+            serde_json::from_value(fixture["connection"].clone()).unwrap();
+        let public = decide(&models, None, true).unwrap();
+        let public_json = serde_json::to_string(&public).unwrap();
+        for private in ["api_root", "credential_binding", "auth"] {
+            assert!(!public_json.contains(private), "{private}");
+        }
+        let admitted = InferenceAdmission {
+            selection: public,
+            connection,
+        };
         assert_eq!(serde_json::to_value(&admitted).unwrap(), fixture);
         // A retained decision is stable; a new admission observes revocation.
         models.offers[0].permitted = false;

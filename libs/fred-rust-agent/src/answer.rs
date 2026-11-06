@@ -449,6 +449,40 @@ mod tests {
         );
     }
 
+    /// Rig's dialect adapts the content and the streaming options, at the same URL.
+    #[tokio::test]
+    async fn the_dialect_decides_the_streamed_payload_behind_one_gateway_root() {
+        for (dialect, asks_for_usage) in [
+            (fred_rust_sdk::inference::ModelDialect::Mistral, false),
+            (fred_rust_sdk::inference::ModelDialect::Openai, true),
+        ] {
+            let provider = Provider::at("/inference/v2").await;
+            let mut a = crate::testing::admission();
+            a.connection.dialect = dialect;
+            a.connection.api_root = provider.url.clone();
+            let reported = std::sync::Mutex::new(None);
+            let events: Vec<_> = without_memory(
+                provider.turn_for(a),
+                "question".into(),
+                no_search(),
+                |usage: Usage| *reported.lock().unwrap() = usage.input_tokens,
+            )
+            .collect()
+            .await;
+            assert_eq!(kinds(&events).last().unwrap(), "final", "{dialect:?}");
+            // Usage comes from the last chunk, which also carries the finish reason.
+            assert_eq!(*reported.lock().unwrap(), Some(2), "{dialect:?}");
+            assert_eq!(
+                *provider.uris.lock().unwrap(),
+                ["/inference/v2/chat/completions"]
+            );
+            let calls = provider.calls.lock().unwrap();
+            assert_eq!(calls[0].1.get("stream_options").is_some(), asks_for_usage);
+            assert_eq!(calls[0].1["max_tokens"], 50);
+            assert!(calls[0].1.get("max_completion_tokens").is_none());
+        }
+    }
+
     #[tokio::test]
     async fn stream_uses_real_rig_response_and_finishes_once() {
         let provider = Provider::start(Duration::ZERO, 200).await;

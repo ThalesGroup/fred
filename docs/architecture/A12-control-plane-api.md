@@ -27,7 +27,7 @@ an operation or field without one shows no description. Regenerate with
 <!-- generated: openapi apps/control-plane/openapi.json -->
 Paths are relative to `/control-plane/v1`.
 
-Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes). [Schemas](#schemas).
+Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes). [Schemas](#schemas).
 
 ## /admin routes
 
@@ -114,11 +114,12 @@ Operation `team_registry`.
 
 | Method | Path | Summary |
 | --- | --- | --- |
-| POST | [/agents/execute/stream](#post-agentsexecutestream) | Embedded Ralph: at most one document search per admitted turn, without saved history |
+| POST | [/agents/execute/stream](#post-agentsexecutestream) | Embedded Ralph: saved conversations and at most one document search per admitted turn |
+| GET | [/agents/sessions/{session_id}/messages](#get-agentssessionssession_idmessages) | The caller's saved conversation; retirement and loss of space access both hide it |
 
 ### POST /agents/execute/stream
 
-Embedded Ralph: at most one document search per admitted turn, without saved history. Direct demonstration remains a fixed response without an LLM call.
+Embedded Ralph: saved conversations and at most one document search per admitted turn. Direct demonstration remains a fixed response without an LLM call.
 
 Operation `execute_stream`.
 
@@ -126,6 +127,19 @@ Request: [`ExecuteRequest`](#executerequest).
 
 - 200: [`RuntimeEvent`](#runtimeevent) (`text/event-stream`) — SSE data frames containing RuntimeEvent JSON; final closes the stream without a sentinel
 - 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### GET /agents/sessions/{session_id}/messages
+
+The caller's saved conversation; retirement and loss of space access both hide it.
+
+Operation `messages`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `session_id` | path | string (uuid) | yes |  |
+
+- 200: array of [`ChatMessage`](#chatmessage)
+- 401, 403, 404, 422, 500, 503: [`ErrorBody`](#errorbody)
 
 ## /authorize routes
 
@@ -215,6 +229,91 @@ Request: [`BootstrapRequest`](#bootstraprequest).
 - 400: [`ErrorBody`](#errorbody) — Malformed JSON body
 - 401, 403, 409, 422, 500, 503: [`ErrorBody`](#errorbody) — Request failed
 
+## /capability-preparations routes
+
+| Method | Path | Summary |
+| --- | --- | --- |
+| GET | [/capability-preparations/cleanup](#get-capability-preparationscleanup) |  |
+| GET | [/capability-preparations/worker](#get-capability-preparationsworker) |  |
+| GET | [/capability-preparations/{id}](#get-capability-preparationsid) |  |
+| POST | [/capability-preparations/{id}/cleaned](#post-capability-preparationsidcleaned) |  |
+| POST | [/capability-preparations/{id}/confirm](#post-capability-preparationsidconfirm) |  |
+| GET | [/capability-preparations/{id}/content](#get-capability-preparationsidcontent) |  |
+
+### GET /capability-preparations/cleanup
+
+Operation `capability_preparation_cleanup`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `runtime_id` | query | string | yes |  |
+
+- 200: array of string (uuid)
+- 401, 403: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /capability-preparations/worker
+
+Operation `capability_preparation_worker`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `runtime_id` | query | string | yes |  |
+
+- 200: [`WorkerBinding`](#workerbinding)
+- 401, 403: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /capability-preparations/{id}
+
+Operation `capability_preparation_context`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | yes |  |
+
+- 200: [`Work`](#work)
+- 401, 403, 404: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /capability-preparations/{id}/cleaned
+
+Operation `capability_preparation_cleaned`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | yes |  |
+
+- 204: no body
+- 401, 403, 404: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /capability-preparations/{id}/confirm
+
+Operation `capability_preparation_confirm`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | yes |  |
+
+Request: [`ResultConfirmation`](#resultconfirmation).
+
+- 204: no body
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 401, 403, 404, 409, 422: [`ErrorBody`](#errorbody)
+
+### GET /capability-preparations/{id}/content
+
+Operation `capability_preparation_content`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | yes |  |
+
+- 200: string (`application/octet-stream`)
+- 401, 403, 404: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
 ## /deletions routes
 
 | Method | Path | Summary |
@@ -247,6 +346,7 @@ Operation `deletion_status`.
 | GET | [/document-processing/{id}/original](#get-document-processingidoriginal) |  |
 | POST | [/document-processing/{id}/vectors](#post-document-processingidvectors) |  |
 | GET | [/document-processing/{id}/work](#get-document-processingidwork) |  |
+| POST | [/document-processing/{id}/writes](#post-document-processingidwrites) |  |
 
 ### GET /document-processing/cleanup
 
@@ -365,6 +465,21 @@ Operation `work`.
 
 - 200: [`Work`](#work)
 - 401, 403, 404, 503: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /document-processing/{id}/writes
+
+Operation `writes`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `id` | path | string (uuid) | yes |  |
+
+Request: [`WriteReceipt`](#writereceipt).
+
+- 200: no body
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 401, 403, 404, 409, 503: [`ErrorBody`](#errorbody)
 - 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
 
 ## /document-uploads routes
@@ -984,8 +1099,11 @@ Operation `powerpoint_upload_receipt`.
 | GET | [/spaces/{space_id}/capability-policies](#get-spacesspace_idcapability-policies) |  |
 | PUT | [/spaces/{space_id}/capability-policies/{runtime_id}](#put-spacesspace_idcapability-policiesruntime_id) |  |
 | GET | [/spaces/{space_id}/powerpoint-template](#get-spacesspace_idpowerpoint-template) | Resolve the stored file for this usage |
-| PUT | [/spaces/{space_id}/powerpoint-template](#put-spacesspace_idpowerpoint-template) | Persist and attach one immutable original |
+| PUT | [/spaces/{space_id}/powerpoint-template](#put-spacesspace_idpowerpoint-template) | Stage an agent original, or accept an organization candidate after preflight |
 | DELETE | [/spaces/{space_id}/powerpoint-template](#delete-spacesspace_idpowerpoint-template) | Detach the own file; physical cleanup is asynchronous and durably recorded |
+| POST | [/spaces/{space_id}/powerpoint-template/prepare](#post-spacesspace_idpowerpoint-templateprepare) |  |
+| GET | [/spaces/{space_id}/powerpoint-template/settings](#get-spacesspace_idpowerpoint-templatesettings) |  |
+| PUT | [/spaces/{space_id}/powerpoint-template/settings](#put-spacesspace_idpowerpoint-templatesettings) |  |
 | GET | [/spaces/{space_id}/powerpoint-template/{file_id}/content](#get-spacesspace_idpowerpoint-templatefile_idcontent) | File identity is checked against the authorized, currently resolved usage |
 | GET | [/spaces/{space_id}/prompt-categories](#get-spacesspace_idprompt-categories) |  |
 | POST | [/spaces/{space_id}/prompt-categories](#post-spacesspace_idprompt-categories) |  |
@@ -1192,7 +1310,7 @@ Operation `delete_agent_instance`.
 | `space_id` | path | string (uuid) | yes |  |
 | `agent_instance_id` | path | string (uuid) | yes |  |
 
-- 202: no body — Agent removed; CP file cleanup pending; pod-derived data is not purged by this operation
+- 202: no body — Agent removed; original and prepared template cleanup pending
 - 204: no body — Agent instance deleted; no CP file cleanup pending
 - 400, 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
 
@@ -1293,7 +1411,7 @@ Request: [`ReplaceSpaceCapabilityPolicy`](#replacespacecapabilitypolicy).
 
 ### GET /spaces/{space_id}/powerpoint-template
 
-Resolve the stored file for this usage. An omitted instance targets only an organization. The result is persistence metadata, not capability readiness or runtime activation.
+Resolve the stored file for this usage. An omitted instance targets only an organization. Preparation metadata comes from acknowledged CP state, scoped to this logical pod.
 
 Operation `resolve_powerpoint_template`.
 
@@ -1301,13 +1419,14 @@ Operation `resolve_powerpoint_template`.
 | --- | --- | --- | --- | --- |
 | `space_id` | path | string (uuid) | yes |  |
 | `agent_instance_id` | query | string (uuid) |  |  |
+| `runtime_id` | query | string |  |  |
 
 - 200: [`PowerPointResolution`](#powerpointresolution)
 - 401, 403, 404, 409, 422, 503: [`ErrorBody`](#errorbody)
 
 ### PUT /spaces/{space_id}/powerpoint-template
 
-Persist and attach one immutable original. The previous file survives transfer errors. Neither this endpoint nor its response activates the file in an executing agent.
+Stage an agent original, or accept an organization candidate after preflight. Neither this endpoint nor its response activates the file in an executing agent.
 
 Operation `upload_powerpoint_template`.
 
@@ -1315,6 +1434,8 @@ Operation `upload_powerpoint_template`.
 | --- | --- | --- | --- | --- |
 | `space_id` | path | string (uuid) | yes |  |
 | `agent_instance_id` | query | string (uuid) |  |  |
+| `runtime_id` | query | string |  |  |
+| `template_id` | query | string (uuid) |  | Only for a new draft instance |
 | `expected_file_id` | query | string (uuid) |  | Current own attachment; omit only if absent |
 | `Idempotency-Key` | header | string (uuid) | yes |  |
 
@@ -1333,9 +1454,54 @@ Operation `remove_powerpoint_template`.
 | --- | --- | --- | --- | --- |
 | `space_id` | path | string (uuid) | yes |  |
 | `agent_instance_id` | query | string (uuid) |  |  |
+| `runtime_id` | query | string |  |  |
 | `expected_file_id` | query | string (uuid) |  |  |
 
 - 202: no body — Detached; cleanup pending
+- 401, 403, 404, 409, 422, 503: [`ErrorBody`](#errorbody)
+
+### POST /spaces/{space_id}/powerpoint-template/prepare
+
+Operation `rerun_powerpoint_template`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `runtime_id` | query | string | yes |  |
+
+Request: [`PowerPointChange`](#powerpointchange).
+
+- 202: no body
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 401, 403, 404, 409, 503: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /spaces/{space_id}/powerpoint-template/settings
+
+Operation `get_powerpoint_settings`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `runtime_id` | query | string | yes |  |
+
+- 200: [`PowerPointSettings`](#powerpointsettings)
+- 401, 403, 404: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### PUT /spaces/{space_id}/powerpoint-template/settings
+
+Operation `put_powerpoint_settings`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `runtime_id` | query | string | yes |  |
+
+Request: [`PowerPointSettingsChange`](#powerpointsettingschange).
+
+- 204: no body
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
 - 401, 403, 404, 409, 422, 503: [`ErrorBody`](#errorbody)
 
 ### GET /spaces/{space_id}/powerpoint-template/{file_id}/content
@@ -1349,6 +1515,7 @@ Operation `download_powerpoint_template`.
 | `space_id` | path | string (uuid) | yes |  |
 | `file_id` | path | string (uuid) | yes |  |
 | `agent_instance_id` | query | string (uuid) |  |  |
+| `runtime_id` | query | string |  |  |
 
 - 200: string (`application/octet-stream`)
 - 401, 403, 404, 409, 422, 429, 503: [`ErrorBody`](#errorbody)
@@ -1638,7 +1805,7 @@ Operation `delete_attachment`.
 
 ### POST /spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage
 
-Atomically record consumption reported by a trusted runtime workload in its own name. Session provenance supplies the space, person and agent, including after retirement. Idempotency-Key identifies the report: identical replays return 204; any difference returns idempotency_conflict. Different keys may report consumption for the same exchange, including after a human-validation resume. This records an admitted turn without renewing its admission or requiring a live agent.
+Atomically record consumption reported by a trusted runtime workload in its own name. Session provenance supplies the space, person and agent, including after purge. Idempotency-Key identifies the report: identical replays return 204; any difference returns idempotency_conflict. Different keys may report consumption for the same exchange, including after a human-validation resume. This records an admitted turn without renewing its admission or requiring a live agent.
 
 Operation `record_usage`.
 
@@ -1971,6 +2138,25 @@ One of: `not_observed`, `observed`, `unavailable`.
 | `params` | map of any or null |  |  |
 | `widget` | string | yes |  |
 
+### ChatMessage
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `channel` | string | yes |  |
+| `exchange_id` | string | yes |  |
+| `metadata` | [`ChatMetadata`](#chatmetadata) | yes |  |
+| `parts` | array of [`MessagePart`](#messagepart) | yes |  |
+| `rank` | integer, >= 0 | yes |  |
+| `role` | string | yes |  |
+| `session_id` | string | yes |  |
+| `timestamp` | string | yes |  |
+
+### ChatMetadata
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `sources` | array of [`SearchHit`](#searchhit) | yes |  |
+
 ### ChatProvenance
 
 One of: `source_guarantee`, `api_metadata`.
@@ -2032,6 +2218,7 @@ One of: `organization`, `team`, `project`.
 | `display_name` | string, min length 1, max length 255 | yes | Unique within the space, ignoring case. Surrounding whitespace is trimmed. |
 | `logical_name` | string, min length 1, max length 64 or null |  | Immutable space-local reference, independent of the mutable display label. Omitted/null generates "agent-" followed by the new instance UUID's 32 hex digits. Explicit references are preserved; collisions return 409 agent_name_conflict. |
 | `model_options` | [`ModelOptions`](#modeloptions) or null |  |  |
+| `powerpoint` | [`FileChange`](#filechange) or null |  |  |
 | `recommended_chat_profile_id` | string or null |  | Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key. |
 | `recommended_model` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
 | `role` | string, min length 1, max length 255 or null |  |  |
@@ -2262,6 +2449,13 @@ One of: `sse`.
 
 One of: `unsupported_input`, `access_changed`, `integrity_failure`, `extraction_failed`, `preview_failed`, `indexing_failed`, `capacity_exceeded`, `worker_failed`, `deadline_exceeded`, `delivery_unknown`.
 
+### FileChange
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `expected_file_id` | string (uuid) or null |  |  |
+| `file_id` | string (uuid) or null |  | A staged CP receipt for this exact space, logical pod and instance; null removes. |
+
 ### FileUpload
 
 Multipart body: exactly one `file` part.
@@ -2354,12 +2548,15 @@ One of: `en`, `fr`.
 | --- | --- | --- | --- |
 | `agent_instance_id` | string (uuid) | yes |  |
 | `capability_config` | map of map of any | yes |  |
+| `configuration_revision` | integer (int64) | yes |  |
 | `created_at` | string (date-time) | yes |  |
 | `created_by` | string | yes |  |
 | `description` | string or null |  |  |
 | `display_name` | string | yes |  |
 | `logical_name` | string | yes |  |
 | `model_options` | [`ModelOptions`](#modeloptions) or null |  |  |
+| `preparation_error` | string or null | yes |  |
+| `preparation_state` | string | yes |  |
 | `recommended_chat_profile_id` | string or null |  | Diagnostic only; requires explicit re-selection if no recommended_model is saved. |
 | `recommended_model` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
 | `role` | string | yes |  |
@@ -2393,6 +2590,35 @@ One of: `en`, `fr`.
 | `user_id` | string | yes |  |
 | `username` | string | yes |  |
 
+### MessagePart
+
+One of:
+
+- `type` = `text`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `text` | string | yes |  |
+| `type` | `text` | yes |  |
+
+- `type` = `tool_call`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `args` | map of any | yes |  |
+| `call_id` | string | yes |  |
+| `name` | string | yes |  |
+| `type` | `tool_call` | yes |  |
+
+- `type` = `tool_result`
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `call_id` | string | yes |  |
+| `content` | string | yes |  |
+| `ok` | boolean | yes |  |
+| `type` | `tool_result` | yes |  |
+
 ### MetadataPreview
 
 The descriptive subset of metadata.json consumed by the document viewer. Extra fields in the artifact belong to their existing owners.
@@ -2402,17 +2628,43 @@ The descriptive subset of metadata.json consumed by the document viewer. Extra f
 | `extensions` | [`PreviewExtensions`](#previewextensions) or null |  |  |
 | `identity` | [`ExtractedFacts`](#extractedfacts) | yes |  |
 
-### ModelConnection
+### ModelAuth
+
+Authentication facts only: the secrets stay in the workload's local binding.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `api_root` | string | yes |  |
-| `credential_binding` | string | yes |  |
-| `provider` | string | yes |  |
+| `client_id` | string or null |  |  |
+| `gateway_key_header` | string or null |  | Name of the header carrying a gateway key, with any kind. |
+| `kind` | [`ModelAuthKind`](#modelauthkind) | yes |  |
+| `scope` | string or null |  |  |
+| `tenant_id` | string or null |  | Required with kind `entra`, forbidden otherwise, like `client_id` and `scope`. |
+
+### ModelAuthKind
+
+One of: `none`, `api_key`, `entra`.
+
+### ModelConnection
+
+One destination, independent of the vendor: protocol, address and authentication. Mirrored by `fred_sdk.contracts.weaver`; `inference_connections.json` pins both.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `api_root` | string | yes | Separately approved canonical root; never derived from discovery_url. |
+| `api_version` | string or null |  |  |
+| `auth` | [`ModelAuth`](#modelauth) | yes |  |
+| `credential_binding` | string | yes | Source-bound workload provisioning reference; never a credential value. |
+| `dialect` | [`ModelDialect`](#modeldialect) | yes |  |
+| `route` | [`ModelRoute`](#modelroute) | yes |  |
+| `wire` | [`ModelWire`](#modelwire) | yes |  |
 
 ### ModelDiagnostic
 
 One of: `unknown_offer`, `not_permitted`, `source_disabled`, `source_revision_unobserved`, `discovery_unavailable`, `withdrawn`, `chat_not_established`, `options_exceed_known_limit`.
+
+### ModelDialect
+
+One of: `openai`, `mistral`.
 
 ### ModelInventory
 
@@ -2477,6 +2729,10 @@ Only explicit overrides. Missing/null members supply no value, not a provider de
 
 One of: `selection_missing`, `reselection_required`, `offer_unknown`, `offer_forbidden`, `offer_unavailable`, `fallback_unavailable`.
 
+### ModelRoute
+
+One of: `standard`, `azure_deployment`.
+
 ### ModelSelectionSource
 
 One of: `user_choice`, `instance_recommendation`, `default`, `withdrawal_fallback`.
@@ -2500,6 +2756,10 @@ Extends [`UsageTotals`](#usagetotals) with:
 | --- | --- | --- | --- |
 | `model_source_id` | string | yes |  |
 | `upstream_model_id` | string | yes |  |
+
+### ModelWire
+
+One of: `openai_chat`, `openai_responses`.
 
 ### MySpace
 
@@ -2652,6 +2912,12 @@ One of: `tool`, `skill`.
 | `default_selected` | boolean | yes |  |
 | `source_agent_id` | string | yes |  |
 
+### PowerPointChange
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `expected_file_id` | string (uuid) or null |  | Compare-and-swap: omit only when no own file is currently attached. |
+
 ### PowerPointFile
 
 | Field | Type | Required | Description |
@@ -2664,6 +2930,7 @@ One of: `tool`, `skill`.
 | `name` | string | yes |  |
 | `published_at` | string (date-time) or null | yes |  |
 | `request_key` | string (uuid) | yes |  |
+| `runtime_id` | string or null | yes |  |
 | `sha256` | string | yes |  |
 | `size` | integer (int64) | yes |  |
 | `space_id` | string (uuid) | yes |  |
@@ -2677,9 +2944,27 @@ One of: `pending`, `stored`, `retired`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `activation_ready` | boolean | yes | This lot does not prepare or activate configurable files in the runtime. |
+| `activation_ready` | boolean | yes |  |
+| `analysis_reference` | string or null | yes | Opaque reference owned by the capability on the resolved logical pod. |
 | `file` | [`PowerPointFile`](#powerpointfile) or null | yes |  |
+| `preparation_error` | string or null | yes |  |
+| `preparation_state` | string | yes |  |
 | `source` | [`PowerPointSource`](#powerpointsource) | yes | agent, organization, or builtin; no configurable platform default. |
+
+### PowerPointSettings
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `config` | object | yes |  |
+| `current` | [`PowerPointResolution`](#powerpointresolution) | yes |  |
+| `replacement` | [`PowerPointResolution`](#powerpointresolution) or null | yes |  |
+
+### PowerPointSettingsChange
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `config` | object | yes |  |
+| `expected_file_id` | string (uuid) or null |  |  |
 
 ### PowerPointSource
 
@@ -2969,6 +3254,13 @@ One of: `high`.
 | `identities_created` | integer, >= 0 | yes |  |
 | `identities_resolved` | integer, >= 0 | yes |  |
 | `spaces_reconciled` | integer, >= 0 | yes |  |
+
+### ResultConfirmation
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `error` | string or null |  |  |
+| `reference` | string or null |  |  |
 
 ### RetrievalConfirmation
 
@@ -3459,6 +3751,7 @@ Type: [`TuningScalar`](#tuningscalar) or array of [`TuningScalar`](#tuningscalar
 | `description` | string, max length 500 or null |  | An empty string is an explicit description. |
 | `display_name` | string, min length 1, max length 255 or null |  | Omitted/null metadata leaves the saved value unchanged. A new display name must remain unique within the space, ignoring case. |
 | `model_options` | [`ModelOptions`](#modeloptions) or null |  |  |
+| `powerpoint` | [`FileChange`](#filechange) or null |  |  |
 | `recommended_chat_profile_id` | string or null |  | Omitted keeps the recommendation; null clears it; other values return 422. |
 | `recommended_model` | [`ModelOfferKey`](#modelofferkey) or null |  |  |
 | `role` | string, min length 1, max length 255 or null |  |  |
@@ -3601,10 +3894,36 @@ Extends [`UsageTotals`](#usagetotals) with:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `contract_version` | integer (int32), >= 1, <= 1 | yes |  |
-| `document_id` | string (uuid) | yes |  |
+| `agent_instance_id` | string (uuid) or null | yes |  |
+| `capability_id` | string | yes |  |
+| `config` | object | yes |  |
+| `configuration_revision` | integer (int64) or null | yes |  |
+| `file_id` | string (uuid) | yes |  |
+| `filename` | string | yes |  |
 | `installation_id` | string (uuid) | yes |  |
-| `original_sha256` | string | yes |  |
-| `processing_id` | string (uuid) | yes |  |
-| `profile` | [`Profile`](#profile) | yes |  |
+| `preparation_id` | string (uuid) | yes |  |
+| `runtime_id` | string | yes |  |
+| `sha256` | string | yes |  |
+| `size` | integer (int64) | yes |  |
+| `space_id` | string (uuid) | yes |  |
+| `state` | string | yes |  |
+
+### WorkerBinding
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `installation_id` | string (uuid) | yes |  |
+| `task_queue` | string | yes |  |
+
+### WriteReceipt
+
+Each physical write is admitted once. A lost response leaves its intent pending; neither an activity retry nor a lease timeout can certify its completion.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `completed` | boolean | yes |  |
+| `generation` | string (uuid) | yes |  |
+| `work` | [`Work`](#work) | yes |  |
+| `workspace` | boolean |  |  |
+| `write_id` | string (uuid) | yes |  |
 <!-- end generated -->
