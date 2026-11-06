@@ -3,7 +3,7 @@
 """Bounded public and worker payloads for capability preparation."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from fred_sdk.contracts.capability.preparation import (
@@ -38,6 +38,12 @@ class PreparationStatusPage(BaseModel):
 
     items: list[PreparationStatus] = Field(max_length=100)
     has_more: bool = False
+
+
+class PlatformPreparationSelection(BaseModel):
+    active: PreparationStatus | None = None
+    candidate: PreparationStatus | None = None
+    settings: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkerPreparationResult(BaseModel):

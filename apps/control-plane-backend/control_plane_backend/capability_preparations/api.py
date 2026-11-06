@@ -5,10 +5,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from types import SimpleNamespace
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Path,
+    Query,
+    Response,
+    UploadFile,
+)
 from fred_core import (
     KeycloakUser,
     TeamPermission,
@@ -27,9 +39,21 @@ from control_plane_backend.capability_preparations.schemas import (
     CleanupCompletion,
     PreparationStatus,
     PreparationStatusPage,
+    PlatformPreparationSelection,
     WorkerPreparationResult,
     WorkerResultAck,
     WorkerAttemptResponse,
+)
+from control_plane_backend.capability_preparations.admission import (
+    cleanup_staged_assets,
+    stage_assets,
+)
+from control_plane_backend.capability_preparations.platform import (
+    platform_selection_status,
+    reset_platform_selection,
+    retry_platform_candidate,
+    set_platform_selection_settings,
+    start_platform_candidate,
 )
 from control_plane_backend.capability_preparations.service import (
     begin_worker_attempt,
@@ -44,6 +68,7 @@ from control_plane_backend.capability_preparations.service import (
 from control_plane_backend.models.capability_preparation_models import (
     CapabilityPreparationRow,
 )
+from control_plane_backend.organization_authz import require_manage_capabilities
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
@@ -62,6 +87,216 @@ def _sessions(deps: ProductServiceDependencies):
             status_code=503, detail="Preparation database is unavailable"
         )
     return deps.get_sql_session_factory()
+
+
+async def _platform_view(
+    deps: ProductServiceDependencies,
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+) -> PlatformPreparationSelection:
+    async with _sessions(deps)() as session:
+        active, candidate, settings = await platform_selection_status(
+            session,
+            runtime_id=runtime_id,
+            capability_id=capability_id,
+            slot_key=slot_key,
+        )
+    return PlatformPreparationSelection(
+        active=active, candidate=candidate, settings=settings
+    )
+
+
+async def _platform_declaration(
+    deps: ProductServiceDependencies, runtime_id: str, capability_id: str
+):
+    source = next(
+        (
+            source
+            for source in deps.configuration.platform.runtime_catalog_sources
+            if source.runtime_id == runtime_id
+            and source.enabled
+            and source.preparation_enabled
+        ),
+        None,
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail="Runtime preparation unavailable")
+    from control_plane_backend.product.service import _available_capabilities_for_source
+
+    entries = await _available_capabilities_for_source(source.base_url)
+    entry = next((entry for entry in entries if entry.id == capability_id), None)
+    if entry is None or entry.preparation is None:
+        raise HTTPException(
+            status_code=404, detail="Capability preparation unavailable"
+        )
+    return entry
+
+
+@router.get(
+    "/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}",
+    response_model=PlatformPreparationSelection,
+)
+async def get_platform_capability_preparation(
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+    deps: Dependencies,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> PlatformPreparationSelection:
+    del user
+    return await _platform_view(deps, runtime_id, capability_id, slot_key)
+
+
+@router.put(
+    "/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/candidate",
+    response_model=PlatformPreparationSelection,
+)
+async def put_platform_capability_candidate(
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+    deps: Dependencies,
+    file: UploadFile = File(...),
+    config_json: str = Form("{}"),
+    user: KeycloakUser = Depends(require_own_credential),
+) -> PlatformPreparationSelection:
+    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    if deps.get_content_store is None:
+        raise HTTPException(status_code=503, detail="Asset storage unavailable")
+    entry = await _platform_declaration(deps, runtime_id, capability_id)
+    spec = entry.preparation
+    assert spec is not None
+    if slot_key not in spec.asset_slots:
+        raise HTTPException(status_code=422, detail="Undeclared preparation asset slot")
+    content = await file.read(min(spec.max_input_bytes, 64 * 1024 * 1024) + 1)
+    if len(content) > spec.max_input_bytes:
+        raise HTTPException(status_code=413, detail="Preparation asset is too large")
+    if len(config_json.encode()) > 128 * 1024:
+        raise HTTPException(status_code=413, detail="Preparation config is too large")
+    try:
+        config = json.loads(config_json)
+        if not isinstance(config, dict):
+            raise ValueError("Preparation config must be an object")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail="Invalid preparation config"
+        ) from exc
+    content_store = deps.get_content_store()
+    staged = []
+    try:
+        staged = await stage_assets(
+            content_store,
+            available=[entry],
+            selected_ids=[capability_id],
+            uploads={
+                capability_id: [
+                    SimpleNamespace(
+                        slot_key=slot_key,
+                        filename=file.filename or "source",
+                        content=content,
+                        content_type=file.content_type,
+                    )
+                ]
+            },
+        )
+        async with _sessions(deps)() as session:
+            async with session.begin():
+                await start_platform_candidate(
+                    session,
+                    runtime_id=runtime_id,
+                    capability_id=capability_id,
+                    slot_key=slot_key,
+                    spec=spec,
+                    config=config,
+                    staged=staged[0],
+                )
+    except ValueError as exc:
+        await cleanup_staged_assets(content_store, staged)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        await cleanup_staged_assets(content_store, staged)
+        raise
+    return await _platform_view(deps, runtime_id, capability_id, slot_key)
+
+
+@router.post(
+    "/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/candidate/retry",
+    response_model=PlatformPreparationSelection,
+)
+async def post_platform_capability_candidate_retry(
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+    deps: Dependencies,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> PlatformPreparationSelection:
+    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    async with _sessions(deps)() as session:
+        async with session.begin():
+            try:
+                row = await retry_platform_candidate(
+                    session,
+                    runtime_id=runtime_id,
+                    capability_id=capability_id,
+                    slot_key=slot_key,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    return await _platform_view(deps, runtime_id, capability_id, slot_key)
+
+
+@router.delete(
+    "/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}",
+    response_model=PlatformPreparationSelection,
+)
+async def delete_platform_capability_preparation(
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+    deps: Dependencies,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> PlatformPreparationSelection:
+    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    async with _sessions(deps)() as session:
+        async with session.begin():
+            await reset_platform_selection(
+                session,
+                runtime_id=runtime_id,
+                capability_id=capability_id,
+                slot_key=slot_key,
+            )
+    return await _platform_view(deps, runtime_id, capability_id, slot_key)
+
+
+@router.put(
+    "/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/settings",
+    response_model=PlatformPreparationSelection,
+)
+async def put_platform_capability_settings(
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+    settings: dict[str, object],
+    deps: Dependencies,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> PlatformPreparationSelection:
+    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    async with _sessions(deps)() as session:
+        async with session.begin():
+            try:
+                await set_platform_selection_settings(
+                    session,
+                    runtime_id=runtime_id,
+                    capability_id=capability_id,
+                    slot_key=slot_key,
+                    settings=settings,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return await _platform_view(deps, runtime_id, capability_id, slot_key)
 
 
 async def _require_agent(

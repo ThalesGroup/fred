@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from typing import Any
 from uuid import uuid4
 
 from fred_sdk.contracts.capability.preparation import PreparationSpec
@@ -14,6 +15,11 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.capability_preparations.admission import StagedAsset
+from control_plane_backend.capability_preparations.schemas import PreparationStatus
+from control_plane_backend.capability_preparations.service import (
+    _assets_by_preparation,
+    _status,
+)
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.capability_preparation_models import (
     CapabilityAssetRow,
@@ -162,3 +168,130 @@ async def reset_platform_selection(
     selection.active_preparation_id = None
     selection.candidate_preparation_id = None
     selection.settings_json = {}
+
+
+async def platform_selection_status(
+    session: AsyncSession, *, runtime_id: str, capability_id: str, slot_key: str
+) -> tuple[PreparationStatus | None, PreparationStatus | None, dict[str, Any]]:
+    selection = await session.get(
+        CapabilityPlatformSelectionRow, (runtime_id, capability_id, slot_key)
+    )
+    if selection is None:
+        return None, None, {}
+    ids = [
+        preparation_id
+        for preparation_id in (
+            selection.active_preparation_id,
+            selection.candidate_preparation_id,
+        )
+        if preparation_id is not None
+    ]
+    rows = {
+        row.id: row
+        for row in (
+            await session.execute(
+                select(CapabilityPreparationRow).where(
+                    CapabilityPreparationRow.id.in_(ids)
+                )
+            )
+        ).scalars()
+    }
+    assets = await _assets_by_preparation(session, ids)
+
+    def status(preparation_id: str | None) -> PreparationStatus | None:
+        row = rows.get(preparation_id) if preparation_id else None
+        return _status(row, assets.get(row.id)) if row is not None else None
+
+    return (
+        status(selection.active_preparation_id),
+        status(selection.candidate_preparation_id),
+        selection.settings_json,
+    )
+
+
+async def retry_platform_candidate(
+    session: AsyncSession, *, runtime_id: str, capability_id: str, slot_key: str
+) -> CapabilityPreparationRow | None:
+    selection = await _selection(
+        session,
+        runtime_id=runtime_id,
+        capability_id=capability_id,
+        slot_key=slot_key,
+    )
+    previous_id = selection.candidate_preparation_id
+    if previous_id is None:
+        return None
+    previous = await session.get(
+        CapabilityPreparationRow, previous_id, with_for_update=True
+    )
+    if previous is None:
+        return None
+    if previous.state != "failed":
+        raise ValueError("Only a failed candidate can be retried")
+    linked = (
+        (
+            await session.execute(
+                select(CapabilityPreparationAssetRow)
+                .where(CapabilityPreparationAssetRow.preparation_id == previous.id)
+                .order_by(CapabilityPreparationAssetRow.position)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    previous.is_current = False
+    previous.superseded_at = utcnow()
+    await session.flush()
+    preparation_id = str(uuid4())
+    now = utcnow()
+    duration = max(timedelta(seconds=1), previous.deadline_at - previous.created_at)
+    row = CapabilityPreparationRow(
+        id=preparation_id,
+        owner_kind="platform",
+        owner_id=f"platform:{preparation_id}",
+        team_id=None,
+        runtime_id=runtime_id,
+        capability_id=capability_id,
+        input_revision=str(uuid4()),
+        rules_version=previous.rules_version,
+        config_json=previous.config_json,
+        gates_readiness=False,
+        is_current=True,
+        state="pending",
+        attempts=0,
+        max_attempts=previous.max_attempts,
+        deadline_at=now + duration,
+        workflow_id=f"capability-preparation/{preparation_id}",
+        task_queue=previous.task_queue,
+    )
+    session.add(row)
+    await session.flush()
+    for position, association in enumerate(linked):
+        session.add(
+            CapabilityPreparationAssetRow(
+                preparation_id=preparation_id,
+                position=position,
+                asset_id=association.asset_id,
+            )
+        )
+    selection.candidate_preparation_id = preparation_id
+    return row
+
+
+async def set_platform_selection_settings(
+    session: AsyncSession,
+    *,
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+    settings: dict[str, Any],
+) -> None:
+    if len(json.dumps(settings, sort_keys=True).encode()) > 128 * 1024:
+        raise ValueError("Platform settings exceed 128 KiB")
+    selection = await _selection(
+        session,
+        runtime_id=runtime_id,
+        capability_id=capability_id,
+        slot_key=slot_key,
+    )
+    selection.settings_json = settings

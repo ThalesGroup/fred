@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import os
+import io
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 from typing import Literal
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException, UploadFile
 from fred_sdk.contracts.capability.preparation import PreparationResult, PreparationSpec
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from control_plane_backend.capability_preparations.admission import StagedAsset
+from control_plane_backend.capability_preparations import api as preparation_api
 from control_plane_backend.capability_preparations.platform import (
     reset_platform_selection,
+    retry_platform_candidate,
+    set_platform_selection_settings,
     start_platform_candidate,
 )
 from control_plane_backend.capability_preparations.schemas import (
@@ -26,6 +33,33 @@ from control_plane_backend.models.capability_preparation_models import (
     CapabilityPreparationRow,
     CapabilityPlatformSelectionRow,
 )
+
+
+@pytest.mark.asyncio
+async def test_platform_candidate_upload_checks_manager_before_storage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deny = AsyncMock(side_effect=HTTPException(status_code=403))
+    declaration = AsyncMock()
+    monkeypatch.setattr(preparation_api, "require_manage_capabilities", deny)
+    monkeypatch.setattr(preparation_api, "_platform_declaration", declaration)
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(rebac=object()),
+        get_content_store=Mock(),
+    )
+    with pytest.raises(HTTPException) as error:
+        await preparation_api.put_platform_capability_candidate(
+            runtime_id="r",
+            capability_id="ppt_builder",
+            slot_key="template",
+            deps=deps,
+            file=UploadFile(filename="template.pptx", file=io.BytesIO(b"content")),
+            config_json="{}",
+            user=object(),  # type: ignore[arg-type]
+        )
+    assert error.value.status_code == 403
+    declaration.assert_not_awaited()
+    deps.get_content_store.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -136,8 +170,21 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
         assert await complete(failed, state="failed")
         assert (await selection()).active_preparation_id == first.id
 
+        async with sessions() as session:
+            async with session.begin():
+                retried = await retry_platform_candidate(
+                    session,
+                    runtime_id="r",
+                    capability_id="example",
+                    slot_key="source",
+                )
+                assert retried is not None
+        assert (await selection()).candidate_preparation_id == retried.id
+        assert (await selection()).active_preparation_id == first.id
+
         replacement = await start()
         assert not await complete(failed, state="failed")
+        assert not await complete(retried, state="failed")
         assert await complete(replacement, state="succeeded")
         selected = await selection()
         assert selected.active_preparation_id == replacement.id
@@ -149,6 +196,16 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
 
         async with sessions() as session:
             async with session.begin():
+                await set_platform_selection_settings(
+                    session,
+                    runtime_id="r",
+                    capability_id="example",
+                    slot_key="source",
+                    settings={"overrides": [{"pattern_id": "slide:1"}]},
+                )
+        assert (await selection()).settings_json["overrides"]
+        async with sessions() as session:
+            async with session.begin():
                 await reset_platform_selection(
                     session,
                     runtime_id="r",
@@ -156,6 +213,7 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
                     slot_key="source",
                 )
         assert (await selection()).active_preparation_id is None
+        assert (await selection()).settings_json == {}
         assert not await complete(replacement, state="failed")
     finally:
         await engine.dispose()
