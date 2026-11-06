@@ -21,6 +21,7 @@ import type {
   ChatMessage,
   HitlRequestPart,
   HitlResponsePart,
+  TurnAttachment,
   VectorSearchHit,
 } from "../../../../slices/runtime/runtimeOpenApi";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
@@ -36,6 +37,28 @@ import {
   uiPartsOf,
 } from "../../../utils/traceUtils";
 import { hitlAnswerSummary, type HitlAnswerSummary } from "../../../utils/hitlAnswerSummary";
+
+// Stored extras are untyped JSON: keep only well-formed entries.
+function turnAttachmentsOf(value: unknown): TurnAttachment[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const attachments = value.flatMap((item: unknown): TurnAttachment[] =>
+    item &&
+    typeof item === "object" &&
+    "attachment_id" in item &&
+    typeof item.attachment_id === "string" &&
+    "name" in item &&
+    typeof item.name === "string"
+      ? [
+          {
+            attachment_id: item.attachment_id,
+            name: item.name,
+            mime: "mime" in item && typeof item.mime === "string" ? item.mime : null,
+          },
+        ]
+      : [],
+  );
+  return attachments.length > 0 ? attachments : undefined;
+}
 
 function isPauseMetadata(m: ChatMessage): boolean {
   return m.channel === "system_note" && m.metadata?.extras?.pause_metadata === true;
@@ -324,6 +347,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
           const load = skillLoadOf(message);
           return load?.origin === "user" && !load.child && load.builtin ? [load.name] : [];
         }),
+        attachments: turnAttachmentsOf(userMsg.metadata?.extras?.attachments),
       });
     }
 

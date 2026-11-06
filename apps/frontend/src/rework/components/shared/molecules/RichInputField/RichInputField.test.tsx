@@ -80,6 +80,13 @@ describe("RichInputField send gating", () => {
     expect(tag).not.toContain("disabled");
   });
 
+  it("keeps a greyed send button while the draft has no text", () => {
+    const html = renderToStaticMarkup(
+      <RichInputField value="  " onChange={() => undefined} onSend={() => undefined} showSendButton />,
+    );
+    expect(sendButtonOpeningTag(html)).toContain("disabled");
+  });
+
   it("disables the send button while sendDisabled is set (e.g. attachments still uploading)", () => {
     const tag = sendButtonOpeningTag(render({ sendDisabled: true }));
     expect(tag).not.toBe("");

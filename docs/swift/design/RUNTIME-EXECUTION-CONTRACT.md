@@ -499,6 +499,11 @@ Selections persist in `metadata.extras.skill_invocations`; readers retain legacy
 fresh turns do not inherit selection intent. Graph agents and deployments with
 skills disabled reject selections. `/skill <name>` remains a legacy submit form.
 
+The optional `runtime_context.attachments: list[TurnAttachment]` (`attachment_id`,
+`name`, optional `mime`) lists only the files sent with this turn. It is display
+data: the runtime stores it on the user message as `metadata.extras.attachments`
+and the agent never reads it; model input stays `attachments_markdown`.
+
 ### 2.4 Pre-execution authorization gate — `_authorize_and_resolve`
 
 There is no `validate_execution_grant` helper. Every execute / execute-stream /
@@ -7404,3 +7409,13 @@ attributed by `history_text_normalization` metadata, without changing live tool
 arguments. Scope checks and database schemas are retained.
 The `document-tool-reliability` specification owns the acceptance contract; see
 the corresponding migration note for validation and compatibility limits.
+
+### Turn attachments on user messages (2026-11-06)
+
+`RuntimeContext` gains optional `attachments: list[TurnAttachment]`, the files
+sent with the turn (`attachment_id`, `name`, optional `mime`). The runtime
+persists them as `metadata.extras.attachments` on the user row, beside
+`skill_invocations`, and the transcript renders them live and after reload.
+`attachments_markdown` is unchanged. Older pods ignore the field; messages
+without it render as before. The `managed-conversations` specification owns the
+acceptance contract.
