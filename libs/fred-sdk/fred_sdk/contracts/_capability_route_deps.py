@@ -26,8 +26,10 @@ from fastapi import HTTPException, Request
 
 from .runtime import (
     CAPABILITY_PLATFORM_MODEL_STATE,
+    CAPABILITY_PREPARATION_READER_STATE,
     CAPABILITY_TEAM_AUTHORIZER_STATE,
     CapabilityModelPort,
+    CapabilityPreparationReader,
     CapabilityTeamAuthorizer,
 )
 
@@ -56,3 +58,10 @@ async def capability_platform_model(request: Request) -> CapabilityModelPort:
             status_code=503, detail="Platform model access is not available."
         )
     return port
+
+
+async def capability_preparation_reader(
+    request: Request,
+) -> CapabilityPreparationReader | None:
+    reader = getattr(request.state, CAPABILITY_PREPARATION_READER_STATE, None)
+    return reader if isinstance(reader, CapabilityPreparationReader) else None

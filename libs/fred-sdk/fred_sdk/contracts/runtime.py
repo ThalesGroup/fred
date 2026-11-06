@@ -643,6 +643,7 @@ class CapabilityModelPort(ABC):
 # teamless model port before a capability route runs.
 CAPABILITY_TEAM_AUTHORIZER_STATE: Final = "fred_capability_team_authorizer"
 CAPABILITY_PLATFORM_MODEL_STATE: Final = "fred_capability_platform_model"
+CAPABILITY_PREPARATION_READER_STATE: Final = "fred_capability_preparation_reader"
 
 
 class CapabilityTeamAuthorizer(ABC):
@@ -660,9 +661,31 @@ class CapabilityTeamAuthorizer(ABC):
         raise HTTPException(status_code=403, detail=CAPABILITY_MANAGER_DENIED)
 
 
+class CapabilityPreparationReader(ABC):
+    """Authenticated current status and artifacts for a capability router."""
+
+    @abstractmethod
+    async def agent_status(
+        self, team_id: str, agent_instance_id: str, capability_id: str
+    ) -> Mapping[str, Any] | None: ...
+
+    @abstractmethod
+    async def read_result(self, reference: str) -> bytes: ...
+
+    @abstractmethod
+    async def read_sibling(self, reference: str, filename: str) -> bytes: ...
+
+    @abstractmethod
+    async def sibling_exists(self, reference: str, filename: str) -> bool: ...
+
+
 CAPABILITY_MANAGER_DENIED: Final = "You cannot manage the platform's capabilities."
 
-_ROUTE_DEPENDENCIES = ("capability_team_authorizer", "capability_platform_model")
+_ROUTE_DEPENDENCIES = (
+    "capability_team_authorizer",
+    "capability_platform_model",
+    "capability_preparation_reader",
+)
 
 
 def __getattr__(name: str) -> Any:

@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+import httpx
+from fastapi import FastAPI, HTTPException
 from fred_sdk.contracts.capability.preparation import (
     PreparationAsset,
     PreparationContext,
@@ -18,7 +20,13 @@ from fred_sdk.contracts.capability.context import (
     SaveContext,
 )
 from fred_sdk.contracts.capability.manifest import UploadedFile
-from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.contracts.runtime import (
+    CapabilityPreparationReader,
+    CapabilityTeamAuthorizer,
+    RuntimeServices,
+    capability_preparation_reader,
+    capability_team_authorizer,
+)
 
 from fred_capability_ppt_filler.builder import capability as builder
 from fred_capability_ppt_filler.builder.builtin import builtin_template
@@ -124,9 +132,7 @@ async def test_turn_reads_only_the_bound_preparation_revision() -> None:
             return template
 
     ctx = CapabilityContext(
-        identity=CapabilityIdentity(
-            user_id="user", agent_instance_id=str(uuid4())
-        ),
+        identity=CapabilityIdentity(user_id="user", agent_instance_id=str(uuid4())),
         config=builder.PptBuilderConfig(
             template_sha256=hashlib.sha256(template).hexdigest(),
             preparation_mode="shared",
@@ -175,3 +181,67 @@ async def test_shared_save_rejects_vision_without_knowledge_flow() -> None:
             {"template": [UploadedFile(filename="template.pptx", content=template)]},
             context,
         )
+
+
+@pytest.mark.asyncio
+async def test_shared_agent_routes_read_current_inventory_and_preview() -> None:
+    template, inventory = builtin_template()
+    reference = "capability-results/current/1/inventory.json"
+
+    class Authorizer(CapabilityTeamAuthorizer):
+        async def require_agent_editor(self, team_id: str) -> None:
+            if team_id != "t1":
+                raise HTTPException(status_code=403)
+
+    class Reader(CapabilityPreparationReader):
+        async def agent_status(self, team_id, agent_instance_id, capability_id):
+            assert (team_id, agent_instance_id, capability_id) == (
+                "t1",
+                "a1",
+                "ppt_builder",
+            )
+            return {
+                "state": "succeeded",
+                "assets": [
+                    {
+                        "slot_key": "template",
+                        "sha256": hashlib.sha256(template).hexdigest(),
+                    }
+                ],
+                "result_reference": reference,
+                "created_at": "2026-11-06T12:00:00Z",
+            }
+
+        async def read_result(self, result_reference):
+            assert result_reference == reference
+            return inventory.model_dump_json().encode()
+
+        async def read_sibling(self, result_reference, filename):
+            assert (result_reference, filename) == (reference, "patterns.pdf")
+            return b"%PDF"
+
+        async def sibling_exists(self, result_reference, filename):
+            return (result_reference, filename) == (reference, "patterns.pdf")
+
+    app = FastAPI()
+    router = builder.PptBuilderCapability.manifest.router
+    assert router is not None
+    app.include_router(router, prefix="/capabilities/ppt_builder")
+    app.dependency_overrides[capability_team_authorizer] = Authorizer
+    app.dependency_overrides[capability_preparation_reader] = Reader
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://pod"
+    ) as client:
+        response = await client.get(
+            "/capabilities/ppt_builder/analysis/a1", params={"team_id": "t1"}
+        )
+        assert response.status_code == 200
+        assert response.json()["inventory"]["patterns"]
+        assert (
+            response.json()["template_sha256"] == hashlib.sha256(template).hexdigest()
+        )
+        preview = await client.get(
+            "/capabilities/ppt_builder/analysis/a1/patterns.pdf",
+            params={"team_id": "t1"},
+        )
+        assert preview.content == b"%PDF"

@@ -47,6 +47,7 @@ from fred_sdk.contracts.models import AgentDefinition, ExecutionCategory
 from fred_sdk.contracts.runtime import (
     CAPABILITY_MANAGER_DENIED,
     CAPABILITY_PLATFORM_MODEL_STATE,
+    CAPABILITY_PREPARATION_READER_STATE,
     CAPABILITY_TEAM_AUTHORIZER_STATE,
     CapabilityModelPort,
     CapabilityModelUnavailableError,
@@ -59,6 +60,7 @@ from ..model_routing.authz import usable_model_capability_ids
 from ..model_routing.contracts import ModelNotUsableError, TeamRoutingProfileDriftError
 from ..model_routing.provider import RoutedChatModelFactory
 from ..runtime_context import get_runtime_context_or_none
+from .preparation_routes import RuntimePreparationRouteReader
 
 
 class CapabilitySaveRouting(BaseModel):
@@ -309,6 +311,22 @@ def _bind(request: Request, user: KeycloakUser | None, enforce: bool) -> None:
     if runtime is not None:
         port = platform_model_port(runtime.config.chat_model_factory, rebac)
         setattr(request.state, CAPABILITY_PLATFORM_MODEL_STATE, port)
+        config = runtime.config
+        if (
+            config.control_plane_url is not None
+            and config.control_plane_http_client is not None
+            and config.filesystem is not None
+        ):
+            setattr(
+                request.state,
+                CAPABILITY_PREPARATION_READER_STATE,
+                RuntimePreparationRouteReader(
+                    control_plane_url=config.control_plane_url,
+                    client=config.control_plane_http_client,
+                    filesystem=config.filesystem,
+                    authorization=request.headers.get("Authorization"),
+                ),
+            )
 
 
 _platform_port: tuple[object, RoutedCapabilityModelPort] | None = None

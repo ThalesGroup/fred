@@ -128,7 +128,7 @@ export function usePptBuilderAnalysis({
 
   const [pollingInterval, setPollingInterval] = useState(0);
   const statusQuery = useGetPptBuilderAnalysisQuery(
-    { instanceId: agentInstanceId ?? "" },
+    { instanceId: agentInstanceId ?? "", teamId },
     { skip: !routed || !agentInstanceId || !templateSha, pollingInterval },
   );
   // A failed poll keeps the last answer (RTK keeps `data`): one network blip must
@@ -195,7 +195,7 @@ export function usePptBuilderAnalysis({
         : null
       : { kind: "builtin" }
     : phase === "succeeded" && status?.has_thumbnails && agentInstanceId
-      ? { kind: "analysis", instanceId: agentInstanceId }
+      ? { kind: "analysis", instanceId: agentInstanceId, teamId }
       : null;
 
   return {

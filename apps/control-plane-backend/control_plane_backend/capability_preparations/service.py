@@ -29,7 +29,9 @@ from control_plane_backend.models.capability_preparation_models import (
 )
 
 
-def _status(row: CapabilityPreparationRow) -> PreparationStatus:
+def _status(
+    row: CapabilityPreparationRow, assets: list[PreparationAsset] | None = None
+) -> PreparationStatus:
     return PreparationStatus(
         capability_id=row.capability_id,
         preparation_id=row.id,
@@ -43,7 +45,42 @@ def _status(row: CapabilityPreparationRow) -> PreparationStatus:
         summary=row.result_summary,
         error_code=row.error_code,
         error_detail=row.error_detail,
+        result_reference=row.result_reference,
+        assets=assets or [],
     )
+
+
+async def _assets_by_preparation(
+    session: AsyncSession, preparation_ids: list[str]
+) -> dict[str, list[PreparationAsset]]:
+    if not preparation_ids:
+        return {}
+    linked = (
+        await session.execute(
+            select(CapabilityPreparationAssetRow.preparation_id, CapabilityAssetRow)
+            .join(
+                CapabilityAssetRow,
+                CapabilityPreparationAssetRow.asset_id == CapabilityAssetRow.id,
+            )
+            .where(CapabilityPreparationAssetRow.preparation_id.in_(preparation_ids))
+            .order_by(
+                CapabilityPreparationAssetRow.preparation_id,
+                CapabilityPreparationAssetRow.position,
+            )
+        )
+    ).all()
+    result: dict[str, list[PreparationAsset]] = {}
+    for preparation_id, asset in linked:
+        result.setdefault(preparation_id, []).append(
+            PreparationAsset(
+                asset_id=UUID(asset.id),
+                slot_key=asset.slot_key,
+                filename=asset.filename,
+                sha256=asset.sha256,
+                size=asset.size,
+            )
+        )
+    return result
 
 
 async def list_agent_preparations(
@@ -72,8 +109,11 @@ async def list_agent_preparations(
         .scalars()
         .all()
     )
+    visible = rows[:limit]
+    assets = await _assets_by_preparation(session, [row.id for row in visible])
     return PreparationStatusPage(
-        items=[_status(row) for row in rows[:limit]], has_more=len(rows) > limit
+        items=[_status(row, assets.get(row.id)) for row in visible],
+        has_more=len(rows) > limit,
     )
 
 
@@ -147,7 +187,8 @@ async def retry_agent_preparation(
                 asset_id=association.asset_id,
             )
         )
-    return _status(row)
+    assets = await _assets_by_preparation(session, [row.id])
+    return _status(row, assets.get(row.id))
 
 
 async def get_worker_work(

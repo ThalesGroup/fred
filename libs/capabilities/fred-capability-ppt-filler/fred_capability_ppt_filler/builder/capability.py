@@ -26,7 +26,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Annotated, Any, List, Literal, Optional, get_args
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import (
@@ -52,8 +52,10 @@ from fred_sdk.contracts.capability.preparation import (
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
     CapabilityModelUnavailableError,
+    CapabilityPreparationReader,
     CapabilityTeamAuthorizer,
     capability_platform_model,
+    capability_preparation_reader,
     capability_team_authorizer,
 )
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
@@ -246,6 +248,53 @@ async def _authorised_record(
         raise HTTPException(status_code=404, detail="No template analysis.")
     await authorizer.require_agent_editor(record.team_id)
     return record
+
+
+async def _shared_analysis_status(
+    item: Mapping[str, Any], reader: CapabilityPreparationReader
+) -> AnalysisStatusResponse:
+    asset = next(
+        (
+            asset
+            for asset in item.get("assets", [])
+            if asset.get("slot_key") == TEMPLATE_SLOT
+        ),
+        None,
+    )
+    if asset is None:
+        raise HTTPException(status_code=404, detail="No template analysis.")
+    state = item.get("state")
+    if state not in ("pending", "running", "succeeded", "failed"):
+        raise HTTPException(status_code=503, detail="Invalid preparation state")
+    reference = item.get("result_reference")
+    inventory = None
+    thumbnails = False
+    if state == "succeeded":
+        if not isinstance(reference, str):
+            raise HTTPException(
+                status_code=503, detail="Preparation result unavailable"
+            )
+        try:
+            inventory = TemplateInventory.model_validate_json(
+                await reader.read_result(reference)
+            )
+            thumbnails = await reader.sibling_exists(reference, "patterns.pdf")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503, detail="Preparation result unavailable"
+            ) from exc
+    return AnalysisStatusResponse(
+        status=state,
+        template_sha256=asset["sha256"],
+        labelling_key="shared",
+        analysis_version=ANALYSIS_VERSION,
+        current=True,
+        error=item.get("error_detail") or item.get("error_code"),
+        updated_at=item.get("completed_at") or item["created_at"],
+        has_thumbnails=thumbnails,
+        summary=inventory.summary() if inventory else None,
+        inventory=inventory,
+    )
 
 
 class PlatformTemplateResponse(BaseModel):
@@ -551,9 +600,24 @@ def _build_router() -> APIRouter:
     )
     async def analysis_status(
         instance_id: str,
+        team_id: Optional[str] = Query(None),
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
+        reader: Optional[CapabilityPreparationReader] = Depends(
+            capability_preparation_reader
+        ),
     ) -> AnalysisStatusResponse:
         """Status, summary and inventory of the instance's template analysis."""
+        if team_id:
+            if reader is None:
+                raise HTTPException(
+                    status_code=503, detail="Preparation results unavailable"
+                )
+            await authorizer.require_agent_editor(team_id)
+            item = await reader.agent_status(
+                team_id, instance_id, PPT_BUILDER_CAPABILITY_ID
+            )
+            if item is not None:
+                return await _shared_analysis_status(item, reader)
         return status_response(await _authorised_record(instance_id, authorizer))
 
     @router.get(
@@ -562,9 +626,33 @@ def _build_router() -> APIRouter:
     )
     async def analysis_patterns(
         instance_id: str,
+        team_id: Optional[str] = Query(None),
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
+        reader: Optional[CapabilityPreparationReader] = Depends(
+            capability_preparation_reader
+        ),
     ) -> Response:
         """One PDF page per pattern of the analysed template (the thumbnails)."""
+        if team_id:
+            if reader is None:
+                raise HTTPException(
+                    status_code=503, detail="Preparation results unavailable"
+                )
+            await authorizer.require_agent_editor(team_id)
+            item = await reader.agent_status(
+                team_id, instance_id, PPT_BUILDER_CAPABILITY_ID
+            )
+            if item is not None:
+                reference = item.get("result_reference")
+                if item.get("state") != "succeeded" or not isinstance(reference, str):
+                    raise HTTPException(status_code=404, detail="No thumbnails.")
+                try:
+                    pdf = await reader.read_sibling(reference, "patterns.pdf")
+                except FileNotFoundError as exc:
+                    raise HTTPException(
+                        status_code=404, detail="No thumbnails."
+                    ) from exc
+                return Response(content=pdf, media_type=_PDF_CONTENT_TYPE)
         await _authorised_record(instance_id, authorizer)
         pdf = await get_analysis_store().patterns_pdf(instance_id)
         if pdf is None:

@@ -427,6 +427,13 @@ async def test_preparation_intention_is_atomic_and_unchanged_save_reuses_it() ->
                 assert not await publish_worker_result(
                     session, preparation_id=current.id, completion=complete
                 )
+        async with sessions() as session:
+            page = await list_agent_preparations(
+                session, agent_instance_id="a1", team_id="t1", limit=32, offset=0
+            )
+            assert complete.result is not None
+            assert page.items[0].result_reference == complete.result.reference
+            assert page.items[0].assets[0].sha256 == uploaded.sha256
         store = AgentInstanceStore(engine)
         with pytest.raises(ValueError, match="exceeds 128 KiB"):
             async with sessions() as session:

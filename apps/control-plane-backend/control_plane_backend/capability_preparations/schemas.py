@@ -6,8 +6,11 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from fred_sdk.contracts.capability.preparation import PreparationResult
-from fred_sdk.contracts.capability.preparation import PreparationWork
+from fred_sdk.contracts.capability.preparation import (
+    PreparationAsset,
+    PreparationResult,
+    PreparationWork,
+)
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -26,6 +29,8 @@ class PreparationStatus(BaseModel):
     summary: str | None = None
     error_code: str | None = None
     error_detail: str | None = None
+    result_reference: str | None = None
+    assets: list[PreparationAsset] = Field(default_factory=list, max_length=32)
 
 
 class PreparationStatusPage(BaseModel):
