@@ -71,12 +71,8 @@ def preview_union():
     rebuild_ui_part_union(())
 
 
-async def _pdf(_bytes: bytes, *, suffix: str, **_options):
+async def _pdf(_workspace, _content: bytes, *, suffix: str):
     return b"%PDF-fake"
-
-
-async def _no_pdf(_bytes: bytes, *, suffix: str, **_options):
-    return None
 
 
 def _ctx(
@@ -128,7 +124,6 @@ def _configured(
 
 
 async def _build(
-    monkeypatch,
     *,
     workspace=None,
     docs=None,
@@ -136,7 +131,6 @@ async def _build(
     variety="template_slide",
     **kwargs,
 ):
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured(extend, variety)
     tools = _tools(_ctx(config, assets=assets, docs=docs, workspace=workspace))
     return await tools[BUILD_TOOL_NAME].coroutine(**kwargs)
@@ -282,7 +276,7 @@ def test_the_choice_guide_states_the_authors_max():
 
 @pytest.mark.asyncio
 async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_union):
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _pdf)
+    monkeypatch.setattr(FakeWorkspace, "convert_office_to_pdf", _pdf)
     config, assets = _configured()
     workspace = FakeWorkspace()
     tools = _tools(_ctx(config, assets=assets, workspace=workspace))
@@ -313,8 +307,7 @@ async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_
 
 
 @pytest.mark.asyncio
-async def test_build_without_template_uses_the_built_in_template(monkeypatch):
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+async def test_build_without_template_uses_the_built_in_template():
     workspace = FakeWorkspace()
     tools = _tools(_ctx(PptBuilderConfig(), workspace=workspace))
     text, result = await tools[BUILD_TOOL_NAME].coroutine(
@@ -336,7 +329,7 @@ async def test_several_builds_of_one_answer_land_on_one_preview(
     monkeypatch, preview_union
 ):
     """They share a key, so the reader is shown one deck."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _pdf)
+    monkeypatch.setattr(FakeWorkspace, "convert_office_to_pdf", _pdf)
     config, assets = _configured()
     tools = _tools(_ctx(config, assets=assets, workspace=FakeWorkspace()))
     previews = []
@@ -350,8 +343,8 @@ async def test_several_builds_of_one_answer_land_on_one_preview(
 
 
 @pytest.mark.asyncio
-async def test_empty_plan_is_an_error_the_user_can_read(monkeypatch):
-    text, result = await _build(monkeypatch, slides=[{"kind": "bullets"}])
+async def test_empty_plan_is_an_error_the_user_can_read():
+    text, result = await _build(slides=[{"kind": "bullets"}])
     assert result.is_error and "every slide of the plan is empty" in text
     assert "and call build_presentation again" in text
     # The text travels in the result so the runtime shows it, not a generic failure.
@@ -374,10 +367,10 @@ async def test_empty_plan_is_an_error_the_user_can_read(monkeypatch):
         },
     ],
 )
-async def test_line_breaks_in_the_text_still_build(monkeypatch, slide):
+async def test_line_breaks_in_the_text_still_build(slide):
     workspace = FakeWorkspace()
     text, result = await _build(
-        monkeypatch, workspace=workspace, variety="off", slides=[COVER, slide]
+        workspace=workspace, variety="off", slides=[COVER, slide]
     )
     assert not result.is_error, text
     assert workspace.writes
@@ -389,19 +382,18 @@ async def test_a_checker_bug_is_a_tool_error_not_an_exception(monkeypatch):
         raise RuntimeError("secret plan text")
 
     monkeypatch.setattr(tools_mod, "_evaluate", _broken)
-    text, result = await _build(monkeypatch, slides=[COVER])
+    text, result = await _build(slides=[COVER])
     assert result.is_error and "internal problem" in text
     assert "secret" not in text
 
 
 @pytest.mark.asyncio
-async def test_malformed_plan_from_a_small_model_still_builds(monkeypatch):
+async def test_malformed_plan_from_a_small_model_still_builds():
     """The shape of a real failing call: the old `pattern` key holding ids or
     legacy names, stray strings in `slides`, bullets as one string, numbers as
     integers, an unknown top-level key."""
     workspace = FakeWorkspace()
     text, result = await _build(
-        monkeypatch,
         workspace=workspace,
         notes="stray top-level key",
         slides=[
@@ -435,13 +427,10 @@ async def test_malformed_plan_from_a_small_model_still_builds(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change(
-    monkeypatch,
-):
+async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change():
     """Seven steps where the largest process slide holds three: the old tool
     dropped four of them silently."""
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, _ = _configured()
     # No template in the store: a fetch would turn the answer into a load error.
     tools = _tools(_ctx(config, assets=FakeAssets(), workspace=workspace))
@@ -482,17 +471,15 @@ async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change(
 
 
 @pytest.mark.asyncio
-async def test_the_corrected_plan_is_built_as_a_whole(monkeypatch):
+async def test_the_corrected_plan_is_built_as_a_whole():
     workspace = FakeWorkspace()
     steps = [{"number": str(i), "heading": f"Step {i}", "text": "x"} for i in range(7)]
     _, first = await _build(
-        monkeypatch,
         workspace=workspace,
         slides=[COVER, {"title": "Method", "kind": "process", "items": steps}],
     )
     assert not first.is_error and workspace.writes == []
     text, second = await _build(
-        monkeypatch,
         workspace=workspace,
         slides=[
             COVER,
@@ -506,9 +493,8 @@ async def test_the_corrected_plan_is_built_as_a_whole(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_a_parallel_copy_of_a_call_is_not_built_twice(monkeypatch):
+async def test_a_parallel_copy_of_a_call_is_not_built_twice():
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     plan = [COVER, {"title": "Agenda", "bullets": ["One", "Two"]}]
@@ -541,9 +527,8 @@ _REPEATED = [COVER] + [_steps(n) for n in range(4)]
 
 
 @pytest.mark.asyncio
-async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkeypatch):
+async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built():
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=_REPEATED)
@@ -568,9 +553,8 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
 
 
 @pytest.mark.asyncio
-async def test_a_malformed_first_call_does_not_use_up_the_variety_ask(monkeypatch):
+async def test_a_malformed_first_call_does_not_use_up_the_variety_ask():
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=[{"kind": "bullets"}])
@@ -589,9 +573,8 @@ _TOO_MANY = {
 
 
 @pytest.mark.asyncio
-async def test_no_variety_ask_after_a_fit_repair(monkeypatch):
+async def test_no_variety_ask_after_a_fit_repair():
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=[COVER, _TOO_MANY])
@@ -603,9 +586,8 @@ async def test_no_variety_ask_after_a_fit_repair(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_a_first_call_with_fit_problems_carries_the_variety_ask(monkeypatch):
+async def test_a_first_call_with_fit_problems_carries_the_variety_ask():
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=_REPEATED + [_TOO_MANY])
@@ -629,13 +611,10 @@ def _labelled_steps(n: int, label: bool = True) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_slides_to_fix_that_repeat_are_asked_to_vary_in_the_same_round(
-    monkeypatch,
-):
+async def test_slides_to_fix_that_repeat_are_asked_to_vary_in_the_same_round():
     """The live call: both repeated slides had a fit problem, so the first
     answer named no repeat and the repaired deck broke the max of 1."""
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     config = config.model_copy(update={"variety_max_uses": 1})
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
@@ -668,11 +647,8 @@ class _Request:
         return self
 
 
-async def _later_turn(
-    monkeypatch, history: list, extend=None, variety="template_slide"
-):
+async def _later_turn(history: list, extend=None, variety="template_slide"):
     """A new turn's build tool, after the model call that was sent ``history``."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured(extend, variety)
     (middleware,) = PptBuilderCapability().middleware(_ctx(config, assets=assets))
     middleware = cast(Any, middleware)
@@ -710,27 +686,25 @@ def _rehydrated(history: list) -> list:
 
 
 @pytest.mark.asyncio
-async def test_a_deck_after_the_first_one_is_built_as_is(monkeypatch):
+async def test_a_deck_after_the_first_one_is_built_as_is():
     """A delivered deck in the history: the user may have asked for these slides."""
-    delivered, result = await _build(monkeypatch, slides=[COVER])
+    delivered, result = await _build(slides=[COVER])
     assert not result.is_error
-    build = await _later_turn(monkeypatch, _turn(delivered))
+    build = await _later_turn(_turn(delivered))
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
     assert '"variety"' not in text and "all use the template slide" not in text
 
 
 @pytest.mark.asyncio
-async def test_a_deck_delivered_in_an_earlier_turn_is_seen_with_names_stripped(
-    monkeypatch,
-):
+async def test_a_deck_delivered_in_an_earlier_turn_is_seen_with_names_stripped():
     """Live: the variety ask came back on turn 3 for slides delivered on turn 1,
     because the model call's tool messages carry no name."""
-    delivered, result = await _build(monkeypatch, slides=[COVER])
+    delivered, result = await _build(slides=[COVER])
     assert not result.is_error
     history = _rehydrated(_turn(delivered))
     assert tools_mod.deck_delivered(history)
-    build = await _later_turn(monkeypatch, history)
+    build = await _later_turn(history)
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
     # Another tool's delivery-like text, names stripped, still delivers nothing.
@@ -738,13 +712,13 @@ async def test_a_deck_delivered_in_an_earlier_turn_is_seen_with_names_stripped(
 
 
 @pytest.mark.asyncio
-async def test_a_history_without_a_delivered_deck_is_still_a_first_deck(monkeypatch):
-    asked, _ = await _build(monkeypatch, slides=_REPEATED)
+async def test_a_history_without_a_delivered_deck_is_still_a_first_deck():
+    asked, _ = await _build(slides=_REPEATED)
     assert '"variety": [' in asked
-    unread, _ = await _build(monkeypatch, slides=[{"kind": "bullets"}])
+    unread, _ = await _build(slides=[{"kind": "bullets"}])
     # A needs_revision, an error, or another tool's text never delivered a deck.
     history = _turn(asked) + _turn(unread) + _turn("Delivered: 'x.pptx'", "other")
-    build = await _later_turn(monkeypatch, history)
+    build = await _later_turn(history)
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error and '"variety": [' in text
 
@@ -761,12 +735,9 @@ def test_both_success_texts_count_as_a_delivered_deck():
 
 
 @pytest.mark.asyncio
-async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
-    monkeypatch,
-):
+async def test_one_kind_on_different_slides_is_asked_once_with_content_advice():
     """The real first deck: five bullets slides on five template slides."""
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured(with_item_slides, "kind")
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
@@ -787,18 +758,16 @@ async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
 
 
 @pytest.mark.asyncio
-async def test_a_later_deck_repeating_a_kind_is_built_as_is(monkeypatch):
-    delivered, _ = await _build(monkeypatch, slides=[COVER])
-    build = await _later_turn(
-        monkeypatch, _turn(delivered), extend=with_item_slides, variety="kind"
-    )
+async def test_a_later_deck_repeating_a_kind_is_built_as_is():
+    delivered, _ = await _build(slides=[COVER])
+    build = await _later_turn(_turn(delivered), extend=with_item_slides, variety="kind")
     text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
     assert not result.is_error, text
     assert '"variety"' not in text and "are all 'bullets' slides" not in text
 
 
 @pytest.mark.asyncio
-async def test_each_variety_check_mode_asks_for_its_own_repeat(monkeypatch):
+async def test_each_variety_check_mode_asks_for_its_own_repeat():
     """Five bullets slides on five template slides: a kind repeat, no template
     slide used three times; the steps reuse one template slide."""
     for variety, plan, asked in [
@@ -810,9 +779,7 @@ async def test_each_variety_check_mode_asks_for_its_own_repeat(monkeypatch):
     ]:
         # The added item slides are never rendered: only the evidence plan needs them.
         extend = with_item_slides if plan is EVIDENCE_SLIDES else None
-        text, result = await _build(
-            monkeypatch, extend=extend, variety=variety, slides=plan
-        )
+        text, result = await _build(extend=extend, variety=variety, slides=plan)
         assert not result.is_error, (variety, text)
         assert asked is ('"variety": [' in text), (variety, text)
         # A delivered deck never talks layout reuse.
@@ -842,17 +809,16 @@ def test_the_variety_check_defaults_and_never_triggers_a_re_analysis():
 
 
 @pytest.mark.asyncio
-async def test_structural_repeats_are_never_a_revision(monkeypatch):
+async def test_structural_repeats_are_never_a_revision():
     sections = [COVER] + [{"title": f"Part {n}", "kind": "section"} for n in range(4)]
-    text, result = await _build(monkeypatch, slides=sections)
+    text, result = await _build(slides=sections)
     assert not result.is_error, text
 
 
 @pytest.mark.asyncio
-async def test_a_heading2_column_is_returned_for_revision_not_dropped(monkeypatch):
+async def test_a_heading2_column_is_returned_for_revision_not_dropped():
     workspace = FakeWorkspace()
     text, result = await _build(
-        monkeypatch,
         workspace=workspace,
         slides=[
             COVER,
@@ -890,7 +856,7 @@ def test_the_success_notes_name_what_was_cut_per_slide():
 
 
 @pytest.mark.asyncio
-async def test_a_renderer_finding_reaches_the_model_in_the_review_notes(monkeypatch):
+async def test_a_renderer_finding_reaches_the_model_in_the_review_notes():
     """An agenda announcing parts the deck never covers was only logged; the
     model now reads it, with its remedy, after the unchanged success prefix."""
     agenda = {
@@ -898,7 +864,7 @@ async def test_a_renderer_finding_reaches_the_model_in_the_review_notes(monkeypa
         "kind": "agenda",
         "items": [{"heading": f"Part {i}"} for i in range(4)],
     }
-    text, result = await _build(monkeypatch, slides=[COVER, agenda])
+    text, result = await _build(slides=[COVER, agenda])
     assert not result.is_error, text
     assert tools_mod.deck_delivered(_turn(text))
     review = text[text.index("\nTell the user") :]
@@ -921,29 +887,27 @@ def _agenda(n: int) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_a_split_agenda_is_one_agenda_for_the_gap_check(monkeypatch):
+async def test_a_split_agenda_is_one_agenda_for_the_gap_check():
     """Six parts over two agenda slides of 3: the slides that follow are
     counted after the second part, the parts announced once."""
-    text, result = await _build(monkeypatch, slides=[COVER, _agenda(6), *_points(2)])
+    text, result = await _build(slides=[COVER, _agenda(6), *_points(2)])
     assert not result.is_error, text
     review = text[text.index("\nTell the user") :]
     assert "Slide 2: its 6 items continue on a second 'agenda' slide (3 + 3" in review
     assert (
         "Slide 2: the agenda announces 6 parts but only 2 slide(s) follow it." in review
     )
-    text, _ = await _build(monkeypatch, slides=[COVER, _agenda(6), *_points(3)])
+    text, _ = await _build(slides=[COVER, _agenda(6), *_points(3)])
     assert "announces" not in text
 
 
 @pytest.mark.asyncio
-async def test_notes_after_a_split_name_the_files_slide_numbers(monkeypatch):
+async def test_notes_after_a_split_name_the_files_slide_numbers():
     """The process list of slide 2 takes two slides; the agenda after it is
     slide 4 of the file, and every note says so."""
     steps = [{"heading": f"Step {i}", "text": "x"} for i in range(5)]
     method = {"title": "Method", "kind": "process", "items": steps}
-    text, result = await _build(
-        monkeypatch, slides=[COVER, method, _agenda(4), *_points(1)]
-    )
+    text, result = await _build(slides=[COVER, method, _agenda(4), *_points(1)])
     assert not result.is_error, text
     assert "(5 slides)" in text
     assert "Slide 2: its 5 items continue on a second 'process' slide (3 + 2" in text
@@ -964,14 +928,12 @@ def _relabel(**labels: str):
 
 
 @pytest.mark.asyncio
-async def test_the_delivered_text_names_each_file_slides_design(monkeypatch):
+async def test_the_delivered_text_names_each_file_slides_design():
     """A "same layout as slide 5" request is about the template slide, not the kind: the
     model reads which design each file slide has, a split list's parts included."""
     steps = [{"heading": f"Step {i}", "text": "x"} for i in range(5)]
     method = {"title": "Method", "kind": "process", "items": steps}
-    text, result = await _build(
-        monkeypatch, slides=[COVER, method, _agenda(4), *_points(3)]
-    )
+    text, result = await _build(slides=[COVER, method, _agenda(4), *_points(3)])
     assert not result.is_error, text
     (designs,) = [line for line in text.splitlines() if line.startswith("Designs: ")]
     assert designs.startswith(
@@ -986,9 +948,9 @@ async def test_the_delivered_text_names_each_file_slides_design(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_two_template_slides_sharing_a_label_get_distinct_names(monkeypatch):
+async def test_two_template_slides_sharing_a_label_get_distinct_names():
     extend = _relabel(**{"slide:269": "Points"}, **{"slide:266": "Points"})
-    text, result = await _build(monkeypatch, extend=extend, slides=[COVER, *_points(3)])
+    text, result = await _build(extend=extend, slides=[COVER, *_points(3)])
     assert not result.is_error, text
     (designs,) = [line for line in text.splitlines() if line.startswith("Designs: ")]
     assert "'Points'" in designs and "'Points #2'" in designs
@@ -1018,7 +980,7 @@ def test_a_long_design_name_is_cut():
 async def test_the_delivered_part_summarises_what_was_built(monkeypatch, preview_union):
     """The dialog beside the download reads the tool's record, not the reply:
     a split list, a close-kind fallback and a picture that did not load."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _pdf)
+    monkeypatch.setattr(FakeWorkspace, "convert_office_to_pdf", _pdf)
     config, assets = _configured()
     docs = FakeDocs({"txt-1": (b"hello", "text/plain")})
     tools = _tools(_ctx(config, assets=assets, docs=docs))
@@ -1074,7 +1036,7 @@ async def test_the_delivered_part_summarises_what_was_built(monkeypatch, preview
 
 
 @pytest.mark.asyncio
-async def test_build_places_images_from_documents_and_reports_bad_ones(monkeypatch):
+async def test_build_places_images_from_documents_and_reports_bad_ones():
     docs = FakeDocs(
         {"img-1": (png_bytes(20, 10), "image/png"), "txt-1": (b"hello", "text/plain")}
     )
@@ -1082,13 +1044,13 @@ async def test_build_places_images_from_documents_and_reports_bad_ones(monkeypat
     def plan(image: str) -> list:
         return [COVER, {"title": "Site", "image": image}]
 
-    text, result = await _build(monkeypatch, docs=docs, slides=plan("img-1"))
+    text, result = await _build(docs=docs, slides=plan("img-1"))
     assert not result.is_error, text
     assert docs.fetch_uids == ["img-1"]
     # A bad image reference costs the picture, never the deck.
-    text, result = await _build(monkeypatch, docs=docs, slides=plan("txt-1"))
+    text, result = await _build(docs=docs, slides=plan("txt-1"))
     assert not result.is_error and "image 'txt-1'" in text
-    text, result = await _build(monkeypatch, docs=docs, slides=plan("missing"))
+    text, result = await _build(docs=docs, slides=plan("missing"))
     assert not result.is_error and "image 'missing'" in text
 
 
@@ -1142,12 +1104,11 @@ async def _through_middleware(middleware, message: AIMessage, call: dict):
 
 
 @pytest.mark.asyncio
-async def test_parallel_build_calls_of_one_round_build_only_the_first(monkeypatch):
+async def test_parallel_build_calls_of_one_round_build_only_the_first():
     """Live: a small model sent one deck as several different calls at once;
     the cover+agenda call was delivered and the fragments were refused for
     not starting with a cover, which led it to split further."""
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     (middleware,) = PptBuilderCapability().middleware(
         _ctx(config, assets=assets, workspace=workspace)
@@ -1182,9 +1143,8 @@ async def test_parallel_build_calls_of_one_round_build_only_the_first(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_a_single_build_call_or_a_copy_in_parallel_is_handled_once(monkeypatch):
+async def test_a_single_build_call_or_a_copy_in_parallel_is_handled_once():
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     (middleware,) = PptBuilderCapability().middleware(
         _ctx(config, assets=assets, workspace=workspace)
@@ -1207,9 +1167,8 @@ async def test_a_single_build_call_or_a_copy_in_parallel_is_handled_once(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_a_deck_without_a_cover_is_built_as_sent(monkeypatch):
+async def test_a_deck_without_a_cover_is_built_as_sent():
     """No cover refusal: the deck holds exactly what the model sends."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=FakeWorkspace()))[
         BUILD_TOOL_NAME
@@ -1225,7 +1184,6 @@ async def test_resending_the_delivered_deck_rebuilds_nothing(monkeypatch):
     """Live: the model resent the deck it had just been delivered, which was
     rebuilt for ~14 s for nothing and used up one of the turn's tool calls."""
     workspace = FakeWorkspace()
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     plan = [COVER, {"title": "Agenda", "bullets": ["One", "Two"]}]
@@ -1305,10 +1263,9 @@ def _replay(name: str) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_a_deck_field_written_inside_a_slide_is_read_as_the_decks(monkeypatch):
+async def test_a_deck_field_written_inside_a_slide_is_read_as_the_decks():
     """Live (mistral-medium): `file_name` sat inside the cover slide and the
     whole deck was refused, telling the model to put it in the slide's text."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     # The session's own template is not in the repo: the built-in one, whose
     # variety note that template did not raise, checked apart.
     config = PptBuilderConfig.model_validate({"variety_check": "off"})
@@ -1329,12 +1286,9 @@ async def test_a_deck_field_written_inside_a_slide_is_read_as_the_decks(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_a_deck_field_inside_a_parsed_slide_is_never_a_slide_problem(
-    monkeypatch,
-):
+async def test_a_deck_field_inside_a_parsed_slide_is_never_a_slide_problem():
     """Live (0f2506ea, mistral-medium): the cover's `file_name` came back as
     'a deck field, not a slide field' once the runtime had parsed the slides."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     build = _tools(_ctx(PptBuilderConfig()))[BUILD_TOOL_NAME]
     sent = _replay("0f2506ea_first_build.json")
     assert "file_name" in sent["slides"][0] and "file_name" not in sent
@@ -1369,7 +1323,7 @@ async def test_an_unreadable_plan_is_logged_without_its_text(monkeypatch, caplog
         return _Slide.model_validate({"title": "confidential figures"})
 
     monkeypatch.setattr(tools_mod, "_to_plan", _unreadable)
-    text, result = await _build(monkeypatch, slides=[COVER])
+    text, result = await _build(slides=[COVER])
     assert result.is_error, text
     logged = [r.getMessage() for r in caplog.records if "unreadable plan" in r.msg]
     assert logged == ["[PPTBUILD][TOOL] unreadable plan: title: int_parsing"]
@@ -1377,10 +1331,10 @@ async def test_an_unreadable_plan_is_logged_without_its_text(monkeypatch, caplog
 
 
 @pytest.mark.asyncio
-async def test_a_ragged_table_is_sent_back_with_its_rows_named(monkeypatch):
+async def test_a_ragged_table_is_sent_back_with_its_rows_named():
     table = {"columns": ["A", "B", "C"], "rows": [["1"], ["1", "2", "3", "4"]]}
     text, result = await _build(
-        monkeypatch, variety="off", slides=[COVER, {"title": "T", "table": table}]
+        variety="off", slides=[COVER, {"title": "T", "table": table}]
     )
     assert not result.is_error and "No deck was built" in text
     assert "table.rows[0] has 1 cells for 3 columns" in text
@@ -1388,11 +1342,11 @@ async def test_a_ragged_table_is_sent_back_with_its_rows_named(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_characters_xml_refuses_are_dropped_and_the_deck_builds(monkeypatch):
+async def test_characters_xml_refuses_are_dropped_and_the_deck_builds():
     workspace = FakeWorkspace()
     slide = {"title": "bad\x00\x0b title \ud800", "bullets": ["￾ x", "a\x08b"]}
     text, result = await _build(
-        monkeypatch, workspace=workspace, variety="off", slides=[COVER, slide]
+        workspace=workspace, variety="off", slides=[COVER, slide]
     )
     assert not result.is_error and text.startswith(tools_mod._DELIVERED), text
     deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
@@ -1401,12 +1355,11 @@ async def test_characters_xml_refuses_are_dropped_and_the_deck_builds(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_a_picture_too_large_is_left_out_with_a_note(monkeypatch):
+async def test_a_picture_too_large_is_left_out_with_a_note():
     from deck_builders import declared_png
 
     docs = FakeDocs({"huge-1": (declared_png(9_000, 9_000), "image/png")})
     text, result = await _build(
-        monkeypatch,
         docs=docs,
         variety="off",
         slides=[COVER, {"title": "Site", "image": "huge-1"}],
@@ -1419,14 +1372,31 @@ async def test_a_picture_too_large_is_left_out_with_a_note(monkeypatch):
 async def test_a_preview_stuck_in_the_queue_leaves_the_deck_download_only(
     monkeypatch, preview_union
 ):
-    async def _stuck(_bytes: bytes, *, suffix: str, **_options):
+    async def _stuck(_workspace, _content: bytes, *, suffix: str):
         await asyncio.sleep(30)
 
     config, assets = _configured()
     workspace = FakeWorkspace()
     tools = _tools(_ctx(config, assets=assets, workspace=workspace))
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _stuck)
+    monkeypatch.setattr(FakeWorkspace, "convert_office_to_pdf", _stuck)
     monkeypatch.setattr(tools_mod, "PREVIEW_WAIT_SECONDS", 0.05)
+    text, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[COVER])
+    assert not result.is_error and "only the download" in text
+    assert result.ui_parts[0].kind.value == "download"
+    assert [w["path"][-5:] for w in workspace.writes] == [".pptx"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_preview_conversion_leaves_the_deck_download_only(
+    monkeypatch, preview_union
+):
+    async def _failed(_workspace, _content: bytes, *, suffix: str):
+        raise RuntimeError("conversion failed")
+
+    config, assets = _configured()
+    workspace = FakeWorkspace()
+    tools = _tools(_ctx(config, assets=assets, workspace=workspace))
+    monkeypatch.setattr(FakeWorkspace, "convert_office_to_pdf", _failed)
     text, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[COVER])
     assert not result.is_error and "only the download" in text
     assert result.ui_parts[0].kind.value == "download"

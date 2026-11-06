@@ -30,7 +30,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fred_capability_ppt_filler.builder import analysis_job, preparation
 from fred_capability_ppt_filler.builder import capability as capability_mod
-from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis_job import get_analysis_store
 from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.capability import (
@@ -78,10 +77,6 @@ def _uploads(content: bytes):
 
 async def _pdf(_bytes: bytes, *, suffix: str, **_options):
     return b"%PDF-fake"
-
-
-async def _no_pdf(_bytes: bytes, *, suffix: str, **_options):
-    return None
 
 
 @pytest.fixture(autouse=True)
@@ -339,7 +334,7 @@ async def test_the_tool_refuses_while_the_analysis_is_pending(analysis_db):
 
 @pytest.mark.asyncio
 async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
-    analysis_db, monkeypatch
+    analysis_db,
 ):
     stored = await _analysed(analysis_db)
     analysis_job.clear_caches()  # a pod that has not read it yet
@@ -377,7 +372,6 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
     assert "never write the call, its JSON" in update["system_message"].content
 
     # The registered tool executes with the template's tool, from validated args.
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     message = await deferred.ainvoke(
         {
             "type": "tool_call",
@@ -398,12 +392,9 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
 
 
 @pytest.mark.asyncio
-async def test_a_turn_never_renders_a_template_other_than_the_analysed_one(
-    analysis_db, monkeypatch
-):
+async def test_a_turn_never_renders_a_template_other_than_the_analysed_one(analysis_db):
     """A save stores a new template before its config commits: a turn still on
     the old config refuses instead of rendering the new bytes."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     stored = await _analysed(analysis_db)
     plan = {"slides": [{"title": "Kick-off"}, {"title": "Plan", "bullets": ["a"]}]}
     newer = builtin_template()[0]  # a valid deck: rendering it would succeed

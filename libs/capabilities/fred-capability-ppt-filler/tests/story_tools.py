@@ -21,7 +21,6 @@ import io
 import itertools
 from typing import Any, Dict, List, Optional, cast
 
-from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.capability import (
     PptBuilderCapability,
     PptBuilderConfig,
@@ -70,7 +69,7 @@ class _Request:
         return self
 
 
-async def _pdf(_bytes: bytes, *, suffix: str, **_options):
+async def _pdf(_workspace, _content: bytes, *, suffix: str):
     return b"%PDF-fake"
 
 
@@ -82,7 +81,7 @@ async def build_tool(
     workspace: Optional[FakeWorkspace] = None,
 ) -> Any:
     """A new turn's build tool on the built-in template."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _pdf)
+    monkeypatch.setattr(FakeWorkspace, "convert_office_to_pdf", _pdf)
     config = PptBuilderConfig(validate_plan=validate_plan, variety_check="off")
     ctx = CapabilityContext(
         identity=CapabilityIdentity(

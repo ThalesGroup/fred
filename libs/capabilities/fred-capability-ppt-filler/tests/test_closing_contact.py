@@ -27,7 +27,6 @@ import pytest
 from builder_decks import L_TITLE_ONLY, _set_title, _textbox, build_slides
 from deck_builders import png_bytes
 from fred_capability_ppt_filler.builder import lexicon
-from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import assign
 from fred_capability_ppt_filler.builder.models import Pattern, TemplateInventory
@@ -44,7 +43,7 @@ from fred_capability_ppt_filler.builder.tools import (
 from port_fakes import FakeWorkspace
 from pptx import Presentation
 from pptx.util import Inches
-from test_build_tool import _configured, _ctx, _no_pdf, _tools
+from test_build_tool import _configured, _ctx, _tools
 
 COVER = {"title": "Projet X", "subtitle": "Revue de lancement"}
 POINTS = {"title": "Le contexte", "bullets": ["Un marché en croissance", "Deux sites"]}
@@ -282,12 +281,9 @@ def test_the_guidance_puts_the_closing_outside_the_slide_count():
 
 
 @pytest.mark.asyncio
-async def test_an_opt_out_sent_with_changes_drops_the_added_closing(
-    monkeypatch, deck_plan_store
-):
+async def test_an_opt_out_sent_with_changes_drops_the_added_closing(deck_plan_store):
     """The opt-out removes the thank-you closing the build appended, without a
     `remove` op, even when the edit sent leaves every slide as it was."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     workspace = FakeWorkspace()
     template = _template(_contact_slide, _thanks_slide)
 

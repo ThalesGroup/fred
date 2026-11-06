@@ -46,7 +46,7 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.runtime import RuntimeServices
 from port_fakes import FakeDocs, FakeWorkspace
 from pptx import Presentation
-from test_build_tool import _REPEATED, COVER, _configured, _ctx, _no_pdf, _tools
+from test_build_tool import _REPEATED, COVER, _configured, _ctx, _tools
 from test_builder_render import _texts
 
 BASE = DeckPlan.model_validate(
@@ -295,7 +295,6 @@ class _Turn:
             return real(template, inventory, plan, patterns, *rest)
 
         monkeypatch.setattr(tools_mod, "render_deck", recording)
-        monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
         config, assets = _configured()
         self.build = _tools(
             _ctx(config, assets=assets, docs=docs, workspace=workspace)
@@ -930,8 +929,7 @@ async def test_the_base_is_shared_through_the_sql_table(monkeypatch, analysis_db
 
 
 @pytest.mark.asyncio
-async def test_a_deck_without_session_keeps_its_base_for_the_turn_only(monkeypatch):
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+async def test_a_deck_without_session_keeps_its_base_for_the_turn_only():
     config, _ = _configured()
     ctx = CapabilityContext(
         identity=CapabilityIdentity(

@@ -38,7 +38,6 @@ from typing import (
     cast,
 )
 
-from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
 from fred_sdk.contracts.context import (
     LinkKind,
@@ -1993,7 +1992,7 @@ def build_builder_tools(
 
         try:
             pdf_bytes = await asyncio.wait_for(
-                convert_office_bytes_to_pdf(
+                workspace.convert_office_to_pdf(
                     result.preview_pptx or result.pptx, suffix=".pptx"
                 ),
                 PREVIEW_WAIT_SECONDS,
@@ -2001,6 +2000,13 @@ def build_builder_tools(
         except asyncio.TimeoutError:  # the conversions are all busy: deliver the file
             logger.warning(
                 "[PPTBUILD][TOOL] preview skipped after %.0fs", PREVIEW_WAIT_SECONDS
+            )
+            pdf_bytes = None
+        except Exception as exc:
+            # The runtime retains an uncertain conversion intent; returning the
+            # deck must never imply its temporary files have been cleaned up.
+            logger.warning(
+                "[PPTBUILD][TOOL] preview conversion failed: %s", type(exc).__name__
             )
             pdf_bytes = None
         pdf_url: Optional[str] = None
