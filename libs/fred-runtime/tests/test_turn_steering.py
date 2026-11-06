@@ -564,7 +564,9 @@ async def test_steered_reply_is_visible_before_normal_model_call(monkeypatch):
             )
         assert request.messages[-2].content == "I am checking the sources."
         assert isinstance(request.messages[-1], HumanMessage)
-        assert "Continue the original task" in request.messages[-1].content
+        assert "complete any question or request" in request.messages[-1].content
+        assert "later updates can revise earlier ones" in request.messages[-1].content
+        assert "If the task remains stopped" in request.messages[-1].content
         assert [message.type for message in request.messages] == [
             "human",
             "ai",

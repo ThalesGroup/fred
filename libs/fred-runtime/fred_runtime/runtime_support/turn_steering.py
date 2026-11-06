@@ -100,9 +100,13 @@ def _continue_after_steered_reply(request: ModelRequest) -> ModelRequest:
             *request.messages,
             HumanMessage(
                 content=(
-                    "Continue the original task unless the latest user update changes "
-                    "or stops it. The brief reply above was already shown to the user; "
-                    "do not repeat it."
+                    "Apply all in-progress user updates in order; later updates can revise "
+                    "earlier ones. If the task remains stopped after those updates, do not "
+                    "call tools or continue it; end the turn. Otherwise, complete any "
+                    "question or request from those "
+                    "updates that the visible reply above did not fully answer, using tools "
+                    "when needed. Continue the original task if it still applies. "
+                    "Do not repeat the visible reply or work already completed."
                 )
             ),
         ]

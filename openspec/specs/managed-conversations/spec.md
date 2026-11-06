@@ -198,7 +198,7 @@ The runtime SHALL give an eligible submitted message to the active ReAct or Deep
 
 ### Requirement: In-progress updates receive separate assistant replies
 
-The agent SHALL send a concise, user-facing assistant message responding to an in-progress update before continuing ordinary model or tool work. User delivery and reply persistence SHALL commit atomically before that work resumes. The reply SHALL have its own canonical rank and survive history reload and checkpoint recovery. A progress question SHALL receive current status when the model produces a visible reply. If two completed reply calls produce no usable answer, the agent SHALL send an explicit, localized failure notice through the same delivery path. A failed model call or persistence SHALL leave the user message pending.
+The agent SHALL send a concise, user-facing assistant message responding to an in-progress update before continuing ordinary model or tool work. User delivery and reply persistence SHALL commit atomically before that work resumes. The reply SHALL have its own canonical rank and survive history reload and checkpoint recovery. A progress question SHALL receive current status when the model produces a visible reply. Continuation SHALL retain that reply and direct the agent to complete any part of the update it did not fully answer, with tools available, unless the update stops the task. If two completed reply calls produce no usable answer, the agent SHALL send an explicit, localized failure notice through the same delivery path. A failed model call or persistence SHALL leave the user message pending.
 
 #### Scenario: Progress question during a tool call
 
@@ -206,6 +206,13 @@ The agent SHALL send a concise, user-facing assistant message responding to an i
 - **WHEN** the user asks for progress and the tool results arrive
 - **THEN** the agent sends a separate assistant status message before any further tool calls
 - **AND** the chat keeps that message separate from the later final answer after reload
+
+#### Scenario: Update needs more work than the immediate reply
+
+- **GIVEN** an update asks a substantive question requiring more tool work
+- **WHEN** the immediate reply explains the current progress
+- **THEN** the next model decision retains that reply and the unanswered update in context
+- **AND** the agent is directed to complete the remaining request with tools available
 
 #### Scenario: Reply failure before delivery
 
