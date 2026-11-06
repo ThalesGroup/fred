@@ -18,4 +18,4 @@
 
 - [x] 4.1 Update runtime and UX contracts plus migration operations guidance; verify documentation matches the final API and deployment sequence.
 - [x] 4.2 Run focused backend/frontend tests, root quality once, and an independent branch review against the target branch; record findings and dispositions.
-- [ ] 4.3 Reconcile OpenSpec artifacts, sync and archive the change, create or link the tracking issue, and push a draft PR; verify its diff and migration count.
+- [x] 4.3 Reconcile OpenSpec artifacts, sync and archive the change, create or link the tracking issue, and push a draft PR; verify its diff and migration count.
