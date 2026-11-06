@@ -577,7 +577,7 @@ async fn python_purge_retries_blocked_receipts_and_requires_effective_erasure() 
         cleanup::batch(&e.pool, receipt.id, &pod.runtime, None)
             .await
             .is_err(),
-        "old history-only endpoint must not complete erasure"
+        "a success without an explicit purge acknowledgement must not complete erasure"
     );
     pod.purged.store(true, Ordering::SeqCst);
     for _ in 0..2 {

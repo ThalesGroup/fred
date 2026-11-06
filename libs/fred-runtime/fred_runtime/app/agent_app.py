@@ -478,10 +478,6 @@ class _ConversationFilesystemPurgeResponse(BaseModel):
     purged: bool
 
 
-class _SessionPurgeResponse(_ConversationFilesystemPurgeResponse):
-    """Filesystem erased; SQL ownership is enforced by CP-rooted foreign keys."""
-
-
 class _RuntimeErrorPayload(BaseModel):
     """
     Structured execution error payload returned by runtime HTTP endpoints.
@@ -5607,18 +5603,16 @@ def _build_agent_router(
 
     @router.delete(
         "/sessions/{session_id}",
-        response_model=_SessionPurgeResponse,
+        response_model=_ConversationFilesystemPurgeResponse,
     )
     async def purge_session(
         http_request: Request,
         session_id: str,
         caller: KeycloakUser | None = Depends(_purge_subject),
-    ) -> _SessionPurgeResponse:
+    ) -> _ConversationFilesystemPurgeResponse:
         """Close object writes permanently, then erase conversation files.
 
-        Only platform maintenance may perform physical lifecycle erasure. The
-        success acknowledgement is deliberately distinct from the old history-only
-        DELETE: an older pod must never let Control Plane complete a receipt.
+        Only platform maintenance may perform physical lifecycle erasure.
         """
         _refuse_reserved_session_id(session_id)
         if security_enabled and not await _caller_can_manage_platform(
@@ -5648,7 +5642,7 @@ def _build_agent_router(
             raise HTTPException(
                 status_code=503, detail="session_purge_unavailable"
             ) from exc
-        return _SessionPurgeResponse(purged=True)
+        return _ConversationFilesystemPurgeResponse(purged=True)
 
     @router.get("/sessions/{session_id}/filesystem/exports/{path:path}")
     async def download_session_export(

@@ -256,7 +256,8 @@ async def test_late_writes_fail_in_database_after_runtime_restarts(database):
         )
     with pytest.raises(IntegrityError):
         await PostgresHistoryStore(runtime).save(SESSION, [_message(SESSION)], "alice")
-    # Every table is protected even for SQL issued by an old admitted producer.
+    # Every table is protected even for SQL issued by a producer admitted before
+    # the purge.
     async with runtime.connect() as conn:
         metadata = MetaData()
         reflected = await conn.run_sync(

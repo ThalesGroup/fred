@@ -398,7 +398,7 @@ export type ListSessionsPodV1AgentsSessionsGetApiArg = {
   userId?: string | null;
 };
 export type PurgeSessionPodV1AgentsSessionsSessionIdDeleteApiResponse =
-  /** status 200 Successful Response */ SessionPurgeResponse;
+  /** status 200 Successful Response */ ConversationFilesystemPurgeResponse;
 export type PurgeSessionPodV1AgentsSessionsSessionIdDeleteApiArg = {
   sessionId: string;
 };
@@ -1228,9 +1228,6 @@ export type PlatformPromptFileResponse = {
   creation_assistant_prompt_revised_at: string;
   platform_instructions: string;
   platform_prompt: string;
-};
-export type SessionPurgeResponse = {
-  purged: boolean;
 };
 export type ConversationFilesystemPurgeResponse = {
   purged: boolean;
