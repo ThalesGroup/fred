@@ -635,9 +635,9 @@ async def test_invalid_interim_reply_falls_back_and_continues(
     assert events[1].message_ids == ("m1", "m2")
     assert [item.message_id for item in events[1].deliveries] == ["m1", "m2"]
     assert events[1].content == (
-        "J'ai reçu tes messages et vais suivre tes dernières consignes."
+        "Je n'ai pas pu répondre immédiatement à tes messages. Je les ai pris en compte."
         if invalid_kind == "reasoning"
-        else "I received your updates and will follow your latest instructions."
+        else "I could not answer your updates immediately. I have taken them into account."
     )
     assert [message.content for message in response.result] == [
         events[1].content,

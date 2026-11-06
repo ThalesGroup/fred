@@ -263,15 +263,19 @@ class TurnSteeringMiddleware(AgentMiddleware):
             reply = AIMessage(
                 content=(
                     (
-                        "J'ai reçu tes messages et vais suivre tes dernières consignes."
+                        "Je n'ai pas pu répondre immédiatement à tes messages. "
+                        "Je les ai pris en compte."
                         if len(message_ids) > 1
-                        else "J'ai reçu ton message et vais suivre ta dernière consigne."
+                        else "Je n'ai pas pu répondre immédiatement à ton message. "
+                        "Je l'ai pris en compte."
                     )
                     if french
                     else (
-                        "I received your updates and will follow your latest instructions."
+                        "I could not answer your updates immediately. "
+                        "I have taken them into account."
                         if len(message_ids) > 1
-                        else "I received your update and will follow your latest instruction."
+                        else "I could not answer your update immediately. "
+                        "I have taken it into account."
                     )
                 )
             )
