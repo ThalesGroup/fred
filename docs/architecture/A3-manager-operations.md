@@ -208,14 +208,14 @@ credentials or raw transport diagnostics. User lookup encodes the subject as a p
 
 ## Import boundary and feedback
 
-The CLI reads the operator bearer from a file, separately from the service-client
+The CLI reads the platform-admin bearer from a file, separately from the service-client
 secret. HTTP accepts exactly one multipart `file` after verified platform-admin
 authority. The ZIP parser accepts stored/deflated entries without extraction,
 checks actual expanded bytes and rejects duplicate/path-bearing entries, inconsistent
 headers, symlinks, encryption and corrupt data. Archive size is 50 MiB; expanded
 data totals at most 100 MiB. The HTTP body limit adds 64 KiB for multipart framing.
 Parsing runs on a blocking worker. Old formats return 422 `not_yet_supported`.
-HTTP maps operator authentication to 401, authority to 403, invalid declarations
+HTTP maps caller authentication to 401, authority to 403, invalid declarations
 to 422, state/revision conflicts to 409, unavailable dependencies to 503 and internal
 SQL failures to 500. Importer failures contain static reasons and safe counts, never dependency
 diagnostics or input values. HTTP upload, parsing and initial authorization
@@ -227,7 +227,7 @@ values; provisioning failures report a safe phase and acknowledgment counts, and
 nonzero. Counts cover resolved/created identities, committed reconciled spaces and
 acknowledged grants; a lost response can leave uncounted remote effects. Success returns
 these counts as one JSON object (stdout or HTTP 200). The recovery action after a partial failure is replay
-with a valid operator token, after correcting the cause. Created identities are not deleted
+with a valid platform-admin token, after correcting the cause. Created identities are not deleted
 as compensation.
 
 ## Deployment topology
@@ -371,12 +371,12 @@ the service. Complete root bootstrap, then accept CGU in the UI. CLI import itse
 never migrates SQL. It needs PostgreSQL and Keycloak; it does not need the HTTP
 server or Temporal to remain running.
 
-From `apps/control-plane`, with the directory client configured and an operator access
+From `apps/control-plane`, with the directory client configured and a platform-admin access
 token in a private file:
 
 ```sh
 make bundle-demo
-make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/path/to/operator-token
+make import-provisioning BUNDLE=target/demo-provisioning-bundle.zip TOKEN_FILE=/path/to/platform-admin-token
 ```
 
 `bundle-demo` packages the five checked-in JSON files with Python's standard
@@ -408,9 +408,9 @@ existing account attached elsewhere must be handled explicitly before import.
 
 The bearer must identify a current platform admin, who may declare any platform role
 and organization admins.
-The operator token is never used to administer Keycloak: that traffic uses the manager's
+The platform-admin token is never used to administer Keycloak: that traffic uses the manager's
 service identity from `identities.yaml`. Token validity and authority are rechecked during
-import; replay after expiry uses a fresh operator token.
+import; replay after expiry uses a fresh platform-admin token.
 
 ## Frontend routing
 

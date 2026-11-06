@@ -53,7 +53,7 @@ Every team or project role above rests on a direct content role (`member`,
 `editor` or `analyst`) on the parent: Carl, Bob, Elena and Carol are members of
 Acme, Grace and Zoe of Globex. That prerequisite grants nothing on the child.
 Everyone except Oscar and Olivia may open a personal space. None of these people
-holds a platform role; the platform account is bootstrapped separately. Dana, the
-infrastructure operator of chapter 2.3, configures model sources outside Fred and
-has no Fred account. The demo bundle creates these accounts, spaces and roles, and
-no personal space.
+holds a platform role; the platform account is bootstrapped separately. Model
+connections in chapter 2.3 are deployment prerequisites, not another persona or
+Fred role. The demo bundle creates these accounts, spaces and roles, and no
+personal space.

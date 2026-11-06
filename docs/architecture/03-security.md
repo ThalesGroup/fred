@@ -29,15 +29,21 @@ distinguish this initial setup from later user provisioning and migration.
 
 ## 3.2. Governance and content access
 
-Fred separates technical administration from business work.
+Fred separates technical administration from business work. The
+[role reference](A11-roles.md#reference-roles) defines this responsibility boundary;
+its enforcement comparison records where current permissions differ.
 
 - An **admin** is technical. The platform admin creates organizations and names
   their admin and initial owner; the organization admin names and replaces the
-  organization's owners and reads supervision aggregates. Neither reads content
-  or shapes the business structure. There is no team or project admin.
+  organization's owners and reads supervision aggregates. The technical mandate
+  also covers platform constraints such as capacity quotas and security policies,
+  not the choice of applications, models or capabilities for business use.
+  These responsibilities do not grant content access. There is no team or project admin.
 - An **owner** (French: *responsable*) manages a space and its community: its
-  members, its resources and its sub-spaces. The organization owner also manages
-  model choices and creates teams; a team owner creates projects. Each creation
+  members, its resources and its sub-spaces. Business configuration of applications,
+  agents, models, capabilities and templates belongs to this responsibility,
+  within technical and security constraints. The organization owner creates teams;
+  a team owner creates projects. Each creation
   names the new space's owner; the creator receives no role there.
 - Reading or contributing to content requires a content role: **member** reads,
   **editor** reads and writes, **analyst** reads and evaluates. Owner alone grants

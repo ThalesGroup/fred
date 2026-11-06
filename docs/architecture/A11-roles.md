@@ -5,7 +5,7 @@ This is the role reference for architecture and security reviews (SSI). It separ
 is not proof of an implemented control. Current permissions below come from source
 inspection. Focused integration-test evidence for owner-only management is recorded
 in [A8](A8-organizations.md#owner-only-team-management); deployed browser validation
-remains a separate operator exercise.
+remains a separate functional validation exercise.
 
 Read each row as the authority of **that role alone**. Current roles are cumulative;
 the ability to grant another role is listed separately. Authentication, admission,
@@ -19,6 +19,15 @@ organizations. **Owner** denotes business management. Owner, analyst, editor and
 member have the same meaning in an organization, team or project, apply only to the
 space where they are granted, and never reach a child space. There is no team-admin
 or project-admin role.
+
+Technical administration covers limited platform and organization duties, such
+as organization creation, capacity quotas and security policies. Business
+configuration of applications, agents, models, capabilities and templates belongs
+to the Owner/Responsable of the relevant space, within those technical constraints.
+The word "configuration" alone does not make an action an Admin responsibility.
+This defines responsibility, not a claim that every quota or policy action has an
+implemented API. It also does not grant Owner implicit content write: current
+agent-authoring routes require Editor, as recorded in the permission table.
 
 | Identifier | English label | French label | Nature |
 | --- | --- | --- | --- |
@@ -39,7 +48,7 @@ authorized owner from explicitly granting themselves a content role.
 | --- | --- | --- | --- | --- |
 | **Platform admin** (`platform_admin`) | Platform | Bootstrap platform administration and create organizations, selecting their admin and initial owner; no business role or right to know their contents. | Organization creation, platform-role and organization-admin assignment, provisioning and space retirement. Does not imply observer, feature-manager or prompt-editor roles. No direct space-content access. Platform-role assignment and standalone team/project retirement remain broader than organization-only governance. | Platform only; no space role or content inheritance. |
 | **Organization admin** (`organization_admin`) | Organization only | Name and replace organization owners, manage the organization access allowlist (not yet implemented), and read supervision aggregates. No content access or business-structure management. | Assign/revoke organization owners and read organization supervision aggregates. No content read/write, model management or evaluation permissions. Access-allowlist changes are **not implemented**. No team creation. | Organization only. |
-| **Owner** (`owner`) | Organization, team or project | Manage the business workspace and its community; create teams under an organization or projects under a team, naming their initial owner. At organization level, manage model choices and shared resources with analysts, editors and members. | Space management and role assignment; creation of teams/projects under an authorized parent. Organization owner manages model inventory/policy and template governance. Evaluation run/corpus permissions and `ReadUsage` for team/project consumption aggregates; no content read/write or evaluation-conversation read. | Granted space only. |
+| **Owner** (`owner`) | Organization, team or project | Manage the business workspace and its community; create teams under an organization or projects under a team, naming their initial owner. Own business configuration of applications, agents, models, capabilities and templates within the space, working with analysts, editors and members. | Space management and role assignment; creation of teams/projects under an authorized parent. Organization owner manages model inventory/policy and template governance. Evaluation run/corpus permissions and `ReadUsage` for team/project consumption aggregates; no content read/write or evaluation-conversation read. | Granted space only. |
 | **Analyst** (`analyst`) | Organization, team or project | Consult content and evaluate the space's agents and their use. | Content read; evaluation run, corpus management, evaluation-conversation-read and `ReadUsage` for team/project consumption aggregates. No ordinary content write, space management or organization model management. | Granted space only. |
 | **Editor** (`editor`) | Organization, team or project; personal space at creation | Contribute to the space's content. | Content read/write, including agent-instance authoring where supported and template-authorized. No role management, evaluation permissions or organization model management. | Granted space only. |
 | **Member** (`member`) | Organization, team or project; personal space at creation | Consult the space's content and use its authorized assistants. | Content read and assistant access subject to template-use and execution checks. No content write, role management, evaluation permissions or organization model management. | Granted space only. |
@@ -73,9 +82,9 @@ been settled. The responsibility column describes their current purpose.
 
 | Role | Scope of grant | Current purpose | Current permissions and limits, role alone | Permission scope |
 | --- | --- | --- | --- | --- |
-| **Platform observer** (`platform_observer`) | Platform | Hold platform observation authority. | `observe_platform`; no space membership or content access. A permission declaration does not establish an observation UI or unrestricted access to logs. | Platform only; also implied by platform admin. |
-| **Feature manager** (`feature_manager`) | Platform | Hold capability-management and global team-registry authority. | `manage_capabilities` and `list_all_teams`; registry access exposes team metadata, not content. No organization model-management permission. | Platform only; also implied by platform admin. |
-| **Prompt editor** (`prompt_editor`) | Platform | Hold platform-prompt editing authority. | `edit_platform_prompt`; no right to edit a space's resources or read its content. This permission alone does not establish a wired prompt-editing journey. | Platform only; also implied by platform admin. |
+| **Platform observer** (`platform_observer`) | Platform | Hold platform observation authority. | `observe_platform`; no space membership or content access. A permission declaration does not establish an observation UI or unrestricted access to logs. | Platform only; requires its own grant. |
+| **Feature manager** (`feature_manager`) | Platform | Hold capability-management and global team-registry authority. | `manage_capabilities` and `list_all_teams`; registry access exposes team metadata, not content. No organization model-management permission. | Platform only; requires its own grant. |
+| **Prompt editor** (`prompt_editor`) | Platform | Hold platform-prompt editing authority. | `edit_platform_prompt`; no right to edit a space's resources or read its content. This permission alone does not establish a wired prompt-editing journey. | Platform only; requires its own grant. |
 
 Business roles apply only to the space where they are granted; none reaches a
 child space. Roles held at several levels are independent. A personal space has
@@ -128,7 +137,7 @@ organizational decisions; it does not change the permission model.
 | Team creation | `create_space` requires `Manage` on the parent organization. An organization admin alone cannot create a team. | Aligned: the direct organization owner creates teams and the direct team owner creates projects, naming their initial owner. The organization admin does not create teams. |
 | Organization access allowlist | Membership derives from committed roles; any person known to the directory can receive a role in any organization from an authorized grantor. The inspected contracts have no admin-operated allowlist. | Gap: the agreed access-allowlist action is not available. |
 | Steering committee mandate | The inspected mutation paths check the caller's roles and lifecycle constraints; they do not require a committee decision or approval reference. | Process boundary: the mandate is an organizational rule. No application approval workflow is implemented or implied by this vocabulary. |
-| Platform-admin remit | Platform admin implies all platform permissions. Role management, provisioning of business and platform grants, global team metadata and space retirement exceed bootstrap and organization creation. | Gap: the implementation is broader than the agreed limited remit. No direct content read does not mean no ability to grant it. |
+| Platform-admin remit | Platform roles require separate grants. Platform-admin role management, provisioning of business and platform grants, and space retirement remain broader than organization creation; global team metadata requires feature-manager authority. | Gap: the implementation is broader than the agreed limited remit. No direct content read does not mean no ability to grant it. |
 | Admin/business separation | Organization creation permits the same identity as admin and owner. An organization admin can grant themselves owner, then an owner can grant themselves editor under the normal conditions. | The code enforces no content access from admin alone, but no exclusive separation of duties. The intended limits on cumulative roles and self-assignment require explicit resolution. |
 | Organization supervision | `can_administer_organization` exposes document/processing/role counts, team names and scoped aggregates, without document content or named users. | Aligned: technical supervision aggregates are within the organization admin mandate; they grant no content access. |
 
@@ -136,9 +145,9 @@ organizational decisions; it does not change the permission model.
 
 - **Steering committee:** decides institutional changes; the organization admin
   executes its express decisions. The committee is not an permission role.
-- **Infrastructure operator:** deploys services and manages connections, secrets
-  and infrastructure access. Operational access needs its own controls; it confers
-  no Fred business role. Dana fills this responsibility in the model journey.
+- **Deployment configuration:** connections, secrets and infrastructure access
+  are technical prerequisites, not an additional Fred role or business persona.
+  A Fred Admin grant alone does not establish deployment credentials.
 - **Bootstrap:** the procedure establishing the first platform admin, not another
   role or a permanent super-admin identity.
 - **Personal-space owner:** the identity associated with a personal space in SQL,
@@ -167,5 +176,8 @@ and the [organization creation contract](A5-user-journeys.md#a-platform-admin-cr
 The canonical role identifiers are `platform_admin`, `organization_admin` and
 `owner`. English labels use **Admin** for technical governance and **Owner** for
 business responsibility; French labels use **Admin** and **Responsable** respectively.
+In journeys, name the exact role and scope for each application action. Describe
+deployment prerequisites without inventing an "operator" persona. If the authority
+is unknown, record that gap rather than using "admin" as a generic synonym.
 `/bootstrap/platform-admin` establishes the first platform admin. Personal-space
 and conversation ownership are identities, not either governance role.

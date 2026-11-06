@@ -411,15 +411,15 @@ optimistic message insertion or runtime dispatch. Resume code has the same guard
 Weaver preparation still advertises `supports_hitl: false`. An enabled instance is
 not a model-readiness guarantee, and creation does not require a recommendation.
 
-**Operator boundary.**
+**Deployment prerequisites and business choices.**
 [`model_catalog/config.rs`](../../apps/control-plane/src/model_catalog/config.rs)
 defines platform-approved discovery and inference destinations separately.
 Control Plane uses the configured discovery authentication; the inference
 connection contains a binding reference that the pod resolves locally, not a secret
 value. Alice, Acme's organization owner, may refresh an approved source and
 change Acme's model policy; this is business responsibility, not Oscar's admin
-mandate. Her organization role cannot rewrite platform connections. Dana must
-provision both discovery and inference access; discovering an offer proves neither permission nor
+mandate. Her organization role cannot rewrite platform connections. Deployment
+configuration must provide both discovery and inference access; discovering an offer proves neither permission nor
 a successful model call.
 
 <!-- generated: routes apps/control-plane/src/model_catalog/http.rs /control-plane/v1 -->

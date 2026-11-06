@@ -10,7 +10,7 @@ all Fred components. Start with [User journeys](02.1-user-journeys.md) and
 ```mermaid
 flowchart LR
     client["Client<br/>browser application"]
-    operator["Platform admin<br/>CLI or HTTP ZIP import"]
+    platform_admin["Platform admin<br/>CLI or HTTP ZIP import"]
     caller["Service acting for a user<br/>with the user's token"]
     manager["control-plane<br/>CLI and REST /control-plane/v1"]
     keycloak["Keycloak<br/>realm app"]
@@ -21,7 +21,7 @@ flowchart LR
     kf["Existing Knowledge Flow workers"]
     derived[("Isolated derived objects and vectors")]
 
-    operator -- "ZIP + operator bearer" --> manager
+    platform_admin -- "ZIP + platform-admin bearer" --> manager
     client -- "bearer token" --> manager
     caller -- "authorize document,<br/>authorize scope" --> manager
     client -- "login" --> keycloak
@@ -309,8 +309,8 @@ other candidates. The loop neither publishes documents nor calls processing serv
 
 ## Platform administration and self checks
 
-`GET /me` returns effective platform roles, including the roles implied by platform
-admin. `GET /users/platform-roles` returns direct grants only, to platform admins.
+`GET /me` returns the person's platform-role grants; platform admin does not imply
+the other platform roles. `GET /users/platform-roles` lists direct grants for platform admins.
 `PUT` and `DELETE /users/{user}/platform-roles/{role}` acquire the bootstrap/platform
 lock and recheck the caller's platform-admin permission. Any platform admin grants or
 revokes platform admins; revoking the last one is refused with 409. Granting requires
@@ -319,16 +319,16 @@ grant does not require the identity to still exist (I15).
 
 Platform roles use canonical names `platform_admin`, `platform_observer`,
 `feature_manager` and `prompt_editor`; no other name is accepted.
-Deleting an absent direct grant returns 404, even when the role is effective through platform admin.
+Deleting an absent direct grant returns 404.
 
-An organization's `organization_admin` is granted and revoked by platform admins, under the
-platform and organization locks; owner on a team or project is
-refused with 409, as is revoking an organization's last owner (I14). Before granting,
-manager verifies the subject with its Keycloak service account in the same realm
-and requires raw subject mapping. Missing or unavailable identity verification
-prevents the write; revocation does not depend on the directory. The
-organization's admins are granted by its owners or admins; every other space role by
-the space's admins (I21).
+An organization's `organization_admin` is granted and revoked by platform admins,
+under the platform and organization locks. Organization owners can be appointed
+by that organization's owner or admin; team/project roles are managed by their
+direct owner. See the canonical
+[attribution rules](A11-roles.md#attribution-accumulation-and-removal) for initial
+grants, last-holder safeguards and personal-space exceptions. Before granting,
+Control Plane verifies the subject through its configured user directory;
+revocation does not depend on the directory.
 
 `POST /authorize/platform` accepts `{ "permission": "list_all_teams" }`;
 `POST /authorize/space` accepts `{ "space_id": "<uuid>", "permission": "run_evaluations" }`.
@@ -359,12 +359,11 @@ grants and revocations commit together in the same SQL transaction. The response
 a directory failure after commit returns id-only summaries rather than an error.
 A missing or non-organization id answers 404.
 
-**Pending decision (review of #3319).** This `PATCH` is a platform-admin path to an
-organization's governance roles that grant and revoke do not offer: it needs
-neither the caller's attachment to the organization nor `Manage`/`AdministerOrganization`
-on it, and replacing the admin revokes admins the organization's owners appointed.
-The alternative under review limits `PATCH` to the name and owner, leaving admins
-to the organization's own governance.
+This `PATCH` replaces the designated governance-role holders, whereas ordinary
+role routes add or remove individual grants. Its platform authority grants no
+space-content access. The distinction between the agreed technical remit and
+current governance powers is recorded in
+[the role comparison](A11-roles.md#responsibility-boundaries-and-current-enforcement).
 
 Team creation requires a direct owner role on the parent organization, project
 creation a direct owner role on the parent team. The nominated owner must hold a direct content

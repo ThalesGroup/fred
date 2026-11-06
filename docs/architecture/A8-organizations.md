@@ -161,7 +161,7 @@ covers owner-only access, rejected member/parent-owner/platform-admin access,
 parent candidates, cumulative grants, last-owner protection, lost management and
 pagination. Frontend tests cover landing, role controls, refusals and sidebar
 content-query isolation. These checks are not deployed browser validation; the Nova
-operator exercise must be repeated after rebuilding Control Plane and frontend.
+functional validation exercise must be repeated after rebuilding Control Plane and frontend.
 
 
 ## Organization supervision

@@ -44,24 +44,24 @@ focus collaboration within a team. Subject to [access rights](03-security.md),
 a team can use organization resources, and a project can use resources from both
 its team and organization.
 
-The same [four roles](A11-roles.md#reference-roles) apply at every level:
-**admins** manage the workspace and its community, **analysts** evaluate agents
+The same [four business roles](A11-roles.md#reference-roles) apply at every level:
+**owners** (French: *responsables*) manage the workspace and its business choices, **analysts** evaluate agents
 and their use, **editors** contribute content, and **members** consult it.
 Management and content access remain separate permissions; a person can combine
-roles.
+roles. Technical Admin roles exist separately at platform and organization level.
 
 ```mermaid
 flowchart TB
     subgraph organization["Organization space"]
         direction TB
-        common["Common knowledge<br/>Assistants and resources<br/>Admin / Analyst<br/>Editor / Member"]
+        common["Common knowledge<br/>Assistants and resources<br/>Owner / Analyst<br/>Editor / Member"]
 
         subgraph team["Team space"]
             direction TB
-            shared["Team knowledge<br/>Assistants and resources<br/>Admin / Analyst<br/>Editor / Member"]
+            shared["Team knowledge<br/>Assistants and resources<br/>Owner / Analyst<br/>Editor / Member"]
 
             subgraph project["Project space"]
-                focused["Resources for a shared objective<br/>Admin / Analyst<br/>Editor / Member"]
+                focused["Resources for a shared objective<br/>Owner / Analyst<br/>Editor / Member"]
             end
         end
 

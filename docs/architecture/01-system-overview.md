@@ -134,14 +134,14 @@ the precise role boundaries are defined in the [roles annex](A11-roles.md).
 
 ```mermaid
 flowchart TB
-    admin["Organization owner"]
+    owner["Organization owner"]
     policy["Organization policy<br/>Permitted agents and models"]
     person["Person"]
     roles["Roles in a space<br/>Read / contribute / administer"]
     space["Working space<br/>Organization, team, project or personal"]
     documents["Space documents"]
     assistants["Agent instances<br/>configured in the space"]
-    admin -->|"Sets"| policy
+    owner -->|"Sets"| policy
     person -->|"Holds"| roles
     roles -->|"Determine allowed actions"| space
     space -->|"Contains"| documents
@@ -149,7 +149,7 @@ flowchart TB
     policy -->|"Constrains available choices"| assistants
 
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class admin,policy,person,roles,space,documents,assistants neutral
+    class owner,policy,person,roles,space,documents,assistants neutral
 ```
 
 An assistant must satisfy both controls: the organization's usage policy and

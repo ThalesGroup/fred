@@ -3,7 +3,7 @@
 Companion to the [Security chapter](03-security.md).
 
 This reference describes **Control Plane** permissions on the
-organization/team/project model, HTTP entry points and operator commands.
+organization/team/project model, HTTP entry points and command-line operations.
 The [managed chat section](#model-administration-and-the-first-managed-chat)
 connects these permissions to the Agent Pod admission boundary; other Python
 surfaces are not inferred to share the same contract.
@@ -81,13 +81,13 @@ The personal route is also available to a person with none of the listed roles.
 
 ## Model administration and the first managed chat
 
-Companion to [Alice and Bob's journey](02.3-agent-administration.md). Dana's source
-configuration is a deployment responsibility, not an organization-role API.
+Companion to [Alice and Bob's journey](02.3-agent-administration.md). Model-source
+connections and credentials are deployment prerequisites, not an additional role.
 The ordinary admission and organization-isolation conditions above still apply.
 
 | Action | Required authority | Example / additional conditions |
 | --- | --- | --- |
-| Configure model sources and inference destinations | Platform deployment access | Dana provisions approved connections; no business content rights follow. |
+| Configure model connections and inference destinations | Deployment credentials, outside the Fred role API | Technical prerequisite; does not authorize business use or grant content rights. |
 | Read model inventory/policy, refresh an approved source, change permitted models/default/fallback | `Manage` on the organization | Alice's Acme owner role qualifies. A team owner, editor or organization admin alone does not. |
 | Create or edit an agent instance | `Write` on its supported space, plus template-use permission | Bob's Research editor role qualifies when the template is authorized. |
 | Prepare a chat and see its model offers | `Read` on its supported space, plus template-use permission | The instance must be executable; a supplied session must belong to the person and instance. Browser offers contain no inference credentials. |
@@ -142,7 +142,7 @@ Conditions are part of these rights:
   precedence, while organization-admin assignment retains its explicit platform check.
 - Every grant names a subject usable as an authorization subject and known to the configured
   user directory, checked after authorization; otherwise 422 (I27).
-- Owner changes are platform operations and do not require the actor to belong to
+- Organization-admin changes are platform operations and do not require the actor to belong to
   the target organization. A new organization admin must exist in the configured Keycloak realm;
   removal can clean up a deleted identity. The other space-role routes require the
   actor's matching organization context.
@@ -162,7 +162,7 @@ Space roles grant none of these operations.
 | Import identities, organizations, teams, projects and roles - `POST /import-export/import` | Yes | No | No | No | Real authentication, CGU, compatible directory, valid bundle and parent dependencies |
 | Request project/team/organization deletion - `DELETE /spaces/{id}` | Yes | No | No | No | Real authentication and CGU; enabled lifecycle; no documents or pending uploads; complete subtree; no standalone personal deletion |
 | Read deletion receipt - `GET /deletions/{operation_id}` | Yes | No | No | No | Real authentication and CGU; remains available after cleanup and when lifecycle is disabled |
-| List global team registry - `GET /admin/teams` | Yes | No | Yes | No | Non-personal team metadata only; no content access |
+| List global team registry - `GET /admin/teams` | No | No | Yes | No | Non-personal team metadata only; no content access |
 | Read or write space content directly | No | No | No | No | Requires an independently held space content role |
 
 Import is additive. Its broader role-assignment authority is described in
@@ -203,24 +203,26 @@ an evaluation permission answer does not run an evaluation or read a conversatio
 
 | Platform permission queried | platform_admin | platform_observer | feature_manager | prompt_editor |
 | --- | --- | --- | --- | --- |
-| `list_all_teams` | Yes | No | Yes | No |
+| `list_all_teams` | No | No | Yes | No |
 | `delete_team` | Yes | No | No | No |
 | `delete_space` | Yes | No | No | No |
 | `rescue_team_owner` | Yes | No | No | No |
 | `edit_agent_class_path` | Yes | No | No | No |
-| `observe_platform` | Yes | Yes | No | No |
+| `observe_platform` | No | Yes | No | No |
 | `administer_users` | Yes | No | No | No |
 | `manage_platform` | Yes | No | No | No |
-| `manage_capabilities` | Yes | No | Yes | No |
-| `edit_platform_prompt` | Yes | No | No | Yes |
+| `manage_capabilities` | No | No | Yes | No |
+| `edit_platform_prompt` | No | No | No | Yes |
 
 `read`, `write` and `manage` answers follow the corresponding space matrices above.
 `/authorize/document` also accepts `manage`: an effective owner can receive true
 without receiving read/write. The folder mutation handlers require write,
-not manage. Platform admin includes the other platform permissions through the
-typed permission evaluator; that implication is not a stored grant of every role.
+not manage. Platform roles require separate grants: platform admin does not imply
+observer, feature-manager or prompt-editor authority. These are current permission
+answers, not additional business personas for the journeys; see
+[the role reference](A11-roles.md#complementary-roles-in-the-current-implementation).
 
-## Operator commands
+## Command-line operations
 
 | Entry point | Authority and effect |
 | --- | --- |
@@ -241,7 +243,7 @@ The matrices are checked against [the model](../../apps/control-plane/src/author
 [space governance](../../apps/control-plane/src/spaces.rs),
 [organization supervision](../../apps/control-plane/src/supervision/mod.rs),
 [platform governance](../../apps/control-plane/src/platform.rs), and
-[operator commands](../../apps/control-plane/src/main.rs).
+[command-line operations](../../apps/control-plane/src/main.rs).
 Role truth tables, ancestor behavior, private isolation and revocation are exercised
 by [manager integration tests](../../apps/control-plane/tests/integration.rs) and
 [resource contract tests](../../apps/control-plane/tests/support/resource_browsing.rs).

@@ -63,7 +63,7 @@ migrate existing Knowledge Flow documents or rename persisted resources.
 The Rust ingestion profile does not support application data reset. The reset
 helper rejects this configuration before mutation; its Swift erasure contract
 must not be widened to include Rust document resources. Recreating a disposable
-secondary installation is a separate, explicit operator action.
+secondary installation is a separate, explicitly authorized deployment operation.
 
 ## Consumption, observation and technical health
 

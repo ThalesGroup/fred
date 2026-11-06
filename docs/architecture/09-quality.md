@@ -175,7 +175,7 @@ tree Read, on a successful attempt:
 The [importer](../../apps/control-plane/src/provisioning.rs) holds the platform lock
 per identity dispatch, then platform plus all declared organization locks through
 reconciliation commit. Mutations needing those locks wait at most five seconds and
-then answer 503, so reconciliation length bounds their unavailability; the operator's
+then answer 503, so reconciliation length bounds their unavailability; the initiating platform admin's
 bearer lifetime does not bound the import. Organizations are locked in UUID order; child name resolution
 follows locking. Preflight directory lookups hold no lock. Parser memory is bounded
 by compressed/expanded bytes plus decoded declarations; ordered reference/name

@@ -127,7 +127,7 @@ refresh/error handling and logout are covered by
 [`Onboarding.test.tsx`](../../apps/frontend/src/app/Onboarding.test.tsx) and
 [`OnboardingGuard.test.tsx`](../../apps/frontend/src/rework/core/guards/OnboardingGuard.test.tsx).
 These focused checks do not establish end-to-end production SSO or migration validation;
-the changed browser journey still needs operator validation on the deployed images.
+the changed browser journey still needs functional validation on the deployed images.
 
 After initialization, platform administrators manage platform roles while preserving
 at least one administrator.
@@ -135,7 +135,7 @@ at least one administrator.
 ## Roles, permissions and ReBAC
 
 The [action/role matrix](A7-action-role-matrix.md) enumerates every manager HTTP
-action, operator entry point and evaluable permission, including additional gates. The following explains the security model.
+action, command-line entry point and evaluable permission, including additional gates. The following explains the security model.
 
 The [roles annex](A11-roles.md) defines the complete role inventory, local scope
 (I20), owner/content separation (I21), required organization admins and owners
@@ -244,7 +244,7 @@ public errors carry no bearer tokens, storage secrets or provider diagnostics.
 ## Service identities
 
 Manager resolves and creates provisioning identities with its own Keycloak client,
-declared in `identities.yaml`. The operator bearer proves Fred authority; it is
+declared in `identities.yaml`. The initiating platform admin's bearer proves Fred authority; it is
 never used as a directory administration credential. The
 [directory boundary](A3-manager-operations.md#outbound-keycloak-directory) describes
 realm/subject checks, retries and safe errors.
@@ -256,10 +256,10 @@ Admission requires an existing platform role or a direct role in an active organ
 team or project; an orphaned personal space or an old CGU acceptance does not suffice.
 Space activity includes its organization and parent. No separate admission record is stored.
 
-The local directory requires explicit operator registration before the first role
+The local directory requires explicit registration through the deployment CLI before the first role
 assignment; observing a shared SSO session does not register the person. Registration
 stores only a profile in the existing directory and grants no access or consent.
-See the [operator procedure](../../apps/control-plane/README.md#admit-a-user-with-the-local-directory).
+See the [registration procedure](../../apps/control-plane/README.md#admit-a-user-with-the-local-directory).
 
 After platform initialization, an unadmitted person sees an access-unavailable message
 before the CGU. The API rejects consent, preference writes and business requests with

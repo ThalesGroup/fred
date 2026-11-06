@@ -8,8 +8,9 @@ It is a distinct kind of space, not a collective team.
 ## Who creates and names whom
 
 The organization is both an institutional boundary and a shared business workspace.
-Admins are technical and stop at the organization; from the organization's owner
-down, everything is business work, including how a team is divided into projects.
+Technical Admin roles exist at platform and organization level. Owners are
+responsible for business choices within their space, including application,
+model and capability configuration and how a team is divided into projects.
 
 ```mermaid
 flowchart TB
@@ -77,13 +78,13 @@ in a side panel; Refresh reloads the summary and the open detail.
 
 ```mermaid
 flowchart TB
-    owner["Organization admin"] --> summary["Organization summary"]
+    admin["Organization admin"] --> summary["Organization summary"]
     summary --> direct["Organization's<br/>own resources"]
     summary --> teams["Teams and<br/>their projects"]
     summary --> personal["Personal spaces<br/>combined"]
 
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class owner,summary,direct,teams,personal neutral
+    class admin,summary,direct,teams,personal neutral
 ```
 
 Team details include their projects. Organization totals cover all teams,
