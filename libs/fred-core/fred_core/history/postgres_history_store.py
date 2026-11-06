@@ -48,7 +48,8 @@ from datetime import datetime, timezone
 from typing import Any, List
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
-from sqlalchemy import MetaData, delete, func, select
+from sqlalchemy import MetaData, delete, func, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.history.base_history_store import BaseHistoryStore
@@ -492,6 +493,236 @@ class PostgresHistoryStore(BaseHistoryStore):
             )
             max_rank = result.scalar()
         return 0 if max_rank is None else max_rank + 1
+
+    async def _lock_conversation(self, session: AsyncSession, session_id: str) -> None:
+        if self._engine.dialect.name == "postgresql":
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:session_id))"),
+                {"session_id": session_id},
+            )
+
+    async def submit_steered_message(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        team_id: str,
+        agent_instance_id: str,
+        message_id: str,
+        content: str,
+    ) -> ChatMessage:
+        """Persist one user update before the active turn reaches a model boundary."""
+        normalized_content, normalized_count = _normalize_history_text(content)
+        assert isinstance(normalized_content, str)
+        metadata: dict[str, Any] = {
+            "extras": {
+                "steered_message_id": message_id,
+                "steering_state": "pending",
+            }
+        }
+        if normalized_count:
+            metadata["history_text_normalization"] = {
+                "character": "U+0000",
+                "replacement": "[U+0000]",
+                "count": normalized_count,
+            }
+        for attempt in range(3):
+            try:
+                async with self._sessions.begin() as session:
+                    await self._lock_conversation(session, session_id)
+                    existing = (
+                        await session.execute(
+                            select(SessionHistoryRow).where(
+                                SessionHistoryRow.session_id == session_id,
+                                SessionHistoryRow.user_id == user_id,
+                                SessionHistoryRow.message_id == message_id,
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if existing is not None:
+                        existing_parts = existing.parts_json or []
+                        if (
+                            not existing_parts
+                            or existing_parts[0].get("text") != normalized_content
+                        ):
+                            raise ValueError("message_id_reused_with_different_content")
+                        return self._steered_row(existing)
+                    count = (
+                        await session.execute(
+                            select(func.count()).where(
+                                SessionHistoryRow.session_id == session_id,
+                                SessionHistoryRow.user_id == user_id,
+                                SessionHistoryRow.delivery_state == "pending",
+                            )
+                        )
+                    ).scalar_one()
+                    if count >= 32:
+                        raise ValueError("too_many_pending_messages")
+                    minimum = (
+                        await session.execute(
+                            select(func.min(SessionHistoryRow.rank)).where(
+                                SessionHistoryRow.session_id == session_id,
+                                SessionHistoryRow.user_id == user_id,
+                            )
+                        )
+                    ).scalar_one()
+                    rank = min(0, minimum or 0) - 1
+                    row = SessionHistoryRow(
+                        session_id=session_id,
+                        user_id=user_id,
+                        rank=rank,
+                        timestamp=datetime.now(timezone.utc),
+                        role=Role.user.value,
+                        channel=Channel.final.value,
+                        exchange_id="",
+                        team_id=team_id,
+                        agent_instance_id=agent_instance_id,
+                        parts_json=[{"type": "text", "text": normalized_content}],
+                        metadata_json=metadata,
+                        message_id=message_id,
+                        delivery_state="pending",
+                    )
+                    session.add(row)
+                    await session.flush()
+                    return self._steered_row(row)
+            except IntegrityError:
+                if attempt == 2:
+                    raise
+        raise AssertionError("unreachable")
+
+    @staticmethod
+    def _steered_row(row: SessionHistoryRow) -> ChatMessage:
+        return ChatMessage(
+            session_id=row.session_id,
+            exchange_id=row.exchange_id or "",
+            rank=row.rank,
+            timestamp=row.timestamp,
+            role=Role.user,
+            channel=Channel.final,
+            parts=_MESSAGE_PARTS_ADAPTER.validate_python(row.parts_json or []),
+            metadata=ChatMetadata.model_validate(row.metadata_json or {}),
+        )
+
+    async def pending_steered_messages(
+        self, session_id: str, user_id: str | None = None
+    ) -> list[ChatMessage]:
+        async with self._sessions() as session:
+            criteria = [
+                SessionHistoryRow.session_id == session_id,
+                SessionHistoryRow.delivery_state == "pending",
+            ]
+            if user_id is not None:
+                criteria.append(SessionHistoryRow.user_id == user_id)
+            rows = (
+                (
+                    await session.execute(
+                        select(SessionHistoryRow)
+                        .where(*criteria)
+                        .order_by(SessionHistoryRow.rank.desc())
+                        .limit(32)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [self._steered_row(row) for row in rows]
+
+    async def pending_steered_message(
+        self, session_id: str, user_id: str, message_id: str
+    ) -> ChatMessage | None:
+        async with self._sessions() as session:
+            row = (
+                await session.execute(
+                    select(SessionHistoryRow).where(
+                        SessionHistoryRow.session_id == session_id,
+                        SessionHistoryRow.user_id == user_id,
+                        SessionHistoryRow.message_id == message_id,
+                        SessionHistoryRow.delivery_state == "pending",
+                    )
+                )
+            ).scalar_one_or_none()
+            return self._steered_row(row) if row is not None else None
+
+    async def recoverable_steered_messages(
+        self, session_id: str, exchange_id: str
+    ) -> list[ChatMessage]:
+        """Find delivered identities to reconcile with the checkpoint."""
+        async with self._sessions() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(SessionHistoryRow)
+                        .where(
+                            SessionHistoryRow.session_id == session_id,
+                            SessionHistoryRow.exchange_id == exchange_id,
+                            SessionHistoryRow.delivery_state == "delivered",
+                        )
+                        .order_by(SessionHistoryRow.rank)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [self._steered_row(row) for row in rows]
+
+    async def deliver_steered_message(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        message_id: str,
+        rank: int,
+        exchange_id: str,
+        expected_content: str | None = None,
+        require_pending: bool = False,
+    ) -> ChatMessage | None:
+        async with self._sessions.begin() as session:
+            await self._lock_conversation(session, session_id)
+            row = (
+                await session.execute(
+                    select(SessionHistoryRow)
+                    .where(
+                        SessionHistoryRow.session_id == session_id,
+                        SessionHistoryRow.user_id == user_id,
+                        SessionHistoryRow.message_id == message_id,
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            if (
+                expected_content is not None
+                and (row.parts_json or [{}])[0].get("text") != expected_content
+            ):
+                raise ValueError("pending_message_content_mismatch")
+            if require_pending and row.delivery_state != "pending":
+                raise ValueError("pending_message_already_delivered")
+            if row.delivery_state == "delivered":
+                return self._steered_row(row)
+            metadata = dict(row.metadata_json or {})
+            extras = dict(metadata.get("extras") or {})
+            extras["steering_state"] = "delivered"
+            metadata["extras"] = extras
+            await session.execute(
+                update(SessionHistoryRow)
+                .where(
+                    SessionHistoryRow.session_id == session_id,
+                    SessionHistoryRow.user_id == user_id,
+                    SessionHistoryRow.message_id == message_id,
+                )
+                .values(
+                    rank=rank,
+                    exchange_id=exchange_id,
+                    delivery_state="delivered",
+                    metadata_json=metadata,
+                )
+            )
+            row.rank = rank
+            row.exchange_id = exchange_id
+            row.delivery_state = "delivered"
+            row.metadata_json = metadata
+            return self._steered_row(row)
 
     async def latest_exchange_id(
         self,
