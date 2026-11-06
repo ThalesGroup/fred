@@ -767,10 +767,11 @@ See [activation and policy configuration](../../docs/architecture/A3-manager-ope
 ## Changing it
 
 A change described in the dossier updates its chapter in the same commit. A test that
-proves an invariant carries `// Proves: I<n>` above it. Keep deployed SQLx migrations
-immutable; add a numbered transaction for a supported upgrade, preserving constraints,
-indexes, reader grants and data. Test fresh initialization and the preceding deployed
-history. Never rewrite live checksums (see [Existing local state](#existing-local-state)).
+proves an invariant carries `// Proves: I<n>` above it. Keep pushed SQLx migrations
+immutable; add a numbered transaction, preserving constraints, indexes and reader
+grants. Weaver currently supports fresh installations only (see
+[AGENTS.md](../../AGENTS.md)): test fresh initialization, not upgrades. Never rewrite
+live checksums (see [Existing local state](#existing-local-state)).
 
 ## Generate the frontend contract
 
