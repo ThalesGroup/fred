@@ -101,10 +101,6 @@ async function copyCanonical(relativePath) {
         '<Icon type="arrow_drop_down" />',
       ],
     ],
-    [
-      "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
-      ['<Icon category="outlined" type="close" />', '<Icon type="close" />'],
-    ],
   ]).get(relativePath);
   if (outlinedIconMarkup) {
     assert.equal(
@@ -177,6 +173,7 @@ async function copyCanonical(relativePath) {
       "apps/frontend/src/rework/components/shared/molecules/PageEmptyState/PageEmptyState.tsx",
       "apps/frontend/src/rework/components/shared/molecules/TablePagination/TablePagination.tsx",
       "apps/frontend/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.tsx",
+      "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
     ].includes(relativePath)
   ) {
     generated = generated.replaceAll('category: "outlined", ', "");
