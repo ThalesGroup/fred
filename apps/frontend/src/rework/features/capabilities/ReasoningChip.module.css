@@ -19,6 +19,7 @@
 .wrap {
   position: relative;
   flex-shrink: 0;
+  max-width: 100%;
 }
 
 .trigger {
@@ -30,7 +31,9 @@
   border-radius: var(--radius-s);
   background: transparent;
   padding: 0 var(--spacing-s);
+  max-width: 100%;
   height: 38px;
+  overflow: hidden;
   color: var(--on-surface);
   /* Same font as the chat message being typed (RichInputField's textarea):
      plain regular text, never the weight-500 label tokens that read as bold. */

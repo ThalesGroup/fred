@@ -67,7 +67,7 @@ const SECTION_LABEL_KEYS: Record<SectionKey, string> = {
 
 const SECTION_ICONS: Record<SectionKey, { category: "outlined"; type: IconType }> = {
   general: { category: "outlined", type: "tune" },
-  prompts: { category: "outlined", type: "edit_note" },
+  prompts: { category: "outlined", type: "chat" },
   tools: { category: "outlined", type: "build" },
   commitments: { category: "outlined", type: "shield" },
 };

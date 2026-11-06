@@ -211,7 +211,7 @@ export default function TeamContentNavbar() {
     {
       type: "link",
       label: "Prompts",
-      icon: { category: "outlined", type: "edit_note", filled: true },
+      icon: { category: "outlined", type: "chat", filled: true },
       linkProps: { to: `/team/${teamId}/prompts` },
     },
   ];
