@@ -98,6 +98,9 @@ from control_plane_backend.capability_preparations.admission import (
     persist_agent_preparations,
     stage_assets,
 )
+from control_plane_backend.capability_preparations.readiness import (
+    agent_preparation_readiness,
+)
 from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
@@ -1828,6 +1831,7 @@ async def list_managed_agent_instances(
     records = await _refresh_pending_readiness(
         deps, await store.list_by_team(team_id), authorization=authorization
     )
+    preparation_verdicts = await _preparation_verdicts(deps, records)
 
     # Build a catalog-per-source map for drift detection; failures → "unavailable".
     catalog_by_source: dict[str, dict[str, bool] | None] = {}
@@ -1840,7 +1844,15 @@ async def list_managed_agent_instances(
     for record in records:
         catalog = catalog_by_source.get(record.source_runtime_id)
         if catalog is None:
-            summaries.append(_record_to_summary(record, runtime_status="unavailable"))
+            summaries.append(
+                _record_to_summary(
+                    record,
+                    runtime_status="unavailable",
+                    preparation_verdict=preparation_verdicts.get(
+                        record.agent_instance_id
+                    ),
+                )
+            )
             continue
 
         warnings: list[str] = []
@@ -1854,7 +1866,13 @@ async def list_managed_agent_instances(
         for cid in record.tuning.selected_capability_ids or []:
             if cid in catalog and not catalog[cid]:
                 warnings.append(f"MCP server '{cid}' is disabled in the pod catalog.")
-        summaries.append(_record_to_summary(record, catalog_warnings=warnings))
+        summaries.append(
+            _record_to_summary(
+                record,
+                catalog_warnings=warnings,
+                preparation_verdict=preparation_verdicts.get(record.agent_instance_id),
+            )
+        )
 
     return summaries
 
@@ -2587,7 +2605,30 @@ async def recheck_agent_instance_readiness(
     updated = await apply_capability_readiness(
         deps, record, authorization=authorization
     )
-    return _record_to_summary(updated)
+    verdicts = await _preparation_verdicts(deps, [updated])
+    return _record_to_summary(
+        updated, preparation_verdict=verdicts.get(updated.agent_instance_id)
+    )
+
+
+async def _preparation_verdicts(
+    deps: ProductServiceDependencies,
+    records: Sequence[AgentInstanceRecord],
+) -> dict[str, ReadinessVerdict]:
+    if not records or deps.get_sql_session_factory is None:
+        return {}
+    by_team: dict[str, list[str]] = {}
+    for record in records:
+        by_team.setdefault(str(record.team_id), []).append(record.agent_instance_id)
+    verdicts: dict[str, ReadinessVerdict] = {}
+    async with deps.get_sql_session_factory()() as session:
+        for team_id, ids in by_team.items():
+            verdicts.update(
+                await agent_preparation_readiness(
+                    session, team_id=team_id, agent_instance_ids=ids
+                )
+            )
+    return verdicts
 
 
 def _make_slice_validator(*, base_url: str, team_id: TeamId):
@@ -2628,6 +2669,7 @@ def _record_to_summary(
     *,
     runtime_status: Literal["ok", "unavailable"] = "ok",
     catalog_warnings: list[str] | None = None,
+    preparation_verdict: ReadinessVerdict | None = None,
 ) -> ManagedAgentInstanceSummary:
     """
     Build one frontend-facing summary from a DB-backed agent instance record.
@@ -2648,6 +2690,12 @@ def _record_to_summary(
     Example:
     - `_record_to_summary(record, runtime_status="unavailable")`
     """
+    reason = record.suspension_reason
+    detail = record.suspension_detail
+    if preparation_verdict is not None and not preparation_verdict.ready:
+        if reason is None or reason == SuspensionReason.CAPABILITY_PENDING.value:
+            reason = SuspensionReason.CAPABILITY_PENDING.value
+            detail = preparation_verdict.detail or detail
     return ManagedAgentInstanceSummary(
         agent_instance_id=record.agent_instance_id,
         team_id=record.team_id,
@@ -2658,12 +2706,8 @@ def _record_to_summary(
         usage_statement=record.tuning.usage_statement,
         recommended_chat_profile_id=record.tuning.recommended_chat_profile_id,
         status="enabled" if record.enabled else "disabled",
-        suspension_reason=(
-            SuspensionReason(record.suspension_reason)
-            if record.suspension_reason is not None
-            else None
-        ),
-        suspension_detail=record.suspension_detail,
+        suspension_reason=(SuspensionReason(reason) if reason is not None else None),
+        suspension_detail=detail,
         created_at=record.created_at,
         updated_at=record.updated_at,
         created_by=record.created_by,
@@ -3232,7 +3276,11 @@ async def enroll_agent_instance(
         raise
     created = await settle_capability_save(deps, created, authorization=authorization)
     emit_agent_created_kpi(created, user=user, deps=deps)
-    return _record_to_summary(created)
+    preparation_verdicts = await _preparation_verdicts(deps, [created])
+    return _record_to_summary(
+        created,
+        preparation_verdict=preparation_verdicts.get(created.agent_instance_id),
+    )
 
 
 def emit_agent_created_kpi(
@@ -3567,7 +3615,13 @@ async def update_agent_instance(
             )
         except Exception:
             logger.exception("[control-plane][kpi] Failed to emit agent.updated")
-    return _record_to_summary(updated) if updated is not None else None
+    if updated is None:
+        return None
+    preparation_verdicts = await _preparation_verdicts(deps, [updated])
+    return _record_to_summary(
+        updated,
+        preparation_verdict=preparation_verdicts.get(updated.agent_instance_id),
+    )
 
 
 async def unenroll_agent_instance(
@@ -3810,6 +3864,15 @@ async def prepare_execution(
             f"({instance.suspension_reason}): a capability it uses is broken or "
             "unavailable. An editor must fix it in the agent settings before it "
             "can run.",
+            http_status=409,
+        )
+    preparation_verdict = (await _preparation_verdicts(deps, [instance])).get(
+        instance.agent_instance_id
+    )
+    if preparation_verdict is not None and not preparation_verdict.ready:
+        raise ExecutionPreparationError(
+            f"Agent instance {agent_instance_id!r} is waiting for capability "
+            f"preparation: {', '.join(preparation_verdict.capability_ids)}.",
             http_status=409,
         )
     # --- #1975 suspension guard — END -------------------------------------
