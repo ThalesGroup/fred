@@ -63,8 +63,9 @@ The preparation worker is a separate process using the same installed capability
 registry. Run `make run-worker` locally or `make run-worker-docker` with the built
 image. Both invoke `python -m fred_runtime preparation-worker`; the Docker target
 uses `WORKER_CONFIG_FILE` (default `./config/configuration_prod.yaml`) and the
-same `.env` as the API. The local target accepts `WORKER_ENV_FILE` when the
-credentials live outside the checkout; `make run-worker-prod` selects the
+same `.env` as the API, mounted read-only and read by the local user's UID.
+The local target accepts `WORKER_ENV_FILE` when the credentials live outside
+the checkout; `make run-worker-prod` selects the
 production YAML. The worker needs Temporal, the Control
 Plane URL, workload credentials and shared object storage. The serving API
 remains a separate process.

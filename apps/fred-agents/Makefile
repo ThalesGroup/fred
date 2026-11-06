@@ -71,9 +71,9 @@ run-worker-docker: ## Run the generic capability preparation worker in Docker
 	docker run --rm -it \
 		--name $(WORKER_CONTAINER_NAME) \
 		--network $(WORKER_DOCKER_NETWORK) \
+		--user $(WORKER_DOCKER_USER) \
 		-v $(realpath config):/app/config:ro \
 		-v $(realpath $(WORKER_ENV_FILE)):/app/worker.env:ro \
-		--env-file $(realpath $(WORKER_ENV_FILE)) \
 		-e ENV_FILE=/app/worker.env \
 		-e CONFIG_FILE=$(WORKER_CONFIG_FILE) \
 		--entrypoint python \
@@ -99,5 +99,6 @@ API_CONTAINER_NAME ?= fred-agents-api
 API_DOCKER_NETWORK ?= host
 WORKER_CONTAINER_NAME ?= fred-agents-preparation-worker
 WORKER_DOCKER_NETWORK ?= host
+WORKER_DOCKER_USER ?= $(shell id -u):$(shell id -g)
 WORKER_CONFIG_FILE ?= ./config/configuration_prod.yaml
 WORKER_ENV_FILE ?= $(CURDIR)/config/.env
