@@ -191,7 +191,7 @@ The runtime SHALL give an eligible submitted message to the active ReAct or Deep
 
 ### Requirement: In-progress updates receive separate assistant replies
 
-The agent SHALL send a visible assistant message responding to an in-progress update before continuing ordinary model or tool work. User delivery and reply persistence SHALL commit atomically before that work resumes. The reply SHALL have its own canonical rank and survive history reload and checkpoint recovery. A progress question SHALL receive current status in that message. A failed reply generation SHALL leave the user message pending.
+The agent SHALL send a visible assistant message responding to an in-progress update before continuing ordinary model or tool work. User delivery and reply persistence SHALL commit atomically before that work resumes. The reply SHALL have its own canonical rank and survive history reload and checkpoint recovery. A progress question SHALL receive current status when the model produces a visible reply. If two completed reply calls produce no usable answer, the agent SHALL send a localized acknowledgement through the same delivery path. A failed model call or persistence SHALL leave the user message pending.
 
 #### Scenario: Progress question during a tool call
 
@@ -203,8 +203,15 @@ The agent SHALL send a visible assistant message responding to an in-progress up
 #### Scenario: Reply failure before delivery
 
 - **GIVEN** a steered user message is waiting at a model boundary
-- **WHEN** the agent cannot generate the intermediate reply
+- **WHEN** the reply model call fails or the reply cannot be persisted
 - **THEN** the message remains pending with its clock and can be retried
+
+#### Scenario: Reply has no visible text
+
+- **GIVEN** a steered user message is waiting at a model boundary
+- **WHEN** the model returns only reasoning, no assistant message, or an unexpected tool call on two attempts
+- **THEN** the agent sends a plain acknowledgement in the conversation language through the normal reply and delivery path
+- **AND** the original task continues without losing or duplicating the user message
 
 #### Scenario: Checkpoint recovery after reply persistence
 

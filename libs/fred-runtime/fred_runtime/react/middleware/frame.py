@@ -92,6 +92,7 @@ def build_react_platform_middleware_frame(
                     binding.portable_context.session_id,
                     binding.portable_context.baggage.get("pending_message_id"),
                     binding.portable_context.baggage.get("exchange_id"),
+                    binding.runtime_context.language,
                 ),
             )
             if binding.portable_context.baggage.get("steering_enabled") == "true"

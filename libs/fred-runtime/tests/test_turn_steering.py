@@ -4,7 +4,14 @@ import asyncio
 from typing import Any, cast
 
 import pytest
-from fred_core.history.history_schema import ChatMessage, TextPart, make_user_text
+from fred_core.history.history_schema import (
+    ChatMessage,
+    TextPart,
+    make_assistant_final,
+    make_tool_call,
+    make_tool_result,
+    make_user_text,
+)
 from fred_core.history.postgres_history_store import (
     PostgresHistoryStore,
     create_history_schema,
@@ -20,10 +27,12 @@ from fred_runtime.runtime_context import (
 )
 from fred_runtime.runtime_support import turn_steering
 from fred_runtime.runtime_support.run_scope import RunScope
+from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
 from fred_sdk.contracts.models import GraphAgentDefinition
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_openai import ChatOpenAI
 from langgraph.runtime import Runtime
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -447,7 +456,17 @@ async def test_steered_reply_is_visible_before_normal_model_call(monkeypatch):
             return ModelResponse(
                 result=[AIMessage(content="I am checking the sources.")]
             )
-        assert request.messages[-1].content == "I am checking the sources."
+        assert request.messages[-2].content == "I am checking the sources."
+        assert isinstance(request.messages[-1], HumanMessage)
+        assert "Continue the original task" in request.messages[-1].content
+        assert [message.type for message in request.messages] == [
+            "human",
+            "ai",
+            "tool",
+            "human",
+            "ai",
+            "human",
+        ]
         return ModelResponse(result=[AIMessage(content="Continuing work.")])
 
     with RunScope.open() as scope:
@@ -455,7 +474,15 @@ async def test_steered_reply_is_visible_before_normal_model_call(monkeypatch):
         response = await middleware.awrap_model_call(
             ModelRequest(
                 model=cast(BaseChatModel, object()),
-                messages=[HumanMessage(content="Where are you?")],
+                messages=[
+                    HumanMessage(content="Original task"),
+                    AIMessage(
+                        content="",
+                        tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+                    ),
+                    ToolMessage(content="Source found", tool_call_id="call-1"),
+                    HumanMessage(content="Where are you?"),
+                ],
             ),
             handler,
         )
@@ -471,6 +498,52 @@ async def test_steered_reply_is_visible_before_normal_model_call(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_recovered_steered_reply_continues_with_user_last():
+    middleware = turn_steering.TurnSteeringMiddleware("s", exchange_id="ex")
+    prior_reply = AIMessage(
+        id=steered_reply_id(("m1",)),
+        content="I am checking the sources.",
+        additional_kwargs={"steered_reply_for": ["m1"]},
+    )
+    calls = []
+
+    async def handler(request):
+        calls.append(request)
+        assert request.messages[-2] is prior_reply
+        assert isinstance(request.messages[-1], HumanMessage)
+        return ModelResponse(result=[AIMessage(content="Continuing work.")])
+
+    response = await middleware.awrap_model_call(
+        ModelRequest(
+            model=cast(BaseChatModel, object()),
+            messages=[HumanMessage(content="Where are you?"), prior_reply],
+        ),
+        handler,
+    )
+    assert len(calls) == 1
+    assert [message.content for message in response.result] == ["Continuing work."]
+
+
+@pytest.mark.parametrize("model_name", ["mistral-medium-latest", "gpt-6-luna"])
+def test_steered_continuation_serializes_for_provider(model_name):
+    model = cast(
+        ChatOpenAI,
+        with_mistral_reasoning_replay(ChatOpenAI(model=model_name, api_key="test-key")),
+    )
+    reply = AIMessage(
+        content="I am checking the sources.",
+        additional_kwargs={"steered_reply_for": ["m1"]},
+    )
+    request = ModelRequest(
+        model=model,
+        messages=[HumanMessage(content="Where are you?"), reply],
+    )
+    continued = turn_steering._continue_after_steered_reply(request)
+    wire = model._get_request_payload(continued.messages)["messages"]
+    assert [message["role"] for message in wire] == ["user", "assistant", "user"]
+
+
+@pytest.mark.asyncio
 async def test_failed_steered_reply_does_not_emit_delivery(monkeypatch):
     events = []
     monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: events.append)
@@ -478,18 +551,176 @@ async def test_failed_steered_reply_does_not_emit_delivery(monkeypatch):
     middleware._unanswered_ids = ("m1",)
     middleware._pending_delivery = (("m1", "Where are you?"),)
 
-    async def empty_reply(_request):
-        return ModelResponse(result=[AIMessage(content="")])
+    async def unavailable_reply(_request):
+        raise RuntimeError("provider unavailable")
 
-    with pytest.raises(RuntimeError, match="Steered assistant reply was empty"):
+    with pytest.raises(RuntimeError, match="provider unavailable"):
         await middleware.awrap_model_call(
             ModelRequest(
                 model=cast(BaseChatModel, object()),
                 messages=[HumanMessage(content="Where are you?")],
             ),
-            empty_reply,
+            unavailable_reply,
         )
     assert events == [{"kind": "_steered_reply_start"}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_kind", ["empty", "reasoning", "tool", "missing"])
+async def test_invalid_interim_reply_falls_back_and_continues(
+    monkeypatch, invalid_kind
+):
+    events = []
+    scope_holder = []
+
+    def write(event):
+        events.append(event)
+        if getattr(event, "kind", None) == "steered_assistant_message":
+            scope_holder[0].complete_event_receipt(
+                steered_reply_id(("m1", "m2")), {"content": event.content}
+            )
+
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: write)
+    middleware = turn_steering.TurnSteeringMiddleware(
+        "s", exchange_id="ex", language="fr" if invalid_kind == "reasoning" else None
+    )
+    middleware._unanswered_ids = ("m1", "m2")
+    middleware._pending_delivery = (("m1", "Status?"), ("m2", "Add two docs"))
+    if invalid_kind == "reasoning":
+        invalid = ModelResponse(
+            result=[AIMessage(content=[{"type": "thinking", "thinking": "planning"}])]
+        )
+    elif invalid_kind == "tool":
+        invalid = ModelResponse(
+            result=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+                )
+            ]
+        )
+    elif invalid_kind == "missing":
+        invalid = ModelResponse(result=[])
+    else:
+        invalid = ModelResponse(result=[AIMessage(content="")])
+    for message in invalid.result:
+        if isinstance(message, AIMessage):
+            message.usage_metadata = {
+                "input_tokens": 12,
+                "output_tokens": 5,
+                "total_tokens": 17,
+            }
+    calls = []
+
+    async def handler(request):
+        calls.append(request)
+        if len(calls) <= 2:
+            assert request.tools == []
+            assert request.tool_choice == "none"
+            return invalid
+        assert isinstance(request.messages[-1], HumanMessage)
+        return ModelResponse(result=[AIMessage(content="Original task continues.")])
+
+    with RunScope.open() as scope:
+        scope_holder.append(scope)
+        response = await middleware.awrap_model_call(
+            ModelRequest(
+                model=cast(BaseChatModel, object()),
+                messages=[HumanMessage(content="Add two docs")],
+            ),
+            handler,
+        )
+    assert len(calls) == 3
+    assert len(events) == 2
+    assert events[1].message_ids == ("m1", "m2")
+    assert [item.message_id for item in events[1].deliveries] == ["m1", "m2"]
+    assert events[1].content == (
+        "J'ai reçu tes messages et vais suivre tes dernières consignes."
+        if invalid_kind == "reasoning"
+        else "I received your updates and will follow your latest instructions."
+    )
+    assert [message.content for message in response.result] == [
+        events[1].content,
+        "Original task continues.",
+    ]
+    assert response.result[0].usage_metadata == (
+        None
+        if invalid_kind == "missing"
+        else {
+            "input_tokens": 24,
+            "output_tokens": 10,
+            "total_tokens": 34,
+            "input_token_details": {"cache_read": 0, "cache_creation": 0},
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_valid_retry_replies_without_fallback(monkeypatch):
+    events = []
+    scope_holder = []
+
+    def write(event):
+        events.append(event)
+        if getattr(event, "kind", None) == "steered_assistant_message":
+            scope_holder[0].complete_event_receipt(
+                steered_reply_id(("m1",)), {"content": event.content}
+            )
+
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: write)
+    middleware = turn_steering.TurnSteeringMiddleware("s", exchange_id="ex")
+    middleware._unanswered_ids = ("m1",)
+    middleware._pending_delivery = (("m1", "Status?"),)
+    calls = []
+
+    async def handler(request):
+        calls.append(request)
+        if len(calls) == 1:
+            return ModelResponse(
+                result=[
+                    AIMessage(
+                        content="",
+                        usage_metadata={
+                            "input_tokens": 12,
+                            "output_tokens": 5,
+                            "total_tokens": 17,
+                        },
+                    )
+                ]
+            )
+        if len(calls) == 2:
+            return ModelResponse(
+                result=[
+                    AIMessage(
+                        content="I am checking the sources.",
+                        usage_metadata={
+                            "input_tokens": 14,
+                            "output_tokens": 6,
+                            "total_tokens": 20,
+                        },
+                    )
+                ]
+            )
+        assert isinstance(request.messages[-1], HumanMessage)
+        return ModelResponse(result=[AIMessage(content="Continuing work.")])
+
+    with RunScope.open() as scope:
+        scope_holder.append(scope)
+        response = await middleware.awrap_model_call(
+            ModelRequest(
+                model=cast(BaseChatModel, object()),
+                messages=[HumanMessage(content="Status?")],
+            ),
+            handler,
+        )
+    assert len(calls) == 3
+    assert events[1].content == "I am checking the sources."
+    assert response.result[0].usage_metadata == {
+        "input_tokens": 26,
+        "output_tokens": 11,
+        "total_tokens": 37,
+        "input_token_details": {"cache_read": 0, "cache_creation": 0},
+    }
 
 
 @pytest.mark.asyncio
@@ -707,6 +938,170 @@ async def test_normal_model_waits_for_reply_persistence(monkeypatch, tmp_path):
         assert persisted_event["rank"] == 2
         assert persisted_event["deliveries"][0]["rank"] == 1
         assert [item.content for item in response.result] == ["Checking.", "Done."]
+    finally:
+        turn_steering.turn_messages.configure(None)
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_two_steers_during_tool_call_continue_one_turn(monkeypatch, tmp_path):
+    from fred_runtime.app.agent_app import _HistoryRanker, _rank_runtime_event
+
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    turn_steering.turn_messages.configure(second)
+    queue = asyncio.Queue()
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: queue.put_nowait)
+    try:
+        await first.save(
+            "s",
+            [
+                make_user_text("s", "ex", 0, "Read the sources and summarize them"),
+                make_tool_call("s", "ex", 1, "call-1", "lookup", {}),
+            ],
+            "u",
+        )
+        tool_started = asyncio.Event()
+        release_tool = asyncio.Event()
+
+        async def running_tool():
+            tool_started.set()
+            await release_tool.wait()
+            return "Sources found"
+
+        tool_task = asyncio.create_task(running_tool())
+        await tool_started.wait()
+        first_steer = await first.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="Where are you?",
+        )
+        second_steer = await first.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m2",
+            content="Also include two more documents",
+        )
+        assert (first_steer.rank, second_steer.rank) == (-1, -2)
+        release_tool.set()
+        tool_result = await tool_task
+        await first.save(
+            "s", [make_tool_result("s", "ex", 2, "call-1", tool_result)], "u"
+        )
+        prior_messages = [
+            HumanMessage(content="Read the sources and summarize them"),
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+            ),
+            ToolMessage(content=tool_result, tool_call_id="call-1"),
+        ]
+        middleware = turn_steering.TurnSteeringMiddleware("s", exchange_id="ex")
+        update = await middleware.abefore_model(
+            {"messages": prior_messages}, Runtime(context=None)
+        )
+        assert update is not None
+        assert [message.id for message in update["messages"]] == [
+            "steered:m1",
+            "steered:m2",
+        ]
+        ranker = _HistoryRanker(
+            3,
+            opening_rank=0,
+            pending_message_id=None,
+            previously_pending_occurrence_ids=(),
+        )
+
+        async def persist_reply():
+            assert await queue.get() == {"kind": "_steered_reply_start"}
+            event = await queue.get()
+            return await _rank_runtime_event(
+                event.model_dump(mode="json"),
+                ranker,
+                session_id="s",
+                user_id="u",
+                exchange_id="ex",
+            )
+
+        calls = []
+
+        async def handler(request):
+            calls.append(request)
+            if len(calls) == 1:
+                assert [message.type for message in request.messages] == [
+                    "human",
+                    "ai",
+                    "tool",
+                    "human",
+                    "human",
+                ]
+                return ModelResponse(
+                    result=[
+                        AIMessage(
+                            content="The lookup finished. I will include the two extra documents."
+                        )
+                    ]
+                )
+            assert [message.type for message in request.messages] == [
+                "human",
+                "ai",
+                "tool",
+                "human",
+                "human",
+                "ai",
+                "human",
+            ]
+            return ModelResponse(
+                result=[AIMessage(content="Summary with extra documents")]
+            )
+
+        with RunScope.open():
+            consumer = asyncio.create_task(persist_reply())
+            response = await asyncio.wait_for(
+                middleware.awrap_model_call(
+                    ModelRequest(
+                        model=cast(BaseChatModel, object()),
+                        messages=[*prior_messages, *update["messages"]],
+                    ),
+                    handler,
+                ),
+                timeout=5,
+            )
+            persisted_event = await consumer
+        assert len(calls) == 2
+        assert [item["rank"] for item in persisted_event["deliveries"]] == [3, 4]
+        assert persisted_event["rank"] == 5
+        final = await _rank_runtime_event(
+            {"kind": "final", "content": response.result[-1].content},
+            ranker,
+            session_id="s",
+            user_id="u",
+            exchange_id="ex",
+        )
+        assert final["rank"] == 6
+        await first.save(
+            "s", [make_assistant_final("s", "ex", 6, final["content"])], "u"
+        )
+        rows = await first.get("s", "u")
+        assert [(row.rank, row.channel.value) for row in rows] == [
+            (0, "final"),
+            (1, "tool_call"),
+            (2, "tool_result"),
+            (3, "final"),
+            (4, "final"),
+            (5, "final"),
+            (6, "final"),
+        ]
+        assert [_text(row) for row in rows if row.role.value == "user"] == [
+            "Read the sources and summarize them",
+            "Where are you?",
+            "Also include two more documents",
+        ]
     finally:
         turn_steering.turn_messages.configure(None)
         await first_engine.dispose()

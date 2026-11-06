@@ -610,6 +610,7 @@ def _build_deepagent_runtime_middleware(
                     binding.portable_context.session_id,
                     binding.portable_context.baggage.get("pending_message_id"),
                     binding.portable_context.baggage.get("exchange_id"),
+                    binding.runtime_context.language,
                 ),
             )
             if not child

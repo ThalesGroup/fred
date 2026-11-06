@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 
 from fred_core.history.history_schema import TextPart
@@ -17,10 +18,17 @@ from fred_sdk.contracts.runtime import (
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages.ai import InputTokenDetails, UsageMetadata
 from langgraph.config import get_stream_writer
 
+from fred_runtime.runtime_support.model_metadata import (
+    runtime_metadata_from_message,
+    sum_token_usage,
+)
 from fred_runtime.runtime_support.run_scope import RunScope
 from fred_runtime.support.thinking import content_to_text
+
+logger = logging.getLogger(__name__)
 
 
 class TurnMessages:
@@ -39,17 +47,36 @@ class TurnMessages:
 turn_messages = TurnMessages()
 
 
+def _continue_after_steered_reply(request: ModelRequest) -> ModelRequest:
+    # Keep the visible reply in context while ending the request on a user role.
+    # Mistral rejects a completed assistant message as the final input.
+    return request.override(
+        messages=[
+            *request.messages,
+            HumanMessage(
+                content=(
+                    "Continue the original task unless the latest user update changes "
+                    "or stops it. The brief reply above was already shown to the user; "
+                    "do not repeat it."
+                )
+            ),
+        ]
+    )
+
+
 class TurnSteeringMiddleware(AgentMiddleware):
     def __init__(
         self,
         session_id: str | None,
         pending_message_id: str | None = None,
         exchange_id: str | None = None,
+        language: str | None = None,
     ) -> None:
         super().__init__()
         self._session_id = session_id
         self._pending_message_id = pending_message_id
         self._exchange_id = exchange_id
+        self._language = language
         self._first_boundary = True
         self._unanswered_ids: tuple[str, ...] = ()
         self._pending_delivery: tuple[tuple[str, str], ...] = ()
@@ -165,6 +192,12 @@ class TurnSteeringMiddleware(AgentMiddleware):
         pending_delivery = self._pending_delivery
         self._pending_delivery = ()
         if not message_ids:
+            if request.messages and isinstance(request.messages[-1], AIMessage):
+                reply_for = request.messages[-1].additional_kwargs.get(
+                    "steered_reply_for"
+                )
+                if isinstance(reply_for, list) and reply_for:
+                    request = _continue_after_steered_reply(request)
             return await handler(request)
 
         writer = get_stream_writer()
@@ -181,25 +214,76 @@ class TurnSteeringMiddleware(AgentMiddleware):
                 "Do not call tools or give a final answer to the original task."
             )
         )
-        interim = await handler(
-            request.override(
-                tools=[],
-                tool_choice="none",
-                response_format=None,
-                system_message=instruction,
+        reply_request = request.override(
+            tools=[],
+            tool_choice="none",
+            response_format=None,
+            system_message=instruction,
+        )
+        reply: AIMessage | None = None
+        reply_usage: dict[str, int] | None = None
+        for attempt in range(2):
+            interim = await handler(reply_request)
+            candidate = next(
+                (
+                    message
+                    for message in interim.result
+                    if isinstance(message, AIMessage)
+                ),
+                None,
             )
-        )
-        reply = next(
-            (message for message in interim.result if isinstance(message, AIMessage)),
-            None,
-        )
-        if (
-            reply is None
-            or reply.tool_calls
-            or not content_to_text(reply.content).strip()
-        ):
-            raise RuntimeError(
-                "Steered assistant reply was empty or contained tool calls"
+            if candidate is not None:
+                _, usage, _ = runtime_metadata_from_message(candidate)
+                reply_usage = sum_token_usage(reply_usage, usage)
+            if candidate is not None and not candidate.tool_calls:
+                visible_text = content_to_text(candidate.content).strip()
+                if visible_text:
+                    reply = candidate
+                    break
+            logger.warning(
+                "event=steered_reply_invalid attempt=%d reason=%s",
+                attempt + 1,
+                "missing_assistant"
+                if candidate is None
+                else "unexpected_tool_calls"
+                if candidate.tool_calls
+                else "empty_visible_text",
+            )
+            reply_request = reply_request.override(
+                system_message=SystemMessage(
+                    content=(
+                        f"{request.system_prompt or ''}\n\n"
+                        "Reply briefly in plain visible text to the latest user update. "
+                        "Do not call tools. The user is waiting for this reply."
+                    )
+                )
+            )
+        if reply is None:
+            french = (self._language or "").lower().startswith("fr")
+            reply = AIMessage(
+                content=(
+                    (
+                        "J'ai reçu tes messages et vais suivre tes dernières consignes."
+                        if len(message_ids) > 1
+                        else "J'ai reçu ton message et vais suivre ta dernière consigne."
+                    )
+                    if french
+                    else (
+                        "I received your updates and will follow your latest instructions."
+                        if len(message_ids) > 1
+                        else "I received your update and will follow your latest instruction."
+                    )
+                )
+            )
+        if reply_usage is not None:
+            reply.usage_metadata = UsageMetadata(
+                input_tokens=reply_usage["input_tokens"],
+                output_tokens=reply_usage["output_tokens"],
+                total_tokens=reply_usage["total_tokens"],
+                input_token_details=InputTokenDetails(
+                    cache_read=reply_usage["cache_read_tokens"],
+                    cache_creation=reply_usage["cache_creation_tokens"],
+                ),
             )
         reply.id = steered_reply_id(message_ids)
         reply.additional_kwargs["steered_reply_for"] = list(message_ids)
@@ -225,7 +309,11 @@ class TurnSteeringMiddleware(AgentMiddleware):
         finally:
             scope.discard_event_receipt(reply_id)
         reply.content = persisted["content"]
-        continued = await handler(request.override(messages=[*request.messages, reply]))
+        continued = await handler(
+            _continue_after_steered_reply(
+                request.override(messages=[*request.messages, reply])
+            )
+        )
         return ModelResponse(
             result=[reply, *continued.result],
             structured_response=continued.structured_response,
