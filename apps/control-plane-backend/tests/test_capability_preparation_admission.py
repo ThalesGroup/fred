@@ -27,6 +27,13 @@ from control_plane_backend.capability_preparations.admission import (
     persist_agent_preparations,
     stage_assets,
 )
+from control_plane_backend.capability_preparations.dispatcher import (
+    claim_due,
+    finish_delivery,
+)
+from control_plane_backend.capability_preparations.readiness import (
+    agent_preparation_readiness,
+)
 from control_plane_backend.capability_preparations.schemas import (
     WorkerPreparationResult,
 )
@@ -90,6 +97,16 @@ def _entry() -> CapabilityCatalogEntry:
         icon="star",
         assets=[AssetSlot(key="source", accepted_types=[".txt"], max_count=2)],
         preparation=PreparationSpec(asset_slots=("source",), rules_version="v1"),
+    )
+
+
+def _second_entry() -> CapabilityCatalogEntry:
+    return _entry().model_copy(
+        update={
+            "id": "reverse",
+            "name": "reverse",
+            "preparation": PreparationSpec(asset_slots=("source",), rules_version="v2"),
+        }
     )
 
 
@@ -444,6 +461,120 @@ async def test_preparation_intention_is_atomic_and_unchanged_save_reuses_it() ->
                         staged=[],
                     )
         assert await store.get("a2") is None
+    finally:
+        await engine.dispose()
+        with sync_engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        sync_engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.integration_postgres
+async def test_two_capabilities_share_save_dispatch_status_and_readiness() -> None:
+    url = os.environ.get("FRED_CAP_PREP_TEST_POSTGRES_URL")
+    if not url:
+        pytest.skip("Set FRED_CAP_PREP_TEST_POSTGRES_URL for PostgreSQL verification")
+    schema = f"cap_prep_multi_{uuid4().hex}"
+    sync_engine = create_engine(url)
+    with sync_engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_async_engine(
+        url, connect_args={"options": f"-c search_path={schema}"}
+    )
+    try:
+        async with engine.begin() as connection:
+            for table in (
+                CapabilityAssetRow.__table__,
+                CapabilityPreparationRow.__table__,
+                CapabilityPreparationAssetRow.__table__,
+            ):
+                await connection.run_sync(lambda sync, table=table: table.create(sync))
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        uploads = {
+            cap_id: [Upload("source", f"{cap_id}.txt", cap_id.encode())]
+            for cap_id in ("example", "reverse")
+        }
+        stored = MemoryStore()
+        staged = await stage_assets(
+            stored,
+            available=[_entry(), _second_entry()],
+            selected_ids=list(uploads),
+            uploads=uploads,
+        )
+        async with sessions() as session:
+            async with session.begin():
+                await persist_agent_preparations(
+                    session,
+                    owner_id="a1",
+                    team_id="t1",
+                    runtime_id="fred-agents",
+                    available=[_entry(), _second_entry()],
+                    selected_ids=list(uploads),
+                    capability_config={
+                        cap_id: {"config": {"mode": cap_id}} for cap_id in uploads
+                    },
+                    staged=staged,
+                )
+        deliveries = await claim_due(sessions)
+        assert len(deliveries) == 2
+        assert all(
+            delivery.task_queue == "capability-preparation-fred-agents"
+            for delivery in deliveries
+        )
+        for delivery in deliveries:
+            await finish_delivery(
+                sessions, delivery, run_id=f"run-{delivery.preparation_id}"
+            )
+        async with sessions() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(CapabilityPreparationRow).where(
+                            CapabilityPreparationRow.is_current.is_(True)
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            by_capability = {row.capability_id: row for row in rows}
+            assert set(by_capability) == {"example", "reverse"}
+            for cap_id, row in by_capability.items():
+                assert row.run_id is not None
+                work = await get_work_asset(
+                    session,
+                    preparation_id=row.id,
+                    asset_id=next(
+                        asset.id for asset in staged if asset.capability_id == cap_id
+                    ),
+                )
+                assert work is not None
+            verdict = await agent_preparation_readiness(
+                session, team_id="t1", agent_instance_ids=["a1"]
+            )
+            assert verdict["a1"].capability_ids == ("example", "reverse")
+            page = await list_agent_preparations(
+                session, agent_instance_id="a1", team_id="t1", limit=20, offset=0
+            )
+            assert {item.capability_id for item in page.items} == {"example", "reverse"}
+        async with sessions() as session:
+            async with session.begin():
+                reverse = await session.get(
+                    CapabilityPreparationRow, by_capability["reverse"].id
+                )
+                assert reverse is not None
+                reverse.state = "failed"
+                example = await session.get(
+                    CapabilityPreparationRow, by_capability["example"].id
+                )
+                assert example is not None
+                example.state = "succeeded"
+        async with sessions() as session:
+            verdict = await agent_preparation_readiness(
+                session, team_id="t1", agent_instance_ids=["a1"]
+            )
+            assert verdict["a1"].capability_ids == ("reverse",)
     finally:
         await engine.dispose()
         with sync_engine.begin() as connection:

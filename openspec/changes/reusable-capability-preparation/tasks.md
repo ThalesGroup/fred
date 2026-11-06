@@ -13,7 +13,7 @@
 - [x] 2.2 Add a separate `fred-agents` preparation-worker mode and deployment that loads the installed registry and calls the declared hook; verify a worker restart resumes a job without a serving pod or remembered in-process object.
 - [x] 2.3 Derive agent readiness from every current gating preparation plus existing suspension/enabled rules in listings, picker and turn admission; verify two capabilities preparing concurrently, one failure, and a separate suspension.
 - [x] 2.4 Add fenced result publication and idempotent cleanup for superseded/deleted resources; verify replacement, deletion, duplicate completion and late callback races.
-- [ ] 2.5 Exercise the public contract with a minimal second test capability through the same save, dispatch, status and readiness path; verify no capability-ID-specific control-plane branch is needed and document the extension points.
+- [x] 2.5 Exercise the public contract with a minimal second test capability through the same save, dispatch, status and readiness path; verify no capability-ID-specific control-plane branch is needed and document the extension points.
 
 ## 3. Knowledge Flow vision service
 
