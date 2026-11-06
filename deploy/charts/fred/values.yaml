@@ -1146,6 +1146,8 @@ applications:
     applicationName: fred-agents-preparation-worker
     deployment:
       enabled: false
+    migration:
+      enabled: false
     replicaCount: 1
     command:
       enabled: true
