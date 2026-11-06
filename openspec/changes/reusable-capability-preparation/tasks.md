@@ -26,11 +26,11 @@
 - [x] 4.1 Declare PPT template preparation in its manifest and move analysis, preview generation and inventory persistence behind its `prepare` hook; verify the agent tool reads the inventory tied to its active template revision.
 - [x] 4.2 Keep the numbered-slot prompt, response validation and heuristic fallback in PPT Builder while calling Knowledge Flow for vision; verify rule-only, valid, malformed and temporarily failed vision responses.
 - [x] 4.3 Move agent template upload, copy, override, retry and status flows to generic assets/preparations; verify team permissions, copied-agent behavior, retry without a new upload and stale-result fencing.
-- [ ] 4.4 Move Swift's platform-wide default and candidate replacement to the shared lifecycle while preserving the built-in deck, active-default continuity, reviews, reset and propagation bound; verify admin permissions and failed replacement behavior.
+- [x] 4.4 Move Swift's platform-wide default and candidate replacement to the shared lifecycle while preserving the built-in deck, active-default continuity, reviews, reset and propagation bound; verify admin permissions and failed replacement behavior.
 
 ## 5. Settings and model catalog cleanup
 
-- [ ] 5.1 Remove PPT labelling-model inputs and selectors in the agent and platform forms; keep `use_vision` and drive its availability from Knowledge Flow; verify both form layouts and legacy saved selections.
+- [x] 5.1 Remove PPT labelling-model inputs and selectors in the agent and platform forms; keep `use_vision` and drive its availability from Knowledge Flow; verify both form layouts and legacy saved selections.
 - [ ] 5.2 Remove `supports_vision` and derived vision-profile projections from catalog YAML, SDK/runtime/control-plane schemas, APIs and generated frontend types; verify catalog/routing contract tests and legacy YAML tolerance.
 - [ ] 5.3 Update user-facing help and operator configuration guidance for the single Knowledge Flow vision model and generic preparation worker; verify documented settings and deployment values match the actual configuration.
 

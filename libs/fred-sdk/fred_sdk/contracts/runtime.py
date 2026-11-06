@@ -727,6 +727,7 @@ CAPABILITY_MANAGER_DENIED: Final = "You cannot manage the platform's capabilitie
 _ROUTE_DEPENDENCIES = (
     "capability_team_authorizer",
     "capability_platform_model",
+    "capability_platform_model_optional",
     "capability_preparation_reader",
     "capability_preparation_manager",
 )

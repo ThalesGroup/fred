@@ -38,7 +38,6 @@ from fred_sdk.contracts.capability import (
     CapabilityManifest,
     CapabilityReadiness,
     EmptyModel,
-    Public,
     SaveContext,
     SidePanelSpec,
     UploadedFile,
@@ -51,11 +50,10 @@ from fred_sdk.contracts.capability.preparation import (
 )
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
-    CapabilityModelUnavailableError,
     CapabilityPreparationManager,
     CapabilityPreparationReader,
     CapabilityTeamAuthorizer,
-    capability_platform_model,
+    capability_platform_model_optional,
     capability_preparation_manager,
     capability_preparation_reader,
     capability_team_authorizer,
@@ -165,8 +163,6 @@ class PptBuilderConfig(BaseModel):
     template_sha256: Optional[str] = None
     preparation_mode: Literal["legacy", "shared"] = "legacy"
     use_vision: bool = True
-    # A catalogue profile: a team that may not use it falls back to rules.
-    labelling_model: Public[Optional[str]] = None
     overrides: List[PatternOverride] = []
     # Read by the build tool each turn, never by the analysis: no re-run.
     variety_check: VarietyCheck = "template_slide"
@@ -180,7 +176,7 @@ class PptBuilderConfig(BaseModel):
         return self
 
     def labelling_key(self) -> str:
-        return labelling_key(self.use_vision, self.labelling_model)
+        return labelling_key(self.use_vision, None)
 
 
 def _bounded_analysis(content: bytes):
@@ -311,9 +307,8 @@ class PlatformTemplateResponse(BaseModel):
     overrides: List[PatternOverride] = []
     replacement: Optional[AnalysisStatusResponse] = None
     replacement_filename: Optional[str] = None
-    # The replacement's choice, else the current one's. None: the platform's default model.
+    # The replacement's choice, else the current one's.
     use_vision: bool = True
-    vision_profile_id: Optional[str] = None
 
 
 class PlatformOverridesRequest(BaseModel):
@@ -321,10 +316,9 @@ class PlatformOverridesRequest(BaseModel):
 
 
 class PlatformAnalysisRequest(BaseModel):
-    """The vision choice a platform analysis runs with."""
+    """Whether platform preparation asks Knowledge Flow to describe slides."""
 
     use_vision: bool = True
-    vision_profile_id: Optional[str] = None
 
 
 async def _shared_platform_response(
@@ -379,7 +373,7 @@ async def _platform_response(*, recover: bool = False) -> PlatformTemplateRespon
     latest = replacement or current
     if latest is None:
         return PlatformTemplateResponse(overrides=overrides)
-    use_vision, profile_id = parse_labelling_key(latest.labelling_key)
+    use_vision, _ = parse_labelling_key(latest.labelling_key)
     return PlatformTemplateResponse(
         analysis=status_response(current) if current else None,
         template_filename=current.template_filename if current else None,
@@ -387,7 +381,6 @@ async def _platform_response(*, recover: bool = False) -> PlatformTemplateRespon
         replacement=status_response(replacement) if replacement else None,
         replacement_filename=replacement.template_filename if replacement else None,
         use_vision=use_vision,
-        vision_profile_id=profile_id,
     )
 
 
@@ -398,18 +391,6 @@ async def _builtin_overrides() -> List[PatternOverride]:
         return []
     kept, _ = prune_overrides(record.overrides(), builtin_template()[1])
     return kept
-
-
-async def _platform_labelling_key(
-    port: CapabilityModelPort, use_vision: bool, profile_id: Optional[str]
-) -> str:
-    """422 for a vision model the platform drawer would not offer."""
-    if use_vision and profile_id:
-        try:
-            await port.require_vision_profile(profile_id)
-        except CapabilityModelUnavailableError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return labelling_key(use_vision, profile_id or None)
 
 
 def _remember_platform_port(port: CapabilityModelPort) -> None:
@@ -521,9 +502,10 @@ def _build_router() -> APIRouter:
     async def put_platform_template(
         file: UploadFile = File(...),
         use_vision: bool = Form(True),
-        vision_profile_id: Optional[str] = Form(None),
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
-        port: CapabilityModelPort = Depends(capability_platform_model),
+        port: Optional[CapabilityModelPort] = Depends(
+            capability_platform_model_optional
+        ),
         reader: Optional[CapabilityPreparationReader] = Depends(
             capability_preparation_reader
         ),
@@ -545,7 +527,11 @@ def _build_router() -> APIRouter:
                 {"use_vision": use_vision},
             )
             return await _shared_platform_response(reader)
-        key = await _platform_labelling_key(port, use_vision, vision_profile_id)
+        if port is None:
+            raise HTTPException(
+                status_code=503, detail="Platform model access is unavailable"
+            )
+        key = labelling_key(use_vision, None)
         content = await _readable_upload(file)
         store = get_analysis_store()
         current = await store.get(PLATFORM_ID, with_inventory=False)
@@ -577,7 +563,9 @@ def _build_router() -> APIRouter:
     async def rerun_platform_analysis(
         body: PlatformAnalysisRequest,
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
-        port: CapabilityModelPort = Depends(capability_platform_model),
+        port: Optional[CapabilityModelPort] = Depends(
+            capability_platform_model_optional
+        ),
         reader: Optional[CapabilityPreparationReader] = Depends(
             capability_preparation_reader
         ),
@@ -596,9 +584,11 @@ def _build_router() -> APIRouter:
                 {"use_vision": body.use_vision},
             )
             return await _shared_platform_response(reader)
-        key = await _platform_labelling_key(
-            port, body.use_vision, body.vision_profile_id
-        )
+        if port is None:
+            raise HTTPException(
+                status_code=503, detail="Platform model access is unavailable"
+            )
+        key = labelling_key(body.use_vision, None)
         store = get_analysis_store()
         _remember_platform_port(port)
         replacement = await store.get(PLATFORM_NEXT_ID, with_inventory=False)
@@ -1336,7 +1326,6 @@ class PptBuilderCapability(
                         "template_sha256": hashlib.sha256(content).hexdigest(),
                         "template_key": PPT_BUILDER_TEMPLATE_KEY,
                         "preparation_mode": "shared",
-                        "labelling_model": None,
                     }
                 )
             if config.template_sha256 is None:
@@ -1344,12 +1333,9 @@ class PptBuilderCapability(
                     update={
                         "overrides": [],
                         "preparation_mode": "shared",
-                        "labelling_model": None,
                     }
                 )
-            return config.model_copy(
-                update={"preparation_mode": "shared", "labelling_model": None}
-            )
+            return config.model_copy(update={"preparation_mode": "shared"})
         if template_uploads:
             return await self._accept_upload(config, template_uploads[0].content, ctx)
         if config.template_sha256 is None:  # pattern edits belong to a template

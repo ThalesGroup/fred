@@ -21,10 +21,12 @@ from fred_sdk.contracts.capability.context import (
 )
 from fred_sdk.contracts.capability.manifest import UploadedFile
 from fred_sdk.contracts.runtime import (
+    CapabilityPreparationManager,
     CapabilityPreparationReader,
     CapabilityTeamAuthorizer,
     RuntimeServices,
     capability_preparation_reader,
+    capability_preparation_manager,
     capability_team_authorizer,
 )
 
@@ -109,12 +111,14 @@ async def test_shared_save_validates_template_without_legacy_job(
         preparation_enabled=True,
     )
     stored = await builder.PptBuilderCapability().validate_config(
-        builder.PptBuilderConfig(labelling_model="legacy-profile", use_vision=False),
+        builder.PptBuilderConfig.model_validate(
+            {"labelling_model": "legacy-profile", "use_vision": False}
+        ),
         {"template": [UploadedFile(filename="template.pptx", content=template)]},
         context,
     )
     assert stored.preparation_mode == "shared"
-    assert stored.labelling_model is None
+    assert "labelling_model" not in stored.model_dump()
     assert stored.template_sha256 == hashlib.sha256(template).hexdigest()
 
 
@@ -364,3 +368,96 @@ async def test_shared_platform_routes_preserve_active_on_failed_candidate() -> N
         assert body["use_vision"] is True
         preview = await client.get("/platform/patterns.pdf")
         assert preview.content == b"%PDF"
+
+
+@pytest.mark.asyncio
+async def test_shared_platform_mutations_use_generic_manager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template, inventory = builtin_template()
+    selection = {"active": None, "candidate": None, "settings": {}}
+
+    class Authorizer(CapabilityTeamAuthorizer):
+        async def require_agent_editor(self, team_id):
+            return None
+
+        async def require_capability_manager(self):
+            return None
+
+    class Reader(CapabilityPreparationReader):
+        def enabled(self, capability_id):
+            return capability_id == "ppt_builder"
+
+        async def platform_status(self, capability_id, slot_key):
+            return selection
+
+        async def agent_status(self, team_id, agent_instance_id, capability_id):
+            return None
+
+        async def read_result(self, reference):
+            raise AssertionError("No active result")
+
+        async def read_sibling(self, reference, filename):
+            raise AssertionError("No active result")
+
+        async def sibling_exists(self, reference, filename):
+            return False
+
+    class Manager(CapabilityPreparationManager):
+        def __init__(self):
+            self.upload = AsyncMock(return_value=selection)
+            self.refresh = AsyncMock(return_value=selection)
+            self.settings = AsyncMock(return_value=selection)
+            self.reset = AsyncMock(return_value=selection)
+
+        async def upload_platform_candidate(self, *args):
+            return await self.upload(*args)
+
+        async def retry_platform_candidate(self, *args):
+            return selection
+
+        async def refresh_platform_candidate(self, *args):
+            return await self.refresh(*args)
+
+        async def set_platform_settings(self, *args):
+            return await self.settings(*args)
+
+        async def reset_platform_selection(self, *args):
+            return await self.reset(*args)
+
+    manager = Manager()
+    monkeypatch.setattr(builder, "_readable_upload", AsyncMock(return_value=template))
+    monkeypatch.setattr(
+        builder, "get_analysis_store", lambda: pytest.fail("legacy store accessed")
+    )
+    app = FastAPI()
+    app.include_router(builder.PptBuilderCapability.manifest.router)
+    app.dependency_overrides[capability_team_authorizer] = Authorizer
+    app.dependency_overrides[capability_preparation_reader] = Reader
+    app.dependency_overrides[capability_preparation_manager] = lambda: manager
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://pod"
+    ) as client:
+        upload = await client.put(
+            "/platform/template",
+            files={"file": ("brand.pptx", template)},
+            data={"use_vision": "false"},
+        )
+        assert upload.status_code == 200
+        rerun = await client.post("/platform/analysis", json={"use_vision": True})
+        assert rerun.status_code == 200
+        overrides = await client.put(
+            "/platform/overrides",
+            json={"overrides": [{"pattern_id": inventory.patterns[0].id}]},
+        )
+        assert overrides.status_code == 200
+        reset = await client.delete("/platform/template")
+        assert reset.status_code == 200
+    manager.upload.assert_awaited_once_with(
+        "ppt_builder", "template", template, "brand.pptx", {"use_vision": False}
+    )
+    manager.refresh.assert_awaited_once_with(
+        "ppt_builder", "template", {"use_vision": True}
+    )
+    manager.settings.assert_awaited_once()
+    manager.reset.assert_awaited_once_with("ppt_builder", "template")

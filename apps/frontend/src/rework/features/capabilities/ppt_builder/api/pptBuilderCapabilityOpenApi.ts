@@ -264,7 +264,6 @@ export type PlatformTemplateResponse = {
   replacement?: AnalysisStatusResponse | null;
   replacement_filename?: string | null;
   use_vision?: boolean;
-  vision_profile_id?: string | null;
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -279,11 +278,9 @@ export type HttpValidationError = {
 export type BodyPutPptBuilderPlatformTemplate = {
   file: string;
   use_vision?: boolean;
-  vision_profile_id?: string | null;
 };
 export type PlatformAnalysisRequest = {
   use_vision?: boolean;
-  vision_profile_id?: string | null;
 };
 export type PlatformOverridesRequest = {
   overrides?: PatternOverride[];

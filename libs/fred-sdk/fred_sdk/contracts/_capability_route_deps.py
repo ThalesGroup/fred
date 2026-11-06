@@ -62,6 +62,13 @@ async def capability_platform_model(request: Request) -> CapabilityModelPort:
     return port
 
 
+async def capability_platform_model_optional(
+    request: Request,
+) -> CapabilityModelPort | None:
+    port = getattr(request.state, CAPABILITY_PLATFORM_MODEL_STATE, None)
+    return port if isinstance(port, CapabilityModelPort) else None
+
+
 async def capability_preparation_reader(
     request: Request,
 ) -> CapabilityPreparationReader | None:
