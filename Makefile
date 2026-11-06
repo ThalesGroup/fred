@@ -165,7 +165,7 @@ dev:  ## Start development environment in all submodules
 ##@ Docker
 
 .PHONY: sbom
-sbom: ## Generate local image CycloneDX SBOMs (CVES=true to include vulnerabilities)
+sbom: ## Generate local image CycloneDX SBOMs (IMAGE=name for one, CVES=true for vulnerabilities)
 	@bash scripts/generate_image_sboms.sh
 
 .PHONY: docker-build

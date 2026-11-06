@@ -24,10 +24,10 @@ for tool in "${required_tools[@]}"; do
   fi
 done
 
-image_rows=$(jq -er '
-  [.images[] | select(.publish == true) |
+image_rows=$(jq -er --arg image "${IMAGE:-}" '
+  [.images[] | select(.publish == true and ($image == "" or .name == $image)) |
     [.name, (.dockerfile | split("/")[0:2] | join("/"))] | @tsv]
-  | if length > 0 then .[] else error("No published images in manifest") end
+  | if length > 0 then .[] else error("No published image matches IMAGE=" + $image) end
 ' .github/docker-images.json)
 
 names=()

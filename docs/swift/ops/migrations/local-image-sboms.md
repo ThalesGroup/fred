@@ -29,6 +29,8 @@ With the published application images available locally, run `make sbom` or
 `make sbom TRIVY_MODE=docker` and check for non-empty CycloneDX reports in
 `target/sbom/`.
 Add `CVES=true` to include detected vulnerabilities in those reports.
+Use `make sbom IMAGE=frontend` to generate only one image's report. Release-tag
+CI generates one report with CVEs in each image job after its push.
 
 ## Rollback
 

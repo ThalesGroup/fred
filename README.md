@@ -581,6 +581,14 @@ docker build --build-arg INSTALL_PYMUPDF=true \
 make sbom
 ```
 
+To scan one published image, pass its manifest name instead. The global target
+still scans all published images when `IMAGE` is omitted:
+
+```bash
+make sbom IMAGE=frontend
+make sbom IMAGE=knowledge-flow-backend-pymupdf CVES=true
+```
+
 Alternatively, use Trivy in Docker without installing the binary:
 
 ```bash
@@ -616,6 +624,9 @@ image name (including variants). It only inspects images
 already present in Docker; it does not rebuild or pull them. The files are in
 `target/sbom/` (ignored by Git). If an image is missing, use the build commands
 above, including the separate PyMuPDF variant build.
+On release tags, each image build job exports its image to a local tar while
+pushing it, then scans that tar with Trivy and uploads a CycloneDX report with
+CVEs as a separate artifact.
 
 ## Production mode
 
