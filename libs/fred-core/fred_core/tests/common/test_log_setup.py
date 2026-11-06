@@ -27,12 +27,9 @@ from typing import Literal
 import pytest
 from fred_core.logs.log_setup import (
     AUDIT_LOGGER_NAME,
-    CompactJsonFormatter,
-    StoreEmitHandler,
     UvicornSensitiveQueryFilter,
     log_setup,
 )
-from fred_core.logs.log_structures import LogEventDTO
 from fred_core.security.delegation import DelegationConfig, initialize_delegation
 
 
@@ -76,20 +73,6 @@ def _reset_delegation() -> Iterator[None]:
                 entry.disabled = False
                 entry.propagate = True
                 entry.setLevel(logging.NOTSET)
-
-
-class _StubLogStore:
-    def __init__(self) -> None:
-        self.indexed: list[LogEventDTO] = []
-
-    def ensure_ready(self) -> None:
-        return None
-
-    def index_event(self, event: LogEventDTO) -> None:
-        self.indexed.append(event)
-
-    def bulk_index(self, events: list[LogEventDTO]) -> None:
-        return None
 
 
 def test_uvicorn_sensitive_query_filter_redacts_token_in_args() -> None:
@@ -173,8 +156,8 @@ def _wired_uvicorn_logging() -> Iterator[tuple[_Sink, _Sink]]:
     access_logger.propagate = False
     log_setup(
         service_name=service_name,
+        service_role="api",
         log_level="INFO",
-        store=_StubLogStore(),
         use_rich=False,
     )
     info_sink, all_sink = _Sink(logging.INFO), _Sink(logging.NOTSET)
@@ -262,8 +245,8 @@ def test_duplicate_uvicorn_access_is_suppressed_without_delegation() -> None:
 def test_log_setup_suppresses_aiosqlite_debug_noise() -> None:
     log_setup(
         service_name="test-log-setup-aiosqlite",
+        service_role="api",
         log_level="DEBUG",
-        store=_StubLogStore(),
         include_uvicorn=False,
         use_rich=False,
     )
@@ -274,69 +257,17 @@ def test_log_setup_suppresses_aiosqlite_debug_noise() -> None:
     assert logger.propagate is False
 
 
-def test_compact_json_formatter_surfaces_extra_fields() -> None:
-    """extra={...} on a logging call must survive into the JSON payload — this
-    is what StoreEmitHandler/LogEventDTO already expect (they read payload
-    "extra"), and what audit events depend on to carry their structured
-    fields instead of being reduced to a bare message string."""
-    logger = logging.getLogger("test-compact-json-formatter")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    logger.handlers.clear()
-    lines: list[str] = []
+def test_audit_logger_writes_the_common_json_format_on_its_own_handler(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from fred_core.logs.audit_log import emit_audit_log
 
-    class _CapturingHandler(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            lines.append(self.format(record))
-
-    handler = _CapturingHandler()
-    handler.setFormatter(CompactJsonFormatter("test-service"))
-    logger.addHandler(handler)
-
-    logger.info(
-        "[SECURITY] %s",
-        "authz_denied",
-        extra={"audit_event": "authz_denied", "user_id": "u-1", "team_id": "t-1"},
-    )
-
-    assert len(lines) == 1
-    payload = json.loads(lines[0])
-    assert payload["msg"] == "[SECURITY] authz_denied"
-    assert payload["extra"] == {
-        "audit_event": "authz_denied",
-        "user_id": "u-1",
-        "team_id": "t-1",
-    }
-
-
-def test_compact_json_formatter_omits_extra_key_when_absent() -> None:
-    logger = logging.getLogger("test-compact-json-formatter-no-extra")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    logger.handlers.clear()
-    lines: list[str] = []
-
-    class _CapturingHandler(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            lines.append(self.format(record))
-
-    handler = _CapturingHandler()
-    handler.setFormatter(CompactJsonFormatter("test-service"))
-    logger.addHandler(handler)
-
-    logger.info("plain message")
-
-    payload = json.loads(lines[0])
-    assert "extra" not in payload
-
-
-def test_log_setup_gives_audit_logger_a_dedicated_non_propagating_json_handler() -> (
-    None
-):
+    # Audit stays JSON even when application lines are readable text.
     log_setup(
         service_name="test-log-setup-audit",
+        service_role="api",
         log_level="INFO",
-        store=_StubLogStore(),
+        log_format="text",
         include_uvicorn=False,
         use_rich=False,
     )
@@ -345,7 +276,16 @@ def test_log_setup_gives_audit_logger_a_dedicated_non_propagating_json_handler()
 
     assert audit_logger.propagate is False
     assert len(audit_logger.handlers) == 1
-    assert isinstance(audit_logger.handlers[0].formatter, CompactJsonFormatter)
+
+    emit_audit_log("authz_denied", user_id="u-1", team_id="t-1")
+    event = json.loads(capsys.readouterr().out)
+    assert event["message"] == "[SECURITY] authz_denied"
+    assert event["severity"] == "INFO"
+    assert event["logger"] == AUDIT_LOGGER_NAME
+    assert event["service_role"] == "api"
+    assert event["audit_event"] == "authz_denied"
+    assert event["user_id"] == "u-1"
+    assert event["team_id"] == "t-1"
 
     from fred_core.logs.context import log_context
     from fred_core.logs.processors import ContextSnapshot
@@ -364,103 +304,12 @@ def test_audit_logger_still_accepts_info_when_application_log_level_is_warning()
 ):
     log_setup(
         service_name="test-log-setup-audit-level",
+        service_role="api",
         log_level="WARNING",
-        store=_StubLogStore(),
         include_uvicorn=False,
         use_rich=False,
     )
     assert logging.getLogger(AUDIT_LOGGER_NAME).isEnabledFor(logging.INFO)
-
-
-def test_store_emit_handler_hard_drops_audit_logger_records() -> None:
-    """Issue #2009: belt-and-braces alongside AUDIT_LOGGER_NAME's own
-    propagate=False — even if a handler were mistakenly attached directly to
-    the audit logger, StoreEmitHandler must never index that record into the
-    generic app-log store."""
-    store = _StubLogStore()
-    handler = StoreEmitHandler(service_name="test-service", store=store)
-    handler.setFormatter(CompactJsonFormatter("test-service"))
-
-    record = logging.LogRecord(
-        name=AUDIT_LOGGER_NAME,
-        level=logging.INFO,
-        pathname=__file__,
-        lineno=1,
-        msg="[SECURITY] agent.tool.invocation.completed",
-        args=(),
-        exc_info=None,
-    )
-
-    handler.emit(record)
-
-    assert store.indexed == []
-
-
-def test_store_emit_handler_indexes_ordinary_records() -> None:
-    store = _StubLogStore()
-    handler = StoreEmitHandler(service_name="test-service", store=store)
-    handler.setFormatter(CompactJsonFormatter("test-service"))
-
-    record = logging.LogRecord(
-        name="some.ordinary.module",
-        level=logging.INFO,
-        pathname=__file__,
-        lineno=1,
-        msg="an ordinary application log line",
-        args=(),
-        exc_info=None,
-    )
-
-    handler.emit(record)
-
-    assert len(store.indexed) == 1
-    assert store.indexed[0].logger == "some.ordinary.module"
-
-
-def test_store_emit_handler_category_cannot_be_spoofed_by_message_text() -> None:
-    """Issue #2009: category is derived from the LogRecord's logger identity,
-    never from message text — a line that merely *contains* "[AUDIT]" or
-    "[KPI]" on an ordinary module logger must not be classified as that
-    category."""
-    store = _StubLogStore()
-    handler = StoreEmitHandler(service_name="test-service", store=store)
-    handler.setFormatter(CompactJsonFormatter("test-service"))
-
-    record = logging.LogRecord(
-        name="some.ordinary.module",
-        level=logging.INFO,
-        pathname=__file__,
-        lineno=1,
-        msg="[AUDIT] fake, not on the real audit logger; also mentions [KPI]",
-        args=(),
-        exc_info=None,
-    )
-
-    handler.emit(record)
-
-    assert len(store.indexed) == 1
-    assert store.indexed[0].category == "application"
-
-
-def test_store_emit_handler_categorizes_reserved_kpi_logger_as_kpi() -> None:
-    store = _StubLogStore()
-    handler = StoreEmitHandler(service_name="test-service", store=store)
-    handler.setFormatter(CompactJsonFormatter("test-service"))
-
-    record = logging.LogRecord(
-        name="KPI",
-        level=logging.INFO,
-        pathname=__file__,
-        lineno=1,
-        msg="periodic rollup summary",
-        args=(),
-        exc_info=None,
-    )
-
-    handler.emit(record)
-
-    assert len(store.indexed) == 1
-    assert store.indexed[0].category == "kpi"
 
 
 def test_shared_output_contract_and_repeat_setup(
@@ -470,14 +319,12 @@ def test_shared_output_contract_and_repeat_setup(
 
     root = logging.getLogger()
     saved = (root.level, list(root.handlers))
-    store = _StubLogStore()
     try:
         for _ in range(2):
             log_setup(
                 service_name="contract-test",
-                store=store,
-                log_format="json",
                 service_role="api",
+                log_format="json",
                 include_uvicorn=False,
             )
         with log_context(user_id="person-a", correlation_id="operation-a"):
@@ -499,15 +346,14 @@ def test_shared_output_contract_and_repeat_setup(
         assert event["user_id"] == "person-a"
         assert event["count"] == 3
         assert event["service_role"] == "api"
-        assert event["timestamp"]["seconds"] == int(store.indexed[0].ts)
+        assert event["timestamp"]["seconds"] > 1_700_000_000
         assert 0 <= event["timestamp"]["nanos"] < 1_000_000_000
-        assert store.indexed[0].extra is not None
-        assert store.indexed[0].extra["correlation_id"] == "operation-a"
+        assert event["correlation_id"] == "operation-a"
         assert "\x1b" not in lines[0]
         assert "SECRET-CANARY" not in lines[0]
         log_setup(
             service_name="contract-test",
-            store=store,
+            service_role="api",
             log_format="text",
             include_uvicorn=False,
         )
@@ -542,10 +388,9 @@ def test_shared_output_preserves_legacy_arguments_and_structured_fields(
     from fred_core.logs.context import log_context
 
     with _wired_uvicorn_logging():
-        store = _StubLogStore()
         log_setup(
             service_name="legacy-compatibility",
-            store=store,
+            service_role="api",
             log_format=log_format,
             use_rich=False,
         )
@@ -575,9 +420,6 @@ def test_shared_output_preserves_legacy_arguments_and_structured_fields(
             assert expected in output
             assert "count=3" in output
             assert "correlation_id=operation-a" in output
-        assert len(store.indexed) == 1
-        assert store.indexed[0].msg == expected
-        assert store.indexed[0].extra == {"count": 3, "correlation_id": "operation-a"}
         assert record.msg == message
         assert record.args == original_args
 
@@ -594,7 +436,7 @@ def test_dependency_child_diagnostics_remain_sanitized(
     initialize_delegation(DelegationConfig(accept_delegated_calls=delegation))
     log_setup(
         service_name="dependency-contract",
-        store=_StubLogStore(),
+        service_role="api",
         log_format="json",
         include_uvicorn=False,
     )
@@ -633,7 +475,7 @@ def test_uvicorn_error_preserves_traceback_with_targeted_redaction(
     with _wired_uvicorn_logging():
         log_setup(
             service_name="server-contract",
-            store=_StubLogStore(),
+            service_role="api",
             log_format=log_format,
             use_rich=False,
         )
@@ -654,6 +496,25 @@ def test_uvicorn_error_preserves_traceback_with_targeted_redaction(
             assert event["severity"] == "ERROR"
             assert "Traceback" in event["exception"]
             assert "test_uvicorn_error_preserves_traceback" in event["exception"]
+
+
+def test_message_and_traceback_never_carry_a_signed_url_credential(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    log_setup(
+        service_name="signed-url",
+        service_role="api",
+        log_format="json",
+        include_uvicorn=False,
+    )
+    url = "https://s3.invalid/doc?X-Amz-Signature=SENTINEL&X-Amz-Credential=SENTINEL&part=1"
+    try:
+        raise RuntimeError("Failed request " + url)
+    except RuntimeError as error:
+        logging.getLogger("signed.url").exception("Fetch failed: %s", error)
+    output = capsys.readouterr().out
+    assert "SENTINEL" not in output
+    assert "part=1" in output
 
 
 def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> None:
@@ -701,7 +562,7 @@ async def test_fastapi_unhandled_error_keeps_response_and_log_references(
 
     log_setup(
         service_name="error-contract",
-        store=_StubLogStore(),
+        service_role="api",
         log_format="json",
         include_uvicorn=False,
     )
@@ -802,21 +663,16 @@ def test_startup_diagnostics_wait_for_selected_output(
     # Both startup events must remain buffered until the output format is known.
     assert not capsys.readouterr().out
 
-    # Real setup flushes the buffer through the selected formatter and fake store.
-    store = _StubLogStore()
+    # Real setup flushes the buffer through the selected formatter.
     log_setup(
         service_name="bootstrap-test",
-        store=store,
+        service_role="api",
         log_format=log_format,
         include_uvicorn=False,
     )
     output = capsys.readouterr().out
     # Paths survive as structured metadata, while file contents stay out of output.
     assert "private-value" not in output
-    assert store.indexed[-1].extra == {
-        "env_file": str(env_file),
-        "config_file": config_file,
-    }
     if log_format == "json":
         # The last line is the configuration event, queued after the environment event.
         event = json.loads(output.splitlines()[-1])
@@ -833,10 +689,6 @@ def test_startup_diagnostics_wait_for_selected_output(
     lazy_config_file = str(tmp_path / "lazy-configuration.yaml")
     files.mark_config_loaded(lazy_config_file)
     output = capsys.readouterr().out
-    assert store.indexed[-1].extra == {
-        "env_file": str(env_file),
-        "config_file": lazy_config_file,
-    }
     if log_format == "json":
         assert json.loads(output)["config_file"] == lazy_config_file
     else:
@@ -848,28 +700,14 @@ async def test_interleaved_request_context_survives_stream_and_thread_then_retir
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     import asyncio
-    import threading
     from types import SimpleNamespace
 
-    from fred_core.common.resilient_sink import ResilientSinkStore
     from fred_core.logs.context import bind_operation_context, operation_log_scope
     from fred_core.logs.http import RequestLoggingMiddleware
 
-    store_release = threading.Event()
-    delivered = threading.Event()
-    expected_count = [0]
-
-    class DelayedStore(_StubLogStore):
-        def index_event(self, event: LogEventDTO) -> None:
-            assert store_release.wait(timeout=2)
-            super().index_event(event)
-            if len(self.indexed) == expected_count[0]:
-                delivered.set()
-
-    store = DelayedStore()
     log_setup(
         service_name="request-test",
-        store=ResilientSinkStore(store),
+        service_role="api",
         log_format="json",
         include_uvicorn=False,
     )
@@ -963,17 +801,6 @@ async def test_interleaved_request_context_survives_stream_and_thread_then_retir
     release_late.set()
     await asyncio.wait_for(asyncio.gather(*retained), timeout=3)
     events = captured()
-    expected_count[0] = len(events)
-    assert store.indexed == []
-    store_release.set()
-    assert await asyncio.to_thread(delivered.wait, timeout=2)
-    persisted = [event for event in store.indexed if event.logger == "http"]
-    assert len(persisted) == 3
-    assert all(
-        event.extra is not None
-        and event.extra["session_id"] == f"session-{event.extra['user_id']}"
-        for event in persisted
-    )
     completions = [event for event in events if event["logger"] == "http"]
     assert len(completions) == 3
     assert len({event["request_id"] for event in completions}) == 3
@@ -1043,10 +870,9 @@ async def test_http_completion_message_is_readable_and_retains_structured_fields
     monkeypatch.setattr(
         http_logging, "time", SimpleNamespace(perf_counter=lambda: next(ticks))
     )
-    store = _StubLogStore()
     log_setup(
         service_name="completion-test",
-        store=store,
+        service_role="api",
         log_format=log_format,
         include_uvicorn=False,
     )
@@ -1092,16 +918,6 @@ async def test_http_completion_message_is_readable_and_retains_structured_fields
     output = capsys.readouterr().out
     safe_route = route if route is not None and len(route) <= 1024 else "<unmatched>"
     expected = f"POST {safe_route} → {summary}"
-    completions = [event for event in store.indexed if event.logger == "http"]
-    assert len(completions) == 1
-    event = completions[0]
-    assert event.msg == expected
-    assert event.extra is not None
-    assert event.extra["http_method"] == "POST"
-    assert event.extra["duration_ms"] == pytest.approx(8.0)
-    assert event.extra["outcome"] == case
-    assert event.extra.get("http_status") == status
-    assert event.extra.get("route") == (route if safe_route != "<unmatched>" else None)
     if log_format == "json":
         completion = next(
             json.loads(line)
@@ -1109,6 +925,13 @@ async def test_http_completion_message_is_readable_and_retains_structured_fields
             if json.loads(line)["logger"] == "http"
         )
         assert completion["message"] == expected
+        assert completion["http_method"] == "POST"
+        assert completion["duration_ms"] == pytest.approx(8.0)
+        assert completion["outcome"] == case
+        assert completion.get("http_status") == status
+        assert completion.get("route") == (
+            route if safe_route != "<unmatched>" else None
+        )
     else:
         assert expected in output
     assert "secret-canary" not in output
@@ -1128,7 +951,7 @@ async def test_completion_handles_real_stream_disconnect_and_probe_failures(
 
     log_setup(
         service_name="completion-test",
-        store=_StubLogStore(),
+        service_role="api",
         log_format="json",
         include_uvicorn=False,
     )
@@ -1248,7 +1071,7 @@ def test_duplicate_filter_is_separate_and_replaced_on_reinitialization() -> None
 
     with _wired_uvicorn_logging():
         for _ in range(2):
-            log_setup(service_name="filter-wiring", store=_StubLogStore())
+            log_setup(service_name="filter-wiring", service_role="api")
         filters = logging.getLogger("uvicorn.error").filters
         assert sum(isinstance(f, AlreadyReportedExceptionFilter) for f in filters) == 1
         duplicate = next(
@@ -1278,7 +1101,7 @@ async def test_concurrent_request_exceptions_keep_the_completion_identity(
 
     log_setup(
         service_name="concurrent-errors",
-        store=_StubLogStore(),
+        service_role="api",
         log_format="json",
         include_uvicorn=False,
     )
@@ -1354,7 +1177,7 @@ async def test_http_error_diagnostic_ownership(
 
     log_setup(
         service_name="ownership",
-        store=_StubLogStore(),
+        service_role="api",
         log_format="json",
         include_uvicorn=False,
     )

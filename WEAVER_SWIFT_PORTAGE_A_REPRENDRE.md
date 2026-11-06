@@ -1,7 +1,7 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
 **Dernière tranche intégrée : Swift `3d18384205a469f691bbf3ca3cb697911bc6b257`.**
-Le dernier merge part de Weaver `e017f869ea5d5668a47d04da3c2de572e97af8b7` et
+Le merge Swift `394a9150f` part de Weaver `e017f869ea5d5668a47d04da3c2de572e97af8b7` et
 reprend quatre nouveaux commits ; voir la section 12. Cette borne sert à
 inventorier les prochaines arrivées Swift. Les réceptions et portages différés
 restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
@@ -17,19 +17,262 @@ Ce dossier conserve les sources Swift, les décisions et les preuves de la tranc
 initiale ; ce n'est pas une liste de missions à relancer intégralement.
 
 > Un comportement différé peut déjà avoir son commit Swift dans l'ascendance.
-> Un nouveau merge ne le réapplique pas. Les portages intégrés ci-dessous ne
-> déplacent pas la borne Swift fusionnée : `53e39f6f7`.
+> Un nouveau merge ne le réapplique pas. Les portages adaptés ne déplacent pas
+> à eux seuls la borne Swift. Celle de la tranche initiale était `53e39f6f7` ;
+> la borne actuelle après les tranches suivantes est `3d1838420`.
 
-## 1. Reprendre en cinq minutes
+## 1. Point de reprise consolidé au 5 novembre 2026
 
-1. Lire cet état et la méthode ; vérifier branche, statut et travail concurrent.
-2. Actualiser les références Swift sans merge automatique et figer la nouvelle cible.
-3. Inventorier les nouveaux changements depuis la borne intégrée, séparément des
-   validations restantes et des décisions mises de côté.
-4. Expliquer les apports produit puis attribuer des lots bornés, avec propriétaires
-   Weaver, dépendances et contrôles proportionnés.
-5. Mettre à jour ce dossier après chaque intégration, sans présenter du code isolé
-   ou des tests simulés comme une validation déployée.
+**Priorité actuelle : le développeur teste les premiers jalons PowerPoint.**
+Les lots applicatifs sont acceptés sur leurs preuves locales ; ne pas refaire leur
+revue générale. Leur réception déployée reste ouverte. Aucun nouveau chantier
+d'architecture n'est lancé. Cet état consolidé prime sur les instantanés historiques
+ci-dessous, notamment les mentions « non commité », « fichiers bloqués » ou
+« préparation à raccorder » de la section 12.
+
+### Où se trouve le travail et ce que le dernier merge a conservé
+
+Vérification locale après la fusion du 5 novembre à 15:45 CET :
+
+| Elément | Emplacement et état constatés |
+| --- | --- |
+| Code Fred | `/home/dimi/Work/weaver/fred`, branche `weaver` |
+| Lots PowerPoint et Temporal | Commit `ad97b244008929913781b768fed84dee7b9c5c53`, créé à 15:11 CET : fichiers CP, migrations 0006/0007/0008, préparation, worker, admission, chart et correctif UI |
+| Fusion des backports | HEAD `dfa19a3ccb31963de9091e6707dacb3867e7c925`, parents `ad97b2440` et `df5c45c9b` ; le commit PowerPoint est conservé dans l'ascendance |
+| Effet de cette fusion | Six fichiers de CI, documentation et notes opérateur diffèrent de `ad97b2440` ; aucun fichier applicatif PowerPoint ne diffère |
+| Etat Fred | Checkout propre juste avant cette mise à jour documentaire ; plus de fusion en cours. Branche en avance de 7 commits sur la référence locale `origin/weaver`, sans nouveau fetch |
+| Configuration de déploiement | `/home/dimi/Work/common/fred-deployment-factory`, branche `weaver`, HEAD `f2db3463601426b03f857552fbe7cae6d6d10d0d` |
+| Travail encore non commité dans la factory | `k3d-apps/fred/values-weaver.yaml` : liaison CP du worker, activation `fred-agents-worker`, retrait du montage incorrect `processing-contract`. Modifications voisines : `CLAUDE.md`, `README.md`, `docs/SWIFT-WEAVER.md` ; `docs/HOW-IT-WORKS.md` non suivi |
+
+**Le travail PowerPoint n'a pas été perdu lors du checkout/merge observé.** Le
+reflog montre un checkout de `weaver` vers `weaver`, puis la fusion ci-dessus.
+Les réglages de la factory restent séparés et non commités : un clone du seul
+dépôt Fred ne les récupère pas. Aucun commit, push, checkout ou changement de la
+factory n'a été effectué pour rédiger ce point de reprise. Ce document n'est pas
+une sauvegarde des modifications de la factory.
+
+### Branches locales à conserver et chantier conversations séparé
+
+Vérification complémentaire du 5 novembre, HEAD Weaver `dfa19a3cc` :
+
+- Conserver `weaver` et `swift`.
+- **Conserver aussi `chore/conversations`**, pointe `eccc5abc9`. Elle porte
+  **35 commits absents de Weaver** ; `git cherry weaver chore/conversations`
+  les marque tous `+` (pas de patch équivalent détecté). Ils concernent notamment
+  mémoire/historique de l'agent Rust, propriété des conversations, effacement,
+  fichiers générés et acquittements des producteurs. Leur réception et leur
+  intégration ne sont pas établies par le suivi PowerPoint.
+- `chore/rust-agent`, `codex/merge-swift-20261104`,
+  `codex/port-conversation-titles`, `codex/port-email-metadata` et
+  `codex/weaver-skills` sont entièrement ancêtres de `weaver`. Leurs références
+  locales peuvent être supprimées sans perdre de commits accessibles depuis
+  `weaver`. Aucune branche n'a été supprimée pendant cette vérification.
+
+Le chantier `chore/conversations` ne doit pas être confondu avec le sujet différé
+« conversations sous Temporal ». Il existe déjà du code distinct à préserver.
+Son inventaire/intégration formera un lot séparé après stabilisation du jalon
+PowerPoint, sans merge automatique pendant la réception.
+
+**Point concret à résoudre avant cette future intégration :** les deux branches
+utilisent les numéros SQLx 0006 à 0008 pour des migrations différentes. Conversations
+ajoute aussi 0009/0010. Il faudra établir quelles histoires ont été appliquées dans
+quelles bases et préparer une convergence explicite ; ne pas simplement juxtaposer
+les fichiers, renuméroter une migration déjà déployée ou modifier ses empreintes.
+Cette constatation repose sur les arbres Git, pas sur une inspection des bases.
+
+Repères de code pour retrouver le lot sans le réauditer :
+
+- Schéma : `apps/control-plane/migrations/0006_powerpoint_files.sql`,
+  `0007_capability_preparation.sql`, `0008_powerpoint_template_settings.sql`.
+- CP : `apps/control-plane/src/documents/powerpoint/` et
+  `apps/control-plane/src/capability_preparation/`.
+- Worker : `apps/fred-agents/fred_agents/__main__.py`,
+  `libs/fred-runtime/fred_runtime/app/preparation_worker.py` et
+  `libs/fred-runtime/fred_runtime/capabilities/preparation_workflow.py`.
+- UI : `CapabilityPlatformDrawer.tsx`, `PptBuilderPlatformPanel.tsx` et
+  `PptBuilderTemplatePanel.tsx` dans `apps/frontend/src/rework/`.
+- Exploitation : [note PowerPoint](deploy/release-notes/changes/weaver-powerpoint-file-ownership.md)
+  et [raccord de déploiement](deploy/k3d/README.md).
+
+### Consignes permanentes pour les assistants
+
+- Développement et documentation seulement. Aucun accès cluster, démarrage de
+  service, build de déploiement, déploiement, migration sur base vivante ou campagne
+  navigateur. Le développeur garde le déploiement et les tests fonctionnels.
+- Aucun commit, push, changement de branche ou résolution de merge sans demande.
+  Préserver les modifications des autres auteurs et de la factory.
+- Corriger un défaut concret remonté par le développeur, avec contrôles locaux
+  ciblés autorisés ; ne pas rouvrir les lots acceptés ni lancer une campagne générale.
+- L'UI Swift est un invariant. Réutiliser ses composants ; seules les adaptations
+  nécessaires à organisation/équipe/projet et au pod sont admises. Aucun écran,
+  sélecteur ou parcours parallèle inventé.
+
+### Décisions PowerPoint à ne plus rediscuter implicitement
+
+1. La capability est une bibliothèque fournie par un **pod logique**, pas un
+   service plateforme. Sans offre correspondante, pas d'UI PowerPoint orpheline.
+2. Le modèle commun appartient au périmètre **organisation + pod logique** de
+   l'offre `ppt_builder`. Deux pods peuvent avoir des formats/versions différents.
+   Aucun défaut configurable global plateforme, ni partage implicite entre pods.
+3. Résolution : modèle propre à l'agent, sinon commun de son organisation et de
+   son pod, sinon intégré à la bibliothèque. Les droits d'espace existants restent
+   applicables ; un libellé « administrateur » ne remplace pas une autorisation CP.
+4. CP/PostgreSQL font autorité sur rattachements, droits, révision et cycle de vie.
+   S3 conserve les octets ; OpenSearch reste une projection. Le pod possède les
+   règles PowerPoint et exécute la préparation.
+5. Modèle propre à l'agent : pendant sa préparation, pas de nouvelle conversation
+   avec cet agent ; succès puis disponibilité, échec visible et relançable. Ne pas
+   inventer de repli sur l'ancien modèle propre lors d'un remplacement.
+6. Modèle commun : l'ancien actif reste utilisable pendant la préparation du
+   candidat et en cas d'échec ; activation seulement après succès. Sans commun,
+   le modèle intégré s'applique.
+7. UI : engrenage dans « Réglages » de « Générer une présentation » (`ppt_builder`),
+   tiroir Swift, upload immédiat, revue/correction des slides, relance et remise à
+   l'intégré. Aucun bloc commun ajouté au-dessus du tableau. `ppt_filler` est une
+   autre capability : ne pas déplacer ses réglages par confusion de nom.
+8. Vision hors tour indisponible et explicitement expliquée. Préparation
+   structurelle seulement dans ce lot. Les conversations ne passent pas à Temporal.
+
+### Jalons livrés et niveau de preuve
+
+| Jalon | Livré | Ce qui reste à recevoir |
+| --- | --- | --- |
+| Persistance | 0006, dépôt/remplacement/retrait/résolution, droits et nettoyage des originaux | Parcours réel UI/CP/S3 |
+| Préparation et readiness | 0007, intention durable, Temporal, mode worker, admission, reprise et nettoyage des nouveaux résultats abandonnés | Parcours déployé complet, échec/reprise et redémarrage |
+| Raccord worker | Chart et correction du montage `processing-contract` ; valeurs complémentaires dans la factory | Déploiement cohérent des deux checkouts par le développeur |
+| Parité UI Swift | Tiroir et composants réutilisés, corrections persistées ; 0008 pour les réglages communs, y compris intégré sans fichier | Comparaison FR/EN, SQL 0008 neuf/upgrade, persistance et isolation |
+
+Les résultats locaux détaillés restent en section 12. Dernier correctif UI :
+59 tests frontend, 19 bibliothèque, 58 runtime, 17 contrat CP rapportés réussis et
+qualité des quatre composants conforme. Ces suites ne sont ni additionnées aux
+précédentes ni relancées pour ce document. Elles ne prouvent pas le parcours déployé.
+
+Un déploiement antérieur avec worker connecté est documenté en section 12, avant
+le correctif UI/0008. Il ne prouve pas que l'installation actuelle exécute ce dernier
+lot. L'ancien arrêt au bootstrap/CGU est un instantané historique, pas une affirmation
+sur l'état actuel du navigateur du développeur.
+
+### Réception PowerPoint à faire tranquillement dans cet ordre
+
+Préparer deux fichiers `.pptx` valides A et B avec un marquage visuel différent,
+un agent de test et, pour l'isolation, deux organisations et deux pods si disponibles.
+Noter la révision Fred et l'état de la factory réellement utilisés au déploiement.
+Tous les points ci-dessous restent à renseigner ; aucun n'est déclaré reçu ici.
+
+- [ ] **P1 - Interface Swift.** Administration de l'organisation, Fonctionnalités,
+  Capacités, pod concerné : engrenage sur `ppt_builder`, même tiroir et disposition
+  que Swift, en FR puis EN. Aucun bloc « modèle commun » au-dessus du tableau.
+- [ ] **P2 - Modèle intégré.** Sans modèle propre ni commun, ouvrir la revue des
+  slides, l'aide et les aperçus disponibles. Créer une présentation depuis le chat,
+  télécharger le PPTX et l'ouvrir ; contenu et rendu exploitables.
+- [ ] **P3 - Commun A.** Choisir A dans le tiroir : départ immédiat sans nouveau
+  bouton Enregistrer. Préparation visible, puis A actif. Fermer/rouvrir et recharger
+  la page : A et son état sont conservés. Un agent sans modèle propre utilise A.
+- [ ] **P4 - Remplacer par B.** Pendant la préparation, A reste effectif ; après
+  succès, une nouvelle génération utilise B. Recharger ne perd pas l'état.
+- [ ] **P5 - Echec et relance.** Distinguer fichier refusé avant acceptation et
+  préparation acceptée puis échouée. Le second cas doit montrer l'échec et permettre
+  la relance, sans remplacer l'ancien commun actif. Si ce cas n'est pas reproductible
+  dans l'UI, le noter « non testé » ; ne pas simuler une panne de cluster via assistant.
+- [ ] **P6 - Corrections.** Modifier les informations de slides proposées par la
+  revue, enregistrer, fermer puis rouvrir/recharger : corrections conservées sur le
+  même modèle. Refaire avec le modèle intégré après réinitialisation. Un changement
+  de modèle concurrent ne doit pas appliquer des corrections au mauvais fichier.
+- [ ] **P7 - Réinitialisation.** Retirer le commun depuis l'action Swift : retour
+  à l'intégré et absence des corrections de l'ancien fichier. Un modèle propre
+  d'agent conserve sa priorité.
+- [ ] **P8 - Modèle propre.** Ajouter A à un agent et sauvegarder. Observer son
+  indisponibilité pendant la préparation, y compris après reload, puis sa disponibilité.
+  Générer : A prime sur le commun B. Remplacer, tester l'échec si possible, puis
+  retirer le propre : retour au commun applicable, sinon à l'intégré.
+- [ ] **P9 - Droits et isolation.** Un lecteur non autorisé ne modifie pas le modèle.
+  Changer d'organisation/pod ne révèle ni fichier, ni correction, ni état de l'autre.
+  Sans pod offrant la capability, aucun réglage PowerPoint. Si un deuxième pod ou une
+  deuxième organisation manque, marquer le contrôle non testé, pas réussi.
+- [ ] **P10 - Usage réel.** Tester la génération avec texte, graphique et image dans
+  les possibilités de Swift ; contrôler aperçu, téléchargement et ouverture du fichier.
+  Noter séparément une erreur fournisseur et une erreur de préparation/conversion.
+- [ ] **P11 - Suppression UI.** Supprimer l'agent de test hors tour actif : il ne
+  réapparaît pas après reload. Ce contrôle UI seul ne prouve pas la purge S3/SQL.
+
+Contrôles techniques distincts, à la main du développeur :
+
+- [ ] 0008 : initialisation neuve et upgrade supporté, conservation des migrations
+  précédentes ; régénération de la référence ER depuis le schéma vérifié.
+- [ ] Images API/worker concordantes, file Temporal et identité de workload correctes,
+  préparation/reprise après redémarrage sans activation d'une ancienne révision.
+- [ ] Nettoyage effectif des originaux et nouveaux résultats abandonnés ; suppression
+  de propriétaire acquittée. Ne pas en déduire une purge générale des plans/historiques.
+
+### Autres points du merge et nature du travail restant
+
+| Sujet | Etat et réception attendue | Nature de la suite |
+| --- | --- | --- |
+| Skills | `3fae108e4` intégré : catalogue, règles d'accès, chargement/traces, ReAct/Deep et limites Graph/Ralph | Réception ; pas de nouveau portage |
+| Titres | `d61648f0e` intégré : titre automatique, renommage manuel concurrent préservé, bon historique/espace, échec modèle et usage comptabilisé | Réception |
+| Auteur Word | `c784b3b71` intégré : auteur/dernier modificateur issus de l'utilisateur vérifié, repli sûr ; contrôler les propriétés dans Word/LibreOffice | Réception |
+| E-mails | `276026917` intégré : `.eml`/`.msg` en bibliothèque et en pièce jointe de chat, détails, droits et frontière de conversation | Réception ; installer le bon contrat worker exporté, voir 7.3 ; aucun backfill |
+| Notifications et HITL | Tranche `059ae1c91` : notification depuis une autre page, retour au bon espace, changement d'identité, états pending/unavailable/unknown et refus de reprise | Réception ; ne pas promettre la durabilité après fermeture d'onglet |
+| Chat et ingestion déjà adaptés | Arrière-plan, file/steering, refus d'accès, DOCX invalide, retry mail/DOCX, extraction PPTX légère, MCP/tabulaire | Contrôles ciblés si ces usages sont exercés ; ne pas les considérer à réimplémenter |
+| Isolation OpenSearch | `8134c78a5` intégré : vérifier la séparation effective Swift/Weaver dans le déploiement | Exploitation ; aucune migration des anciennes données annoncée |
+| Backports CI et downgrade | Fusion `dfa19a3cc`, détails et preuves en section 13 | CI réelle et rollback isolé non reçus ; ne pas les tester sur la base vivante par défaut |
+| Note opérateur PowerPoint | `check-pr` rapporté bloqué : section `Prerequisites` absente de la note PowerPoint | Correction documentaire ciblée avant PR, puis relancer le contrôle qui pourra révéler d'autres écarts |
+| Architecture arc42 | Actualiser seulement les parcours effectivement reçus et leurs limites | Documentation après réception, pas preuve de fonctionnement |
+
+La majorité de cette liste correspond donc à des **réceptions**. Une correction
+documentaire est identifiée ; la durée des éventuelles corrections fonctionnelles
+ne peut pas être garantie avant les tests. Ne pas confondre nombre de contrôles et
+nombre de développements restant à financer.
+
+### Sujets différés ou exclus qui ne bloquent pas ces premiers jalons
+
+- Vision hors tour : reste à concevoir/raccorder sous les règles Weaver de modèle,
+  admission et quota. Chantier distinct, pas une simple activation de bouton.
+- Conversations sous Temporal : hors lot ; seule la préparation PowerPoint est concernée.
+- Ressource remplacée/supprimée pendant un tour déjà admis : étude transversale
+  différée. Le tour garde son admission, mais aucune survie garantie du fichier
+  supprimé ; pas de rafraîchissement des droits par outil.
+- Purge générale des plans, conversations et anciennes données Swift : hors lot.
+  Ne pas étendre à ces données la preuve du nettoyage des nouveaux originaux/résultats.
+- Skills possédés par espace : évolution produit distincte des skills fournis par pod.
+- Mistral Large 4 / PR #3321 : mis de côté ; aucune relance sans demande.
+- Erreurs MCP brutes, CP Python, OpenFGA et anciennes voies supprimées : exclusions
+  volontaires, pas backlog à restaurer.
+- Nouveaux commits Swift après `3d1838420` : futur inventaire séparé. Aucun nouveau
+  fetch/merge n'est nécessaire pour recevoir le lot actuel.
+
+### Reprendre après une interruption
+
+1. Lire cette section, puis vérifier les deux checkouts sans changer de branche.
+   Comparer les nouveaux HEAD aux repères ci-dessus ; ne pas réappliquer `ad97b2440`.
+2. Recueillir les résultats P1-P11 et techniques du développeur. Pour chaque défaut :
+   scénario, compte/rôle, organisation/pod/espace, modèle, action, attendu/observé,
+   heure, capture ou message, révision déployée. Aucun secret ni jeton dans le suivi.
+3. Traiter un seul défaut concret à la fois, réutiliser l'existant, puis laisser le
+   développeur redéployer et recevoir. Une absence de résultat reste « non testé ».
+4. Après PowerPoint, recevoir titres/DOCX, e-mails, skills, notifications/HITL ;
+   consigner les preuves ici. Cet ordre est proposé pour réduire la charge, pas une
+   dépendance technique entre ces lots.
+5. Avant PR : corriger la note opérateur, vérifier les contrôles documentaires,
+   puis traiter les adaptations arc42 justifiées. Aucun push automatique.
+
+Texte à transmettre à un prochain assistant :
+
+> Nous travaillons dans /home/dimi/Work/weaver/fred, branche weaver. Lis AGENTS.md
+> et la section 1 de WEAVER_SWIFT_PORTAGE_A_REPRENDRE.md avant toute action. Le lot
+> PowerPoint/Temporal/UI est commité en ad97b2440, conservé par dfa19a3cc. La factory
+> /home/dimi/Work/common/fred-deployment-factory porte encore des réglages locaux
+> non commités ; vérifie son état sans les modifier. Conserve chore/conversations :
+> 35 commits séparés non intégrés, avec des numéros de migrations SQLx en collision ;
+> ce chantier est à traiter séparément, sans merge automatique. Les lots PowerPoint sont
+> acceptés localement, la réception est à ma main. Aucun cluster, service démarré,
+> déploiement, base vivante, campagne navigateur, commit ou push. L'UI Swift reste
+> l'invariant ; commun PowerPoint par organisation/pod, aucun défaut plateforme.
+> Ne refais pas la revue générale. Pars uniquement du résultat de test que je te
+> donne, corrige le défaut ciblé et mets à jour ce suivi. Si je ne fournis pas encore
+> de défaut, aide-moi à situer les validations restantes sans lancer un chantier.
+
+### Inventaire historique de la tranche initiale
 
 | Sujet | Etat courant | Suite |
 | --- | --- | --- |
@@ -45,7 +288,7 @@ L'isolation des index OpenSearch Swift/Weaver est intégrée en `8134c78a5` ; el
 ne constitue pas une migration des données Swift. La recréation du cluster et sa
 validation sont pilotées par le développeur.
 
-### Repères Git et limites de ce dossier
+### Repères Git historiques de la tranche initiale
 
 - Branche : `weaver`.
 - Weaver avant fusion : `5786f7f558966f6f442da3d309a6a3e159e86cd9`.
@@ -1043,12 +1286,12 @@ générateur **+43/-3** lignes ; valeurs Fred/factory **+75/-0** ; contrôles de
 implémenté). Documentation exclue. L'ajout correspond au processus manquant et
 réemploie le chart, les hooks et l'héritage existants ; aucun second chemin local.
 
-### Reprise de la réception déployée PowerPoint - 5 novembre 2026
+### Reprise de la réception déployée PowerPoint - 5 novembre 2026 (historique)
 
-La nouvelle mission autorise la construction, le déploiement et la réception
-navigateur sur la cible locale déjà convenue. Elle remplace, pour cette reprise,
-la restriction précédente laissant l'exécution au développeur. Les lots
-applicatifs acceptés ne sont pas remis en revue.
+Cette mission avait autorisé la construction, le déploiement et la réception
+navigateur sur la cible locale convenue. Cette autorisation a ensuite été retirée :
+le développeur garde désormais ces opérations, conformément à la section 1.
+Les faits ci-dessous sont historiques et n'autorisent aucune intervention actuelle.
 
 **Déploiement effectué ; réception fonctionnelle reprise par le développeur à
 sa demande, avant bootstrap. Aucun scénario 1 à 7 reçu.** Checkouts Fred et factory sur les mêmes HEAD

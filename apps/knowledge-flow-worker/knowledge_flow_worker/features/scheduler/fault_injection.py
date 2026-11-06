@@ -80,7 +80,7 @@ async def inject_ingestion_fault(*, stage: str, document_name: str, document_uid
     if fault.attempts is not None and info.attempt not in fault.attempts:
         return
     activity.logger.warning(
-        "[SIMULATED INGESTION FAULT] armed mode=%s stage=%s document=%s attempt=%s delay_s=%s",
+        "armed mode=%s stage=%s document=%s attempt=%s delay_s=%s",
         fault.mode,
         stage,
         document_uid,
@@ -92,7 +92,7 @@ async def inject_ingestion_fault(*, stage: str, document_name: str, document_uid
         heartbeat_details={"stage": stage, "document_uid": document_uid, "simulated_fault": fault.mode},
     )
     message = f"Simulated ingestion fault: {fault.mode} at {stage}, attempt {info.attempt}, document {document_uid}."
-    activity.logger.warning("[SIMULATED INGESTION FAULT] triggering: %s", message)
+    activity.logger.warning("triggering: %s", message)
     if fault.mode == "worker_crash":
         os._exit(86)  # Deliberate abrupt worker exit: no finally blocks or graceful shutdown.
     if fault.mode != "delay":

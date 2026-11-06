@@ -269,7 +269,7 @@ def scan_document_uids_composite(
                 break
         return doc_uids
     except Exception:
-        logger.warning("[VECTOR][OPENSEARCH] Could not list document_uids from index=%s", index, exc_info=True)
+        logger.warning("Could not list document_uids from index=%s", index, exc_info=True)
         return []
 
 
@@ -354,7 +354,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
         if not read_only:
             self.ensure_ready()
-        logger.info("[VECTOR][OPENSEARCH] initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
+        logger.info("initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
 
     def _phase_timer(self, phase: str):
         if self._kpi is None:
@@ -415,12 +415,12 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     # Another worker replica may have created the same index first.
                     if exc.error != "resource_already_exists_exception":
                         raise
-                logger.info("[VECTOR][OPENSEARCH] initialized index '%s' with dimension=%s", self._index, expected_dim)
+                logger.info("initialized index '%s' with dimension=%s", self._index, expected_dim)
             self._validate_index_compatibility(expected_dim, allow_metadata_mapping_update=not self._read_only)
             validate_index_mapping(self._client, self._index, expected_mapping)
             self._ready = True
         except OpenSearchException as exc:
-            logger.error("[VECTOR][OPENSEARCH] ensure_ready failed for index '%s': %s", self._index, exc)
+            logger.error("ensure_ready failed for index '%s': %s", self._index, exc)
             raise
         finally:
             self._ready_lock.release()
@@ -429,11 +429,11 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         """
         Force initialization + mapping validation so callers can fail fast at startup.
         """
-        logger.info("[VECTOR][OPENSEARCH] validating vector index=%s", self._index)
+        logger.info("validating vector index=%s", self._index)
         try:
             self.ensure_ready()
         except (MappingValidationError, OpenSearchException, ValueError) as e:
-            logger.critical("[VECTOR][OPENSEARCH] index validation failed: %s", e)
+            logger.critical("index validation failed: %s", e)
             raise SystemExit(1) from e
 
     def pipeline_exists(self, pipeline_name: str) -> bool:
@@ -453,7 +453,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         except NotFoundError:
             return False
         except Exception as e:
-            logger.warning("[OPENSEARCH][PIPELINE] Error checking pipeline '%s': %s", pipeline_name, e)
+            logger.warning("Error checking pipeline '%s': %s", pipeline_name, e)
             return False
 
     def create_pipeline(self, pipeline_name: str, pipeline_config: Dict[str, Any]) -> bool:
@@ -471,15 +471,15 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         Raises:
             RequestError: If OpenSearch returns an error while creating the pipeline.
         """
-        logger.info("[OPENSEARCH][PIPELINE] Creating pipeline '%s'", pipeline_name)
+        logger.info("Creating pipeline '%s'", pipeline_name)
 
         try:
             self._client.search_pipeline.put(id=pipeline_name, body=pipeline_config)
-            logger.info("[OPENSEARCH][PIPELINE] Successfully created pipeline '%s'", pipeline_name)
+            logger.info("Successfully created pipeline '%s'", pipeline_name)
             return True
 
         except RequestError as e:
-            logger.error("[OPENSEARCH][PIPELINE] Failed to create pipeline '%s': %s", pipeline_name, e)
+            logger.error("Failed to create pipeline '%s': %s", pipeline_name, e)
             raise
 
     # ---------- BaseVectorStore: identification ----------
@@ -651,7 +651,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         base_chunk_size = previous_chunk_size or configured_chunk_size
         if not isinstance(base_chunk_size, int) or base_chunk_size <= 128:
             logger.warning(
-                "[VECTOR][OPENSEARCH] cannot reduce retry chunk size for index=%s current_chunk_size=%s configured_chunk_size=%s",
+                "cannot reduce retry chunk size for index=%s current_chunk_size=%s configured_chunk_size=%s",
                 self._index,
                 previous_chunk_size,
                 configured_chunk_size,
@@ -661,14 +661,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         next_chunk_size = max(128, base_chunk_size // 2)
         if next_chunk_size >= base_chunk_size:
             logger.warning(
-                "[VECTOR][OPENSEARCH] next retry chunk size is not smaller for index=%s current=%s next=%s",
+                "next retry chunk size is not smaller for index=%s current=%s next=%s",
                 self._index,
                 base_chunk_size,
                 next_chunk_size,
             )
             return None
         logger.info(
-            "[VECTOR][OPENSEARCH] reducing retry chunk size for index=%s from=%s to=%s",
+            "reducing retry chunk size for index=%s from=%s to=%s",
             self._index,
             base_chunk_size,
             next_chunk_size,
@@ -724,7 +724,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         )
         if len(split_documents) <= 1:
             logger.warning(
-                "[VECTOR][OPENSEARCH] retry split did not reduce oversized chunk for index=%s chunk_id=%s target_chunk_size=%s",
+                "retry split did not reduce oversized chunk for index=%s chunk_id=%s target_chunk_size=%s",
                 self._index,
                 forced_id or document.metadata.get(CHUNK_ID_FIELD),
                 chunk_size,
@@ -743,7 +743,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             prepared_ids.append(chunk_id)
 
         logger.info(
-            "[VECTOR][OPENSEARCH] split oversized chunk for retry index=%s original_chunk_id=%s target_chunk_size=%s produced=%s",
+            "split oversized chunk for retry index=%s original_chunk_id=%s target_chunk_size=%s produced=%s",
             self._index,
             base_id,
             chunk_size,
@@ -777,7 +777,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             return
         self._learned_embedding_batch_cap = new_cap
         logger.info(
-            "[VECTOR][OPENSEARCH] learned embedding batch cap for index=%s lowered to %s (was %s)",
+            "learned embedding batch cap for index=%s lowered to %s (was %s)",
             self._index,
             new_cap,
             current,
@@ -822,7 +822,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         if limit is not None and len(documents) > limit:
             split_index = max(1, len(documents) // 2)
             logger.info(
-                "[VECTOR][OPENSEARCH] batch exceeds learned embedding cap for index=%s batch_size=%s attempt_limit=%s; splitting without provider attempt",
+                "batch exceeds learned embedding cap for index=%s batch_size=%s attempt_limit=%s; splitting without provider attempt",
                 self._index,
                 len(documents),
                 limit,
@@ -841,7 +841,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
         try:
             logger.info(
-                "[VECTOR][OPENSEARCH] add batch attempt index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s ids_sample=%s",
+                "add batch attempt index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s ids_sample=%s",
                 self._index,
                 len(documents),
                 retry_attempt,
@@ -864,7 +864,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 ids = observer.before_write(documents, ids)
             assigned_ids = list(self._lc.add_documents(documents, ids=ids))
             logger.info(
-                "[VECTOR][OPENSEARCH] batch attempt succeeded index=%s batch_size=%s assigned=%s retry_attempt=%s split_chunk_size=%s",
+                "batch attempt succeeded index=%s batch_size=%s assigned=%s retry_attempt=%s split_chunk_size=%s",
                 self._index,
                 len(documents),
                 len(assigned_ids),
@@ -878,7 +878,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     self._learned_embedding_batch_cap = len(documents)
                     self._cap_success_streak = 0
                     logger.info(
-                        "[VECTOR][OPENSEARCH] learned embedding batch cap for index=%s raised to %s after successful probe (was %s)",
+                        "learned embedding batch cap for index=%s raised to %s after successful probe (was %s)",
                         self._index,
                         len(documents),
                         cap,
@@ -889,7 +889,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         except Exception as error:
             failure = self._get_embedding_request_failure(error)
             logger.warning(
-                "[VECTOR][OPENSEARCH] batch attempt failed index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s status=%s code=%s type=%s error=%s",
+                "batch attempt failed index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s status=%s code=%s type=%s error=%s",
                 self._index,
                 len(documents),
                 retry_attempt,
@@ -915,7 +915,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                         raise
 
                     logger.warning(
-                        "[VECTOR][OPENSEARCH] oversized single chunk for index=%s; retrying with text_splitter chunk_size=%s produced=%s",
+                        "oversized single chunk for index=%s; retrying with text_splitter chunk_size=%s produced=%s",
                         self._index,
                         next_chunk_size,
                         len(split_documents),
@@ -930,7 +930,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 self._cap_success_streak = 0
                 self._lower_learned_embedding_batch_cap(split_index)
                 logger.warning(
-                    "[VECTOR][OPENSEARCH] embedding batch exceeds provider limit for index=%s batch_size=%s; splitting into sub-batches %s and %s",
+                    "embedding batch exceeds provider limit for index=%s batch_size=%s; splitting into sub-batches %s and %s",
                     self._index,
                     len(documents),
                     split_index,
@@ -952,7 +952,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 next_attempt = retry_attempt + 1
                 delay_seconds = self._embedding_retry_delay_seconds(next_attempt)
                 logger.warning(
-                    "[VECTOR][OPENSEARCH] transient embedding failure for index=%s batch_size=%s status=%s type=%s attempt=%s/%s; retrying same batch in %.2fs",
+                    "transient embedding failure for index=%s batch_size=%s status=%s type=%s attempt=%s/%s; retrying same batch in %.2fs",
                     self._index,
                     len(documents),
                     failure.status_code if failure else None,
@@ -989,7 +989,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         assigned_ids: List[str] = []
         try:
             if not documents:
-                logger.info("[VECTOR][OPENSEARCH] add_documents called with empty payload for index=%s", self._index)
+                logger.info("add_documents called with empty payload for index=%s", self._index)
                 return []
 
             if self._bulk_size <= 0:
@@ -1008,7 +1008,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     ids.append(cid)
 
             logger.info(
-                "[VECTOR][OPENSEARCH] add_documents start index=%s documents=%s bulk_size=%s ids_provided=%s",
+                "add_documents start index=%s documents=%s bulk_size=%s ids_provided=%s",
                 self._index,
                 len(documents),
                 self._bulk_size,
@@ -1028,7 +1028,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 batch_documents = documents[start:end]
                 batch_ids = ids[start:end]
                 logger.info(
-                    "[VECTOR][OPENSEARCH] processing bulk slice index=%s start=%s end=%s batch_size=%s",
+                    "processing bulk slice index=%s start=%s end=%s batch_size=%s",
                     self._index,
                     start,
                     end,
@@ -1043,7 +1043,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 start = end
 
             logger.info(
-                "[VECTOR][OPENSEARCH] add_documents complete index=%s input_documents=%s stored_chunks=%s",
+                "add_documents complete index=%s input_documents=%s stored_chunks=%s",
                 self._index,
                 len(documents),
                 len(assigned_ids),
@@ -1055,14 +1055,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             # line, no stacktrace, and no RuntimeError wrapping so callers can
             # tell it apart and clean up what this run already wrote.
             logger.info(
-                "[VECTOR][OPENSEARCH] indexing cancelled index=%s after %s of %s chunks (completed slices only; the caller deletes any partial writes); abandoning the rest",
+                "indexing cancelled index=%s after %s of %s chunks (completed slices only; the caller deletes any partial writes); abandoning the rest",
                 self._index,
                 len(assigned_ids),
                 len(documents),
             )
             raise
         except Exception as e:
-            logger.exception("[VECTOR][OPENSEARCH] failed to add documents to OpenSearch.")
+            logger.exception("failed to add documents to OpenSearch.")
             raise RuntimeError("Unexpected error during vector indexing.") from e
 
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
@@ -1080,9 +1080,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             if resp.get("timed_out") or resp.get("failures") or resp.get("version_conflicts", 0):
                 raise RuntimeError("Vector deletion was incomplete.")
             deleted = int(resp.get("deleted", 0))
-            logger.info("[VECTOR][OPENSEARCH] deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
+            logger.info("deleted %s vector chunks for document_uid=%s.", deleted, document_uid)
         except Exception:
-            logger.exception("[VECTOR][OPENSEARCH] failed to delete vectors for document_uid=%s.", document_uid)
+            logger.exception("failed to delete vectors for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to delete vectors from OpenSearch.")
 
     def get_document_chunk_count(self, *, document_uid: str) -> int:
@@ -1099,7 +1099,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     raise RuntimeError("Vector count was incomplete.")
             count = int(resp.get("count", 0))
             logger.debug(
-                "[VECTOR][OPENSEARCH] counted %s vector chunks for document_uid=%s in index=%s",
+                "counted %s vector chunks for document_uid=%s in index=%s",
                 count,
                 document_uid,
                 self._index,
@@ -1109,7 +1109,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             if getattr(self, "strict_operations", False):
                 raise
             logger.exception(
-                "[VECTOR][OPENSEARCH] failed to count vector chunks for document_uid=%s in index=%s",
+                "failed to count vector chunks for document_uid=%s in index=%s",
                 document_uid,
                 self._index,
             )
@@ -1176,13 +1176,13 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             )
             updated = int(resp.get("updated", 0))
             logger.info(
-                "[VECTOR][OPENSEARCH] updated retrievable=%s on %s vector chunks for document_uid=%s.",
+                "updated retrievable=%s on %s vector chunks for document_uid=%s.",
                 value,
                 updated,
                 document_uid,
             )
         except Exception:
-            logger.exception("[VECTOR][OPENSEARCH] failed to update retrievable flag for document_uid=%s.", document_uid)
+            logger.exception("failed to update retrievable flag for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update retrievable flag in OpenSearch.")
 
     def set_document_name(self, *, document_uid: str, document_name: str) -> None:
@@ -1212,7 +1212,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 # version conflict) — it reports it here instead, so a caller that only
                 # checked for a raised exception would call this a silent success.
                 logger.error(
-                    "[VECTOR][OPENSEARCH] document_name update_by_query reported %s failure(s) for document_uid=%s: %s",
+                    "document_name update_by_query reported %s failure(s) for document_uid=%s: %s",
                     len(failures),
                     document_uid,
                     failures,
@@ -1223,17 +1223,17 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 # chunks here is unexpected — the rename didn't reach the vector index,
                 # and the caller's best-effort try/except means nothing else will surface it.
                 logger.error(
-                    "[VECTOR][OPENSEARCH] document_name update matched 0 vector chunks for document_uid=%s — rename not reflected in search results.",
+                    "document_name update matched 0 vector chunks for document_uid=%s — rename not reflected in search results.",
                     document_uid,
                 )
             else:
                 logger.info(
-                    "[VECTOR][OPENSEARCH] updated document_name on %s vector chunks for document_uid=%s.",
+                    "updated document_name on %s vector chunks for document_uid=%s.",
                     updated,
                     document_uid,
                 )
         except Exception:
-            logger.exception("[VECTOR][OPENSEARCH] failed to update document_name for document_uid=%s.", document_uid)
+            logger.exception("failed to update document_name for document_uid=%s.", document_uid)
             raise RuntimeError("Failed to update document_name in OpenSearch.")
 
     def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
@@ -1246,7 +1246,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         failures = resp.get("failures") or []
         if failures:
             raise RuntimeError(f"OpenSearch failed to update tag_ids on {len(failures)} chunk(s) of document {document_uid}.")
-        logger.info("[VECTOR][OPENSEARCH] updated tag_ids on %s chunk(s) for document_uid=%s.", resp.get("updated", 0), document_uid)
+        logger.info("updated tag_ids on %s chunk(s) for document_uid=%s.", resp.get("updated", 0), document_uid)
 
     # ---------- Diagnostics / Introspection ----------
 
@@ -1277,14 +1277,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     entry["text"] = src.get("text", "")
                 out.append(entry)
             logger.debug(
-                "[VECTOR][OPENSEARCH] fetched %d vectors for document_uid=%s from index=%s",
+                "fetched %d vectors for document_uid=%s from index=%s",
                 len(out),
                 document_uid,
                 self._index,
             )
             return out
         except Exception:
-            logger.exception("[VECTOR][OPENSEARCH] failed to fetch vectors for document_uid=%s", document_uid)
+            logger.exception("failed to fetch vectors for document_uid=%s", document_uid)
             return []
 
     def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
@@ -1312,14 +1312,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     }
                 )
             logger.debug(
-                "[VECTOR][OPENSEARCH] fetched %d chunks for document_uid=%s from index=%s",
+                "fetched %d chunks for document_uid=%s from index=%s",
                 len(out),
                 document_uid,
                 self._index,
             )
             return out
         except Exception:
-            logger.exception("[VECTOR][OPENSEARCH] failed to fetch chunks for document_uid=%s", document_uid)
+            logger.exception("failed to fetch chunks for document_uid=%s", document_uid)
             raise RuntimeError("Failed to fetch chunks from OpenSearch.")
 
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
@@ -1329,13 +1329,13 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         try:
             res = self._client.get(index=self._index, id=chunk_uid)
             if not res or res.get("found") is not True:
-                logger.warning("[VECTOR][OPENSEARCH] chunk not found: %s", chunk_uid)
+                logger.warning("chunk not found: %s", chunk_uid)
                 return {"chunk_uid": chunk_uid}
             src = res.get("_source", {}) or {}
             md = src.get("metadata", {}) or {}
             if md.get("document_uid") != document_uid:
                 logger.warning(
-                    "[VECTOR][OPENSEARCH] chunk %s does not belong to document_uid=%s",
+                    "chunk %s does not belong to document_uid=%s",
                     chunk_uid,
                     document_uid,
                 )
@@ -1348,7 +1348,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         except Exception as error:
             if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
                 raise
-            logger.exception("[VECTOR][OPENSEARCH] failed to fetch chunk %s", chunk_uid)
+            logger.exception("failed to fetch chunk %s", chunk_uid)
             return {"chunk_uid": chunk_uid}
 
     def delete_chunk(self, document_uid: str, chunk_uid: str) -> None:
@@ -1357,23 +1357,23 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             # Ensure ownership by checking metadata.document_uid
             res = self._client.get(index=self._index, id=chunk_uid)
             if not res or res.get("found") is not True:
-                logger.warning("[VECTOR][OPENSEARCH] cannot delete; chunk not found: %s", chunk_uid)
+                logger.warning("cannot delete; chunk not found: %s", chunk_uid)
                 return
             src = res.get("_source", {}) or {}
             md = src.get("metadata", {}) or {}
             if md.get("document_uid") != document_uid:
                 logger.warning(
-                    "[VECTOR][OPENSEARCH] not deleting chunk %s: mismatched document_uid=%s",
+                    "not deleting chunk %s: mismatched document_uid=%s",
                     chunk_uid,
                     document_uid,
                 )
                 return
             self._client.delete(index=self._index, id=chunk_uid)
-            logger.debug("[VECTOR][OPENSEARCH] deleted chunk %s for document_uid=%s", chunk_uid, document_uid)
+            logger.debug("deleted chunk %s for document_uid=%s", chunk_uid, document_uid)
         except Exception as error:
             if getattr(self, "strict_operations", False) and getattr(error, "status_code", None) != 404:
                 raise
-            logger.exception("[VECTOR][OPENSEARCH] failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)
+            logger.exception("failed to delete chunk %s for document_uid=%s", chunk_uid, document_uid)
 
     def _build_hits(self, hits_data: List, hit_type: Type[T]) -> List[T]:
         """
@@ -1418,19 +1418,19 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
     def _build_ann_hits(self, hits_data: List) -> List[AnnHit]:
         hits = self._build_hits(hits_data, AnnHit)
         if DEBUG and hits:
-            logger.debug("[VECTOR][OPENSEARCH][ANN] built hits count=%d", len(hits))
+            logger.debug("built hits count=%d", len(hits))
         return hits
 
     def _build_hybrid_hits(self, hits_data: List) -> List[HybridHit]:
         hits = self._build_hits(hits_data, HybridHit)
         if DEBUG and hits:
-            logger.debug("[VECTOR][OPENSEARCH][HYBRID] built hits count=%d", len(hits))
+            logger.debug("built hits count=%d", len(hits))
         return hits
 
     def _build_fulltext_hits(self, hits_data: list) -> List[FullTextHit]:
         hits = self._build_hits(hits_data, FullTextHit)
         if DEBUG and hits:
-            logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] built hits count=%d", len(hits))
+            logger.debug("built hits count=%d", len(hits))
         return hits
 
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
@@ -1448,16 +1448,16 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         Raises:
             RuntimeError: If the embedding model fails or if the search query fails.
         """
-        logger.debug("[VECTOR][OPENSEARCH][ANN] query=%r k=%d search_filter=%s", query, k, search_filter)
+        logger.debug("query_len=%d k=%d search_filter=%s", len(query), k, search_filter)
         filters = self._to_filter_clause(search_filter)
-        logger.debug("[VECTOR][OPENSEARCH][ANN] computed filters=%s", filters or [])
+        logger.debug("computed filters=%s", filters or [])
 
         try:
             with self._phase_timer("vector_ann_embed_query"):
                 vector = self._embedding_model.embed_query(query)
-            logger.debug("[VECTOR][OPENSEARCH][ANN] embedding_dim=%d", len(vector))
+            logger.debug("embedding_dim=%d", len(vector))
         except Exception as e:
-            logger.exception("[VECTOR][OPENSEARCH] failed to compute embedding.")
+            logger.exception("failed to compute embedding.")
             raise RuntimeError(f"Embedding model failed: {e}") from e
 
         knn_query = {
@@ -1478,9 +1478,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             with self._phase_timer("vector_ann_opensearch_query"):
                 res = self._client.search(index=self._index, body=bool_knn_body)
             hits_data = res.get("hits", {}).get("hits", [])
-            logger.debug("[VECTOR][OPENSEARCH][ANN] search returned %d hits", len(hits_data))
+            logger.debug("search returned %d hits", len(hits_data))
         except Exception as e:
-            logger.warning("[VECTOR][OPENSEARCH][ANN] query failed: %s", str(e))
+            logger.warning("query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
 
         return self._build_ann_hits(hits_data)
@@ -1544,9 +1544,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         try:
             response = self._client.search(index=self._index, body=search_body, params={"search_pipeline": HYBRID_SEARCH_PIPELINE_NAME})
             hits_data = response.get("hits", {}).get("hits", [])
-            logger.debug("[VECTOR][OPENSEARCH][HYBRID] search returned %d hits", len(hits_data))
+            logger.debug("search returned %d hits", len(hits_data))
         except Exception as e:
-            logger.warning("[VECTOR][OPENSEARCH][HYBRID] query failed: %s", str(e))
+            logger.warning("query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
 
         return self._build_hybrid_hits(hits_data=hits_data)
@@ -1581,9 +1581,9 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         try:
             response = self._client.search(index=self._index, body=search_body)
             hits_data = response.get("hits", {}).get("hits", [])
-            logger.debug("[VECTOR][OPENSEARCH][FULLTEXT] search returned %d hits", len(hits_data))
+            logger.debug("search returned %d hits", len(hits_data))
         except Exception as e:
-            logger.warning("[VECTOR][OPENSEARCH][FULLTEXT] query failed: %s", str(e))
+            logger.warning("query failed: %s", str(e))
             raise OpenSearchException(f"{str(e)}") from e
 
         return self._build_fulltext_hits(hits_data=hits_data)
@@ -1598,14 +1598,14 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         try:
             self._client.indices.put_mapping(index=self._index, body=payload)
             logger.info(
-                "[VECTOR][OPENSEARCH][MAPPING] added safe metadata fields %s to index %s",
+                "added safe metadata fields %s to index %s",
                 missing_fields,
                 self._index,
             )
             return True
         except Exception as exc:
             logger.error(
-                "[VECTOR][OPENSEARCH][MAPPING] failed to add safe metadata fields %s to index %s: %s",
+                "failed to add safe metadata fields %s to index %s: %s",
                 missing_fields,
                 self._index,
                 exc,
@@ -1629,7 +1629,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
         if spec.dim != expected_dim:
             logger.warning(
-                "[VECTOR][OPENSEARCH] runtime embedding dimension %s differs from catalog dimension %s for model %s; using runtime dimension",
+                "runtime embedding dimension %s differs from catalog dimension %s for model %s; using runtime dimension",
                 expected_dim,
                 spec.dim,
                 model_name,
@@ -1651,7 +1651,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         try:
             mapping = self._client.indices.get_mapping(index=self._index)
         except Exception as e:
-            logger.warning("[VECTOR][OPENSEARCH] could not fetch mapping for %r: %s", self._index, e)
+            logger.warning("could not fetch mapping for %r: %s", self._index, e)
             return  # Don't block init; ANN calls will fail later with clearer errors.
 
         m = mapping.get(self._index, {}).get("mappings", {})
@@ -1703,7 +1703,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         missing_metadata_fields = [field for field in SAFE_METADATA_MAPPING_UPDATES if field not in metadata_props]
         if missing_metadata_fields:
             logger.critical(
-                "[VECTOR][OPENSEARCH][MAPPING] index %s missing safe metadata fields %s",
+                "index %s missing safe metadata fields %s",
                 self._index,
                 missing_metadata_fields,
             )
@@ -1744,16 +1744,16 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             )
         if warnings:
             for w in warnings:
-                logger.warning("[VECTOR][OPENSEARCH] %s", w)
+                logger.warning("%s", w)
             logger.warning(
-                "[VECTOR][OPENSEARCH] index mapping accepted with warnings: engine=%s space=%s method=%s dim=%s",
+                "index mapping accepted with warnings: engine=%s space=%s method=%s dim=%s",
                 method_engine,
                 method_space,
                 method_name,
                 actual_dim,
             )
         else:
-            logger.info("[VECTOR][OPENSEARCH] index mapping compatible: engine=%s space=%s method=%s dim=%s", method_engine, method_space, method_name, actual_dim)
+            logger.info("index mapping compatible: engine=%s space=%s method=%s dim=%s", method_engine, method_space, method_name, actual_dim)
 
     # --- helper: return a flat list of term filters (or None) ---
     def _to_filter_clause(self, f: Optional[SearchFilter]) -> Optional[List[Dict]]:
@@ -1791,7 +1791,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                         continue
 
                     logger.debug(
-                        "[VECTOR][OPENSEARCH][FILTER] building retrievable filter: field=%s values=%s want_true=%s want_false=%s",
+                        "building retrievable filter: field=%s values=%s want_true=%s want_false=%s",
                         meta_field,
                         values_list,
                         want_true,
@@ -1837,18 +1837,18 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                             include_values.append(v)
                     if include_values:
                         logger.debug(
-                            "[VECTOR][OPENSEARCH][FILTER] adding terms filter: field=%s values=%s",
+                            "adding terms filter: field=%s values=%s",
                             meta_field,
                             include_values,
                         )
                         filters.append({"terms": {meta_field: include_values}})
                     if exclude_values:
                         logger.debug(
-                            "[VECTOR][OPENSEARCH][FILTER] adding must_not terms: field=%s values=%s",
+                            "adding must_not terms: field=%s values=%s",
                             meta_field,
                             exclude_values,
                         )
                         filters.append({"bool": {"must_not": {"terms": {meta_field: exclude_values}}}})
         if filters:
-            logger.debug("[VECTOR][OPENSEARCH][FILTER] final filter list=%s", filters)
+            logger.debug("final filter list=%s", filters)
         return filters or None

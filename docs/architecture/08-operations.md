@@ -26,8 +26,8 @@ before any provisioning. The document index name is independent of the backend n
 
 The hook does not infer resources from a component-name prefix. The worker uses the
 same rendered configuration as the permission setup. The local profile selects
-`document-vectors`, `weaver-app-logs` and `weaver-kpi`: Swift can share the
-OpenSearch instance, never these indexes.
+`document-vectors` and `weaver-kpi`: Swift can share the OpenSearch instance, never
+these indexes.
 
 ## PostgreSQL ownership
 
@@ -72,6 +72,8 @@ PostgreSQL records exactly and idempotently how much was consumed or owned,
 by whom and for which resource. Tokens belong to this registry. If a figure will
 ever be compared with a limit, a bill or a quota, it belongs in the registry.
 OpenSearch serves agent-behavior observation, where occasional loss is acceptable.
+Application logs are not among these figures: every process writes them to stdout
+and the platform's collector routes them, as described under Logs and lifecycle.
 Prometheus and OpenTelemetry serve technical health and operations.
 
 The runtime reports consumption in its own name, using its workload identity.
@@ -111,6 +113,11 @@ consumption; resuming after human validation adds tokens at their consumption
 time without another turn, even across days or query boundaries.
 
 ## Logs and lifecycle
+
+Rust and Python processes write one line per event to stdout, in one format, and never
+call a log store. k3d ships it with Fluent Bit and GKE with Cloud Logging. The chart
+installs no collector, so a platform without one keeps logs in `kubectl logs` only. The
+[operations reference](A3-manager-operations.md#logging) defines the format.
 
 Lifecycle and ingestion use SQL receipts and bounded cleanup/reconciliation.
 Disabling new ingestion does not discard accepted work. See the

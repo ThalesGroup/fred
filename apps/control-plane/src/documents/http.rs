@@ -178,7 +178,7 @@ async fn entries(
             .await
     };
     directory.uploaders = names.await.unwrap_or_else(|_| {
-        tracing::warn!("[DOCUMENTS] Uploader names unavailable");
+        tracing::warn!("Uploader names unavailable");
         Default::default()
     });
     Ok(Json(directory))

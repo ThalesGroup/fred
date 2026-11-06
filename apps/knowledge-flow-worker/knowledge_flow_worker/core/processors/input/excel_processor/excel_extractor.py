@@ -402,9 +402,9 @@ class ExcelExtractor:
         self.all_tables = []
         for summary in self.summaries:
             if not summary.visible and not self.include_hidden_sheets:
-                log.info('\n── sheet "%s" skipped (hidden)', summary.name)
+                log.info("Hidden sheet skipped")
                 continue
-            log.info('\n── sheet "%s" %s', summary.name, "(hidden)" if not summary.visible else "")
+            log.info("Sheet extraction started", extra={"hidden": not summary.visible})
             grid, structure = self.a2_load_and_capture(summary.name)
             if grid.size == 0:
                 # Empty sheet: no block to detect, no table to build. Flagged so

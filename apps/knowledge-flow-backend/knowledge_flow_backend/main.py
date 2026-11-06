@@ -31,7 +31,6 @@ from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
 from fred_core.logs.http import RequestLoggingFastAPI
-from fred_core.logs.null_log_store import NullLogStore
 from fred_core.security.mcp_delegation import declare_delegation_parameters
 from fred_core.security.oidc import configure_token_security
 from prometheus_client import start_http_server
@@ -51,9 +50,7 @@ from knowledge_flow_backend.features.tabular.execution import close_tabular_exec
 from knowledge_flow_backend.features.vector_search.vector_search_controller import VectorSearchController
 from knowledge_flow_backend.mcp_mount import mount_fastapi_tools
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-LOG_PREFIX = "[APP]"
 
 
 def create_app() -> FastAPI:
@@ -63,9 +60,8 @@ def create_app() -> FastAPI:
         log_level=configuration.app.log_level,
         log_format=configuration.app.log_format,
         service_role="api",
-        store=NullLogStore(),
     )
-    logger.info("%s Embedding model: [%s] %s", LOG_PREFIX, configuration.embedding_model.provider, configuration.embedding_model.name)
+    logger.info("Embedding model selected", extra={"provider": configuration.embedding_model.provider, "model": configuration.embedding_model.name})
 
     if not configuration.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -73,16 +69,9 @@ def create_app() -> FastAPI:
         import torch
 
         torch.set_default_device("cpu")
-        logger.info("%s GPU support is disabled. Running on CPU.", LOG_PREFIX)
+        logger.info("GPU support is disabled; running on CPU")
 
     application_context = ApplicationContext(configuration)
-    log_setup(
-        service_name="knowledge-flow",
-        log_level=configuration.app.log_level,
-        log_format=configuration.app.log_format,
-        service_role="api",
-        store=application_context.get_log_store(),
-    )
     application_context._log_config_summary()
     docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
 

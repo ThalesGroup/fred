@@ -612,8 +612,7 @@ def _build_filled_deck(
             # The persisted schema references a slide the template no longer
             # has; skip rather than crash.
             logger.warning(
-                "[PPTFILL][TOOL] schema references slide %d but template has "
-                "only %d slides; skipping.",
+                "schema references slide %d but template has only %d slides; skipping.",
                 slide_number,
                 len(slides),
             )
@@ -829,7 +828,7 @@ def build_fill_tools(
                 f"Could not fetch the PPT template '{template_key}' from agent "
                 f"config storage after {elapsed:.0f}s [{type(exc).__name__}: {exc}]."
             )
-            logger.exception("[PPTFILL][TOOL] template fetch FAILED -> %s", message)
+            logger.exception("template fetch failed")
             return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
 
         # 2. Prefetch every candidate image's bytes concurrently (bounded),
@@ -868,13 +867,13 @@ def build_fill_tools(
                 f"Could not fill the PPT template after {elapsed:.0f}s "
                 f"[{type(exc).__name__}: {exc}]."
             )
-            logger.exception("[PPTFILL][TOOL] fill FAILED -> %s", message)
+            logger.exception("fill failed")
             return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
         finally:
             release_heavy_job_slot()
 
         if fill_error is not None:
-            logger.warning("[PPTFILL][TOOL] image fill rejected -> %s", fill_error)
+            logger.warning("image fill rejected -> %s", fill_error)
             return fill_error, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
         assert filled_bytes is not None  # fill_error is None here
 
@@ -900,11 +899,11 @@ def build_fill_tools(
                 f"Filled the template but could not upload the result after "
                 f"{elapsed:.0f}s [{type(exc).__name__}: {exc}]."
             )
-            logger.exception("[PPTFILL][TOOL] upload FAILED -> %s", message)
+            logger.exception("upload failed")
             return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
 
         logger.info(
-            "[PPTFILL][TOOL] filled deck uploaded session=%s key=%s",
+            "filled deck uploaded session=%s key=%s",
             session_id,
             pptx_artifact.key,
         )
@@ -921,9 +920,7 @@ def build_fill_tools(
         except Exception as exc:
             # The runtime retains an uncertain conversion intent; returning the
             # deck must never imply its temporary files have been cleaned up.
-            logger.warning(
-                "[PPTFILL][TOOL] preview conversion failed: %s", type(exc).__name__
-            )
+            logger.warning("preview conversion failed: %s", type(exc).__name__)
             pdf_bytes = None
         if pdf_bytes is not None:
             try:
@@ -936,7 +933,7 @@ def build_fill_tools(
                 pdf_download_url = pdf_artifact.href
             except Exception as exc:
                 logger.warning(
-                    "[PPTFILL][TOOL] preview upload failed (deck still returned): %s",
+                    "preview upload failed (deck still returned): %s",
                     exc,
                 )
 

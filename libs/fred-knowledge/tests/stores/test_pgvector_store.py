@@ -62,6 +62,13 @@ def _chunk(document_uid: str, index: int) -> Document:
     )
 
 
+def test_ann_search_keeps_the_question_out_of_logs(caplog):
+    store, _ = _make_store([_chunk("doc-a", 0)])
+    with caplog.at_level("DEBUG"):
+        store.ann_search("SENTINEL question", k=1)
+    assert "SENTINEL" not in caplog.text
+
+
 def test_ann_search_pushes_every_requested_document_uid_to_sql():
     store, fake = _make_store([_chunk(uid, i) for uid in ("doc-a", "doc-b", "doc-c") for i in range(2)])
 

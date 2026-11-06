@@ -293,7 +293,7 @@ impl Jwks {
             Ok(set) => set,
             Err(error) => {
                 if let Some(key) = stale {
-                    tracing::warn!("[AUTH] JWKS refresh failed; serving a known signing key");
+                    tracing::warn!("JWKS refresh failed; serving a known signing key");
                     return Ok(key);
                 }
                 return Err(error);
@@ -359,7 +359,7 @@ impl Authenticator {
             );
         }
         if !settings.enabled {
-            tracing::warn!("[AUTH] Authentication is DISABLED; every caller is the mock admin");
+            tracing::warn!("Authentication is DISABLED; every caller is the mock admin");
             return Ok(Self { verifier: None });
         }
         let http = reqwest::Client::builder()
@@ -389,7 +389,7 @@ impl Authenticator {
             issuer,
             jwks_url,
             client_id = settings.client_id,
-            "[AUTH] user authentication initialized"
+            "user authentication initialized"
         );
         Ok(Self {
             verifier: Some(Verifier {
@@ -518,7 +518,7 @@ impl Verifier {
             None => None,
         };
         let Some(key) = key else {
-            tracing::warn!("[AUTH] Could not retrieve a trusted JWT signing key");
+            tracing::warn!("Could not retrieve a trusted JWT signing key");
             return Err(AuthError::SigningKey);
         };
 
@@ -536,11 +536,11 @@ impl Verifier {
         let payload = match jsonwebtoken::decode::<Map<String, Value>>(token, &key, &validation) {
             Ok(data) => data.claims,
             Err(e) if matches!(e.kind(), ErrorKind::ExpiredSignature) => {
-                tracing::warn!("[AUTH] Access token expired");
+                tracing::warn!("Access token expired");
                 return Err(AuthError::Expired);
             }
             Err(_) => {
-                tracing::error!("[AUTH] Invalid JWT token");
+                tracing::error!("Invalid JWT token");
                 return Err(AuthError::Invalid);
             }
         };
@@ -571,7 +571,7 @@ impl Verifier {
         let identity = match payload.get(&s.claims.uid) {
             Some(Value::String(id)) if !id.trim().is_empty() => id.clone(),
             _ => {
-                tracing::warn!("[AUTH] JWT token missing or invalid identity claim");
+                tracing::warn!("JWT token missing or invalid identity claim");
                 return Err(AuthError::InvalidClaims);
             }
         };
@@ -704,12 +704,12 @@ fn check_times(
     max_lifetime: f64,
 ) -> Result<(), AuthError> {
     let Some(iat) = payload.get("iat").and_then(Value::as_i64) else {
-        tracing::warn!("[AUTH] JWT missing or non-integer iat");
+        tracing::warn!("JWT missing or non-integer iat");
         return Err(AuthError::Invalid);
     };
     let iat = iat as f64;
     if iat > now + leeway as f64 {
-        tracing::warn!("[AUTH] JWT issued in the future");
+        tracing::warn!("JWT issued in the future");
         return Err(AuthError::Invalid);
     }
     let exp = payload
@@ -717,11 +717,11 @@ fn check_times(
         .and_then(Value::as_f64)
         .ok_or(AuthError::Invalid)?;
     if exp - iat < 0.0 {
-        tracing::warn!("[AUTH] JWT has negative lifetime");
+        tracing::warn!("JWT has negative lifetime");
         return Err(AuthError::NegativeLifetime);
     }
     if exp - iat > max_lifetime {
-        tracing::warn!("[AUTH] JWT lifetime exceeds policy ceiling");
+        tracing::warn!("JWT lifetime exceeds policy ceiling");
         return Err(AuthError::LifetimeTooLong);
     }
     Ok(())

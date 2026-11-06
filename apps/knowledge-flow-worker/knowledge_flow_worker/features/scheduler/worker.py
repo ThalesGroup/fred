@@ -28,6 +28,7 @@ import concurrent.futures
 import logging
 from datetime import timedelta
 
+from fred_core.scheduler.temporal_client_provider import route_temporal_core_logs
 from temporalio.client import Client
 from temporalio.worker import Worker
 
@@ -66,7 +67,7 @@ def _build_worker(
     queue = _role_task_queue(config, role)
     if is_common:
         logger.info(
-            "[SCHEDULER] role=%s queue=%s max_concurrent_activities=%d max_concurrent_workflow_tasks=%d",
+            "role=%s queue=%s max_concurrent_activities=%d max_concurrent_workflow_tasks=%d",
             role.value,
             queue,
             activity_concurrency,
@@ -76,7 +77,7 @@ def _build_worker(
         # No workflow is registered here, so the workflow-task limit would say
         # nothing about what this pod actually does.
         logger.info(
-            "[SCHEDULER] role=%s queue=%s max_concurrent_activities=%d (extraction only, no workflows)",
+            "role=%s queue=%s max_concurrent_activities=%d (extraction only, no workflows)",
             role.value,
             queue,
             activity_concurrency,
@@ -139,13 +140,14 @@ async def run_worker(
 
     fault = read_ingestion_fault()
     if fault is not None:
-        logger.warning("[SIMULATED INGESTION FAULT] worker started with %s", fault)
+        logger.warning("worker started with %s", fault)
 
     active_roles = list(roles) if roles else [IngestionWorkerRole.common]
     workflow_task_concurrency = max(1, int(max_concurrent_workflow_tasks))
     activity_concurrency = max(1, int(max_concurrent_activities))
 
     logger.info(f"🔗 Connecting to Temporal at {config.host} (namespace={config.namespace})")
+    route_temporal_core_logs()
     client = await Client.connect(
         target_host=config.host,
         namespace=config.namespace,
@@ -164,11 +166,11 @@ async def run_worker(
 
     if len(workers) > 1:
         logger.info(
-            "[SCHEDULER] %d roles in this process: up to %d activities at once across them",
+            "%d roles in this process: up to %d activities at once across them",
             len(workers),
             len(workers) * activity_concurrency,
         )
-    logger.info("[SCHEDULER] Temporal worker is now running and ready to receive ingestion jobs.")
+    logger.info("Temporal worker is now running and ready to receive ingestion jobs.")
     # A TaskGroup, not gather: when one role's worker dies the others must be
     # cancelled before the caller's shutdown disposes the database engine and the
     # KPI writer their activities are still using.

@@ -200,7 +200,7 @@ class ReActRuntimeToolResolver:
         """
 
         logger.debug(
-            "[V2][TOOL_RESOLVER] start toolset_key=%r declared_tool_refs=%r",
+            "start toolset_key=%r declared_tool_refs=%r",
             self._toolset_key,
             [r.tool_ref for r in self._declared_tool_refs],
         )
@@ -252,7 +252,7 @@ class ReActRuntimeToolResolver:
                 )
             )
         logger.debug(
-            "[V2][TOOL_RESOLVER] resolved %d tool(s): %r",
+            "resolved %d tool(s): %r",
             len(specs),
             [s.runtime_name for s in specs],
         )

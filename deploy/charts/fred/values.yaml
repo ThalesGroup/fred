@@ -356,8 +356,6 @@ x-kf-storage: &kf-storage
     secure: true
     verify_certs: false
     username: admin
-  log_store:
-    type: "in_memory"
   vector_store:
     type: pgvector
     collection_name: document_vectors
@@ -735,9 +733,6 @@ applications:
           secure: true
           verify_certs: false
           username: admin
-        log_store:
-          type: "in_memory"
-
       platform:
         control_plane_url: "http://control-plane-backend:8222/control-plane/v1"
 
@@ -1945,8 +1940,10 @@ applications:
       - name: MONITOR_NAMESPACE
         valueFrom:
           fieldRef: {fieldPath: metadata.namespace}
-      - name: RUST_LOG
+      - name: MONITOR_LOG_LEVEL
         value: info
+      - name: MONITOR_LOG_FORMAT
+        value: json
     extraEnvVars: []
     ports: [{name: http, containerPort: 8223}]
     service:

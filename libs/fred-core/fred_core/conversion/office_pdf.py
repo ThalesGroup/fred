@@ -136,9 +136,7 @@ def convert_office_file_to_pdf(
     pdf_path.unlink(missing_ok=True)
     soffice_path = shutil.which("soffice")
     if not soffice_path:
-        logger.error(
-            "[OFFICE2PDF] LibreOffice (soffice) is not installed or not in PATH."
-        )
+        logger.error("LibreOffice (soffice) is not installed or not in PATH.")
         return None
 
     try:
@@ -166,22 +164,22 @@ def convert_office_file_to_pdf(
             )
     except subprocess.TimeoutExpired:
         logger.error(
-            "[OFFICE2PDF] LibreOffice conversion timed out after %.0fs.",
+            "LibreOffice conversion timed out after %.0fs.",
             timeout_seconds,
         )
         return None
     except subprocess.CalledProcessError as exc:
         logger.error(
-            "[OFFICE2PDF] LibreOffice conversion failed: %s",
+            "LibreOffice conversion failed: %s",
             exc.stderr.decode(errors="ignore") if exc.stderr else exc,
         )
         return None
 
     if pdf_path.exists():
-        logger.info("[OFFICE2PDF] Converted %s to PDF: %s", source_path.name, pdf_path)
+        logger.info("Converted %s to PDF: %s", source_path.name, pdf_path)
         return pdf_path
 
-    logger.warning("[OFFICE2PDF] Conversion completed but PDF not found: %s", pdf_path)
+    logger.warning("Conversion completed but PDF not found: %s", pdf_path)
     return None
 
 
@@ -231,7 +229,7 @@ async def convert_office_bytes_to_pdf(
     except (
         Exception
     ):  # pragma: no cover - defensive: never let conversion break the caller
-        logger.exception("[OFFICE2PDF] Unexpected error during Office→PDF conversion.")
+        logger.exception("Unexpected error during Office→PDF conversion.")
         if strict_cleanup:
             raise
         return None

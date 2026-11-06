@@ -71,7 +71,7 @@ async def ensure_schedule(
     )
     try:
         await client.create_schedule(schedule_id, schedule)
-        logger.info("[TEMPORAL] Schedule created: %s", schedule_id)
+        logger.info("Schedule created: %s", schedule_id)
         return schedule_id
     except ScheduleAlreadyRunningError:
         pass
@@ -82,9 +82,7 @@ async def ensure_schedule(
     await client.get_schedule_handle(schedule_id).update(
         lambda _current: ScheduleUpdate(schedule=schedule)
     )
-    logger.info(
-        "[TEMPORAL] Schedule already existed, definition refreshed: %s", schedule_id
-    )
+    logger.info("Schedule already existed, definition refreshed: %s", schedule_id)
     return schedule_id
 
 
@@ -96,5 +94,5 @@ async def delete_schedule_if_exists(client: Client, schedule_id: str) -> bool:
         if exc.status == RPCStatusCode.NOT_FOUND:
             return False
         raise
-    logger.info("[TEMPORAL] Schedule deleted: %s", schedule_id)
+    logger.info("Schedule deleted: %s", schedule_id)
     return True

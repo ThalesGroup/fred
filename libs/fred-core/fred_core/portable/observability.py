@@ -246,8 +246,7 @@ class _LoggingSpan(Span):
         self._attrs[key] = value
 
     def set_io(self, *, input: Any = None, output: Any = None) -> None:
-        # This logger feeds the generic app-log store, which carries no content
-        # (OBSERVABILITY-AND-AUDIT.md §7) — hence sizes only, never the payload.
+        # Application logs carry no content: sizes only, never the payload.
         # `LoggingTracer.captures_content` stays False so well-behaved callers
         # never even build these payloads; recording lengths here just means a
         # caller that ignores that hint still cannot leak content into the store.

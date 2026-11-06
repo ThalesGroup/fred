@@ -165,7 +165,7 @@ def _patch_vertex_maas_auth(model: Any) -> None:
         async_client, httpx.AsyncClient
     ):
         logger.warning(
-            "[MODEL][VERTEX_MAAS] Unable to patch auto-refresh auth for %s: model does not expose expected httpx clients.",
+            "Unable to patch auto-refresh auth for %s: model does not expose expected httpx clients.",
             type(model).__name__,
         )
         return
@@ -175,7 +175,7 @@ def _patch_vertex_maas_auth(model: Any) -> None:
         client.auth = auth
         client.headers.pop("Authorization", None)
     logger.info(
-        "[MODEL][VERTEX_MAAS] Enabled auto-refreshing GCP auth for %s.",
+        "Enabled auto-refreshing GCP auth for %s.",
         type(model).__name__,
     )
 
@@ -187,7 +187,7 @@ def _patch_vertex_maas_auth(model: Any) -> None:
 
 def _info_provider(cfg: ModelConfiguration, settings: Dict[str, Any]) -> None:
     # Settings may contain custom headers and signed URLs; never dump them.
-    logger.info("[MODEL] Provider=%s Name=%s", cfg.provider, cfg.name)
+    logger.info("Provider=%s Name=%s", cfg.provider, cfg.name)
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +367,7 @@ def _create_model(
             )
         _info_provider(cfg, settings)
         logger.info(
-            "[MODEL][OPENAI] Constructing ChatOpenAI model=%s with explicit timeout=%s stream_usage=%s (overriding SDK default)",
+            "Constructing ChatOpenAI model=%s with explicit timeout=%s stream_usage=%s (overriding SDK default)",
             cfg.name,
             base_kwargs.get("timeout"),
             settings.get("stream_usage"),
@@ -389,12 +389,12 @@ def _create_model(
         api_version = settings.pop("azure_openai_api_version")
         _info_provider(cfg, settings)
         logger.info(
-            "[MODEL][AZURE_OPENAI] Constructing AzureChatOpenAI deployment=%s with explicit timeout=%s",
+            "Constructing AzureChatOpenAI deployment=%s with explicit timeout=%s",
             cfg.name,
             base_kwargs.get("timeout"),
         )
         logger.info(
-            "[MODEL][AZURE_OPENAI] stream_usage=%s",
+            "stream_usage=%s",
             settings.get("stream_usage"),
         )
         return AzureChatOpenAI(
@@ -450,12 +450,12 @@ def _create_model(
             }
         _info_provider(cfg, passthrough)
         logger.info(
-            "[MODEL][AZURE_APIM] Constructing AzureChatOpenAI (APIM) deployment=%s with explicit timeout=%s",
+            "Constructing AzureChatOpenAI (APIM) deployment=%s with explicit timeout=%s",
             cfg.name,
             base_kwargs.get("timeout"),
         )
         logger.info(
-            "[MODEL][AZURE_APIM] stream_usage=%s",
+            "stream_usage=%s",
             passthrough.get("stream_usage"),
         )
 
@@ -497,7 +497,7 @@ def _create_model(
         log_settings.update({"project": project, "location": location})
         _info_provider(cfg, log_settings)
         logger.info(
-            "[MODEL][VERTEX_AI] Constructing ChatGoogleGenerativeAI model=%s project=%s location=%s",
+            "Constructing ChatGoogleGenerativeAI model=%s project=%s location=%s",
             cfg.name,
             project,
             location,
@@ -569,7 +569,7 @@ def _create_model(
         )
         _info_provider(cfg, log_settings)
         logger.info(
-            "[MODEL][VERTEX_AI_MODEL_GARDEN] Constructing %s model=%s family=%s project=%s location=%s",
+            "Constructing %s model=%s family=%s project=%s location=%s",
             model_cls.__name__,
             cfg.name,
             model_family,
@@ -654,7 +654,7 @@ def _create_model(
                         _parts.add(_host)
                         os.environ["no_proxy"] = ",".join(sorted(_parts))
                         logger.info(
-                            "[MODEL][ANTHROPIC] Patched no_proxy: added %s for direct connection",
+                            "Patched no_proxy: added %s for direct connection",
                             _host,
                         )
             except Exception:  # nosec B110 # best-effort proxy patch; must not block model construction
@@ -662,7 +662,7 @@ def _create_model(
 
         _info_provider(cfg, settings)
         logger.info(
-            "[MODEL][ANTHROPIC] Constructing ChatAnthropic model=%s base_url=%s",
+            "Constructing ChatAnthropic model=%s base_url=%s",
             cfg.name,
             base_url or "(default, from ANTHROPIC_BASE_URL env)",
         )

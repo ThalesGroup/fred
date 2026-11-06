@@ -102,7 +102,7 @@ class LitePptxToMdExtractor(BaseLiteMdProcessor):
                         lines.append(part)
                 except Exception as e:  # noqa: BLE001
                     logger.debug(
-                        "[LITE_PPTX][IMPLEM] shape export skipped on slide %s: %s",
+                        "shape export skipped on slide %s: %s",
                         s_idx,
                         e,
                     )

@@ -164,7 +164,7 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
         try:
             result: LiteMarkdownResult = self._extract_pymupdf4llm(file_path, opts)
             logger.info(
-                "[LITE_PDF][IMPLEM] Pymupdf4llm page-wise extraction | file=%s pages=%s chars=%s truncated=%s",
+                "Pymupdf4llm page-wise extraction | file=%s pages=%s chars=%s truncated=%s",
                 file_path.name,
                 result.page_count,
                 result.total_chars,
@@ -182,7 +182,7 @@ class LitePdfToMdExtractor(BaseLiteMdProcessor):
         try:
             result = self._extract_with_markitdown(file_path, opts)
             logger.info(
-                "[LITE_PDF][IMPLEM] Markitdown extraction | file=%s pages=%s chars=%s truncated=%s",
+                "Markitdown extraction | file=%s pages=%s chars=%s truncated=%s",
                 file_path.name,
                 result.page_count,
                 result.total_chars,

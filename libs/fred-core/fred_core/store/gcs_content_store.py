@@ -98,9 +98,7 @@ class GcsContentStore:
 
         self.client = build_gcs_client(project_id)
         self.bucket = self.client.bucket(bucket_name)
-        logger.info(
-            "[CONTENT][GCS] Initialized GcsContentStore bucket='%s'", bucket_name
-        )
+        logger.info("Initialized GcsContentStore bucket='%s'", bucket_name)
 
     @staticmethod
     def _normalize_key(key: str) -> str:
@@ -131,9 +129,7 @@ class GcsContentStore:
         ct = content_type or "application/octet-stream"
         blob = self.bucket.blob(object_name)
         blob.upload_from_file(io.BytesIO(payload), content_type=ct)
-        logger.info(
-            "[CONTENT][GCS] put object=%s bucket='%s'", object_name, self.bucket_name
-        )
+        logger.info("put object=%s bucket='%s'", object_name, self.bucket_name)
 
     def delete_object(self, key: str) -> None:
         """Remove object `key`; a missing object is a no-op."""
@@ -144,7 +140,7 @@ class GcsContentStore:
         except NotFound:
             return
         logger.info(
-            "[CONTENT][GCS] deleted object=%s bucket='%s'",
+            "deleted object=%s bucket='%s'",
             object_name,
             self.bucket_name,
         )
@@ -208,7 +204,7 @@ class GcsContentStore:
         )
         # Log the request, never the signed URL (it grants temporary read access).
         logger.info(
-            "[CONTENT][GCS] minted V4 signed URL key=%s ttl=%ds",
+            "minted V4 signed URL key=%s ttl=%ds",
             key,
             int(expires.total_seconds()),
         )

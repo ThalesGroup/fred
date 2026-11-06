@@ -92,8 +92,8 @@ def test_compute_transport_tuning_warns_for_invalid_limit_shape_and_request_fall
     with caplog.at_level(logging.WARNING):
         tuning = http_clients.compute_transport_tuning(settings)
 
-    assert "[NET] http_client_limits ignored" in caplog.text
-    assert "[NET] timeout not set; using request_timeout=42" in caplog.text
+    assert "http_client_limits ignored" in caplog.text
+    assert "timeout not set; using request_timeout=42" in caplog.text
     assert tuning.limits.max_connections == 500
     assert tuning.timeout.connect == 42.0
     assert tuning.timeout.read == 42.0
@@ -175,7 +175,7 @@ def test_get_shared_stack_initializes_once_and_reuses_matching_tuning(
     assert sync_1 is sync_2
     assert async_1 is async_2
     assert registered == [http_clients.shutdown_shared_clients]
-    assert "[NET] Shared HTTPX stack init provider=openai" in caplog.text
+    assert "Shared HTTPX stack init provider=openai" in caplog.text
 
     http_clients.shutdown_shared_clients()
     assert sync_1.is_closed is True

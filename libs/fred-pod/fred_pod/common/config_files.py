@@ -77,7 +77,6 @@ class ConfigFiles:
         default_config_file: str = "./config/configuration.yaml",
         env_var_name: str = "ENV_FILE",
         config_var_name: str = "CONFIG_FILE",
-        log_prefix: str = "[CONFIG]",
     ) -> None:
         """Create a resolver with Fred defaults.
 

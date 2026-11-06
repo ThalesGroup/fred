@@ -62,7 +62,7 @@ def get_shared_kf_async_client(
             )
             atexit.register(close_shared_kf_async_client)
             logger.info(
-                "[KF][NET] Shared async client init limits(max=%s keepalive=%s exp=%ss) "
+                "Shared async client init limits(max=%s keepalive=%s exp=%ss) "
                 "timeout(connect=%ss read=%ss write=%ss pool=%ss)",
                 requested.limits.max_connections,
                 requested.limits.max_keepalive_connections,
@@ -75,7 +75,7 @@ def get_shared_kf_async_client(
         else:
             if _TUNING and requested != _TUNING:
                 logger.warning(
-                    "[KF][NET] Shared client already initialized; ignoring new tuning requested=%s active=%s",
+                    "Shared client already initialized; ignoring new tuning requested=%s active=%s",
                     requested,
                     _TUNING,
                 )
@@ -103,7 +103,7 @@ def close_shared_kf_async_client() -> None:
                 await client.aclose()
             except Exception:
                 logger.debug(
-                    "[KF][NET] Suppressed error during async client close",
+                    "Suppressed error during async client close",
                     exc_info=True,
                 )
 
@@ -114,9 +114,9 @@ def close_shared_kf_async_client() -> None:
                 asyncio.run(_close())
             except RuntimeError:
                 # If the loop is already closed or shutting down, skip close silently.
-                logger.debug("[KF][NET] Event loop closed during close; skipping")
+                logger.debug("Event loop closed during close; skipping")
     except Exception:
-        logger.exception("[KF][NET] Error closing shared async client")
+        logger.exception("Error closing shared async client")
 
 
 async def async_close_shared_kf_async_client() -> None:
@@ -129,4 +129,4 @@ async def async_close_shared_kf_async_client() -> None:
     try:
         await client.aclose()
     except Exception:
-        logger.exception("[KF][NET] Error closing shared async client")
+        logger.exception("Error closing shared async client")

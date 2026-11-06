@@ -77,7 +77,10 @@ API remains the default (`python -m fred_agents`). Worker mode initializes SQL,
 the capability registry, workload credentials and shared HTTP client; it does not
 start the HTTP server, conversation stores, agent loop or conversation workflows.
 It runs at most two preparation activities concurrently. SIGINT/SIGTERM initiates
-Temporal shutdown and closes its resources.
+Temporal shutdown and closes its resources. Worker logs go to stdout, like those of
+every Fred process. Each preparation appears by its identifier in `operation_id`,
+with exception types and HTTP statuses but no messages or bodies.
+The CP logs its delivery, failure and Temporal outage under the same identifier.
 
 The Fred chart exposes this as `applications.fred-agents-worker.enabled: true`
 (disabled by default). Its `inheritFrom: fred-agents` resolves after image and

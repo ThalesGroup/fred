@@ -1450,6 +1450,7 @@ dependencies = [
  "anyhow",
  "axum",
  "base64 0.23.1",
+ "chrono",
  "jsonwebtoken",
  "reqwest",
  "rsa",
@@ -1458,6 +1459,7 @@ dependencies = [
  "sqlx",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "utoipa",
  "uuid",
 ]
@@ -2601,7 +2603,6 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
- "tracing-subscriber",
  "utoipa",
 ]
 

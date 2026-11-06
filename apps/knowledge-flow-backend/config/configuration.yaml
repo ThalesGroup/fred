@@ -94,8 +94,6 @@ storage:
     secure: true
     verify_certs: false
     username: admin
-  log_store:
-    type: "in_memory"
   tabular_store:
     artifacts_prefix: "tabular/datasets"
     format: "parquet"

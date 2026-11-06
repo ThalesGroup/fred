@@ -112,7 +112,7 @@ class VectorSearchService:
             try:
                 await asyncio.to_thread(self.vector_store.ensure_ready)
             except Exception:
-                logger.warning("[VECTOR] corpus is not ready", exc_info=True)
+                logger.warning("corpus is not ready", exc_info=True)
                 raise HTTPException(status_code=503, detail="corpus_not_ready") from None
 
     @property
@@ -321,7 +321,7 @@ class VectorSearchService:
                     dims={**base_dims, "status": "error"},
                     actor=self._kpi_actor(user=user),
                 )
-                logger.error("[VECTOR][SEARCH][ANN] Unexpected error during search: %s", str(e))
+                logger.error("Unexpected error during search: %s", str(e))
                 raise
             kpi_dims["status"] = "ok"
             self.kpi.count(
@@ -361,7 +361,7 @@ class VectorSearchService:
         """
         if not isinstance(self.vector_store, SupportsFullTextSearch):
             logger.warning(
-                "[VECTOR][SEARCH][STRICT] backend=%s lacks full_text_search; falling back to semantic search",
+                "backend=%s lacks full_text_search; falling back to semantic search",
                 type(self.vector_store).__name__,
             )
             return await self._semantic(
@@ -397,7 +397,7 @@ class VectorSearchService:
                     dims={**base_dims, "status": "error"},
                     actor=self._kpi_actor(user=user),
                 )
-                logger.error("[VECTOR][SEARCH][FULLTEXT] Unexpected error during search: %s", str(e))
+                logger.error("Unexpected error during search: %s", str(e))
                 raise
             kpi_dims["status"] = "ok"
             self.kpi.count(
@@ -438,7 +438,7 @@ class VectorSearchService:
         """
         if not isinstance(self.vector_store, SupportsHybridSearch):
             logger.warning(
-                "[VECTOR][SEARCH][HYBRID] backend=%s lacks hybrid_search; falling back to semantic search",
+                "backend=%s lacks hybrid_search; falling back to semantic search",
                 type(self.vector_store).__name__,
             )
             return await self._semantic(
@@ -474,7 +474,7 @@ class VectorSearchService:
                     dims={**base_dims, "status": "error"},
                     actor=self._kpi_actor(user=user),
                 )
-                logger.error("[VECTOR][SEARCH][HYBRID] Unexpected error during search: %s", str(e))
+                logger.error("Unexpected error during search: %s", str(e))
                 raise
             kpi_dims["status"] = "ok"
             self.kpi.count(
@@ -601,7 +601,7 @@ class VectorSearchService:
 
             # Keep top-R documents
             reranked_documents = [doc for doc, _ in sorted_docs[:top_r]]
-            logger.info("[VECTOR][RERANK] Reranked %s documents, keeping top %s", len(documents), len(reranked_documents))
+            logger.info("Reranked %s documents, keeping top %s", len(documents), len(reranked_documents))
             kpi_dims["status"] = "ok"
             self.kpi.count(
                 "rag.rerank_total",
@@ -642,7 +642,7 @@ class VectorSearchService:
         try:
             raw_chunks = await asyncio.to_thread(self.vector_store.get_chunks_for_document, document_uid)
         except NotImplementedError:
-            logger.warning("[VECTOR][DOC_CHUNKS] store %s cannot fetch chunks by document", type(self.vector_store).__name__)
+            logger.warning("store %s cannot fetch chunks by document", type(self.vector_store).__name__)
             return []
         if not raw_chunks:
             return []
@@ -663,7 +663,7 @@ class VectorSearchService:
         ]
         hits = await self._visible_hits(scope, documents, user)
         logger.info(
-            "[VECTOR][DOC_CHUNKS] document_uid=%s published=%d of %d truncated=%s",
+            "document_uid=%s published=%d of %d truncated=%s",
             document_uid,
             len(hits),
             len(raw_chunks),

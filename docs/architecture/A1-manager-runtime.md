@@ -62,7 +62,7 @@ authorization. The extraction does not change its HTTP security contract.
 flowchart TB
     main["main.rs<br/>serve, initialize-schema<br/>import-provisioning"]
     config["config.rs<br/>configuration.yaml + secrets"]
-    logging["logging.rs<br/>stdout format, request ids"]
+    logging["logging.rs<br/>request ids, role audit"]
     api["api.rs<br/>routes, handlers"]
     auth["SDK authentication<br/>bearer verification"]
     error["error.rs<br/>error contract"]

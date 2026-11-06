@@ -58,6 +58,7 @@ def test_main_passes_http_binding_settings_to_uvicorn(monkeypatch) -> None:
 
     assert captured == {
         "app_path": "fred_agents.main:app",
+        "log_config": None,
         "host": "0.0.0.0",
         "port": 8123,
         "log_level": "warning",

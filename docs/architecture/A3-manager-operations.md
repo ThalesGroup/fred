@@ -5,19 +5,25 @@ infrastructure. Developer commands also live in the [component README](../../app
 
 ## Logging
 
-Structured stdout, in the format shared by Fred's services.
+Structured stdout, in the format shared by every Fred process. Rust services use
+`fred_rust_sdk::logging`, Python services `fred_core.logs`, Knowledge Base pods
+`fred_sdk.knowledge_base.logs`; a shared
+[contract file](../../libs/fred-core/fred_core/tests/logs/log_contract.json) tests the
+first two. The monitor selects its output with `MONITOR_LOG_FORMAT` and
+`MONITOR_LOG_LEVEL`.
 
 | `app.log_format` | Output |
 | --- | --- |
-| `json` | One object per line: `severity`, `message`, `timestamp` `{seconds, nanos}`, `logger`, `service` (`control-plane`), `service_role` (`api` or `worker`), `category`, `logging.googleapis.com/sourceLocation` (`file`, `line`, `function` = module path), `process`, `thread` |
-| `text` | `<rfc3339> <SEVERITY> control-plane/<logger> <message> key=value ...`, no wrapping, colors only on a terminal without `NO_COLOR` |
+| `json` | One object per line: `severity`, `message`, `timestamp` `{seconds, nanos}`, `logger`, `service` (`control-plane`), `service_role` (`api` for `serve`, `migration` for `initialize-schema`, `job` for another command), `category`, `logging.googleapis.com/sourceLocation` (`file`, `line`, `function` = module path), `process`, `thread` |
+| `text` | `<rfc3339> <SEVERITY> control-plane/<role>/<logger> <message> key=value ...`, no wrapping, colors only on a terminal without `NO_COLOR` |
 
 - Event fields and request context are top-level and never replace core fields.
   Fields named `token`, `access_token`, `refresh_token`, `id_token`, `authorization`,
   `cookie`, `password`, `secret`, `email`, `user`, `prompt`, `completion`, `content`,
   `body`, `arguments`, `result`, `url` or `signed_url` are dropped (I11).
-- Dependencies log from WARNING only, as `Dependency diagnostic`, without their text or
-  fields (I11).
+- Crates outside the service and `fred_*` log from WARNING only, as `Dependency
+  diagnostic`, without their text or fields (I11). An error field carries the error
+  chain's text, without the query string of a failed HTTP call.
 - Each request gets `X-Request-ID` and `X-Correlation-ID`; its lines carry
   `request_id`, `correlation_id` and, once authenticated, `user_id`. It ends with one
   event on logger `http`: `METHOD route → status | Nms`, fields `http_method`, `route`

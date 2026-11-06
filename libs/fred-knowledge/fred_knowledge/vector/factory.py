@@ -49,7 +49,7 @@ def build_vector_store(
             collection_name=store.collection_name,
         )
         logger.info(
-            "[VECTOR][PGVECTOR] Using postgres collection=%s (default table)",
+            "Using postgres collection=%s (default table)",
             store.collection_name,
         )
     else:

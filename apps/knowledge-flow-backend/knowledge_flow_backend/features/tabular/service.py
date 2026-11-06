@@ -172,7 +172,7 @@ def _redacting_dataset_read_errors():
     except duckdb.OutOfMemoryException:
         # Same reasoning as the query wrapper: a scan that blows the per-query
         # budget is the caller asking for too much, not a server failure.
-        logger.warning("[TABULAR] dataset read exceeded its memory budget")
+        logger.warning("dataset read exceeded its memory budget")
         raise TabularQueryError("Reading this dataset exceeded the per-query memory budget. Scope the request to fewer datasets.") from None
     except duckdb.Error as exc:
         raise TabularDatasetReadError(_redact_signed_urls(str(exc))) from None
@@ -207,11 +207,11 @@ def _redacting_query_execution_errors():
         # DuckDB text is dropped rather than redacted: it names the configured
         # limit and advises setting `temp_directory`, neither of which is the
         # caller's business.
-        logger.warning("[TABULAR] read query exceeded its memory budget")
+        logger.warning("read query exceeded its memory budget")
         raise TabularQueryError("Query exceeded the per-query memory budget. Add filters, aggregate, or select fewer columns.") from None
     except (duckdb.ProgrammingError, duckdb.DataError) as exc:
         message = _redact_signed_urls(str(exc))
-        logger.warning("[TABULAR] read query rejected by DuckDB: %s", message)
+        logger.warning("read query rejected by DuckDB", extra={"error_type": type(exc).__name__})
         raise TabularQueryError(message) from None
     except duckdb.Error as exc:
         raise TabularDatasetReadError(_redact_signed_urls(str(exc))) from None
@@ -577,7 +577,7 @@ class TabularService:
 
         duration_ms = (time.perf_counter() - started_at) * 1000
         logger.info(
-            "[TABULAR] user=%s datasets=%s aliases=%s sql_sha256=%s rows=%s duration_ms=%.2f",
+            "user=%s datasets=%s aliases=%s sql_sha256=%s rows=%s duration_ms=%.2f",
             user.uid,
             [dataset.metadata.document_uid for dataset in mounted_datasets],
             [dataset.query_alias for dataset in mounted_datasets],
@@ -648,7 +648,7 @@ class TabularService:
         dropped_document_uids = {dataset.metadata.document_uid for dataset in selected_datasets[query_config.max_selected_datasets :]}
         if selection_truncated:
             logger.info(
-                "[TABULAR] search selection capped user=%s selected=%s scanned=%s",
+                "search selection capped user=%s selected=%s scanned=%s",
                 user.uid,
                 len(selected_datasets),
                 len(scanned_datasets),
@@ -697,7 +697,7 @@ class TabularService:
         # The keyword itself is not logged: it may carry sensitive terms, exactly
         # as query_read logs a SQL hash rather than the SQL text.
         logger.info(
-            "[TABULAR] search user=%s datasets=%s matches=%s tables_truncated=%s duration_ms=%.2f",
+            "search user=%s datasets=%s matches=%s tables_truncated=%s duration_ms=%.2f",
             user.uid,
             [dataset.metadata.document_uid for dataset in scanned_datasets],
             len(matches),
@@ -988,7 +988,7 @@ class TabularService:
             return
         except Exception as load_exc:  # noqa: BLE001
             logger.info(
-                "[TABULAR] DuckDB httpfs not yet available, trying INSTALL+LOAD: %s",
+                "DuckDB httpfs not yet available, trying INSTALL+LOAD: %s",
                 load_exc,
             )
         try:
@@ -1084,7 +1084,7 @@ class TabularService:
         started_at = time.perf_counter()
         frame = await run_duckdb_job(_job, config=query_config, operation="preview")
         logger.info(
-            "[TABULAR] preview dataset=%s rows=%s duration_ms=%.2f",
+            "preview dataset=%s rows=%s duration_ms=%.2f",
             dataset.metadata.document_uid,
             len(frame),
             (time.perf_counter() - started_at) * 1000,

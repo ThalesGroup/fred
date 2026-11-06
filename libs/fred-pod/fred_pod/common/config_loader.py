@@ -141,7 +141,7 @@ def load_configuration_with_config_files(
 # Own `ConfigFiles`: the caller below is a component that never loads the
 # backend's full configuration model, so it cannot share that loader's instance.
 # The distinct prefix keeps the second pair of [CONFIG] lines traceable.
-_postgres_config_files = ConfigFiles(logger=logger, log_prefix="[CONFIG][postgres]")
+_postgres_config_files = ConfigFiles(logger=logger)
 
 
 def _parse_postgres_config(config_file: str) -> PostgresStoreConfig:

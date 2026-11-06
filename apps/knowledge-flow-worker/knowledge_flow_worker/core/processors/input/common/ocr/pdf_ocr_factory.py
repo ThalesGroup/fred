@@ -42,7 +42,7 @@ def build_pdf_ocr_extractor(ocr_cfg: Optional[ModelConfiguration]) -> Optional[B
         return MistralPdfOcrExtractor(ocr_cfg)
 
     logger.warning(
-        "[PROCESSOR][PDF][OCR] Unsupported remote OCR model provider=%s name=%s; falling back to local Docling OCR.",
+        "Unsupported remote OCR model provider=%s name=%s; falling back to local Docling OCR.",
         ocr_cfg.provider,
         ocr_cfg.name,
     )

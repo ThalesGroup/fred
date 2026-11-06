@@ -114,7 +114,7 @@ async def require_tables(
 
     if not stamped:
         logger.warning(
-            "[SCHEMA] %s: tables exist but '%s' is not stamped — this database "
+            "%s: tables exist but '%s' is not stamped — this database "
             "is not managed by Alembic and `%s` will fail on the first "
             "revision. Stamp it before the next upgrade — see %s.",
             component,

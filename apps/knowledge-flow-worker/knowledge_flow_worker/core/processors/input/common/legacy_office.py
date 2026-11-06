@@ -68,7 +68,7 @@ def looks_like_ole_binary(file_path: Path) -> bool:
         with file_path.open("rb") as handle:
             return handle.read(len(OLE2_MAGIC)) == OLE2_MAGIC
     except OSError as exc:
-        logger.warning("[LEGACY-OFFICE] Failed to read header of %s: %s", file_path, exc)
+        logger.warning("Failed to read header of %s: %s", file_path, exc)
         return False
 
 
@@ -89,7 +89,7 @@ def looks_like_odf(file_path: Path, expected_mimetype: str) -> bool:
                     return declared == expected_mimetype
             return "content.xml" in names
     except (zipfile.BadZipFile, OSError) as exc:
-        logger.warning("[LEGACY-OFFICE] %s is not a valid ODF/zip package: %s", file_path, exc)
+        logger.warning("%s is not a valid ODF/zip package: %s", file_path, exc)
         return False
 
 
@@ -147,7 +147,7 @@ def _convert_with_libreoffice(src_path: Path, out_dir: Path, *, convert_to: str,
             raise LegacyOfficeConversionError(f"LibreOffice conversion produced no '{target_suffix}' for '{src_path.name}'.")
         expected_output = produced[0]
 
-    logger.info("[LEGACY-OFFICE] Converted %s -> %s via LibreOffice", src_path.name, expected_output.name)
+    logger.info("Converted %s -> %s via LibreOffice", src_path.name, expected_output.name)
     return expected_output
 
 

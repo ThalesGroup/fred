@@ -206,7 +206,7 @@ def filter_candidates(
         else:
             dropped["chunk_not_published"] += 1
     logger.info(
-        "[VECTOR][PUBLICATION] checked",
+        "checked",
         extra={
             "event_name": "vector_publication_checked",
             "candidates": len(candidates),
@@ -317,7 +317,7 @@ async def verify_candidates(
     )
     if not document_ids:
         logger.info(
-            "[VECTOR][SQL] skipped",
+            "skipped",
             extra={
                 "event_name": "vector_visibility_skipped",
                 "candidates": len(candidates),
@@ -338,7 +338,7 @@ async def verify_candidates(
             rejected["out_of_scope"] += 1
         rejected.update(row["rejection_reasons"])
     logger.info(
-        "[VECTOR][SQL] checked",
+        "checked",
         extra={
             "event_name": "vector_visibility_checked",
             "candidates": len(candidates),

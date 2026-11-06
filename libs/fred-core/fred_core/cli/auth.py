@@ -879,11 +879,7 @@ def default_pkce_callback_port(
     return int(os.getenv(env_var_name, str(default_port)))
 
 
-def load_cli_environment(
-    dotenv_path: str | None = None,
-    *,
-    log_prefix: str = "[CLI CONFIG]",
-) -> str:
+def load_cli_environment(dotenv_path: str | None = None) -> str:
     """
     Load one CLI environment file using Fred's standard startup convention.
 
@@ -899,7 +895,7 @@ def load_cli_environment(
     - `load_cli_environment()`
     """
 
-    config_files = ConfigFiles(logger=logger, log_prefix=log_prefix)
+    config_files = ConfigFiles(logger=logger)
     return config_files.load_environment(dotenv_path)
 
 

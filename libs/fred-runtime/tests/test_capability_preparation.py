@@ -4,8 +4,10 @@
 
 import asyncio
 import hashlib
+import logging
 import os
 import subprocess
+from unittest.mock import Mock
 from uuid import uuid4
 
 import httpx
@@ -13,7 +15,13 @@ import pytest
 import pytest_asyncio
 from _tracer_capability import TracerEchoCapability
 from conftest import StaticWorkloadTokens
-from fred_runtime.app.preparation_worker import WORKFLOW_RUNNER, PreparationWorker
+from fred_core.logs.processors import install_context_capture
+from fred_runtime.app import preparation_worker
+from fred_runtime.app.preparation_worker import (
+    WORKFLOW_RUNNER,
+    PreparationWorker,
+    failure_summary,
+)
 from fred_runtime.capabilities import CapabilityRegistry
 from fred_runtime.capabilities.preparation_workflow import PrepareCapability
 from fred_runtime.common.outbound_credentials import DelegationRuntime
@@ -117,8 +125,16 @@ async def preparation(tmp_path, minimal_config):
     await engine.dispose()
 
 
+def current_operation(record: logging.LogRecord) -> object:
+    return getattr(record, "_fred_snapshot").values["operation_id"]
+
+
 @pytest.mark.asyncio
-async def test_lost_confirmation_reuses_sql_result_on_another_replica(preparation):
+async def test_lost_confirmation_reuses_sql_result_on_another_replica(
+    preparation, caplog
+):
+    caplog.set_level(logging.INFO, logger="fred_runtime.app.preparation_worker")
+    install_context_capture()
     replica, identity, _, confirmations, _ = preparation
     first, capability = replica()
     with pytest.raises(
@@ -126,10 +142,43 @@ async def test_lost_confirmation_reuses_sql_result_on_another_replica(preparatio
     ) as error:
         await ActivityEnvironment().run(first.prepare, identity)
     assert "secret" not in str(error.value)
+    reconciled = next(
+        r for r in caplog.records if r.getMessage().endswith("will be reconciled")
+    )
+    assert reconciled.reason == "ReadError"
+    assert reconciled.error_code == "capability_preparation_interrupted"
+    assert current_operation(reconciled) == identity
+    assert "DO-NOT-RETAIN" not in caplog.text
     second, restarted = replica()
     await ActivityEnvironment().run(second.prepare, identity)
     assert capability.calculations == 1 and restarted.calculations == 0
     assert len(confirmations) == 2 and confirmations[0] == confirmations[1]
+    confirmed = next(r for r in caplog.records if r.getMessage().endswith("confirmed"))
+    assert confirmed.outcome == "ready"
+    assert current_operation(confirmed) == identity
+
+
+def test_failure_summary_names_the_refused_call_without_its_content():
+    request = httpx.Request("GET", "http://cp.invalid/v1/prep/content?token=secret")
+    error = httpx.HTTPStatusError(
+        "secret message",
+        request=request,
+        response=httpx.Response(403, request=request, content=b"secret body"),
+    )
+    assert failure_summary(error) == "HTTPStatusError status=403 GET /v1/prep/content"
+
+
+@pytest.mark.asyncio
+async def test_worker_mode_configures_its_own_local_logging(
+    minimal_config, monkeypatch
+):
+    configured = Mock()
+    monkeypatch.setattr(preparation_worker, "log_setup", configured)
+    minimal_config.scheduler.enabled = False
+    with pytest.raises(ValueError, match="scheduler.enabled"):
+        await preparation_worker.run_preparation_worker(minimal_config)
+    settings = configured.call_args.kwargs
+    assert settings["service_role"] == "worker"
 
 
 @pytest.mark.asyncio

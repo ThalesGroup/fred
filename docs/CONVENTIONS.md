@@ -96,15 +96,16 @@ while writing code; a specialist review or campaign is not automatically require
   genuinely needed, log and re-raise or return an explicit error value.
 - **Use existing `fred-core` utilities.** `ThreadSafeLRUCache`, `read_env_bool`,
   `get_config`, logging setup — do not reimplement.
-- **No new `[TAG]` message prefixes.** `[SECURITY]` (via `fred_core.logs.audit_log.
+- **Logs go to stdout, through `log_setup`.** The collector routes them; no process
+  writes logs to a store. Every process passes its `service_role` (`api`, `worker`,
+  `migration` or `job`). Keep messages short and stable, with values in fields: use
+  `operation_id` and `error_code` where they apply. Never log a token, prompt, model
+  reply, document content, response body or URL query string; exception text can
+  carry them, so prefer its type.
+- **No `[TAG]` message prefixes.** `[SECURITY]` (via `fred_core.logs.audit_log.
   emit_audit_log`) and `[KPI]` (via `logging.getLogger("KPI")`) are the only two
   reserved for a real routed channel — never reuse either string on a plain module
-  logger. For everything else, the console formatter already includes `%(name)s`
-  (the logger's dotted module path) and `CompactJsonFormatter` already includes
-  `file`/`line`/`logger` — that's provenance enough. ~60 ad hoc `[VECTOR]`/
-  `[SCHEDULER]`/`[MetadataService]`-style tags already exist from before this rule;
-  don't add a new one, and don't mass-rename the old ones as a side effect of an
-  unrelated change.
+  logger. For everything else, the `logger` field and source location give provenance.
 - **Never hand-edit generated files.** `openapi.json` — regenerate from source and
   document the regeneration command when you run it.
 - **Alembic table ownership is declared, never derived.** A backend whose

@@ -84,7 +84,7 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
     # Pool tuning only: the DSN, host, database, account and connect arguments
     # identify the deployment and its credentials, and this runs on every start.
     logger.info(
-        "[SQL][Engine] Creating engine: echo=%s pool_size=%s max_overflow=%s "
+        "Creating engine: echo=%s pool_size=%s max_overflow=%s "
         "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s",
         config.echo,
         effective_pool_size,
@@ -106,7 +106,7 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
             connect_args=connect_args,
         )
         logger.info(
-            "[SQL][Engine] Engine created: pool_size=%s max_overflow=%s "
+            "Engine created: pool_size=%s max_overflow=%s "
             "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s",
             effective_pool_size,
             effective_max_overflow,
@@ -119,7 +119,7 @@ def create_engine_from_config(config: PostgresStoreConfig) -> Engine:
         # No traceback either: the driver's own error text routinely embeds the
         # connection URL, and this line outlives the deployment in a log sink.
         # The exception still propagates unchanged to the caller.
-        logger.error("[SQL][Engine] Failed to create engine")
+        logger.error("Failed to create engine")
         raise
 
 
@@ -144,16 +144,16 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
             )
             # No path: it names a filesystem location on the host, and on a
             # workstation that includes the account it runs under.
-            logger.info("[SQL][AsyncEngine] SQLite async engine created")
+            logger.info("SQLite async engine created")
             return engine
         except Exception:
-            logger.error("[SQL][AsyncEngine] Failed to create SQLite engine")
+            logger.error("Failed to create SQLite engine")
             raise
 
     if not os.getenv("FRED_POSTGRES_PASSWORD"):
         # The variable name is a secret name: it belongs in the deployment
         # documentation, not in a log line or a propagating error message.
-        logger.error("[SQL][AsyncEngine] No database password is configured")
+        logger.error("No database password is configured")
         raise RuntimeError("A database password is required but is not configured")
     missing = [
         name
@@ -183,7 +183,7 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
     )
 
     logger.info(
-        "[SQL][AsyncEngine] Creating engine: echo=%s pool_size=%s max_overflow=%s "
+        "Creating engine: echo=%s pool_size=%s max_overflow=%s "
         "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s",
         config.echo,
         effective_pool_size,
@@ -206,7 +206,7 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
             hide_parameters=True,
         )
         logger.info(
-            "[SQL][AsyncEngine] Engine created: pool_size=%s max_overflow=%s "
+            "Engine created: pool_size=%s max_overflow=%s "
             "pool_timeout=%s pool_recycle=%s pool_pre_ping=%s",
             effective_pool_size,
             effective_max_overflow,
@@ -216,7 +216,7 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
         )
         return engine
     except Exception:
-        logger.error("[SQL][AsyncEngine] Failed to create engine")
+        logger.error("Failed to create engine")
         raise
 
 
@@ -395,7 +395,7 @@ async def run_ddl_with_advisory_lock(
             )
             if any(m in msg for m in race_markers):
                 logger.warning(
-                    "[SQL][DDL] DDL raced; assuming objects already exist (lock_id=%s)",
+                    "DDL raced; assuming objects already exist (lock_id=%s)",
                     lock_key,
                 )
             else:

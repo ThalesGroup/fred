@@ -199,7 +199,7 @@ class PodApplicationContext:
             await asyncio.wait_for(_ping(), timeout=_SQL_BOOT_PING_TIMEOUT_S)
         except Exception as exc:
             logger.error(
-                "[fred-runtime] SQL storage unreachable at startup — "
+                "SQL storage unreachable at startup — "
                 "dialect=%s host=%s port=%s database=%s error_type=%s",
                 engine.dialect.name,
                 postgres_config.host,
@@ -244,7 +244,7 @@ class PodApplicationContext:
         self._checkpointer = checkpointer
         self._history_store = history_store
         logger.info(
-            "[fred-runtime] SQL checkpointer and history store ready (dialect=%s)",
+            "SQL checkpointer and history store ready (dialect=%s)",
             engine.dialect.name,
         )
 
@@ -304,7 +304,7 @@ class PodApplicationContext:
         result = start_http_server(prom_cfg.port, addr=prom_cfg.address)
         self._metrics_exporter = result if isinstance(result, tuple) else None
         logger.info(
-            "[fred-runtime] Prometheus metrics exporter ready at %s:%s",
+            "Prometheus metrics exporter ready at %s:%s",
             prom_cfg.address,
             prom_cfg.port,
         )
@@ -398,9 +398,7 @@ class PodApplicationContext:
                     try:
                         await close()
                     except Exception:
-                        logger.error(
-                            "[fred-runtime] Resource closure failed: %s", label
-                        )
+                        logger.error("Resource closure failed: %s", label)
         finally:
             self._stop_metrics_exporter()
 

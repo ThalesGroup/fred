@@ -202,7 +202,7 @@ def _wf_activity_context_args(file: Any) -> list[Any]:
 
 def _wf_log_policy(file: Any) -> None:
     workflow.logger.info(
-        "[INGESTION POLICY] document=%s profile=%s extraction_queue=%s "
+        "document=%s profile=%s extraction_queue=%s "
         "metadata_attempt_s=%s extraction_attempt_s=%s output_attempt_s=%s "
         "attempts=%s retry_initial_s=%s retry_backoff=%s retry_max_s=%s heartbeat_s=%s non_retryable_types=%s",
         _wf_document_uid(file),
@@ -291,7 +291,7 @@ async def _wf_run_parent_pipeline(
     for index, file in enumerate(files):
         pending.setdefault(_wf_admission_window(file), deque()).append((index, file))
     workflow.logger.info(
-        "[SCHEDULER] Ingesting pipeline: %s (%d documents, %d per profile, %d profiles)",
+        "Ingesting pipeline: %s (%d documents, %d per profile, %d profiles)",
         pipeline_name,
         len(files),
         per_profile_limit,
@@ -326,7 +326,7 @@ async def _wf_run_parent_pipeline(
             if is_cancelled_exception(exc):
                 raise
             workflow.logger.warning(
-                "[SCHEDULER] Document %s failed; the submission continues: %s",
+                "Document %s failed; the submission continues: %s",
                 _wf_get(file, "display_name", None) or file_index,
                 exc,
             )
@@ -385,7 +385,7 @@ async def _wf_run_parent_pipeline(
         raise
 
     if failed:
-        workflow.logger.warning("[SCHEDULER] Pipeline %s: %d of %d document(s) failed", pipeline_name, failed, processed)
+        workflow.logger.warning("Pipeline %s: %d of %d document(s) failed", pipeline_name, failed, processed)
     # Control Plane reconciles each processing attempt from its callbacks and Temporal outcome.
     return {"total": len(files), "processed": processed, "failed": failed}
 
@@ -403,7 +403,7 @@ class GetPushFileMetadata:
         How:
             Pass the serialized file payload carrying the profile retry settings.
         """
-        workflow.logger.info("[SCHEDULER] GetPushFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
+        workflow.logger.info("GetPushFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
         return await workflow.execute_activity(
             "get_push_file_metadata",
             args=[file],
@@ -436,7 +436,7 @@ class PushInputProcess:
             computed timeout values in seconds.
         """
         task_queue = _wf_extraction_task_queue(file)
-        workflow.logger.info("[SCHEDULER] PushInputProcess: restoring authorized original on queue=%s", task_queue)
+        workflow.logger.info("PushInputProcess: restoring authorized original on queue=%s", task_queue)
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "push_input_process",
@@ -467,7 +467,7 @@ class OutputProcess:
             Pass the file payload so the output activity reuses the same retry
             policy as the rest of the ingestion pipeline.
         """
-        workflow.logger.info("[SCHEDULER] OutputProcess: %s", _wf_get(file, "display_name", "unknown"))
+        workflow.logger.info("OutputProcess: %s", _wf_get(file, "display_name", "unknown"))
         await workflow.execute_activity(
             "output_process",
             args=[file, metadata],
@@ -506,7 +506,7 @@ class ProcessPushFile:
         document_uid: str | None = _wf_get(file, "document_uid")
         _wf_log_policy(file)
 
-        workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
+        workflow.logger.info("Processing push file: %s", display_name)
         metadata = await workflow.execute_child_workflow(
             GetPushFileMetadata.run,
             args=[file],
@@ -533,7 +533,7 @@ class ProcessPushFile:
             id=_wf_child_id("OutputProcess", file, file_index),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
-        workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
+        workflow.logger.info("Completed file: %s", display_name)
         final_uid = _wf_get(metadata, "document_uid") or document_uid
         return {"document_uid": final_uid, "filename": display_name}
 

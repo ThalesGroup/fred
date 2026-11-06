@@ -257,19 +257,15 @@ async def test_cancellation_transport_errors_and_cleanup(caplog, monkeypatch):
 
 @pytest.fixture
 def logging_sinks():
-    # Reuse the shared logging fixture's restoration and generic store contract.
-    from fred_core.tests.common.test_log_setup import _StubLogStore
-
     loggers = [logging.getLogger(), *[v for v in logging.Logger.manager.loggerDict.values() if isinstance(v, logging.Logger)]]
     saved = [(v, v.level, list(v.handlers), list(v.filters), v.propagate, v.disabled) for v in loggers]
     factory = logging.getLogRecordFactory()
-    store = _StubLogStore()
-    log_setup(service_name="knowledge-flow", service_role="api", log_level="DEBUG", log_format="json", store=store, use_rich=False)
+    log_setup(service_name="knowledge-flow", service_role="api", log_level="DEBUG", log_format="json", use_rich=False)
     output = io.StringIO()
     for handler in {h for v in [logging.getLogger(), logging.getLogger("fastmcp")] for h in v.handlers if isinstance(h, logging.StreamHandler)}:
         handler.setStream(output)
     try:
-        yield store, output
+        yield output
     finally:
         logging.setLogRecordFactory(factory)
         for v in list(logging.Logger.manager.loggerDict.values()):
@@ -320,8 +316,9 @@ def test_curated_sql_400_result_and_full_delegated_json_log(logging_sinks, capsy
     assert result["isError"] is True
     assert "Status code: 400" in result["content"][0]["text"]
     assert "amount_typo" in result["content"][0]["text"]
-    store, captured = logging_sinks
-    output = captured.getvalue()
+    output = logging_sinks.getvalue()
+    # The SQL and DuckDB's text echoing it stay out of every line.
+    assert "amount_typo" not in output
     events = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
     [event] = [e for e in events if e["message"] == "mcp.inner_http_failure"]
     assert event["tool_name"] == "query_tabular_documents" and event["upstream_http_status"] == 400
@@ -332,10 +329,6 @@ def test_curated_sql_400_result_and_full_delegated_json_log(logging_sinks, capsy
     assert event["request_id"] != event["upstream_request_id"]
     [access] = [e for e in events if e.get("request_id") == event["upstream_request_id"] and e["logger"] == "http"]
     assert access["http_status"] == 400 and access["session_id"] == "session-proof"
-    for e in (event, access):
-        assert "amount_typo" not in json.dumps(e)
-    stored = [e for e in store.indexed if e.msg == "mcp.inner_http_failure"]
-    assert len(stored) == 1
     # Optional local evidence export; no synthetic proof artifacts enter the repo.
     import os
 
@@ -360,13 +353,10 @@ def test_dependency_and_explicit_events_confine_canaries_in_all_sinks(logging_si
     dependency.setLevel(logging.DEBUG)
     dependency.debug("PATH-CANARY")
     dependency.error("BODY-CANARY", extra={"arbitrary": "EXTRA-CANARY"}, exc_info=ValueError("EXCEPTION-CANARY"))
-    store, captured = logging_sinks
-    output = captured.getvalue()
+    output = logging_sinks.getvalue()
     assert "CANARY" not in output
-    assert "CANARY" not in repr(store.indexed)
     assert "mcp.inner_http_failure" in output
     assert "Dependency diagnostic" in output
-    assert not [e for e in store.indexed if e.logger.startswith("fastmcp")]
 
 
 def test_actual_mcp_body_grant_forgery_is_removed_without_losing_business_fields():

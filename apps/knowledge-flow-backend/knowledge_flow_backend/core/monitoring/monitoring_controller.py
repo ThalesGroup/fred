@@ -83,7 +83,7 @@ class MonitoringController:
                     "elapsed_ms": int((time.monotonic() - started) * 1000),
                     "error": f"{type(exc).__name__}: {exc}",
                 }
-                logger.warning("[READY] dependency '%s' check failed: %s", name, exc)
+                logger.warning("dependency '%s' check failed: %s", name, exc)
 
         await asyncio.gather(*(run_one(name, fn) for name, fn in probes.items()))
         return results

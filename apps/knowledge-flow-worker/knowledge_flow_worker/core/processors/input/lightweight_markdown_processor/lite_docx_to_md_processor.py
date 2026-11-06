@@ -52,7 +52,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
             md_ver = version("markitdown")
         except PackageNotFoundError:
             md_ver = "<unknown>"
-        logger.info("[LITE_DOCX][IMPLEM] initialized | markitdown=%s", md_ver)
+        logger.info("initialized | markitdown=%s", md_ver)
 
     def extract(self, file_path: Path, options: LiteMarkdownOptions | None = None) -> LiteMarkdownResult:
         opts = options or LiteMarkdownOptions()
@@ -61,7 +61,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
         try:
             stat = file_path.stat()
             logger.info(
-                "[LITE_DOCX][IMPLEM] extract start | name=%s size=%dB exists=%s suffix=%s",
+                "extract start | name=%s size=%dB exists=%s suffix=%s",
                 file_path.name,
                 stat.st_size,
                 file_path.exists(),
@@ -76,7 +76,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
         md = ""
         engine = "markitdown"
         logger.debug(
-            "[LITE_DOCX][IMPLEM] markitdown.convert done | type=%s has_text=%s has_markdown=%s has_content=%s has_md=%s",
+            "markitdown.convert done | type=%s has_text=%s has_markdown=%s has_content=%s has_md=%s",
             type(converted).__name__,
             hasattr(converted, "text"),
             hasattr(converted, "markdown"),
@@ -91,7 +91,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
                 if isinstance(val, str) and val.strip():
                     md = val
                     logger.debug(
-                        "[LITE_DOCX][IMPLEM] using markitdown attribute '%s' | length=%d",
+                        "using markitdown attribute '%s' | length=%d",
                         attr,
                         len(md),
                     )
@@ -99,7 +99,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
                     break
             except Exception:
                 logger.debug(
-                    "[LITE_DOCX][IMPLEM] accessing unknown attribute '%s' on markitdown object failed",
+                    "accessing unknown attribute '%s' on markitdown object failed",
                     attr,
                 )
                 # Accessing unknown attrs is safe; continue to next
@@ -108,28 +108,22 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
         raw_md = md
         if raw_md is not None:
             logger.info(
-                "[LITE_DOCX][IMPLEM] raw markdown (pre-normalization) | source_attr=%s len=%d",
+                "raw markdown (pre-normalization) | source_attr=%s len=%d",
                 selected_attr or "<none>",
                 len(raw_md),
             )
-            if raw_md:
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(
-                        "[LITE_DOCX][IMPLEM] ----- BEGIN RAW MARKDOWN -----\n%s\n----- END RAW MARKDOWN -----",
-                        raw_md,
-                    )
 
         if not md:
-            logger.info("[LITE_DOCX][IMPLEM] markitdown returned empty text for DOCX; using python-docx fallback")
+            logger.info("markitdown returned empty text for DOCX; using python-docx fallback")
             try:
                 md = self._fallback_docx_to_md(file_path)
                 engine = "python-docx-fallback"
                 logger.info(
-                    "[LITE_DOCX][IMPLEM] fallback produced length=%d chars",
+                    "fallback produced length=%d chars",
                     len(md),
                 )
             except Exception as e:  # noqa: BLE001
-                logger.error(f"[LITE_DOCX][IMPLEM] DOCX fallback extraction failed: {e}")
+                logger.error(f"DOCX fallback extraction failed: {e}")
                 md = ""
 
         # Fred post-processing guarantees -------------------------------------
@@ -137,7 +131,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
             before = len(md)
             md = collapse_whitespace(md)
             logger.info(
-                "[LITE_DOCX][IMPLEM] whitespace normalization | before=%d after=%d",
+                "whitespace normalization | before=%d after=%d",
                 before,
                 len(md),
             )
@@ -146,7 +140,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
         md, truncated = enforce_max_chars(md, opts.max_chars)
         if truncated:
             logger.info(
-                "[LITE_DOCX][IMPLEM] max chars enforced | limit=%d final=%d",
+                "max chars enforced | limit=%d final=%d",
                 opts.max_chars,
                 len(md),
             )
@@ -154,17 +148,12 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
         # We don't have true "pages" for DOCX; preserve the API by returning one page if requested
         pages = [LitePageMarkdown(page_no=1, markdown=md, char_count=len(md))] if opts.return_per_page else []
         logger.info(
-            "[LITE_DOCX][IMPLEM] extract end | engine=%s final_len=%d pages=%d sample=%r",
+            "extract end | engine=%s final_len=%d pages=%d sample=%r",
             engine,
             len(md),
             len(pages),
             (md[:120].replace("\n", " ") if md else ""),
         )
-        if md:
-            logger.debug(
-                "[LITE_DOCX][IMPLEM] ----- BEGIN FINAL MARKDOWN -----\n%s\n----- END FINAL MARKDOWN -----",
-                md,
-            )
 
         return LiteMarkdownResult(
             document_name=file_path.name,
@@ -214,7 +203,7 @@ class LiteDocxToMdProcessor(BaseLiteMdProcessor):
 
         md = "\n\n".join(lines).strip()
         logger.info(
-            "[LITE_DOCX][IMPLEM] fallback summary | paragraphs=%d tables=%d non_empty_rows=%d md_len=%d sample=%r",
+            "fallback summary | paragraphs=%d tables=%d non_empty_rows=%d md_len=%d sample=%r",
             non_empty_paras,
             tbl_count,
             non_empty_rows,

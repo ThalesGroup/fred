@@ -46,7 +46,7 @@ class FastLiteImageProcessor(BaseFastTextProcessor):
         vision_model = get_configuration().vision_model
         if not vision_model:
             if not self._warned_missing_vision_model:
-                logger.info("[FAST TEXT][IMAGE] Vision model missing; using filename fallback only.")
+                logger.info("Vision model missing; using filename fallback only.")
                 self._warned_missing_vision_model = True
             return None
         self.image_describer = build_image_describer(vision_model)

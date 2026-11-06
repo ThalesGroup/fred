@@ -16,7 +16,7 @@
 Resilient sink decorator — bounded queue + circuit breaker (issue #2009).
 
 Why this exists:
-- `BaseLogStore` and `BaseKPIStore` share the same write shape (`index_event`,
+- `BaseKPIStore` has the write shape this wraps (`index_event`,
   `bulk_index`) and the same contract note: "must not block or crash the
   caller on outage." Nothing previously enforced that for the OpenSearch-
   backed implementations — a down/slow cluster could block the calling
@@ -34,9 +34,7 @@ How to use:
   decorator. `ensure_ready()` passes straight through: startup provisioning
   is not this decorator's concern, only the steady-state write path is.
   `query()` also passes through, best-effort, for wrapped stores that
-  support it (KPI stores do; the log store no longer does since Fred stopped
-  exposing its own log-query surface — OpenSearch Dashboards reads that
-  index directly instead).
+  support it.
 """
 
 from __future__ import annotations
@@ -101,7 +99,7 @@ class _CircuitBreaker:
 
 
 class ResilientSinkStore:
-    """Fail-open, non-blocking decorator around a `BaseLogStore`/`BaseKPIStore`.
+    """Fail-open, non-blocking decorator around a `BaseKPIStore`.
 
     Contract with the caller:
     - `index_event`/`bulk_index` never raise and never block beyond a
@@ -140,8 +138,7 @@ class ResilientSinkStore:
         self._wrapped.ensure_ready()
 
     def query(self, q: Any) -> Any:
-        """Best-effort passthrough for wrapped stores that support querying
-        (KPI stores do; the log store no longer does)."""
+        """Best-effort passthrough for wrapped stores that support querying."""
         query_fn = getattr(self._wrapped, "query", None)
         if query_fn is None:
             raise AttributeError(

@@ -167,7 +167,7 @@ async def save_writable_document(
             existing = await store.list_for_session(session_id)
         except Exception:
             logger.exception(
-                "[WRITABLE_DOC][TOOL] failed to list documents for session=%s",
+                "failed to list documents for session=%s",
                 session_id,
             )
             existing = []
@@ -198,10 +198,9 @@ async def save_writable_document(
         updated_by="agent",
     )
     logger.info(
-        "[WRITABLE_DOC][TOOL] session=%s document_id=%s title=%r len=%d",
+        "session=%s document_id=%s len=%d",
         session_id,
         doc_id,
-        title[:80],
         len(content_markdown),
     )
     artifact = ToolInvocationResult(
@@ -277,7 +276,7 @@ class _WritableDocumentMiddleware(AgentMiddleware):
             edited = await store.list_user_edited_unnotified(self._session_id)
         except Exception:
             logger.exception(
-                "[WRITABLE_DOC] failed to list user-edited documents for session=%s",
+                "failed to list user-edited documents for session=%s",
                 self._session_id,
             )
             return None
@@ -290,7 +289,7 @@ class _WritableDocumentMiddleware(AgentMiddleware):
             messages.append(SystemMessage(_edit_note_text(record)))
             await store.mark_agent_notified(self._session_id, record.document_id, now)
         logger.info(
-            "[WRITABLE_DOC] session=%s injecting %d user-edited document note(s): %s",
+            "session=%s injecting %d user-edited document note(s): %s",
             self._session_id,
             len(edited),
             [record.document_id for record in edited],
@@ -319,7 +318,7 @@ class _WritableDocumentMiddleware(AgentMiddleware):
                 records = await store.list_for_session(self._session_id)
             except Exception:
                 logger.exception(
-                    "[WRITABLE_DOC] failed to list documents for session=%s",
+                    "failed to list documents for session=%s",
                     self._session_id,
                 )
                 records = []

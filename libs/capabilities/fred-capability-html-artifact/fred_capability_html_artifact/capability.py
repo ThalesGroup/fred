@@ -181,11 +181,9 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
                 version=_artifact_version(html, css),
             )
             logger.info(
-                "[HTML_ARTIFACT][TOOL] session=%s artifact_id=%s title=%r "
-                "html_len=%d css_len=%d",
+                "session=%s artifact_id=%s html_len=%d css_len=%d",
                 session_id,
                 aid,
-                title[:80],
                 len(html),
                 len(css),
             )

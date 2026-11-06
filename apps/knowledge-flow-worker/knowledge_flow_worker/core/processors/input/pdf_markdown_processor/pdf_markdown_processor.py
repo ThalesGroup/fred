@@ -103,7 +103,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             image_paths = [str(it.image_path) for it in images_transcription]
             return ocr_model.predict(image_paths)
         except Exception as e:
-            logger.warning("[PDF][PROCESSOR] Failed to use ocr model : %s | Error : ", ocr_model.backend_name, e)
+            logger.warning("Failed to use ocr model : %s | Error : ", ocr_model.backend_name, e)
             return []
 
     def _use_image_describer(self, image_describer, images_transcription: ImageTranscription, ocr_result) -> str:
@@ -241,7 +241,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
 
         extractor_name = profile_cfg.pdf.extractor
         logger.info(
-            "[PROCESSOR][PDF] extractor=%s | use_ocr=%s | use_image_describer=%s",
+            "extractor=%s | use_ocr=%s | use_image_describer=%s",
             extractor_name,
             use_ocr,
             use_image_describer,
@@ -256,14 +256,14 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         except Exception as e:
             raise RuntimeError(f"PDF extraction failed with extractor '{extractor_name}'") from e
         logger.info(
-            "[PROCESSOR][PDF] extraction complete | elapsed_s=%.2f | chars=%d | images=%d",
+            "extraction complete | elapsed_s=%.2f | chars=%d | images=%d",
             time.perf_counter() - extract_start,
             len(md_text),
             len(images_transcription),
         )
 
         if images_transcription and use_ocr:
-            logger.info("[PROCESSOR][PDF] image OCR/VLM loop starting | images=%d", len(images_transcription))
+            logger.info("image OCR/VLM loop starting | images=%d", len(images_transcription))
             loop_start = time.perf_counter()
             with self._pdf_kpi_timer(
                 "knowledge_flow.pdf.image_loop_latency_ms",
@@ -280,7 +280,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                             image_transcription.transcription = self._use_image_describer(image_describer, image_transcription, ocr_result)
                     else:
                         image_transcription.transcription = " ".join(ocr_result["rec_texts"])
-            logger.info("[PROCESSOR][PDF] image OCR/VLM loop finished | elapsed_s=%.2f", time.perf_counter() - loop_start)
+            logger.info("image OCR/VLM loop finished | elapsed_s=%.2f", time.perf_counter() - loop_start)
 
         for image_transcription in images_transcription:
             md_text = re.sub(r"!\[.*?\]\(" + re.escape(str(image_transcription.image_path)) + r"\)", image_transcription.transcription, md_text)
@@ -298,9 +298,9 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                     return False
                 return True
         except PdfReadError as e:
-            logger.error(f"[PROCESSOR][PDF] Corrupted PDF file: {file_path} - {e}")
+            logger.error(f"Corrupted PDF file: {file_path} - {e}")
         except Exception as e:
-            logger.error(f"[PROCESSOR][PDF] Unexpected error while validating {file_path}: {e}")
+            logger.error(f"Unexpected error while validating {file_path}: {e}")
         return False
 
     def extract_file_metadata(self, file_path: Path) -> dict:
@@ -322,7 +322,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                     },
                 }
         except Exception as e:
-            logger.error(f"[PROCESSOR][PDF] Error extracting metadata from PDF: {e}")
+            logger.error(f"Error extracting metadata from PDF: {e}")
             return {"document_name": file_path.name, "error": str(e)}
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
@@ -334,7 +334,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             output_dir.mkdir(parents=True, exist_ok=True)
 
             md_content = self._extract_md(file_path, work_dir)
-            logger.info("[PROCESSOR][PDF] Extraction succeeded | file=%s", file_path.name)
+            logger.info("Extraction succeeded | file=%s", file_path.name)
 
             with open(output_markdown_path, "w", encoding="utf-8") as f:
                 f.write(md_content)
@@ -354,7 +354,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         # Fallback extraction: Markitdown
         try:
             md_content = self._extract_with_markitdown(file_path)
-            logger.info("[PROCESSOR][PDF] Markitdown extraction | file=%s", file_path.name)
+            logger.info("Markitdown extraction | file=%s", file_path.name)
 
             with open(output_markdown_path, "w", encoding="utf-8") as f:
                 f.write(md_content)

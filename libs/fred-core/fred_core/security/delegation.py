@@ -118,7 +118,7 @@ def initialize_delegation(
         user_clients=frozenset(user_clients) | frozenset(config.user_clients),
     )
     logger.info(
-        "[AUTH] Delegation initialized: act_for_people=%s accept_delegated_calls=%s "
+        "Delegation initialized: act_for_people=%s accept_delegated_calls=%s "
         "caller_role=%s",
         config.act_for_people,
         config.accept_delegated_calls,

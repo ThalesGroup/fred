@@ -16,14 +16,39 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from functools import cache
 from typing import Optional
 
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
+from temporalio.runtime import (
+    LogForwardingConfig,
+    LoggingConfig,
+    Runtime,
+    TelemetryConfig,
+)
 
 from fred_core.common import TemporalSchedulerConfig
 
 logger = logging.getLogger(__name__)
+
+
+@cache
+def route_temporal_core_logs() -> None:
+    """Forward sdk-core's logs to Python: it writes stderr in its own format otherwise.
+
+    Call before the process's first Temporal client, which fixes the default runtime.
+    """
+    logs = LoggingConfig(
+        filter=LoggingConfig.default.filter,
+        forwarding=LogForwardingConfig(
+            logger=logging.getLogger("temporal_sdk_core"),
+            prepend_target_on_message=False,
+        ),
+    )
+    Runtime.set_default(
+        Runtime(telemetry=TelemetryConfig(logging=logs)), error_if_already_set=False
+    )
 
 
 class TemporalClientProvider:
@@ -58,7 +83,7 @@ class TemporalClientProvider:
 
             if self._log_connection_details:
                 logger.info(
-                    "[TEMPORAL] Connecting: host=%s namespace=%s",
+                    "Connecting: host=%s namespace=%s",
                     self._config.host,
                     self._config.namespace,
                 )
@@ -67,6 +92,7 @@ class TemporalClientProvider:
             # temporalio Client.connect is async and exposes no per-call rpc_timeout of
             # its own — bound it ourselves so an unreachable/slow Temporal frontend
             # cannot hang every caller of get_client() indefinitely.
+            route_temporal_core_logs()
             connect_call = Client.connect(
                 self._config.host,
                 namespace=self._config.namespace,
@@ -82,7 +108,7 @@ class TemporalClientProvider:
             except TimeoutError:
                 if self._log_connection_details:
                     logger.error(
-                        "[TEMPORAL] Connect to host=%s namespace=%s timed out after %ss",
+                        "Connect to host=%s namespace=%s timed out after %ss",
                         self._config.host,
                         self._config.namespace,
                         timeout,

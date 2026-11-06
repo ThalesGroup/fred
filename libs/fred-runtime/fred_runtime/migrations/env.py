@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-from logging.config import fileConfig
 from typing import cast
 
 from alembic import context
@@ -28,14 +27,15 @@ from fred_runtime.app.config_loader import load_agent_pod_config
 from fred_runtime.app.web_research_activity import (
     WebResearchActivityRow,
 )
+from fred_runtime.migrations import configure_migration_logging
 from fred_runtime.runtime_support.turn_steering import _turns
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config
 
-# Set up Python logging from alembic.ini if present.
+# Run through the alembic CLI, not the `migrate` command that already configured it.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    configure_migration_logging()
 
 # Build a MetaData scoped to only the tables fred-runtime owns.
 # SessionHistoryRow shares Base with other backends (users, session, teammetadata),

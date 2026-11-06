@@ -190,8 +190,8 @@ def _build_tool_error_artifact(
 def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
     """
     Fred rationale:
-    Give ops-grade traces that directly point to auth/token problems, with enough
-    context (method, URL, body snippet) to debug quickly.
+    Give ops-grade traces that directly point to auth/token problems: the method
+    and URL locate the failure; the response body stays out of logs.
     """
     req = getattr(err, "request", None)
     resp = getattr(err, "response", None)
@@ -204,40 +204,23 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
     with_traceback = url == raw_url
     code = getattr(resp, "status_code", None)
 
-    body_preview = ""
-    try:
-        if resp is not None:
-            txt = resp.text
-            # keep logs short; we only need a hint
-            body_preview = scrub_grant_text(
-                f" | body: {txt[:300].replace(chr(10), ' ')}"
-            )
-    except httpx.ResponseNotRead:
-        logger.debug(
-            "HTTP response body not read (streamed response); skipping body preview"
-        )
-    except Exception:
-        logger.warning("Failed to extract HTTP response body", exc_info=True)
-
     if code == 401:
         expired_flag = " (expired token)" if is_expired_httpx_status_error(err) else ""
         logger.error(
-            "[MCP][%s] 401 Unauthorized%s (likely expired/invalid token) on %s %s%s",
+            "[%s] 401 Unauthorized%s (likely expired/invalid token) on %s %s",
             tool_name,
             expired_flag,
             method,
             url,
-            body_preview,
             exc_info=with_traceback,
         )
     else:
         logger.error(
-            "[MCP][%s] HTTP %s on %s %s%s",
+            "[%s] HTTP %s on %s %s",
             tool_name,
             code,
             method,
             url,
-            body_preview,
             exc_info=with_traceback,
         )
 
@@ -504,9 +487,7 @@ class ContextAwareTool(BaseTool):
             if inner:
                 _log_http_error(self.name, inner)
             else:
-                logger.exception(
-                    "[MCP][%s] Tool execution failed (captured)", self.name
-                )
+                logger.exception("[%s] Tool execution failed (captured)", self.name)
 
             # CRITICAL: Return error as text to preserve chat history integrity.
             # This ensures every ToolCall gets a ToolResult, preventing "orphan" calls.
@@ -548,9 +529,7 @@ class ContextAwareTool(BaseTool):
             if inner:
                 _log_http_error(self.name, inner)
             else:
-                logger.exception(
-                    "[MCP][%s] Tool execution failed (captured)", self.name
-                )
+                logger.exception("[%s] Tool execution failed (captured)", self.name)
 
             # CRITICAL: Return error as text to preserve chat history integrity.
             msg = _build_tool_error_message(e, inner, tool_name=self.name)

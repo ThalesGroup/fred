@@ -52,9 +52,9 @@ def emit_audit_log(
     never collide with — or be mistaken by a type checker for — these two
     fixed parameters.
 
-    `fields` becomes the JSON payload's `extra` object once CompactJsonFormatter
-    formats the record (see log_setup.py). `None` values are dropped rather than
-    serialized, so a caller can pass every optional field unconditionally.
+    `fields` become top-level fields of the JSON line (see log_setup.py). `None`
+    values are dropped rather than serialized, so a caller can pass every optional
+    field unconditionally.
     """
     payload: dict[str, object] = {"audit_event": event_name}
     payload.update({k: v for k, v in fields.items() if v is not None})

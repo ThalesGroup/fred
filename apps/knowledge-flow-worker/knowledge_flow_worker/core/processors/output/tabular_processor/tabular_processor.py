@@ -225,13 +225,13 @@ class TabularProcessor(BaseOutputProcessor):
             # never reached — the guard saw no VECTORIZED stage and skipped it).
             metadata.mark_stage_done(ProcessingStage.VECTORIZED)
             logger.info(
-                "[TABULAR] document_uid=%s dataset pointer chunk written (columns=%s)",
+                "document_uid=%s dataset pointer chunk written (columns=%s)",
                 metadata.document_uid,
                 len(artifact.columns),
             )
         except Exception:  # noqa: BLE001
             logger.warning(
-                "[TABULAR] document_uid=%s failed to write dataset pointer chunk (non-fatal, Parquet artifact unaffected)",
+                "document_uid=%s failed to write dataset pointer chunk (non-fatal, Parquet artifact unaffected)",
                 metadata.document_uid,
                 exc_info=True,
             )
@@ -323,7 +323,7 @@ class TabularProcessor(BaseOutputProcessor):
             cleanup_generated_parquet_file(parquet_path)
 
         logger.info(
-            "[TABULAR] document_uid=%s object_key=%s rows=%s size_bytes=%s format=%s compression=%s",
+            "document_uid=%s object_key=%s rows=%s size_bytes=%s format=%s compression=%s",
             metadata.document_uid,
             stored_object.key,
             generated_metadata.row_count,

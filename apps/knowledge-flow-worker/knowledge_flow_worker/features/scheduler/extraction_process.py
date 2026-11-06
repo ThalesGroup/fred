@@ -46,7 +46,6 @@ from typing import Any
 from fred_core.documents.document_structures import DocumentMetadata
 from fred_core.logs.context import current_context, request_log_scope
 from fred_core.logs.log_setup import log_setup
-from fred_core.logs.null_log_store import NullLogStore
 from fred_core.logs.propagation import bind_received_log_context, encode_log_context
 from fred_pod.common.structures import LogOutputFormat
 from temporalio import activity, exceptions
@@ -148,11 +147,11 @@ def _install_parent_death_signal(expected_parent_pid: int) -> None:
         try:
             libc = ctypes.CDLL("libc.so.6", use_errno=True)
             if libc.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0) != 0:
-                logger.warning("[EXTRACTION][CHILD] could not install PDEATHSIG: errno=%s", ctypes.get_errno())
+                logger.warning("could not install PDEATHSIG: errno=%s", ctypes.get_errno())
         except Exception:  # noqa: BLE001 - never let a best-effort guard fail extraction
-            logger.warning("[EXTRACTION][CHILD] could not install PDEATHSIG", exc_info=True)
+            logger.warning("could not install PDEATHSIG", exc_info=True)
     if os.getppid() != expected_parent_pid:
-        logger.warning("[EXTRACTION][CHILD] expected parent %s is already gone; exiting", expected_parent_pid)
+        logger.warning("expected parent %s is already gone; exiting", expected_parent_pid)
         os._exit(1)
 
 
@@ -165,7 +164,7 @@ def _child_main(request: ExtractionRequest, result_pipe: Connection, parent_pid:
     try:
         os.setsid()
     except OSError:
-        logger.warning("[EXTRACTION][CHILD] could not create a process group", exc_info=True)
+        logger.warning("could not create a process group", exc_info=True)
     _install_parent_death_signal(parent_pid)
 
     try:
@@ -234,7 +233,7 @@ def _send_outcome(result_pipe: Connection, outcome: dict[str, Any]) -> None:
         result_pipe.close()
     except Exception:  # noqa: BLE001
         # The parent reads an abnormal exit instead, which is the safe reading.
-        logger.warning("[EXTRACTION][CHILD] could not report its outcome", exc_info=True)
+        logger.warning("could not report its outcome", exc_info=True)
 
 
 def _is_permanent(exc: BaseException) -> bool:
@@ -265,7 +264,7 @@ class _ChildGroup:
 
 
 def _child_with_logging(request: ExtractionRequest, result_pipe: Connection, parent_pid: int, *, target: Callable[..., None]) -> None:
-    log_setup(service_name="knowledge-flow", service_role="worker", log_format=request.log_format, log_level=request.log_level, store=NullLogStore(), use_rich=False, include_uvicorn=False)
+    log_setup(service_name="knowledge-flow", service_role="worker", log_format=request.log_format, log_level=request.log_level, use_rich=False, include_uvicorn=False)
     with request_log_scope():
         bind_received_log_context(request.logging_context)
         target(request, result_pipe, parent_pid)
@@ -299,7 +298,7 @@ async def run_extraction_in_process(
     try:
         receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
     except OSError:
-        logger.warning("[EXTRACTION][KPI] Could not create telemetry channel", exc_info=True)
+        logger.warning("Could not create telemetry channel", exc_info=True)
         await _run_extraction_in_process(request=request, budget_seconds=budget_seconds, heartbeat=heartbeat, target=partial(_child_with_logging, target=target), start_method=start_method)
         return
     with receiver, sender:
@@ -371,7 +370,7 @@ async def _run_extraction_in_process(
     child_conn.close()
 
     group = _ChildGroup(process.pid)
-    logger.info("[EXTRACTION] child pid=%s budget=%.0fs output=%s", process.pid, budget_seconds, request.output_dir)
+    logger.info("child pid=%s budget=%.0fs output=%s", process.pid, budget_seconds, request.output_dir)
     try:
         await _await_process(process, group=group, budget_seconds=budget_seconds, heartbeat=heartbeat)
     except BaseException as exc:
@@ -482,7 +481,7 @@ async def _stop_without_abandoning(process: BaseProcess, group: _ChildGroup) -> 
         except asyncio.CancelledError:
             cancelled = True
         except Exception:  # noqa: BLE001 - a stop that failed is a stop we cannot confirm
-            logger.error("[EXTRACTION] the stop itself failed; the child cannot be confirmed gone", exc_info=True)
+            logger.error("the stop itself failed; the child cannot be confirmed gone", exc_info=True)
             return False, cancelled
 
 
@@ -519,11 +518,11 @@ async def _stop_group(process: BaseProcess, group: _ChildGroup) -> bool:
         alive = process.is_alive()
         leftovers = _live_members(group.pgid)
         if not alive and not leftovers:
-            logger.info("[EXTRACTION] child pid=%s and its process group are gone", pid)
+            logger.info("child pid=%s and its process group are gone", pid)
             return True
         if loop.time() >= deadline:
             logger.error(
-                "[EXTRACTION] child pid=%s alive=%s, group leftovers=%s after SIGKILL; this pod's extraction capacity is not free",
+                "child pid=%s alive=%s, group leftovers=%s after SIGKILL; this pod's extraction capacity is not free",
                 pid,
                 alive,
                 leftovers,
@@ -580,7 +579,7 @@ def _signal_pid(pid: int, sig: int) -> None:
     except ProcessLookupError:
         pass  # already gone, which is the outcome we wanted
     except PermissionError:
-        logger.warning("[EXTRACTION] not allowed to signal leftover %s", pid)
+        logger.warning("not allowed to signal leftover %s", pid)
 
 
 def _signal_child(pid: int, pgid: int | None, sig: int) -> None:
@@ -600,7 +599,7 @@ def _signal_child(pid: int, pgid: int | None, sig: int) -> None:
     except ProcessLookupError:
         pass  # The child already exited; the supervisor still confirms cleanup.
     except PermissionError:
-        logger.warning("[EXTRACTION] not allowed to signal child %s", pid)
+        logger.warning("not allowed to signal child %s", pid)
 
 
 def _own_process_group(pid: int) -> int | None:
@@ -623,9 +622,9 @@ def _signal_pgid(pgid: int, sig: int) -> None:
     except ProcessLookupError:
         pass  # already gone, which is the outcome we wanted
     except PermissionError:
-        logger.warning("[EXTRACTION] not allowed to signal process group %s", pgid)
+        logger.warning("not allowed to signal process group %s", pgid)
     except OSError:
-        logger.warning("[EXTRACTION] could not signal process group %s", pgid, exc_info=True)
+        logger.warning("could not signal process group %s", pgid, exc_info=True)
 
 
 async def extract_document(
@@ -693,7 +692,7 @@ async def extract_document(
         # Do not unwind the activity: that would delete working files and free
         # a slot while the extraction may still be using both.
         try:
-            logger.critical("[EXTRACTION] document_uid=%s termination unconfirmed; exiting worker", metadata.document_uid, exc_info=True)
+            logger.critical("document_uid=%s termination unconfirmed; exiting worker", metadata.document_uid, exc_info=True)
         finally:
             os._exit(1)
     except ExtractionProcessError as exc:

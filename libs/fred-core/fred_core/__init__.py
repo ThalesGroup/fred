@@ -51,17 +51,7 @@ from fred_core.filesystem.structures import (
     FilesystemResourceInfoResult,
 )
 from fred_core.logs.audit_log import emit_audit_log
-from fred_core.logs.base_log_store import BaseLogStore
-from fred_core.logs.log_setup import AUDIT_LOGGER_NAME, StoreEmitHandler, log_setup
-from fred_core.logs.log_store_factory import build_log_store
-from fred_core.logs.log_structures import (
-    InMemoryLogStorageConfig,
-    LogCategory,
-    LogEventDTO,
-    LogStorageConfig,
-)
-from fred_core.logs.memory_log_store import RamLogStore
-from fred_core.logs.opensearch_log_store import OpenSearchLogStore
+from fred_core.logs.log_setup import AUDIT_LOGGER_NAME, log_setup
 from fred_core.model.factory import get_embeddings, get_model, get_structured_chain
 from fred_core.model.models import ModelProvider
 from fred_core.model.rate_limit import is_rate_limit
@@ -129,18 +119,9 @@ from fred_core.security.structure import (
 from .common import get_config
 
 __all__ = [
-    "BaseLogStore",
-    "LogCategory",
-    "LogEventDTO",
-    "OpenSearchLogStore",
     "AUDIT_LOGGER_NAME",
-    "RamLogStore",
-    "StoreEmitHandler",
-    "build_log_store",
     "emit_audit_log",
     "log_setup",
-    "LogStorageConfig",
-    "InMemoryLogStorageConfig",
     "decode_jwt",
     "initialize_user_security",
     "KeycloakUser",

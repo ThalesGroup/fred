@@ -49,14 +49,14 @@ class DocMarkdownProcessor(DocxMarkdownProcessor):
         """
         try:
             if file_path.stat().st_size <= 0:
-                logger.warning("[DOC] %s is empty.", file_path)
+                logger.warning("%s is empty.", file_path)
                 return False
         except OSError as exc:
-            logger.error("[DOC] Cannot stat %s: %s", file_path, exc)
+            logger.error("Cannot stat %s: %s", file_path, exc)
             return False
 
         if not looks_like_ole_binary(file_path):
-            logger.error("[DOC] %s is not a valid legacy OLE .doc file.", file_path)
+            logger.error("%s is not a valid legacy OLE .doc file.", file_path)
             return False
         return True
 

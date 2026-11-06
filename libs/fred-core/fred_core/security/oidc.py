@@ -110,7 +110,7 @@ def get_keycloak_url() -> str:
     """
     if not KEYCLOAK_URL:
         # This state should not be hit if initialize_user_security ran at startup
-        logger.warning("[AUTH] Keycloak URL requested but not initialized.")
+        logger.warning("Keycloak URL requested but not initialized.")
         return ""
     return KEYCLOAK_URL
 
@@ -118,7 +118,7 @@ def get_keycloak_url() -> str:
 def get_token_endpoint() -> str:
     """Return the user provider's resolved token endpoint after startup."""
     if not USER_TOKEN_ENDPOINT:
-        logger.warning("[AUTH] Token endpoint requested but not initialized.")
+        logger.warning("Token endpoint requested but not initialized.")
         return ""
     return USER_TOKEN_ENDPOINT
 
@@ -129,7 +129,7 @@ def get_keycloak_client_id() -> str:
     """
     if not KEYCLOAK_CLIENT_ID:
         # This state should not be hit if initialize_user_security ran at startup
-        logger.warning("[AUTH] Keycloak Client ID requested but not initialized.")
+        logger.warning("Keycloak Client ID requested but not initialized.")
         return ""
     return KEYCLOAK_CLIENT_ID
 
@@ -167,7 +167,7 @@ def initialize_user_security(config: UserSecurity) -> None:
     if config.provider == "keycloak":
         base, realm = split_realm_url(KEYCLOAK_URL)
         logger.info(
-            "[AUTH] Keycloak initialized: enabled=%s base=%s realm=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
+            "Keycloak initialized: enabled=%s base=%s realm=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
             KEYCLOAK_ENABLED,
             base,
             realm,
@@ -179,7 +179,7 @@ def initialize_user_security(config: UserSecurity) -> None:
         )
     else:
         logger.info(
-            "[AUTH] OIDC initialized: enabled=%s issuer=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
+            "OIDC initialized: enabled=%s issuer=%s client_id=%s jwks=%s strict_issuer=%s strict_audience=%s skew=%ss",
             KEYCLOAK_ENABLED,
             USER_ISSUER,
             KEYCLOAK_CLIENT_ID,
@@ -258,7 +258,7 @@ def configure_token_security(config: SecurityConfiguration) -> None:
             + "; ".join(violations)
         )
 
-    logger.info("[AUTH] C3 profile active: strict issuer+audience")
+    logger.info("C3 profile active: strict issuer+audience")
 
 
 def split_realm_url(realm_url: str) -> tuple[str, str]:
@@ -286,7 +286,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 def _get_jwks_client() -> PyJWKClient:
     global _JWKS_CLIENT
     if _JWKS_CLIENT is None:
-        logger.debug("[AUTH] Creating PyJWKClient for %s", KEYCLOAK_JWKS_URL)
+        logger.debug("Creating PyJWKClient for %s", KEYCLOAK_JWKS_URL)
         _JWKS_CLIENT = PyJWKClient(KEYCLOAK_JWKS_URL)
     return _JWKS_CLIENT
 
@@ -302,7 +302,7 @@ def _get_cached_user(token: str) -> KeycloakUser | None:
     expires_at, user = entry
     now = time.time()
     if expires_at > now:
-        logger.debug("[AUTH] JWT cache hit")
+        logger.debug("JWT cache hit")
         return user
 
     # stale entry
@@ -326,9 +326,7 @@ def _cache_user(token: str, payload: Dict[str, Any], user: KeycloakUser) -> None
         try:
             expires_at_candidates.append(float(candidate))
         except (TypeError, ValueError) as exc:
-            logger.debug(
-                "[AUTH] Ignoring invalid expiry candidate %s (%s)", candidate, exc
-            )
+            logger.debug("Ignoring invalid expiry candidate %s (%s)", candidate, exc)
 
     if not expires_at_candidates:
         return
@@ -362,9 +360,7 @@ def decode_jwt(
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
         username = getpass.getuser()
-        logger.debug(
-            "[AUTH] Authentication is DISABLED. Returning mock user: %s", username
-        )
+        logger.debug("Authentication is DISABLED. Returning mock user: %s", username)
         # Carries a client id so routes gated on ONE exact client stay reachable
         # locally, but deliberately NOT the service_agent role: granting it here
         # would flip every `is_service_agent` bypass — team reads, runtime
@@ -386,20 +382,20 @@ def decode_jwt(
     # quick header/claim peek for logs (never log raw token)
     header, payload_peek = _peek_header_and_claims(token)
     alg = header.get("alg")
-    logger.debug("[AUTH] JWT header parsed algorithm=%s", alg)
+    logger.debug("JWT header parsed algorithm=%s", alg)
 
     # Soft observability logs only. Strict enforcement (C3) happens in jwt.decode
     # below, on the SIGNATURE-VERIFIED payload, via exact issuer/audience.
     iss = payload_peek.get("iss")
     aud = payload_peek.get("aud")
     if iss and KEYCLOAK_URL and str(iss) != KEYCLOAK_URL:
-        logger.warning("[AUTH] JWT issuer mismatch (soft)")
+        logger.warning("JWT issuer mismatch (soft)")
     user_audience = USER_AUDIENCE or KEYCLOAK_CLIENT_ID
     if user_audience:
         aud_list = aud if isinstance(aud, list) else [aud] if aud else []
         if user_audience not in aud_list:
             logger.debug(
-                "[AUTH] JWT audience does not include the configured %s",
+                "JWT audience does not include the configured %s",
                 "client" if user_audience == KEYCLOAK_CLIENT_ID else "audience",
             )
 
@@ -409,10 +405,10 @@ def decode_jwt(
         jwks_client = _get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(token).key
         jwks_ms = (time.perf_counter() - t0) * 1000
-        logger.debug("[AUTH] JWKS resolved key in %.1f ms", jwks_ms)
+        logger.debug("JWKS resolved key in %.1f ms", jwks_ms)
     except Exception:
         # Invalid JWT structure/kid/signature is a normal 401, not a 500.
-        logger.warning("[AUTH] Could not retrieve a trusted JWT signing key")
+        logger.warning("Could not retrieve a trusted JWT signing key")
         raise HTTPException(
             status_code=401,
             detail="Invalid token signature",
@@ -447,9 +443,9 @@ def decode_jwt(
             options={"verify_exp": True, "verify_aud": verify_aud},
             leeway=CLOCK_SKEW_SECONDS,
         )
-        logger.debug("[AUTH] JWT token successfully decoded")
+        logger.debug("JWT token successfully decoded")
     except jwt.ExpiredSignatureError:
-        logger.warning("[AUTH] Access token expired")
+        logger.warning("Access token expired")
         raise HTTPException(
             status_code=401,
             detail="Token has expired",
@@ -458,7 +454,7 @@ def decode_jwt(
             },
         )
     except jwt.InvalidTokenError:
-        logger.error("[AUTH] Invalid JWT token")
+        logger.error("Invalid JWT token")
         raise HTTPException(
             status_code=401,
             detail="Invalid token",
@@ -481,7 +477,7 @@ def decode_jwt(
             # as long as exp itself is still in the future. That negative
             # lifetime would otherwise fail the ">" ceiling check below
             # silently instead of being rejected.
-            logger.warning("[AUTH] JWT has negative lifetime")
+            logger.warning("JWT has negative lifetime")
             raise HTTPException(
                 status_code=401,
                 detail="Token has invalid iat/exp claims",
@@ -490,7 +486,7 @@ def decode_jwt(
                 },
             )
         if lifetime_seconds > MAX_TOKEN_LIFETIME_SECONDS:
-            logger.warning("[AUTH] JWT lifetime exceeds policy ceiling")
+            logger.warning("JWT lifetime exceeds policy ceiling")
             raise HTTPException(
                 status_code=401,
                 detail="Token lifetime exceeds the maximum permitted duration",
@@ -525,14 +521,14 @@ def decode_jwt(
             or is_user_client(client_id)
             or (delegation.service_accounts_only and not service_account)
         ):
-            logger.warning("[AUTH] JWT audience accepted only for delegating workloads")
+            logger.warning("JWT audience accepted only for delegating workloads")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid token",
                 headers={"WWW-Authenticate": "Bearer error='invalid_token'"},
             )
 
-    logger.debug("[AUTH] JWT token decoded")
+    logger.debug("JWT token decoded")
 
     # Build user
     identity = _claim_path(payload, (claims.uid,))
@@ -541,7 +537,7 @@ def decode_jwt(
         and USER_SECURITY_CONFIG.provider == "oidc"
         and not identity.strip()
     ):
-        logger.warning("[AUTH] JWT token missing or invalid identity claim")
+        logger.warning("JWT token missing or invalid identity claim")
         raise HTTPException(
             status_code=401,
             detail="Invalid token claims",
@@ -574,7 +570,7 @@ def decode_jwt(
         caller_roles=caller_roles,
         service_account=service_account,
     )
-    logger.debug("[AUTH] Authenticated principal built")
+    logger.debug("Authenticated principal built")
     if verified_payload is not None:
         verified_payload.update(payload)
     _cache_user(token, payload, user)
@@ -590,7 +586,7 @@ async def authenticate_request(
     Admission is owned by the consuming backend, after this common trust boundary.
     """
     if not KEYCLOAK_ENABLED:
-        logger.debug("[AUTH] Authentication is DISABLED. Returning a mock user.")
+        logger.debug("Authentication is DISABLED. Returning a mock user.")
         # Same local-dev client id as `decode_jwt`'s mock, and for the same
         # reason: this is the branch routes actually reach when authentication
         # is off, so without it every route gated on one exact client — machine
@@ -614,7 +610,7 @@ async def authenticate_request(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    logger.debug("[AUTH] Received bearer credential")
+    logger.debug("Received bearer credential")
     caller = decode_jwt(token)
     subject = await resolve_verified_principal(request, caller)
     if not is_service_agent(subject):

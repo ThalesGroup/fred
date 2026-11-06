@@ -971,7 +971,7 @@ def _warn_deprecated_reasoning_once(cls: type) -> None:
         return
     _DEPRECATED_REASONING_WARNED.add(cls)
     logger.warning(
-        "[fred-sdk] %s sets reasoning_enabled/reasoning_default_on: these "
+        "%s sets reasoning_enabled/reasoning_default_on: these "
         "AgentDefinition fields are deprecated and ignored (reasoning follows "
         "the model now); remove them before the next SDK minor.",
         cls.__qualname__,

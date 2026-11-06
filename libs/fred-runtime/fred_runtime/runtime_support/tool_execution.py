@@ -197,17 +197,11 @@ class ToolExecution:
                     )
                 reason = e.reason if isinstance(e, RunStopError) else type(e).__name__
                 if isinstance(e, RunStopError):
-                    logger.warning(
-                        "[TOOL] event=tool_call outcome=stopped reason=%s", reason
-                    )
+                    logger.warning("event=tool_call outcome=stopped reason=%s", reason)
                 elif confined:
-                    logger.error(
-                        "[TOOL] event=tool_call outcome=failed reason=%s", reason
-                    )
+                    logger.error("event=tool_call outcome=failed reason=%s", reason)
                 else:
-                    logger.exception(
-                        "[TOOL][%s] Tool execution failed (captured)", tool_name
-                    )
+                    logger.exception("[%s] Tool execution failed (captured)", tool_name)
                 if confined:
                     emit_audit_log(
                         "agent.tool.invocation.completed",

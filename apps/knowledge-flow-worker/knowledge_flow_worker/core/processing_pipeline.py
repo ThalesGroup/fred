@@ -64,7 +64,7 @@ class ProcessingPipeline:
             except ValueError:
                 logger.debug("No output processor configured for extension %s; skipping output pipeline.", ext)
 
-        logger.info("[PROCESSOR] Default processing pipeline built with extensions: %s", sorted(input_processors.keys()))
+        logger.info("Default processing pipeline built with extensions: %s", sorted(input_processors.keys()))
         return cls(
             name="default",
             input_processors=input_processors,

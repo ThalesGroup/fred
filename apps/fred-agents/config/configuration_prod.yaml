@@ -108,9 +108,6 @@ storage:
     username: "admin"
     secure: true
     verify_certs: false
-  log_store:
-    type: opensearch
-    index: app-logs-index
   object_store:
     type: minio
     endpoint: "http://localhost:8333"

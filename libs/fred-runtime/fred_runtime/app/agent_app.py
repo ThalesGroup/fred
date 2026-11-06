@@ -96,7 +96,6 @@ from fred_core.logs.context import (
 )
 from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
 from fred_core.logs.log_setup import log_setup
-from fred_core.logs.log_store_factory import build_log_store
 from fred_core.logs.propagation import outbound_context_headers
 from fred_core.security.delegation import (
     AssertedUser,
@@ -2711,7 +2710,7 @@ def _turn_command(ctx: dict[str, Any]) -> CommandDescriptor | None:
     try:
         return CommandDescriptor.model_validate(raw)
     except ValidationError:
-        logger.warning("[history] ignoring malformed turn command descriptor")
+        logger.warning("ignoring malformed turn command descriptor")
         return None
 
 
@@ -2799,7 +2798,7 @@ async def _write_turn_history(
             logger.error("event=turn_history outcome=failed reason=rank_query_failed")
         else:
             logger.exception(
-                "[fred-runtime][history] Failed to query next_rank session_id=%s",
+                "Failed to query next_rank session_id=%s",
                 session_id,
             )
         return
@@ -3213,7 +3212,7 @@ async def _write_turn_history(
             logger.error("event=turn_history outcome=failed reason=write_failed")
         else:
             logger.exception(
-                "[fred-runtime][history] Failed to write turn history session_id=%s",
+                "Failed to write turn history session_id=%s",
                 session_id,
             )
 
@@ -3451,7 +3450,7 @@ def _emit_turn_completed(
         if delegation_enabled():
             logger.error("event=turn_kpi outcome=failed reason=emit_failed")
         else:
-            logger.exception("[fred-runtime][kpi] Failed to emit agent.turn_completed")
+            logger.exception("Failed to emit agent.turn_completed")
 
 
 async def _resolve_exchange_id(
@@ -4031,9 +4030,7 @@ async def _claim_hitl_resumes_before_invocation(
         raise RuntimeError("Cannot claim HITL answers without a session_id.")
     checkpointer = get_runtime_context().config.checkpointer
     if not isinstance(checkpointer, FredSqlCheckpointer):
-        logger.warning(
-            "[fred-runtime][HITL] checkpointer does not support batch resume claims"
-        )
+        logger.warning("checkpointer does not support batch resume claims")
         return None
     occurrences = tuple((item.interrupt_id, item.occurrence_id) for item in answers)
     token = await checkpointer.aclaim_hitl_resumes(
@@ -4135,7 +4132,7 @@ async def _claim_hitl_resume_before_invocation(
     checkpointer = get_runtime_context().config.checkpointer
     if not isinstance(checkpointer, FredSqlCheckpointer):
         logger.warning(
-            "[fred-runtime][HITL] checkpointer %r does not support atomic "
+            "checkpointer %r does not support atomic "
             "resume claims; concurrent duplicate resumes are not guarded "
             "for session_id=%s",
             type(checkpointer).__name__,
@@ -4574,7 +4571,7 @@ async def _iterate_runtime_event_payloads_inner(
             )
         else:
             logger.debug(
-                "[V2][CAPABILITY] agent=%s registry_is_none=%s selected=%s "
+                "agent=%s registry_is_none=%s selected=%s "
                 "block_is_none=%s middleware_count=%s",
                 definition.agent_id,
                 capability_registry is None,
@@ -4745,7 +4742,7 @@ async def _iterate_runtime_event_payloads_inner(
         # The platform ended this run. The reason is machine-readable and the
         # message is the bounded sentence the raising site owns.
         logger.warning(
-            "[fred-runtime] event=run_stopped outcome=stopped reason=%s",
+            "event=run_stopped outcome=stopped reason=%s",
             stop.reason,
         )
         yield terminal_stop_event(stop).model_dump(mode="json")
@@ -4832,7 +4829,7 @@ def _mount_capability_routers(
             dependencies=auth_deps,
         )
         logger.info(
-            "[CAPABILITY] mounted router for '%s' at /capabilities/%s",
+            "mounted router for '%s' at /capabilities/%s",
             cap_id,
             cap_id,
         )
@@ -6624,10 +6621,6 @@ def create_agent_app(
             log_level=config.app.log_level,
             log_format=config.app.log_format,
             service_role="api",
-            store=build_log_store(
-                log_store_config=config.storage.log_store,
-                opensearch_config=config.storage.opensearch,
-            ),
         )
         gc_diagnostics = install_gc_diagnostics()
         container = build_pod_container(config)
@@ -6731,7 +6724,7 @@ def create_agent_app(
                 logger.info("event=runtime_startup outcome=completed reason=ready")
             else:
                 logger.info(
-                    "[fred-runtime] agent pod started — base_url=%s kf=%s security=%s "
+                    "agent pod started — base_url=%s kf=%s security=%s "
                     "checkpointer=%s history=%s metrics=%s agents=%s",
                     base_url or "/",
                     config.ai.knowledge_flow_url,
@@ -6776,9 +6769,7 @@ def create_agent_app(
                             "event=runtime_shutdown outcome=failed reason=cleanup_failed"
                         )
                     else:
-                        logger.exception(
-                            "[fred-runtime] shutdown step failed: %s", label
-                        )
+                        logger.exception("shutdown step failed: %s", label)
 
     app = RequestLoggingFastAPI(
         title=config.app.name,
@@ -6801,7 +6792,7 @@ def create_agent_app(
             allow_headers=["Content-Type", "Authorization"],
             expose_headers=REFERENCE_HEADERS,
         )
-        logger.debug("[fred-runtime] CORS allow_origins=%s", authorized_origins)
+        logger.debug("CORS allow_origins=%s", authorized_origins)
 
     # KPI middleware — writer is lazily resolved from app.state because the
     # container (and its KPI writer) is only initialised during lifespan startup.
@@ -6849,6 +6840,6 @@ def create_agent_app(
             max_chat_input_chars=config.app.max_chat_input_chars,
         )
         app.include_router(openai_router, prefix="/v1")
-        logger.info("[fred-runtime] OpenAI-compat endpoints enabled at /v1")
+        logger.info("OpenAI-compat endpoints enabled at /v1")
 
     return app

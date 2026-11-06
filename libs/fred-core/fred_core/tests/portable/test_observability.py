@@ -66,8 +66,8 @@ def test_logging_span_records_content_sizes_but_never_the_content(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """
-    This logger feeds the generic app-log store, which carries no content.
-    A caller that ignores `captures_content` still must not leak into it.
+    Application logs carry no content.
+    A caller that ignores `captures_content` still must not leak into them.
     """
 
     logger = logging.getLogger("fred_core.tests.traces.io")

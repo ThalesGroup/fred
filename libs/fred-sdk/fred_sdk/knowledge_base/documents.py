@@ -177,10 +177,9 @@ async def declare_library_synchronized(
         # A different machine already filling this library means two of them
         # share a folder, which nothing upstream should allow — loud on purpose.
         logger.warning(
-            "Fred refused the declaration for library %s: %s %s",
+            "Fred refused the declaration for library %s: %s",
             library_id,
             response.status_code,
-            response.text[:300],
         )
 
 

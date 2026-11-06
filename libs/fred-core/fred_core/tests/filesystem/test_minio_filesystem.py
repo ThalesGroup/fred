@@ -113,7 +113,7 @@ async def test_read_info_log_does_not_expose_object_key(caplog):
         await fs.read("conversations/session/private.txt")
 
     assert "conversations/session/private.txt" not in caplog.text
-    assert "[MINIO_READ] bucket=bucket" in caplog.text
+    assert "bucket=bucket" in caplog.text
 
 
 @pytest.mark.asyncio

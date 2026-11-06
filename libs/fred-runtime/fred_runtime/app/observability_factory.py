@@ -83,7 +83,7 @@ def bootstrap_observability(
     set_tracer(tracer)
     set_metrics_provider(metrics)
     logger.info(
-        "[fred-runtime] observability ready — tracer=%s prometheus=%s",
+        "observability ready — tracer=%s prometheus=%s",
         config.tracer.value,
         config.kpi.prometheus.enabled,
     )
@@ -102,7 +102,7 @@ def _build_tracer(config: PodObservabilityConfig) -> Tracer:
     if config.tracer == TracerBackend.langfuse:
         return _build_langfuse_tracer(config)
     logger.warning(
-        "[fred-runtime] Unknown tracer backend '%s' — falling back to logging",
+        "Unknown tracer backend '%s' — falling back to logging",
         config.tracer,
     )
     return LoggingTracer()
@@ -126,7 +126,7 @@ def _build_langfuse_tracer(config: PodObservabilityConfig) -> Tracer:
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
     if not public_key or not secret_key:
         logger.warning(
-            "[fred-runtime] tracer=langfuse selected but LANGFUSE_PUBLIC_KEY or"
+            "tracer=langfuse selected but LANGFUSE_PUBLIC_KEY or"
             " LANGFUSE_SECRET_KEY is not set — falling back to logging"
         )
         return LoggingTracer()
@@ -145,19 +145,17 @@ def _build_langfuse_tracer(config: PodObservabilityConfig) -> Tracer:
         )
         if tracer is None:
             logger.warning(
-                "[fred-runtime] Langfuse tracer could not be built — falling back to logging"
+                "Langfuse tracer could not be built — falling back to logging"
             )
             return LoggingTracer()
-        logger.info(
-            "[fred-runtime] Langfuse tracer initialized (host=%s)", config.langfuse.host
-        )
+        logger.info("Langfuse tracer initialized (host=%s)", config.langfuse.host)
         if capture_content:
             # Loud on purpose. This is the one setting that puts user prompts,
             # model answers, and tool payloads into an external system, against
             # the content exclusion in OBSERVABILITY-AND-AUDIT.md §7. An
             # operator who did not mean to enable it must see it at startup.
             logger.warning(
-                "[fred-runtime] Langfuse CONTENT CAPTURE IS ON — prompts, model"
+                "Langfuse CONTENT CAPTURE IS ON — prompts, model"
                 " answers, and tool payloads are exported to %s. This is for local"
                 " debugging only; it violates the content exclusion of"
                 " OBSERVABILITY-AND-AUDIT.md §7 and must never be enabled on a"
@@ -167,7 +165,7 @@ def _build_langfuse_tracer(config: PodObservabilityConfig) -> Tracer:
         return tracer
     except Exception:
         logger.exception(
-            "[fred-runtime] Failed to initialize Langfuse tracer — falling back to logging"
+            "Failed to initialize Langfuse tracer — falling back to logging"
         )
         return LoggingTracer()
 
@@ -185,7 +183,7 @@ def _build_metrics(
     if config.kpi.prometheus.enabled:
         if kpi_writer is None:
             logger.warning(
-                "[fred-runtime] prometheus enabled without a KPI writer — falling back to logging"
+                "prometheus enabled without a KPI writer — falling back to logging"
             )
             return LoggingMetricsProvider()
         from fred_runtime.integrations.v2_runtime.adapters import (

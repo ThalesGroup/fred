@@ -27,7 +27,6 @@ from contextlib import suppress
 from fred_core import log_setup
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import emit_process_kpis
-from fred_core.logs.null_log_store import NullLogStore
 from prometheus_client import start_http_server
 
 from knowledge_flow_worker.application_context import ApplicationContext
@@ -69,14 +68,11 @@ async def main() -> None:
         optional Prometheus exporter and KPI background tasks, then run the Temporal worker.
     """
     configuration = load_configuration()
-    # Keep worker logging local-only: Temporal workflow sandbox must not trigger
-    # external log sinks (OpenSearch/HTTP imports) from workflow threads.
     log_setup(
         service_name="knowledge-flow",
         service_role="worker",
         log_level=configuration.app.log_level,
         log_format=configuration.app.log_format,
-        store=NullLogStore(),
         use_rich=False,
     )
     ApplicationContext(configuration)

@@ -67,7 +67,7 @@ async def _with_transient_retry(request):
                 _RETRY_BASE_DELAY_S * (2**attempt) + random.random() * 0.25  # nosec B311
             )
             logger.warning(
-                "[VECTOR][RETRY] attempt=%d/%d after %r, retrying in %.2fs",
+                "attempt=%d/%d after %r, retrying in %.2fs",
                 attempt + 1,
                 _TRANSIENT_RETRIES,
                 exc,
@@ -122,7 +122,7 @@ class VectorSearchClient(KfBaseClient):
         if search_policy:
             payload["search_policy"] = search_policy
         logger.info(
-            "[VECTOR][CLIENT] space_id=%s top_k=%d search_policy=%s",
+            "space_id=%s top_k=%d search_policy=%s",
             document_context.space_id,
             top_k,
             search_policy,

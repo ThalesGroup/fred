@@ -14,6 +14,8 @@
 
 //! control-plane CLI: serve, schema initialization, authenticated provisioning.
 
+use std::io::IsTerminal;
+
 use anyhow::{Context, Result};
 use futures::{FutureExt, StreamExt, future::LocalBoxFuture, stream::FuturesUnordered};
 use sqlx::postgres::PgPoolOptions;
@@ -52,32 +54,14 @@ async fn main() -> Result<()> {
     }
     // Helm's pre-install Job has only DATABASE_URL; release config and identities do not exist yet.
     if args == ["initialize-schema"] {
-        let url = std::env::var("DATABASE_URL").context("DATABASE_URL is required")?;
-        let url = match url.strip_prefix("postgresql+asyncpg://") {
-            Some(rest) => format!("postgresql://{rest}"),
-            None => url,
+        let format = if std::io::stdout().is_terminal() {
+            logging::LogFormat::Text
+        } else {
+            logging::LogFormat::Json
         };
-        let options = url
-            .parse::<sqlx::postgres::PgConnectOptions>()
-            .map_err(|_| anyhow::anyhow!("invalid schema initialization database URL"))?
-            .options([("search_path", "control_plane")]);
-        let pool = PgPoolOptions::new()
-            .max_connections(1)
-            .connect_with(options)
-            .await
-            .map_err(|_| anyhow::anyhow!("schema initialization database connection failed"))?;
-        sqlx::migrate!()
-            .run(&pool)
-            .await
-            .map_err(|error| {
-                use sqlx::migrate::MigrateError;
-                match error {
-                    MigrateError::VersionMissing(_) | MigrateError::VersionMismatch(_) | MigrateError::Dirty(_) =>
-                        anyhow::anyhow!("incompatible control-plane migration history: an applied migration is missing, changed or incomplete; restore matching migration files or recover the database; do not rewrite SQLx history"),
-                    _ => anyhow::anyhow!("control-plane schema migration failed; check database privileges and migration prerequisites"),
-                }
-            })?;
-        println!("Control Plane schema initialized");
+        fred_rust_sdk::logging::init(logging::identity("migration"), "info", format)?;
+        let outcome = initialize_schema().await;
+        stop_on_error(outcome);
         return Ok(());
     }
     // Same rule as fred-pod: ENV_FILE, default ./config/.env, never overriding the process.
@@ -97,10 +81,14 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     // Startup events wait for the configured format, as fred-pod buffers them.
-    logging::init_role(
+    let role = match args.first().map(String::as_str) {
+        None | Some("serve") => "api",
+        Some(_) => "job",
+    };
+    fred_rust_sdk::logging::init(
+        logging::identity(role),
         &config.app.log_level,
         config.app.log_format,
-        logging::ServiceRole::Api,
     )
     .map_err(|error| {
         if args.first().is_some_and(|a| a == "import-provisioning") {
@@ -150,11 +138,45 @@ async fn main() -> Result<()> {
         }
         _ => Err(anyhow::anyhow!(USAGE)),
     };
-    // Once logging runs, a fatal error is one more structured event, not stray stderr.
+    stop_on_error(outcome);
+    Ok(())
+}
+
+/// Once logging runs, a fatal error is one more structured event, not stray stderr.
+fn stop_on_error(outcome: Result<()>) {
     if let Err(error) = outcome {
-        tracing::error!(error = format!("{error:#}"), "control-plane stopped");
+        tracing::error!(
+            error = fred_rust_sdk::logging::error_chain(&error),
+            "control-plane stopped"
+        );
         std::process::exit(1);
     }
+}
+
+async fn initialize_schema() -> Result<()> {
+    let url = std::env::var("DATABASE_URL").context("DATABASE_URL is required")?;
+    let url = match url.strip_prefix("postgresql+asyncpg://") {
+        Some(rest) => format!("postgresql://{rest}"),
+        None => url,
+    };
+    let options = url
+        .parse::<sqlx::postgres::PgConnectOptions>()
+        .map_err(|_| anyhow::anyhow!("invalid schema initialization database URL"))?
+        .options([("search_path", "control_plane")]);
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .map_err(|_| anyhow::anyhow!("schema initialization database connection failed"))?;
+    sqlx::migrate!().run(&pool).await.map_err(|error| {
+        use sqlx::migrate::MigrateError;
+        match error {
+            MigrateError::VersionMissing(_) | MigrateError::VersionMismatch(_) | MigrateError::Dirty(_) =>
+                anyhow::anyhow!("incompatible control-plane migration history: an applied migration is missing, changed or incomplete; restore matching migration files or recover the database; do not rewrite SQLx history"),
+            _ => anyhow::anyhow!("control-plane schema migration failed; check database privileges and migration prerequisites"),
+        }
+    })?;
+    tracing::info!("Control Plane schema initialized");
     Ok(())
 }
 

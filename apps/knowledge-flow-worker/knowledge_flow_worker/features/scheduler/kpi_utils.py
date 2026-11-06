@@ -79,7 +79,7 @@ def emit_temporal_activity_queue_wait_kpi(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "[SCHEDULER][ACTIVITY][KPI] Failed to emit activity queue wait metric for phase=%s: %s",
+            "Failed to emit activity queue wait metric for phase=%s: %s",
             phase,
             exc,
         )
@@ -221,7 +221,7 @@ def emit_temporal_activity_result_kpis(
     duration_ms = max(0.0, (time.perf_counter() - started_at_monotonic) * 1000.0)
     error_code = _temporal_exception_code(exc)
     logger.info(
-        "[INGESTION ATTEMPT] workflow=%s activity=%s queue=%s attempt=%s status=%s duration_ms=%.0f error_code=%s",
+        "workflow=%s activity=%s queue=%s attempt=%s status=%s duration_ms=%.0f error_code=%s",
         info.workflow_id,
         info.activity_type,
         info.task_queue,
@@ -264,7 +264,7 @@ def emit_temporal_activity_result_kpis(
         )
     except Exception as metric_exc:  # noqa: BLE001
         logger.warning(
-            "[SCHEDULER][ACTIVITY][KPI] Failed to emit result metrics for phase=%s status=%s: %s",
+            "Failed to emit result metrics for phase=%s status=%s: %s",
             phase,
             status,
             metric_exc,
@@ -320,7 +320,7 @@ def emit_temporal_workflow_status_kpi(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "[SCHEDULER][ACTIVITY][KPI] Failed to emit workflow status metric for workflow_id=%s: %s",
+            "Failed to emit workflow status metric for workflow_id=%s: %s",
             workflow_id,
             exc,
         )
@@ -354,7 +354,7 @@ def extraction_kpi_timer(name: str, dims: Dims) -> Iterator[None]:
                 # Nonblocking datagrams cannot leave a partial frame on worker loss.
                 sender.send(payload)
         except Exception:
-            logger.warning("[EXTRACTION][KPI] Dropping timing %s", name, exc_info=True)
+            logger.warning("Dropping timing %s", name, exc_info=True)
 
 
 def drain_extraction_kpis(receiver: socket.socket) -> None:
@@ -365,7 +365,7 @@ def drain_extraction_kpis(receiver: socket.socket) -> None:
         except BlockingIOError:
             return
         except OSError:
-            logger.warning("[EXTRACTION][KPI] Could not receive timings", exc_info=True)
+            logger.warning("Could not receive timings", exc_info=True)
             return
         try:
             from knowledge_flow_worker.application_context import ApplicationContext
@@ -373,7 +373,7 @@ def drain_extraction_kpis(receiver: socket.socket) -> None:
             metric = json.loads(payload)
             ApplicationContext.get_instance().get_kpi_writer().emit(name=metric["name"], type="timer", unit="ms", value=metric["value"], dims=metric["dims"], actor=build_temporal_activity_kpi_actor())
         except Exception:
-            logger.warning("[EXTRACTION][KPI] Could not emit timing", exc_info=True)
+            logger.warning("Could not emit timing", exc_info=True)
 
 
 def processor_activity_timer(name: str, dims: Dims) -> AbstractContextManager:
@@ -388,5 +388,5 @@ def processor_activity_timer(name: str, dims: Dims) -> AbstractContextManager:
         kpi = ApplicationContext.get_instance().get_kpi_writer()
         return kpi.timer(name, dims=dims, actor=build_temporal_activity_kpi_actor())
     except Exception as exc:  # noqa: BLE001
-        logger.warning("[PROCESSOR][PDF][KPI] Failed to start timer %s: %s", name, exc)
+        logger.warning("Failed to start timer %s: %s", name, exc)
         return nullcontext()

@@ -78,13 +78,13 @@ async def _get_or_connect_mcp_client(
 
 async def _close_mcp_client_quietly(client: Optional[list[MCPAdapter]]) -> None:
     if not client:
-        logger.debug("[MCP] event=connection_close outcome=skipped reason=no_client")
+        logger.debug("event=connection_close outcome=skipped reason=no_client")
         return
 
-    logger.info("[MCP] event=connection_close outcome=started")
+    logger.info("event=connection_close outcome=started")
 
     # MCPAdapter opens a client per listing or invocation; no context remains open.
-    logger.debug("[MCP] event=connection_close outcome=succeeded")
+    logger.debug("event=connection_close outcome=succeeded")
 
 
 class MCPRuntime:
@@ -115,12 +115,11 @@ class MCPRuntime:
         if mcp_config is None:
             if self._confined_logs:
                 logger.warning(
-                    "[MCP] event=runtime_init outcome=skipped "
-                    "reason=missing_configuration"
+                    "event=runtime_init outcome=skipped reason=missing_configuration"
                 )
             else:
                 logger.warning(
-                    "[MCP][%s] Global MCP configuration not available; no MCP "
+                    "[%s] Global MCP configuration not available; no MCP "
                     "tools will be loaded.",
                     self._agent_id,
                 )
@@ -130,12 +129,11 @@ class MCPRuntime:
                 if not server_configuration:
                     if self._confined_logs:
                         logger.warning(
-                            "[MCP] event=server_activation outcome=skipped "
-                            "reason=unavailable"
+                            "event=server_activation outcome=skipped reason=unavailable"
                         )
                     else:
                         logger.warning(
-                            "[MCP][%s] Server '%s' not found or disabled in global "
+                            "[%s] Server '%s' not found or disabled in global "
                             "MCP configuration. Skipping.",
                             self._agent_id,
                             s.id,
@@ -154,10 +152,10 @@ class MCPRuntime:
         self._close_task: asyncio.Task[None] | None = None
 
         if self._confined_logs:
-            logger.info("[MCP] event=server_activation outcome=resolved")
+            logger.info("event=server_activation outcome=resolved")
         else:
             logger.info(
-                "[MCP]agent=%s mcp_servers=%s (enabled only)",
+                "agent=%s mcp_servers=%s (enabled only)",
                 self._agent_id,
                 [s.id for s in self.available_servers],
             )
@@ -173,9 +171,7 @@ class MCPRuntime:
         """
         if not self.available_servers:
             if self._confined_logs:
-                logger.info(
-                    "[MCP] event=runtime_init outcome=skipped reason=no_servers"
-                )
+                logger.info("event=runtime_init outcome=skipped reason=no_servers")
             else:
                 logger.info(
                     "agent=%s init: No MCP server configuration found in tunings. "
@@ -219,12 +215,11 @@ class MCPRuntime:
             delay_secs = MCP_CONNECT_RETRY_BASE_DELAY_SECS * (2 ** (attempt - 1))
             if self._confined_logs:
                 logger.warning(
-                    "[MCP] event=runtime_init outcome=retrying reason=connection_error"
+                    "event=runtime_init outcome=retrying reason=connection_error"
                 )
             else:
                 logger.warning(
-                    "[MCP] agent=%s init attempt %d/%d failed with %s. "
-                    "Retrying in %.1fs.",
+                    "agent=%s init attempt %d/%d failed with %s. Retrying in %.1fs.",
                     self._agent_id,
                     attempt,
                     MCP_CONNECT_MAX_ATTEMPTS,
@@ -288,16 +283,16 @@ class MCPRuntime:
             self.toolkit = McpToolkit(client=new_client, agent=self.agent_instance)
             self.toolkit.tools = tools
             if self._confined_logs:
-                logger.info("[MCP] event=runtime_init outcome=connected")
-                logger.info("[MCP] event=runtime_init outcome=succeeded")
+                logger.info("event=runtime_init outcome=connected")
+                logger.info("event=runtime_init outcome=succeeded")
             else:
                 logger.info(
-                    "[MCP] agent=%s init: Connected and cached %d tools.",
+                    "agent=%s init: Connected and cached %d tools.",
                     self._agent_id,
                     len(tools),
                 )
                 logger.info(
-                    "[MCP] agent=%s init: Successfully built and connected client.",
+                    "agent=%s init: Successfully built and connected client.",
                     self._agent_id,
                 )
             # Signal readiness
@@ -315,7 +310,7 @@ class MCPRuntime:
             if self._ready_event and not self._ready_event.is_set():
                 self._ready_event.set()
             logger.warning(
-                "[MCP] event=runtime_init outcome=stopped reason=%s",
+                "event=runtime_init outcome=stopped reason=%s",
                 stop.reason,
             )
         except Exception as e:
@@ -325,11 +320,11 @@ class MCPRuntime:
                 self._ready_event.set()
             if self._confined_logs:
                 logger.error(
-                    "[MCP] event=runtime_init outcome=failed reason=unexpected_error"
+                    "event=runtime_init outcome=failed reason=unexpected_error"
                 )
             else:
                 logger.exception(
-                    "[MCP] agent=%s lifecycle error during init.", self._agent_id
+                    "agent=%s lifecycle error during init.", self._agent_id
                 )
         finally:
             # Close client in the SAME task that opened it
@@ -350,7 +345,7 @@ class MCPRuntime:
             remote_tools = self.toolkit.get_tools()
         elif self.available_servers:
             logger.warning(
-                "[MCP] event=tool_loading outcome=skipped reason=runtime_unavailable"
+                "event=tool_loading outcome=skipped reason=runtime_unavailable"
             )
         return self._dedupe_tools_by_name(remote_tools)
 
@@ -387,7 +382,7 @@ class MCPRuntime:
             raise asyncio.CancelledError
 
     async def _close_owned(self) -> None:
-        logger.debug("[MCP] event=runtime_close outcome=started")
+        logger.debug("event=runtime_close outcome=started")
         # If lifecycle task exists, signal and await it to close contexts safely
         if self._lifecycle_task:
             if self._stop_event and not self._stop_event.is_set():
@@ -404,7 +399,7 @@ class MCPRuntime:
             await _close_mcp_client_quietly(self.mcp_client)
             self.mcp_client = None
             self.toolkit = None
-        logger.info("[MCP] event=runtime_close outcome=succeeded")
+        logger.info("event=runtime_close outcome=succeeded")
 
     @staticmethod
     def _dedupe_tools_by_name(tools: list[BaseTool]) -> list[BaseTool]:
@@ -417,8 +412,7 @@ class MCPRuntime:
                 continue
             if name in seen:
                 logger.warning(
-                    "[MCP] event=tool_deduplication outcome=skipped "
-                    "reason=duplicate_name"
+                    "event=tool_deduplication outcome=skipped reason=duplicate_name"
                 )
                 continue
             seen.add(name)

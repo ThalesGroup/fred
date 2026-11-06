@@ -101,7 +101,6 @@ class VectorizationProcessor(BaseOutputProcessor):
             metadata.mark_retrievable()
 
             document: Document = load_langchain_doc_from_metadata(file_path, metadata)
-            logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
 
@@ -180,9 +179,7 @@ class VectorizationProcessor(BaseOutputProcessor):
                 # Merge with doc-level metadata
                 doc.metadata = {**base_flat, **clean}
 
-                # No content/section text here — this logger feeds the generic
-                # app-log store (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md
-                # §7: "Content ... Nowhere in any observability or audit stream").
+                # Application logs carry no document content: sizes only.
                 logger.debug(
                     "[Chunk %d] content_len=%d | idx=%s uid=%s cs=%s ce=%s has_section=%s dropped=%s",
                     i,

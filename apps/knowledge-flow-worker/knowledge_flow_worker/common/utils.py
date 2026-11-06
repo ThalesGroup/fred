@@ -21,7 +21,7 @@ def parse_server_configuration(configuration_path: str) -> Configuration:
     with open(configuration_path, "r") as f:
         try:
             config: Dict = yaml.safe_load(f)
-        except yaml.YAMLError as e:
-            print(f"Error while parsing configuration file {configuration_path}: {e}")
-            sys.exit(1)
+        except yaml.YAMLError:
+            # The YAML error quotes the file, which can hold secrets.
+            sys.exit(f"Invalid YAML in configuration file {configuration_path}")
     return Configuration(**config)

@@ -57,7 +57,7 @@ class ImageProcessor(BaseMarkdownProcessor):
         vision_model = get_configuration().vision_model
         if not vision_model:
             if not self._warned_missing_vision_model:
-                logger.info("[PROCESSOR][IMAGE] Vision model missing; markdown keeps filename-based content only.")
+                logger.info("Vision model missing; markdown keeps filename-based content only.")
                 self._warned_missing_vision_model = True
             return None
         with self._image_describer_lock:
@@ -107,7 +107,7 @@ class ImageProcessor(BaseMarkdownProcessor):
             },
         }
 
-        logger.info(f"Extracted metadata for image: {file_path.name} with title '{image_title}'")
+        logger.info("Extracted image metadata")
         return metadata
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:

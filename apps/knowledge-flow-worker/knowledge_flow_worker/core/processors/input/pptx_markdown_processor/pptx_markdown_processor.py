@@ -80,7 +80,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             return self.image_describer
         if not get_configuration().vision_model:
             if not self._warned_missing_vision_model:
-                logger.warning("[PROCESSOR][PPTX] Vision model configuration is missing while vision enrichment is enabled.")
+                logger.warning("Vision model configuration is missing while vision enrichment is enabled.")
                 self._warned_missing_vision_model = True
             return None
         self.image_describer = build_image_describer(
@@ -120,7 +120,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
 
     def _log_visual_preanalysis(self, visual_preanalysis) -> None:
         logger.info(
-            "[PPTX][PREANALYSIS] activate_vision=%s slides_for_vision=%s",
+            "activate_vision=%s slides_for_vision=%s",
             visual_preanalysis.activate_vision,
             visual_preanalysis.slides_for_vision,
         )
@@ -129,7 +129,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                 continue
 
             logger.info(
-                "[PPTX][PREANALYSIS] slide=%s needs_vision=%s vision_priority=%s reasons=%s visual_area_ratio=%.3f pictures=%s groups=%s charts=%s others=%s",
+                "slide=%s needs_vision=%s vision_priority=%s reasons=%s visual_area_ratio=%.3f pictures=%s groups=%s charts=%s others=%s",
                 slide_summary.slide_number,
                 slide_summary.needs_vision,
                 slide_summary.vision_priority,
@@ -169,7 +169,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             xml_bytes = pptx_zip.read(part_name)
             root = ET.fromstring(xml_bytes)
         except Exception as e:
-            logger.warning("[PPTX][GUARDRAIL] Failed to parse %s: %s", part_name, e)
+            logger.warning("Failed to parse %s: %s", part_name, e)
             return []
 
         lines: list[str] = []
@@ -193,7 +193,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                     elif part_name.startswith("ppt/slideLayouts/") and part_name.endswith(".xml"):
                         layout_lines.extend(self._extract_text_from_pptx_xml_part(pptx_zip, part_name))
         except Exception as e:
-            logger.warning("[PPTX][GUARDRAIL] Failed to inspect PPTX xml parts for %s: %s", file_path, e)
+            logger.warning("Failed to inspect PPTX xml parts for %s: %s", file_path, e)
 
         return master_lines, layout_lines
 
@@ -227,7 +227,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             image_describer = self._resolve_image_describer(processing_mode)
 
             logger.info(
-                "[PROCESSOR][PPTX] Using profile=%s processing_mode=%s vision_model_available=%s",
+                "Using profile=%s processing_mode=%s vision_model_available=%s",
                 active_profile.value,
                 processing_mode.value,
                 bool(image_describer),
@@ -249,7 +249,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             if processing_mode != PptxProcessingMode.NATIVE_ONLY and image_describer:
                 slides_to_enrich = self._select_slides_for_vision(visual_preanalysis)
                 logger.info(
-                    "[PROCESSOR][PPTX] Selected %s slide(s) for vision enrichment: %s",
+                    "Selected %s slide(s) for vision enrichment: %s",
                     len(slides_to_enrich),
                     slides_to_enrich,
                 )
@@ -269,7 +269,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                     rendered_slides=rendered_slides,
                 )
                 logger.info(
-                    "[PROCESSOR][PPTX] Wrote slide asset manifest for %s slide(s): %s",
+                    "Wrote slide asset manifest for %s slide(s): %s",
                     len(rendered_slides),
                     manifest_path,
                 )

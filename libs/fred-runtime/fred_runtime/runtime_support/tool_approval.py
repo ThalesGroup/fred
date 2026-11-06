@@ -247,7 +247,7 @@ class ToolApproval:
                 needs = bool(bound.spec.when(request))
             except Exception:
                 logger.exception(
-                    "[HITL] capability 'when' predicate for tool '%s' raised; "
+                    "capability 'when' predicate for tool '%s' raised; "
                     "failing closed (interrupt).",
                     tool_name,
                 )

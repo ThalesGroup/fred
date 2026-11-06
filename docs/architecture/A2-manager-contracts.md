@@ -173,6 +173,14 @@ configuration they live in database `fred`, schema `control_plane`; consumers
 read the `cp_read` views installed by `0002_cp_read.sql`. It does not describe
 the private schemas of Keycloak, Temporal or other Fred services.
 
+### Pod capability offers
+
+The [capability journey](02.3-agent-administration.md#which-capabilities-can-an-assistant-use)
+separates pod supply, organization authorization and agent selection. The offer
+key is `(runtime_id, capability_id)`: `runtime_id` identifies a logical pod, not
+a replica. Its version describes the observed offer; it does not combine offers
+from different pods into a global library identity.
+
 Internal catalog storage is defined by the `runtime_*` tables of
 [`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql)
 and [`agents/catalog.rs`](../../apps/control-plane/src/agents/catalog.rs).
@@ -189,14 +197,34 @@ discovery, not this store.
 Organization enablement of these offers is defined by table `organization_capability` of
 [`0001_schema.sql`](../../apps/control-plane/migrations/0001_schema.sql)
 and owned by [`agents/enablement.rs`](../../apps/control-plane/src/agents/enablement.rs).
-A row enables one `(runtime_id, capability_id)` offer for every space of the
-organization; no row denies it. Its foreign key requires an observed offer, and
-enabling requires the offer to be currently advertised. It is SQL configuration,
+A row authorizes one `(runtime_id, capability_id)` offer at organization level;
+absence of a row denies it. Team and project restrictions in
+[`0005_pod_skills_and_local_offers.sql`](../../apps/control-plane/migrations/0005_pod_skills_and_local_offers.sql)
+can narrow that ceiling through `space_capability_policy` and
+`space_capability_permission`. `Policy::load_for_space` and `usable` intersect
+organization permission with restrictions on the space's ancestor path. A local
+permission cannot grant an offer denied by the organization. The organization
+grant's foreign key requires an observed offer, and enabling requires the offer
+to be currently advertised. It is SQL configuration,
 not an SQL grant. The organization Capabilities tab reads it within the
 inventory snapshot and writes it in the same authorized transaction as refresh,
 with a `capability.default_changed` audit event when the decision changes.
 `usable_capability_ids` filters agent forms and gates enrollment and capability
-edits; chat preparation does not consult it.
+edits. [`select_capabilities`](../../apps/control-plane/src/agent_instances/tuning.rs)
+stores the effective selection and configuration in the agent's tuning, checking
+the template's supported offers. New turn admission calls `require_usable` on
+that saved selection in
+[`resolve_runtime_binding`](../../apps/control-plane/src/agent_instances/runtime.rs).
+Revocation retains the configuration but refuses new turns using the forbidden
+offer; it does not revoke an already admitted turn.
+
+The pod's
+[`build_capability_contexts`](../../libs/fred-runtime/fred_runtime/capabilities/assembly.py)
+assembles only the selected tool capabilities. This contract does not establish
+the policy coverage of every capability-specific HTTP route or the selection
+semantics of skills. Configuration preparation is a separate availability concern.
+
+### Model storage
 
 Model storage has a separate platform admin in
 [`model_catalog`](../../apps/control-plane/src/model_catalog/mod.rs) and the `model_source` and `model_offer` tables of

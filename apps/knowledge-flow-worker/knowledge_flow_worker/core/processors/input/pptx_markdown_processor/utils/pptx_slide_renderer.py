@@ -48,7 +48,7 @@ def render_pdf_pages_to_png(pdf_path: Path, slide_numbers: list[int], out_dir: P
         timeout=RENDER_TIMEOUT_SECONDS,
     )
     if result.stderr:
-        logger.info("[PROCESSOR][PPTX] %s", result.stderr.strip())
+        logger.info("%s", result.stderr.strip())
     return {number: out_dir / f"slide_{number:03d}.png" for number in json.loads(result.stdout)}
 
 

@@ -120,7 +120,7 @@ def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
         # request, so drop it rather than pass it through unchanged.
         if isinstance(msg, ToolMessage):
             logger.warning(
-                "[TOOL_LOOP] Dropped orphaned ToolMessage at index %d "
+                "Dropped orphaned ToolMessage at index %d "
                 "(no preceding AIMessage(tool_calls) claims it).",
                 i,
             )
@@ -147,7 +147,7 @@ def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
                 # Dangling or partial — drop AIMessage and partial ToolMessages,
                 # keep everything after (user messages for the current turn).
                 logger.warning(
-                    "[TOOL_LOOP] Dropped dangling AIMessage(tool_calls) at index %d "
+                    "Dropped dangling AIMessage(tool_calls) at index %d "
                     "expected_ids=%s seen_ids=%s. "
                     "This usually means a prior turn crashed before the tool result was stored.",
                     i,
@@ -183,7 +183,7 @@ def _advance_to_safe_boundary(trimmed: list) -> list:
         if not isinstance(msg, ToolMessage):
             if i:
                 logger.debug(
-                    "[TOOL LOOP] dropped %d leading orphan ToolMessage(s) after trim "
+                    "dropped %d leading orphan ToolMessage(s) after trim "
                     "to keep a valid provider payload",
                     i,
                 )
@@ -191,7 +191,7 @@ def _advance_to_safe_boundary(trimmed: list) -> list:
     # Window is entirely orphan ToolMessages: drop them rather than send an
     # invalid payload. The system prompt alone still lets the model answer.
     logger.debug(
-        "[TOOL LOOP] trimmed window was all orphan ToolMessages; dropped to avoid "
+        "trimmed window was all orphan ToolMessages; dropped to avoid "
         "an invalid provider payload"
     )
     return []

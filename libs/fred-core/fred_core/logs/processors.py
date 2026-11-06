@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -112,7 +113,7 @@ def event_properties(record: logging.LogRecord) -> dict[str, object]:
 
 
 class EventProcessor:
-    def __init__(self, service: str, role: str | None) -> None:
+    def __init__(self, service: str, role: str) -> None:
         self.service = service
         self.role = role
 
@@ -143,9 +144,10 @@ class EventProcessor:
                 "seconds": seconds,
                 "nanos": int((record.created - seconds) * 1_000_000_000),
             },
-            "message": event["event"],
+            "message": sanitize_sensitive_query_params(event["event"]),
             "logger": record.name,
             "service": self.service,
+            "service_role": self.role,
             "category": "kpi" if record.name == KPI_LOGGER_NAME else "application",
             "logging.googleapis.com/sourceLocation": {
                 "file": record.filename,
@@ -156,8 +158,6 @@ class EventProcessor:
             "thread": record.threadName,
             "task_name": getattr(record, "_fred_snapshot").task_name,
         }
-        if self.role is not None:
-            result["service_role"] = self.role
         if exc_info := event.get("exc_info"):
             result["exc_info"] = exc_info
             result = format_exc_info(logger, method, result)
@@ -187,11 +187,12 @@ class TextRenderer:
             )
             severity = f"\x1b[{color}m{severity}\x1b[0m"
         detail = " ".join(
-            f"{key}={value}"
+            f"{key}={value if isinstance(value, str) else json.dumps(value)}"
             for key, value in event.items()
             if key not in RESERVED_FIELDS
         )
-        output = f"{stamp} {severity} {event['service']}/{event['logger']} {event['message']}"
+        source = f"{event['service']}/{event['service_role']}/{event['logger']}"
+        output = f"{stamp} {severity} {source} {event['message']}"
         if detail:
             output += " " + detail
         if "exception" in event:
@@ -200,7 +201,7 @@ class TextRenderer:
 
 
 def output_formatter(
-    service: str, role: str | None, *, json_output: bool, colors: bool
+    service: str, role: str, *, json_output: bool, colors: bool
 ) -> ProcessorFormatter:
     """Configure stdlib events through the same structlog processors/renderers."""
     return ProcessorFormatter(

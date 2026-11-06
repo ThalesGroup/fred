@@ -323,7 +323,7 @@ pub async fn snapshot(admission: &AdmissionState, user: &CurrentUser) {
             .lock()
             .await
             .retain(|(db, uid, _)| db != &database || *uid != id);
-        tracing::warn!("[AUTH] Local identity snapshot failed");
+        tracing::warn!("Local identity snapshot failed");
     }
 }
 

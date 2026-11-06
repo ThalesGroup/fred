@@ -190,7 +190,7 @@ class DuckDBAbortHandle:
             try:
                 connection.interrupt()
             except duckdb.Error as exc:  # pragma: no cover - defensive
-                logger.debug("[TABULAR] interrupt on an unusable DuckDB connection: %s", exc)
+                logger.debug("interrupt on an unusable DuckDB connection: %s", exc)
 
 
 class _TabularExecutionGuard:
@@ -413,7 +413,7 @@ async def run_duckdb_job(
     # pool queue, so there is no second waiting mechanism to tune here, and the
     # event loop never waits for a slot.
     if not permits.acquire(blocking=False):
-        logger.warning("[TABULAR] %s rejected: no execution slot available", operation)
+        logger.warning("%s rejected: no execution slot available", operation)
         raise TabularCapacityExceededError("Tabular query capacity is saturated; retry shortly.")
 
     handle = DuckDBAbortHandle()
@@ -466,9 +466,9 @@ async def run_duckdb_job(
             # jobs. That is overload (503), not a slow query (504) — reporting
             # 504 would send an operator hunting for a slow query that never
             # ran, and collapse the very distinction this guard exists to keep.
-            logger.warning("[TABULAR] %s rejected: queued past the %.1fs budget without starting", operation, config.query_timeout_seconds)
+            logger.warning("%s rejected: queued past the %.1fs budget without starting", operation, config.query_timeout_seconds)
             raise TabularCapacityExceededError("Tabular query capacity is saturated; retry shortly.") from None
-        logger.warning("[TABULAR] %s aborted after %.1fs execution budget", operation, config.query_timeout_seconds)
+        logger.warning("%s aborted after %.1fs execution budget", operation, config.query_timeout_seconds)
         raise TabularExecutionTimeoutError(f"Tabular {operation} exceeded the {config.query_timeout_seconds:g}s execution budget.") from None
     except asyncio.CancelledError:
         _abort_repeatedly(handle)

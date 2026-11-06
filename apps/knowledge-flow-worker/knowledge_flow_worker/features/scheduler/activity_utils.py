@@ -245,7 +245,7 @@ async def _drain_cancelled_thread(
         now = loop.time()
         if now >= deadline:
             logger.warning(
-                "[SCHEDULER][CANCEL] %s: worker thread still busy %.0fs after the cancel signal; detaching (it stops at its next checkpoint and its output is discarded)",
+                "%s: worker thread still busy %.0fs after the cancel signal; detaching (it stops at its next checkpoint and its output is discarded)",
                 label,
                 THREAD_CANCEL_DRAIN_MAX_SECONDS,
             )
@@ -260,13 +260,13 @@ async def _drain_cancelled_thread(
     elapsed = loop.time() - signalled_at
     if exc is None or isinstance(exc, WorkCancelled):
         logger.info(
-            "[SCHEDULER][CANCEL] %s: worker thread stopped %.1fs after the cancel signal",
+            "%s: worker thread stopped %.1fs after the cancel signal",
             label,
             elapsed,
         )
     else:
         logger.warning(
-            "[SCHEDULER][CANCEL] %s: worker thread ended with %s during cancellation: %s",
+            "%s: worker thread ended with %s during cancellation: %s",
             label,
             type(exc).__name__,
             exc,

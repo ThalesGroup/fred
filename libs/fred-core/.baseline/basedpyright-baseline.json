@@ -1,14 +1,3 @@
 {
-    "files": {
-        "./fred_core/logs/opensearch_log_store.py": [
-            {
-                "code": "reportUnreachable",
-                "range": {
-                    "startColumn": 4,
-                    "endColumn": 55,
-                    "lineCount": 1
-                }
-            }
-        ]
-    }
+    "files": {}
 }

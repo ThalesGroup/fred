@@ -123,7 +123,10 @@ impl IntoResponse for AppError {
             AppError::Unprocessable(_) => StatusCode::UNPROCESSABLE_ENTITY,
             AppError::Problem { status, .. } => *status,
             AppError::Internal(e) => {
-                tracing::error!(error = ?e, "internal error");
+                tracing::error!(
+                    error = fred_rust_sdk::logging::error_chain(e),
+                    "internal error"
+                );
                 StatusCode::INTERNAL_SERVER_ERROR
             }
         };

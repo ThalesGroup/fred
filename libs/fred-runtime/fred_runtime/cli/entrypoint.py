@@ -145,7 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the Fred agent pod chat client."""
-    env_file = load_cli_environment(log_prefix="[CLI CONFIG]")
+    env_file = load_cli_environment()
     parser = build_parser()
     args = parser.parse_args(argv)
     base_url = normalize_base_url(args.base_url)

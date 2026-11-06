@@ -14,51 +14,5 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Dict, Literal, Optional, Union
-
-from pydantic import BaseModel, Field
-
-from fred_core.common import OpenSearchIndexConfig
-
 AUDIT_LOGGER_NAME = "fred.security.audit"
 KPI_LOGGER_NAME = "KPI"
-
-LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-
-# Closed, structurally-derived classification for the generic app-log store
-# (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §6). This is a closed
-# vocabulary of exactly what this store can ever hold — "security"/"audit"
-# are deliberately not members: the security/audit trail (fred.security.audit)
-# is structurally excluded from this store by StoreEmitHandler, never merged
-# into it, so a type that included those values would misrepresent what can
-# actually appear here. Computed once, in StoreEmitHandler, from the emitting
-# LogRecord's logger name — never inferred from message text, so a message
-# that happens to contain "[KPI]" or "[AUDIT]" cannot be mistaken for that
-# category.
-LogCategory = Literal["application", "kpi"]
-
-
-class InMemoryLogStorageConfig(BaseModel):
-    type: Literal["in_memory"]
-
-
-class StdoutLogStorageConfig(BaseModel):
-    type: Literal["stdout"]
-
-
-LogStorageConfig = Annotated[
-    Union[InMemoryLogStorageConfig, StdoutLogStorageConfig, OpenSearchIndexConfig],
-    Field(discriminator="type"),
-]
-
-
-class LogEventDTO(BaseModel):
-    ts: float
-    level: LogLevel
-    logger: str
-    file: str
-    line: int
-    msg: str
-    service: Optional[str] = None
-    extra: Dict[str, Any] | None = None
-    category: LogCategory = "application"

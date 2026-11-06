@@ -144,7 +144,7 @@ def build_tool_loop_compiled_react_agent(
     # ours. Pairs with `[V2][CAPABILITY]` (agent_app.py) to localize a missing
     # tool to either side of that boundary from logs alone.
     logger.debug(
-        "[V2][TOOL_LOOP] agent=%s static_tools=%s middleware=%s",
+        "agent=%s static_tools=%s middleware=%s",
         definition.agent_id,
         [t.name for t in tools],
         [

@@ -163,7 +163,7 @@ class ExcelProcessor(BaseMarkdownProcessor):
             finally:
                 wb.close()
         except Exception as e:
-            logger.warning("[PROCESSOR][EXCEL] Failed to read metadata for %s: %s", file_path, e)
+            logger.warning("Failed to read metadata for %s: %s", file_path, e)
             return {}
         return {
             "extras": {
@@ -485,7 +485,7 @@ class ExcelProcessor(BaseMarkdownProcessor):
             return
         if self.extract_format != "parquet":
             logger.warning(
-                "[PROCESSOR][EXCEL] extract_format=%r: tables of document %s will not be SQL-registered (Parquet required)",
+                "extract_format=%r: tables of document %s will not be SQL-registered (Parquet required)",
                 self.extract_format,
                 document_uid,
             )
@@ -495,7 +495,7 @@ class ExcelProcessor(BaseMarkdownProcessor):
         try:
             context = ApplicationContext.get_instance()
         except RuntimeError:
-            logger.warning("[PROCESSOR][EXCEL] No ApplicationContext: skipping table registration for document %s", document_uid)
+            logger.warning("No ApplicationContext: skipping table registration for document %s", document_uid)
             return
 
         put_file = self.put_file_override or context.get_content_store().put_file

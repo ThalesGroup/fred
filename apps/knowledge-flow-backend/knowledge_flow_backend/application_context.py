@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import httpx
-from fred_core import BaseLogStore, ModelProvider, build_log_store, get_embeddings, get_model, split_realm_url
+from fred_core import ModelProvider, get_embeddings, get_model, split_realm_url
 from fred_core.common import ModelConfiguration, OpenSearchIndexConfig
 from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
@@ -73,7 +73,6 @@ class ApplicationContext:
         self.configuration = configuration
         self._published_artifact_reader: ArtifactReader | None = None
         self._vector_store_instance: BaseVectorStore | None = None
-        self._log_store_instance: BaseLogStore | None = None
         self._embedder_instance: Embeddings | None = None
         self._kpi_writer: BaseKPIWriter | None = None
         self._control_plane_client: httpx.AsyncClient | None = None
@@ -225,22 +224,8 @@ class ApplicationContext:
         pg_cfg = self.configuration.storage.postgres
         pg_async_engine = create_async_engine_from_config(pg_cfg)
 
-        logger.info("[SQL] Shared Postgres async initialized.")
+        logger.info("Shared Postgres async initialized.")
         return pg_async_engine
-
-    def get_log_store(self) -> BaseLogStore:
-        """
-        Factory function to get the appropriate log storage backend based on configuration.
-        Returns:
-            BaseLogStore: An instance of the log storage backend.
-        """
-        if self._log_store_instance is None:
-            config = ApplicationContext.get_instance().get_config().storage
-            self._log_store_instance = build_log_store(
-                log_store_config=config.log_store,
-                opensearch_config=config.opensearch,
-            )
-        return self._log_store_instance
 
     def get_embedder(self) -> Embeddings:
         """
@@ -284,8 +269,8 @@ class ApplicationContext:
                 self.configuration.crossencoder_model = ModelConfiguration(provider=None, name="cross-encoder/ms-marco-MiniLM-L-12-v2")
                 return CrossEncoder(model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2", cache_folder=None)
             except Exception as e:
-                logging.error(f"[CROSSENCODER][OFFLINE] The configuration is missing : Error: {e}")
-                logging.error("[CROSSENCODER][OFFLINE] Loading a default model : cross-encoder/ms-marco-MiniLM-L-12-v2")
+                logging.error(f"The configuration is missing : Error: {e}")
+                logging.error("Loading a default model : cross-encoder/ms-marco-MiniLM-L-12-v2")
                 default_cache = str(Path.home() / ".cache" / "huggingface")
                 return CrossEncoder(
                     model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2",
@@ -307,8 +292,8 @@ class ApplicationContext:
             expanded = os.path.expandvars(str(configured_local_path))
             resolved_local_path = str(Path(expanded).expanduser().resolve(strict=False))
 
-            logging.info("[CROSSENCODER][OFFLINE] Offline mode enabled.")
-            logging.info("[CROSSENCODER][OFFLINE] Using configured local_path: %s", resolved_local_path)
+            logging.info("Offline mode enabled.")
+            logging.info("Using configured local_path: %s", resolved_local_path)
             try:
                 return CrossEncoder(
                     model_name_or_path=model_config.name,
@@ -393,7 +378,7 @@ class ApplicationContext:
         try:
             await http_clients.async_shutdown_shared_clients()
         except Exception:
-            logger.debug("[HTTP] Failed to shutdown shared clients", exc_info=True)
+            logger.debug("Failed to shutdown shared clients", exc_info=True)
 
         if self._control_plane_client is not None:
             await self._control_plane_client.aclose()
@@ -410,7 +395,7 @@ class ApplicationContext:
             try:
                 self._opensearch_client.close()
             except Exception:
-                logger.debug("[OS] Error closing OpenSearch client", exc_info=True)
+                logger.debug("Error closing OpenSearch client", exc_info=True)
             finally:
                 self._opensearch_client = None
 

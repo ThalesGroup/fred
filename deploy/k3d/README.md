@@ -16,8 +16,7 @@ renders without building or changing the cluster.
 `FRED=weaver` gives context `k3d-fred`, namespace `fred-weaver`, database
 `fred_weaver`, Temporal namespace `fred-weaver`, and <http://weaver.localhost:8088>.
 Infrastructure is in namespace `fred-infra`. Swift, when deployed, has its own namespace,
-database and OpenSearch indexes (Weaver: `document-vectors`, `weaver-app-logs`,
-`weaver-kpi`). Login accounts and the S3 document bucket are shared; no users, grants, documents or conversations are migrated by deployment.
+database and OpenSearch indexes (Weaver: `document-vectors`, `weaver-kpi`). Login accounts and the S3 document bucket are shared; no users, grants, documents or conversations are migrated by deployment.
 
 On `weaver`, `deploy/k3d/build` builds `apps/control-plane` as the
 `control-plane-backend` image. The ingestion profile runs it as `control-plane serve`:
@@ -144,7 +143,7 @@ The inherited factory settings are retained:
 | --- | --- |
 | PostgreSQL / migrations | Database `fred_weaver`, host `postgres`; API and preparation worker use runtime login `fred_runtime`, schema `runtime`, password from `fred-secrets/POSTGRES_RUNTIME_PASSWORD`. The API's enabled migration job runs `python -m fred_runtime migrate`, including installed capabilities, after CP schema initialization. The worker runs no migration. |
 | Keycloak | Secondary issuer/origins, user and M2M authentication; workload client `agentic` and secret `fred-secrets/KEYCLOAK_AGENTIC_CLIENT_SECRET`. Existing outgoing delegation is retained. |
-| Storage / observability | SeaweedFS runtime object store, OpenSearch logs/KPI, Prometheus and node CA mount; their inherited credential references are retained. |
+| Storage / observability | SeaweedFS runtime object store, OpenSearch KPI, Prometheus and node CA mount; their inherited credential references are retained. |
 | Models | The control plane discovers the Mistral source; the pod retains only its inference credential binding. Both explicitly use `fred-model-credentials/OPENAI_API_KEY`. Discovery invokes no model. Web research stays disabled. |
 | Control Plane | Pod URL `http://control-plane-backend:8222/control-plane/v1` comes from the chart. The pod resolves each turn through the Rust resolver using trusted delegation. |
 

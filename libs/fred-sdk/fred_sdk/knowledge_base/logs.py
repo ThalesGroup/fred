@@ -19,9 +19,8 @@ Standard output is the only log channel a pod has, so every record goes there,
 one JSON object per line: the cluster's log pipeline turns each into fields,
 and `service` — the pod's `app.runtime_id` — is the same value its metrics
 carry, which is what joins a log line to the series it explains. Field names
-are those of Fred's own structured logs (`fred_core`'s `CompactJsonFormatter`),
-re-written here in a few lines so a pod never imports the agents platform.
-Contract: openspec/specs/knowledge-base-pod-metrics/spec.md.
+are those of Fred's own structured logs (`fred_core.logs.processors`), re-written
+here in a few lines so a pod never imports the agents platform.
 """
 
 from __future__ import annotations
@@ -29,9 +28,11 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import time
 from typing import Literal
 
 LogFormat = Literal["json", "text"]
+SERVICE_ROLE = "worker"
 
 
 class _Pending(logging.Handler):
@@ -83,7 +84,7 @@ def release_unconfigured() -> None:
 
 
 class JsonLineFormatter(logging.Formatter):
-    """One record, one line: what a log pipeline parses without being told how."""
+    """One record, one line, with the fields of every Fred service."""
 
     def __init__(self, *, service: str, knowledge_base: str) -> None:
         super().__init__()
@@ -91,18 +92,29 @@ class JsonLineFormatter(logging.Formatter):
         self._knowledge_base = knowledge_base
 
     def format(self, record: logging.LogRecord) -> str:
+        seconds = int(record.created)
         line = {
-            "ts": record.created,
-            "level": record.levelname,
+            "severity": record.levelname,
+            "timestamp": {
+                "seconds": seconds,
+                "nanos": int((record.created - seconds) * 1_000_000_000),
+            },
+            "message": record.getMessage(),
             "logger": record.name,
-            "file": record.filename,
-            "line": record.lineno,
             "service": self._service,
+            "service_role": SERVICE_ROLE,
+            "category": "application",
+            "logging.googleapis.com/sourceLocation": {
+                "file": record.filename,
+                "line": str(record.lineno),
+                "function": record.funcName,
+            },
+            "process": record.process,
+            "thread": record.threadName,
             "knowledge_base": self._knowledge_base,
-            "msg": record.getMessage(),
         }
         if record.exc_info:
-            line["exc"] = self.formatException(record.exc_info)
+            line["exception"] = self.formatException(record.exc_info)
         return json.dumps(line, ensure_ascii=False, default=str)
 
 
@@ -122,9 +134,11 @@ def configure_logging(
     else:
         # For a person at a terminal; the runtime id stays on every line.
         formatter = logging.Formatter(
-            fmt=f"%(asctime)s | %(levelname)s | {service} | %(name)s | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+            fmt=f"%(asctime)s %(levelname)s {service}/{SERVICE_ROLE}/%(name)s %(message)s "
+            f"knowledge_base={knowledge_base}",
+            datefmt="%Y-%m-%dT%H:%M:%S+00:00",
         )
+        formatter.converter = time.gmtime
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
     held = _take_pending()

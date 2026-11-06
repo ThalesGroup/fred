@@ -137,7 +137,7 @@ def _parse_limits(settings: Dict[str, Any]) -> httpx.Limits:
         cfg = {}
     if not isinstance(cfg, dict):
         logger.warning(
-            "[NET] http_client_limits ignored (expected dict, got %s).",
+            "http_client_limits ignored (expected dict, got %s).",
             type(cfg).__name__,
         )
         cfg = {}
@@ -167,7 +167,7 @@ def _parse_timeout(settings: Dict[str, Any]) -> httpx.Timeout:
 
     if raw_timeout is None and raw_request is not None:
         logger.warning(
-            "[NET] timeout not set; using request_timeout=%s for transport. Set timeout to avoid this fallback.",
+            "timeout not set; using request_timeout=%s for transport. Set timeout to avoid this fallback.",
             raw_request,
         )
         raw = raw_request
@@ -191,7 +191,7 @@ def _parse_timeout(settings: Dict[str, Any]) -> httpx.Timeout:
     # Missing or unsupported type -> defaults
     if raw is not None:
         logger.warning(
-            "[NET] timeout ignored (expected number or dict, got %s).",
+            "timeout ignored (expected number or dict, got %s).",
             type(raw).__name__,
         )
 
@@ -272,7 +272,7 @@ def get_shared_stack(
             atexit.register(shutdown_shared_clients)
 
             logger.info(
-                "[NET] Shared HTTPX stack init provider=%s "
+                "Shared HTTPX stack init provider=%s "
                 "limits(max_conn=%s keepalive=%s keepalive_expiry=%ss) "
                 "timeout(connect=%ss read=%ss write=%ss pool=%ss)",
                 cfg.provider,
@@ -285,7 +285,7 @@ def get_shared_stack(
                 _SHARED_TUNING.timeout.pool,
             )
             logger.debug(
-                "[NET][TUNING] provider=%s applied_limits={max=%s keepalive=%s exp=%ss} "
+                "provider=%s applied_limits={max=%s keepalive=%s exp=%ss} "
                 "applied_timeout={connect=%ss read=%ss write=%ss pool=%ss}",
                 cfg.provider,
                 _SHARED_TUNING.limits.max_connections,
@@ -299,7 +299,7 @@ def get_shared_stack(
         else:
             if requested != _SHARED_TUNING:
                 logger.warning(
-                    "[NET] Shared HTTPX stack already initialized; ignoring new tuning. "
+                    "Shared HTTPX stack already initialized; ignoring new tuning. "
                     "provider=%s requested=%s active=%s",
                     cfg.provider,
                     requested,
@@ -307,7 +307,7 @@ def get_shared_stack(
                 )
             else:
                 logger.debug(
-                    "[NET][TUNING] provider=%s reusing shared stack "
+                    "provider=%s reusing shared stack "
                     "limits(max=%s keepalive=%s exp=%ss) "
                     "timeout(connect=%ss read=%ss write=%ss pool=%ss)",
                     cfg.provider,
@@ -350,7 +350,7 @@ def shutdown_shared_clients() -> None:
         try:
             sync_client.close()
         except Exception:
-            logger.exception("[NET] Error closing Sync HTTPX client.")
+            logger.exception("Error closing Sync HTTPX client.")
 
     if async_client is not None:
 
@@ -370,7 +370,7 @@ def shutdown_shared_clients() -> None:
                 with _silence_asyncio_debug_logs():
                     asyncio.run(_close())
         except Exception:
-            logger.exception("[NET] Error closing Async HTTPX client.")
+            logger.exception("Error closing Async HTTPX client.")
 
 
 async def async_shutdown_shared_clients() -> None:
@@ -393,10 +393,10 @@ async def async_shutdown_shared_clients() -> None:
         try:
             sync_client.close()
         except Exception:
-            logger.exception("[NET] Error closing Sync HTTPX client.")
+            logger.exception("Error closing Sync HTTPX client.")
 
     if async_client is not None:
         try:
             await async_client.aclose()
         except Exception:
-            logger.exception("[NET] Error closing Async HTTPX client.")
+            logger.exception("Error closing Async HTTPX client.")

@@ -155,7 +155,7 @@ class RunScope:
                 _CURRENT_RUN_SCOPE.reset(token)
             except ValueError:
                 # A closed scope cannot be joined even if its context survives.
-                logger.debug("[RUN] run scope reset skipped: foreign context")
+                logger.debug("run scope reset skipped: foreign context")
 
     def close(self) -> None:
         """End the scope and cancel whatever it still has running."""

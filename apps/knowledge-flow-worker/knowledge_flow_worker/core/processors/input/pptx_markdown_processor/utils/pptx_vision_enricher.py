@@ -49,7 +49,7 @@ def enrich_slides_with_vision(
         return PptxVisionEnrichmentResult()
 
     if image_describer is None:
-        logger.warning("[PROCESSOR][PPTX] No image describer available for vision enrichment.")
+        logger.warning("No image describer available for vision enrichment.")
         return PptxVisionEnrichmentResult()
 
     # Ingestion is a batch path, not an interactive one: a big deck legitimately
@@ -57,7 +57,7 @@ def enrich_slides_with_vision(
     # drop every slide description on a slow conversion.
     pdf_path = convert_office_file_to_pdf(pptx_path, timeout_seconds=INGESTION_PDF_TIMEOUT_SECONDS)
     if pdf_path is None:
-        logger.warning("[PROCESSOR][PPTX] PPTX to PDF conversion failed; skipping vision enrichment.")
+        logger.warning("PPTX to PDF conversion failed; skipping vision enrichment.")
         return PptxVisionEnrichmentResult()
 
     slides_dir = output_dir / "slides_png"
@@ -74,14 +74,14 @@ def enrich_slides_with_vision(
             enrichments[slide_number] = description
         except Exception as exc:
             logger.warning(
-                "[PROCESSOR][PPTX] Vision enrichment failed for slide %s: %s",
+                "Vision enrichment failed for slide %s: %s",
                 slide_number,
                 exc,
             )
             enrichments[slide_number] = "Visual enrichment not available."
 
     logger.info(
-        "[PROCESSOR][PPTX] Generated vision enrichments for %s slide(s).",
+        "Generated vision enrichments for %s slide(s).",
         len(enrichments),
     )
     return PptxVisionEnrichmentResult(

@@ -10,7 +10,9 @@
       "Bash(acli jira workitem transition:*)"
     ],
     "additionalDirectories": [
-      "/tmp"
+      "/tmp",
+      "/home/dimi/Work/common/fred-deployment-factory/k3d-apps/fred",
+      "/home/dimi/Work/common/fred-deployment-factory/docs"
     ]
   }
 }

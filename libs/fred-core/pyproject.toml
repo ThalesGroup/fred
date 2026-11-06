@@ -125,7 +125,6 @@ omit = [
   "fred_core/filesystem/minio_filesystem.py",
   "fred_core/store/minio_content_store.py",
   "fred_core/store/opensearch_mapping_validator.py",
-  "fred_core/logs/opensearch_log_store.py",
   "fred_core/kpi/opensearch_kpi_store.py",
   # AI model factories: requires live provider credentials (OpenAI, Azure, Ollama, Vertex)
   "fred_core/model/factory.py",

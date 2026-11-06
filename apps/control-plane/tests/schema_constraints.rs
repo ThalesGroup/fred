@@ -488,7 +488,7 @@ async fn initialization_replays_without_data_changes_and_refuses_incompatible_hi
         .execute(&pool).await.unwrap();
     let rejected = initialize();
     assert!(!rejected.status.success());
-    assert!(String::from_utf8_lossy(&rejected.stderr).contains("do not rewrite SQLx history"));
+    assert!(String::from_utf8_lossy(&rejected.stdout).contains("do not rewrite SQLx history"));
     assert!(control_plane::db::require_initialized(&pool).await.is_err());
     let retained: String = sqlx::query_scalar("select name from space where id=$1")
         .bind(org)

@@ -8,7 +8,10 @@ mod kubernetes;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
-use fred_rust_sdk::security::authentication::Authenticator;
+use fred_rust_sdk::{
+    logging::{self, LogFormat, LogIdentity},
+    security::authentication::Authenticator,
+};
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
@@ -17,7 +20,27 @@ async fn main() -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&api::openapi())?);
         return Ok(());
     }
-    tracing_subscriber::fmt::init();
+    logging::init(
+        LogIdentity {
+            service: "monitor",
+            role: "api",
+            owner: "monitor",
+        },
+        &std::env::var("MONITOR_LOG_LEVEL").unwrap_or_else(|_| "info".into()),
+        match std::env::var("MONITOR_LOG_FORMAT").as_deref() {
+            Ok("json") => LogFormat::Json,
+            _ => LogFormat::Text,
+        },
+    )?;
+    // Once logging runs, a fatal error is one more structured event, not stray stderr.
+    if let Err(error) = serve().await {
+        tracing::error!(error = logging::error_chain(&error), "monitor stopped");
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+async fn serve() -> Result<()> {
     let config = config::Config::from_env()?;
     let client = kube::Client::try_default().await?;
     let namespace = config

@@ -68,17 +68,17 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     emit_temporal_activity_queue_wait_kpi(phase="metadata")
 
     ingestion_service = await manager_service(file.source_tag, "preparation", file=file)
-    logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] push file uid={file.document_uid}.")
+    logger.info(f"push file uid={file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
     metadata = await ingestion_service.get_metadata(file.processed_by, file.document_uid)
     if metadata is None:
-        logger.error(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata not found uid={file.document_uid}")
+        logger.error(f"Metadata not found uid={file.document_uid}")
         raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
 
     metadata.processing.profile = file.profile
     raise_if_document_deleted(await ingestion_service.persist_progress(file.processed_by, metadata=metadata), metadata.document_uid)
 
-    logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata found for push file skipping extraction uid={file.document_uid}")
+    logger.info(f"Metadata found for push file skipping extraction uid={file.document_uid}")
     emit_temporal_activity_result_kpis(
         phase="metadata",
         started_at_monotonic=started_at,
@@ -103,7 +103,7 @@ async def push_input_process(
     logger = activity.logger
     started_at = asyncio.get_running_loop().time()
     profile = coerce_processing_profile(profile)
-    logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s profile=%s", metadata.document_uid, profile)
+    logger.info("Starting uid=%s profile=%s", metadata.document_uid, profile)
 
     ingestion_service = await manager_service(metadata.source.source_tag, "extraction")
     if ingestion_service.already_committed:
@@ -161,7 +161,7 @@ async def push_input_process(
         if not ingestion_service.context.is_tabular_file(metadata.document_name):
             metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
         await ingestion_service.persist_progress(user, metadata=metadata)
-        logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] completed uid=%s", metadata.document_uid)
+        logger.info("completed uid=%s", metadata.document_uid)
         emit_temporal_activity_result_kpis(
             phase="input",
             started_at_monotonic=started_at,
@@ -177,12 +177,12 @@ async def push_input_process(
             await ingestion_service.persist_progress(user, metadata=metadata)
         except Exception:
             logger.exception(
-                "[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] failed to persist error state uid=%s",
+                "failed to persist error state uid=%s",
                 metadata.document_uid,
                 exc_info=True,
             )
         logger.exception(
-            "[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] failed uid=%s",
+            "failed uid=%s",
             metadata.document_uid,
             exc_info=True,
         )

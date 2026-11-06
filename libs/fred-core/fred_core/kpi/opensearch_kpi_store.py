@@ -174,9 +174,9 @@ class OpenSearchKPIStore(BaseKPIStore):
         try:
             if not self.client.indices.exists(index=self.index):
                 self.client.indices.create(index=self.index, body=KPI_INDEX_MAPPING)
-                logger.info("[OPENSEARCH][KPI] created index '%s'", self.index)
+                logger.info("created index '%s'", self.index)
             else:
-                logger.info("[OPENSEARCH][KPI] index '%s' already exists.", self.index)
+                logger.info("index '%s' already exists.", self.index)
                 # Repair, then validate. An index created by an older version is
                 # missing whatever KPI_INDEX_MAPPING gained since (CTRLP-12's
                 # `dims.session_id`, OBSERV-02's `quantities.*_tokens`, and
@@ -186,7 +186,7 @@ class OpenSearchKPIStore(BaseKPIStore):
                 # repair. See `ensure_index_mapping`.
                 ensure_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:
-            logger.error("[OPENSEARCH][KPI] ensure_ready failed: %s", e)
+            logger.error("ensure_ready failed: %s", e)
             raise
 
     # -- writes ----------------------------------------------------------------
@@ -194,7 +194,7 @@ class OpenSearchKPIStore(BaseKPIStore):
         try:
             self.client.index(index=self.index, body=event.to_doc())
         except OpenSearchException as e:
-            logger.error("[OPENSEARCH][KPI] index_event failed: %s", e)
+            logger.error("index_event failed: %s", e)
             raise
 
     def bulk_index(self, events: List[KPIEvent]) -> None:
@@ -207,11 +207,9 @@ class OpenSearchKPIStore(BaseKPIStore):
         try:
             resp = self.client.bulk(body=actions)
             if resp.get("errors"):
-                logger.warning(
-                    "[OPENSEARCH][KPI] bulk_index completed with partial errors."
-                )
+                logger.warning("bulk_index completed with partial errors.")
         except OpenSearchException as e:
-            logger.error("[OPENSEARCH][KPI] bulk_index failed: %s", e)
+            logger.error("bulk_index failed: %s", e)
             raise
 
     # -- erasure (RGPD) --------------------------------------------------------
@@ -256,13 +254,13 @@ class OpenSearchKPIStore(BaseKPIStore):
             )
             updated = int(resp.get("updated", 0))
             logger.info(
-                "[OPENSEARCH][KPI] anonymised %s row(s) for session_id=%s",
+                "anonymised %s row(s) for session_id=%s",
                 updated,
                 session_id,
             )
             return updated
         except OpenSearchException as e:
-            logger.error("[OPENSEARCH][KPI] anonymise_for_session failed: %s", e)
+            logger.error("anonymise_for_session failed: %s", e)
             raise
 
     # -- reads -----------------------------------------------------------------

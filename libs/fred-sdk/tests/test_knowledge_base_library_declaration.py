@@ -126,7 +126,9 @@ def test_a_pod_keeping_its_own_store_declares_nothing(monkeypatch):
 
 def test_a_refused_declaration_does_not_fail_the_run(monkeypatch, caplog):
     """A base that stopped synchronizing over a marker would be the worse failure."""
-    transport = _RecordingTransport(status=400, text="another machine already fills it")
+    transport = _RecordingTransport(
+        status=400, text="SENTINEL another machine already fills it"
+    )
     transport.install(monkeypatch)
 
     asyncio.run(
@@ -138,6 +140,7 @@ def test_a_refused_declaration_does_not_fail_the_run(monkeypatch, caplog):
     )
 
     assert "Fred refused the declaration" in caplog.text
+    assert "SENTINEL" not in caplog.text
 
 
 def test_an_unreachable_fred_does_not_fail_the_run(monkeypatch, caplog):

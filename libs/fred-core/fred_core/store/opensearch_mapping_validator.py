@@ -79,13 +79,13 @@ def ensure_index_mapping(
             client.indices.put_mapping(index=index_name, body={"properties": missing})
             current_mapping = None  # the live mapping moved on — re-read it below
             logger.info(
-                "[OPENSEARCH][MAPPING] index '%s': added %s",
+                "index '%s': added %s",
                 index_name,
                 ", ".join(_leaf_paths(missing)),
             )
     except OpenSearchException as e:
         logger.warning(
-            "[OPENSEARCH][MAPPING] index '%s': could not add missing fields: %s",
+            "index '%s': could not add missing fields: %s",
             index_name,
             e,
         )
@@ -143,7 +143,7 @@ def validate_index_mapping(
             if field_name not in current_properties:
                 error_msg = f"Missing root field: '{field_name}'"
                 if allow_missing_fields:
-                    logger.warning("[OPENSEARCH][MAPPING] %s", error_msg)
+                    logger.warning("%s", error_msg)
                 else:
                     mismatches.append(error_msg)
                 continue
@@ -159,13 +159,13 @@ def validate_index_mapping(
             error_msg = (
                 f"Index '{index_name}' has mapping validation errors: {mismatches}"
             )
-            logger.error("[OPENSEARCH][MAPPING] %s", error_msg)
+            logger.error("%s", error_msg)
 
             if strict:
                 raise MappingValidationError(error_msg)
         else:
             logger.info(
-                "[OPENSEARCH][MAPPING] index '%s' mapping validation passed",
+                "index '%s' mapping validation passed",
                 index_name,
             )
 
@@ -173,7 +173,7 @@ def validate_index_mapping(
         if isinstance(e, MappingValidationError):
             raise
         logger.error(
-            "[OPENSEARCH][MAPPING] validation failed for index '%s': %s",
+            "validation failed for index '%s': %s",
             index_name,
             e,
         )

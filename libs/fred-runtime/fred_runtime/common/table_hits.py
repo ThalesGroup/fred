@@ -147,13 +147,13 @@ async def complete_truncated_table(
     try:
         chunks = await fetch(document_uid=uid, limit=TABLE_EXPANSION_MAX_CHUNKS)
     except Exception:
-        logger.warning("[TABLE] completion failed for uid=%s", uid, exc_info=True)
+        logger.warning("completion failed for uid=%s", uid, exc_info=True)
         return hits
 
     original = [hit for hit in hits if hit.uid == uid]
     if len(chunks) <= len(original) or len(chunks) >= TABLE_EXPANSION_MAX_CHUNKS:
         logger.info(
-            "[TABLE] completion skipped uid=%s fetched=%d had=%d cap=%d",
+            "completion skipped uid=%s fetched=%d had=%d cap=%d",
             uid,
             len(chunks),
             len(original),
@@ -168,9 +168,7 @@ async def complete_truncated_table(
     chunks = [chunk.model_copy(update={"score": best}) for chunk in chunks]
     at = next(i for i, hit in enumerate(hits) if hit.uid == uid)
     rest = [hit for hit in hits if hit.uid != uid]
-    logger.info(
-        "[TABLE] completion uid=%s chunks=%d->%d", uid, len(original), len(chunks)
-    )
+    logger.info("completion uid=%s chunks=%d->%d", uid, len(original), len(chunks))
     return rest[:at] + chunks + rest[at:]
 
 

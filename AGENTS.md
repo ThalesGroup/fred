@@ -9,8 +9,13 @@ Explicit user instructions take precedence, then nearest `AGENTS.override.md` or
 ## Sources and working order
 
 Fred's maintained architectural explanation is [arc42](docs/architecture/README.md).
-Code, migrations and executable checks establish implementation facts. An agreed
-business decision defines the intended behavior; existing code can be wrong.
+Start with its navigation map, then read the relevant chapters and technical
+annexes; do not reload the whole dossier for every change. Code, migrations and
+executable checks establish implementation facts. Accepted decisions describe
+intended behavior, not unquestionable truths. Challenge a decision when concrete
+evidence invalidates its assumptions or shows disproportionate cost. Explain the
+evidence, consequence and smallest useful comparison before proposing a change;
+do not silently replace the decision or rewrite the documentation to hide a defect.
 Use component READMEs for commands and usage. Historical material in Git is
 comparison evidence only when explicitly needed, never an active contract.
 
@@ -31,6 +36,32 @@ Read [fred-architecture](.agents/skills/fred-architecture/SKILL.md) at the start
 of a Fred task; use its editorial rules when updating the dossier. Keep proposed
 work in the current task or issue. No RFC workflow or separate architecture-doc
 mode remains. Do not rebuild the retired document corpus.
+
+## Architecture audits that support a decision
+
+For a requested architecture assessment, state the decision to be informed and
+inspect only the responsibilities and boundaries needed to answer it. Start the
+report with a short conclusion: what to retain, what warrants reconsideration,
+and what remains uncertain. A sound model is a valid outcome; do not manufacture
+simplifications or turn every hypothetical use into an implementation requirement.
+An explicitly deferred need stays outside acceptance criteria until reopened.
+
+Separate structural concerns from local defects. Include concrete source evidence,
+but put detailed findings after the decision summary, without repeating the whole
+investigation. Surface a serious security or correctness issue even when it does
+not change the architectural conclusion; discovering it does not authorize a fix
+or a wider audit. This decision-first format takes precedence over exhaustive
+skill output templates for architecture assessments; explicit review requests
+still determine scope and required detail.
+
+When documentation updates are authorized, reflect the agreed conclusion in the
+existing arc42 explanation and annex references, not a new audit ledger. A
+read-only audit stays read-only. Keep reasons and meaningful limits with
+the canonical explanation; keep pending work in the task or issue. Link to that
+explanation from instructions instead of copying domain rules into skills. Verify
+the affected sources and distinguish implementation evidence from deployed
+validation; document neither an untested journey as received nor a local defect
+as proof that the whole architecture is wrong.
 
 ## Incremental collaboration
 

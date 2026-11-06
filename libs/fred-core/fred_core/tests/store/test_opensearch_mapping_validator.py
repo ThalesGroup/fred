@@ -19,8 +19,8 @@ created by an older version instead of hard-failing startup on it. Its contract
 is narrow on purpose: report what is *absent*, never what merely differs.
 
 The orchestration around it (read once, patch, validate) is exercised end to end
-through the stores that call it — see `tests/kpi/test_opensearch_kpi_store_
-ensure_ready.py` and `tests/logs/test_opensearch_log_store_ensure_ready.py`.
+through the store that calls it — see `tests/kpi/test_opensearch_kpi_store_
+ensure_ready.py`.
 """
 
 from __future__ import annotations

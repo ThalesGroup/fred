@@ -198,7 +198,7 @@ def apply_external_catalog_overrides(config: AgentPodConfig) -> AgentPodConfig:
     if platform_prompt_path.exists():
         config.set_platform_prompt_file(load_platform_prompt_file(platform_prompt_path))
         logger.info(
-            "[fred-runtime][config] platform prompt file loaded from %s",
+            "platform prompt file loaded from %s",
             platform_prompt_path,
         )
     else:
@@ -208,7 +208,7 @@ def apply_external_catalog_overrides(config: AgentPodConfig) -> AgentPodConfig:
         # a pod running without the platform instructions has lost the tool
         # discipline every agent depends on, which is worth noticing.
         logger.warning(
-            "[fred-runtime][config] no platform prompt file at %s; this pod "
+            "no platform prompt file at %s; this pod "
             "contributes no platform prompt and no platform instructions",
             platform_prompt_path,
         )
@@ -219,7 +219,7 @@ def apply_external_catalog_overrides(config: AgentPodConfig) -> AgentPodConfig:
         if not mcp_catalog_path.exists():
             config.set_mcp_configuration(None)
             logger.info(
-                "[fred-runtime][config] MCP catalog not found at %s; pod starts with no external MCP servers",
+                "MCP catalog not found at %s; pod starts with no external MCP servers",
                 mcp_catalog_path,
             )
             return config
@@ -227,7 +227,7 @@ def apply_external_catalog_overrides(config: AgentPodConfig) -> AgentPodConfig:
         catalog = load_mcp_catalog(mcp_catalog_path, services=services)
         config.set_mcp_configuration(catalog)
         logger.info(
-            "[fred-runtime][config] loaded MCP catalog from %s (servers=%d)",
+            "loaded MCP catalog from %s (servers=%d)",
             mcp_catalog_path,
             len(catalog.servers),
         )
@@ -248,7 +248,7 @@ def apply_external_catalog_overrides(config: AgentPodConfig) -> AgentPodConfig:
     catalog = McpCatalog(servers=[*installed.servers, *external.servers])
     config.set_mcp_configuration(catalog if catalog.servers else None)
     logger.info(
-        "[fred-runtime][config] loaded MCP catalogs (installed=%d external=%d)",
+        "loaded MCP catalogs (installed=%d external=%d)",
         len(installed.servers),
         len(external.servers),
     )

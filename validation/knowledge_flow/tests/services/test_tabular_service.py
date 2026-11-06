@@ -572,7 +572,7 @@ async def test_tabular_processor_logs_parquet_artifact_write(tmp_path, caplog):
     assert artifact is not None
 
     tabular_log_records = [
-        record.message for record in caplog.records if "[TABULAR]" in record.message
+        record.message for record in caplog.records if "document_uid=" in record.message
     ]
     assert any(
         "document_uid=doc-log-check" in message

@@ -183,7 +183,7 @@ class DeepAgentRuntime(ReActRuntime):
         # own copy of ReActRuntime's "[V2][EXECUTOR] build start" line under
         # this module's own logger to stay distinguishable in the logs.
         logger.debug(
-            "[V2][EXECUTOR] build start runtime=%s agent=%s declared_tool_refs=%r toolset_key=%r",
+            "build start runtime=%s agent=%s declared_tool_refs=%r toolset_key=%r",
             type(self).__name__,
             self.definition.agent_id,
             [r.tool_ref for r in self.definition.declared_tool_refs],

@@ -58,7 +58,7 @@ async def _output_process_impl(
 ) -> DocumentMetadata:
     logger = activity.logger
     started_at = asyncio.get_running_loop().time()
-    logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] Starting uid={metadata.document_uid}")
+    logger.info(f"Starting uid={metadata.document_uid}")
 
     output_stage: ProcessingStage | None = None
     try:
@@ -131,7 +131,7 @@ async def _output_process_impl(
             # Save the updated metadata
             await persist_progress(file.processed_by, metadata=metadata)
 
-        logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
+        logger.info(f"completed uid={metadata.document_uid}")
         emit_temporal_activity_result_kpis(
             phase="output",
             started_at_monotonic=started_at,
@@ -149,11 +149,11 @@ async def _output_process_impl(
             await persist_progress(file.processed_by, metadata=metadata)
         except Exception:
             logger.exception(
-                "[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] failed to persist error state uid=%s",
+                "failed to persist error state uid=%s",
                 metadata.document_uid,
                 exc_info=True,
             )
-        logger.exception(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] failed uid={metadata.document_uid}", exc_info=True)
+        logger.exception(f"failed uid={metadata.document_uid}", exc_info=True)
         emit_temporal_activity_result_kpis(
             phase="output",
             started_at_monotonic=started_at,

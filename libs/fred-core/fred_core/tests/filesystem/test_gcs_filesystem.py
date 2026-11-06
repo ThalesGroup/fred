@@ -211,7 +211,7 @@ async def test_read_info_log_does_not_expose_object_key(gcs_fs, caplog):
         await gcs_fs.read("conversations/session/private.txt")
 
     assert "conversations/session/private.txt" not in caplog.text
-    assert "[GCS_READ] bucket=test-bucket" in caplog.text
+    assert "bucket=test-bucket" in caplog.text
 
 
 @pytest.mark.asyncio

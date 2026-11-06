@@ -63,10 +63,10 @@ def test_a_json_line_carries_the_pod_and_the_definition(capsys):
     record = json.loads(line)
     assert record["service"] == "webdav-kb"
     assert record["knowledge_base"] == "fred.samples.webdav"
-    assert record["msg"] == "wrote 3 documents"
-    assert record["level"] == "INFO"
+    assert record["message"] == "wrote 3 documents"
+    assert record["severity"] == "INFO"
     assert record["logger"] == "acme.sync"
-    assert isinstance(record["ts"], float)
+    assert isinstance(record["timestamp"]["seconds"], int)
 
 
 def test_an_exception_stays_inside_its_one_line(capsys):
@@ -78,7 +78,7 @@ def test_an_exception_stays_inside_its_one_line(capsys):
         logging.getLogger("acme").exception("run failed")
 
     [line] = _lines(capsys)
-    assert "ValueError: boom" in json.loads(line)["exc"]
+    assert "ValueError: boom" in json.loads(line)["exception"]
 
 
 def test_text_keeps_the_runtime_id_on_every_line(capsys):
@@ -87,8 +87,8 @@ def test_text_keeps_the_runtime_id_on_every_line(capsys):
     logging.getLogger("acme").warning("slow share")
 
     [line] = _lines(capsys)
-    assert "| webdav-kb |" in line
-    assert line.endswith("slow share")
+    assert " WARNING webdav-kb/worker/acme slow share knowledge_base=k.b" in line
+    assert "+00:00 " in line
 
 
 def test_earlier_handlers_write_no_unattributed_copy(capsys):
@@ -138,7 +138,7 @@ def test_lines_logged_while_the_configuration_loads_are_written_as_the_pod(capsy
     [line] = _lines(capsys)
     record = json.loads(line)
     assert record["service"] == "webdav-kb"
-    assert record["msg"] == "Loaded configuration from: x.yaml"
+    assert record["message"] == "Loaded configuration from: x.yaml"
 
 
 def test_a_configuration_that_cannot_load_still_shows_why(capsys):
@@ -210,10 +210,10 @@ def test_native_engine_logs_use_the_pod_output(
         data = json.loads(line)
         assert data["service"] == "acme-kb"
         assert data["knowledge_base"] == "acme.kb.runtime"
-        assert data["level"] == "INFO"
-        assert data["ts"] == record.created
+        assert data["severity"] == "INFO"
+        assert data["timestamp"]["seconds"] == int(record.created)
         assert data["logger"] == record.name
-        assert data["msg"].startswith("native engine message")
+        assert data["message"].startswith("native engine message")
     else:
-        assert "| acme-kb |" in line
+        assert " acme-kb/worker/" in line
         assert "native engine message" in line

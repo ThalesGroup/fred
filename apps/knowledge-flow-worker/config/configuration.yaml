@@ -321,6 +321,3 @@ storage:
     type: opensearch
     index: vector-index-mistral
     bulk_size: 1000
-  log_store:
-    type: opensearch
-    index: app-logs-index

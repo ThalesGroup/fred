@@ -422,16 +422,12 @@ class LangfuseSpanAdapter(SpanPort):
             if self._is_root and (self._input is not None or self._output is not None):
                 self._set_trace_io()
         except Exception:
-            logger.warning(
-                "[V2][TRACING] Failed to flush Langfuse span payload.", exc_info=True
-            )
+            logger.warning("Failed to flush Langfuse span payload.", exc_info=True)
         finally:
             try:
                 self._span.end()
             except Exception:
-                logger.warning(
-                    "[V2][TRACING] Failed to end Langfuse span.", exc_info=True
-                )
+                logger.warning("Failed to end Langfuse span.", exc_info=True)
             self._ended = True
 
     def _set_trace_io(self) -> None:
@@ -661,9 +657,7 @@ class LangfuseTracerAdapter(TracerPort):
             otel_span.set_attributes(attributes)
         except Exception:
             # Never let a tracing detail break a turn.
-            logger.debug(
-                "[V2][TRACING] Could not set Langfuse trace attributes.", exc_info=True
-            )
+            logger.debug("Could not set Langfuse trace attributes.", exc_info=True)
 
 
 _LANGFUSE_TRACER: TracerPort | None | bool = False
@@ -725,14 +719,14 @@ def langfuse_max_content_chars(default: int = DEFAULT_MAX_CONTENT_CHARS) -> int:
         parsed = int(raw.strip())
     except ValueError:
         logger.warning(
-            "[V2][TRACING] LANGFUSE_MAX_CONTENT_CHARS=%r is not an integer — using %d.",
+            "LANGFUSE_MAX_CONTENT_CHARS=%r is not an integer — using %d.",
             raw,
             default,
         )
         return default
     if parsed <= 0:
         logger.warning(
-            "[V2][TRACING] LANGFUSE_MAX_CONTENT_CHARS must be positive — using %d.",
+            "LANGFUSE_MAX_CONTENT_CHARS must be positive — using %d.",
             default,
         )
         return default
@@ -767,7 +761,7 @@ def build_langfuse_tracer(
                 max_content_chars=langfuse_max_content_chars(max_content_chars),
             )
         except Exception:
-            logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
+            logger.exception("Failed to initialize Langfuse tracer.")
             _LANGFUSE_TRACER = None
     else:
         _LANGFUSE_TRACER = None
@@ -1157,7 +1151,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
 
         if _langfuse_credentials() is None:
             logger.info(
-                "[V2][TRACES] summarize_conversation skipped: Langfuse credentials are not configured."
+                "summarize_conversation skipped: Langfuse credentials are not configured."
             )
             return ToolInvocationResult(
                 tool_ref=request.tool_ref,
@@ -1187,7 +1181,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             )
         except Exception as exc:
             logger.warning(
-                "[V2][TRACES] summarize_conversation failed: %s",
+                "summarize_conversation failed: %s",
                 exc,
                 exc_info=True,
             )

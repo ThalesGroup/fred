@@ -397,11 +397,11 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         """`on_error`: report the failure and continue at the fallback node."""
         message = str(exc).strip() or type(exc).__name__
         logger.warning(
-            "[V2][GRAPH] Node %r raised; routing to on_error=%r. agent=%s error=%s",
+            "Node %r raised; routing to on_error=%r. agent=%s error_type=%s",
             node_id,
             target,
             self._definition.agent_id,
-            message,
+            type(exc).__name__,
         )
         get_stream_writer()(
             NodeErrorRuntimeEvent(
@@ -531,7 +531,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             return
         except Exception as exc:
             logger.exception(
-                "[V2][GRAPH] Unhandled exception in graph agent=%s",
+                "Unhandled exception in graph agent=%s",
                 self._definition.agent_id,
             )
             outcome.error = exc

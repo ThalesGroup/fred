@@ -66,8 +66,6 @@ applications:
           database: fred
           username: fred_runtime
           schema: runtime
-        log_store:
-          type: "in_memory"
         tabular_store:
           artifacts_prefix: "tabular/datasets"
           format: "parquet"

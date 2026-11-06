@@ -92,7 +92,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             return self.image_describer
         if not get_configuration().vision_model:
             if not self._warned_missing_vision_model:
-                logger.warning("[PROCESSOR][DOCX] Vision model configuration is missing while process_images is enabled.")
+                logger.warning("Vision model configuration is missing while process_images is enabled.")
                 self._warned_missing_vision_model = True
             return None
         self.image_describer = build_image_describer(get_configuration().vision_model)
@@ -188,7 +188,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             xml_bytes = docx_zip.read(part_name)
             root = ET.fromstring(xml_bytes)
         except Exception as e:
-            logger.warning("[DOCX][GUARDRAIL] Failed to parse %s: %s", part_name, e)
+            logger.warning("Failed to parse %s: %s", part_name, e)
             return []
 
         lines: list[str] = []
@@ -212,7 +212,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
                     elif part_name.startswith("word/footer") and part_name.endswith(".xml"):
                         footer_lines.extend(self._extract_text_from_docx_xml_part(docx_zip, part_name))
         except Exception as e:
-            logger.warning("[DOCX][GUARDRAIL] Failed to inspect DOCX xml parts for %s: %s", file_path, e)
+            logger.warning("Failed to inspect DOCX xml parts for %s: %s", file_path, e)
 
         return header_lines, footer_lines
 
@@ -310,7 +310,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             svg_path = img_path.with_suffix(".svg")
             inkscape_path = which("inkscape")
             if inkscape_path is None:
-                logger.error("[DOCX] Inkscape not found; cannot convert %s to SVG. Leaving EMF in place.", img_path)
+                logger.error("Inkscape not found; cannot convert %s to SVG. Leaving EMF in place.", img_path)
                 continue
 
             try:
@@ -319,7 +319,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
                     check=True,
                 )
             except subprocess.CalledProcessError as e:
-                logger.error("[DOCX] Inkscape failed converting %s to SVG: %s", img_path, e)
+                logger.error("Inkscape failed converting %s to SVG: %s", img_path, e)
                 continue
 
             # Remove the original EMF file
@@ -341,14 +341,14 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
                     try:
                         img_b64 = base64.b64encode(img_path.read_bytes()).decode("utf-8")
                         description = image_describer.describe(img_b64)
-                        logger.info("[PROCESSOR][DOCX] Described image: %s", img_path.name)
+                        logger.info("Described image: %s", img_path.name)
                     except Exception as e:
-                        logger.warning("[PROCESSOR][DOCX] Image description failed for %s: %s", img_path.name, e)
+                        logger.warning("Image description failed for %s: %s", img_path.name, e)
                         description = "Image could not be described."
                     before = md_content
                     md_content = _replace_image_reference(md_content, str(img_path), description)
                     if md_content == before:
-                        logger.warning("[PROCESSOR][DOCX] No match found for image reference: %s — regex did not replace", img_path)
+                        logger.warning("No match found for image reference: %s — regex did not replace", img_path)
 
         # Change media path to use api endpoint
         md_content = md_content.replace(str(output_dir), f"knowledge-flow/v1/markdown/{document_uid}")

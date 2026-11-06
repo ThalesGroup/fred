@@ -257,7 +257,7 @@ async fn bootstrap_platform_admin(
     crate::users::snapshot(&AdmissionState::from_ref(&s), &user).await;
     tracing::info!(
         user_id = user.uid,
-        "[BOOTSTRAP] Granted platform_admin via root bootstrap"
+        "Granted platform_admin via root bootstrap"
     );
     Ok(Json(BootstrapResponse {
         user_id: user.uid,

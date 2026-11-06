@@ -229,7 +229,7 @@ class _AttachmentTexts:
             worker.start()
             worker.join(ATTACHMENT_TIMEOUT_SECONDS)
             if worker.is_alive():
-                logger.warning("[EMAIL] attachment %r: text extraction exceeded %ss", attachment.name, ATTACHMENT_TIMEOUT_SECONDS)
+                logger.warning("attachment %r: text extraction exceeded %ss", attachment.name, ATTACHMENT_TIMEOUT_SECONDS)
                 self.timed_out = True
                 return None
         return outcome.get("text") or None
@@ -248,7 +248,7 @@ def _extract_text(name: str, path: Path, outcome: dict[str, str]) -> None:
         options = FastTextOptions(max_chars=MAX_ATTACHMENT_CHARS, add_page_headings=path.suffix in (".pptx", ".ppt"))
         outcome["text"] = processor.extract(path, options).text.strip()
     except Exception as exc:  # noqa: BLE001 - encrypted or damaged attachments must never fail the mail
-        logger.info("[EMAIL] attachment %r: text could not be extracted: %s", name, exc)
+        logger.info("attachment %r: text could not be extracted: %s", name, exc)
 
 
 def _has_expected_signature(path: Path) -> bool:
@@ -391,7 +391,7 @@ def _attached_message(name: str, depth: int, budget: _AttachedBudget, parse: Cal
     try:
         return AttachedMessage(name=name, parsed=parse())
     except Exception as exc:  # noqa: BLE001 - a damaged attached mail must never fail its parent
-        logger.info("[EMAIL] attached message %r could not be read: %s", name, exc)
+        logger.info("attached message %r could not be read: %s", name, exc)
         return AttachedMessage(name=name, parsed=None)
 
 

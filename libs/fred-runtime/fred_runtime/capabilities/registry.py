@@ -154,7 +154,7 @@ class CapabilityRegistry:
                 ) from exc
             cap_id = self.register(_as_capability(ep.name, target))
             logger.info(
-                "[CAPABILITY] discovered '%s' from entry point '%s' (%s)",
+                "discovered '%s' from entry point '%s' (%s)",
                 cap_id,
                 ep.name,
                 ep.value,
@@ -425,5 +425,5 @@ def boot_capability_registry(
         register_mcp_capabilities(registry, mcp_servers)
     registry.validate(env)
     if len(registry):
-        logger.info("[CAPABILITY] registry ready: %s", ", ".join(registry.ids()))
+        logger.info("registry ready: %s", ", ".join(registry.ids()))
     return registry

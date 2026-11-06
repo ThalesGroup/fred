@@ -236,7 +236,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 returned = self._vs.add_embeddings(texts, embeddings, metadatas=[document.metadata for document in documents], ids=assigned)
 
         logger.info(
-            "[VECTOR][PGVECTOR] upserted %d chunk(s) into collection=%s",
+            "upserted %d chunk(s) into collection=%s",
             len(returned),
             self.collection_name,
         )
@@ -264,14 +264,14 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 )
                 deleted = res.rowcount or 0
                 logger.info(
-                    "[VECTOR][PGVECTOR] deleted vectors for document_uid=%s collection=%s deleted=%d",
+                    "deleted vectors for document_uid=%s collection=%s deleted=%d",
                     document_uid,
                     self.collection_name,
                     deleted,
                 )
         except Exception:
             logger.exception(
-                "[VECTOR][PGVECTOR] failed to delete vectors for document_uid=%s",
+                "failed to delete vectors for document_uid=%s",
                 document_uid,
             )
             raise RuntimeError("Failed to delete vectors from PGVector.")
@@ -294,14 +294,14 @@ class PgVectorStoreAdapter(BaseVectorStore):
                     {"collection": self.collection_name, "doc_uid": document_uid, "value": bool(value)},
                 )
                 logger.info(
-                    "[VECTOR][PGVECTOR] updated retrievable=%s on %d chunk(s) for document_uid=%s collection=%s",
+                    "updated retrievable=%s on %d chunk(s) for document_uid=%s collection=%s",
                     value,
                     res.rowcount or 0,
                     document_uid,
                     self.collection_name,
                 )
         except Exception:
-            logger.exception("[VECTOR][PGVECTOR] failed to update retrievable flag for document_uid=%s", document_uid)
+            logger.exception("failed to update retrievable flag for document_uid=%s", document_uid)
             raise RuntimeError("Failed to update retrievable flag in PGVector.")
 
     def set_document_name(self, *, document_uid: str, document_name: str) -> None:
@@ -330,14 +330,14 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 )
                 updated = res.rowcount or 0
                 logger.info(
-                    "[VECTOR][PGVECTOR] updated document_name on %d chunk(s) for document_uid=%s collection=%s",
+                    "updated document_name on %d chunk(s) for document_uid=%s collection=%s",
                     updated,
                     document_uid,
                     self.collection_name,
                 )
         except Exception:
             logger.exception(
-                "[VECTOR][PGVECTOR] failed to update document_name for document_uid=%s",
+                "failed to update document_name for document_uid=%s",
                 document_uid,
             )
 
@@ -364,7 +364,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
         except Exception:
             if getattr(self, "strict_operations", False):
                 raise
-            logger.exception("[VECTOR][PGVECTOR] Failed to count chunks for %s", document_uid)
+            logger.exception("Failed to count chunks for %s", document_uid)
             return 0
 
     def list_document_uids(self) -> list[str]:
@@ -387,7 +387,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 ).fetchall()
                 return [r[0] for r in rows if r[0]]
         except Exception:
-            logger.exception("[VECTOR][PGVECTOR] Failed to list document_uids")
+            logger.exception("Failed to list document_uids")
             return []
 
     def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
@@ -411,7 +411,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
             for cid, vec, doc, meta in rows:
                 vec_list = _as_vector_list(vec)
                 if vec_list is None:
-                    logger.warning("[VECTOR][PGVECTOR] skipped vector for chunk_uid=%s (could not parse vector payload)", cid)
+                    logger.warning("skipped vector for chunk_uid=%s (could not parse vector payload)", cid)
                     continue
                 entry: Dict[str, Any] = {"chunk_uid": cid, "vector": vec_list}
                 if with_document:
@@ -421,14 +421,14 @@ class PgVectorStoreAdapter(BaseVectorStore):
                     entry["metadata"] = meta
                 out.append(entry)
             logger.info(
-                "[VECTOR][PGVECTOR] fetched %d vectors for document_uid=%s collection=%s",
+                "fetched %d vectors for document_uid=%s collection=%s",
                 len(out),
                 document_uid,
                 self.collection_name,
             )
             return out
         except Exception:
-            logger.exception("[VECTOR][PGVECTOR] failed to fetch vectors for document_uid=%s", document_uid)
+            logger.exception("failed to fetch vectors for document_uid=%s", document_uid)
             return []
 
     def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
@@ -453,14 +453,14 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 entry: Dict[str, Any] = {"chunk_uid": cid, "text": doc or "", "metadata": meta or {}}
                 out.append(entry)
             logger.info(
-                "[VECTOR][PGVECTOR] fetched %d chunks for document_uid=%s collection=%s",
+                "fetched %d chunks for document_uid=%s collection=%s",
                 len(out),
                 document_uid,
                 self.collection_name,
             )
             return out
         except Exception:
-            logger.exception("[VECTOR][PGVECTOR] failed to fetch chunks for document_uid=%s", document_uid)
+            logger.exception("failed to fetch chunks for document_uid=%s", document_uid)
             raise RuntimeError("Failed to fetch chunks from PGVector.")
 
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
@@ -499,7 +499,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 ),
                 {"collection": self.collection_name, "doc_uid": document_uid, "tag_ids": json.dumps([str(t) for t in tag_ids])},
             )
-        logger.info("[VECTOR][PGVECTOR] updated tag_ids on %d chunk(s) for document_uid=%s", res.rowcount or 0, document_uid)
+        logger.info("updated tag_ids on %d chunk(s) for document_uid=%s", res.rowcount or 0, document_uid)
 
     # ---------- BaseVectorStore: ANN search ----------
 
@@ -536,8 +536,8 @@ class PgVectorStoreAdapter(BaseVectorStore):
         filter_arg = filt or None
         candidate_k = min(max(k * 4, k), 200)
         logger.info(
-            "[VECTOR][PGVECTOR][ANN] query=%r k=%d candidate_k=%d collection=%s filter=%s",
-            query,
+            "query_len=%d k=%d candidate_k=%d collection=%s filter=%s",
+            len(query),
             k,
             candidate_k,
             self.collection_name,
@@ -547,7 +547,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
             hits = self._vs.similarity_search_with_relevance_scores(query, k=candidate_k, filter=filter_arg)
         except Exception:
             logger.exception(
-                "[VECTOR][PGVECTOR] similarity search failed (k=%s, filter=%s)",
+                "similarity search failed (k=%s, filter=%s)",
                 candidate_k,
                 filter_arg,
             )
@@ -571,12 +571,12 @@ class PgVectorStoreAdapter(BaseVectorStore):
                 break
         if filtered_out:
             logger.info(
-                "[VECTOR][PGVECTOR][ANN] filtered_out=%d kept=%d",
+                "filtered_out=%d kept=%d",
                 filtered_out,
                 len(results),
             )
         logger.info(
-            "[VECTOR][PGVECTOR][ANN] returned=%d top_score=%.4f",
+            "returned=%d top_score=%.4f",
             len(results),
             float(results[0].score) if results else 0.0,
         )

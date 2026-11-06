@@ -77,7 +77,6 @@ from fred_core.common import (
     TemporalSchedulerConfig,
     default_postgres_store_config,
 )
-from fred_core.logs.log_structures import LogStorageConfig
 from fred_core.scheduler.backend import SchedulerBackend
 from fred_core.security.structure import SecurityConfiguration
 from fred_pod.common import RUNTIME_ID_PATTERN, PodAppIdentity
@@ -365,14 +364,12 @@ class PodStorageConfig(BaseModel):
     Fields:
     - `postgres`: SQL engine used by the LangGraph checkpointer (SQLite in
       local dev via sqlite_path, PostgreSQL in production via host/port/database)
-    - `opensearch`: optional, for log forwarding in production
-    - `log_store`: optional, for structured log persistence
+    - `opensearch`: optional connection, for the KPI index
     - `object_store`: one bucket/root for all runtime-owned files
     """
 
     postgres: PostgresStoreConfig = Field(default_factory=default_postgres_store_config)
     opensearch: Optional[OpenSearchStoreConfig] = None
-    log_store: Optional[LogStorageConfig] = None
     object_store: RuntimeFilesystemConfig = Field(
         default_factory=LocalRuntimeFilesystemConfig
     )

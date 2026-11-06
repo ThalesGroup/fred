@@ -196,7 +196,7 @@ def test_downgrade_cli_requires_explicit_target(
     assert main(["downgrade", "runtime", target_revision]) == 0
     assert main(["downgrade", "capability:ppt_builder", "base"]) == 0
     assert calls == [("runtime", target_revision), ("capability:ppt_builder", "base")]
-    assert "downgraded: fred-runtime" in capsys.readouterr().out
+    assert "Migration downgrade applied" in capsys.readouterr().out
 
 
 def test_downgrade_cli_reports_unknown_tree(

@@ -53,7 +53,7 @@ class McpToolkit(BaseToolkit):
         self._agent = agent
         # 🟢 LOG 1: Initialization success
         logger.info(
-            "[MCP] initialized. Client: %s, Agent: %s",
+            "initialized. Client: %s, Agent: %s",
             type(client).__name__,
             type(agent).__name__,
         )
@@ -74,11 +74,11 @@ class McpToolkit(BaseToolkit):
         try:
             names = [getattr(t, "name", "") for t in self._discover_base_tools()]
             # 🟢 LOG 3: Peek successful
-            logger.info("[MCP] peeked tool names: %s", names)
+            logger.info("peeked tool names: %s", names)
             return names
         except Exception as e:
             # 🟢 LOG 3 (Failure): Peek failed
-            logger.warning("[MCP] peek failed during tool discovery: %s", e)
+            logger.warning("peek failed during tool discovery: %s", e)
             return []
 
     def get_tools(

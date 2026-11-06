@@ -17,7 +17,25 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fred_core.common import TemporalSchedulerConfig
-from fred_core.scheduler.temporal_client_provider import TemporalClientProvider
+from fred_core.scheduler.temporal_client_provider import (
+    TemporalClientProvider,
+    route_temporal_core_logs,
+)
+
+
+def test_temporal_core_logs_reach_python_logging() -> None:
+    route_temporal_core_logs.cache_clear()
+    with (
+        patch("fred_core.scheduler.temporal_client_provider.Runtime") as runtime,
+        patch(
+            "fred_core.scheduler.temporal_client_provider.TelemetryConfig"
+        ) as telemetry,
+    ):
+        route_temporal_core_logs()
+    logs = telemetry.call_args.kwargs["logging"]
+    assert logs.forwarding.logger.name == "temporal_sdk_core"
+    runtime.set_default.assert_called_once()
+    route_temporal_core_logs.cache_clear()
 
 
 @pytest.mark.asyncio

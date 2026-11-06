@@ -95,7 +95,7 @@ def _normalize_ts(ts: datetime | str) -> datetime:
         try:
             dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         except Exception:
-            logger.warning("[history][pg] Failed to parse timestamp %r — using now", ts)
+            logger.warning("Failed to parse timestamp %r — using now", ts)
             dt = datetime.now(timezone.utc)
     else:
         dt = ts
@@ -337,9 +337,7 @@ class PostgresHistoryStore(BaseHistoryStore):
                     )
                 )
             except (ValidationError, ValueError) as exc:
-                logger.error(
-                    "[history][pg] Skipping malformed row rank=%s: %s", row.rank, exc
-                )
+                logger.error("Skipping malformed row rank=%s: %s", row.rank, exc)
         return out
 
     async def list_sessions(

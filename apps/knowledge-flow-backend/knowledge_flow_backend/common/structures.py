@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from typing import Optional
 
-from fred_core import LogStorageConfig, SecurityConfiguration
+from fred_core import SecurityConfiguration
 from fred_core.common import KpiObservabilityConfig, ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig
 from fred_knowledge.configuration import ArtifactStorageConfig, TabularStoreConfig, TextSplitterConfig, VectorStorageConfig
 from fred_knowledge.configuration import OpenSearchVectorIndexConfig as OpenSearchVectorIndexConfig
@@ -32,7 +32,6 @@ class StorageConfig(BaseModel):
         description="Dataset-centric tabular runtime configuration backed by Parquet artifacts in content storage.",
     )
     vector_store: VectorStorageConfig
-    log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
 
 
 class ObservabilityConfig(BaseModel):

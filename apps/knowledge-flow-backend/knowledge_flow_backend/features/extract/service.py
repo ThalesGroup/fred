@@ -54,7 +54,7 @@ class ExtractService:
         extractor = self._build_extractor()
         result = await extractor.extract(text=text, instruction=request.instruction)
         logger.info(
-            "[EXTRACT] %s items=%d chunks=%d truncated=%s total_ms=%.0f",
+            "%s items=%d chunks=%d truncated=%s total_ms=%.0f",
             document_uid,
             result.item_count,
             result.chunks_processed,

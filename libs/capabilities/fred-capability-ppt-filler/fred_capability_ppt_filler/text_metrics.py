@@ -76,7 +76,7 @@ def _font_file(family: str, bold: bool) -> Optional[str]:
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
-        logger.info("[PPT][METRICS] fontconfig unavailable, estimating text widths")
+        logger.info("fontconfig unavailable, estimating text widths")
         return None
     path = found.stdout.strip()
     return path or None
@@ -102,7 +102,7 @@ def _font(family: Optional[str], bold: bool) -> Optional[ImageFont.FreeTypeFont]
         try:
             faces[path] = ImageFont.truetype(path, _REF_SIZE)
         except OSError:
-            logger.info("[PPT][METRICS] cannot read %s, estimating text widths", path)
+            logger.info("cannot read %s, estimating text widths", path)
             faces[path] = None
     return faces[path]
 

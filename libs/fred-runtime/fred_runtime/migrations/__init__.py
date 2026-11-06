@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 from ..capabilities import CapabilityRegistry
@@ -53,6 +54,18 @@ class MigrationTreeSelectionError(ValueError):
     """The requested tree or target is not available for downgrade."""
 
 
+def configure_migration_logging() -> None:
+    """Migration jobs log like every process; a pre-install hook has no application config."""
+    from fred_core.logs.log_setup import log_setup
+
+    log_setup(
+        service_name="fred-runtime",
+        service_role="migration",
+        log_format="text" if sys.stdout.isatty() else "json",
+        include_uvicorn=False,
+    )
+
+
 def _upgrade(script_location: str, *, label: str) -> None:
     """Run ``alembic upgrade head`` against one script tree (its env.py owns
     metadata, version table, and DB URL)."""
@@ -60,11 +73,11 @@ def _upgrade(script_location: str, *, label: str) -> None:
     from alembic import command
     from alembic.config import Config
 
-    logger.info("[MIGRATE] upgrading %s (%s)", label, script_location)
+    logger.info("upgrading %s (%s)", label, script_location)
     cfg = Config()
     cfg.set_main_option("script_location", script_location)
     command.upgrade(cfg, "head")
-    logger.info("[MIGRATE] %s at head", label)
+    logger.info("%s at head", label)
 
 
 def _downgrade(script_location: str, *, label: str, revision: str) -> None:
@@ -83,9 +96,9 @@ def _downgrade(script_location: str, *, label: str, revision: str) -> None:
             f"revision '{revision}' is not a complete ID in {label}'s migration tree"
         )
 
-    logger.info("[MIGRATE] downgrading %s to %s (%s)", label, revision, script_location)
+    logger.info("downgrading %s to %s (%s)", label, revision, script_location)
     command.downgrade(cfg, revision)
-    logger.info("[MIGRATE] downgraded %s to %s", label, revision)
+    logger.info("downgraded %s to %s", label, revision)
 
 
 def run_all_migrations() -> list[str]:
@@ -110,7 +123,7 @@ def run_all_migrations() -> list[str]:
         _upgrade(location, label=f"capability '{cap_id}'")
         upgraded.append(cap_id)
 
-    logger.info("[MIGRATE] complete: %s", ", ".join(upgraded))
+    logger.info("complete: %s", ", ".join(upgraded))
     return upgraded
 
 

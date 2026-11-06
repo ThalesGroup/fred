@@ -132,21 +132,6 @@
       "type": "object",
       "additionalProperties": false
     },
-    "InMemoryLogStorageConfig": {
-      "properties": {
-        "type": {
-          "const": "in_memory",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "InMemoryLogStorageConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
     "InferenceCredentialBinding": {
       "additionalProperties": false,
       "description": "Pod-local provisioning. A resolver cannot redirect an existing secret.",
@@ -426,27 +411,6 @@
       "type": "object",
       "additionalProperties": false
     },
-    "OpenSearchIndexConfig": {
-      "properties": {
-        "type": {
-          "const": "opensearch",
-          "title": "Type",
-          "type": "string"
-        },
-        "index": {
-          "description": "OpenSearch index name",
-          "title": "Index",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type",
-        "index"
-      ],
-      "title": "OpenSearchIndexConfig",
-      "type": "object",
-      "additionalProperties": false
-    },
     "OpenSearchStoreConfig": {
       "properties": {
         "host": {
@@ -637,7 +601,7 @@
       "additionalProperties": false
     },
     "PodSchedulerConfig": {
-      "description": "Temporal scheduler settings for an agent pod.\n\nDisabled by default \u2014 only needed for Story B (deep/durable agents).\nReuses TemporalSchedulerConfig from fred-core.",
+      "description": "Temporal scheduler settings for an agent pod.\n\nDisabled by default. Capability worker mode uses this existing Temporal\nconnection; it obtains its installation/pod queue from the Control Plane.\nReuses TemporalSchedulerConfig from fred-core.",
       "properties": {
         "enabled": {
           "default": false,
@@ -657,23 +621,21 @@
       "additionalProperties": false
     },
     "PodSkillsConfig": {
-      "description": "Opt-in startup snapshot: package or a directory relative to configuration.yaml.",
+      "description": "Pod skill source; permissions are supplied by Weaver at admission.",
       "properties": {
         "directory": {
+          "default": "package",
           "minLength": 1,
           "title": "Directory",
           "type": "string"
         }
       },
-      "required": [
-        "directory"
-      ],
       "title": "PodSkillsConfig",
       "type": "object",
       "additionalProperties": false
     },
     "PodStorageConfig": {
-      "description": "Persistence backend settings for an agent pod.\n\nAll conversation state (sessions, multi-turn history, checkpoints) is\nmanaged exclusively by the LangGraph SQL checkpointer, which uses the\n`postgres` connection. There are no separate session or history tables.\n\nFields:\n- `postgres`: SQL engine used by the LangGraph checkpointer (SQLite in\n  local dev via sqlite_path, PostgreSQL in production via host/port/database)\n- `opensearch`: optional, for log forwarding in production\n- `log_store`: optional, for structured log persistence\n- `object_store`: one bucket/root for all runtime-owned files",
+      "description": "Persistence backend settings for an agent pod.\n\nAll conversation state (sessions, multi-turn history, checkpoints) is\nmanaged exclusively by the LangGraph SQL checkpointer, which uses the\n`postgres` connection. There are no separate session or history tables.\n\nFields:\n- `postgres`: SQL engine used by the LangGraph checkpointer (SQLite in\n  local dev via sqlite_path, PostgreSQL in production via host/port/database)\n- `opensearch`: optional connection, for the KPI index\n- `object_store`: one bucket/root for all runtime-owned files",
       "properties": {
         "postgres": {
           "$ref": "#/$defs/PostgresStoreConfig"
@@ -688,36 +650,6 @@
             }
           ],
           "default": null
-        },
-        "log_store": {
-          "anyOf": [
-            {
-              "discriminator": {
-                "mapping": {
-                  "in_memory": "#/$defs/InMemoryLogStorageConfig",
-                  "opensearch": "#/$defs/OpenSearchIndexConfig",
-                  "stdout": "#/$defs/StdoutLogStorageConfig"
-                },
-                "propertyName": "type"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/$defs/InMemoryLogStorageConfig"
-                },
-                {
-                  "$ref": "#/$defs/StdoutLogStorageConfig"
-                },
-                {
-                  "$ref": "#/$defs/OpenSearchIndexConfig"
-                }
-              ]
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Log Store"
         },
         "object_store": {
           "discriminator": {
@@ -1038,21 +970,6 @@
         "user"
       ],
       "title": "SecurityConfiguration",
-      "type": "object",
-      "additionalProperties": false
-    },
-    "StdoutLogStorageConfig": {
-      "properties": {
-        "type": {
-          "const": "stdout",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "StdoutLogStorageConfig",
       "type": "object",
       "additionalProperties": false
     },
@@ -1508,8 +1425,7 @@
         {
           "type": "null"
         }
-      ],
-      "default": null
+      ]
     }
   },
   "required": [

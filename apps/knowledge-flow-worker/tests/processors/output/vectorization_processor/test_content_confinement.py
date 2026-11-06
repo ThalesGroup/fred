@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""No document-content fragments in the generic app-log store (issue #2009).
+"""No document-content fragments in application logs (issue #2009).
 
 `SemanticSplitter`'s anchoring loop used to log raw chunk/window text previews
-at DEBUG level; those lines reach the generic, now-durable app-log store (see
-docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7 — content must appear in
-no observability stream). This locks in that the fix holds regardless of how
-the anchoring logic is refactored later.
+at DEBUG level. This locks in that the fix holds regardless of how the anchoring
+logic is refactored later.
 """
 
 from __future__ import annotations

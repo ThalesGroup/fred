@@ -211,9 +211,6 @@ storage:
     # otherwise the API searches an empty index and every RAG query returns 0.
     index: vector-index-mistral
     bulk_size: 1000
-  log_store:
-    type: opensearch
-    index: app-logs-index
 control_plane_url: "http://localhost:8001"
 
 use_gpu: false

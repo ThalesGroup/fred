@@ -72,7 +72,7 @@ def current_rss_kb() -> int | None:
 
         return psutil.Process(os.getpid()).memory_info().rss // 1024
     except Exception:
-        logger.debug("[fred-core][gc-diagnostics] RSS read failed", exc_info=True)
+        logger.debug("RSS read failed", exc_info=True)
         return None
 
 
@@ -97,7 +97,7 @@ def malloc_trim() -> bool:
         libc.malloc_trim(0)
         return True
     except Exception:
-        logger.debug("[fred-core][gc-diagnostics] malloc_trim failed", exc_info=True)
+        logger.debug("malloc_trim failed", exc_info=True)
         return False
 
 
@@ -134,7 +134,7 @@ def collect_and_trim(label: str = "manual", *, log: bool = True) -> GCTrimResult
     result = GCTrimResult(label, collected, uncollectable, trimmed, before_kb, after_kb)
     if log:
         logger.warning(
-            "[GC][%s] collected=%d uncollectable=%d trimmed=%s RSS %s",
+            "[%s] collected=%d uncollectable=%d trimmed=%s RSS %s",
             label,
             collected,
             uncollectable,
@@ -228,7 +228,7 @@ def collect_and_report_types(top_n: int = 20, *, log: bool = True) -> GCTypeRepo
     )
     if log:
         logger.warning(
-            "[GC][types] collected=%d held_for_inspection=%d freed_after_clear=%d trimmed=%s RSS %s top_types=%s",
+            "collected=%d held_for_inspection=%d freed_after_clear=%d trimmed=%s RSS %s top_types=%s",
             collected,
             garbage_count,
             freed_after_clear,
@@ -327,7 +327,7 @@ def live_object_census(top_n: int = 20, *, log: bool = True) -> LiveObjectCensus
     )
     if log:
         logger.warning(
-            "[GC][census] total_objects=%d total_bytes_shallow=%d (%s) sizing_failures=%d top_by_count=%s top_by_size=%s",
+            "total_objects=%d total_bytes_shallow=%d (%s) sizing_failures=%d top_by_count=%s top_by_size=%s",
             result.total_objects,
             result.total_bytes_shallow,
             _shallow_fraction_of_rss(result.total_bytes_shallow, rss_kb),
@@ -350,7 +350,7 @@ def _periodic_interval_from_env(env_var: str) -> float:
         return float(raw)
     except ValueError:
         logger.warning(
-            "[fred-core][gc-diagnostics] Invalid %s=%r, ignoring (periodic GC disabled)",
+            "Invalid %s=%r, ignoring (periodic GC disabled)",
             env_var,
             raw,
         )
@@ -415,7 +415,7 @@ def install_gc_diagnostics(
         sigusr2 = getattr(signal, "SIGUSR2", None)
         if sigusr1 is None or sigusr2 is None:
             logger.warning(
-                "[fred-core][gc-diagnostics] SIGUSR1/SIGUSR2 not available on this "
+                "SIGUSR1/SIGUSR2 not available on this "
                 "platform (%s) — manual triggers disabled",
                 platform.system(),
             )
@@ -429,7 +429,7 @@ def install_gc_diagnostics(
                 signals_installed = True
             except (NotImplementedError, RuntimeError) as exc:
                 logger.warning(
-                    "[fred-core][gc-diagnostics] SIGUSR1/SIGUSR2 manual triggers "
+                    "SIGUSR1/SIGUSR2 manual triggers "
                     "unavailable on this platform/thread: %s",
                     exc,
                 )
@@ -446,10 +446,10 @@ def install_gc_diagnostics(
         except RuntimeError as exc:
             # No running event loop (e.g. called from sync startup code) —
             # never fatal, same contract as the signal-registration branch above.
-            logger.warning("[fred-core][gc-diagnostics] periodic GC disabled: %s", exc)
+            logger.warning("periodic GC disabled: %s", exc)
         else:
             logger.warning(
-                "[fred-core][gc-diagnostics] periodic gc.collect()+malloc_trim() enabled every %ss",
+                "periodic gc.collect()+malloc_trim() enabled every %ss",
                 interval_s,
             )
 

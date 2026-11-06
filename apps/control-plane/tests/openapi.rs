@@ -571,7 +571,9 @@ fn schema_initialization_requires_only_database_url_and_redacts_errors() {
         }
         let output = command.output().unwrap();
         assert!(!output.status.success());
-        let error = String::from_utf8_lossy(&output.stderr);
+        // A fatal error is one structured event on stdout, never stray stderr.
+        assert!(output.stderr.is_empty());
+        let error = String::from_utf8_lossy(&output.stdout);
         assert!(
             error.contains(if url.is_none() {
                 "DATABASE_URL is required"

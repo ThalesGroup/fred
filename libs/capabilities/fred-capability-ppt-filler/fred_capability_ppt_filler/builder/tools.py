@@ -1420,7 +1420,7 @@ class _BasePlans:
         try:
             return DeckPlan.model_validate_json(stored)
         except ValueError:
-            logger.warning("[PPTBUILD][TOOL] stored base plan no longer validates")
+            logger.warning("stored base plan no longer validates")
             return None
 
     async def write(self, plan: DeckPlan) -> None:
@@ -1433,7 +1433,7 @@ class _BasePlans:
             await get_deck_plan_store().put(*self._key, data)
             self._written = data
         except Exception:  # noqa: BLE001 - the deck itself is unaffected
-            logger.warning("[PPTBUILD][TOOL] base plan not stored", exc_info=True)
+            logger.warning("base plan not stored", exc_info=True)
 
 
 # --- tools ------------------------------------------------------------------------------------
@@ -1662,7 +1662,7 @@ def build_builder_tools(
         try:
             stored = await plans.read() if base is None else None
         except Exception:  # noqa: BLE001 - no proof of a deck: the plan is shown
-            logger.warning("[PPTBUILD][TOOL] base plan unreadable", exc_info=True)
+            logger.warning("base plan unreadable", exc_info=True)
             return False
         return stored is not None and stored.delivered
 
@@ -1675,7 +1675,7 @@ def build_builder_tools(
         try:
             stored = await plans.read()
         except Exception:  # noqa: BLE001 - the delta line is only a help
-            logger.warning("[PPTBUILD][TOOL] base plan unreadable", exc_info=True)
+            logger.warning("base plan unreadable", exc_info=True)
             return None
         return stored if stored is not None and stored.delivered else None
 
@@ -1692,7 +1692,7 @@ def build_builder_tools(
             plan = _to_plan(validated)
             changes = None if validated.changes is None else _to_changes(validated)
         except Exception as exc:  # noqa: BLE001 - coercion makes this unexpected
-            logger.warning("[PPTBUILD][TOOL] unreadable plan: %s", _shape_of(exc))
+            logger.warning("unreadable plan: %s", _shape_of(exc))
             return _error(
                 "No deck was built: the slide plan could not be read. Call build_presentation "
                 "again with 'slides' as a list of objects, each with its content (title, "
@@ -1711,7 +1711,7 @@ def build_builder_tools(
             try:
                 base = turn_base[0] if turn_base else await plans.read()
             except Exception:  # noqa: BLE001 - the model can resend the whole deck
-                logger.warning("[PPTBUILD][TOOL] base plan unreadable", exc_info=True)
+                logger.warning("base plan unreadable", exc_info=True)
                 return _error(_BASE_UNREADABLE)
             if base is None:
                 return _error(_NO_BASE)
@@ -1827,7 +1827,7 @@ def build_builder_tools(
                 checked,
             )
         except Exception:  # noqa: BLE001 - a checker bug must not escape the tool
-            logger.exception("[PPTBUILD][TOOL] plan evaluation FAILED")
+            logger.exception("plan evaluation FAILED")
             return _error(_INTERNAL_ERROR)
         first, called = not called, True
         unloadable = [f"image '{uid}' {_unusable(prefetched[uid])}." for uid in bad]
@@ -1902,7 +1902,7 @@ def build_builder_tools(
         try:
             template_bytes = await template_bytes_loader()
         except Exception:  # noqa: BLE001 - surfaced to the agent
-            logger.exception("[PPTBUILD][TOOL] template load FAILED")
+            logger.exception("template load FAILED")
             return _error(
                 "No deck was built: the presentation template could not be loaded right now. "
                 "Tell the user and suggest trying again in a moment."
@@ -1925,7 +1925,7 @@ def build_builder_tools(
             return _error(f"No deck was built: {exc}")
         except Exception:  # noqa: BLE001 - wrapped uniformly for the agent
             elapsed = time.monotonic() - started
-            logger.exception("[PPTBUILD][TOOL] render FAILED after %.0fs", elapsed)
+            logger.exception("render FAILED after %.0fs", elapsed)
             return _error(_INTERNAL_ERROR)
 
         file_name = (
@@ -1948,7 +1948,7 @@ def build_builder_tools(
                 title=file_name,
             )
         except Exception:  # noqa: BLE001 - surfaced to the agent
-            logger.exception("[PPTBUILD][TOOL] upload FAILED")
+            logger.exception("upload FAILED")
             return _error(
                 "The deck was built but could not be saved to the conversation files, so the "
                 "user cannot get it. Tell the user and suggest trying again in a moment."
@@ -1998,16 +1998,12 @@ def build_builder_tools(
                 PREVIEW_WAIT_SECONDS,
             )
         except asyncio.TimeoutError:  # the conversions are all busy: deliver the file
-            logger.warning(
-                "[PPTBUILD][TOOL] preview skipped after %.0fs", PREVIEW_WAIT_SECONDS
-            )
+            logger.warning("preview skipped after %.0fs", PREVIEW_WAIT_SECONDS)
             pdf_bytes = None
         except Exception as exc:
             # The runtime retains an uncertain conversion intent; returning the
             # deck must never imply its temporary files have been cleaned up.
-            logger.warning(
-                "[PPTBUILD][TOOL] preview conversion failed: %s", type(exc).__name__
-            )
+            logger.warning("preview conversion failed: %s", type(exc).__name__)
             pdf_bytes = None
         pdf_url: Optional[str] = None
         if pdf_bytes is not None:
@@ -2021,7 +2017,7 @@ def build_builder_tools(
                 pdf_url = pdf_artifact.href
             except Exception as exc:  # noqa: BLE001 - preview is best effort
                 logger.warning(
-                    "[PPTBUILD][TOOL] preview upload failed (deck still returned): %s",
+                    "preview upload failed (deck still returned): %s",
                     exc,
                 )
 

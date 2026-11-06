@@ -300,7 +300,7 @@ async fn name_owners<'a>(
             .await
     };
     let names = names.await.unwrap_or_else(|_| {
-        tracing::warn!("[CAPABILITIES] Owner names unavailable");
+        tracing::warn!("Owner names unavailable");
         HashMap::new()
     });
     for item in affected {

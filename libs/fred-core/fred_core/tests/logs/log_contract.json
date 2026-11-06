@@ -1,0 +1,36 @@
+{
+  "reserved_fields": [
+    "severity", "message", "timestamp", "logger", "service", "service_role", "category",
+    "file", "line", "process", "thread", "task_name", "host",
+    "logging.googleapis.com/sourceLocation", "httpRequest", "trace_id", "span_id",
+    "ts", "level", "msg", "exception", "stack", "event"
+  ],
+  "sensitive_fields": [
+    "token", "access_token", "refresh_token", "id_token", "authorization", "cookie",
+    "password", "secret", "email", "user", "prompt", "completion", "content", "body",
+    "arguments", "result", "url", "signed_url"
+  ],
+  "event": {
+    "severity": "WARNING",
+    "message": "Contract event",
+    "logger": "contract.event",
+    "service": "contract-service",
+    "service_role": "api",
+    "category": "application",
+    "correlation_id": "correlation-1",
+    "operation_id": "operation-1",
+    "error_code": "contract_failed",
+    "attempt": 3,
+    "done": false
+  },
+  "text": {
+    "line": "WARNING contract-service/api/contract.event Contract event",
+    "fields": [
+      "attempt=3",
+      "correlation_id=correlation-1",
+      "done=false",
+      "error_code=contract_failed",
+      "operation_id=operation-1"
+    ]
+  }
+}

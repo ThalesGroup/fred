@@ -32,24 +32,32 @@ import json
 import logging
 import sys
 
+logger = logging.getLogger(__name__)
+
 
 def _cmd_migrate(_args: argparse.Namespace) -> int:
-    from .migrations import run_all_migrations
+    from .migrations import configure_migration_logging, run_all_migrations
 
+    configure_migration_logging()
     upgraded = run_all_migrations()
-    print(f"migrated: {', '.join(upgraded)}")
+    logger.info("Migrations applied", extra={"trees": upgraded})
     return 0
 
 
 def _cmd_downgrade(args: argparse.Namespace) -> int:
-    from .migrations import MigrationTreeSelectionError, downgrade_migration_tree
+    from .migrations import (
+        MigrationTreeSelectionError,
+        configure_migration_logging,
+        downgrade_migration_tree,
+    )
 
+    configure_migration_logging()
     try:
         downgraded = downgrade_migration_tree(args.tree, args.revision)
     except MigrationTreeSelectionError as exc:
         print(f"downgrade: {exc}", file=sys.stderr)
         return 2
-    print(f"downgraded: {downgraded}")
+    logger.info("Migration downgrade applied", extra={"tree": downgraded})
     return 0
 
 
@@ -57,6 +65,8 @@ def _cmd_dump_openapi(args: argparse.Namespace) -> int:
     from .capabilities import CapabilityRegistry
     from .capabilities.openapi_dump import dump_capability_openapi
 
+    # Stdout is this command's document; its diagnostics stay on stderr.
+    logging.basicConfig(level=logging.INFO)
     registry = CapabilityRegistry()
     registry.discover()
     if args.capability_id not in registry:
@@ -72,9 +82,6 @@ def _cmd_dump_openapi(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(
-        level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s"
-    )
     parser = argparse.ArgumentParser(prog="fred_runtime")
     sub = parser.add_subparsers(dest="command", required=True)
 

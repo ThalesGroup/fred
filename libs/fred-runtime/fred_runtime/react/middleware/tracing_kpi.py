@@ -376,10 +376,7 @@ class TracingKpiMiddleware(AgentMiddleware):
 
     @staticmethod
     def _log_model_call(request: ModelRequest) -> None:
-        # Never log message/question content here — this logger feeds the
-        # generic app-log store (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md
-        # §7: "Content ... Nowhere in any observability or audit stream").
-        # Lengths and counts only.
+        # Never log message/question content here: lengths and counts only.
         messages = list(request.messages)
         sys_text = request.system_prompt or ""
         tail = ", ".join(
@@ -394,7 +391,7 @@ class TracingKpiMiddleware(AgentMiddleware):
             None,
         )
         logger.info(
-            "[LLM][CALL] sys=%dc total_msgs=%d hist_tail=[%s] question_len=%s",
+            "sys=%dc total_msgs=%d hist_tail=[%s] question_len=%s",
             len(sys_text),
             len(messages) + (1 if request.system_message is not None else 0),
             tail,
@@ -415,7 +412,7 @@ class TracingKpiMiddleware(AgentMiddleware):
         if tool_calls:
             if delegation_enabled():
                 logger.info(
-                    "[LLM][RESPONSE] tool_calls=%d total_args=%d",
+                    "tool_calls=%d total_args=%d",
                     len(tool_calls),
                     sum(
                         len((tc.get("args") or {})) if isinstance(tc, dict) else 0
@@ -424,7 +421,7 @@ class TracingKpiMiddleware(AgentMiddleware):
                 )
             else:
                 logger.info(
-                    "[LLM][RESPONSE] tool_calls=%s",
+                    "tool_calls=%s",
                     [
                         {
                             "name": tc.get("name")
@@ -444,6 +441,6 @@ class TracingKpiMiddleware(AgentMiddleware):
                 else str(ai_message.content)
             )
             logger.info(
-                "[LLM][RESPONSE] final answer_len=%d",
+                "final answer_len=%d",
                 len(text),
             )

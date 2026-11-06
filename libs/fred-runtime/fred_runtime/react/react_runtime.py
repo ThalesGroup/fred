@@ -338,7 +338,7 @@ async def _aclose_agent_stream(stream: AsyncIterator[object] | None) -> None:
     except Exception as exc:
         # Class name only: the traceback here chains the upstream error whose
         # body must not reach the pod's logs.
-        logger.debug("[V2][REACT] agent stream close failed: %s", type(exc).__name__)
+        logger.debug("agent stream close failed: %s", type(exc).__name__)
 
 
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
@@ -416,13 +416,12 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     ) -> ReActOutput:
         if delegation_enabled():
             logger.info(
-                "[AGENT VERSION] *** V2 BasicReAct/%s *** handling exchange",
+                "*** V2 BasicReAct/%s *** handling exchange",
                 self._runtime_class_name,
             )
         else:
             logger.info(
-                "[AGENT VERSION] *** V2 BasicReAct/%s *** handling exchange "
-                "agent_id=%s session_id=%s",
+                "*** V2 BasicReAct/%s *** handling exchange agent_id=%s session_id=%s",
                 self._runtime_class_name,
                 self._binding.portable_context.agent_id or "unknown",
                 self._binding.portable_context.session_id,
@@ -483,13 +482,12 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     ) -> AsyncIterator[RuntimeEvent]:
         if delegation_enabled():
             logger.debug(
-                "[AGENT VERSION] *** V2 BasicReAct/%s stream *** exchange",
+                "*** V2 BasicReAct/%s stream *** exchange",
                 self._runtime_class_name,
             )
         else:
             logger.debug(
-                "[AGENT VERSION] *** V2 BasicReAct/%s stream *** exchange "
-                "agent_id=%s session_id=%s",
+                "*** V2 BasicReAct/%s stream *** exchange agent_id=%s session_id=%s",
                 self._runtime_class_name,
                 self._binding.portable_context.agent_id or "unknown",
                 self._binding.portable_context.session_id,
@@ -1129,9 +1127,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 )
                 if last_tool_error is not None and not answer.strip():
                     final_content = last_tool_error
-                    logger.info(
-                        "[V2][REACT] event=final_from_tool_error reason=no_model_answer"
-                    )
+                    logger.info("event=final_from_tool_error reason=no_model_answer")
                 else:
                     final_content = answer
                 yield FinalRuntimeEvent(
@@ -1173,7 +1169,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 span.set_attribute("status", "error")
                 span.set_attribute("error_type", type(stop_error).__name__)
             logger.warning(
-                "[V2][REACT] event=run_stopped outcome=stopped reason=%s",
+                "event=run_stopped outcome=stopped reason=%s",
                 stop_error.reason,
             )
             for event in _close_pending_tool_pairs():
@@ -1197,7 +1193,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     try:
                         active_agent_span.reset(span_token)
                     except ValueError:
-                        logger.debug("[V2][REACT] span reset skipped: foreign context")
+                        logger.debug("span reset skipped: foreign context")
                 if span is not None:
                     span.end()
             finally:
@@ -1279,13 +1275,13 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             await self.services.tool_provider.activate()
         if delegation_enabled():
             logger.info(
-                "[AGENT VERSION] *** V2 BasicReAct/%s *** activated tools=%d",
+                "*** V2 BasicReAct/%s *** activated tools=%d",
                 type(self).__name__,
                 len(self.definition.declared_tool_refs),
             )
         else:
             logger.info(
-                "[AGENT VERSION] *** V2 BasicReAct/%s *** activated"
+                "*** V2 BasicReAct/%s *** activated"
                 " agent_id=%s profile=%s session_id=%s tools=%s",
                 type(self).__name__,
                 self.definition.agent_id,
@@ -1304,14 +1300,13 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         policy = self.definition.policy()
         if delegation_enabled():
             logger.debug(
-                "[V2][EXECUTOR] build start runtime=%s declared_tools=%d",
+                "build start runtime=%s declared_tools=%d",
                 type(self).__name__,
                 len(self.definition.declared_tool_refs),
             )
         else:
             logger.debug(
-                "[V2][EXECUTOR] build start runtime=%s agent=%s "
-                "declared_tool_refs=%r toolset_key=%r",
+                "build start runtime=%s agent=%s declared_tool_refs=%r toolset_key=%r",
                 type(self).__name__,
                 self.definition.agent_id,
                 [r.tool_ref for r in self.definition.declared_tool_refs],
@@ -1334,10 +1329,10 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             binding=binding,
         ).build_tools()
         if delegation_enabled():
-            logger.debug("[V2][EXECUTOR] bound_tools=%d", len(bound_tools))
+            logger.debug("bound_tools=%d", len(bound_tools))
         else:
             logger.debug(
-                "[V2][EXECUTOR] bound_tools=%d names=%r",
+                "bound_tools=%d names=%r",
                 len(bound_tools),
                 [bt.tool.name for bt in bound_tools],
             )
@@ -1355,7 +1350,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         # No content preview here — this logger feeds the generic app-log
         # store (see docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §7:
         # "Content ... Nowhere in any observability or audit stream").
-        logger.debug("[V2][EXECUTOR] system_prompt_len=%d", len(system_prompt))
+        logger.debug("system_prompt_len=%d", len(system_prompt))
         system_prompt = _compose_system_prompt(
             system_prompt,
             skills_prompt=self.services.skills.prompt
@@ -1379,10 +1374,10 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             tabular_tools_available=_tabular_tools_bound(bound_tools),
         )
         if delegation_enabled():
-            logger.debug("[LLM][SYSTEM PROMPT] total_len=%d", len(system_prompt))
+            logger.debug("total_len=%d", len(system_prompt))
         else:
             logger.debug(
-                "[LLM][SYSTEM PROMPT] agent=%s total_len=%d",
+                "agent=%s total_len=%d",
                 self.definition.agent_id,
                 len(system_prompt),
             )

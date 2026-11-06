@@ -11,6 +11,8 @@ from datetime import timedelta
 from uuid import UUID
 
 import httpx
+from fred_core.logs.context import operation_log_scope
+from fred_core.logs.log_setup import log_setup
 from fred_core.scheduler.temporal_client_provider import TemporalClientProvider
 from fred_sdk.contracts.capability.preparation import (
     PreparationContext,
@@ -42,6 +44,17 @@ logger = logging.getLogger(__name__)
 WORKFLOW_RUNNER = SandboxedWorkflowRunner(
     restrictions=SandboxRestrictions.default.with_passthrough_modules("fred_runtime")
 )
+
+
+def failure_summary(error: Exception) -> str:
+    """Name a failure without its message: bodies, tokens and files stay out of logs."""
+    summary = type(error).__name__
+    if isinstance(error, httpx.HTTPStatusError):
+        request = error.request
+        summary += (
+            f" status={error.response.status_code} {request.method} {request.url.path}"
+        )
+    return summary
 
 
 class PreparationWorker:
@@ -109,11 +122,22 @@ class PreparationWorker:
 
     @activity.defn(name="prepare_capability")
     async def prepare(self, preparation_id: str) -> None:
+        with operation_log_scope(operation_id=preparation_id):
+            await self._prepare(preparation_id)
+
+    async def _prepare(self, preparation_id: str) -> None:
         # Exceptions entering history never contain HTTP bodies, tokens, configs or files.
         try:
             ctx = await self.context(preparation_id)
             if ctx.work.state != "pending":
+                logger.info(
+                    "Capability preparation skipped", extra={"state": ctx.work.state}
+                )
                 return
+            logger.info(
+                "Capability preparation started",
+                extra={"attempt": activity.info().attempt},
+            )
             capability = self.registry.capability(ctx.work.capability_id)
             content = await self.request(
                 "GET", f"/{ctx.work.preparation_id}/content", max_bytes=ctx.work.size
@@ -138,18 +162,36 @@ class PreparationWorker:
                     f"/{ctx.work.preparation_id}/confirm",
                     json=result.model_dump(),
                 )
+                logger.info(
+                    "Capability preparation confirmed",
+                    extra={"outcome": "failed" if result.error else "ready"},
+                )
             finally:
                 if not task.done():
                     task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
-        except ApplicationError:
+        except ApplicationError as error:
+            logger.warning(
+                "Capability preparation refused",
+                extra={
+                    "error_code": "capability_preparation_refused",
+                    "reason": str(error),
+                },
+            )
             raise
-        except Exception:
-            logger.warning("Capability preparation will be reconciled", exc_info=False)
+        except Exception as error:
+            logger.warning(
+                "Capability preparation will be reconciled",
+                extra={
+                    "error_code": "capability_preparation_interrupted",
+                    "reason": failure_summary(error),
+                },
+            )
             raise ApplicationError("Capability preparation interrupted") from None
 
     async def cleanup(self) -> None:
         while True:
+            identity = None
             try:
                 reply = await self.request(
                     "GET", "/cleanup", params={"runtime_id": self.config.app.runtime_id}
@@ -162,12 +204,27 @@ class PreparationWorker:
                         ctx.work.capability_id
                     ).retire_preparation(ctx)
                     await self.request("POST", f"/{ctx.work.preparation_id}/cleaned")
-            except Exception:
-                logger.warning("Capability cleanup will retry", exc_info=False)
+            except Exception as error:
+                logger.warning(
+                    "Capability cleanup will retry",
+                    extra={
+                        "operation_id": identity,
+                        "error_code": "capability_cleanup_retry",
+                        "reason": failure_summary(error),
+                    },
+                )
             await asyncio.sleep(10)
 
 
 async def run_preparation_worker(config: AgentPodConfig) -> None:
+    # The API's lifespan does not run here.
+    log_setup(
+        service_name=config.app.runtime_id,
+        service_role="worker",
+        log_level=config.app.log_level,
+        log_format=config.app.log_format,
+        use_rich=False,
+    )
     if not config.scheduler.enabled:
         raise ValueError("Capability worker requires scheduler.enabled")
     registry = boot_capability_registry()
@@ -210,6 +267,7 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
             max_concurrent_activities=2,
             graceful_shutdown_timeout=timedelta(seconds=30),
         ):
+            logger.info("Preparation worker polling", extra={"task_queue": queue})
             await stop.wait()
     finally:
         if cleanup is not None:

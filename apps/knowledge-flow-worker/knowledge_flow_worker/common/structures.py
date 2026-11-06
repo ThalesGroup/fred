@@ -17,7 +17,6 @@ import re
 from enum import Enum
 from typing import List, Literal, Optional
 
-from fred_core import LogStorageConfig
 from fred_core.common import KpiObservabilityConfig, ModelConfiguration, OpenSearchStoreConfig, PostgresStoreConfig, TemporalSchedulerConfig
 from fred_core.documents.processing_profile import IngestionProcessingProfile as IngestionProcessingProfile
 from fred_knowledge.configuration import ArtifactStorageConfig, TabularStoreConfig, TextSplitterConfig, VectorStorageConfig
@@ -458,7 +457,6 @@ class StorageConfig(BaseModel):
         description="Dataset-centric tabular runtime configuration backed by Parquet artifacts in content storage.",
     )
     vector_store: VectorStorageConfig
-    log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
 
 
 class ObservabilityConfig(BaseModel):

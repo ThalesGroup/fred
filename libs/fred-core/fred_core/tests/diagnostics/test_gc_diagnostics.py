@@ -104,7 +104,7 @@ def test_collect_and_trim_returns_a_populated_result(caplog):
     assert result.label == "unit-test"
     assert result.collected >= 0
     assert result.uncollectable >= 0
-    assert any("[GC][unit-test]" in r.message for r in caplog.records)
+    assert any("[unit-test]" in r.message for r in caplog.records)
 
 
 def test_collect_and_trim_can_skip_logging():
@@ -156,7 +156,7 @@ def test_live_object_census_returns_a_populated_result(caplog):
     assert result.rss_kb is None or result.rss_kb > 0
     assert result.top_by_count
     assert result.top_by_size
-    assert any("[GC][census]" in r.message for r in caplog.records)
+    assert any("total_objects=" in r.message for r in caplog.records)
 
 
 def test_live_object_census_can_skip_logging():

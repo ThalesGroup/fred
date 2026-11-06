@@ -274,7 +274,7 @@ async def get_connected_mcp_client_for_agent(
             tools = await adapter.list_tools()
             elapsed_ms = (time.perf_counter() - started) * 1000
             logger.info(
-                "[MCP] event=connection_validation outcome=succeeded tools=%d dur_ms=%.0f",
+                "event=connection_validation outcome=succeeded tools=%d dur_ms=%.0f",
                 len(tools),
                 elapsed_ms,
             )
@@ -303,7 +303,7 @@ async def get_connected_mcp_client_for_agent(
             if call_credentials.delegated and _refusal_status(exc) is not None:
                 raise AuthorityLostError() from None
             logger.warning(
-                "[MCP] event=connection_validation outcome=failed server=%s error=%s",
+                "event=connection_validation outcome=failed server=%s error=%s",
                 server.id,
                 type(exc).__name__,
             )

@@ -172,7 +172,7 @@ class DocumentExtractor:
                         # waking at the same instant and re-tripping the limit.
                         delay += random.uniform(0, 0.5)  # nosec B311 # retry jitter, not security-sensitive
                         logger.warning(
-                            "[EXTRACT] rate-limited on chunk (attempt %d/%d); backing off %.1fs",
+                            "rate-limited on chunk (attempt %d/%d); backing off %.1fs",
                             attempt + 1,
                             _MAX_RETRIES,
                             delay,
@@ -183,11 +183,11 @@ class DocumentExtractor:
                         # Retries exhausted on a genuine rate limit — this one is
                         # worth surfacing so the caller can report a partial risk.
                         logger.error(
-                            "[EXTRACT] rate limit persisted after %d retries; dropping one chunk's items",
+                            "rate limit persisted after %d retries; dropping one chunk's items",
                             _MAX_RETRIES,
                         )
                     else:
-                        logger.warning("[EXTRACT] chunk extraction failed (continuing): %r", exc)
+                        logger.warning("chunk extraction failed (continuing): %r", exc)
                     return []
         return []
 
@@ -224,7 +224,7 @@ class DocumentExtractor:
                     items.append(it)
 
         logger.info(
-            "[EXTRACT] windows=%d (shards=%d) items=%d chars_in=%d elapsed_ms=%.0f truncated=%s",
+            "windows=%d (shards=%d) items=%d chars_in=%d elapsed_ms=%.0f truncated=%s",
             len(windows),
             len(chunks),
             len(items),

@@ -92,7 +92,7 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
         if self._max_history_messages is not None:
             trimmed = trim_to_human_boundary(messages, self._max_history_messages)
             logger.debug(
-                "[TOOL LOOP] history trimmed: %d → %d messages (max_history_messages=%d)",
+                "history trimmed: %d → %d messages (max_history_messages=%d)",
                 len(messages),
                 len(trimmed),
                 self._max_history_messages,
@@ -154,7 +154,7 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
                 # only the Prometheus-allow-listed subset of those ever
                 # reaches Grafana — see `PROMETHEUS_ALLOWED_LABELS`).
                 logger.warning(
-                    "[TOOL LOOP] turn rejected: content too large even after "
+                    "turn rejected: content too large even after "
                     "trim (%d chars > %d char budget)",
                     actual_chars,
                     self._max_history_chars,
@@ -177,8 +177,7 @@ class CheckpointHygieneMiddleware(AgentMiddleware):
                 )
             if len(trimmed) != len(messages):
                 logger.debug(
-                    "[TOOL LOOP] history trimmed by size: %d → %d chars "
-                    "(max_history_chars=%d)",
+                    "history trimmed by size: %d → %d chars (max_history_chars=%d)",
                     total_char_len(messages),
                     actual_chars,
                     self._max_history_chars,

@@ -49,6 +49,8 @@ def main() -> None:
         host=config.app.host,
         port=config.app.port,
         log_level=config.app.log_level,
+        # The app's log_setup owns every logger, uvicorn's included.
+        log_config=None,
         limit_concurrency=config.app.limit_concurrency,
         reload=False,
     )

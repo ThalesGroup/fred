@@ -49,14 +49,14 @@ class OdtMarkdownProcessor(DocxMarkdownProcessor):
         """
         try:
             if file_path.stat().st_size <= 0:
-                logger.warning("[ODT] %s is empty.", file_path)
+                logger.warning("%s is empty.", file_path)
                 return False
         except OSError as exc:
-            logger.error("[ODT] Cannot stat %s: %s", file_path, exc)
+            logger.error("Cannot stat %s: %s", file_path, exc)
             return False
 
         if not looks_like_odf(file_path, ODT_MIMETYPE):
-            logger.error("[ODT] %s is not a valid OpenDocument .odt package.", file_path)
+            logger.error("%s is not a valid OpenDocument .odt package.", file_path)
             return False
         return True
 

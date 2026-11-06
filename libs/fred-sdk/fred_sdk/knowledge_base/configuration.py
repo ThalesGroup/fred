@@ -47,7 +47,7 @@ from fred_sdk.knowledge_base.logs import LogFormat
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_FILES = ConfigFiles(logger=logger, log_prefix="[CONFIG][KB]")
+_CONFIG_FILES = ConfigFiles(logger=logger)
 
 
 class MissingPodConfiguration(RuntimeError):

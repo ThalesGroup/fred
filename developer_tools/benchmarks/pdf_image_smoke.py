@@ -43,7 +43,6 @@ def run(corpus: Path, optional: bool) -> dict:
         raw["scheduler"]["enabled"] = False
         raw["observability"]["kpi"]["opensearch"] = {"enabled": False}
         raw["observability"]["kpi"]["prometheus"]["enabled"] = False
-        raw["storage"]["log_store"] = None
         for profile in raw["processing"]["profiles"].values():
             profile["process_images"] = False
             profile["generate_summary"] = False
