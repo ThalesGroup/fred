@@ -416,7 +416,9 @@ switch it answers for the conversation the user just left.
 Declare `PreparationSpec` on the manifest when a saved asset needs expensive work
 before an agent can use the capability. List accepted asset slots, input and
 output limits, a rules version, timeout, retry count and whether the result
-gates agent readiness. Implement `AgentCapability.prepare(context)` in the
+gates agent readiness. Set `config_fields` to the saved fields that affect
+preparation so display or turn-only edits do not start a new job. Implement
+`AgentCapability.prepare(context)` in the
 capability package. The context supplies immutable original assets, a bounded
 artifact writer and optional shared services such as Knowledge Flow vision.
 Return a reference under the current attempt's artifact prefix plus a short

@@ -236,19 +236,28 @@ def test_preparation_contract_dispatches_a_declared_hook() -> None:
     assert result.reference == f"results/{work.preparation_id}"
     advertised = CapabilityCatalogEntry.from_manifest(_PreparingCapability.manifest)
     assert advertised.preparation == _PreparingCapability.manifest.preparation
-    assert CapabilityCatalogEntry.model_validate_json(
-        advertised.model_dump_json()
-    ).preparation == advertised.preparation
+    assert (
+        CapabilityCatalogEntry.model_validate_json(
+            advertised.model_dump_json()
+        ).preparation
+        == advertised.preparation
+    )
 
 
 def test_preparation_declaration_rejects_unknown_slot() -> None:
     with pytest.raises(ValidationError, match="undeclared asset slots"):
-        _manifest(preparation=PreparationSpec(asset_slots=("missing",), rules_version="1"))
+        _manifest(
+            preparation=PreparationSpec(asset_slots=("missing",), rules_version="1")
+        )
 
 
 def test_preparation_declaration_rejects_duplicate_slot_and_unbounded_work() -> None:
     with pytest.raises(ValidationError, match="nonempty and unique"):
         PreparationSpec(asset_slots=("input", "input"), rules_version="1")
+    with pytest.raises(
+        ValidationError, match="config fields must be nonempty and unique"
+    ):
+        PreparationSpec(rules_version="1", config_fields=("mode", "mode"))
     with pytest.raises(ValidationError):
         PreparationSpec(rules_version="1", max_attempts=0)
     with pytest.raises(ValidationError, match="config exceeds"):

@@ -1050,6 +1050,7 @@ class PptBuilderCapability(
             asset_slots=(TEMPLATE_SLOT,),
             min_assets=1,
             activation_field="template_sha256",
+            config_fields=("template_sha256", "use_vision"),
             rules_version=str(ANALYSIS_VERSION),
             max_input_bytes=MAX_TEMPLATE_UPLOAD_BYTES,
         ),

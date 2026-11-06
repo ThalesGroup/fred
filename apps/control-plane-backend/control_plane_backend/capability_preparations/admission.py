@@ -208,14 +208,19 @@ async def persist_agent_preparations(
             assets.extend(
                 (asset.id, asset.slot_key, asset.sha256) for asset in new_assets
             )
-        config = dict(capability_config.get(cap_id, {}).get("config") or {})
-        if spec.activation_field and not config.get(spec.activation_field):
+        full_config = dict(capability_config.get(cap_id, {}).get("config") or {})
+        if spec.activation_field and not full_config.get(spec.activation_field):
             if previous is not None:
                 previous.is_current = False
                 previous.superseded_at = utcnow()
                 if previous.state in ("pending", "running"):
                     previous.state = "obsolete"
             continue
+        config = (
+            {key: full_config[key] for key in spec.config_fields if key in full_config}
+            if spec.config_fields is not None
+            else full_config
+        )
         if len(assets) < spec.min_assets:
             raise ValueError("Preparation requires an uploaded asset")
         serialized = json.dumps(config, sort_keys=True, separators=(",", ":"))

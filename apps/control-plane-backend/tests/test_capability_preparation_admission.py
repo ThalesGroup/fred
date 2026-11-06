@@ -105,7 +105,9 @@ def _second_entry() -> CapabilityCatalogEntry:
         update={
             "id": "reverse",
             "name": "reverse",
-            "preparation": PreparationSpec(asset_slots=("source",), rules_version="v2"),
+            "preparation": PreparationSpec(
+                asset_slots=("source",), rules_version="v2", config_fields=("mode",)
+            ),
         }
     )
 
@@ -523,6 +525,28 @@ async def test_two_capabilities_share_save_dispatch_status_and_readiness() -> No
                     },
                     staged=staged,
                 )
+        async with sessions() as session:
+            async with session.begin():
+                await persist_agent_preparations(
+                    session,
+                    owner_id="a1",
+                    team_id="t1",
+                    runtime_id="fred-agents",
+                    available=[_entry(), _second_entry()],
+                    selected_ids=list(uploads),
+                    capability_config={
+                        "example": {"config": {"mode": "example"}},
+                        "reverse": {
+                            "config": {"mode": "reverse", "display_override": "edited"}
+                        },
+                    },
+                    staged=[],
+                )
+                assert (
+                    await session.scalar(
+                        select(func.count()).select_from(CapabilityPreparationRow)
+                    )
+                ) == 2
         deliveries = await claim_due(sessions)
         assert len(deliveries) == 2
         assert all(

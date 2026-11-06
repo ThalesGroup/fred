@@ -24,6 +24,8 @@ See [proposal.md](proposal.md). Swift relays capability assets from the control 
 
 Extend the capability manifest with an optional preparation declaration naming the asset slots, input limits and whether preparation gates readiness. Extend `AgentCapability` with a `prepare(context)` hook and an optional cleanup hook for derived artifacts. The control plane sees only manifest metadata and opaque config/output references; the runtime registry resolves the capability ID and invokes the hook. Existing capabilities without a declaration keep their current save and runtime behavior. An integration fixture using a second, minimal capability will exercise the same path to prove the generic boundary.
 
+The declaration can list preparation-relevant config fields. Changing other saved settings, such as PPT pattern overrides or build-time variety, does not create a new preparation revision. When the list is absent, the full config remains the preparation input for existing declarers.
+
 Alternative: embed `ppt_builder` branches in the control plane as Weaver currently does. That would move ownership but leave each new capability requiring another admission and status implementation.
 
 ### 2. Control plane owns originals and preparation state; capability owns derived artifacts
