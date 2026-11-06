@@ -615,9 +615,8 @@ class CapabilityModelPort(ABC):
     default, catalogue default), within the team's usable models. A `profile_id`
     replaces that default and is never swapped for it. Fails closed with
     `CapabilityModelUnavailableError`, including when that profile is unknown or
-    outside the usable models, and when `require_vision` is set and the resolved
-    profile does not declare `supports_vision`. Images go as
-    LangChain `image_url` content parts.
+    outside the usable models. Legacy `require_vision` calls fail closed; image
+    description for preparations is served by Knowledge Flow.
     """
 
     @abstractmethod
@@ -629,15 +628,6 @@ class CapabilityModelPort(ABC):
         require_vision: bool = False,
     ) -> AIMessage:
         """Run one chat completion and return the model's message."""
-
-    async def require_vision_profile(self, profile_id: str) -> None:
-        """Raise `CapabilityModelUnavailableError` unless `profile_id` is a
-        vision chat profile this port may use, without calling the model.
-        Refuses unless an implementer overrides it."""
-        raise CapabilityModelUnavailableError(
-            f"Model profile {profile_id!r} cannot be checked here."
-        )
-
 
 # Request-state keys under which the pod binds the caller's authorizer and the
 # teamless model port before a capability route runs.

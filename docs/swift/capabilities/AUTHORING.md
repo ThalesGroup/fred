@@ -112,9 +112,11 @@ writing an artifact under `/.deep/`. The runtime binds the conversation and rout
 capability cannot select a bucket or another conversation. Fail loudly when the optional port is
 absent.
 For a model call outside a turn (in `validate_config`, or a background job it starts), use
-`SaveContext.services.capability_model` (`CapabilityModelPort.ainvoke(messages, *, profile_id,
-require_vision)`). It routes to the agent's default model and fails closed with
-`CapabilityModelUnavailableError`, so keep a fallback without the model. A capability route that
+`SaveContext.services.capability_model` (`CapabilityModelPort.ainvoke(messages, *, profile_id)`).
+It routes to the agent's default model and fails closed with
+`CapabilityModelUnavailableError`, so keep a fallback without the model. For
+image understanding in preparation, call Knowledge Flow through its configured
+vision service. A capability route that
 reads team-scoped rows takes `Depends(capability_team_authorizer)` and calls
 `require_agent_editor(row.team_id)` (contract §8.120). A route that writes platform-wide state
 calls `require_capability_manager()` instead (the Admin > Features gate), and gets a model port

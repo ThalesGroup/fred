@@ -1006,6 +1006,68 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGet:
+      build.query<
+        GetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetApiResponse,
+        GetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}`,
+        }),
+      }),
+    deletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDelete:
+      build.mutation<
+        DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteApiResponse,
+        DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}`,
+          method: "DELETE",
+        }),
+      }),
+    putPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut:
+      build.mutation<
+        PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiResponse,
+        PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}/candidate`,
+          method: "PUT",
+          body: queryArg.bodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut,
+        }),
+      }),
+    postPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPost:
+      build.mutation<
+        PostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostApiResponse,
+        PostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}/candidate/retry`,
+          method: "POST",
+        }),
+      }),
+    postPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPost:
+      build.mutation<
+        PostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostApiResponse,
+        PostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}/candidate/refresh`,
+          method: "POST",
+          body: queryArg.config,
+        }),
+      }),
+    putPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPut:
+      build.mutation<
+        PutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutApiResponse,
+        PutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}/settings`,
+          method: "PUT",
+          body: queryArg.settings,
+        }),
+      }),
     claimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPost: build.mutation<
       ClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostApiResponse,
       ClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostApiArg
@@ -3021,6 +3083,61 @@ export type PrepareAgentExecutionApiArg = {
   run?: string | null;
   agent?: string | null;
 };
+export type GetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type GetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+  };
+export type DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+  };
+export type PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+    bodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut: BodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut;
+  };
+export type PostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type PostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+  };
+export type PostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type PostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+    config: {
+      [key: string]: any;
+    };
+  };
+export type PutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type PutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+    settings: {
+      [key: string]: any;
+    };
+  };
 export type ClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostApiResponse =
   /** status 200 Successful Response */ CleanupBatch;
 export type ClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostApiArg = {
@@ -4568,6 +4685,7 @@ export type PreparationSpec = {
   min_assets?: number;
   activation_field?: string | null;
   config_fields?: string[] | null;
+  public_config_fields?: string[];
   rules_version: string;
   gates_readiness?: boolean;
   max_input_bytes?: number;
@@ -4630,7 +4748,6 @@ export type CapabilityCatalogEntry = {
   model_chat_profile_ids?: string[];
   model_platform_binding?: ModelBinding | null;
   model_thinking_profile_ids?: string[];
-  model_vision_profile_ids?: string[];
   model_reasoning_efforts?: {
     [key: string]: ("low" | "medium" | "high")[];
   };
@@ -5082,6 +5199,11 @@ export type ManagedAgentRuntimeBinding = {
   preparation_results?: {
     [key: string]: string;
   };
+  platform_preparation_settings?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
   preparation_blocked?: boolean;
   team_capability_settings?: {
     [key: string]: {
@@ -5255,13 +5377,6 @@ export type ExecutionPreparation = {
   /** kind="model" capability ids whose reasoning a platform admin has switched on (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5). Resolved once here at session prep and folded onto RuntimeContext by the frontend, exactly like chat_default_profile_id — the same three-hop channel, deliberately not a per-turn lookup. GLOBAL, not per team: an activation ('does this model run with reasoning'), not a permission — per-team model access is untouched (§5.1). **Empty means no model reasons** (§5.6, off by default); the runtime strips the reasoning settings for every model absent from this list at client construction (§5.6.2). */
   reasoning_enabled_model_ids?: string[];
 };
-export type CleanupLease = {
-  preparation_id: string;
-  claim_id: string;
-};
-export type CleanupBatch = {
-  items?: CleanupLease[];
-};
 export type PreparationAsset = {
   asset_id: string;
   slot_key: string;
@@ -5284,6 +5399,28 @@ export type PreparationStatus = {
   error_detail?: string | null;
   result_reference?: string | null;
   assets?: PreparationAsset[];
+  public_config?: {
+    [key: string]: any;
+  };
+};
+export type PlatformPreparationSelection = {
+  active?: PreparationStatus | null;
+  candidate?: PreparationStatus | null;
+  settings?: {
+    [key: string]: any;
+  };
+};
+export type BodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut =
+  {
+    file: string;
+    config_json?: string;
+  };
+export type CleanupLease = {
+  preparation_id: string;
+  claim_id: string;
+};
+export type CleanupBatch = {
+  items?: CleanupLease[];
 };
 export type PreparationStatusPage = {
   items: PreparationStatus[];
@@ -5632,8 +5769,6 @@ export type AvailableModelProfile = {
   display_name?: string | null;
   /** Whether a platform admin enabled reasoning for this model: only then can the team set a reasoning default for it. */
   reasoning_available?: boolean;
-  /** Whether this profile declares `supports_vision` in the pod model catalog, so a capability form can offer image reading. */
-  supports_vision?: boolean;
 };
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
@@ -5664,8 +5799,6 @@ export type EffectiveChatModel = {
     
     Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
   reasoning_enabled?: boolean;
-  /** Whether the resolved profile declares `supports_vision`. Always False for a platform binding, which carries no such declaration: image reading then fails closed. */
-  supports_vision?: boolean;
   /** Models a member may pick for this agent: chat models served by the instance's pod, `can_use` for the team and not team-disabled. Empty when the choice is locked or the pod is unreachable. */
   selectable_models?: SelectableChatModel[];
   /** True when a platform binding or a pod per-agent override fixes the model, so no choice is offered. */
@@ -6654,6 +6787,13 @@ export const {
   useGetAgentInstanceSkillDetailQuery,
   useLazyGetAgentInstanceSkillDetailQuery,
   usePrepareAgentExecutionMutation,
+  useGetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetQuery,
+  useLazyGetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetQuery,
+  useDeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteMutation,
+  usePutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutMutation,
+  usePostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostMutation,
+  usePostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostMutation,
+  usePutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutMutation,
   useClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostMutation,
   useGetTeamAgentPreparationsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsGetQuery,
   useLazyGetTeamAgentPreparationsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsGetQuery,

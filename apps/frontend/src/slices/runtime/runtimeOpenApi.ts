@@ -1175,7 +1175,6 @@ export type ModelCatalogEntry = {
     [key: string]: ("low" | "medium" | "high")[];
   };
   thinking_profile_ids?: string[];
-  vision_profile_ids?: string[];
 };
 export type ModelCatalogResponse = {
   active_revision?: number;
@@ -1451,10 +1450,12 @@ export type FieldSpec = {
 export type PreparationSpec = {
   activation_field?: string | null;
   asset_slots?: string[];
+  config_fields?: string[] | null;
   gates_readiness?: boolean;
   max_attempts?: number;
   max_input_bytes?: number;
   min_assets?: number;
+  public_config_fields?: string[];
   rules_version: string;
   timeout_seconds?: number;
 };
@@ -1485,7 +1486,6 @@ export type CapabilityCatalogEntry = {
   };
   model_runtime_ids?: string[];
   model_thinking_profile_ids?: string[];
-  model_vision_profile_ids?: string[];
   /** i18n key */
   name: string;
   preparation?: PreparationSpec | null;

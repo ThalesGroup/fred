@@ -48,7 +48,6 @@ from fred_sdk.contracts.capability import (
 )
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
-    CapabilityModelUnavailableError,
     CapabilityTeamAuthorizer,
     RuntimeServices,
     capability_platform_model_optional,
@@ -66,11 +65,6 @@ _BASE = "/capabilities/ppt_builder/platform"
 class _Port(CapabilityModelPort):
     async def ainvoke(self, messages, *, profile_id=None, require_vision=False):
         raise AssertionError("label_inventory is faked here")
-
-    async def require_vision_profile(self, profile_id: str) -> None:
-        if profile_id != "chat.vision":
-            raise CapabilityModelUnavailableError(f"{profile_id!r} is not offered.")
-
 
 PORT = _Port()
 

@@ -6,6 +6,26 @@ the runtime object store. It also imports the active platform template, a failed
 or pending replacement, and the manager's pattern overrides. The old SQL rows
 remain intact for the migration window.
 
+## Configuration
+
+Set `vision_model` once on the Knowledge Flow API and its worker configuration.
+The preparation worker calls Knowledge Flow's internal vision endpoint using
+the workload identity named by `vision_worker_client_id`; the caller never
+chooses a model. The PPT settings retain only `use_vision`. When Knowledge
+Flow reports that no vision model is available, the form disables this switch
+and preparation uses the slide labelling rules.
+
+The Helm chart defines `applications.fred-agents-preparation-worker` as a
+separate deployment using the same capability registry and runtime storage as
+`applications.fred-agents`. Enable its `enabled` and `deployment.enabled`
+values for the cutover. Give it the same `ai.knowledge_flow_url`, service
+credentials, Temporal namespace and object-store configuration as the serving
+pods. `preparation.max_concurrent_jobs` bounds work per worker replica, and
+`preparation.per_capability_concurrency` bounds each installed capability's
+work within that replica. Set control-plane runtime catalog source
+`preparation_enabled` and serving pod `preparation.enabled_capabilities` only
+after backfill and worker deployment are complete.
+
 ## Deployment order
 
 1. Deploy the additive control-plane migration, Knowledge Flow vision endpoint,

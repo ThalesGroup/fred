@@ -31,8 +31,8 @@
 ## 5. Settings and model catalog cleanup
 
 - [x] 5.1 Remove PPT labelling-model inputs and selectors in the agent and platform forms; keep `use_vision` and drive its availability from Knowledge Flow; verify both form layouts and legacy saved selections.
-- [ ] 5.2 Remove `supports_vision` and derived vision-profile projections from catalog YAML, SDK/runtime/control-plane schemas, APIs and generated frontend types; verify catalog/routing contract tests and legacy YAML tolerance.
-- [ ] 5.3 Update user-facing help and operator configuration guidance for the single Knowledge Flow vision model and generic preparation worker; verify documented settings and deployment values match the actual configuration.
+- [x] 5.2 Remove `supports_vision` and derived vision-profile projections from catalog YAML, SDK/runtime/control-plane schemas, APIs and generated frontend types; verify catalog/routing contract tests and legacy YAML tolerance.
+- [x] 5.3 Update user-facing help and operator configuration guidance for the single Knowledge Flow vision model and generic preparation worker; verify documented settings and deployment values match the actual configuration.
 
 ## 6. Data cutover and integration
 

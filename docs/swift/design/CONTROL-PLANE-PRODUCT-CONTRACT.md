@@ -5250,9 +5250,9 @@ new conversation of this agent starts from, so a capability can call the agent's
 model during its save. No platform binding is sent. The pod
 `copy-config` call carries the same parameters for the destination team.
 
-**Vision flags.** `AvailableModelProfile.supports_vision` and
-`EffectiveChatModel.supports_vision` (default false) report whether the profile
-declares `supports_vision` in the pod catalog. A platform binding reports false.
+**Vision flags.** Removed by the reusable preparation cutover (§72). Routing
+profiles no longer advertise image-reading support. PPT template vision uses
+Knowledge Flow's configured model.
 
 ## 71. Contract Notes — capability platform settings fields (2026-10-22)
 
@@ -5267,7 +5267,7 @@ for a platform-wide choice, from the same service function called without a team
 no `can_use` check, but the model must hold the org `default_on` marker, the
 profile must be a chat profile available on every enabled pod, and
 `effective_default_profile_id` is the pods' common default. A capability's platform
-panel filters it on `supports_vision`, as the agent form filters the team list.
+panel no longer filters by vision support; PPT vision uses Knowledge Flow.
 
 The capability routes those panels call (ppt_builder `/platform*`) live on the pod
 and are gated by the pod's capability-manager check

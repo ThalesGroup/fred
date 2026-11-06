@@ -184,6 +184,13 @@ class ModelProfile(FrozenModel):
     - `chat.azure_apim.gpt4o`
     """
 
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_legacy_vision_flag(cls, value: object) -> object:
+        if isinstance(value, dict) and "supports_vision" in value:
+            return {key: item for key, item in value.items() if key != "supports_vision"}
+        return value
+
     profile_id: str = Field(..., min_length=1)
     capability: ModelCapability
     model: ModelConfiguration
@@ -231,15 +238,6 @@ class ModelProfile(FrozenModel):
             "`RuntimeContext.reasoning_enabled_model_ids`."
         ),
     )
-    supports_vision: bool = Field(
-        default=False,
-        description=(
-            "Declared aptitude: this profile's model accepts image input. "
-            "Capability calls that require vision fail closed on a profile "
-            "that does not declare it."
-        ),
-    )
-
     reasoning_efforts: tuple[ReasoningEffortLevel, ...] | None = Field(
         default=None,
         min_length=1,

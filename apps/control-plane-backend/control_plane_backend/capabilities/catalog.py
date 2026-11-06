@@ -256,10 +256,6 @@ async def aggregate_capability_catalog(
                             existing.model_thinking_profile_ids,
                             entry.model_thinking_profile_ids,
                         ),
-                        "model_vision_profile_ids": _union_profile_ids(
-                            existing.model_vision_profile_ids,
-                            entry.model_vision_profile_ids,
-                        ),
                         "model_reasoning_efforts": {
                             **existing.model_reasoning_efforts,
                             **entry.model_reasoning_efforts,

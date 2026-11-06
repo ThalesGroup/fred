@@ -1059,7 +1059,6 @@ async def _model_capabilities_for_source_uncached(
             # which then reads as on/off only.
             model_reasoning_efforts=_reasoning_efforts(entry.get("reasoning_efforts")),
             # Absent on an older pod: no profile reads as vision-capable.
-            model_vision_profile_ids=tuple(entry.get("vision_profile_ids") or ()),
             # Ops-authored display label, carried verbatim. Absent on an older
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.

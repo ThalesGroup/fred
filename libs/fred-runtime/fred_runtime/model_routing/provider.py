@@ -616,12 +616,6 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             )
         return model, selection
 
-    def supports_vision(self, selection: ModelSelection) -> bool:
-        """Whether the selected profile declares image input. A platform binding
-        has no profile, so it never does."""
-        profile = self._resolver.profile_or_none(selection.profile_id)
-        return profile is not None and profile.supports_vision
-
     def usable_profile_selection(
         self, profile_id: str, binding: BoundRuntimeContext
     ) -> ModelSelection | None:

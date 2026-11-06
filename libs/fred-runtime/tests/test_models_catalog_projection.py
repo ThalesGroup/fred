@@ -553,20 +553,18 @@ def test_response_models_match_the_entries_projection() -> None:
     assert response.models == _project_model_catalog_entries(catalog)
 
 
-def test_vision_profile_ids_is_the_supports_vision_subset() -> None:
-    catalog = _catalog(
-        (
-            _profile("chat.vision", name="gpt-4o").model_copy(
-                update={"supports_vision": True}
-            ),
-            _profile("chat.text", name="gpt-4o"),
-            _profile("other", name="gpt-5.1"),
-        )
+def test_legacy_vision_declaration_is_accepted_but_not_projected() -> None:
+    profile = ModelProfile.model_validate(
+        {
+            **_profile("chat.vision", name="gpt-4o").model_dump(),
+            "supports_vision": True,
+        }
     )
+    catalog = _catalog((profile,))
 
-    entries = _project_model_catalog_entries(catalog)
-
-    assert [entry.vision_profile_ids for entry in entries] == [["chat.vision"], []]
+    assert "supports_vision" not in profile.model_dump()
+    assert "vision_profile_ids" not in _project_model_catalog_entries(catalog)[0].model_dump()
+    assert "vision_profile_ids" not in _project_model_catalog_response(catalog).model_dump()
 
 
 def test_reasoning_efforts_lists_only_profiles_with_selectable_levels() -> None:

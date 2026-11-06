@@ -1481,9 +1481,6 @@ class _ModelCatalogEntry(BaseModel):
     for profiles declaring two or more (`ModelProfile.reasoning_levels`).
     Absent: that thinking profile is on/off only. Empty: no level a platform
     helper can send (`ModelProfile.reasoning_on_effort` is None)."""
-    vision_profile_ids: list[str] = Field(default_factory=list)
-    """The subset of `profile_ids` declaring `supports_vision` — what lets a
-    capability form offer image reading only when a vision model exists."""
     display_name: str | None = None
     """The ops-authored `model_display_name` of this model's first profile that
     declares one — the label the composer shows instead of splitting the
@@ -1689,8 +1686,6 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
             elif profile.reasoning_on_effort is None:
                 # Nothing a platform helper could send: reported as no levels.
                 existing.reasoning_efforts[profile.profile_id] = []
-        if profile.supports_vision:
-            existing.vision_profile_ids.append(profile.profile_id)
     return list(seen.values())
 
 
