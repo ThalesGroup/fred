@@ -665,8 +665,14 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       { kind: "tool_call", call_id: "c1", tool_name: "lookup", arguments: {}, rank: 1 },
       { kind: "thought_start", thought_id: "hidden", phase: "tool_use" },
       { kind: "tool_result", call_id: "c1", content: "done", rank: 2 },
-      { kind: "steered_user_message", message_id: "m1", content: "change course", rank: 3 },
-      { kind: "final", content: "changed", rank: 4 },
+      {
+        kind: "steered_assistant_message",
+        message_ids: ["m1"],
+        content: "I will focus there.",
+        rank: 4,
+        deliveries: [{ message_id: "m1", content: "change course", rank: 3 }],
+      },
+      { kind: "final", content: "changed", rank: 5 },
     ];
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -683,6 +689,10 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       [2, "tool_result"],
       [3, "final"],
       [4, "final"],
+      [5, "final"],
+    ]);
+    expect(latest.messages.find((message) => message.rank === 4)?.parts).toEqual([
+      { type: "text", text: "I will focus there." },
     ]);
     fetchSpy.mockRestore();
   });

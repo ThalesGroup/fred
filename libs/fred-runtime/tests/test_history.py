@@ -731,7 +731,7 @@ def test_write_turn_history_persists_reasoning_blocks() -> None:
     assert thought.rank < tool_call_rank
 
 
-def test_write_turn_history_places_steering_after_tool_results() -> None:
+def test_write_turn_history_reserves_directly_persisted_steering_rows() -> None:
     from fred_core.history.history_schema import Role
 
     store = AsyncMock()
@@ -755,6 +755,11 @@ def test_write_turn_history_places_steering_after_tool_results() -> None:
                     "message_id": "m1",
                     "content": "new direction",
                 },
+                {
+                    "kind": "steered_assistant_message",
+                    "message_ids": ["m1"],
+                    "content": "I will adjust the search.",
+                },
                 {"kind": "final", "content": "updated"},
             ],
             history_store=store,
@@ -765,11 +770,9 @@ def test_write_turn_history_places_steering_after_tool_results() -> None:
         Role.user,
         Role.assistant,
         Role.tool,
-        Role.user,
         Role.assistant,
     ]
-    assert [message.rank for message in messages] == [0, 1, 2, 3, 4]
-    assert messages[3].parts[0].text == "new direction"
+    assert [message.rank for message in messages] == [0, 1, 2, 5]
 
 
 def test_write_turn_history_skips_synthetic_tool_use_thoughts() -> None:

@@ -35,6 +35,7 @@ import type {
   ExecutionInterruptedRuntimeEvent,
   RuntimeExecuteRequest,
   SessionTitleRuntimeEvent,
+  SteeredAssistantMessageRuntimeEvent,
   SteeredUserMessageRuntimeEvent,
   StatusRuntimeEvent,
   ThoughtDeltaEvent,
@@ -183,6 +184,7 @@ async function verifyTokenStillUsable(): Promise<string | null> {
 
 type AnyRuntimeEvent =
   | ({ kind: "steered_user_message" } & SteeredUserMessageRuntimeEvent)
+  | ({ kind: "steered_assistant_message" } & SteeredAssistantMessageRuntimeEvent)
   | ({ kind: "assistant_delta" } & AssistantDeltaRuntimeEvent)
   | ({ kind: "awaiting_human" } & AwaitingHumanRuntimeEvent)
   | ({ kind: "final" } & FinalRuntimeEvent)
@@ -563,6 +565,34 @@ export function useChatSse(
             channel: "final",
             parts: [{ type: "text", text: event.content }],
             metadata: { extras: { steered_message_id: event.message_id, steering_state: "delivered" } },
+          });
+          break;
+        }
+        case "steered_assistant_message": {
+          for (const delivery of event.deliveries ?? []) {
+            const existing = readTurnMessages(turn).find(
+              (message) => message.metadata?.extras?.steered_message_id === delivery.message_id,
+            );
+            emit({
+              session_id: sessionId,
+              exchange_id: exchangeId,
+              rank: takeRank(delivery.rank),
+              timestamp: existing?.timestamp ?? ts,
+              role: "user",
+              channel: "final",
+              parts: [{ type: "text", text: delivery.content }],
+              metadata: { extras: { steered_message_id: delivery.message_id, steering_state: "delivered" } },
+            });
+          }
+          emit({
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            rank: takeRank(event.rank),
+            timestamp: ts,
+            role: "assistant",
+            channel: "final",
+            parts: [{ type: "text", text: event.content }],
+            metadata: { extras: { steered_reply_for: event.message_ids } },
           });
           break;
         }

@@ -21,7 +21,7 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Final, TypeVar, cast
+from typing import Any, Final, TypeVar, cast
 
 import anyio
 from fred_sdk.contracts.runtime import RuntimeErrorEvent, RuntimeStopReason
@@ -110,6 +110,32 @@ class RunScope:
         self._closed = False
         self._end_owner_authority: Callable[[], None] | None = None
         self._delegated_credentials = False
+        self._event_receipts: dict[str, asyncio.Future[dict[str, Any]]] = {}
+
+    def register_event_receipt(self, key: str) -> asyncio.Future[dict[str, Any]]:
+        receipt: asyncio.Future[dict[str, Any]] = (
+            asyncio.get_running_loop().create_future()
+        )
+        if key in self._event_receipts:
+            raise RuntimeError("Duplicate runtime event receipt")
+        self._event_receipts[key] = receipt
+        return receipt
+
+    def complete_event_receipt(self, key: str, payload: dict[str, Any]) -> None:
+        receipt = self._event_receipts.pop(key, None)
+        if receipt is None or receipt.done():
+            raise RuntimeError("Runtime event receipt is unavailable")
+        receipt.set_result(payload)
+
+    def fail_event_receipt(self, key: str, error: Exception) -> None:
+        receipt = self._event_receipts.pop(key, None)
+        if receipt is not None and not receipt.done():
+            receipt.set_exception(error)
+
+    def discard_event_receipt(self, key: str) -> None:
+        receipt = self._event_receipts.pop(key, None)
+        if receipt is not None and not receipt.done():
+            receipt.cancel()
 
     @property
     def delegated_credentials(self) -> bool:
@@ -157,6 +183,10 @@ class RunScope:
         """End the scope and cancel whatever it still has running."""
 
         self._closed = True
+        for receipt in self._event_receipts.values():
+            if not receipt.done():
+                receipt.cancel()
+        self._event_receipts.clear()
         self.cancel_children()
 
     @property

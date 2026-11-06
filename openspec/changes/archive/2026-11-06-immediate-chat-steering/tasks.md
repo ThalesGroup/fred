@@ -11,7 +11,7 @@
 
 ## 3. Managed chat interface
 
-- [x] 3.1 Submit active-turn text directly as an optimistic chat row, reconcile the persisted row by message identity, and show pending/brief delivered indicators; verify focused hook and rendering tests.
+- [x] 3.1 Submit active-turn text directly as an optimistic chat row, reconcile the persisted row by message identity, and show a clock only while pending; verify focused hook and rendering tests.
 - [x] 3.2 Remove the browser queue, panel, controls, and translations, and resume persisted pending messages when eligible; verify navigation, reload, Stop, HITL, and Graph behavior.
 
 ## 4. Integration and delivery
@@ -19,3 +19,4 @@
 - [x] 4.1 Update runtime and UX contracts plus migration operations guidance; verify documentation matches the final API and deployment sequence.
 - [x] 4.2 Run focused backend/frontend tests, root quality once, and an independent branch review against the target branch; record findings and dispositions.
 - [x] 4.3 Reconcile OpenSpec artifacts, sync and archive the change, create or link the tracking issue, and push a draft PR; verify its diff and migration count.
+- [x] 4.4 Send a durable assistant reply at the next safe boundary before normal work resumes; verify history rank, checkpoint recovery, streaming, and separate chat rendering.

@@ -79,7 +79,10 @@ from fred_core.history.history_schema import (
     HitlResponsePart,
     TextPart,
 )
-from fred_core.history.postgres_history_store import PostgresHistoryStore
+from fred_core.history.postgres_history_store import (
+    PostgresHistoryStore,
+    steered_reply_id,
+)
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -3366,6 +3369,7 @@ def _opening_history_count(
 @dataclass(frozen=True)
 class _HistoryPositions:
     row: int | None = None
+    steered_deliveries: tuple[int, ...] = ()
     pause_metadata: int | None = None
     hitl_request: int | None = None
 
@@ -3403,6 +3407,13 @@ class _HistoryRanker:
             if payload.get("message_id") == self.pending_message_id:
                 return _HistoryPositions(row=self.opening_rank)
             return _HistoryPositions(row=self._take())
+        if kind == RuntimeEventKind.STEERED_ASSISTANT_MESSAGE.value:
+            delivery_ranks = tuple(
+                self._take() for _ in payload.get("deliveries") or ()
+            )
+            return _HistoryPositions(
+                row=self._take(), steered_deliveries=delivery_ranks
+            )
         if kind == "status" and isinstance(payload.get("skill_load"), dict):
             load_id = payload["skill_load"].get("load_id")
             if isinstance(load_id, str) and load_id not in self.skill_load_ids:
@@ -3511,6 +3522,60 @@ async def _rank_runtime_event(
         if delivered is None:
             raise RuntimeError("Steered message disappeared before delivery")
         payload["rank"] = delivered.rank
+    elif payload.get("kind") == RuntimeEventKind.STEERED_ASSISTANT_MESSAGE.value:
+        if not session_id:
+            raise RuntimeError("Steered assistant reply has no session")
+        reply_id = steered_reply_id(tuple(payload["message_ids"]))
+        scope = RunScope.current()
+        if scope is None:
+            raise RuntimeError("Steered reply has no active run scope")
+        try:
+            (
+                delivered,
+                persisted,
+            ) = await turn_messages.require_history().persist_steered_assistant_message(
+                session_id=session_id,
+                user_id=user_id,
+                exchange_id=exchange_id,
+                rank=positions.require_row(),
+                message_ids=tuple(payload["message_ids"]),
+                content=payload["content"],
+                deliveries=tuple(
+                    (item["message_id"], item["content"], rank)
+                    for item, rank in zip(
+                        payload.get("deliveries") or (),
+                        positions.steered_deliveries,
+                        strict=True,
+                    )
+                ),
+            )
+            reply_part = persisted.parts[0]
+            if not isinstance(reply_part, TextPart):
+                raise RuntimeError("Steered assistant reply is not text")
+            reply_extras = (persisted.metadata.model_extra or {}).get("extras") or {}
+            payload["rank"] = persisted.rank
+            payload["content"] = reply_part.text
+            payload["message_ids"] = reply_extras.get(
+                "steered_reply_for", payload["message_ids"]
+            )
+            payload["deliveries"] = []
+            for item in delivered:
+                user_part = item.parts[0]
+                if not isinstance(user_part, TextPart):
+                    raise RuntimeError("Steered user message is not text")
+                payload["deliveries"].append(
+                    {
+                        "message_id": (item.metadata.model_extra or {})
+                        .get("extras", {})
+                        .get("steered_message_id"),
+                        "content": user_part.text,
+                        "rank": item.rank,
+                    }
+                )
+            scope.complete_event_receipt(reply_id, payload)
+        except Exception as exc:
+            scope.fail_event_receipt(reply_id, exc)
+            raise
     return payload
 
 
@@ -3768,7 +3833,10 @@ async def _write_turn_history(
         kind = payload.get("kind")
         positions = ranker.reserve(payload)
 
-        if kind == RuntimeEventKind.STEERED_USER_MESSAGE.value:
+        if kind in {
+            RuntimeEventKind.STEERED_USER_MESSAGE.value,
+            RuntimeEventKind.STEERED_ASSISTANT_MESSAGE.value,
+        }:
             continue
         elif kind == "status" and isinstance(payload.get("skill_load"), dict):
             from fred_sdk.contracts.skills import SkillLoadAttribution
@@ -4389,6 +4457,7 @@ async def _stream(
         title_model_profile_id=title_model_profile_id,
         credential_provider=credential_provider,
         owns_run_record=True,
+        steering_enabled=True,
     )
     try:
         async for runtime_payload in payloads:
@@ -5017,6 +5086,7 @@ async def _iterate_runtime_event_payloads(
     title_model_profile_id: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
+    steering_enabled: bool = False,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Own the run's scope and release the run record once.
 
@@ -5045,6 +5115,7 @@ async def _iterate_runtime_event_payloads(
         platform_prompt=platform_prompt,
         credential_provider=credential_provider,
         owns_run_record=owns_run_record,
+        steering_enabled=steering_enabled,
     )
     started = time.perf_counter()
     outcome = "succeeded"
@@ -5167,6 +5238,7 @@ async def _iterate_runtime_event_payloads_inner(
     platform_prompt: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
+    steering_enabled: bool = False,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -5222,6 +5294,7 @@ async def _iterate_runtime_event_payloads_inner(
                 "team_id": resolved_team_id,
                 "exchange_id": exchange_id,
                 "pending_message_id": request.pending_message_id,
+                "steering_enabled": "true" if steering_enabled else None,
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
                 "run_id": getattr(credential_provider, "run_id", None),
@@ -7260,6 +7333,7 @@ def _build_agent_router(
             platform_prompt=target.platform_prompt,
             credential_provider=target.credential_provider,
             owns_run_record=True,
+            steering_enabled=True,
         ):
             for payload in expander.expand(runtime_payload):
                 payloads.append(
@@ -7388,6 +7462,7 @@ def _build_agent_router(
             platform_prompt=target.platform_prompt,
             credential_provider=target.credential_provider,
             owns_run_record=True,
+            steering_enabled=True,
         ):
             for payload in expander.expand(runtime_payload):
                 payloads.append(

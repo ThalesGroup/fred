@@ -16,7 +16,7 @@ Use a user/final row with nullable `message_id` and `delivery_state` columns, ex
 
 ### Reserve canonical rank from the turn's trace sequence
 
-At turn start, wait for the preceding turn's history commit and capture `MAX(canonical rank)+1`. A single rank allocator reserves positions for both SSE events and persisted trace rows. The stream sends these ranks with each ranked event, so the live browser and reloaded history use the same order. At the safe model boundary, a `steered_user_message` event atomically moves its pending row to its canonical rank and marks it delivered, before new model output can reserve tool ranks. The turn writer persists the other events at their reserved ranks, skipping a second user row for that identity. Synthetic `tool_use` thoughts do not consume a canonical rank. Rank gaps from empty reasoning blocks remain allowed. A later pending message keeps its negative rank until its own boundary.
+At turn start, wait for the preceding turn's history commit and capture `MAX(canonical rank)+1`. A single rank allocator reserves positions for both SSE events and persisted trace rows. The stream sends these ranks with each ranked event, so the live browser and reloaded history use the same order. At the safe model boundary, a short tool-free model call answers the in-progress update. One `steered_assistant_message` event carries the pending user identities and the reply. Its consumer promotes the user rows and inserts the assistant row in one SQL transaction, then acknowledges persistence before ordinary model or tool work resumes. The turn writer reserves those ranks but skips their second insertion. Synthetic `tool_use` thoughts do not consume a canonical rank. Rank gaps from empty reasoning blocks remain allowed. A later pending message keeps its negative rank until its own boundary.
 
 ### Make the history write part of stream completion
 
@@ -24,7 +24,7 @@ Finish writing the collected trace before the SSE stream closes, instead of spaw
 
 ### Treat the model boundary as delivery, and reconcile checkpoints
 
-The middleware reads pending rows in send order from shared SQL, injects stable LangGraph `HumanMessage.id` values after the completed tool batch, and emits one delivery event per incorporated message. On continuation, it compares every delivered identity from the current exchange with checkpoint messages before re-injecting, even if the trace was persisted before the checkpoint. Delivery state is durable only after the rank move succeeds. A crash between an external model call and checkpoint commit can replay that call, as with other runtime work; the stable message identity prevents a second history row and a later checkpoint comparison avoids duplicate context injection.
+The middleware reads pending rows in send order from shared SQL and injects stable LangGraph `HumanMessage.id` values after the completed tool batch. It makes one tool-free model call for the pending batch, then emits the combined delivery/reply event and waits for a run-scoped persistence receipt before the normal model call. A failed reply call or SQL transaction leaves the user rows pending. The assistant reply has an idempotent identity derived from the full ordered batch of user message IDs. On continuation, delivered user rows and assistant replies from the current exchange are reconciled with checkpoint messages in rank order. A crash between an external model call and checkpoint commit can replay that call, as with other runtime work; stable identities prevent duplicate history rows. Steering middleware is installed only for top-level executions whose event consumer persists and acknowledges ranked chat events; nested agent invocations and OpenAI-compatible streams have no such consumer.
 
 ### Continue a message that misses the boundary
 
@@ -39,6 +39,7 @@ The composer creates an optimistic in-thread message keyed by a UUID, calls the 
 - [History persistence adds latency at stream close] -> Keep one batched write, measure the additional close time, and avoid a database call per trace token.
 - [Pending rows may be received while a turn is finishing] -> Serialize promotion and trace persistence per session; a late row remains pending for the following ordinary turn.
 - [Model call and SQL/checkpoint commits are not one transaction] -> Use stable IDs and reconcile pending state with checkpoint messages on continuation. External tool/model effects remain subject to the runtime's existing retry semantics.
+- [Each in-progress update batch adds one model call] -> Generate one short reply for the batch without tools, then continue the original model decision; count both calls in turn usage.
 - [Negative provisional ranks are not canonical order] -> Only rows explicitly marked pending use the bottom-of-thread presentation rule. All delivered and ordinary messages continue to sort by canonical rank.
 
 ## Migration Plan

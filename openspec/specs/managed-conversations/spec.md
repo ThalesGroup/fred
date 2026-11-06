@@ -189,6 +189,29 @@ The runtime SHALL give an eligible submitted message to the active ReAct or Deep
 - **WHEN** Graph reaches a human-input pause before a final answer
 - **THEN** the message receives its definitive opening rank and no longer appears pending
 
+### Requirement: In-progress updates receive separate assistant replies
+
+The agent SHALL send a visible assistant message responding to an in-progress update before continuing ordinary model or tool work. User delivery and reply persistence SHALL commit atomically before that work resumes. The reply SHALL have its own canonical rank and survive history reload and checkpoint recovery. A progress question SHALL receive current status in that message. A failed reply generation SHALL leave the user message pending.
+
+#### Scenario: Progress question during a tool call
+
+- **GIVEN** the agent has dispatched a tool call
+- **WHEN** the user asks for progress and the tool results arrive
+- **THEN** the agent sends a separate assistant status message before any further tool calls
+- **AND** the chat keeps that message separate from the later final answer after reload
+
+#### Scenario: Reply failure before delivery
+
+- **GIVEN** a steered user message is waiting at a model boundary
+- **WHEN** the agent cannot generate the intermediate reply
+- **THEN** the message remains pending with its clock and can be retried
+
+#### Scenario: Checkpoint recovery after reply persistence
+
+- **GIVEN** the assistant reply was persisted before the graph checkpoint committed
+- **WHEN** the same exchange resumes on another replica
+- **THEN** the user update and assistant reply are injected once in rank order without another reply
+
 ### Requirement: In-thread submission survives concurrency and failure
 
 The runtime SHALL authorize the session and managed agent before storing a submitted message. Message identity SHALL make retries idempotent across runtime replicas. Concurrent submissions and history writes SHALL not overwrite or duplicate messages or canonical ranks. A runtime crash SHALL leave an unincorporated message visible and eligible for a later continuation or ordinary turn. Deleting a conversation SHALL delete its submitted messages with the rest of its history.

@@ -133,6 +133,36 @@ it("shows a steered user message in the current exchange", () => {
   expect(rows[3].text).toBe("October notes");
 });
 
+it("keeps an in-progress assistant reply separate from later tool work and final answer", () => {
+  const rows = toThreadMessages(
+    [
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Find notes" }] }),
+      msg({ role: "user", rank: 1, parts: [{ type: "text", text: "Where are you?" }] }),
+      msg({
+        role: "assistant",
+        rank: 2,
+        parts: [{ type: "text", text: "I am checking the sources." }],
+        metadata: { extras: { steered_reply_for: ["m1"] } },
+      }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 3,
+        parts: [{ type: "tool_call", call_id: "c1", name: "search", args: {} }],
+      }),
+      msg({ role: "assistant", rank: 4, parts: [{ type: "text", text: "Found it." }] }),
+    ],
+    false,
+  );
+  expect(rows.map((row) => [row.role, row.text])).toEqual([
+    ["user", "Find notes"],
+    ["user", "Where are you?"],
+    ["assistant", "I am checking the sources."],
+    ["assistant", "Found it."],
+  ]);
+  expect(rows[3].traceMessages).toHaveLength(1);
+});
+
 it("preserves the context token anchor across a steered tool segment", () => {
   const rows = toThreadMessages(
     [

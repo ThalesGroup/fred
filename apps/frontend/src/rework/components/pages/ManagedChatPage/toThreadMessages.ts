@@ -266,9 +266,15 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
   for (const eid of exchanges.order) {
     let segmentId = eid;
     let hasUser = false;
+    let splitAfterReplyRank: number | null = null;
     for (const message of exchanges.groups.get(eid)!) {
       const isUserMessage = message.role === "user" && (message.channel as string) !== "hitl_response";
-      if (isUserMessage && hasUser) segmentId = `${eid}:steer:${message.rank}`;
+      if (splitAfterReplyRank !== null) {
+        segmentId = `${eid}:after-steer-reply:${splitAfterReplyRank}`;
+        splitAfterReplyRank = null;
+      } else if (isUserMessage && hasUser) {
+        segmentId = `${eid}:steer:${message.rank}`;
+      }
       if (isUserMessage) hasUser = true;
       if (!groups.has(segmentId)) {
         order.push(segmentId);
@@ -276,6 +282,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         segmentOrigins.set(segmentId, eid);
       }
       groups.get(segmentId)!.push(message);
+      if (Array.isArray(message.metadata?.extras?.steered_reply_for)) splitAfterReplyRank = message.rank;
     }
   }
 
@@ -324,8 +331,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         role: "user",
         text: textOf(userMsg),
         isStreaming: false,
-        steeringState:
-          userMsg.metadata?.extras?.steering_state === "pending" ? "pending" : undefined,
+        steeringState: userMsg.metadata?.extras?.steering_state === "pending" ? "pending" : undefined,
         pendingMessageId:
           userMsg.metadata?.extras?.steering_state === "pending" &&
           typeof userMsg.metadata?.extras?.steered_message_id === "string"
@@ -491,7 +497,8 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         id: `${eid}:assistant`,
         role: "assistant",
         text: finalMessages.map((m) => textOf(m)).join(""),
-        isStreaming: isStreaming && isLast,
+        isStreaming:
+          isStreaming && isLast && !finalMessages.some((m) => Array.isArray(m.metadata?.extras?.steered_reply_for)),
         traceMessages,
         hitlAnswerSummariesByCallId,
         sources,

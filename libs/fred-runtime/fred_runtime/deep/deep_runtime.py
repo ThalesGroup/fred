@@ -613,6 +613,7 @@ def _build_deepagent_runtime_middleware(
                 ),
             )
             if not child
+            and binding.portable_context.baggage.get("steering_enabled") == "true"
             else ()
         ),
         # Deep Agents no longer installs planning for non-Codex models.
