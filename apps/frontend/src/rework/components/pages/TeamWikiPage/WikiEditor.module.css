@@ -141,6 +141,11 @@
   font: var(--font-body-large);
 }
 
+/* The first block's own top margin stacked on the editor's padding, leaving a blank band under the toolbar. */
+.surface :global(.fred-writable-document) > :first-child {
+  margin-top: 0;
+}
+
 /* MDXEditor paints its toolbar with `--baseBg`, a Radix slate step outside this
    design system. Set on the element rather than by redefining that variable:
    the library declares it at the same specificity in a chunk that loads later,
