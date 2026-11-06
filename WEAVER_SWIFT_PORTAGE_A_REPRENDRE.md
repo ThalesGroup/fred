@@ -1472,3 +1472,57 @@ et rollback sur installation isolée non exécutés.
 **Résolu le 6 novembre :** `weaver-powerpoint-file-ownership.md` a reçu sa section
 `## Prerequisites` et `make migration-check` passe sur sa base par défaut `origin/swift`.
 
+
+## 14. Tranche Swift vers 89baab5b6 - 6 novembre 2026
+
+Cible figée : `89baab5b6`. Base Weaver : `7c29aede0`. Borne intégrée : `3d1838420`.
+Branche : `merge/swift-89baab5b6`. Quatre étapes, dans l'ordre de l'ascendance Swift. `6fae3a708`,
+`6f3b28478` et `f951e3438`, arrivés ensuite, restent hors de cette tranche.
+
+| Etape | Commits Swift | Etat |
+| --- | --- | --- |
+| 1 | `b00551906` (#3460) tabulaire | Fusion résolue et préparée, non commitée, en attente de relecture |
+| 2 | `a2ebfe48c` (#3476) Azure APIM | Non commencée |
+| 3 | `d9eb3738f` (#3453), `303b7456e` (#3483) | Non commencée |
+| 4 | `507866562` (#3475), `89baab5b6` (#3455) | Non commencée |
+
+### Etape 1 : décisions
+
+- **Repris :** colonnes compactes (`categorical_values`, bornes seulement sur les numériques), `table_names`,
+  message explicite pour zéro ligne, diagnostic SQL limité aux tables montées, types temporels Excel, détail
+  des échecs dans le panneau de traces, textes d'erreur Fred et prompt tabulaire.
+- **Adapté à Weaver :** `read_query` devient `query_tabular_documents`, y compris dans `toolFailureTrace.ts` ;
+  `TabularColumnSchema` reste dans `fred_knowledge` et perd `has_two_values` ; la note opérateur ne parle plus
+  de données déjà ingérées.
+- **Exclu volontairement :** `attachment_uids`, `owner_filter`, `team_id`, `include_*_scope` et
+  `document_library_tags_ids` en arguments d'outil, car le périmètre vient du contexte serveur. Les corps de
+  réponse HTTP restent hors des logs, et les messages SQL hors du log de rejet.
+- **Suppressions Weaver maintenues :** `docs/swift`, `openspec`, le prompt `basic_react_sql_expert`,
+  `tests/services/test_tabular_service.py` et `tests/test_mcp_v2_inventory.py`. Leurs cas de comportement sont
+  repris dans `test_weaver_tabular.py` et `validation/knowledge_flow`, sans les assertions sur les libellés.
+- **Conservé tel quel :** `has_two_values` reste lu par `tabularTrace.ts`, comme dans Swift. Ce champ est
+  sans objet sur une installation neuve.
+
+### Etape 1 : preuves locales, sans déploiement
+
+- Knowledge Flow API : 186 réussis. Worker Excel : 186 réussis. Runtime ciblé : 106 réussis. Frontend ciblé :
+  382 réussis. Ces suites ne prouvent pas le parcours déployé.
+- `validation/knowledge_flow`, avec `--confcutdir=validation/knowledge_flow` : 57 réussis et 1 échec dû au
+  blocage réseau ; ce dernier test réussit en autorisant seulement `127.0.0.1`.
+- `make code-quality` : Knowledge Flow API et worker, `fred-knowledge`, runtime, frontend. `make migration-check`
+  valide 32 déclarations. Tests de `fred-capability-mcp` non exécutés : ce paquet n'a pas de dossier de tests.
+
+### Etape 1 : à recevoir sur déploiement
+
+- Un agent décrit tout un classeur puis une seule table ; la colonne montre `categorical_values`.
+- Une colonne de date Excel nouvellement ingérée a un vrai type temporel en SQL.
+- Une requête sans résultat répond « 0 ligne », sans erreur.
+- Une colonne inexistante produit un diagnostic qui ne cite que les tables de la requête, et le panneau de
+  traces montre les arguments envoyés et la cause.
+
+### Défauts constatés, non corrigés dans ce lot
+
+- `make generate-openapi` de Knowledge Flow initialise pgvector à la création de l'application et se connecte
+  donc à `localhost:5432`. Le client a été généré par un script temporaire neutralisant cet appel.
+- `make test-knowledge-flow-contracts` charge `validation/conftest.py`, qui exige un Control Plane en marche,
+  et `--disable-socket` bloque le test de Parquet signé sur `127.0.0.1`.

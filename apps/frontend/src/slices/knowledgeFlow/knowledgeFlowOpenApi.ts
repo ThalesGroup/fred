@@ -13,6 +13,21 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/knowledge-flow/v2/ready` }),
     }),
+    listDocumentTree: build.query<ListDocumentTreeApiResponse, ListDocumentTreeApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v2/documents/tree`,
+        headers: {
+          "x-fred-document-context": queryArg["x-fred-document-context"],
+        },
+        params: {
+          folder_id: queryArg.folderId,
+          limit: queryArg.limit,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
     searchDocuments: build.mutation<SearchDocumentsApiResponse, SearchDocumentsApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v2/documents/search`,
@@ -106,6 +121,7 @@ const injectedRtkApi = api.injectEndpoints({
         },
         params: {
           document_uids: queryArg.documentUids,
+          table_names: queryArg.tableNames,
           person: queryArg.person,
           run: queryArg.run,
           agent: queryArg.agent,
@@ -150,6 +166,19 @@ export type HealthzKnowledgeFlowV2HealthzGetApiResponse = /** status 200 Success
 export type HealthzKnowledgeFlowV2HealthzGetApiArg = void;
 export type ReadyKnowledgeFlowV2ReadyGetApiResponse = /** status 200 Successful Response */ any;
 export type ReadyKnowledgeFlowV2ReadyGetApiArg = void;
+export type ListDocumentTreeApiResponse = /** status 200 Successful Response */ DocumentTreeResponse;
+export type ListDocumentTreeApiArg = {
+  folderId?: string | null;
+  limit?: number;
+  /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
+  person?: string | null;
+  /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
+  run?: string | null;
+  /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
+  agent?: string | null;
+  /** One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. */
+  "x-fred-document-context": any;
+};
 export type SearchDocumentsApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type SearchDocumentsApiArg = {
   /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
@@ -227,8 +256,10 @@ export type ListTabularDocumentsApiArg = {
 export type DescribeTabularDocumentsApiResponse =
   /** status 200 Successful Response */ TabularDocumentDescriptionResponse[];
 export type DescribeTabularDocumentsApiArg = {
-  /** Document UUIDs from listing, encoded as repeated document_uids query parameters. All requested documents must be in scope; 1 to 1000 identifiers. */
+  /** Document UUIDs copied exactly from list_tabular_documents, not filenames or SQL table aliases. Repeat the parameter for several documents. All requested documents must be in scope; 1 to 1000 identifiers. */
   documentUids: string[];
+  /** Optional exact query_alias values or unambiguous sheet/title names. Omit or pass an empty list for all tables. Does not rename SQL aliases. */
+  tableNames?: string[] | null;
   /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
   person?: string | null;
   /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
@@ -261,6 +292,44 @@ export type SearchTabularValuesApiArg = {
   /** One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. */
   "x-fred-document-context": any;
   tabularSearchRequest: TabularSearchRequest;
+};
+export type DocumentTreeSpace = {
+  space_id: string;
+  name: string;
+};
+export type DocumentTreeFolder = {
+  folder_id: string;
+  space_id: string;
+  parent_id: string | null;
+  name: string;
+};
+export type DocumentTreeDocument = {
+  document_uid: string;
+  space_id: string;
+  folder_id: string | null;
+  name: string;
+  mime: string;
+  added_at: string;
+};
+export type DocumentTreeResponse = {
+  spaces?: DocumentTreeSpace[];
+  folders?: DocumentTreeFolder[];
+  documents?: DocumentTreeDocument[];
+  truncated?: boolean;
+};
+export type KnowledgeFlowError = {
+  /** Error code or message. Do not assume all messages are stable machine-readable codes. */
+  detail: string;
+};
+export type ValidationError = {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+  input?: any;
+  ctx?: object;
+};
+export type HttpValidationError = {
+  detail?: ValidationError[];
 };
 export type VectorSearchHit = {
   content: string;
@@ -306,20 +375,6 @@ export type VectorSearchHit = {
   retrieved_at?: string | null;
   retrieval_session_id?: string | null;
 };
-export type KnowledgeFlowError = {
-  /** Error code or message. Do not assume all messages are stable machine-readable codes. */
-  detail: string;
-};
-export type ValidationError = {
-  loc: (string | number)[];
-  msg: string;
-  type: string;
-  input?: any;
-  ctx?: object;
-};
-export type HttpValidationError = {
-  detail?: ValidationError[];
-};
 export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type SearchRequest = {
   /** Natural-language search query. This operation returns chunks, not a generated answer. */
@@ -328,6 +383,10 @@ export type SearchRequest = {
   top_k?: number;
   /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
   search_policy?: SearchPolicyName | null;
+  /** Retrieve up to min(top_k * 5, 100) candidates and rerank visible, in-scope hits with the cross-encoder, keeping top_k. Retrieval scores are unchanged. */
+  rerank?: boolean;
+  /** Keep hits whose original retrieval score (or 0.0 when absent) is at least this value, after optional reranking and its top_k limit. */
+  min_score?: number | null;
 };
 export type MarkdownResponse = {
   /** Full UTF-8 text of the authorized published output.md artifact; no pagination or response-size limit is imposed here. */
@@ -372,18 +431,14 @@ export type TabularDocumentListResponse = {
   source_kind?: "corpus" | "conversation_attachment";
   tag_names?: string[] | null;
 };
-export type TabularColumnSchema = {
+export type TabularColumnDescription = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
-  /** For string columns, whether the count of distinct non-null values is between 1 and max_categories(row_count), with null rows included in row_count. None for non-string or older columns without this analysis. */
-  is_categorical?: boolean | null;
-  /** For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values. */
-  has_two_values?: boolean | null;
-  /** Every distinct non-null string value when is_categorical is true, preserving exact casing for SQL filters. None otherwise. */
-  sample_values?: string[] | null;
-  /** Smallest finite non-null value of an integer or float column. None when unavailable. */
+  /** Exact distinct non-null categories, preserving spelling and case. Present only for a described categorical string column. */
+  categorical_values?: string[] | null;
+  /** Smallest finite value. Present only for integer/float columns; null if none exist. */
   min_value?: number | number | null;
-  /** Largest finite non-null value of an integer or float column. None when unavailable. */
+  /** Largest finite value. Present only for integer/float columns; null if none exist. */
   max_value?: number | number | null;
 };
 export type TabularTableSchema = {
@@ -392,13 +447,13 @@ export type TabularTableSchema = {
   title?: string | null;
   row_count?: number | null;
   generated_at?: string | null;
-  columns?: TabularColumnSchema[];
+  columns?: TabularColumnDescription[];
 };
 export type TabularDocumentDescriptionResponse = {
   document_uid: string;
   document_name: string;
   kind: "csv" | "spreadsheet";
-  markdown: string | null;
+  markdown?: string | null;
   tables?: TabularTableSchema[];
   source_tag?: string | null;
 };
@@ -411,17 +466,19 @@ export type RawSqlResponse = {
   }[];
   /** Null on this mounted success path; failures use HTTP error statuses, not a success response containing an error. */
   error?: string | null;
+  /** Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information. */
+  message?: string | null;
   /** Document UUIDs of the mounted tables. A workbook UUID may appear more than once. */
   dataset_uids?: string[];
   /** Exact aliases of the mounted tables used by the query. */
   query_aliases?: string[];
 };
 export type TabularQueryRequest = {
-  /** One read-only SELECT/WITH using exact aliases returned by schema discovery. Must reference an authorized dataset; SELECT 1, writes and external reads are refused. */
+  /** One read-only DuckDB SELECT/WITH using exact tables[].query_alias values from describe_tabular_documents. These aliases are SQL table names, not document UUIDs or filenames. Must reference an authorized dataset; SELECT 1, writes and external reads are refused. */
   sql: string;
-  /** Optional document UUID subset, not table aliases. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook includes its tables. */
+  /** Document UUIDs copied exactly from authorized discovery, not filenames, SQL aliases or shortened identifiers. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook UUID selects all its tables. */
   dataset_uids?: string[] | null;
-  /** Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination or truncation flag. */
+  /** Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination or truncation flag. For totals or statistics, aggregate in SQL rather than counting this preview. */
   max_rows?: number | null;
 };
 export type TabularTableMatch = {
@@ -447,9 +504,9 @@ export type TabularSearchResponse = {
   searched_dataset_uids?: string[];
 };
 export type TabularSearchRequest = {
-  /** Precise value to locate. Schema minimum is 1 character; the service additionally requires at least 2 stripped characters (400) and a nonempty normalized keyword. Case/accent/whitespace-insensitive substring matching, including numeric columns. */
+  /** Precise word or expression of at least two characters after trimming (400 otherwise), nonempty once normalized. Case/accent/whitespace-insensitive substring matching, including numeric columns. Use after document description; generic terms match too many tables to locate a value. */
   keyword: string;
-  /** Optional document UUID subset, not table aliases. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook includes its tables. */
+  /** Document UUIDs copied exactly from authorized discovery, not filenames, SQL aliases or shortened identifiers. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook UUID selects all its tables. */
   dataset_uids?: string[] | null;
   /** Maximum matching rows returned per table (ceiling). */
   max_rows_per_table?: number;
@@ -461,6 +518,8 @@ export const {
   useLazyHealthzKnowledgeFlowV2HealthzGetQuery,
   useReadyKnowledgeFlowV2ReadyGetQuery,
   useLazyReadyKnowledgeFlowV2ReadyGetQuery,
+  useListDocumentTreeQuery,
+  useLazyListDocumentTreeQuery,
   useSearchDocumentsMutation,
   useGetDocumentChunksQuery,
   useLazyGetDocumentChunksQuery,

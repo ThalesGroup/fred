@@ -18,10 +18,6 @@ class TabularColumnSchema(BaseModel):
             "row_count. None for non-string or older columns without this analysis."
         ),
     )
-    has_two_values: Optional[bool] = Field(
-        default=None,
-        description=("For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values."),
-    )
     sample_values: Optional[list[str]] = Field(
         default=None,
         description=("Every distinct non-null string value when is_categorical is true, preserving exact casing for SQL filters. None otherwise."),

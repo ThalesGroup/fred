@@ -320,9 +320,9 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 | Method | Path | Summary |
 | --- | --- | --- |
 | GET | [/tabular/documents](#get-tabulardocuments) | List published tabular documents in the active document selection |
-| GET | [/tabular/documents/schemas](#get-tabulardocumentsschemas) | Read extraction catalogs and typed tables of selected documents |
-| POST | [/tabular/query](#post-tabularquery) | Execute one read-only SELECT on authorized published datasets |
-| POST | [/tabular/search](#post-tabularsearch) | Locate a precise value in authorized published datasets |
+| GET | [/tabular/documents/schemas](#get-tabulardocumentsschemas) | Inspect document catalogs, SQL aliases and column types |
+| POST | [/tabular/query](#post-tabularquery) | Run one read-only DuckDB SELECT over discovered tables |
+| POST | [/tabular/search](#post-tabularsearch) | Locate a precise value after inspecting document structure |
 
 ### GET /tabular/documents
 
@@ -369,13 +369,14 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### GET /tabular/documents/schemas
 
-Read extraction catalogs and typed tables of selected documents. Use document UIDs from list_tabular_documents. Returns exact SQL aliases, column types, categorical values and numeric ranges; Excel includes its catalog. Every requested document must belong to the active document selection. The configured max_selected_datasets also bounds the total tables described; a workbook may contain multiple tables. CSV markdown is null; Excel returns its published extraction catalog. Category/range analysis is subject to the same tabular execution budgets. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
+Inspect document catalogs, SQL aliases and column types. Inspect the catalog, SQL table aliases and column types before querying. Pass exact document UIDs from list_tabular_documents; every one must belong to the active document selection. Batch several documents when a query will join them. For Excel, read the published markdown catalog first, then inspect tables[].columns. CSV markdown is null. Describe all tables by default, or select table_names to inspect only relevant schemas; the workbook catalog stays complete. The configured max_selected_datasets bounds the total tables described, and analysis is subject to the same tabular execution budgets. Categorical string categorical_values contain all distinct non-null values: preserve their exact spelling and format in filters. Numeric min_value and max_value are finite observed bounds, not query answers. Use query_alias in SQL FROM/JOIN clauses and document UIDs only as document selectors. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
 
 Operation `describe_tabular_documents`.
 
 | Parameter | In | Type | Required | Description |
 | --- | --- | --- | --- | --- |
-| `document_uids` | query | array of string, min items 1, max items 1000 | yes | Document UUIDs from listing, encoded as repeated document_uids query parameters. All requested documents must be in scope; 1 to 1000 identifiers. |
+| `document_uids` | query | array of string, min items 1, max items 1000 | yes | Document UUIDs copied exactly from list_tabular_documents, not filenames or SQL table aliases. Repeat the parameter for several documents. All requested documents must be in scope; 1 to 1000 identifiers. |
+| `table_names` | query | array of string, max items 1000 or null |  | Optional exact query_alias values or unambiguous sheet/title names. Omit or pass an empty list for all tables. Does not rename SQL aliases. |
 | `person` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `run` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
 | `agent` | query | string, max length 256 or null |  | Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. |
@@ -414,7 +415,7 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### POST /tabular/query
 
-Execute one read-only SELECT on authorized published datasets. Use exact aliases from describe_tabular_documents. dataset_uids narrows the active selection; a workbook UID includes all its tables. SQL must reference at least one dataset. Execution, memory, row and dataset limits apply. Results are row-limited without a truncation flag or pagination token; reaching the row limit does not prove completeness. Dataset, memory, concurrency and timeout ceilings come from storage.tabular_store.query. Retry capacity 503 with bounded backoff; for 504 narrow the query. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
+Run one read-only DuckDB SELECT over discovered tables. Run one read-only DuckDB SELECT after describing every document it reads. Use exact query_alias values from describe_tabular_documents in FROM/JOIN. dataset_uids narrows the active selection; a workbook UID includes all its tables. SQL must reference at least one dataset. Execution, memory, row and dataset ceilings come from storage.tabular_store.query. Results are row-limited without a truncation flag or pagination token: compute totals and aggregates in SQL instead of inferring them from previews. rows=[] with error=null is a successful query with zero matching rows and an explicit success message. A zero count or null aggregate is still a row. Reuse successful results; inspect types and filters before changing an unexpectedly empty query instead of repeating it unchanged. HTTP 400 requires correcting SQL or arguments. Retry capacity 503 with bounded backoff; for 504 narrow the query. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
 
 Operation `query_tabular_documents`.
 
@@ -460,7 +461,7 @@ Response 503 header `X-Fred-Denial-Cause`: `account_status_unavailable`. Present
 
 ### POST /tabular/search
 
-Locate a precise value in authorized published datasets. Case/accent/whitespace-insensitive search, including numeric columns. Use dataset_uids to narrow the search. The stripped keyword must have at least two characters and must remain nonempty after normalization. Up to 5 rows per table and 30 matching tables; callers may lower these caps. The configured dataset scan ceiling can further restrict work. Inspect tables_truncated and each match's rows_truncated; an empty matches list with truncation is not proof the value is absent. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
+Locate a precise value after inspecting document structure. Locate a precise value when the inspected catalog cannot identify its table. Use only after describe_tabular_documents, as a last-resort value locator rather than a structure-discovery or aggregation tool. Matching ignores case, accents and whitespace; numeric columns are searchable too. Use dataset_uids to narrow the search. The stripped keyword must have at least two characters and must remain nonempty after normalization. Up to 5 rows per table and 30 matching tables; callers may lower these caps. The configured dataset scan ceiling can further restrict work. Inspect tables_truncated and each match's row_truncated; an empty matches list with truncation is not proof the value is absent. Use the located aliases in a subsequent query_tabular_documents. Sources are the union of the selected corpus and explicitly authorized conversation attachments, further narrowed by requested dataset/document IDs. Published Parquet artifacts do not require vector chunks. All sheets/tables keep their existing aliases; no dataset outside this union is mounted.
 
 Operation `search_tabular_values`.
 
@@ -622,6 +623,7 @@ Existing HTTP error envelope. Request-validation errors use HTTPValidationError 
 | --- | --- | --- | --- |
 | `dataset_uids` | array of string |  | Document UUIDs of the mounted tables. A workbook UUID may appear more than once. |
 | `error` | string or null |  | Null on this mounted success path; failures use HTTP error statuses, not a success response containing an error. |
+| `message` | string or null |  | Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information. |
 | `query_aliases` | array of string |  | Exact aliases of the mounted tables used by the query. |
 | `rows` | array of object |  | JSON objects keyed by selected SQL columns; values depend on the query. Bounded preview, without a completeness flag. |
 | `sql_query` | string | yes | Validated SQL before the server adds its outer result-row LIMIT. |
@@ -660,17 +662,17 @@ Additional fields are rejected.
 | `shrunk_for_budget` | boolean | yes | True when a corrective rewriting pass completed. This does not guarantee that the result is within max_chars. |
 | `summary` | string | yes |  |
 
-### TabularColumnSchema
+### TabularColumnDescription
+
+Compact public schema, separate from stored ingestion classification.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `categorical_values` | array of string or null |  | Exact distinct non-null categories, preserving spelling and case. Present only for a described categorical string column. |
 | `dtype` | `string`, `integer`, `float`, `boolean`, `datetime`, `unknown` | yes |  |
-| `has_two_values` | boolean or null |  | For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values. |
-| `is_categorical` | boolean or null |  | For string columns, whether the count of distinct non-null values is between 1 and max_categories(row_count), with null rows included in row_count. None for non-string or older columns without this analysis. |
-| `max_value` | integer or number or null |  | Largest finite non-null value of an integer or float column. None when unavailable. |
-| `min_value` | integer or number or null |  | Smallest finite non-null value of an integer or float column. None when unavailable. |
+| `max_value` | integer or number or null |  | Largest finite value. Present only for integer/float columns; null if none exist. |
+| `min_value` | integer or number or null |  | Smallest finite value. Present only for integer/float columns; null if none exist. |
 | `name` | string | yes |  |
-| `sample_values` | array of string or null |  | Every distinct non-null string value when is_categorical is true, preserving exact casing for SQL filters. None otherwise. |
 
 ### TabularDocumentDescriptionResponse
 
@@ -681,7 +683,7 @@ Extraction catalog and full schemas for one authorized tabular document. Why thi
 | `document_name` | string | yes |  |
 | `document_uid` | string | yes |  |
 | `kind` | `csv`, `spreadsheet` | yes |  |
-| `markdown` | string or null | yes |  |
+| `markdown` | string or null |  |  |
 | `source_tag` | string or null |  |  |
 | `tables` | array of [`TabularTableSchema`](#tabulartableschema) |  |  |
 
@@ -709,22 +711,22 @@ Excel table identity exposed by the document-list endpoint.
 
 ### TabularQueryRequest
 
-Read-only SQL query request for authorized tabular datasets. Why this exists: - The new tabular runtime can query several document-scoped datasets at once. How to use: - Send `sql` and an optional `dataset_uids` subset. - Omit `dataset_uids` to make every readable dataset in the active tabular scope available to the query. Only the aliases the SQL actually references are mounted. The authorized inventory is still resolved. - The query must reference at least one dataset alias in its `FROM` clause; a query that reads no dataset (`SELECT 1`) is rejected with 400. - A query joining more datasets than the server's per-request limit is also rejected with 400 — split it or scope `dataset_uids`. - An explicit empty dataset list selects nothing. The trusted document scope is supplied by the runtime outside tool arguments. Example: ```python request = TabularQueryRequest( sql="SELECT city, COUNT(*) FROM d_doc_sales GROUP BY city", dataset_uids=["doc-sales"], max_rows=50, ) ``` Additional fields are rejected.
+One read-only DuckDB SELECT over authorized document tables. sql uses discovered table aliases; dataset_uids scopes exact document UUIDs. If omitted, SQL may reference any table in the active authorized scope; only referenced tables are mounted. An explicit empty list selects nothing. The query must read at least one table and respect the server's dataset limit. The trusted document scope is supplied by the runtime outside tool arguments. max_rows caps the returned preview; compute totals and statistics in SQL. Additional fields are rejected.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset_uids` | array of string, max items 1000 or null |  | Optional document UUID subset, not table aliases. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook includes its tables. |
-| `max_rows` | integer, >= 1.0 or null |  | Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination or truncation flag. |
-| `sql` | string, min length 1 | yes | One read-only SELECT/WITH using exact aliases returned by schema discovery. Must reference an authorized dataset; SELECT 1, writes and external reads are refused. |
+| `dataset_uids` | array of string, max items 1000 or null |  | Document UUIDs copied exactly from authorized discovery, not filenames, SQL aliases or shortened identifiers. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook UUID selects all its tables. |
+| `max_rows` | integer, >= 1.0 or null |  | Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination or truncation flag. For totals or statistics, aggregate in SQL rather than counting this preview. |
+| `sql` | string, min length 1 | yes | One read-only DuckDB SELECT/WITH using exact tables[].query_alias values from describe_tabular_documents. These aliases are SQL table names, not document UUIDs or filenames. Must reference an authorized dataset; SELECT 1, writes and external reads are refused. |
 
 ### TabularSearchRequest
 
-Keyword value-locator request over authorized tabular datasets. Why this exists: - The catalog and schemas expose a workbook's structure but never its cell values, so a question about a value otherwise forces a blind table-by-table scan — one MCP/LLM round trip per table. This locates the value once, server-side. How to use: - Send a precise `keyword`; scope with `dataset_uids` when possible (one spreadsheet uid covers all its tables). Omit `dataset_uids` to search every readable dataset in the active scope. - `max_rows_per_table` and `max_matching_tables` are ceilings (module constants) — lower them, never raise them. Example: ```python request = TabularSearchRequest(keyword="ABC-123", dataset_uids=["doc-sales"]) ``` Additional fields are rejected.
+Bounded lookup of a precise value after inspecting document structure. Schemas expose types and categorical values; this locator helps find other cell values across tables. dataset_uids scopes exact document UIDs, with one workbook UID covering all its tables. If omitted, all readable datasets in the active scope may be searched. Prefer a narrow scope and keyword. Preview ceilings can be lowered, never raised; truncation means partial coverage and requires refining the search. Additional fields are rejected.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `dataset_uids` | array of string, max items 1000 or null |  | Optional document UUID subset, not table aliases. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook includes its tables. |
-| `keyword` | string, min length 1 | yes | Precise value to locate. Schema minimum is 1 character; the service additionally requires at least 2 stripped characters (400) and a nonempty normalized keyword. Case/accent/whitespace-insensitive substring matching, including numeric columns. |
+| `dataset_uids` | array of string, max items 1000 or null |  | Document UUIDs copied exactly from authorized discovery, not filenames, SQL aliases or shortened identifiers. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook UUID selects all its tables. |
+| `keyword` | string, min length 1 | yes | Precise word or expression of at least two characters after trimming (400 otherwise), nonempty once normalized. Case/accent/whitespace-insensitive substring matching, including numeric columns. Use after document description; generic terms match too many tables to locate a value. |
 | `max_matching_tables` | integer, >= 1.0, <= 30.0 |  | Maximum tables with a match returned before the search stops (ceiling). Default: `30`. |
 | `max_rows_per_table` | integer, >= 1.0, <= 5.0 |  | Maximum matching rows returned per table (ceiling). Default: `5`. |
 
@@ -761,7 +763,7 @@ Full schema for one queryable table (summary fields plus columns). Why this exis
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `columns` | array of [`TabularColumnSchema`](#tabularcolumnschema) |  |  |
+| `columns` | array of [`TabularColumnDescription`](#tabularcolumndescription) |  |  |
 | `generated_at` | string or null |  |  |
 | `query_alias` | string | yes |  |
 | `row_count` | integer or null |  |  |

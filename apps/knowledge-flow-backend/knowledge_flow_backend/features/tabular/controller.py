@@ -72,8 +72,9 @@ class TabularController:
         @router.get(
             "/tabular/documents/schemas",
             response_model=list[TabularDocumentDescriptionResponse],
+            response_model_exclude_none=True,
             tags=["Tabular"],
-            summary="Read extraction catalogs and typed tables of selected documents",
+            summary="Inspect document catalogs, SQL aliases and column types",
             operation_id="describe_tabular_documents",
         )
         async def describe_documents(
@@ -82,42 +83,68 @@ class TabularController:
                 Query(
                     min_length=1,
                     max_length=1000,
-                    description="Document UUIDs from listing, encoded as repeated document_uids query parameters. All requested documents must be in scope; 1 to 1000 identifiers.",
+                    description="Document UUIDs copied exactly from list_tabular_documents, not filenames or SQL table aliases. Repeat the parameter for several documents. All requested documents must be in scope; 1 to 1000 identifiers.",
                 ),
             ],
+            table_names: Annotated[
+                list[str] | None,
+                Query(max_length=1000, description="Optional exact query_alias values or unambiguous sheet/title names. Omit or pass an empty list for all tables. Does not rename SQL aliases."),
+            ] = None,
             person: AssertedUser = Depends(delegated_person),
             service: TabularService = Depends(tabular_service),
         ):
-            """Use document UIDs from list_tabular_documents. Returns exact SQL aliases,
-            column types, categorical values and numeric ranges; Excel includes its catalog.
-            Every requested document must belong to the active document selection. The
-            configured max_selected_datasets also bounds the total tables described;
-            a workbook may contain multiple tables. CSV markdown is null; Excel
-            returns its published extraction catalog. Category/range analysis is
-            subject to the same tabular execution budgets."""
-            with tabular_errors():
-                return await service.describe_documents(person, document_uids=document_uids)
+            """Inspect the catalog, SQL table aliases and column types before querying.
 
-        @router.post("/tabular/query", response_model=RawSQLResponse, tags=["Tabular"], summary="Execute one read-only SELECT on authorized published datasets", operation_id="query_tabular_documents")
+            Pass exact document UIDs from list_tabular_documents; every one must belong
+            to the active document selection. Batch several documents when a query will
+            join them. For Excel, read the published markdown catalog first, then inspect
+            tables[].columns. CSV markdown is null. Describe all tables by default, or
+            select table_names to inspect only relevant schemas; the workbook catalog
+            stays complete. The configured max_selected_datasets bounds the total tables
+            described, and analysis is subject to the same tabular execution budgets.
+
+            Categorical string categorical_values contain all distinct non-null values:
+            preserve their exact spelling and format in filters. Numeric min_value and
+            max_value are finite observed bounds, not query answers. Use query_alias in
+            SQL FROM/JOIN clauses and document UIDs only as document selectors."""
+            with tabular_errors():
+                return await service.describe_documents(person, document_uids=document_uids, table_names=table_names)
+
+        @router.post("/tabular/query", response_model=RawSQLResponse, tags=["Tabular"], summary="Run one read-only DuckDB SELECT over discovered tables", operation_id="query_tabular_documents")
         async def query(request: TabularQueryRequest, person: AssertedUser = Depends(delegated_person), service: TabularService = Depends(tabular_service)):
-            """Use exact aliases from describe_tabular_documents. dataset_uids narrows the
-            active selection; a workbook UID includes all its tables. SQL must reference
-            at least one dataset. Execution, memory, row and dataset limits apply.
-            Results are row-limited without a truncation flag or pagination token;
-            reaching the row limit does not prove completeness. Dataset, memory,
-            concurrency and timeout ceilings come from storage.tabular_store.query.
-            Retry capacity 503 with bounded backoff; for 504 narrow the query."""
+            """Run one read-only DuckDB SELECT after describing every document it reads.
+
+            Use exact query_alias values from describe_tabular_documents in FROM/JOIN.
+            dataset_uids narrows the active selection; a workbook UID includes all its
+            tables. SQL must reference at least one dataset. Execution, memory, row and
+            dataset ceilings come from storage.tabular_store.query. Results are
+            row-limited without a truncation flag or pagination token: compute totals and
+            aggregates in SQL instead of inferring them from previews.
+
+            rows=[] with error=null is a successful query with zero matching rows and an
+            explicit success message. A zero count or null aggregate is still a row. Reuse
+            successful results; inspect types and filters before changing an unexpectedly
+            empty query instead of repeating it unchanged.
+
+            HTTP 400 requires correcting SQL or arguments. Retry capacity 503 with bounded
+            backoff; for 504 narrow the query."""
             with tabular_errors():
                 return await service.query_read(person, request=request)
 
-        @router.post("/tabular/search", response_model=TabularSearchResponse, tags=["Tabular"], summary="Locate a precise value in authorized published datasets", operation_id="search_tabular_values")
+        @router.post(
+            "/tabular/search", response_model=TabularSearchResponse, tags=["Tabular"], summary="Locate a precise value after inspecting document structure", operation_id="search_tabular_values"
+        )
         async def search(request: TabularSearchRequest, person: AssertedUser = Depends(delegated_person), service: TabularService = Depends(tabular_service)):
-            """Case/accent/whitespace-insensitive search, including numeric columns.
-            Use dataset_uids to narrow the search. The stripped keyword must have at
-            least two characters and must remain nonempty after normalization.
-            Up to 5 rows per table and 30 matching tables; callers may lower these
-            caps. The configured dataset scan ceiling can further restrict work.
-            Inspect tables_truncated and each match's rows_truncated; an empty
-            matches list with truncation is not proof the value is absent."""
+            """Locate a precise value when the inspected catalog cannot identify its table.
+
+            Use only after describe_tabular_documents, as a last-resort value locator
+            rather than a structure-discovery or aggregation tool. Matching ignores case,
+            accents and whitespace; numeric columns are searchable too. Use dataset_uids
+            to narrow the search. The stripped keyword must have at least two characters
+            and must remain nonempty after normalization. Up to 5 rows per table and 30
+            matching tables; callers may lower these caps. The configured dataset scan
+            ceiling can further restrict work. Inspect tables_truncated and each match's
+            row_truncated; an empty matches list with truncation is not proof the value is
+            absent. Use the located aliases in a subsequent query_tabular_documents."""
             with tabular_errors():
                 return await service.search_values(person, request=request)

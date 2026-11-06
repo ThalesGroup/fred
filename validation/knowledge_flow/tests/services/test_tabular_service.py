@@ -374,13 +374,13 @@ async def test_tabular_processor_classifies_strings_without_storing_category_val
         column for column in artifact.columns if column.name == "severity"
     )
     assert severity_column.is_categorical is True
-    assert severity_column.has_two_values is True
+    assert "has_two_values" not in severity_column.model_dump()
     assert severity_column.sample_values is None
 
     # Non-string columns are never sampled, regardless of cardinality.
     id_column = next(column for column in artifact.columns if column.name == "id")
     assert id_column.is_categorical is None
-    assert id_column.has_two_values is None
+    assert "has_two_values" not in id_column.model_dump()
     assert id_column.sample_values is None
 
 
@@ -406,7 +406,7 @@ async def test_tabular_processor_excludes_high_cardinality_string_columns(tmp_pa
     assert artifact is not None
     label_column = next(column for column in artifact.columns if column.name == "label")
     assert label_column.is_categorical is False
-    assert label_column.has_two_values is False
+    assert "has_two_values" not in label_column.model_dump()
     assert label_column.sample_values is None
 
 
@@ -432,12 +432,12 @@ async def test_tabular_processor_counts_null_rows_for_category_limit(tmp_path):
         column for column in artifact.columns if column.name == "status"
     )
     assert status_column.is_categorical is True
-    assert status_column.has_two_values is False
+    assert "has_two_values" not in status_column.model_dump()
     assert status_column.sample_values is None
     blank_column = next(column for column in artifact.columns if column.name == "blank")
     assert blank_column.dtype == "string"
     assert blank_column.is_categorical is False
-    assert blank_column.has_two_values is False
+    assert "has_two_values" not in blank_column.model_dump()
     assert blank_column.sample_values is None
 
 
@@ -463,10 +463,10 @@ async def test_tabular_processor_preserves_duckdb_boolean_columns(tmp_path):
     assert columns["available"].dtype == "boolean"
     assert columns["active"].is_categorical is None
     assert columns["available"].is_categorical is None
-    assert columns["active"].has_two_values is None
-    assert columns["available"].has_two_values is None
+    assert "has_two_values" not in columns["active"].model_dump()
+    assert "has_two_values" not in columns["available"].model_dump()
     assert columns["french"].dtype == "string"
-    assert columns["french"].has_two_values is True
+    assert "has_two_values" not in columns["french"].model_dump()
     assert columns["french"].sample_values is None
 
 
@@ -491,7 +491,7 @@ async def test_tabular_processor_excludes_one_value_above_category_limit(tmp_pat
         column for column in artifact.columns if column.name == "status"
     )
     assert status_column.is_categorical is False
-    assert status_column.has_two_values is False
+    assert "has_two_values" not in status_column.model_dump()
     assert status_column.sample_values is None
 
 
@@ -868,8 +868,8 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(
         "city",
         "amount",
     ]
-    assert csv_schema.tables[0].columns[0].is_categorical is True
-    assert csv_schema.tables[0].columns[0].sample_values == ["Lyon", "Paris"]
+    assert "is_categorical" not in csv_schema.tables[0].columns[0].model_dump()
+    assert csv_schema.tables[0].columns[0].categorical_values == ["Lyon", "Paris"]
     assert csv_schema.tables[0].columns[1].min_value == 10
     assert csv_schema.tables[0].columns[1].max_value == 20
 
@@ -891,8 +891,8 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(
     ventes_columns = next(
         table.columns for table in excel_schema.tables if table.sheet == "Ventes"
     )
-    assert ventes_columns[0].is_categorical is True
-    assert ventes_columns[0].sample_values == ["Lyon", "Paris"]
+    assert "is_categorical" not in ventes_columns[0].model_dump()
+    assert ventes_columns[0].categorical_values == ["Lyon", "Paris"]
     assert ventes_columns[1].min_value == 10
     assert ventes_columns[1].max_value == 20
     assert all(
@@ -955,7 +955,7 @@ async def test_describe_documents_reads_values_instead_of_legacy_metadata(
     service = TabularEngineHarness()
     descriptions = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
     csv_columns = {column.name: column for column in descriptions[0].tables[0].columns}
-    assert csv_columns["city"].sample_values == ["Lyon", "Paris"]
+    assert csv_columns["city"].categorical_values == ["Lyon", "Paris"]
     assert (csv_columns["amount"].min_value, csv_columns["amount"].max_value) == (
         10,
         20,
@@ -970,7 +970,7 @@ async def test_describe_documents_reads_values_instead_of_legacy_metadata(
     }
     assert excel_bounds == {"Ventes": (10, 20), "Cibles": (15, 25)}
     assert all(
-        table.columns[0].sample_values == ["Lyon", "Paris"]
+        table.columns[0].categorical_values == ["Lyon", "Paris"]
         for table in descriptions[1].tables
     )
     assert descriptions[1].markdown is not None
@@ -1000,7 +1000,7 @@ async def test_describe_documents_reads_current_values_on_every_call(
         .tables[0]
         .columns
     )
-    assert first[0].sample_values == ["Lyon", "Paris"]
+    assert first[0].categorical_values == ["Lyon", "Paris"]
     assert (first[1].min_value, first[1].max_value) == (-1.5, 2.25)
 
     replacement = tmp_path / "replacement.parquet"
@@ -1015,7 +1015,7 @@ async def test_describe_documents_reads_current_values_on_every_call(
         .tables[0]
         .columns
     )
-    assert second[0].sample_values == ["Milan", "Rome", "Turin"]
+    assert second[0].categorical_values == ["Milan", "Rome", "Turin"]
     assert (second[1].min_value, second[1].max_value) == (-5.0, 30.0)
 
     pd.DataFrame(
@@ -1029,7 +1029,7 @@ async def test_describe_documents_reads_current_values_on_every_call(
         .tables[0]
         .columns
     )
-    assert third[0].sample_values is None
+    assert third[0].categorical_values == []
     assert (third[1].min_value, third[1].max_value) == (None, None)
 
     stored = read_tabular_artifact(
@@ -1057,7 +1057,7 @@ async def test_describe_documents_reads_all_twenty_workbook_tables(
         0
     ].tables
     assert len(tables) == 20
-    assert all(table.columns[0].sample_values == ["Lyon", "Paris"] for table in tables)
+    assert all(table.columns[0].categorical_values == ["Lyon", "Paris"] for table in tables)
     assert [
         (table.columns[1].min_value, table.columns[1].max_value) for table in tables[:2]
     ] == [(10, 20), (15, 25)]

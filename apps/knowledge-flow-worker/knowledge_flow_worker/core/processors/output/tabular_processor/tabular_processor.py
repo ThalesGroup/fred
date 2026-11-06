@@ -447,8 +447,8 @@ class TabularProcessor(BaseOutputProcessor):
         Return up to one more than the category limit in distinct string values.
 
         Why this exists:
-        - A bounded distinct-value scan identifies categorical columns and
-          two-value columns at ingestion. The description tool later reads
+        - A bounded distinct-value scan identifies categorical columns
+          at ingestion. The description tool later reads
           their exact values from Parquet, preserving stored casing.
 
         How to use:

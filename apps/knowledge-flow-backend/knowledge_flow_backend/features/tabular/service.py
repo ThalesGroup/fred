@@ -19,7 +19,7 @@ import hashlib
 import logging
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
@@ -37,11 +37,11 @@ from fred_knowledge.artifacts.reader import safe_path
 from fred_knowledge.tabular.artifacts import TabularArtifactV1, TabularTableArtifactV1, build_default_query_alias, describe_numeric_column, read_tabular_artifact, read_tabular_multi_artifact
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound
+from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound, VisibleQueryRelation, scoped_column_diagnostic
 from knowledge_flow_backend.features.tabular.execution import DuckDBAbortHandle, close_duckdb_connection, open_duckdb_connection, run_duckdb_job
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
-    TabularColumnSchema,
+    TabularColumnDescription,
     TabularDatasetResponse,
     TabularDocumentDescriptionResponse,
     TabularDocumentKind,
@@ -179,7 +179,7 @@ def _redacting_dataset_read_errors():
 
 
 @contextmanager
-def _redacting_query_execution_errors():
+def _redacting_query_execution_errors(*, diagnostic_relations: Sequence[VisibleQueryRelation] = (), mounted_columns: Mapping[str, Sequence[str]] | None = None) -> Iterator[None]:
     """Classify DuckDB errors raised while executing a caller-supplied SQL query.
 
     Why this exists:
@@ -211,6 +211,8 @@ def _redacting_query_execution_errors():
         raise TabularQueryError("Query exceeded the per-query memory budget. Add filters, aggregate, or select fewer columns.") from None
     except (duckdb.ProgrammingError, duckdb.DataError) as exc:
         message = _redact_signed_urls(str(exc))
+        if isinstance(exc, duckdb.BinderException):
+            message = _redact_signed_urls(scoped_column_diagnostic(message, relations=diagnostic_relations, mounted_columns=mounted_columns or {}))
         logger.warning("read query rejected by DuckDB", extra={"error_type": type(exc).__name__})
         raise TabularQueryError(message) from None
     except duckdb.Error as exc:
@@ -306,6 +308,8 @@ class TabularService:
         self,
         user: AssertedUser,
         document_uids: list[str],
+        *,
+        table_names: list[str] | None = None,
     ) -> list[TabularDocumentDescriptionResponse]:
         """
         Return the catalog and typed tables of authorized tabular documents.
@@ -324,13 +328,16 @@ class TabularService:
         if not document_uids:
             raise ValueError("At least one document uid is required")
 
+        requested_uids = list(dict.fromkeys(document_uids))
+        max_selected = self.tabular_config.query.max_selected_datasets
+        if len(requested_uids) > max_selected:
+            raise ValueError(f"Description references {len(requested_uids)} documents, above the limit of {max_selected}; request fewer documents")
+
         datasets = await self._resolve_authorized_datasets(
             user,
             document_uids=document_uids,
         )
         datasets_by_uid = self._group_datasets_by_document(datasets)
-        requested_uids = list(dict.fromkeys(document_uids))
-
         missing_uids = [document_uid for document_uid in requested_uids if document_uid not in datasets_by_uid]
         if missing_uids:
             raise PermissionError(forbidden_datasets_message(missing_uids))
@@ -349,8 +356,7 @@ class TabularService:
                 raise TabularDescriptionNotFound("Published spreadsheet catalog is unavailable", reason="preview_artifact_unavailable") from exc
             return document_uid, content.decode("utf-8")
 
-        ordered_datasets = [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
-        max_selected = self.tabular_config.query.max_selected_datasets
+        ordered_datasets = self._select_description_tables([dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]], table_names)
         if len(ordered_datasets) > max_selected:
             raise ValueError(f"Description references {len(ordered_datasets)} datasets, above the limit of {max_selected}; request fewer documents or increase max_selected_datasets")
         catalogs = dict(await asyncio.gather(*(read_catalog(document_uid) for document_uid in spreadsheet_uids)))
@@ -364,21 +370,50 @@ class TabularService:
                 document_name=datasets_by_uid[document_uid][0].metadata.document_name,
                 kind=self._document_kind(datasets_by_uid[document_uid]),
                 markdown=catalogs.get(document_uid),
-                tables=tables_by_uid[document_uid],
+                tables=tables_by_uid.get(document_uid, []),
                 source_tag=datasets_by_uid[document_uid][0].metadata.source_tag,
             )
             for document_uid in requested_uids
         ]
 
-    async def _describe_columns(self, datasets: list[ResolvedDataset]) -> list[list[TabularColumnSchema]]:
+    @staticmethod
+    def _select_description_tables(datasets: list[ResolvedDataset], table_names: list[str] | None) -> list[ResolvedDataset]:
+        """Select exact existing aliases or unambiguous labels before any scans."""
+        if not table_names:
+            return datasets
+        by_alias = {dataset.query_alias: dataset for dataset in datasets}
+        by_label: dict[str, set[str]] = {}
+        for dataset in datasets:
+            artifact = dataset.artifact
+            if isinstance(artifact, TabularTableArtifactV1):
+                for label in (artifact.sheet, artifact.title):
+                    if label:
+                        by_label.setdefault(label, set()).add(dataset.query_alias)
+        selected: set[str] = set()
+        for name in dict.fromkeys(table_names):
+            if name in by_alias:
+                selected.add(name)
+                continue
+            matches = by_label.get(name, set())
+            if not matches:
+                raise ValueError(f"Unknown table name: {name}. Use an exact query_alias or an unambiguous sheet/title from discovery.")
+            if len(matches) != 1:
+                raise ValueError(f"Ambiguous table name: {name}. Use the exact query_alias from discovery.")
+            selected.update(matches)
+        return [dataset for dataset in datasets if dataset.query_alias in selected]
+
+    async def _describe_columns(self, datasets: list[ResolvedDataset]) -> list[list[TabularColumnDescription]]:
         """Read categorical values and numeric bounds from authorized Parquet tables."""
 
         query_config = self.tabular_config.query
 
-        def _job(handle: DuckDBAbortHandle) -> list[list[TabularColumnSchema]]:
+        if not datasets:
+            return []
+
+        def _job(handle: DuckDBAbortHandle) -> list[list[TabularColumnDescription]]:
             connection = open_duckdb_connection(handle, config=query_config)
             try:
-                results: list[list[TabularColumnSchema]] = []
+                results: list[list[TabularColumnDescription]] = []
                 httpfs_ready = False
                 for dataset in datasets:
                     handle.raise_if_aborted()
@@ -409,7 +444,7 @@ class TabularService:
                             columns[index] = column.model_copy(update={"sample_values": sorted(str(row[0]) for row in rows) or None})
                         if not numeric and not categorical:
                             connection.execute("SELECT COUNT(*) FROM tabular_description_table").fetchone()
-                    results.append(columns)
+                    results.append([TabularColumnDescription.from_stored(column, values_read=True) for column in columns])
                 return results
             finally:
                 close_duckdb_connection(handle, connection)
@@ -445,7 +480,7 @@ class TabularService:
         )
 
     @staticmethod
-    def _table_schema(dataset: ResolvedDataset, columns: list[TabularColumnSchema]) -> TabularTableSchema:
+    def _table_schema(dataset: ResolvedDataset, columns: list[TabularColumnDescription]) -> TabularTableSchema:
         """Build the full table view (columns included) exposed by the schemas endpoint."""
 
         artifact = dataset.artifact
@@ -566,7 +601,10 @@ class TabularService:
                 self._mount_datasets(connection=connection, datasets=mounted_datasets, handle=handle)
                 handle.raise_if_aborted()
                 limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows}"
-                with _redacting_query_execution_errors():
+                with _redacting_query_execution_errors(
+                    diagnostic_relations=validated.diagnostic_relations,
+                    mounted_columns={dataset.query_alias: [column.name for column in dataset.artifact.columns] for dataset in mounted_datasets},
+                ):
                     rows_df = connection.execute(limited_query).df()
                 return validated.sql, dataframe_to_records(rows_df), mounted_datasets
             finally:
@@ -590,6 +628,7 @@ class TabularService:
             sql_query=sql_query,
             rows=rows,
             error=None,
+            message="Requête exécutée avec succès : 0 ligne correspondant aux conditions." if not rows else None,
             dataset_uids=[dataset.metadata.document_uid for dataset in mounted_datasets],
             query_aliases=[dataset.query_alias for dataset in mounted_datasets],
         )
@@ -1030,7 +1069,7 @@ class TabularService:
             document_name=dataset.metadata.document_name,
             query_alias=dataset.query_alias,
             row_count=dataset.artifact.row_count,
-            columns=dataset.artifact.columns,
+            columns=[TabularColumnDescription.from_stored(column) for column in dataset.artifact.columns],
             tag_ids=list(dataset.metadata.tags.tag_ids or []),
             tag_names=list(dataset.metadata.tags.tag_names or []),
             source_tag=dataset.metadata.source_tag,

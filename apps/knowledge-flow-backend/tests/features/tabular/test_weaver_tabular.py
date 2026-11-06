@@ -3,6 +3,7 @@
 """Published SQL data uses the common Weaver boundary, including direct reads."""
 
 import hashlib
+import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -250,7 +251,6 @@ def test_tool_arguments_cannot_supply_authority(key):
 @pytest.mark.asyncio
 async def test_table_must_belong_to_the_same_published_manifest(published):
     # A descriptor in valid metadata cannot point at another document's object.
-    import json
 
     key = f"generation/{D1}/metadata.json"
     metadata = json.loads(published.objects[key])
@@ -278,15 +278,11 @@ async def test_weaver_resolution_preserves_sql_sandbox_and_explicit_empty_query(
     assert result.rows == [{"total": 20}]
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("is_attachment", [False, True])
-async def test_workbook_reads_every_published_table_and_its_catalog(published, is_attachment):
-    import json
-
+def _publish_workbook(published):
+    """Turn D1 into a workbook: identical sheets share one Parquet object, with distinct aliases."""
     key = f"generation/{D1}/metadata.json"
     metadata = json.loads(published.objects[key])
     single = metadata["extensions"].pop("tabular_v1")
-    # Two identical sheets can share the same Parquet object and keep distinct aliases.
     metadata["extensions"]["tabular_multi_v1"] = {"tables": [{**single, "query_alias": alias, "sheet": alias, "table_id": alias} for alias in ("sales_a", "sales_b")]}
     metadata["file"]["row_count"] = 4
     data = json.dumps(metadata).encode()
@@ -294,6 +290,12 @@ async def test_workbook_reads_every_published_table_and_its_catalog(published, i
     for row in published.facts:
         if row["id"] == D1 and row["path"] == "metadata.json":
             row.update(size=len(data), artifact_sha256=hashlib.sha256(data).hexdigest())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_attachment", [False, True])
+async def test_workbook_reads_every_published_table_and_its_catalog(published, is_attachment):
+    _publish_workbook(published)
     if is_attachment:
         published.attach(D1)
     service = published.service(
@@ -388,8 +390,6 @@ async def test_attachment_list_does_not_admit_another_document_or_all_conversati
 
 @pytest.mark.asyncio
 async def test_attachment_metadata_cannot_mount_an_artifact_from_an_old_revision(published):
-    import json
-
     published.attach(D1)
     key = f"generation/{D1}/metadata.json"
     metadata = json.loads(published.objects[key])
@@ -403,3 +403,40 @@ async def test_attachment_metadata_cannot_mount_an_artifact_from_an_old_revision
     with pytest.raises(ValueError, match="artifact"):
         await service.list_documents(PERSON)
     assert all(not path.endswith(".parquet") for path in published.reads)
+
+
+@pytest.mark.asyncio
+async def test_description_selects_tables_without_reading_the_others(published):
+    _publish_workbook(published)
+    service = published.service(DocumentScope.from_ids(document_ids=[str(D1)]))
+    [full] = await service.describe_documents(PERSON, [str(D1)], table_names=[])
+    assert len(full.tables) == 2
+    [selected] = await service.describe_documents(PERSON, [str(D1)], table_names=["sales_b", "sales_b"])
+    assert [table.query_alias for table in selected.tables] == ["sales_b"]
+    assert selected.markdown == full.markdown
+    with pytest.raises(ValueError, match="Unknown table name"):
+        await service.describe_documents(PERSON, [str(D1)], table_names=["SALES_B"])
+
+
+@pytest.mark.asyncio
+async def test_description_columns_are_compact_for_the_model(published):
+    service = published.service(DocumentScope.from_ids(document_ids=[str(D1)]))
+    [description] = await service.describe_documents(PERSON, [str(D1)])
+    city, amount = [column.model_dump() for column in description.tables[0].columns]
+    assert city == {"name": "city", "dtype": "string", "categorical_values": ["Lyon", "Paris"]}
+    assert amount == {"name": "amount", "dtype": "integer", "min_value": 8, "max_value": 12}
+
+
+@pytest.mark.asyncio
+async def test_zero_rows_and_column_errors_explain_themselves_from_mounted_tables_only(published):
+    service = published.service()
+    documents = {document.document_uid: document.tables[0].query_alias for document in await service.list_documents(PERSON)}
+    used, other = documents[str(D1)], documents[str(D2)]
+    empty = await service.query_read(PERSON, request=TabularQueryRequest(sql=f"select * from {used} where amount < 0"))
+    assert empty.rows == [] and empty.error is None and empty.message
+    count = await service.query_read(PERSON, request=TabularQueryRequest(sql=f"select count(*) as total from {used} where amount < 0"))
+    assert count.rows == [{"total": 0}] and count.message is None
+    with pytest.raises(module.TabularQueryError) as failure:
+        await service.query_read(PERSON, request=TabularQueryRequest(sql=f"select c.region from {used} c"))
+    assert f'Column "region" does not exist in "{used}"' in str(failure.value)
+    assert other not in str(failure.value)

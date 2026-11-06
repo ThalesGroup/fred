@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { TabularColumnDescription } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
+
 export type TabularToolKind = "documents" | "markdown" | "schemas" | "descriptions" | "search";
 
 export type TabularTable = {
@@ -28,21 +30,19 @@ export type TabularDocument = {
   tables: TabularTable[];
 };
 
-export type TabularColumn = {
-  name: string;
+// Stored traces can contain older dtype labels and category metadata.
+export type TabularColumn = Omit<TabularColumnDescription, "dtype"> & {
   dtype: string;
   is_categorical?: boolean | null;
   has_two_values?: boolean | null;
   sample_values?: string[] | null;
-  min_value?: number | null;
-  max_value?: number | null;
 };
 
 export type TabularSchemaDocument = Omit<TabularDocument, "tables"> & {
   tables: (TabularTable & { columns: TabularColumn[] })[];
 };
 
-export type TabularDescriptionDocument = TabularSchemaDocument & { markdown: string | null };
+export type TabularDescriptionDocument = TabularSchemaDocument & { markdown?: string | null };
 
 export type TabularMatch = {
   document_uid: string;
@@ -134,6 +134,9 @@ function isColumn(value: unknown): value is TabularColumn {
     isObject(value) &&
     typeof value.name === "string" &&
     typeof value.dtype === "string" &&
+    (value.categorical_values == null ||
+      (Array.isArray(value.categorical_values) &&
+        value.categorical_values.every((category) => typeof category === "string"))) &&
     (value.is_categorical == null || typeof value.is_categorical === "boolean") &&
     (value.has_two_values == null || typeof value.has_two_values === "boolean") &&
     (value.sample_values == null ||
@@ -162,7 +165,7 @@ function isSchemaDocument(value: unknown): value is TabularSchemaDocument {
 function isDescriptionDocument(value: unknown): value is TabularDescriptionDocument {
   if (!isSchemaDocument(value)) return false;
   const markdown = (value as Record<string, unknown>).markdown;
-  return value.kind === "spreadsheet" ? typeof markdown === "string" : markdown === null;
+  return value.kind === "spreadsheet" ? typeof markdown === "string" : markdown == null;
 }
 
 function isMatch(value: unknown): value is TabularMatch {

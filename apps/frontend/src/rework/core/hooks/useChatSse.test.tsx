@@ -91,6 +91,8 @@ vi.mock("../../../security/KeycloakService", () => ({
 }));
 
 import { KeyCloakService } from "../../../security/KeycloakService";
+import { groupTraceEntries } from "../../utils/traceUtils";
+import { toolFailureDetail } from "../../utils/toolFailureTrace";
 
 const preparation = {
   agent_configuration_revision: 1,
@@ -529,6 +531,48 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       fetchSpy.mockRestore();
     },
   );
+
+  it("preserves safe tabular failure details across streaming and a history round trip in a partial batch", async () => {
+    const events = [
+      {
+        kind: "tool_call",
+        call_id: "failed-call",
+        tool_name: "describe_tabular_documents",
+        arguments: { document_uids: ["bad-id"] },
+      },
+      { kind: "tool_call", call_id: "successful-call", tool_name: "list_tabular_documents", arguments: {} },
+      {
+        kind: "tool_result",
+        call_id: "failed-call",
+        is_error: true,
+        content:
+          "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
+      },
+      { kind: "tool_result", call_id: "successful-call", is_error: false, content: "[]" },
+    ];
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), { status: 200 }),
+      );
+    mount();
+    await act(async () => {
+      await latest.send("inspect data", "session-1");
+    });
+    const details = (messages: typeof latest.messages) =>
+      groupTraceEntries(messages)
+        .filter((entry) => entry.kind === "combo")
+        .map(toolFailureDetail);
+    const live = details(latest.messages);
+    expect(live).toHaveLength(2);
+    expect(live[0]).toMatchObject({
+      arguments: { document_uids: ["bad-id"] },
+      errorKey: "rework.chatTrace.failure.authentication",
+    });
+    expect(live[1]).toBeNull();
+    expect(details(JSON.parse(JSON.stringify(latest.messages)))).toEqual(live);
+    fetchSpy.mockRestore();
+  });
 
   it("posts steering through the prepared runtime URL", async () => {
     let finishStream!: (response: Response) => void;

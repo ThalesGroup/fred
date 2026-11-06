@@ -2571,6 +2571,19 @@
           "quota_exceeded": "Daily web search quota reached, try again after midnight UTC.",
           "quota_exceeded_fetch": "Daily page-read quota reached, try again after midnight UTC."
         }
+      },
+      "emptyQuerySuccess": "Query executed successfully: 0 rows matched the conditions.",
+      "failure": {
+        "arguments": "Call arguments:",
+        "error": "Error:",
+        "invalidArguments": "The call arguments were rejected.",
+        "authentication": "Authentication was refused (HTTP 401).",
+        "unavailable": "The requested resource is unavailable in this access scope.",
+        "rateLimited": "The service request limit was reached (HTTP 429).",
+        "busy": "The service is temporarily unavailable or at capacity (HTTP 503).",
+        "timeout": "The operation exceeded its time budget (HTTP 504).",
+        "service": "The service could not complete this operation (HTTP 500).",
+        "unknown": "The call failed. No further usable diagnostic was recorded."
       }
     },
     "collapse": "Collapse",

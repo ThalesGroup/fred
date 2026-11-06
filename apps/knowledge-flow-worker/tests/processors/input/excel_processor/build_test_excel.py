@@ -172,7 +172,7 @@ def build_demo_workbook(path: str) -> None:
     #   • Remise      → numérique : % conservé (chaîne, pas de ÷100)
     #   • Quantité    → numérique : espaces de milliers retirés (chaîne)
     #   • Disponible  → texte (oui/non ; plus de branche booléenne)
-    #   • Date_MAJ    → date en texte (jj/mm/aaaa, dayfirst)
+    #   - Date_MAJ    -> dates ambiguës en texte, conservées sans choisir de locale
     #   • Code_Postal → numérique reconnu, zéros de tête préservés (chaîne)
     #   • Téléphone   → numérique reconnu, zéros de tête préservés (chaîne)
     ws8 = wb.create_sheet("Typage")
