@@ -14,6 +14,7 @@
 - **One localStorage entry per user** (`team-wiki:tree:<userId>` via `useLocalStorageState`), value `{ [teamId]: { expanded: string[], lastSlug } }`. Per-user because localStorage belongs to the browser; per-team inside because page ids and the last page only make sense within one wiki. State moves from `WikiTree` up to `TeamWikiPage`, which already owns `activeSlug`.
 - **Stale ids are ignored, not purged eagerly**: ids not in the current page list are filtered at read time; written state only keeps existing ids.
 - **Save order: metadata first, then content.** A duplicate title (the most likely refusal) then fails before anything is written, and edit mode stays open with the draft. Metadata is sent only when title or parent changed. If metadata succeeds and content then hits a 409, the existing conflict flow applies; the retried save no longer sees a metadata diff.
+- **Parent search lives in the shared `Select`** as an optional `search` prop (filter field at the top of the menu), and the menu is anchored on the trigger rather than the container so the error slot no longer pushes it down. Only already-packaged atoms are used, so the UI package inputs do not change.
 - **Parent select reuses `moveTargets`** and the root option from the current dialog; the dialog and its `renameDialog` i18n keys are deleted.
 
 ## Risks / Trade-offs

@@ -26,6 +26,7 @@ import {
 import { createPortal } from "react-dom";
 import Menu from "../Menu/Menu.tsx";
 import Icon, { type IconProps } from "../../atoms/Icon/Icon.tsx";
+import TextInput from "../../atoms/TextInput/TextInput.tsx";
 import { type ComponentSize } from "../../utils/Type.ts";
 import { uiPortalRoot } from "../../utils/Portal.tsx";
 import { viewportHeight } from "../../utils/viewport.ts";
@@ -67,7 +68,16 @@ export interface SelectProps<T> {
   compact?: boolean;
   /** Consumer-owned empty-state wording; FRED callers retain the existing default. */
   emptyMessage?: string;
+  /** Adds a filter field at the top of the menu, for long lists. */
+  search?: { placeholder: string; noMatchMessage: string };
 }
+
+/** Case- and accent-insensitive, so "eleve" finds "Élève". */
+const fold = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 
 export default function Select<T>({
   options = [],
@@ -81,14 +91,17 @@ export default function Select<T>({
   compact = false,
   size,
   emptyMessage,
+  search,
 }: SelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
   // Virtual focus (aria-activedescendant pattern): DOM focus stays on the
   // trigger button (the portaled listbox isn't part of the tab order), and
   // arrow keys move this index while Menu highlights the matching option.
   const [activeIndex, setActiveIndex] = useState(-1);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const baseId = useId();
 
@@ -98,7 +111,9 @@ export default function Select<T>({
   // the visible scroll area are clipped instead of shown. Flips upward when
   // there is not enough room below.
   const updatePosition = useCallback(() => {
-    const anchor = containerRef.current;
+    // The trigger, not the container: the container also holds the error slot,
+    // which would push the menu a line below the field.
+    const anchor = triggerRef.current;
     if (!anchor) return;
     const rect = anchor.getBoundingClientRect();
     const spaceBelow = viewportHeight() - rect.bottom;
@@ -168,18 +183,26 @@ export default function Select<T>({
         return;
       e.stopPropagation();
       setIsOpen(false);
+      if (search) triggerRef.current?.focus();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [isOpen]);
+  }, [isOpen, search]);
 
   const selectedOption = options.find((opt) => opt.value === value);
+  const visible = search && query ? options.filter((opt) => fold(opt.label).includes(fold(query))) : options;
 
-  const firstEnabledIndex = () => options.findIndex((opt) => !opt.disabled);
+  // Closing from inside the search field would otherwise drop focus on the page body.
+  const closeMenu = (restoreFocus: boolean) => {
+    setIsOpen(false);
+    if (restoreFocus && search) triggerRef.current?.focus();
+  };
+
+  const firstEnabledIndex = (list = visible) => list.findIndex((opt) => !opt.disabled);
 
   const lastEnabledIndex = () => {
-    for (let i = options.length - 1; i >= 0; i--) {
-      if (!options[i]?.disabled) return i;
+    for (let i = visible.length - 1; i >= 0; i--) {
+      if (!visible[i]?.disabled) return i;
     }
     return -1;
   };
@@ -189,34 +212,37 @@ export default function Select<T>({
     // Prefer the selected option if it's enabled, otherwise the first enabled
     // option, otherwise -1 (no active option) if every option is disabled —
     // never land on a disabled option just because it's index 0.
-    const initial = selectedIndex >= 0 && !options[selectedIndex].disabled ? selectedIndex : firstEnabledIndex();
+    const initial = selectedIndex >= 0 && !options[selectedIndex].disabled ? selectedIndex : firstEnabledIndex(options);
+    setQuery("");
     setActiveIndex(initial);
     setIsOpen(true);
   };
 
   const toggleMenu = () => {
     if (disabled) return;
-    if (isOpen) setIsOpen(false);
+    if (isOpen) closeMenu(false);
     else openMenu();
   };
 
   // Walks past disabled options in `delta`'s direction; if every option is
   // disabled, the active index doesn't move.
   const moveActive = (delta: number) => {
-    if (options.length === 0) return;
+    if (visible.length === 0) return;
     setActiveIndex((prev) => {
       const base = prev < 0 ? 0 : prev;
       let next = base;
-      for (let i = 0; i < options.length; i++) {
-        next = (next + delta + options.length) % options.length;
-        if (!options[next]?.disabled) return next;
+      for (let i = 0; i < visible.length; i++) {
+        next = (next + delta + visible.length) % visible.length;
+        if (!visible[next]?.disabled) return next;
       }
       return prev;
     });
   };
 
-  const handleTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+  const handleTriggerKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
     if (disabled) return;
+    // In the search field a space is text, not "choose this option".
+    if (e.key === " " && e.currentTarget instanceof HTMLInputElement) return;
     // A key this select acts on never travels past it. Enter used to open the
     // menu through the button's native click and reach the host as well, which
     // inside a Dialog opened the options and confirmed the dialog at once.
@@ -255,9 +281,9 @@ export default function Select<T>({
         e.stopPropagation();
         if (!isOpen) {
           openMenu();
-        } else if (activeIndex >= 0 && options[activeIndex] && !options[activeIndex].disabled) {
-          const option = options[activeIndex];
-          setIsOpen(false);
+        } else if (activeIndex >= 0 && visible[activeIndex] && !visible[activeIndex].disabled) {
+          const option = visible[activeIndex];
+          closeMenu(true);
           onChange(option.value);
         }
         break;
@@ -266,7 +292,7 @@ export default function Select<T>({
     }
   };
 
-  const activeOption = isOpen && activeIndex >= 0 ? options[activeIndex] : undefined;
+  const activeOption = isOpen && activeIndex >= 0 ? visible[activeIndex] : undefined;
   // Must match Menu's own itemId, which is keyed by `option.key` (unique by
   // contract) rather than `option.value` (can be a non-primitive).
   const activeOptionId = activeOption ? `${baseId}-opt-${activeOption.key}` : undefined;
@@ -288,6 +314,7 @@ export default function Select<T>({
       )}
 
       <button
+        ref={triggerRef}
         id={`${baseId}-trigger`}
         type="button"
         className={styles["trigger"]}
@@ -322,16 +349,38 @@ export default function Select<T>({
             className={styles["menu-popover"]}
             role="presentation"
             style={popoverStyle}
+            data-searchable={search ? "true" : undefined}
           >
+            {search && (
+              <div className={styles["menu-search"]}>
+                <TextInput
+                  compact
+                  size="small"
+                  autoFocus
+                  placeholder={search.placeholder}
+                  aria-label={search.placeholder}
+                  aria-controls={`${baseId}-listbox`}
+                  aria-activedescendant={activeOptionId}
+                  value={query}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setQuery(next);
+                    const list = next ? options.filter((opt) => fold(opt.label).includes(fold(next))) : options;
+                    setActiveIndex(firstEnabledIndex(list));
+                  }}
+                  onKeyDown={handleTriggerKeyDown}
+                />
+              </div>
+            )}
             <Menu
-              options={options}
+              options={visible}
               baseId={baseId}
               activeId={activeOptionId}
               selectedId={value}
-              noOptionsMessage={emptyMessage}
+              noOptionsMessage={search && query ? search.noMatchMessage : emptyMessage}
               noEnabledOptionsMessage={emptyMessage}
               onChange={(v) => {
-                setIsOpen(false);
+                closeMenu(true);
                 onChange(v);
               }}
             />

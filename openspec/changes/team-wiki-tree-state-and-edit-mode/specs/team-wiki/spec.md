@@ -41,6 +41,10 @@ The reading view SHALL offer no rename, move or delete action. Edit mode of an o
 - **WHEN** the new title is already used by another page
 - **THEN** an error is shown, edit mode stays open and the draft is kept
 
+#### Scenario: Find a parent in a long wiki
+- **WHEN** an editor opens the parent page selector and types part of a title
+- **THEN** only matching pages are listed, ignoring case and accents
+
 #### Scenario: Delete from edit mode
 - **WHEN** an editor clicks the delete icon button and confirms
 - **THEN** the page is deleted and the wiki root is shown

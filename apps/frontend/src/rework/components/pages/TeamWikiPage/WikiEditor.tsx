@@ -124,6 +124,10 @@ export function WikiEditor({
             value={parentDraft}
             onChange={setParentDraft}
             options={placement.parentOptions}
+            search={{
+              placeholder: t("rework.wiki.editor.parentSearch"),
+              noMatchMessage: t("rework.wiki.editor.parentNoMatch"),
+            }}
           />
         </div>
       )}

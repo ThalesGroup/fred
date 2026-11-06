@@ -4133,7 +4133,9 @@
         "titleLabel": "Titre de la page",
         "parentLabel": "Page parente",
         "root": "Aucune — premier niveau",
-        "delete": "Supprimer la page"
+        "delete": "Supprimer la page",
+        "parentSearch": "Rechercher une page",
+        "parentNoMatch": "Aucune page ne correspond"
       },
       "history": {
         "title": "Historique des versions",

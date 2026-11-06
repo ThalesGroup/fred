@@ -4133,7 +4133,9 @@
         "titleLabel": "Page title",
         "parentLabel": "Parent page",
         "root": "None — top level",
-        "delete": "Delete page"
+        "delete": "Delete page",
+        "parentSearch": "Search pages",
+        "parentNoMatch": "No matching page"
       },
       "history": {
         "title": "Version history",
