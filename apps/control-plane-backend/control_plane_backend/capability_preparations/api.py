@@ -20,12 +20,15 @@ from fastapi import (
     HTTPException,
     Path,
     Query,
+    Request,
     Response,
     UploadFile,
 )
 from fred_core import (
+    AssertedUser,
     KeycloakUser,
     TeamPermission,
+    get_current_user_or_service,
     get_principal_context,
     is_service_agent,
     require_own_credential,
@@ -81,6 +84,13 @@ router = APIRouter(tags=["Capability Preparations"])
 Dependencies = Annotated[
     ProductServiceDependencies, Depends(get_product_service_dependencies)
 ]
+
+
+async def _worker_principal_context(
+    request: Request,
+    subject: KeycloakUser | AssertedUser = Depends(get_current_user_or_service),
+) -> PrincipalContext:
+    return await get_principal_context(request, subject)
 
 
 def _sessions(deps: ProductServiceDependencies):
@@ -406,7 +416,7 @@ async def claim_capability_cleanup(
     runtime_id: Annotated[str, Query(min_length=1)],
     deps: Dependencies,
     limit: Annotated[int, Query(ge=1, le=20)] = 8,
-    principals: PrincipalContext = Depends(get_principal_context),
+    principals: PrincipalContext = Depends(_worker_principal_context),
 ) -> CleanupBatch:
     _require_runtime_worker(deps, principals, runtime_id)
     async with _sessions(deps)() as session:
@@ -485,7 +495,7 @@ async def post_team_agent_preparation_retry(
 async def get_capability_preparation_work(
     preparation_id: UUID,
     deps: Dependencies,
-    principals: PrincipalContext = Depends(get_principal_context),
+    principals: PrincipalContext = Depends(_worker_principal_context),
     worker_token: Annotated[str | None, Header(alias="X-Preparation-Token")] = None,
 ) -> PreparationWork:
     async with _sessions(deps)() as session:
@@ -504,7 +514,7 @@ async def post_capability_preparation_attempt(
     preparation_id: UUID,
     attempt: Annotated[int, Path(ge=1, le=10)],
     deps: Dependencies,
-    principals: PrincipalContext = Depends(get_principal_context),
+    principals: PrincipalContext = Depends(_worker_principal_context),
     worker_token: Annotated[str | None, Header(alias="X-Preparation-Token")] = None,
 ) -> WorkerAttemptResponse:
     async with _sessions(deps)() as session:
@@ -526,7 +536,7 @@ async def get_capability_preparation_asset(
     preparation_id: UUID,
     asset_id: UUID,
     deps: Dependencies,
-    principals: PrincipalContext = Depends(get_principal_context),
+    principals: PrincipalContext = Depends(_worker_principal_context),
     worker_token: Annotated[str | None, Header(alias="X-Preparation-Token")] = None,
 ) -> Response:
     async with _sessions(deps)() as session:
@@ -558,7 +568,7 @@ async def post_capability_preparation_result(
     preparation_id: UUID,
     body: WorkerPreparationResult,
     deps: Dependencies,
-    principals: PrincipalContext = Depends(get_principal_context),
+    principals: PrincipalContext = Depends(_worker_principal_context),
     worker_token: Annotated[str | None, Header(alias="X-Preparation-Token")] = None,
 ) -> WorkerResultAck:
     async with _sessions(deps)() as session:
@@ -583,7 +593,7 @@ async def complete_capability_cleanup(
     preparation_id: UUID,
     body: CleanupCompletion,
     deps: Dependencies,
-    principals: PrincipalContext = Depends(get_principal_context),
+    principals: PrincipalContext = Depends(_worker_principal_context),
 ) -> WorkerResultAck:
     if deps.get_content_store is None:
         raise HTTPException(status_code=503, detail="Asset storage is unavailable")
