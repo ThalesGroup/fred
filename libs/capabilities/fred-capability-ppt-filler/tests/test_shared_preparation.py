@@ -96,9 +96,28 @@ async def test_shared_save_validates_template_without_legacy_job(
         preparation_enabled=True,
     )
     stored = await builder.PptBuilderCapability().validate_config(
-        builder.PptBuilderConfig(),
+        builder.PptBuilderConfig(labelling_model="legacy-profile", use_vision=False),
         {"template": [UploadedFile(filename="template.pptx", content=template)]},
         context,
     )
     assert stored.preparation_mode == "shared"
+    assert stored.labelling_model is None
     assert stored.template_sha256 == hashlib.sha256(template).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_shared_save_rejects_vision_without_knowledge_flow() -> None:
+    template, _ = builtin_template()
+    context = SaveContext(
+        identity=CapabilityIdentity(user_id="editor", agent_instance_id=str(uuid4())),
+        services=RuntimeServices(
+            preparation_vision=SimpleNamespace(available=AsyncMock(return_value=False))
+        ),
+        preparation_enabled=True,
+    )
+    with pytest.raises(ValueError, match="Knowledge Flow vision is unavailable"):
+        await builder.PptBuilderCapability().validate_config(
+            builder.PptBuilderConfig(use_vision=True),
+            {"template": [UploadedFile(filename="template.pptx", content=template)]},
+            context,
+        )

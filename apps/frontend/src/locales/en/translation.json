@@ -400,14 +400,8 @@
         },
         "use_vision": {
           "title": "Use a vision model",
-          "description": "A model that reads images looks at each slide of the template to name it and understand what it is for.",
-          "unavailable": "No vision-capable model is available for this agent; slides are labelled by rules."
-        },
-        "labelling_model": {
-          "title": "Model that reads the slides",
-          "description": "Leave the agent's model to use the one it answers with.",
-          "agentDefault": "The agent's model",
-          "rereadOnSave": "Changing the model reads the template again when you save the agent."
+          "description": "Knowledge Flow's vision model reads each slide to name it and understand its purpose.",
+          "unavailable": "Knowledge Flow's vision model is unavailable; slides are labelled by rules."
         },
         "variety_check": {
           "title": "Enforce variety",
@@ -589,8 +583,6 @@
         },
         "refreshing": "Reading the template again… Agents keep the previous reading until it ends.",
         "outdated": "This template was read by an older version. Agents keep using it; run the analysis again to get the latest improvements.",
-        "defaultModel": "The platform's default AI model",
-        "visionRereads": "A new model is used the next time the template is read.",
         "rerun": "Run the analysis again",
         "rerunStarted": "Analysis started again.",
         "rerunError": "The analysis could not be started again.",

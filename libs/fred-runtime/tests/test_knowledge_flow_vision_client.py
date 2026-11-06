@@ -5,6 +5,7 @@ import pytest
 
 from fred_runtime.capabilities.vision_client import (
     KnowledgeFlowVisionClient,
+    SaveVisionAvailabilityClient,
     VisionServiceUnavailable,
 )
 
@@ -44,3 +45,25 @@ async def test_vision_client_reports_service_outage_safely() -> None:
             VisionServiceUnavailable, match="Vision service unavailable"
         ):
             await vision.describe(b"image", "Read")
+
+
+@pytest.mark.asyncio
+async def test_save_availability_uses_user_token_without_model_choice() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"available": True})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        availability = SaveVisionAvailabilityClient(
+            client, "http://knowledge-flow/knowledge-flow/v1", "user-token"
+        )
+        assert await availability.available()
+        assert await SaveVisionAvailabilityClient(
+            client, "http://knowledge-flow/knowledge-flow/v1", None
+        ).available()
+    assert len(requests) == 2
+    assert requests[0].url.path == "/knowledge-flow/v1/vision/availability"
+    assert requests[0].headers["Authorization"] == "Bearer user-token"
+    assert "Authorization" not in requests[1].headers

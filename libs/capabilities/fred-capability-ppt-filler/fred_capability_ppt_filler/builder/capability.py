@@ -903,8 +903,7 @@ class PptBuilderCapability(
         description="capability.ppt_builder.description",
         icon="co_present",
         config_fields=[
-            # All belong to the plugin's widget (rendered once): the vision toggle
-            # depends on the team's models, the variety row is one sentence of two selects.
+            # All belong to the plugin's widget, rendered once.
             FieldSpec(
                 key="template_sha256",
                 type="string",
@@ -925,13 +924,6 @@ class PptBuilderCapability(
                 default=True,
                 title="capability.ppt_builder.fields.use_vision.title",
                 description="capability.ppt_builder.fields.use_vision.description",
-                ui=UIHints(widget="ppt_builder_template"),
-            ),
-            FieldSpec(
-                key="labelling_model",
-                type="string",
-                title="capability.ppt_builder.fields.labelling_model.title",
-                description="capability.ppt_builder.fields.labelling_model.description",
                 ui=UIHints(widget="ppt_builder_template"),
             ),
             FieldSpec(
@@ -1058,6 +1050,11 @@ class PptBuilderCapability(
                 early = _bounded_analysis(template_uploads[0].content)
                 if early is not None:
                     raise ValueError(early.errors[0].message)
+            if config.use_vision and (template_uploads or config.template_sha256):
+                vision = ctx.services.preparation_vision
+                if vision is None or not await vision.available():
+                    raise ValueError("Knowledge Flow vision is unavailable")
+            if template_uploads:
                 content = await asyncio.to_thread(
                     _check_readable, template_uploads[0].content
                 )
@@ -1066,13 +1063,20 @@ class PptBuilderCapability(
                         "template_sha256": hashlib.sha256(content).hexdigest(),
                         "template_key": PPT_BUILDER_TEMPLATE_KEY,
                         "preparation_mode": "shared",
+                        "labelling_model": None,
                     }
                 )
             if config.template_sha256 is None:
                 return config.model_copy(
-                    update={"overrides": [], "preparation_mode": "shared"}
+                    update={
+                        "overrides": [],
+                        "preparation_mode": "shared",
+                        "labelling_model": None,
+                    }
                 )
-            return config.model_copy(update={"preparation_mode": "shared"})
+            return config.model_copy(
+                update={"preparation_mode": "shared", "labelling_model": None}
+            )
         if template_uploads:
             return await self._accept_upload(config, template_uploads[0].content, ctx)
         if config.template_sha256 is None:  # pattern edits belong to a template

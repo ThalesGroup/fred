@@ -1651,6 +1651,10 @@ class PreparationArtifactsPort(Protocol):
     async def read_sibling(self, capability_id: str, filename: str) -> bytes | None: ...
 
 
+class PreparationVisionAvailabilityPort(Protocol):
+    async def available(self) -> bool: ...
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -1741,6 +1745,7 @@ class RuntimeServices:
     # Appended last to preserve positional compatibility.
     capability_model: CapabilityModelPort | None = None
     preparation_artifacts: PreparationArtifactsPort | None = None
+    preparation_vision: PreparationVisionAvailabilityPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

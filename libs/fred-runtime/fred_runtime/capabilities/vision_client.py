@@ -11,6 +11,36 @@ class VisionServiceUnavailable(Exception):
     """A bounded vision call could not return a usable answer."""
 
 
+class SaveVisionAvailabilityClient:
+    """Check Knowledge Flow with the saving user's token and a shared HTTP pool."""
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        knowledge_flow_url: str,
+        access_token: str | None,
+    ) -> None:
+        self._client = client
+        self._url = knowledge_flow_url.rstrip("/") + "/vision/availability"
+        self._access_token = access_token
+
+    async def available(self) -> bool:
+        try:
+            response = await self._client.get(
+                self._url,
+                headers=(
+                    {"Authorization": f"Bearer {self._access_token}"}
+                    if self._access_token
+                    else None
+                ),
+                timeout=3.0,
+            )
+            response.raise_for_status()
+            return response.json().get("available") is True
+        except (httpx.HTTPError, ValueError, TypeError):
+            return False
+
+
 class KnowledgeFlowVisionClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self._client = client

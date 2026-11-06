@@ -42,7 +42,7 @@ export function PptBuilderConfigForm({
     assetFiles,
     onAssetFileChange,
   });
-  const vision = useVisionAvailability(teamId, agentInstanceId);
+  const vision = useVisionAvailability();
   return (
     <PptBuilderTemplatePanel
       disabled={disabled}

@@ -228,6 +228,7 @@ from fred_runtime.common.outbound_credentials import (
 )
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.capabilities.preparation_artifacts import BoundPreparationArtifacts
+from fred_runtime.capabilities.vision_client import SaveVisionAvailabilityClient
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import (
     DeepAgentRuntime,
@@ -4311,6 +4312,7 @@ def _build_capability_save_services(
     access_token: str | None,
     agent_instance_id: str | None = None,
     routing: CapabilitySaveRouting | None = None,
+    preparation_vision: SaveVisionAvailabilityClient | None = None,
 ) -> RuntimeServices:
     """
     Minimal `RuntimeServices` for one capability save-time validation (#1974).
@@ -4377,6 +4379,7 @@ def _build_capability_save_services(
             factory=runtime_config.chat_model_factory,
             rebac=runtime_config.rebac_engine,
         ),
+        preparation_vision=preparation_vision,
     )
 
 
@@ -6252,6 +6255,10 @@ def _build_agent_router(
         team_id = form_team_id if isinstance(form_team_id, str) else None
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
+        container = get_pod_container_from_app(http_request.app)
+        preparation_enabled = (
+            capability_id in container.configuration.preparation.enabled_capabilities
+        )
         save_ctx = SaveContext(
             identity=CapabilityIdentity(
                 user_id=(caller.uid if caller is not None else None) or "anonymous",
@@ -6271,13 +6278,17 @@ def _build_agent_router(
                 )
                 or None,
                 routing=parse_save_routing(http_request.query_params),
+                preparation_vision=(
+                    SaveVisionAvailabilityClient(
+                        container.get_control_plane_http_client(),
+                        container.configuration.ai.knowledge_flow_url,
+                        access_token,
+                    )
+                    if preparation_enabled
+                    else None
+                ),
             ),
-            preparation_enabled=(
-                capability_id
-                in get_pod_container_from_app(
-                    http_request.app
-                ).configuration.preparation.enabled_capabilities
-            ),
+            preparation_enabled=preparation_enabled,
         )
         try:
             stored = await capability.validate_config(config, uploads, save_ctx)
@@ -6314,6 +6325,11 @@ def _build_agent_router(
     ) -> SaveContext:
         user_id = (caller.uid if caller is not None else None) or "anonymous"
         auth = http_request.headers.get("Authorization", "")
+        access_token = auth.removeprefix("Bearer ").strip() or None
+        container = get_pod_container_from_app(http_request.app)
+        preparation_enabled = (
+            capability_id in container.configuration.preparation.enabled_capabilities
+        )
         return SaveContext(
             identity=CapabilityIdentity(
                 user_id=user_id,
@@ -6324,16 +6340,20 @@ def _build_agent_router(
                 capability_id=capability_id,
                 user_id=user_id,
                 team_id=team_id,
-                access_token=auth.removeprefix("Bearer ").strip() or None,
+                access_token=access_token,
                 agent_instance_id=agent_instance_id,
                 routing=routing,
+                preparation_vision=(
+                    SaveVisionAvailabilityClient(
+                        container.get_control_plane_http_client(),
+                        container.configuration.ai.knowledge_flow_url,
+                        access_token,
+                    )
+                    if preparation_enabled
+                    else None
+                ),
             ),
-            preparation_enabled=(
-                capability_id
-                in get_pod_container_from_app(
-                    http_request.app
-                ).configuration.preparation.enabled_capabilities
-            ),
+            preparation_enabled=preparation_enabled,
         )
 
     @router.post("/capabilities/{capability_id}/copy-config")

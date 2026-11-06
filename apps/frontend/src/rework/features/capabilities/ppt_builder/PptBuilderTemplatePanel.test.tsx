@@ -13,9 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The analysis status line for each state, and the vision toggle: locked off
-// with its explanation when no vision-capable model exists, selector listing
-// only vision-capable profiles while on; the template guide link; the panel's
+// The analysis status line, the vision toggle, the template guide link, and the panel's
 // default view (template and plan approval) and its advanced section.
 
 import { act } from "react";
@@ -176,21 +174,11 @@ describe("AnalysisStatus", () => {
 });
 
 describe("visionAvailability", () => {
-  const visionProfile = { profile_id: "chat.vision", capability_id: "c", name: "Vision", supports_vision: true };
-  const textProfile = { profile_id: "chat.text", capability_id: "c", name: "Text" };
-
-  it("is unknown until both answers arrive, then false without any vision model", () => {
-    expect(visionAvailability(undefined, undefined, false).available).toBeNull();
-    expect(visionAvailability([textProfile], undefined, false).available).toBeNull();
-    expect(visionAvailability([textProfile], { supports_vision: false }, true).available).toBe(false);
-  });
-
-  it("is true with a vision profile or a vision-capable agent model", () => {
-    expect(visionAvailability([textProfile, visionProfile], undefined, false)).toEqual({
-      available: true,
-      visionProfiles: [visionProfile],
-    });
-    expect(visionAvailability([textProfile], { supports_vision: true }, true).available).toBe(true);
+  it("reflects Knowledge Flow's configured model", () => {
+    expect(visionAvailability(undefined).available).toBeNull();
+    expect(visionAvailability(undefined, true).available).toBe(false);
+    expect(visionAvailability(false).available).toBe(false);
+    expect(visionAvailability(true).available).toBe(true);
   });
 });
 
@@ -203,39 +191,45 @@ describe("PptBuilderVisionSettings", () => {
         configValues={configValues}
         onConfigChange={onConfigChange}
         vision={vision}
-        changeHint="Reads again"
       />,
     );
     return onConfigChange;
   }
 
-  it("locks the toggle off with the explanation when no vision model is available", () => {
-    renderSettings({ available: false, visionProfiles: [] }, { use_vision: true });
-    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
-    expect(toggle.disabled).toBe(true);
-    expect(container.textContent).toContain("capability.ppt_builder.fields.use_vision.unavailable");
-    expect(container.querySelector("select")).toBeNull();
-  });
-
-  it("is on by default and lists only vision-capable profiles", () => {
-    const visionProfile = { profile_id: "chat.vision", capability_id: "c", name: "Vision", supports_vision: true };
-    renderSettings({ available: true, visionProfiles: [visionProfile] });
+  it("explains the unavailable model and lets an existing choice be turned off", () => {
+    const onConfigChange = renderSettings({ available: false }, { use_vision: true });
     const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(toggle.checked).toBe(true);
     expect(toggle.disabled).toBe(false);
-    const options = [...container.querySelectorAll("option")].map((o) => o.value);
-    expect(options).toEqual(["", "chat.vision"]);
+    expect(container.textContent).toContain("capability.ppt_builder.fields.use_vision.unavailable");
+    act(() => toggle.click());
+    expect(onConfigChange).toHaveBeenCalledWith("use_vision", false);
   });
 
-  it("names the model picker and says when a change takes effect", () => {
-    renderSettings({ available: true, visionProfiles: [] });
-    expect(container.textContent).toContain("capability.ppt_builder.fields.labelling_model.title");
-    expect(container.textContent).toContain("Reads again");
+  it("is on by default when Knowledge Flow has a vision model", () => {
+    renderSettings({ available: true });
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    expect(toggle.disabled).toBe(false);
+    expect(container.querySelector("select")).toBeNull();
   });
 
-  it("hides the selector and writes the toggle when turned off", () => {
-    const onConfigChange = renderSettings({ available: true, visionProfiles: [] }, { use_vision: false });
+  it("keeps the toggle off when Knowledge Flow has no vision model", () => {
+    renderSettings({ available: false }, { use_vision: false });
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    expect(toggle.disabled).toBe(true);
+  });
+
+  it("does not enable vision by default for a new agent without a configured model", () => {
+    renderSettings({ available: false });
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    expect(toggle.disabled).toBe(true);
+  });
+
+  it("writes the toggle when turned on", () => {
+    const onConfigChange = renderSettings({ available: true }, { use_vision: false });
     expect(container.querySelector("select")).toBeNull();
     const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     act(() => toggle.click());
@@ -272,7 +266,7 @@ describe("PptBuilderTemplatePanel", () => {
         <PptBuilderTemplatePanel
           disabled={false}
           analysis={panelAnalysis}
-          vision={{ available: true, visionProfiles: [] }}
+          vision={{ available: true }}
           configValues={{}}
           onConfigChange={() => {}}
         />

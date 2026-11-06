@@ -36,8 +36,7 @@ const h = vi.hoisted(() => ({
   upload: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn(),
-  platformModels: vi.fn(),
-  selectOptions: undefined as undefined | { label: string; value: string }[],
+  visionAvailability: vi.fn(),
   review: undefined as
     | undefined
     | {
@@ -73,15 +72,7 @@ vi.mock("./uploadPlatformTemplate", () => ({ uploadPlatformTemplate: h.upload })
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError }),
 }));
-vi.mock("@shared/molecules/Select/Select.tsx", () => ({
-  default: (props: { options: { label: string; value: string }[] }) => {
-    h.selectOptions = props.options;
-    return null;
-  },
-}));
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePlatformAvailableModelProfilesQuery: h.platformModels,
-}));
+vi.mock("./useVisionAvailability", () => ({ useVisionAvailability: h.visionAvailability }));
 vi.mock("./PatternReviewDialog", () => ({
   PatternReviewDialog: (props: NonNullable<typeof h.review>) => {
     h.review = props;
@@ -152,11 +143,10 @@ const button = (label: string) =>
 
 beforeEach(() => {
   for (const fn of [h.refetch, h.rerun, h.reset, h.saveOverrides, h.upload, h.showSuccess, h.showError]) fn.mockReset();
-  h.platformModels.mockReset().mockReturnValue({ data: undefined });
+  h.visionAvailability.mockReset().mockReturnValue({ available: true });
   h.review = undefined;
   h.routed = true;
   h.builtin = { inventory: analysis().inventory };
-  h.selectOptions = undefined;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -214,7 +204,6 @@ describe("PptBuilderPlatformPanel", () => {
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
     expect(h.upload).toHaveBeenCalledWith("/pod/capabilities/ppt_builder", expect.any(File), {
       use_vision: true,
-      vision_profile_id: null,
     });
     expect(h.showError).toHaveBeenCalledWith({
       summary: `${K}.uploadError`,
@@ -238,9 +227,10 @@ describe("PptBuilderPlatformPanel", () => {
     expect(text()).not.toContain(`${K}.loading`);
   });
 
-  it("tells the manager when a new vision model takes effect", () => {
+  it("offers vision without a model selector", () => {
     show({ analysis: analysis(), template_filename: "brand.pptx" });
-    expect(text()).toContain(`${K}.visionRereads`);
+    expect(text()).toContain("capability.ppt_builder.fields.use_vision.title");
+    expect(container.querySelector("select")).toBeNull();
   });
 
   it("lets a manager edit the slides and saves the edits when the review closes", async () => {
@@ -278,28 +268,14 @@ describe("PptBuilderPlatformPanel", () => {
   });
 });
 
-describe("labelling models", () => {
-  it("offers the team-free list's vision profiles, named like the agent form", () => {
-    h.platformModels.mockReturnValue({
-      data: {
-        profiles: [
-          { profile_id: "p1", capability_id: "m1", name: "m1-wire", display_name: "Model one", supports_vision: true },
-          { profile_id: "p2", capability_id: "m2", name: "m2-wire", supports_vision: true },
-          { profile_id: "p3", capability_id: "m3", name: "m3-wire", supports_vision: false },
-        ],
-      },
-    });
+describe("vision availability", () => {
+  it("reads Knowledge Flow availability for capability managers", () => {
     show({ analysis: analysis(), template_filename: "brand.pptx" });
-    expect(h.platformModels).toHaveBeenLastCalledWith(undefined, { skip: false });
-    expect(h.selectOptions?.map((o) => [o.value, o.label])).toEqual([
-      ["", `${K}.defaultModel`],
-      ["p1", "Model one"],
-      ["p2", "m2-wire"],
-    ]);
+    expect(h.visionAvailability).toHaveBeenLastCalledWith(false);
   });
 
-  it("does not ask for the list without the capability-manager right", () => {
+  it("skips availability without the capability-manager right", () => {
     show({ analysis: analysis(), template_filename: "brand.pptx" }, false);
-    expect(h.platformModels).toHaveBeenLastCalledWith(undefined, { skip: true });
+    expect(h.visionAvailability).toHaveBeenLastCalledWith(true);
   });
 });
