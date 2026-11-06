@@ -707,12 +707,18 @@ class PostgresHistoryStore(BaseHistoryStore):
         rank: int,
         message_ids: tuple[str, ...],
         content: str,
+        token_usage: dict[str, int] | None = None,
         deliveries: tuple[tuple[str, str, int], ...] = (),
     ) -> tuple[list[ChatMessage], ChatMessage]:
         reply_id = steered_reply_id(message_ids)
         parts, metadata = _serialize_history_payload(
             [{"type": "text", "text": content}],
-            {"extras": {"steered_reply_for": list(message_ids)}},
+            {
+                "extras": {
+                    "steered_reply_for": list(message_ids),
+                    "steered_reply_usage": token_usage,
+                },
+            },
         )
         async with self._sessions.begin() as session:
             await self._lock_conversation(session, session_id)

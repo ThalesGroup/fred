@@ -260,6 +260,7 @@ class SteeredAssistantMessageRuntimeEvent(RuntimeEventBase):
     )
     message_ids: tuple[str, ...] = Field(..., min_length=1)
     content: str = Field(..., min_length=1)
+    token_usage: dict[str, int] | None = None
     deliveries: tuple[SteeredUserMessageDelivery, ...] = ()
 
 

@@ -34,6 +34,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.runtime import Runtime
+from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -118,7 +119,8 @@ async def test_runtime_steering_gate_reaches_middleware_binding(monkeypatch, ena
         set_runtime_context(None)
 
 
-def test_graph_fallback_acknowledges_at_hitl_pause_once():
+@pytest.mark.parametrize("terminal_kind", ["awaiting_human", "final"])
+def test_graph_fallback_acknowledges_at_terminal_boundary_once(terminal_kind):
     from fred_runtime.app.agent_app import _AgentExecuteRequest, _TurnEventExpander
 
     expander = _TurnEventExpander(
@@ -127,10 +129,17 @@ def test_graph_fallback_acknowledges_at_hitl_pause_once():
             agent_id="test.graph", message="new turn", pending_message_id="m1"
         ),
     )
-    expanded = expander.expand({"kind": "awaiting_human", "request": {}})
+    assert expander.expand({"kind": "tool_call", "call_id": "c1"}) == [
+        {"kind": "tool_call", "call_id": "c1"}
+    ]
+    assert expander.expand({"kind": "tool_result", "call_id": "c1"}) == [
+        {"kind": "tool_result", "call_id": "c1"}
+    ]
+    terminal = {"kind": terminal_kind, "request": {}}
+    expanded = expander.expand(terminal)
     assert [payload["kind"] for payload in expanded] == [
         "steered_user_message",
-        "awaiting_human",
+        terminal_kind,
     ]
     assert expander.expand({"kind": "final"}) == [{"kind": "final"}]
 
@@ -243,6 +252,53 @@ async def test_concurrent_submissions_keep_distinct_provisional_ranks(tmp_path):
         rows = await asyncio.gather(submit(first, "m1"), submit(second, "m2"))
         assert {row.rank for row in rows} == {-1, -2}
         assert len(await first.pending_steered_messages("s", "u")) == 2
+    finally:
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_pending_burst_is_bounded_and_promoted_in_submission_order(tmp_path):
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    try:
+        for index in range(32):
+            row = await first.submit_steered_message(
+                session_id="s",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="a",
+                message_id=f"m{index}",
+                content=f"update {index}",
+            )
+            assert row.rank == -index - 1
+        with pytest.raises(ValueError, match="too_many_pending_messages"):
+            await second.submit_steered_message(
+                session_id="s",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="a",
+                message_id="m32",
+                content="overflow",
+            )
+        pending = await second.pending_steered_messages("s", "u")
+        assert [_text(row) for row in pending] == [
+            f"update {index}" for index in range(32)
+        ]
+        delivered, reply = await second.persist_steered_assistant_message(
+            session_id="s",
+            user_id="u",
+            exchange_id="ex",
+            rank=33,
+            message_ids=tuple(f"m{index}" for index in range(32)),
+            content="I received all 32 updates.",
+            deliveries=tuple(
+                (f"m{index}", f"update {index}", index + 1) for index in range(32)
+            ),
+        )
+        assert [row.rank for row in delivered] == list(range(1, 33))
+        assert reply.rank == 33
+        assert await first.pending_steered_messages("s", "u") == []
+        assert [row.rank for row in await first.get("s", "u")] == list(range(1, 34))
     finally:
         await first_engine.dispose()
         await second_engine.dispose()
@@ -528,7 +584,9 @@ async def test_recovered_steered_reply_continues_with_user_last():
 def test_steered_continuation_serializes_for_provider(model_name):
     model = cast(
         ChatOpenAI,
-        with_mistral_reasoning_replay(ChatOpenAI(model=model_name, api_key="test-key")),
+        with_mistral_reasoning_replay(
+            ChatOpenAI(model=model_name, api_key=SecretStr("test-key"))
+        ),
     )
     reply = AIMessage(
         content="I am checking the sources.",
@@ -643,6 +701,7 @@ async def test_invalid_interim_reply_falls_back_and_continues(
         events[1].content,
         "Original task continues.",
     ]
+    assert isinstance(response.result[0], AIMessage)
     assert response.result[0].usage_metadata == (
         None
         if invalid_kind == "missing"
@@ -715,6 +774,7 @@ async def test_valid_retry_replies_without_fallback(monkeypatch):
         )
     assert len(calls) == 3
     assert events[1].content == "I am checking the sources."
+    assert isinstance(response.result[0], AIMessage)
     assert response.result[0].usage_metadata == {
         "input_tokens": 26,
         "output_tokens": 11,
@@ -914,7 +974,18 @@ async def test_normal_model_waits_for_reply_persistence(monkeypatch, tmp_path):
         async def handler(request):
             calls.append(request)
             if len(calls) == 1:
-                return ModelResponse(result=[AIMessage(content="Checking.")])
+                return ModelResponse(
+                    result=[
+                        AIMessage(
+                            content="Checking.",
+                            usage_metadata={
+                                "input_tokens": 12,
+                                "output_tokens": 3,
+                                "total_tokens": 15,
+                            },
+                        )
+                    ]
+                )
             rows = await first.get("s", "u")
             assert [(row.rank, _text(row)) for row in rows] == [
                 (1, "status?"),
@@ -937,7 +1008,14 @@ async def test_normal_model_waits_for_reply_persistence(monkeypatch, tmp_path):
             persisted_event = await consumer
         assert persisted_event["rank"] == 2
         assert persisted_event["deliveries"][0]["rank"] == 1
+        assert persisted_event["token_usage"]["total_tokens"] == 15
         assert [item.content for item in response.result] == ["Checking.", "Done."]
+        persisted_reply = (await first.get("s", "u"))[1]
+        assert persisted_reply.metadata.token_usage is None
+        recovered = turn_steering.TurnSteeringMiddleware("s", exchange_id="ex")
+        replay = await recovered.abefore_model({"messages": []}, Runtime(context=None))
+        assert replay is not None
+        assert replay["messages"][1].usage_metadata["total_tokens"] == 15
     finally:
         turn_steering.turn_messages.configure(None)
         await first_engine.dispose()
@@ -1101,6 +1179,166 @@ async def test_two_steers_during_tool_call_continue_one_turn(monkeypatch, tmp_pa
             "Read the sources and summarize them",
             "Where are you?",
             "Also include two more documents",
+        ]
+    finally:
+        turn_steering.turn_messages.configure(None)
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_second_steer_arriving_during_reply_reaches_next_model_boundary(
+    monkeypatch, tmp_path
+):
+    from fred_runtime.app.agent_app import _HistoryRanker, _rank_runtime_event
+
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    turn_steering.turn_messages.configure(second)
+    queue = asyncio.Queue()
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: queue.put_nowait)
+    try:
+        await first.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="Where are you?",
+        )
+        middleware = turn_steering.TurnSteeringMiddleware("s", exchange_id="ex")
+        first_update = await middleware.abefore_model(
+            {"messages": []}, Runtime(context=None)
+        )
+        assert first_update is not None
+        ranker = _HistoryRanker(
+            1,
+            opening_rank=0,
+            pending_message_id=None,
+            previously_pending_occurrence_ids=(),
+        )
+
+        async def persist_replies():
+            for expected_id in ("m1", "m2"):
+                assert await queue.get() == {"kind": "_steered_reply_start"}
+                event = await queue.get()
+                assert event.message_ids == (expected_id,)
+                await _rank_runtime_event(
+                    event.model_dump(mode="json"),
+                    ranker,
+                    session_id="s",
+                    user_id="u",
+                    exchange_id="ex",
+                )
+
+        calls = 0
+
+        async def handler(request):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                await first.submit_steered_message(
+                    session_id="s",
+                    user_id="u",
+                    team_id="t",
+                    agent_instance_id="a",
+                    message_id="m2",
+                    content="Also inspect one more document",
+                )
+                return ModelResponse(
+                    result=[AIMessage(content="The first lookup finished.")]
+                )
+            if calls == 2:
+                assert request.tools != []
+                return ModelResponse(
+                    result=[
+                        AIMessage(
+                            content="",
+                            tool_calls=[{"name": "lookup", "args": {}, "id": "c1"}],
+                        )
+                    ]
+                )
+            if calls == 3:
+                assert request.tools == []
+                return ModelResponse(result=[AIMessage(content="I will inspect it.")])
+            return ModelResponse(result=[AIMessage(content="Final answer.")])
+
+        with RunScope.open():
+            consumer = asyncio.create_task(persist_replies())
+            first_response = await middleware.awrap_model_call(
+                ModelRequest(
+                    model=cast(BaseChatModel, object()),
+                    messages=first_update["messages"],
+                    tools=[cast(Any, object())],
+                ),
+                handler,
+            )
+            assert first_response.result[0].content == "The first lookup finished."
+            first_output = cast(list[AIMessage], first_response.result)
+            assert first_output[1].tool_calls[0]["id"] == "c1"
+            tool_call = await _rank_runtime_event(
+                {"kind": "tool_call", "call_id": "c1", "tool_name": "lookup"},
+                ranker,
+                session_id="s",
+                user_id="u",
+                exchange_id="ex",
+            )
+            tool_result = await _rank_runtime_event(
+                {"kind": "tool_result", "call_id": "c1", "content": "Found"},
+                ranker,
+                session_id="s",
+                user_id="u",
+                exchange_id="ex",
+            )
+            await first.save(
+                "s",
+                [
+                    make_tool_call("s", "ex", tool_call["rank"], "c1", "lookup", {}),
+                    make_tool_result("s", "ex", tool_result["rank"], "c1", "Found"),
+                ],
+                "u",
+            )
+            second_update = await middleware.abefore_model(
+                {
+                    "messages": [
+                        *first_update["messages"],
+                        *first_output,
+                        ToolMessage(content="Found", tool_call_id="c1"),
+                    ]
+                },
+                Runtime(context=None),
+            )
+            assert second_update is not None
+            assert [message.id for message in second_update["messages"]] == [
+                "steered:m2"
+            ]
+            second_response = await middleware.awrap_model_call(
+                ModelRequest(
+                    model=cast(BaseChatModel, object()),
+                    messages=[
+                        *first_update["messages"],
+                        *first_output,
+                        ToolMessage(content="Found", tool_call_id="c1"),
+                        *second_update["messages"],
+                    ],
+                    tools=[cast(Any, object())],
+                ),
+                handler,
+            )
+            await consumer
+        assert calls == 4
+        assert [message.content for message in second_response.result] == [
+            "I will inspect it.",
+            "Final answer.",
+        ]
+        rows = await first.get("s", "u")
+        assert [row.rank for row in rows] == [1, 2, 3, 4, 5, 6]
+        assert [
+            (row.rank, _text(row)) for row in rows if row.channel.value == "final"
+        ] == [
+            (1, "Where are you?"),
+            (2, "The first lookup finished."),
+            (5, "Also inspect one more document"),
+            (6, "I will inspect it."),
         ]
     finally:
         turn_steering.turn_messages.configure(None)

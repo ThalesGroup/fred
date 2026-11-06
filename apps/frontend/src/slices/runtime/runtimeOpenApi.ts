@@ -1051,6 +1051,9 @@ export type SteeredAssistantMessageRuntimeEvent = {
   message_ids: string[];
   rank?: number | null;
   sequence?: number;
+  token_usage?: {
+    [key: string]: number;
+  } | null;
 };
 export type SteeredUserMessageRuntimeEvent = {
   content: string;

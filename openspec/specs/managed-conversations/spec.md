@@ -159,6 +159,13 @@ During an active managed ReAct or Deep turn, submitting plain text SHALL create 
 - **WHEN** the browser reloads or the user returns to the conversation
 - **THEN** the same message and pending state are restored from history without a duplicate submission
 
+#### Scenario: HTTP acknowledgements arrive out of order
+
+- **GIVEN** two updates are visible with provisional ranks while an agent works
+- **WHEN** the second submission's HTTP acknowledgement arrives before the first
+- **THEN** neither pending message changes its displayed rank or position
+- **AND** each receives its canonical rank only on delivery
+
 ### Requirement: In-thread messages reach a safe model boundary
 
 The runtime SHALL give an eligible submitted message to the active ReAct or Deep agent once, after dispatched tool results and before the next model decision. At that boundary it SHALL persist a definitive canonical rank and delivered state. Conversation history SHALL remain ordered by rank, with each tool call/result group intact. Messages missing the boundary SHALL remain pending for the next eligible turn.
@@ -218,6 +225,7 @@ The agent SHALL send a visible assistant message responding to an in-progress up
 - **GIVEN** the assistant reply was persisted before the graph checkpoint committed
 - **WHEN** the same exchange resumes on another replica
 - **THEN** the user update and assistant reply are injected once in rank order without another reply
+- **AND** the reply's model usage contributes once to the resumed turn total without a second history badge
 
 ### Requirement: In-thread submission survives concurrency and failure
 

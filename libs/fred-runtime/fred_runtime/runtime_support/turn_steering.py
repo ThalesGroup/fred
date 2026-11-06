@@ -31,6 +31,18 @@ from fred_runtime.support.thinking import content_to_text
 logger = logging.getLogger(__name__)
 
 
+def _usage_metadata(usage: dict[str, int]) -> UsageMetadata:
+    return UsageMetadata(
+        input_tokens=usage["input_tokens"],
+        output_tokens=usage["output_tokens"],
+        total_tokens=usage["total_tokens"],
+        input_token_details=InputTokenDetails(
+            cache_read=usage["cache_read_tokens"],
+            cache_creation=usage["cache_creation_tokens"],
+        ),
+    )
+
+
 class TurnMessages:
     def __init__(self) -> None:
         self._history: PostgresHistoryStore | None = None
@@ -123,6 +135,11 @@ class TurnSteeringMiddleware(AgentMiddleware):
             if isinstance(part, TextPart):
                 reply_id = steered_reply_id(tuple(reply_for)) if reply_for else None
                 if reply_id and reply_id not in seen_ids:
+                    stored_usage = (
+                        extras.get("steered_reply_usage")
+                        if isinstance(extras, dict)
+                        else None
+                    )
                     injected.append(
                         (
                             reply.rank,
@@ -130,6 +147,11 @@ class TurnSteeringMiddleware(AgentMiddleware):
                                 id=reply_id,
                                 content=part.text,
                                 additional_kwargs={"steered_reply_for": reply_for},
+                                usage_metadata=(
+                                    _usage_metadata(stored_usage)
+                                    if isinstance(stored_usage, dict)
+                                    else None
+                                ),
                             ),
                         )
                     )
@@ -280,15 +302,7 @@ class TurnSteeringMiddleware(AgentMiddleware):
                 )
             )
         if reply_usage is not None:
-            reply.usage_metadata = UsageMetadata(
-                input_tokens=reply_usage["input_tokens"],
-                output_tokens=reply_usage["output_tokens"],
-                total_tokens=reply_usage["total_tokens"],
-                input_token_details=InputTokenDetails(
-                    cache_read=reply_usage["cache_read_tokens"],
-                    cache_creation=reply_usage["cache_creation_tokens"],
-                ),
-            )
+            reply.usage_metadata = _usage_metadata(reply_usage)
         reply.id = steered_reply_id(message_ids)
         reply.additional_kwargs["steered_reply_for"] = list(message_ids)
         scope = RunScope.current()
@@ -301,6 +315,7 @@ class TurnSteeringMiddleware(AgentMiddleware):
                 SteeredAssistantMessageRuntimeEvent(
                     message_ids=message_ids,
                     content=content_to_text(reply.content),
+                    token_usage=reply_usage,
                     deliveries=tuple(
                         SteeredUserMessageDelivery(
                             message_id=message_id, content=content

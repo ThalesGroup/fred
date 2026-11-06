@@ -3540,6 +3540,7 @@ async def _rank_runtime_event(
                 rank=positions.require_row(),
                 message_ids=tuple(payload["message_ids"]),
                 content=payload["content"],
+                token_usage=payload.get("token_usage"),
                 deliveries=tuple(
                     (item["message_id"], item["content"], rank)
                     for item, rank in zip(

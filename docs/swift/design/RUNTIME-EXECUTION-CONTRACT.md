@@ -7217,23 +7217,29 @@ gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
 
-### Managed chat stream lifetime (2026-11-02)
+### Managed chat stream lifetime and in-thread updates (2026-11-06)
 
-Ordinary pending messages live per conversation in browser-tab memory and survive
-in-app navigation alongside a background generation. They resume ordinary FIFO
-sends only when that conversation is reopened and its generation and human-input
-holds are resolved. Stop, deletion, reload or a genuine stream interruption clears
-the matching list; there is no queue recovery API or delivery acknowledgement tied
-to history persistence. The existing SQL
-mailbox only coordinates temporary steering across replicas. Injected user
-messages are prefixed in model context as updated user instructions that may add
+Plain-text updates submitted during an active managed ReAct or Deep turn are
+stored directly in `session_history`, with a stable message ID and a fixed
+negative provisional rank. The browser shows them at the end of the thread with
+a clock until delivery; an HTTP acknowledgement does not change their displayed
+rank. At the next model boundary, after dispatched tool results, the runtime
+injects the updates and obtains a separate visible assistant reply. Promotion
+to canonical ranks and reply persistence commit together before normal work
+resumes. Checkpoint recovery reconciles those rows by identity and rank. The
+reply's model usage is stored for recovery but counted in the turn total, not
+again as a separate history badge. An update that misses the boundary remains
+pending for the next ordinary turn. Graph has no shared in-turn model boundary;
+its update starts the next ordinary turn and is promoted at a final answer or
+human-input pause.
+
+Injected updates are prefixed in model context as instructions that may add
 information, revise or cancel the task. A request to stop asks the model to
 acknowledge and finish without further tool calls; the SSE delivery keeps the
 original text. This is model guidance; the Stop button cancels the stream.
-Cancellation completes generator teardown and stops lease renewal; expired steering rows are
-reclaimed every minute in bounded batches. The
+Cancellation completes generator teardown and stops lease renewal. The
 [managed conversations specification](../../../openspec/specs/managed-conversations/spec.md)
-defines the lifecycle and normal HITL behavior.
+defines the full lifecycle and normal HITL behavior.
 
 ### 8.119 Generated conversation title (2026-10-29)
 
