@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
@@ -25,6 +25,10 @@ interface WikiTreeProps {
   pages: readonly WikiPageSummary[];
   rulesPage: WikiPageSummary | null;
   activeSlug: string | null;
+  /** Page ids whose children are shown; everything else is folded. */
+  expanded: ReadonlySet<string>;
+  onToggle: (pageId: string) => void;
+  onExpand: (pageId: string) => void;
   onSelect: (slug: string) => void;
   onSelectRules: () => void;
   /** Editors only: start a new page under this one. */
@@ -47,6 +51,9 @@ export function WikiTree({
   pages,
   rulesPage,
   activeSlug,
+  expanded,
+  onToggle,
+  onExpand,
   onSelect,
   onSelectRules,
   canEdit,
@@ -55,8 +62,6 @@ export function WikiTree({
   onToggleReviewOnly,
 }: WikiTreeProps) {
   const { t } = useTranslation();
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
-
   const tree = useMemo(() => buildWikiTree(pages), [pages]);
   const pendingReview = useMemo(() => pages.filter((p) => p.needs_review).length, [pages]);
 
@@ -68,22 +73,13 @@ export function WikiTree({
         .filter((page) => page.needs_review && page.kind !== "rules")
         .map((page) => ({ page, depth: 0, children: [] }));
     }
-    return visibleNodes(tree, collapsed);
-  }, [reviewOnly, pages, tree, collapsed]);
+    return visibleNodes(tree, expanded);
+  }, [reviewOnly, pages, tree, expanded]);
 
   // A flat wiki has no chevrons, so reserving their column on every row would
   // indent the whole rail against nothing. Under a parent, the slot is what
   // keeps a leaf's title aligned with its siblings', so it stays.
   const anyExpandable = rows.some((row) => row.children.length > 0);
-
-  const toggle = (pageId: string) => {
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (next.has(pageId)) next.delete(pageId);
-      else next.add(pageId);
-      return next;
-    });
-  };
 
   return (
     <nav className={styles.rail} aria-label={t("rework.wiki.tree.ariaLabel")}>
@@ -113,12 +109,12 @@ export function WikiTree({
                 <IconButton
                   icon={{
                     category: "outlined",
-                    type: collapsed.has(page.page_id) ? "chevron_right" : "expand_more",
+                    type: expanded.has(page.page_id) ? "expand_more" : "chevron_right",
                   }}
                   variant="icon"
                   size="small"
-                  onClick={() => toggle(page.page_id)}
-                  aria-label={t(collapsed.has(page.page_id) ? "rework.wiki.tree.expand" : "rework.wiki.tree.collapse")}
+                  onClick={() => onToggle(page.page_id)}
+                  aria-label={t(expanded.has(page.page_id) ? "rework.wiki.tree.collapse" : "rework.wiki.tree.expand")}
                 />
               ) : (
                 anyExpandable && <span className={styles.spacer} aria-hidden="true" />
@@ -146,11 +142,7 @@ export function WikiTree({
                       variant="icon"
                       size="small"
                       onClick={() => {
-                        setCollapsed((current) => {
-                          const next = new Set(current);
-                          next.delete(page.page_id);
-                          return next;
-                        });
+                        onExpand(page.page_id);
                         onAddChild(page);
                       }}
                       aria-label={t("rework.wiki.tree.addChild", { title: page.title })}
