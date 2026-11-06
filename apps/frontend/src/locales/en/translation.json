@@ -644,17 +644,13 @@
       "runErrorTooMany": "A message can hold at most {{limit}} prompt commands. Remove a few, then send again."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
-    "pendingMessages": {
-      "label": "Queued",
-      "send": "Send",
-      "actions": "Message actions",
-      "edit": "Edit",
-      "remove": "Remove",
-      "offered": "Sending...",
-      "retry": "Send again",
-      "retryWarning": "Check the conversation first. This may send a duplicate message.",
-      "textOnly": "Only plain text can wait during an active turn",
-      "forceUnavailable": "Could not send into the active turn. The message is still pending."
+    "steering": {
+      "pending": "Waiting for the agent",
+      "acknowledged": "Seen by the agent",
+      "retry": "Retry pending message",
+      "textOnly": "Only plain text can be sent during an active turn",
+      "unavailable": "Could not send this message. Please try again.",
+      "waiting": "Your previous message is starting its turn. Please wait."
     },
     "newConversation": "New conversation with this agent",
     "hideNavPanel": "Hide navigation panel",

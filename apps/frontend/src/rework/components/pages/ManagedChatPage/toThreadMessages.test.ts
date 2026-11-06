@@ -40,6 +40,37 @@ const GEO = { type: "geo", geojson: { type: "FeatureCollection", features: [] } 
 const DEMO_CARD = { type: "demo_card", title: "Demo echo", body: "HELLO" };
 const UNKNOWN = { type: "part_kind_from_the_future", payload: { x: 1 } };
 
+it("keeps a provisional user message at the bottom while tool trace advances", () => {
+  const pending = msg({
+    role: "user",
+    exchange_id: "",
+    rank: -1,
+    parts: [{ type: "text", text: "Change direction" }],
+    metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+  });
+  const rows = toThreadMessages(
+    [
+      pending,
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Start" }] }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 1,
+        parts: [{ type: "tool_call", call_id: "c1", name: "search", args: {} }],
+      }),
+      msg({
+        role: "tool",
+        channel: "tool_result",
+        rank: 2,
+        parts: [{ type: "tool_result", call_id: "c1", ok: true, content: "done" }],
+      }),
+    ],
+    true,
+  );
+  expect(rows[rows.length - 1]).toMatchObject({ role: "user", text: "Change direction", steeringState: "pending" });
+  expect(rows[1].traceMessages).toHaveLength(2);
+});
+
 it("shows a steered user message in the current exchange", () => {
   const rows = toThreadMessages(
     [
@@ -565,6 +596,19 @@ describe("toThreadMessages — open HITL gate rendering", () => {
     // Only e1's (answered) card renders; e2's dangling one does not duplicate
     // the interactive prompt `reconstructPendingHitl` reconstructs for it.
     expect(rows.filter((r) => r.role === "hitl_request")).toHaveLength(1);
+  });
+
+  it("keeps the active human prompt when an in-thread message is pending", () => {
+    const pending = msg({
+      role: "user",
+      exchange_id: "",
+      rank: -1,
+      parts: [{ type: "text", text: "One more thing" }],
+      metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+    });
+    const history = [hitlRequestMsg("e2"), pending];
+    expect(reconstructPendingHitl(history)?.exchange_id).toBe("e2");
+    expect(toThreadMessages(history, false).filter((row) => row.role === "hitl_request")).toHaveLength(0);
   });
 
   it("pairs several requests and responses by occurrence_id and restores the first unanswered request", () => {

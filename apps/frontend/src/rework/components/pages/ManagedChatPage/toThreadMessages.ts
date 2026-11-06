@@ -107,7 +107,9 @@ function groupByExchange(messages: ChatMessage[]): { order: string[]; groups: Ma
 
 // Only confirmed pending questions (or legacy unannotated history) offer actions.
 export function reconstructPendingHitls(messages: ChatMessage[]): RuntimeAwaitingHumanEvent[] {
-  const { order, groups } = groupByExchange(messages);
+  const { order, groups } = groupByExchange(
+    messages.filter((message) => message.metadata?.extras?.steering_state !== "pending"),
+  );
   const lastEid = order[order.length - 1];
   if (lastEid === undefined) return [];
 
@@ -250,7 +252,13 @@ export function conversationTokenTotals(messages: ThreadMessage[]): TokenUsage {
 }
 
 export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
-  const exchanges = groupByExchange(messages);
+  const pending = messages
+    .filter((message) => message.metadata?.extras?.steering_state === "pending")
+    .sort((a, b) => b.rank - a.rank);
+  const exchanges = groupByExchange([
+    ...messages.filter((message) => message.metadata?.extras?.steering_state !== "pending"),
+    ...pending,
+  ]);
   // A steered user message starts a new display segment inside its persisted exchange.
   const order: string[] = [];
   const groups = new Map<string, ChatMessage[]>();
@@ -272,7 +280,9 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
   }
 
   const result: ThreadMessage[] = [];
-  const lastEid = order[order.length - 1] as string | undefined;
+  const lastEid = [...order]
+    .reverse()
+    .find((eid) => groups.get(eid)!.some((message) => message.metadata?.extras?.steering_state !== "pending"));
   // Rolling anchor for the marginal computation above. Exchanges are walked
   // in order, so each turn sees the context the previous one ended on.
   //
@@ -314,6 +324,17 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         role: "user",
         text: textOf(userMsg),
         isStreaming: false,
+        steeringState:
+          userMsg.metadata?.extras?.steering_state === "pending"
+            ? "pending"
+            : userMsg.metadata?.extras?.steering_state === "acknowledged"
+              ? "acknowledged"
+              : undefined,
+        pendingMessageId:
+          userMsg.metadata?.extras?.steering_state === "pending" &&
+          typeof userMsg.metadata?.extras?.steered_message_id === "string"
+            ? userMsg.metadata.extras.steered_message_id
+            : undefined,
         traceMessages: [],
         sources: [],
         uiParts: [],

@@ -103,6 +103,21 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it("shows a quiet pending clock that can retry when the turn is idle", async () => {
+  const retry = vi.fn();
+  render(<UserTurn text="New instruction" steeringState="pending" onRetryPending={retry} />);
+  const clock = container.querySelector<HTMLButtonElement>('button[aria-label="chatbot.steering.retry"]');
+  expect(clock?.textContent).toContain("schedule");
+  await click(clock!);
+  expect(retry).toHaveBeenCalledTimes(1);
+});
+
+it("shows a brief noninteractive acknowledgement", () => {
+  render(<UserTurn text="New instruction" steeringState="acknowledged" />);
+  expect(container.querySelector('[role="status"][aria-label="chatbot.steering.acknowledged"]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label="chatbot.steering.retry"]')).toBeNull();
+});
+
 describe("UserTurn copy affordance (#2359)", () => {
   it.each(["forward", "backward"])(
     "copies a %s selection across user and assistant messages with native separators and canonical skills",
