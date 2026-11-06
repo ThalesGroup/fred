@@ -184,7 +184,10 @@ function CatalogContent({ content: fullContent, documentName }: { content: strin
   const { t } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   const lines = useMemo(() => {
-    const result = fullContent.split(/\r?\n/);
+    // Extraction catalogs include SQL aliases for the model, not for the trace reader.
+    const result = fullContent
+      .replace(/[ \t]+query_alias="[^"\r\n]*"(?=[ \t]+(?:parquet=|range=))/g, "")
+      .split(/\r?\n/);
     if (result[result.length - 1] === "") result.pop();
     return result;
   }, [fullContent]);
@@ -285,11 +288,13 @@ function SchemasDetail({ data }: { data: Extract<TabularTraceResult, { kind: "sc
                               <PagedItems
                                 items={table.columns}
                                 renderItem={(column, columnIndex) => {
-                                  const label = column.is_categorical
-                                    ? t("rework.chatTrace.tabular.categorical")
-                                    : column.dtype;
+                                  const categoryValues = column.categorical_values ?? column.sample_values;
+                                  const label =
+                                    column.categorical_values != null || column.is_categorical
+                                      ? t("rework.chatTrace.tabular.categorical")
+                                      : column.dtype;
                                   const isNumeric = column.dtype === "integer" || column.dtype === "float";
-                                  const hasValues = !isNumeric && Boolean(column.sample_values?.length);
+                                  const hasValues = !isNumeric && Boolean(categoryValues?.length);
                                   const summary = (
                                     <>
                                       <span>{column.name}</span>
@@ -303,7 +308,7 @@ function SchemasDetail({ data }: { data: Extract<TabularTraceResult, { kind: "sc
                                           <summary className={tabularStyles.columnSummary}>{summary}</summary>
                                           <code className={tabularStyles.columnDetails}>
                                             {hasValues
-                                              ? column.sample_values?.join(" / ")
+                                              ? categoryValues?.join(" / ")
                                               : `min ${column.min_value ?? "—"} · max ${column.max_value ?? "—"}`}
                                           </code>
                                         </details>

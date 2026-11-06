@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import resource
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,7 +23,7 @@ from types import SimpleNamespace
 
 import duckdb
 import pytest
-from fred_core import KeycloakUser, RebacDisabledResult
+from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, TagPermission, is_service_agent
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_store import BaseDocumentMetadataStore as BaseMetadataStore
 from fred_core.documents.document_structures import (
@@ -36,6 +37,7 @@ from fred_core.documents.document_structures import (
     SourceType,
     Tagging,
 )
+from fred_core.security.delegation import holds_caller_role
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
@@ -76,8 +78,25 @@ def _metadata(
         identity=Identity(document_name=file_name, document_uid=document_uid, title=file_name),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
         file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
-        tags=Tagging(tag_ids=tag_ids or [], tag_names=tag_names or []),
+        tags=Tagging(tag_ids=_library_of(document_uid) if tag_ids is None else tag_ids, tag_names=tag_names or []),
     )
+
+
+def _rows_store(rows: list[DocumentMetadata]) -> SimpleNamespace:
+    """Uid and folder lookups over fixed rows, for resolver-level tests."""
+
+    async def by_uids(uids):
+        return [row for row in rows if row.document_uid in uids]
+
+    async def in_tags(tag_ids):
+        return [row for row in rows if set(row.tags.tag_ids or []) & set(tag_ids)]
+
+    return SimpleNamespace(get_metadata_by_uids=by_uids, metadata_in_tags=in_tags)
+
+
+def _library_of(document_uid: str) -> list[str]:
+    """A folder per test document: ReBAC grants documents through folders only."""
+    return [f"lib-{document_uid}"]
 
 
 async def _ingest_csv(
@@ -168,7 +187,7 @@ async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str, extra_tab
         identity=Identity(document_name=f"{document_uid}.xlsx", document_uid=document_uid, title=document_uid),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
         file=FileInfo(file_type=FileType.XLSX),
-        tags=Tagging(tag_ids=[], tag_names=[]),
+        tags=Tagging(tag_ids=_library_of(document_uid), tag_names=[]),
     )
 
     output_dir = tmp_path / f"{document_uid}-output"
@@ -183,15 +202,22 @@ async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str, extra_tab
 
 
 class _FakeRebac:
-    def __init__(self, readable_document_uids: set[str]):
+    """Keep folder discovery separate from authoritative document permissions."""
+
+    def __init__(self, readable_document_uids: set[str], readable_tag_ids: set[str] | None = None):
         self.readable_document_uids = readable_document_uids
+        self.readable_tag_ids = {tag for uid in readable_document_uids for tag in _library_of(uid)} if readable_tag_ids is None else readable_tag_ids
+        self.checked_document_uids: list[str] = []
 
     async def lookup_user_resources(self, user, permission):
-        del user, permission
-        return [SimpleNamespace(id=document_uid) for document_uid in sorted(self.readable_document_uids)]
+        del user
+        assert permission is TagPermission.READ, f"readable {permission.__class__.__name__} must not be enumerated"
+        return [SimpleNamespace(id=tag_id) for tag_id in sorted(self.readable_tag_ids)]
 
     async def has_user_permission(self, user, permission, resource_id):
-        del user, permission
+        del user
+        assert permission is DocumentPermission.READ
+        self.checked_document_uids.append(resource_id)
         return resource_id in self.readable_document_uids
 
 
@@ -239,14 +265,19 @@ class _FakeTagService:
         self.personal_scope = personal_scope or set()
 
     async def list_authorized_tags_ids(self, user, owner_filter, team_id):
-        del user
+        """Like `TagService`: scope folders are narrowed to readable ones, except
+        for the evaluation worker, which reads its team's folders."""
         if owner_filter is None:
             return set(self.readable_tag_ids)
         if owner_filter == OwnerFilter.TEAM:
             if not team_id:
                 raise MissingTeamIdError("team_id is required when owner_filter is 'team'")
-            return set(self.team_scopes.get(team_id, set()))
-        return set(self.personal_scope)
+            scope = set(self.team_scopes.get(team_id, set()))
+        else:
+            scope = set(self.personal_scope)
+        if is_service_agent(user) and not holds_caller_role(user):
+            return scope if owner_filter == OwnerFilter.TEAM else set()
+        return scope & self.readable_tag_ids
 
 
 class _TrackingMetadataStore(BaseMetadataStore):
@@ -254,8 +285,8 @@ class _TrackingMetadataStore(BaseMetadataStore):
     Delegate wrapper that records targeted vs full metadata reads.
 
     Why this exists:
-    - Tabular authorization should use one uid-targeted metadata lookup once
-      ReBAC has already narrowed the readable document set.
+    - Tabular authorization should read the documents of the authorized
+      folders in one targeted query, never the whole metadata table.
 
     How to use:
     - Wrap the real metadata store, assign it to `service.metadata_store`, then
@@ -268,12 +299,17 @@ class _TrackingMetadataStore(BaseMetadataStore):
     def __init__(self, delegate) -> None:
         self._delegate = delegate
         self.get_all_metadata_calls = 0
+        self.metadata_in_tags_calls: list[list[str]] = []
         self.get_metadata_by_uids_calls: list[list[str]] = []
         self.get_metadata_by_uid_calls: list[str] = []
 
     async def get_all_metadata(self, filters: dict, session=None):
         self.get_all_metadata_calls += 1
         return await self._delegate.get_all_metadata(filters, session=session)
+
+    async def metadata_in_tags(self, tag_ids: list[str], session=None):
+        self.metadata_in_tags_calls.append(sorted(tag_ids))
+        return await self._delegate.metadata_in_tags(tag_ids, session=session)
 
     async def get_metadata_by_uids(self, document_uids: list[str], session=None):
         self.get_metadata_by_uids_calls.append(list(document_uids))
@@ -513,13 +549,13 @@ async def test_tabular_processor_classifies_strings_without_storing_category_val
     assert artifact is not None
     severity_column = next(column for column in artifact.columns if column.name == "severity")
     assert severity_column.is_categorical is True
-    assert severity_column.has_two_values is True
+    assert "has_two_values" not in severity_column.model_dump()
     assert severity_column.sample_values is None
 
     # Non-string columns are never sampled, regardless of cardinality.
     id_column = next(column for column in artifact.columns if column.name == "id")
     assert id_column.is_categorical is None
-    assert id_column.has_two_values is None
+    assert "has_two_values" not in id_column.model_dump()
     assert id_column.sample_values is None
 
 
@@ -545,7 +581,7 @@ async def test_tabular_processor_excludes_high_cardinality_string_columns(tmp_pa
     assert artifact is not None
     label_column = next(column for column in artifact.columns if column.name == "label")
     assert label_column.is_categorical is False
-    assert label_column.has_two_values is False
+    assert "has_two_values" not in label_column.model_dump()
     assert label_column.sample_values is None
 
 
@@ -567,12 +603,12 @@ async def test_tabular_processor_counts_null_rows_for_category_limit(tmp_path):
     assert artifact.row_count == 20
     status_column = next(column for column in artifact.columns if column.name == "status")
     assert status_column.is_categorical is True
-    assert status_column.has_two_values is False
+    assert "has_two_values" not in status_column.model_dump()
     assert status_column.sample_values is None
     blank_column = next(column for column in artifact.columns if column.name == "blank")
     assert blank_column.dtype == "string"
     assert blank_column.is_categorical is False
-    assert blank_column.has_two_values is False
+    assert "has_two_values" not in blank_column.model_dump()
     assert blank_column.sample_values is None
 
 
@@ -595,10 +631,10 @@ async def test_tabular_processor_preserves_duckdb_boolean_columns(tmp_path):
     assert columns["available"].dtype == "boolean"
     assert columns["active"].is_categorical is None
     assert columns["available"].is_categorical is None
-    assert columns["active"].has_two_values is None
-    assert columns["available"].has_two_values is None
+    assert "has_two_values" not in columns["active"].model_dump()
+    assert "has_two_values" not in columns["available"].model_dump()
     assert columns["french"].dtype == "string"
-    assert columns["french"].has_two_values is True
+    assert "has_two_values" not in columns["french"].model_dump()
     assert columns["french"].sample_values is None
 
 
@@ -619,7 +655,7 @@ async def test_tabular_processor_excludes_one_value_above_category_limit(tmp_pat
     assert artifact.row_count == 20
     status_column = next(column for column in artifact.columns if column.name == "status")
     assert status_column.is_categorical is False
-    assert status_column.has_two_values is False
+    assert "has_two_values" not in status_column.model_dump()
     assert status_column.sample_values is None
 
 
@@ -777,6 +813,20 @@ async def test_tabular_service_lists_context_and_queries_datasets(tmp_path):
 
     count_query = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT COUNT(*) AS total_rows FROM {sales_alias}"))
     assert count_query.rows == [{"total_rows": 2}]
+    assert query_response.message is None
+    assert count_query.message is None
+
+    empty_sql = f"SELECT * FROM {sales_alias} WHERE 1 = 0"
+    empty = await service.query_read(_user(), request=TabularQueryRequest(sql=empty_sql))
+    assert empty.rows == []
+    assert empty.error is None
+    assert empty.sql_query == empty_sql
+    assert empty.message == "Requête exécutée avec succès : 0 ligne correspondant aux conditions."
+
+    for expression, expected in [("COUNT(*)", 0), ("SUM(amount)", None)]:
+        aggregate = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT {expression} AS value FROM {sales_alias} WHERE 1 = 0"))
+        assert aggregate.rows == [{"value": expected}]
+        assert aggregate.message is None
 
     with pytest.raises(ValueError, match="Only SELECT or WITH statements are allowed"):
         await service.query_read(
@@ -1275,7 +1325,7 @@ async def test_tabular_service_lists_authorized_datasets_with_targeted_metadata_
 
     assert [dataset.document_uid for dataset in datasets] == ["doc-visible"]
     assert tracking_store.get_all_metadata_calls == 0
-    assert tracking_store.get_metadata_by_uids_calls == [["doc-visible"]]
+    assert tracking_store.metadata_in_tags_calls == [["lib-doc-visible"]]
 
 
 @pytest.mark.asyncio
@@ -1606,8 +1656,8 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
     assert csv_schema.kind == "csv"
     assert csv_schema.markdown is None
     assert [column.name for column in csv_schema.tables[0].columns] == ["city", "amount"]
-    assert csv_schema.tables[0].columns[0].is_categorical is True
-    assert csv_schema.tables[0].columns[0].sample_values == ["Lyon", "Paris"]
+    assert "is_categorical" not in csv_schema.tables[0].columns[0].model_dump()
+    assert csv_schema.tables[0].columns[0].categorical_values == ["Lyon", "Paris"]
     assert csv_schema.tables[0].columns[1].min_value == 10
     assert csv_schema.tables[0].columns[1].max_value == 20
 
@@ -1619,8 +1669,8 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
     columns_by_sheet = {table.sheet: [column.name for column in table.columns] for table in excel_schema.tables}
     assert columns_by_sheet == {"Ventes": ["city", "amount"], "Cibles": ["city", "target"]}
     ventes_columns = next(table.columns for table in excel_schema.tables if table.sheet == "Ventes")
-    assert ventes_columns[0].is_categorical is True
-    assert ventes_columns[0].sample_values == ["Lyon", "Paris"]
+    assert "is_categorical" not in ventes_columns[0].model_dump()
+    assert ventes_columns[0].categorical_values == ["Lyon", "Paris"]
     assert ventes_columns[1].min_value == 10
     assert ventes_columns[1].max_value == 20
     assert all(table.query_alias in excel_schema.markdown for table in excel_schema.tables)
@@ -1675,12 +1725,12 @@ async def test_describe_documents_reads_values_instead_of_legacy_metadata(tmp_pa
     service = TabularService()
     descriptions = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
     csv_columns = {column.name: column for column in descriptions[0].tables[0].columns}
-    assert csv_columns["city"].sample_values == ["Lyon", "Paris"]
+    assert csv_columns["city"].categorical_values == ["Lyon", "Paris"]
     assert (csv_columns["amount"].min_value, csv_columns["amount"].max_value) == (10, 20)
     assert (csv_columns["rate"].min_value, csv_columns["rate"].max_value) == (-1.5, 2.25)
     excel_bounds = {table.sheet: (table.columns[1].min_value, table.columns[1].max_value) for table in descriptions[1].tables}
     assert excel_bounds == {"Ventes": (10, 20), "Cibles": (15, 25)}
-    assert all(table.columns[0].sample_values == ["Lyon", "Paris"] for table in descriptions[1].tables)
+    assert all(table.columns[0].categorical_values == ["Lyon", "Paris"] for table in descriptions[1].tables)
     assert descriptions[1].markdown is not None
 
 
@@ -1702,20 +1752,20 @@ async def test_describe_documents_reads_current_values_on_every_call(tmp_path, m
 
     service = TabularService()
     first = (await service.describe_documents(_user(), ["doc-current"]))[0].tables[0].columns
-    assert first[0].sample_values == ["Lyon", "Paris"]
+    assert first[0].categorical_values == ["Lyon", "Paris"]
     assert (first[1].min_value, first[1].max_value) == (-1.5, 2.25)
 
     replacement = tmp_path / "replacement.parquet"
     pd.DataFrame({"city": ["Milan", "Rome", "Turin"], "score": [-5.0, 30.0, 15.0]}).to_parquet(replacement, index=False)
     content_store.put_file(artifact.object_key, replacement, content_type="application/vnd.apache.parquet")
     second = (await service.describe_documents(_user(), ["doc-current"]))[0].tables[0].columns
-    assert second[0].sample_values == ["Milan", "Rome", "Turin"]
+    assert second[0].categorical_values == ["Milan", "Rome", "Turin"]
     assert (second[1].min_value, second[1].max_value) == (-5.0, 30.0)
 
     pd.DataFrame({"city": [None, None], "score": [float("inf"), float("nan")]}).to_parquet(replacement, index=False)
     content_store.put_file(artifact.object_key, replacement, content_type="application/vnd.apache.parquet")
     third = (await service.describe_documents(_user(), ["doc-current"]))[0].tables[0].columns
-    assert third[0].sample_values is None
+    assert third[0].categorical_values == []
     assert (third[1].min_value, third[1].max_value) == (None, None)
 
     stored = read_tabular_artifact(await metadata_store.get_metadata_by_uid("doc-current"))
@@ -1735,7 +1785,7 @@ async def test_describe_documents_reads_all_twenty_workbook_tables(tmp_path, met
 
     tables = (await TabularService().describe_documents(_user(), ["doc-twenty"]))[0].tables
     assert len(tables) == 20
-    assert all(table.columns[0].sample_values == ["Lyon", "Paris"] for table in tables)
+    assert all(table.columns[0].categorical_values == ["Lyon", "Paris"] for table in tables)
     assert [(table.columns[1].min_value, table.columns[1].max_value) for table in tables[:2]] == [(10, 20), (15, 25)]
     assert [(table.columns[1].min_value, table.columns[1].max_value) for table in tables[2:]] == [(index, index + 10) for index in range(18)]
 
@@ -1866,13 +1916,15 @@ async def test_tabular_service_requires_ready_excel_catalog(tmp_path, metadata_s
     [csv_description] = await service.describe_documents(_user(), ["doc-sales"])
     assert csv_description.markdown is None
 
-    with pytest.raises(FileNotFoundError, match="Preview not ready"):
+    with pytest.raises(FileNotFoundError, match="Preview not ready") as error:
         await service.describe_documents(_user(), ["doc-excel"])
+    assert error.value.reason == "preview_not_ready"
 
     metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
     await MetadataService().save_document_metadata(_user(), metadata)
-    with pytest.raises(FileNotFoundError, match="output.md"):
+    with pytest.raises(FileNotFoundError, match="output.md") as error:
         await service.describe_documents(_user(), ["doc-excel"])
+    assert error.value.reason == "preview_artifact_unavailable"
 
     content_store.save_output("doc-excel", output_dir)
     [description] = await service.describe_documents(_user(), ["doc-excel"])
@@ -2251,6 +2303,41 @@ async def test_query_cannot_read_outside_its_local_dataset(tmp_path, monkeypatch
     assert response.rows == [{"city": "p_ris", "median_amount": 10.0}]
 
 
+@pytest.mark.asyncio
+async def test_query_cleans_audit_text_in_a_large_restricted_dataset(tmp_path, monkeypatch):
+    app_context = ApplicationContext.get_instance()
+    app_context.get_content_store().clear()
+    content = "id,Libelle Affaire,Numero Affaire\n" + "".join(f'{index}," {"à trouver" if index == 8073 else "Projet Alpha"} "," 40A123456 "\n' for index in range(1, 8074))
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=app_context.get_metadata_store(),
+        document_uid="doc-audit",
+        file_name="audit.csv",
+        content=content,
+    )
+    service = TabularService()
+    original_mount = service._mount_datasets
+
+    def inspect_mount(*, connection, datasets, handle):
+        original_mount(connection=connection, datasets=datasets, handle=handle)
+        assert connection.execute("SELECT current_setting('enable_external_access')").fetchone() == (False,)
+        with pytest.raises(duckdb.PermissionException):
+            connection.execute("SELECT * FROM read_parquet('/etc/passwd')")
+
+    monkeypatch.setattr(service, "_mount_datasets", inspect_mount)
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    query = f'SELECT id, TRIM("Libelle Affaire") AS label, SUBSTRING(TRIM("Numero Affaire") FROM 4) AS suffix FROM {alias} WHERE LOWER(TRIM("Libelle Affaire")) LIKE \'%à trouver%\''
+    response = await service.query_read(_user(), request=TabularQueryRequest(sql=query, dataset_uids=["doc-audit"]))
+    assert response.rows == [{"id": 8073, "label": "à trouver", "suffix": "123456"}]
+
+    bounded = await service.query_read(_user(), request=TabularQueryRequest(sql=f'SELECT id, main.trim("Libelle Affaire") AS label FROM {alias} ORDER BY id', dataset_uids=["doc-audit"], max_rows=2))
+    assert bounded.rows == [{"id": 1, "label": "Projet Alpha"}, {"id": 2, "label": "Projet Alpha"}]
+
+    for expression in ["main.current_setting('allowed_paths')", "pg_catalog.pg_get_viewdef(1)"]:
+        with pytest.raises(ValueError, match="restricted SQL function"):
+            await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT {expression} FROM {alias}", dataset_uids=["doc-audit"]))
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
@@ -2338,7 +2425,7 @@ async def test_document_discovery_unions_scoped_sources(tmp_path, metadata_store
     await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="other-session", file_name="private.csv", content="city,amount\nRome,30\n", uploaded_by="u-1")
     await _ingest_attachment_csv(tmp_path=tmp_path, document_uid="other-user", file_name="foreign.csv", content="city,amount\nBerlin,40\n", uploaded_by="u-2")
     service = TabularService()
-    service.rebac = _FakeRebacDisabled() if rebac_disabled else _FakeRebac({"corpus"})
+    service.rebac = _FakeRebacDisabled() if rebac_disabled else _FakeRebac({"corpus"}, readable_tag_ids={"finance"})
     scope = dict(attachment_uids=["attached", "attached", "other-user", "missing"], include_session_scope=session, include_corpus_scope=corpus)
     documents = await service.list_documents(_user(), **scope)
     expected = ({"attached"} if session else set()) | ({"corpus"} if corpus else set())
@@ -2373,14 +2460,12 @@ async def test_document_discovery_unions_scoped_sources(tmp_path, metadata_store
 async def test_corpus_selection_union_remains_inside_owner_scope(monkeypatch, libraries, documents, expected):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     service.rebac = _FakeRebac({"doc-A", "doc-B", "outside-owner"})
     rows = [_metadata(document_uid=uid, file_name=uid + ".csv", tag_ids=[tag]) for uid, tag in [("doc-A", "lib-A"), ("doc-B", "lib-B"), ("outside-owner", "lib-foreign")]]
-    service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=rows))
+    service.metadata_store = _rows_store(rows)
     service._resolve_scope_tag_ids = AsyncMock(return_value={"lib-A", "lib-B"})
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
     datasets = await service._resolve_authorized_datasets(
         _user(), include_session_scope=False, owner_filter=OwnerFilter.TEAM, team_id="team-1", document_library_tags_ids=libraries, corpus_document_uids=documents
     )
@@ -2391,14 +2476,12 @@ async def test_corpus_selection_union_remains_inside_owner_scope(monkeypatch, li
 async def test_scoped_inventory_excludes_unready_legacy_and_removed_attachments(monkeypatch):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     rows = [_attachment_metadata(document_uid=uid, file_name=uid + ".csv", uploaded_by=owner) for uid, owner in [("ready", "u-1"), ("unready", "u-1"), ("legacy", "u-1"), ("foreign", "u-2")]]
     rows[0].mark_stage_done(ProcessingStage.SQL_INDEXED)
     rows[3].mark_stage_done(ProcessingStage.SQL_INDEXED)
     service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=rows))
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: None if metadata.document_uid == "legacy" else object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: None if metadata.document_uid == "legacy" else object())
     requested = [row.document_uid for row in rows]
     datasets = await service._resolve_authorized_datasets(_user(), include_corpus_scope=False, attachment_uids=requested)
     assert [dataset.metadata.document_uid for dataset in datasets] == ["ready"]
@@ -2411,12 +2494,327 @@ async def test_scoped_inventory_excludes_unready_legacy_and_removed_attachments(
 async def test_corpus_grant_does_not_replace_attachment_ownership(monkeypatch):
     from unittest.mock import AsyncMock
 
-    import knowledge_flow_backend.features.tabular.service as module
-
     service = object.__new__(TabularService)
     service.rebac = _FakeRebac({"foreign"})
     foreign = _attachment_metadata(document_uid="foreign", file_name="private.csv", uploaded_by="u-2")
-    service.metadata_store = SimpleNamespace(get_metadata_by_uids=AsyncMock(return_value=[foreign]))
+    service.metadata_store = _rows_store([foreign])
     service._resolve_scope_tag_ids = AsyncMock(return_value=None)
-    monkeypatch.setattr(module, "read_tabular_artifact", lambda metadata: object())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
     assert await service._resolve_authorized_datasets(_user(), attachment_uids=["foreign"]) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("readable_documents", [1500, 3000])
+async def test_workbook_past_the_first_thousand_readable_documents_stays_usable(tmp_path, metadata_store, readable_documents):
+    """OpenFGA's plain document inventory stops at 1,000 objects; the target sorts
+    after them and must stay listable, describable, queryable and searchable."""
+    ApplicationContext.get_instance().get_content_store().clear()
+    for index in range(readable_documents - 1):
+        await metadata_store.save_metadata(_metadata(document_uid=f"doc-{index:05}", file_name=f"note-{index}.txt", tag_ids=["team-lib"]))
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="zz-target", file_name="sales.csv", content="city,amount\nParis,10\n", tag_ids=["team-lib"])
+
+    service = TabularService()
+    service.rebac = _FakeRebac({"zz-target"}, readable_tag_ids={"team-lib"})
+    service.tag_service = _FakeTagService(readable_tag_ids={"team-lib"}, team_scopes={"team-a": {"team-lib"}})
+
+    for scope in ({"owner_filter": OwnerFilter.TEAM, "team_id": "team-a"}, {}):
+        assert [document.document_uid for document in await service.list_documents(_user(), **scope)] == ["zz-target"]
+        [description] = await service.describe_documents(_user(), ["zz-target"], **scope)
+        alias = description.tables[0].query_alias
+        result = await service.query_read(_user(), request=TabularQueryRequest(sql=f'SELECT SUM(amount) AS total FROM "{alias}"', dataset_uids=["zz-target"], **scope))
+        assert result.rows == [{"total": 10}]
+        search = await service.search_values(_user(), request=TabularSearchRequest(keyword="Paris", **scope))
+        assert [match.document_uid for match in search.matches] == ["zz-target"]
+    assert service.rebac.checked_document_uids == ["zz-target"] * 8
+
+
+_CANDIDATE_SCOPES = [
+    pytest.param({}, id="unscoped"),
+    pytest.param({"owner_filter": OwnerFilter.TEAM, "team_id": "team-a"}, id="team"),
+    pytest.param({"owner_filter": OwnerFilter.PERSONAL}, id="personal"),
+    pytest.param({"document_library_tags_ids": ["shared-library"]}, id="library"),
+    pytest.param({"corpus_document_uids": ["denied"]}, id="selected-document"),
+    pytest.param({"corpus_document_uids": [], "document_library_tags_ids": ["shared-library"]}, id="selected-library-union"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", _CANDIDATE_SCOPES)
+async def test_tabular_stored_membership_does_not_override_document_denial(tmp_path, metadata_store, scope):
+    """A failed parent write can leave readable-folder membership in SQL only."""
+    ApplicationContext.get_instance().get_content_store().clear()
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="denied",
+        file_name="confidential.csv",
+        content="secret,amount\nPRIVATE,10\n",
+        tag_ids=["shared-library"],
+    )
+    service = TabularService()
+    service.rebac = _FakeRebac(set(), readable_tag_ids={"shared-library"})
+    service.tag_service = _FakeTagService(readable_tag_ids={"shared-library"}, team_scopes={"team-a": {"shared-library"}}, personal_scope={"shared-library"})
+
+    assert await service.list_documents(_user(), **scope) == []
+    with pytest.raises(PermissionError, match="denied"):
+        await service.describe_documents(_user(), ["denied"], **scope)
+    with pytest.raises(PermissionError, match="denied"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql="SELECT * FROM confidential", dataset_uids=["denied"], **scope))
+    with pytest.raises(PermissionError, match="denied"):
+        await service.search_values(_user(), request=TabularSearchRequest(keyword="PRIVATE", dataset_uids=["denied"], **scope))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", _CANDIDATE_SCOPES)
+async def test_tabular_candidate_authorization_failure_propagates(monkeypatch, scope):
+    from unittest.mock import AsyncMock
+
+    service = object.__new__(TabularService)
+    service.metadata_store = _rows_store([_metadata(document_uid="denied", file_name="confidential.csv", tag_ids=["shared-library"])])
+    service.rebac = _FakeRebac(set(), readable_tag_ids={"shared-library"})
+    service.rebac.has_user_permission = AsyncMock(side_effect=RuntimeError("authorization unavailable"))
+    service.tag_service = _FakeTagService(readable_tag_ids={"shared-library"}, team_scopes={"team-a": {"shared-library"}}, personal_scope={"shared-library"})
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: object())
+
+    with pytest.raises(RuntimeError, match="authorization unavailable"):
+        await service._resolve_authorized_datasets(_user(), include_session_scope=False, **scope)
+
+
+@pytest.mark.asyncio
+async def test_tabular_checks_each_workbook_once_with_bounded_concurrency(monkeypatch):
+    rows = [_metadata(document_uid=f"workbook-{index}", file_name=f"workbook-{index}.xlsx", tag_ids=["shared-library"]) for index in range(23)]
+    non_tabular = _metadata(document_uid="plain-document", file_name="note.txt", tag_ids=["shared-library"])
+    service = object.__new__(TabularService)
+    service.metadata_store = _rows_store([*rows, non_tabular])
+    rebac = _FakeRebac({row.document_uid for row in rows}, readable_tag_ids={"shared-library"})
+    service.rebac = rebac
+    active = peak = 0
+    check = rebac.has_user_permission
+
+    async def slow_check(user, permission, resource_id):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            await asyncio.sleep(0)
+            return await check(user, permission, resource_id)
+        finally:
+            active -= 1
+
+    rebac.has_user_permission = slow_check
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.read_tabular_artifact", lambda metadata: None)
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.tabular.service.read_tabular_multi_artifact",
+        lambda metadata: None if metadata.document_uid == "plain-document" else SimpleNamespace(tables=[SimpleNamespace(query_alias=f"{metadata.document_uid}_{index}") for index in range(2)]),
+    )
+
+    datasets = await service._resolve_authorized_datasets(_user(), include_session_scope=False)
+
+    assert len(datasets) == 46
+    assert sorted(rebac.checked_document_uids) == sorted(row.document_uid for row in rows)
+    assert 1 < peak <= 10
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("row_tags", "scope", "reason", "readable", "scoped"),
+    [
+        (None, None, "no_readable_documents", 0, 0),
+        (["library"], set(), "empty_authorized_scope", 0, 0),
+        (["outside"], {"library"}, "no_documents_in_scope", 0, 0),
+        (["library"], None, "no_registered_tables", 1, 1),
+    ],
+)
+async def test_discovery_empty_explains_observed_stages_without_extra_io(monkeypatch, caplog, row_tags, scope, reason, readable, scoped):
+    import logging
+    from unittest.mock import AsyncMock
+
+    service = object.__new__(TabularService)
+    rows = [] if row_tags is None else [_metadata(document_uid="UID-CANARY", file_name="CONTENT-CANARY.csv", tag_ids=row_tags)]
+    service.metadata_store = _rows_store(rows)
+    service.metadata_store.metadata_in_tags = AsyncMock(wraps=service.metadata_store.metadata_in_tags)
+    service.metadata_store.get_all_metadata = AsyncMock(return_value=[])
+    service.rebac = _FakeRebac({"UID-CANARY"}, readable_tag_ids={"library"})
+    service.rebac.has_user_permission = AsyncMock(wraps=service.rebac.has_user_permission)
+    service._resolve_scope_tag_ids = AsyncMock(return_value=scope)
+    with caplog.at_level(logging.INFO):
+        assert await service.list_documents(_user(), include_session_scope=False) == []
+    [event] = [r for r in caplog.records if r.getMessage() == "tabular.discovery_empty"]
+    assert event.reason == reason
+    assert event.readable_metadata_count == readable and event.scoped_metadata_count == scoped and event.resolved_table_count == 0
+    assert event.levelno == logging.INFO
+    assert "CANARY" not in repr(event.__dict__)
+    service.metadata_store.metadata_in_tags.assert_awaited_once()
+    service.metadata_store.get_all_metadata.assert_not_awaited()
+    service.rebac.has_user_permission.assert_not_awaited()
+    service._resolve_scope_tag_ids.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_nonempty_discovery_has_no_empty_diagnostic(tmp_path, metadata_store, caplog):
+    import logging
+
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="available", file_name="sales.csv", content="amount\n10\n")
+    service = TabularService()
+    service.rebac = _FakeRebac({"available"})
+    with caplog.at_level(logging.INFO):
+        assert len(await service.list_documents(_user())) == 1
+    assert not [r for r in caplog.records if r.getMessage() == "tabular.discovery_empty"]
+
+
+@pytest.mark.asyncio
+async def test_description_unresolved_classification_preserves_permission_boundary(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound
+
+    service = object.__new__(TabularService)
+    service.tabular_config = ApplicationContext.get_instance().get_config().storage.tabular_store
+    service.metadata_store = _rows_store([])
+    service.rebac = _FakeRebac({"missing"})
+    service._resolve_scope_tag_ids = AsyncMock(return_value=None)
+    with pytest.raises(TabularDescriptionNotFound) as error:
+        await service.describe_documents(_user(), ["missing"], include_session_scope=False)
+    assert error.value.reason == "datasets_not_resolved"
+    assert str(error.value) == "Requested tabular datasets were not found: missing"
+    assert service.rebac.checked_document_uids == ["missing"]
+    service.rebac = _FakeRebac(set())
+    with pytest.raises(PermissionError):
+        await service.describe_documents(_user(), ["missing"], include_session_scope=False)
+    assert service.rebac.checked_document_uids == ["missing"]
+
+
+@pytest.mark.asyncio
+async def test_description_selects_tables_before_scans_and_limits(tmp_path, metadata_store, monkeypatch):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-filtered")
+    content_store.save_output(metadata.document_uid, output_dir)
+    metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+    await MetadataService().save_document_metadata(_user(), metadata)
+    service = TabularService()
+    full = (await service.describe_documents(_user(), [metadata.document_uid]))[0]
+    assert len((await service.describe_documents(_user(), [metadata.document_uid], table_names=[]))[0].tables) == 2
+    service.tabular_config = service.tabular_config.model_copy(update={"query": service.tabular_config.query.model_copy(update={"max_selected_datasets": 1})})
+    locations = []
+    resolve = service._resolve_dataset_location
+
+    def record_location(key):
+        locations.append(key)
+        return resolve(key)
+
+    monkeypatch.setattr(service, "_resolve_dataset_location", record_location)
+    selected = (await service.describe_documents(_user(), [metadata.document_uid], table_names=["Cibles", "Cibles"]))[0]
+    assert [table.sheet for table in selected.tables] == ["Cibles"]
+    assert selected.markdown == full.markdown
+    assert len(locations) == 1
+    assert selected.tables[0].columns[1].min_value == 15
+    locations.clear()
+    alias = selected.tables[0].query_alias
+    assert (await service.describe_documents(_user(), [metadata.document_uid], table_names=[alias]))[0].tables[0].query_alias == alias
+    assert len(locations) == 1
+    locations.clear()
+    with pytest.raises(ValueError, match="above the limit"):
+        await service.describe_documents(_user(), [metadata.document_uid])
+    assert not locations
+    with pytest.raises(ValueError, match="Unknown table name"):
+        await service.describe_documents(_user(), [metadata.document_uid], table_names=["cibles"])
+    assert not locations
+
+
+@pytest.mark.asyncio
+async def test_description_rejects_ambiguous_labels_and_preserves_document_order(tmp_path, metadata_store, monkeypatch):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    uids = ["doc-filter-first", "doc-filter-second"]
+    for uid in uids:
+        metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid=uid)
+        content_store.save_output(uid, output_dir)
+        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+        await MetadataService().save_document_metadata(_user(), metadata)
+    service = TabularService()
+    full = await service.describe_documents(_user(), uids)
+    alias = full[1].tables[0].query_alias
+    selected = await service.describe_documents(_user(), uids, table_names=[alias])
+    assert [doc.document_uid for doc in selected] == uids
+    assert selected[0].tables == []
+    assert [table.query_alias for table in selected[1].tables] == [alias]
+    monkeypatch.setattr(service, "_resolve_dataset_location", lambda *_: pytest.fail("Invalid labels must not read table data"))
+    with pytest.raises(ValueError, match="Ambiguous table name"):
+        await service.describe_documents(_user(), uids, table_names=["Ventes"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("join_clients", [False, True])
+async def test_query_column_diagnostic_uses_only_already_mounted_tables(tmp_path, metadata_store, monkeypatch, join_clients):
+    """A binder failure cannot load another table just to suggest its columns."""
+    from knowledge_flow_backend.features.tabular.service import TabularQueryError
+
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="diag-orders", file_name="Commandes.csv", content="commande_id,client_id,devise\no1,c1,EUR\n")
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="diag-clients", file_name="Clients.csv", content="client_id,region,secret_internal_label\nc1,France,private\n")
+    service = TabularService()
+    aliases = {dataset.document_uid: dataset.query_alias for dataset in await service.list_datasets(_user())}
+    orders, clients = aliases["diag-orders"], aliases["diag-clients"]
+    mounted = []
+    locations = []
+    mount, resolve_location = service._mount_datasets, service._resolve_dataset_location
+
+    def record_mount(*, connection, datasets, handle):
+        mounted.extend(dataset.query_alias for dataset in datasets)
+        return mount(connection=connection, datasets=datasets, handle=handle)
+
+    def record_location(key):
+        locations.append(key)
+        return resolve_location(key)
+
+    monkeypatch.setattr(service, "_mount_datasets", record_mount)
+    monkeypatch.setattr(service, "_resolve_dataset_location", record_location)
+    sql = f"SELECT c.region FROM {orders} c"
+    if join_clients:
+        sql += f" JOIN {clients} cl ON c.client_id=cl.client_id"
+    with pytest.raises(TabularQueryError) as failure:
+        await service.query_read(_user(), request=TabularQueryRequest(sql=sql))
+
+    message = str(failure.value)
+    assert f'Column "region" does not exist in "{orders}"' in message
+    assert len(locations) == (2 if join_clients else 1)
+    assert set(mounted) == ({orders, clients} if join_clients else {orders})
+    assert "secret_internal_label" not in message
+    if join_clients:
+        assert '"cl"."region"' in message
+    else:
+        assert clients not in message
+        assert '"c"."commande_id"' in message
+    assert failure.value.__cause__ is None
+    assert failure.value.__suppress_context__ is True
+
+
+@pytest.mark.asyncio
+async def test_filtered_description_keeps_document_catalog_admission_bound(monkeypatch):
+    service = TabularService()
+    service.tabular_config = service.tabular_config.model_copy(update={"query": service.tabular_config.query.model_copy(update={"max_selected_datasets": 2})})
+    monkeypatch.setattr(service, "_resolve_authorized_datasets", lambda *_args, **_kwargs: pytest.fail("Reject excess catalogs before resolving or reading them"))
+    with pytest.raises(ValueError, match="3 documents, above the limit of 2"):
+        await service.describe_documents(_user(), ["doc-a", "doc-b", "doc-c"], table_names=["selected-table"])
+
+
+@pytest.mark.asyncio
+async def test_compact_descriptions_and_queries_share_concurrent_execution_budget(tmp_path, metadata_store):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="doc-concurrent", file_name="concurrent.csv", content="city,amount\nParis,10\nLyon,20\n")
+    service = TabularService()
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    jobs = []
+    for _ in range(3):
+        jobs.append(service.describe_documents(_user(), ["doc-concurrent"], table_names=[alias]))
+        jobs.append(service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT COUNT(*) AS n FROM {alias}", dataset_uids=["doc-concurrent"])))
+    results = await asyncio.gather(*jobs)
+    for index, result in enumerate(results):
+        if index % 2:
+            assert result.rows == [{"n": 2}]
+        else:
+            assert result[0].tables[0].columns[0].categorical_values == ["Lyon", "Paris"]
+            assert result[0].tables[0].columns[1].max_value == 20

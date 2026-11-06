@@ -14,70 +14,55 @@
  * limitations under the License.
  */
 
-/* Outer block — same border/radius treatment as CodeBlock */
-.block {
+.preview {
   margin: var(--spacing-s) 0;
-  border: 0.5px solid var(--outline-muted);
-  border-radius: var(--radius-s);
-  overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
-/* Header: language label + copy button — mirrors CodeBlock.module.css */
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 0.5px solid var(--outline-muted);
-  background: var(--surface-container-high);
-  padding: var(--spacing-2xs) var(--spacing-s);
-  min-height: 32px;
-}
-
-.lang {
-  color: var(--on-surface-muted);
-  font-size: 0.6875rem;
-  font-family: monospace;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
+.toolbar,
 .actions {
   display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-2xs);
-}
-
-.copy {
-  display: flex;
-  align-items: center;
-  transition:
-    background 120ms,
-    color 120ms;
-  cursor: pointer;
-  border: 0.5px solid var(--outline-muted);
-  border-radius: var(--radius-xs);
-  background: transparent;
-  padding: 2px var(--spacing-xs);
-  color: var(--on-surface-retreat);
-  font-size: 0.6875rem;
-}
-
-.copy:hover {
-  background: var(--state-on-surface-hover);
   color: var(--on-surface);
 }
 
-/* Diagram body — centered, scrollable on overflow */
+.toolbar {
+  margin-bottom: var(--spacing-2xs);
+}
+
+.downloadError {
+  color: var(--error);
+  font: var(--font-body-small);
+}
+
+.export {
+  position: fixed;
+  top: 0;
+  left: -100000px;
+  visibility: hidden;
+  color: var(--on-surface);
+}
+
+.title {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
 .body {
-  display: flex;
-  justify-content: center;
-  background: var(--surface-container);
-  padding: var(--spacing-m);
-  overflow-x: auto;
+  color: var(--on-surface);
+}
+
+.diagram {
+  width: 100%;
+  min-width: 0;
 }
 
 .diagram :global(svg) {
   display: block;
+  margin: auto;
   max-width: 100%;
   height: auto;
 }
@@ -88,11 +73,11 @@
   font-style: italic;
 }
 
-/* Error state */
 .error {
   background: var(--error-container);
   padding: var(--spacing-s) var(--spacing-m);
   width: 100%;
+  color: var(--on-error-container);
 }
 
 .errorLabel {
@@ -105,18 +90,18 @@
 .errorDetail {
   margin: 0;
   color: var(--on-error-container);
-  font-size: 0.75rem;
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font: var(--font-body-small);
+  font-family: var(--font-family-mono);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-/* Zoom modal — enlarged view of the rendered diagram */
 .zoomOverlay {
   display: flex;
   flex: 1;
   justify-content: center;
   width: 100%;
+  min-height: 0;
 }
 
 .zoomShell {
@@ -124,8 +109,8 @@
   flex: 1;
   flex-direction: column;
   margin: 0 auto;
-  padding: var(--spacing-l);
-  width: min(1400px, 100%);
+  padding: var(--spacing-m);
+  width: 100%;
   min-height: 0;
 }
 
@@ -140,19 +125,27 @@
 .zoomBody {
   display: flex;
   flex: 1;
-  justify-content: center;
-  align-items: center;
-  border: 0.5px solid var(--outline-muted);
-  border-radius: var(--radius-s);
-  background: var(--surface-container);
-  padding: var(--spacing-l);
+  flex-direction: column;
+  padding: var(--spacing-xs);
   min-height: 0;
   overflow: auto;
+  color: var(--on-surface);
 }
 
 .zoomBody :global(svg) {
-  width: 100%;
+  display: block;
+  flex: none;
+  margin: auto;
   max-width: none;
   height: auto;
-  max-height: 100%;
+}
+
+/* Chat diagrams can use the surrounding column without widening the prose. */
+@container chat-messages (min-width: 0px) {
+  :global([data-copyable-content]) > .preview {
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(calc(100cqw - 2 * var(--spacing-2xl)), calc(1.4 * var(--content-prose-max-width)));
+  }
 }

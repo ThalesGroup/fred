@@ -123,7 +123,7 @@ export async function buildIframeSdk() {
   assertIframeSdkBuildSourceGraph(evidence);
   const producerRoot = path.dirname(packageRoot);
   await run(
-    process.execPath,
+    "node",
     [
       path.join(producerRoot, "node_modules/typescript/bin/tsc"),
       "-p",

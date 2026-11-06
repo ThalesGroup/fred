@@ -57,7 +57,12 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
     SidePanelSpec,
 )
-from fred_sdk.contracts.context import ToolInvocationResult, UiPart
+from fred_sdk.contracts.context import (
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationResult,
+    UiPart,
+)
 from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
@@ -160,6 +165,15 @@ async def save_writable_document(
             ToolInvocationResult(tool_ref=tool_ref, is_error=True),
         )
 
+    removed_nul = [
+        f"{name}: {count}"
+        for name, value in (("title", title), ("content_markdown", content_markdown))
+        if (count := value.count("\x00"))
+    ]
+    if removed_nul:
+        title = title.replace("\x00", "")
+        content_markdown = content_markdown.replace("\x00", "")
+
     store = get_writable_document_store()
     doc_id = document_id
     if doc_id is None:
@@ -204,11 +218,17 @@ async def save_writable_document(
         title[:80],
         len(content_markdown),
     )
+    message = f"Document '{title}' saved (id={doc_id})."
+    blocks: tuple[ToolContentBlock, ...] = ()
+    if removed_nul:
+        message += " Removed U+0000 NUL characters (" + "; ".join(removed_nul) + ")."
+        blocks = (ToolContentBlock(kind=ToolContentKind.TEXT, text=message),)
     artifact = ToolInvocationResult(
         tool_ref=tool_ref,
+        blocks=blocks,
         ui_parts=(cast(UiPart, part),),
     )
-    return f"Document '{title}' saved (id={doc_id}).", artifact
+    return message, artifact
 
 
 class _WritableDocumentMiddleware(AgentMiddleware):
@@ -345,7 +365,7 @@ class WritableDocumentCapability(AgentCapability[EmptyModel, EmptyModel, EmptyMo
 
     manifest = CapabilityManifest(
         id=WRITABLE_DOCUMENT_CAPABILITY_ID,
-        version="0.1.0",
+        version="0.1.1",
         name="capability.writable_document.name",
         description="capability.writable_document.description",
         icon="edit_note",

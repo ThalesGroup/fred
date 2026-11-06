@@ -34,6 +34,7 @@ import {
   useUnpublishAgentMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import { useTeamAgentInstances } from "@hooks/useTeamAgentInstances.ts";
 import { type AgentFormPayload, default as AgentFormModal } from "./AgentFormModal/AgentFormModal.tsx";
 import CopyAgentDialog from "./CopyAgentDialog/CopyAgentDialog.tsx";
 import { duplicateCopyArgs, duplicateWarning } from "./duplicateAgent.ts";
@@ -59,15 +60,16 @@ import {
   normalizeAgentName,
   takenAgentNames,
 } from "./agentNames.ts";
-import { getStoredAgentSort, sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort.ts";
+import { sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort.ts";
+import { useCurrentUserPreference } from "../../../../app/userPreferences.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
+import TeamDescriptionReminder from "@shared/organisms/TeamDescriptionReminder/TeamDescriptionReminder.tsx";
 import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   type CreateAgentInstanceRequest,
   type ManagedAgentInstanceSummary,
   type UpdateAgentInstanceRequest,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
   usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
@@ -75,6 +77,7 @@ import {
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useMediaQuery } from "@core/hooks/useMediaQuery";
 import styles from "./TeamAgentsPage.module.css";
 
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
@@ -140,6 +143,8 @@ export default function TeamAgentsPage() {
   const { t } = useTranslation();
   const { showError, showSuccess, showWarn } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
+  // Search ready on arrival with a mouse or trackpad; never on touch, where it would pop the keyboard.
+  const finePointer = useMediaQuery("(pointer: fine)");
   const { activeTeam } = useFrontendBootstrap();
   const { agentsNicknamePlural, agentsNicknameSingular } = useFrontendProperties();
 
@@ -160,9 +165,8 @@ export default function TeamAgentsPage() {
     cause: RepublishProposalCause;
   } | null>(null);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<AgentSortValue>(getStoredAgentSort);
+  const sort = useCurrentUserPreference("agent_sort", "name") as AgentSortValue;
   const changeSort = (next: AgentSortValue) => {
-    setSort(next);
     storeAgentSort(next);
   };
 
@@ -172,6 +176,7 @@ export default function TeamAgentsPage() {
     canUpdateAgents: canManageAgents,
     canPublishMarketplaceAgents: canPublish,
     canUnpublishMarketplaceAgents: canUnpublish,
+    canUpdateInfo,
   } = useTeamCapabilities(team);
 
   const {
@@ -179,10 +184,7 @@ export default function TeamAgentsPage() {
     isLoading: isLoadingInstances,
     isError: isInstancesError,
     refetch: refetchInstances,
-  } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
-    { teamId: teamId || "" },
-    { skip: !teamId },
-  );
+  } = useTeamAgentInstances(teamId);
 
   const {
     data: availableTemplates = [],
@@ -598,48 +600,48 @@ export default function TeamAgentsPage() {
 
   return (
     <div className={styles.teamAgentContainer}>
+      {team?.description_is_placeholder && canUpdateInfo && <TeamDescriptionReminder team={team} withSettingsLink />}
       {hasAgents && !templatesUnavailable && (
-        <div className={styles.title}>
-          <PageHeader
-            title={isPersonalTeam ? t("rework.teams.agents.titlePersonal") : t("rework.teams.agents.title")}
-            actions={
-              <>
-                {canManageAgents && (
-                  <Button
-                    color={"primary"}
-                    variant={"filled"}
-                    size={"small"}
-                    icon={{ category: "outlined", type: "add" }}
-                    onClick={() => setIsEnrollOpen(true)}
-                  >
-                    {t("rework.teams.agents.create", { agentsNicknameSingular })}
-                  </Button>
-                )}
-                <div className={styles.searchBar}>
-                  <SearchInput
-                    value={search}
-                    onChange={setSearch}
-                    placeholder={t("rework.teams.agents.searchPlaceholder", {
-                      agentsNicknamePlural: agentsNicknamePlural.toLowerCase(),
-                    })}
-                    clearAriaLabel={t("rework.teams.agents.clearSearch")}
-                    size="xs"
-                  />
-                </div>
-                <div className={styles.sortSelect}>
-                  <Select<AgentSortValue>
-                    size="xs"
-                    compact
-                    options={sortOptions}
-                    value={sort}
-                    onChange={changeSort}
-                    ariaLabel={t("rework.teams.agents.sortLabel")}
-                  />
-                </div>
-              </>
-            }
-          />
-        </div>
+        <PageHeader
+          title={isPersonalTeam ? t("rework.teams.agents.titlePersonal") : t("rework.teams.agents.title")}
+          actions={
+            <>
+              {canManageAgents && (
+                <Button
+                  color={"primary"}
+                  variant={"filled"}
+                  size={"small"}
+                  icon={{ category: "outlined", type: "add" }}
+                  onClick={() => setIsEnrollOpen(true)}
+                >
+                  {t("rework.teams.agents.create", { agentsNicknameSingular })}
+                </Button>
+              )}
+              <div className={styles.searchBar}>
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  autoFocus={finePointer}
+                  placeholder={t("rework.teams.agents.searchPlaceholder", {
+                    agentsNicknamePlural: agentsNicknamePlural.toLowerCase(),
+                  })}
+                  clearAriaLabel={t("rework.teams.agents.clearSearch")}
+                  size="xs"
+                />
+              </div>
+              <div className={styles.sortSelect}>
+                <Select<AgentSortValue>
+                  size="xs"
+                  compact
+                  options={sortOptions}
+                  value={sort}
+                  onChange={changeSort}
+                  ariaLabel={t("rework.teams.agents.sortLabel")}
+                />
+              </div>
+            </>
+          }
+        />
       )}
 
       {isLoadingInstances ? (

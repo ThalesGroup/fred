@@ -9,14 +9,16 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { enhancedControlPlaneApi as api } from "../slices/controlPlane/controlPlaneApiEnhancements";
 import type { FrontendUiThemes } from "../slices/controlPlane/controlPlaneOpenApi";
 import { localStorageKey } from "../hooks/useLocalStorageState";
+import { setCurrentUserPreferences } from "./userPreferences";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
-import { PLATFORM_UI_THEMES_CACHE_KEY, setCustomUiThemes, UI_THEME_STORAGE_KEY } from "./uiThemes";
+import { PLATFORM_UI_THEMES_CACHE_KEY, setCustomUiThemes } from "./uiThemes";
 vi.mock("../common/config.tsx", () => ({
   getPlatformUiThemes: () => ({ default_theme: "pebble", hidden_themes: [] }),
 }));
 vi.mock("../security/KeycloakService", () => ({
   KeyCloakService: { GetToken: () => "test", ensureFreshToken: async () => true, CallLogout: () => {} },
 }));
+const UI_THEME_STORAGE_KEY = "ApplicationContextProvider.uiTheme";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const makeStore = () =>
   configureStore({ reducer: { [api.reducerPath]: api.reducer }, middleware: (g) => g().concat(api.middleware) });
@@ -33,6 +35,7 @@ beforeEach(() => {
   publicRequests = 0;
   window.localStorage.clear();
   window.localStorage.setItem(localStorageKey(UI_THEME_STORAGE_KEY), JSON.stringify("acme"));
+  setCurrentUserPreferences({ ui_theme_id: "acme" });
   setCustomUiThemes([{ id: "acme", label: "Acme", base: "cobalt" }]);
   vi.stubGlobal(
     "fetch",
@@ -59,6 +62,7 @@ afterEach(() => {
   setCustomUiThemes([]);
   window.localStorage.clear();
   vi.unstubAllGlobals();
+  setCurrentUserPreferences({});
 });
 async function mount() {
   function Probe() {

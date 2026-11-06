@@ -4,14 +4,18 @@ ARG PYTHON_VERSION=3.12.15
 # PYTHON BASE: Ubuntu LTS with CPython from uv's standalone builds, so the
 # interpreter version is pinned here rather than following the distribution.
 # -----------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.5 AS uv
 
 FROM mirror.gcr.io/ubuntu:24.04 AS python-install
 ARG PYTHON_VERSION
 COPY --from=uv /uv /usr/local/bin/uv
-RUN apt-get update && \
+# Behind TLS inspection (e.g. Zscaler), `make docker-build` lends the host's CA
+# bundle as the `ca-bundle` secret; without it, uv keeps its own roots.
+RUN --mount=type=secret,id=ca-bundle \
+    apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
     UV_PYTHON_INSTALL_DIR=/opt/python uv python install ${PYTHON_VERSION}
 
 FROM mirror.gcr.io/ubuntu:24.04 AS python-base
@@ -68,7 +72,9 @@ COPY libs/capabilities/fred-capability-document-access/pyproject.toml /workspace
 COPY libs/capabilities/fred-capability-mcp/pyproject.toml /workspace/libs/capabilities/fred-capability-mcp/
 COPY libs/capabilities/fred-capability-web-research/pyproject.toml /workspace/libs/capabilities/fred-capability-web-research/
 
-RUN make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-project --no-install-local"
+RUN --mount=type=secret,id=ca-bundle \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
+    make prod VENV=/app/venv TARGET=/app/target UV_SYNC_ARGS="--no-install-project --no-install-local"
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE
@@ -79,11 +85,24 @@ ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-# The PPT-filler preview needs Impress at runtime. The headless package keeps
-# PDF export without the full office suite, GUI/media stack or system Python.
+# Runtime requirements for the PPT capabilities are documented in the package
+# README. Each agent-pod image that installs them needs equivalent packages.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libreoffice-impress-nogui && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        libreoffice-impress-nogui fontconfig \
+        fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35 && \
+    rm -rf /var/lib/apt/lists/* && \
+    for package in fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35; do \
+        test -s "/usr/share/doc/${package}/copyright" || exit 1; \
+    done && \
+    grep -q '^License: AGPL-3 with Font exception$' /usr/share/doc/fonts-urw-base35/copyright && \
+    printf '%s\n' \
+        '<?xml version="1.0"?>' \
+        '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
+        '<fontconfig>' \
+        '  <alias binding="same"><family>Century Gothic</family><accept><family>URW Gothic</family></accept></alias>' \
+        '</fontconfig>' > /etc/fonts/conf.d/60-century-gothic.conf && \
+    fc-cache -f
 
 RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
     useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
@@ -93,6 +112,8 @@ COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
 WORKDIR /app
+COPY apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md /app/THIRD_PARTY_FONT_NOTICES.md
+LABEL org.opencontainers.image.documentation="https://github.com/ThalesGroup/fred/blob/swift/apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md"
 
 # The local packages, installed in editable mode from their source roots under
 # the same `/workspace/...` paths, which the image keeps. A change there only
@@ -113,8 +134,10 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-documents 
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-web-research /workspace/libs/capabilities/fred-capability-web-research
-RUN cd /workspace/apps/fred-agents && \
-    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+RUN --mount=type=secret,id=ca-bundle \
+    cd /workspace/apps/fred-agents && \
+    if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
+    UV_PROJECT_ENVIRONMENT=/app/venv SSL_CERT_FILE=${SSL_CERT_FILE:-/etc/ssl/certs/ca-certificates.crt} \
     /app/venv/bin/uv sync --locked --no-default-groups --no-cache
 
 # pip is only needed for the builder bootstrap; remove it and its vendored

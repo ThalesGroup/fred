@@ -1,0 +1,28 @@
+## 1. Rendering integration
+
+- [x] 1.1 Add beautiful-mermaid and declare directly imported sanitization dependencies in the frontend manifests; verify reproducible installation and on-demand imports in the Vite production build.
+- [x] 1.2 Add a co-located rendering adapter and replace MermaidBlock's normal rendering path, retaining raw-first compatibility and the existing repair fallback; verify actual preferred-renderer fixtures for six diagram families and compatibility tests for semicolon headers, pie/Gantt, repaired labels and invalid input.
+- [x] 1.3 Isolate SVG styles and view-specific IDs/references, remove external font imports and sanitize untrusted output; verify safe labels, preserved geometry and simultaneous inline/enlarged diagrams in browser-faithful DOM tests.
+
+## 2. Theme coherence and existing interactions
+
+- [x] 2.1 Bind diagram colors/font to the existing Fred tokens and refresh compatibility renders when theme or mode changes; verify token mapping and mounted-preview updates without library palette presets.
+- [x] 2.2 Preserve source copy, FullPageModal enlargement, errors, cancellation and completed-fence streaming behavior; verify component tests and the affected Markdown/clipboard regression suites.
+- [x] 2.3 Validate representative diagrams on existing Markdown surfaces in Pebble, Cobalt and Cloud, both modes, a deployment token override and a narrow viewport; record observable results and any unverified cases in this task file or the PR.
+
+## 3. Verification and delivery
+
+- [x] 3.1 Update the existing COMPONENT-UX.md rendering entry and add an English impact-none migration note; verify both describe the resulting behavior and run the migration-note check.
+- [x] 3.2 Run the frontend default tests, production build and root make code-quality after the related changes; record exact outcomes and attributable pre-existing failures.
+- [x] 3.3 Apply audit-branch against the actual swift base and obtain an independent read-only review of the complete implementation; record reviewed base/head, consumer coverage, findings/dispositions and exclusions in the PR.
+- [x] 3.4 Reconcile this change with verification, sync/archive it once all tasks are complete, commit reviewable blocks, then push and open a draft PR linked to #3252; verify strict OpenSpec validation and a clean scoped diff before delivery.
+
+## Verification evidence
+
+- Reproducible installation: `npm ci --ignore-scripts --no-audit --no-fund` installed 999 packages. Production compilation succeeds with dynamically imported engines; the Gantt path additionally required four Day.js plugin entries in Vite's existing dependency optimization list.
+- Browser: actual shared MarkdownRenderer and MermaidBlock rendered nine representative diagrams without errors across Pebble, Cobalt and Cloud in both modes. Labels/fonts matched effective theme tokens and surrounding text kept its own font. A deployment override reached both engines. At 360 px, diagrams kept legible natural widths with horizontal scrolling; enlargement, Escape and focus return worked. Additional browser regressions preserved late labels, combined ER keys and local markers in both views. The temporary validation page was removed.
+- Browser limitations: authenticated chat/Help Center routes were traced through the shared Markdown renderer but not exercised end to end. Native clipboard contents were not available through the automation clipboard bridge; source-copy behavior is covered by component and clipboard utility tests.
+- Independent read-only review: base `39c13c8f521fe7632ce6beec3cef4d09c5ea91c2`, planning HEAD `3c4d175ebcbb1c4c14ba448e584b322c0915c157` plus the full implementation worktree. Covered source, tests, dependencies/configuration, locales, documentation/specs, Markdown/streaming/clipboard consumers and modal/theme ownership. Excluded the temporary validation page only. Four findings (late labels, ER cardinalities, combined keys and absolute marker references) were fixed; follow-up also checked late sequence participants and sanitized HTML labels. No remaining finding in the corrective delta; reviewer ran 32 renderer/SVG tests and official-renderer/adversarial HTML probes. Independent geometry was mocked; browser verification was performed by the author.
+- Final frontend verification: `VITEST_MAX_WORKERS=4 npm test` passed (362 files, 4,476 tests; one file/eight tests skipped by the existing suite), including application proxy/smoke and theme overlay checks. `npm run build` passed TypeScript and production bundling; Vite emits its large-chunk warning. `make migration-check` validated one new declaration. Change and affected theme spec pass strict OpenSpec validation; normal validation passes all 34 main specs. Global strict validation flags the unchanged `frontend-surface-scale` TBD Purpose already present at the swift base; no unrelated spec was changed.
+- Root quality gate: `PATH="$PWD/libs/fred-pod/.venv/bin:$PATH" make code-quality` passed all 17 modules, including migration tooling tests, Python checks, the frontend library and final frontend TypeScript/Prettier/ESLint checks. The PATH prefix uses the repository's installed uv because it is absent from the default shell PATH. Implementation is committed as `10c2c8d17`; no source changes followed verification and review.
+- Delivery: dedicated branch `codex/mermaid-themed-preview` starts at the reviewed swift base. Planning and implementation are separate commits. Draft PR [#3256](https://github.com/ThalesGroup/fred/pull/3256) targets swift and links #3252; the specification sync/archive is committed as the final documentation close-out.

@@ -23,7 +23,7 @@ import { ThoughtTrace } from "./ThoughtTrace";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => (key === "rework.chatTrace.toolLabels.readQuery" ? "Reading query" : key),
+    t: (key: string) => (key === "rework.chatTrace.toolLabels.mcp.tabular.readQuery" ? "Reading data" : key),
   }),
 }));
 
@@ -96,9 +96,9 @@ describe("ThoughtTrace", () => {
     const html = render(TRACE, false);
     // Only the two tool steps are step rows; the reasoning row is a <button>.
     expect(html.match(/role="button"/g)).toHaveLength(2);
-    // Its marker is the settings glyph, and it carries no phase label: the row
+    // Its marker is the neurology glyph, and it carries no phase label: the row
     // shows the reasoning itself, not a name for the kind of reasoning it is.
-    expect(html).toContain('data-icon="settings"');
+    expect(html).toContain('data-icon="neurology"');
     expect(html).not.toContain("rework.chatTrace.phase.");
   });
 
@@ -191,6 +191,20 @@ describe("ThoughtTrace", () => {
     expect(html).not.toContain("rework.chatTrace.phase.planning");
     expect(html).not.toContain("258ms");
     expect(html).toContain("rework.chatTrace.summaryReasoning");
+  });
+
+  it("exposes a partial skill read in both its visible and accessible labels", () => {
+    const load = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: {
+        extras: { skill_load: { name: "graph", origin: "agent", load_id: "partial", partial: true } },
+      },
+    });
+    const html = render([load], false);
+    expect(html).toContain(">chatbot.skills.partiallyLoaded<");
+    expect(html).toContain('aria-label="1. chatbot.skills.partiallyLoaded:');
+    expect(html).not.toContain("chatbot.skills.loaded");
   });
 
   // A HITL-gated tool call streams as a `tool_call` with no result, exactly

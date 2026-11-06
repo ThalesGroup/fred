@@ -203,3 +203,76 @@ Fred's packaged MCP catalog and Knowledge Flow deployment SHALL NOT expose the l
 #### Scenario: Non-MCP consumers continue
 - **WHEN** an agent lists indexed documents through `document_access` or PPT Filler reads its template and publishes a filled deck through the authenticated HTTP filesystem API
 - **THEN** those operations continue to work without either retired MCP server or the corpus-manager facade
+
+### Requirement: MCP v2 interoperability
+
+Fred SHALL discover and call tools on MCP v2-compatible remote servers through its implemented HTTP and stdio transports. Knowledge Flow SHALL expose its enabled MCP tool servers to MCP v2-compatible clients at their existing paths without requiring clients to remain on the MCP v1 Python SDK.
+
+#### Scenario: Agent calls a remote v2 tool
+- **WHEN** an agent loads an enabled `streamable_http` or `stdio` MCP server compatible with MCP v2 and calls one of its tools
+- **THEN** Fred lists and invokes that tool and returns its result through the existing agent tool path
+
+#### Scenario: Knowledge Flow serves a v2 client
+- **WHEN** an authorized MCP v2 client lists and invokes an enabled Knowledge Flow tool server
+- **THEN** it sees the same selected tools, names, input schemas, and curated results at the existing mount path
+
+### Requirement: MCP v2 authorization continuity
+
+MCP v2 tool discovery and invocation MUST preserve Fred's current person-token and delegated-authority boundaries. Credential refresh and authority refusal SHALL be evaluated for each tool call, and sensitive credentials and grants MUST NOT enter tool arguments, model transcripts, or logs.
+
+#### Scenario: Person token changes after discovery
+- **WHEN** an agent's own-identity token changes between listing and invoking a remote MCP tool
+- **THEN** the invocation uses the current token and an expired token triggers at most one refresh retry
+
+#### Scenario: Delegated authority ends
+- **WHEN** a delegated run ends or its Knowledge Flow receiver refuses the grant
+- **THEN** Fred stops the tool call with its existing authority-loss behavior and does not retry under a different identity
+
+#### Scenario: Multi-pod Knowledge Flow
+- **WHEN** consecutive MCP v2 requests for one Knowledge Flow tool are routed to different service pods
+- **THEN** the call succeeds without a pod-local session requirement, subject to the same authorization checks
+
+### Requirement: Caught MCP failures provide bounded non-empty feedback
+
+The runtime SHALL provide non-empty Fred-owned feedback for every caught MCP failure. Recognized failures SHALL explain a safe cause and appropriate next action to the model. Unknown failures SHALL use a fixed generic message. Only the existing curated `read_query` HTTP 400 diagnostic SHALL expose dynamic SQL error detail. Provider response bodies, exception representations, credentials and private URLs MUST NOT become generic user-facing error text. Delegated authority refusals and cancellation SHALL retain their existing stopping behavior.
+
+#### Scenario: Authentication failure before a tabular invocation
+- **WHEN** an attachment-inventory request fails with an expired-token HTTP 401 during preparation of a tabular call
+- **THEN** the caught failure contains a non-empty authentication explanation and reconnection guidance without exposing the credential or request URL
+- **AND** it does not report an invalid SQL expression or a completed query
+
+#### Scenario: Known failure or unknown exception
+- **WHEN** a caught MCP error has a recognized unavailable-resource, invalid-argument, overload or timeout category
+- **THEN** its result contains a bounded explanation appropriate to that category
+- **WHEN** no safe category is available or the error artifact has no usable blocks
+- **THEN** the result contains the fixed generic failure message instead of an empty diagnostic
+
+#### Scenario: Curated SQL detail and authority loss
+- **WHEN** `read_query` returns its supported HTTP 400 SQL diagnostic
+- **THEN** the model and user-facing result retain the existing redacted diagnostic
+- **WHEN** delegated authority is lost or the operation is cancelled
+- **THEN** the existing stopping behavior is preserved rather than converted into a retryable tool result
+
+### Requirement: Failed tool details explain the action and recorded safe cause
+
+The existing chat trace drawer SHALL show the failed action, its recorded business arguments and the error preserved by the trusted boundary. It SHALL remain an explanatory view without a next-step section or recovery advice. For supported tabular failures it SHALL preserve the submitted document selectors, SQL, keyword and result-limit arguments where applicable, including invalid values that explain the failed invocation. It SHALL use the same interpretation for live and reloaded history, support French and English labels, and retain failure status without claiming zero returned rows. Argument display MUST exclude credentials, injected authentication/scope internals and unsupported arbitrary provider fields.
+
+#### Scenario: Supported failure in live or reloaded history
+- **WHEN** a user opens a failed tabular tool step with a recognized Fred-owned diagnostic
+- **THEN** the drawer displays the action, recorded business arguments and safe recorded error without a next-step section or recovery advice
+- **AND** reopening the conversation presents the same diagnostic and failure status
+
+#### Scenario: Failed invocation arguments remain inspectable
+- **WHEN** a tabular call fails after submitting a document selector, SQL expression, keyword or result limit
+- **THEN** the drawer displays those recorded business arguments without replacing incorrect values with inferred corrections
+- **AND** an available authorized document name can supplement the argument block without hiding the identifier actually submitted
+
+#### Scenario: Agent recovery guidance stays outside the explanatory view
+- **WHEN** a recognized error includes recovery guidance for the agent
+- **THEN** the drawer displays its diagnostic portion without a separate next-step section or generated recovery advice
+- **AND** the submitted arguments and safe error remain available
+
+#### Scenario: Empty historical or untrusted diagnostic
+- **WHEN** a failed result has an empty diagnostic, unrecognized provider text or a malformed diagnostic message
+- **THEN** the drawer shows a localized fallback indicating that no further safe diagnostic was recorded
+- **AND** no arbitrary response text, credential or private URL is revealed

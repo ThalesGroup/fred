@@ -37,6 +37,9 @@ from test_capability_selection_1974 import (
 )
 from test_main import _PERSONAL_TEAM_ID, _make_record
 
+# Offline: copies must not call a pod for capability readiness.
+pytestmark = pytest.mark.usefixtures("pods_report_ready")
+
 _SOURCE = "team-a"
 _ALL = {RAGS_SAMPLE_ECHO_TEMPLATE_ID, "demo_echo", "probe_echo"}
 
@@ -110,9 +113,13 @@ def _wire(
         "control_plane_backend.product.api.require_team_access", _require_team_access
     )
     pod_calls: list[tuple[str, CapabilityConfigCopyRequest]] = []
+    routing_seen: list[dict[str, str] | None] = []
 
-    async def _fake_copy(*, base_url, capability_id, request, authorization):
+    async def _fake_copy(
+        *, base_url, capability_id, request, authorization, routing_params=None
+    ):
         pod_calls.append((capability_id, request))
+        routing_seen.append(routing_params)
         if request.target_team_id == "team-crash":
             raise RuntimeError("database unavailable")
         if capability_id in rejected:
@@ -126,6 +133,7 @@ def _wire(
         }
 
     monkeypatch.setattr(agent_copy, "_copy_capability_config_via_pod", _fake_copy)
+    app.state.copy_routing_seen = routing_seen
     audits: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
         agent_copy,
@@ -557,7 +565,7 @@ async def test_unsaved_selection_copies_the_template_defaults(
         "control_plane_backend.product.api.require_team_access", _require_team_access
     )
 
-    async def _fake_copy(*, base_url, capability_id, request, authorization):
+    async def _fake_copy(*, base_url, capability_id, request, authorization, **_):
         return {"schema_version": "0.1.0", "config": {}}
 
     monkeypatch.setattr(agent_copy, "_copy_capability_config_via_pod", _fake_copy)
@@ -595,7 +603,7 @@ async def test_graph_agent_saved_with_an_empty_selection_copies_its_included_def
     )
     copied: list[str] = []
 
-    async def _fake_copy(*, base_url, capability_id, request, authorization):
+    async def _fake_copy(*, base_url, capability_id, request, authorization, **_):
         copied.append(capability_id)
         return {"schema_version": "0.1.0", "config": {}}
 
@@ -607,3 +615,34 @@ async def test_graph_agent_saved_with_an_empty_selection_copies_its_included_def
         "demo_echo"
     ]
     assert copied == ["demo_echo"]
+
+
+@pytest.mark.asyncio
+async def test_copy_is_pending_while_its_capability_prepares_in_the_destination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.agent_instances.suspension import ReadinessVerdict
+    from control_plane_backend.product import service
+
+    app, store, _, _ = _wire(
+        monkeypatch,
+        {_SOURCE: _ALL, "team-b": {RAGS_SAMPLE_ECHO_TEMPLATE_ID, "demo_echo"}},
+    )
+    seen: list[str | None] = []
+
+    async def _pending(*, authorization, **_: Any) -> ReadinessVerdict:
+        seen.append(authorization)
+        return ReadinessVerdict(ready=False, capability_ids=("demo_echo",))
+
+    monkeypatch.setattr(service, "_fetch_capability_readiness", _pending)
+
+    resp = await _post_copy(app, {"target_team_ids": ["team-b"]})
+
+    assert resp.status_code == 200
+    [result] = resp.json()["results"]
+    assert result["agent"]["suspension_reason"] == "capability_pending"
+    copy = next(r for r in store._records if r.team_id == "team-b")
+    assert copy.suspension_reason == "capability_pending"
+    assert seen == ["Bearer user-token"]
+    # The destination's routing travels with the copy, as on a save.
+    assert app.state.copy_routing_seen == [{"template_agent_id": copy.source_agent_id}]

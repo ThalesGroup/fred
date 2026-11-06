@@ -353,3 +353,84 @@ async def test_uids_by_name_uses_the_document_name_index(
         plan = [row[0] for row in result]
 
     assert any("idx_metadata_document_name" in line for line in plan), plan
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tag_ids", "expected_uids", "expected_labels"),
+    [
+        (
+            None,
+            ["doc-a", "doc-b", "doc-c", "doc-d", "doc-e"],
+            ["DAT", "HIDDEN", "MEX", "ORPHAN", "OTHER"],
+        ),
+        (set(), [], []),
+        ({"folder-a"}, ["doc-a", "doc-c"], ["DAT", "MEX", "OTHER"]),
+        ({"folder-b"}, ["doc-b", "doc-c"], ["DAT", "MEX"]),
+        (
+            {"folder-a", "folder-b"},
+            ["doc-a", "doc-b", "doc-c"],
+            ["DAT", "MEX", "OTHER"],
+        ),
+        ({"absent"}, [], []),
+    ],
+    ids=["unscoped", "empty", "folder-a", "folder-b", "both-folders", "absent"],
+)
+async def test_label_queries_scope_and_page_on_postgres(
+    pg_store: PostgresDocumentMetadataStore,
+    tag_ids: set[str] | None,
+    expected_uids: list[str],
+    expected_labels: list[str],
+) -> None:
+    # Reverse insertion order and shared membership challenge ordering and
+    # deduplication independently of label OR semantics.
+    fixtures = [
+        ("doc-f", ["folder-a"], ["OTHER"]),
+        ("doc-e", [], ["DAT", "ORPHAN"]),
+        ("doc-d", ["folder-other"], ["DAT", "HIDDEN"]),
+        ("doc-c", ["folder-a", "folder-b"], ["DAT", "MEX"]),
+        ("doc-b", ["folder-b"], ["MEX"]),
+        ("doc-a", ["folder-a"], ["DAT"]),
+    ]
+    for uid, folders, labels in fixtures:
+        await pg_store.save_metadata(_named(uid, f"{uid}.pdf", folders))
+        for label in labels:
+            await pg_store.add_label(uid, label)
+
+    matches = await pg_store.get_document_uids_with_any_label(
+        {"DAT", "MEX"}, tag_ids=tag_ids
+    )
+    assert sorted(matches) == expected_uids
+    assert await pg_store.get_distinct_labels(tag_ids=tag_ids) == expected_labels
+
+    seen: list[str] = []
+    for offset in range(0, len(expected_uids) + 2, 2):
+        page, total = await pg_store.get_document_uids_with_any_label_page(
+            {"DAT", "MEX"}, tag_ids=tag_ids, offset=offset, limit=2
+        )
+        assert total == len(expected_uids)
+        assert page == expected_uids[offset : offset + 2]
+        seen.extend(page)
+    assert seen == expected_uids
+
+
+@pytest.mark.asyncio
+async def test_label_queries_bind_large_folder_scope_as_an_array_on_postgres(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    # More folders than asyncpg permits scalar parameters. Only two documents
+    # are needed to prove the filter binds the scope as one PostgreSQL array.
+    tag_ids = {f"folder-{index}" for index in range(32768)}
+    await pg_store.save_metadata(_named("visible", "visible.pdf", ["folder-32767"]))
+    await pg_store.save_metadata(_named("hidden", "hidden.pdf", ["outside"]))
+    await pg_store.add_label("visible", "DAT")
+    await pg_store.add_label("hidden", "DAT")
+    await pg_store.add_label("hidden", "HIDDEN")
+
+    assert await pg_store.get_document_uids_with_any_label(
+        {"DAT"}, tag_ids=tag_ids
+    ) == ["visible"]
+    assert await pg_store.get_document_uids_with_any_label_page(
+        {"DAT"}, tag_ids=tag_ids, offset=0, limit=1
+    ) == (["visible"], 1)
+    assert await pg_store.get_distinct_labels(tag_ids=tag_ids) == ["DAT"]

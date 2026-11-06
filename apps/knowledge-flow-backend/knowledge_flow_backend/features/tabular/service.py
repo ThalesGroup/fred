@@ -19,7 +19,7 @@ import hashlib
 import logging
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
@@ -27,7 +27,7 @@ from typing import Literal
 
 import duckdb
 import pandas as pd
-from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, is_service_agent
+from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, TagPermission, is_service_agent
 from fred_core.common import OwnerFilter
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from fred_core.security.delegation import holds_caller_role
@@ -43,6 +43,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     read_tabular_artifact,
     read_tabular_multi_artifact,
 )
+from knowledge_flow_backend.features.tabular.diagnostics import ResolutionSummary, TabularDescriptionNotFound, VisibleQueryRelation, scoped_column_diagnostic
 from knowledge_flow_backend.features.tabular.execution import (
     DuckDBAbortHandle,
     close_duckdb_connection,
@@ -51,7 +52,7 @@ from knowledge_flow_backend.features.tabular.execution import (
 )
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
-    TabularColumnSchema,
+    TabularColumnDescription,
     TabularDatasetResponse,
     TabularDocumentDescriptionResponse,
     TabularDocumentKind,
@@ -188,7 +189,7 @@ def _redacting_dataset_read_errors():
 
 
 @contextmanager
-def _redacting_query_execution_errors():
+def _redacting_query_execution_errors(*, diagnostic_relations: Sequence[VisibleQueryRelation] = (), mounted_columns: Mapping[str, Sequence[str]] | None = None) -> Iterator[None]:
     """Classify DuckDB errors raised while executing a caller-supplied SQL query.
 
     Why this exists:
@@ -220,6 +221,8 @@ def _redacting_query_execution_errors():
         raise TabularQueryError("Query exceeded the per-query memory budget. Add filters, aggregate, or select fewer columns.") from None
     except (duckdb.ProgrammingError, duckdb.DataError) as exc:
         message = _redact_signed_urls(str(exc))
+        if isinstance(exc, duckdb.BinderException):
+            message = _redact_signed_urls(scoped_column_diagnostic(message, relations=diagnostic_relations, mounted_columns=mounted_columns or {}))
         logger.warning("[TABULAR] read query rejected by DuckDB: %s", message)
         raise TabularQueryError(message) from None
     except duckdb.Error as exc:
@@ -324,6 +327,7 @@ class TabularService:
           `describe_documents(...)` for the extraction catalog and typed tables.
         """
 
+        summary = ResolutionSummary()
         datasets = await self._resolve_authorized_datasets(
             user,
             document_library_tags_ids=document_library_tags_ids,
@@ -333,7 +337,10 @@ class TabularService:
             include_session_scope=include_session_scope,
             include_corpus_scope=include_corpus_scope,
             corpus_document_uids=corpus_document_uids,
+            summary=summary,
         )
+        if not datasets:
+            summary.log_empty()
         return [
             TabularDocumentResponse(
                 document_uid=document_datasets[0].metadata.document_uid,
@@ -353,6 +360,7 @@ class TabularService:
         user: KeycloakUser,
         document_uids: list[str],
         *,
+        table_names: list[str] | None = None,
         document_library_tags_ids: list[str] | None = None,
         owner_filter: OwnerFilter | None = None,
         team_id: str | None = None,
@@ -378,6 +386,11 @@ class TabularService:
         if not document_uids:
             raise ValueError("At least one document uid is required")
 
+        requested_uids = list(dict.fromkeys(document_uids))
+        max_selected = self.tabular_config.query.max_selected_datasets
+        if len(requested_uids) > max_selected:
+            raise ValueError(f"Description references {len(requested_uids)} documents, above the limit of {max_selected}; request fewer documents")
+
         datasets = await self._resolve_authorized_datasets(
             user,
             document_library_tags_ids=document_library_tags_ids,
@@ -389,8 +402,6 @@ class TabularService:
             corpus_document_uids=corpus_document_uids,
         )
         datasets_by_uid = self._group_datasets_by_document(datasets)
-        requested_uids = list(dict.fromkeys(document_uids))
-
         missing_uids = [document_uid for document_uid in requested_uids if document_uid not in datasets_by_uid]
         if missing_uids and attachment_uids is None and include_session_scope:
             owned = await self._resolve_owned_attachment_datasets(user, missing_uids)
@@ -402,7 +413,7 @@ class TabularService:
             forbidden_uids = [document_uid for document_uid, allowed in zip(missing_uids, permission_checks) if not allowed]
             if forbidden_uids:
                 raise PermissionError(forbidden_datasets_message(forbidden_uids))
-            raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
+            raise TabularDescriptionNotFound(f"Requested tabular datasets were not found: {', '.join(missing_uids)}", reason="datasets_not_resolved")
 
         spreadsheet_uids = [document_uid for document_uid in requested_uids if self._document_kind(datasets_by_uid[document_uid]) == "spreadsheet"]
         read_limit = asyncio.Semaphore(8)
@@ -411,13 +422,15 @@ class TabularService:
             metadata = datasets_by_uid[document_uid][0].metadata
             preview_status = metadata.processing.stages.get(ProcessingStage.PREVIEW_READY, ProcessingStatus.NOT_STARTED)
             if preview_status != ProcessingStatus.DONE:
-                raise FileNotFoundError(f"Preview not ready for document {document_uid}. Current preview stage: {preview_status.value}.")
-            async with read_limit:
-                content = await asyncio.to_thread(self.content_store.get_output_artifact, f"{document_uid}/output/output.md")
+                raise TabularDescriptionNotFound(f"Preview not ready for document {document_uid}. Current preview stage: {preview_status.value}.", reason="preview_not_ready")
+            try:
+                async with read_limit:
+                    content = await asyncio.to_thread(self.content_store.get_output_artifact, f"{document_uid}/output/output.md")
+            except FileNotFoundError as exc:
+                raise TabularDescriptionNotFound(str(exc), reason="preview_artifact_unavailable") from exc
             return document_uid, content.decode("utf-8")
 
-        ordered_datasets = [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
-        max_selected = self.tabular_config.query.max_selected_datasets
+        ordered_datasets = self._select_description_tables([dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]], table_names)
         if len(ordered_datasets) > max_selected:
             raise ValueError(f"Description references {len(ordered_datasets)} datasets, above the limit of {max_selected}; request fewer documents or increase max_selected_datasets")
         catalogs = dict(await asyncio.gather(*(read_catalog(document_uid) for document_uid in spreadsheet_uids)))
@@ -431,21 +444,50 @@ class TabularService:
                 document_name=datasets_by_uid[document_uid][0].metadata.document_name,
                 kind=self._document_kind(datasets_by_uid[document_uid]),
                 markdown=catalogs.get(document_uid),
-                tables=tables_by_uid[document_uid],
+                tables=tables_by_uid.get(document_uid, []),
                 source_tag=datasets_by_uid[document_uid][0].metadata.source_tag,
             )
             for document_uid in requested_uids
         ]
 
-    async def _describe_columns(self, datasets: list[ResolvedDataset]) -> list[list[TabularColumnSchema]]:
+    @staticmethod
+    def _select_description_tables(datasets: list[ResolvedDataset], table_names: list[str] | None) -> list[ResolvedDataset]:
+        """Select exact existing aliases or unambiguous labels before any scans."""
+        if not table_names:
+            return datasets
+        by_alias = {dataset.query_alias: dataset for dataset in datasets}
+        by_label: dict[str, set[str]] = {}
+        for dataset in datasets:
+            artifact = dataset.artifact
+            if isinstance(artifact, TabularTableArtifactV1):
+                for label in (artifact.sheet, artifact.title):
+                    if label:
+                        by_label.setdefault(label, set()).add(dataset.query_alias)
+        selected: set[str] = set()
+        for name in dict.fromkeys(table_names):
+            if name in by_alias:
+                selected.add(name)
+                continue
+            matches = by_label.get(name, set())
+            if not matches:
+                raise ValueError(f"Unknown table name: {name}. Use an exact query_alias or an unambiguous sheet/title from discovery.")
+            if len(matches) != 1:
+                raise ValueError(f"Ambiguous table name: {name}. Use the exact query_alias from discovery.")
+            selected.update(matches)
+        return [dataset for dataset in datasets if dataset.query_alias in selected]
+
+    async def _describe_columns(self, datasets: list[ResolvedDataset]) -> list[list[TabularColumnDescription]]:
         """Read categorical values and numeric bounds from authorized Parquet tables."""
 
         query_config = self.tabular_config.query
 
-        def _job(handle: DuckDBAbortHandle) -> list[list[TabularColumnSchema]]:
+        if not datasets:
+            return []
+
+        def _job(handle: DuckDBAbortHandle) -> list[list[TabularColumnDescription]]:
             connection = open_duckdb_connection(handle, config=query_config)
             try:
-                results: list[list[TabularColumnSchema]] = []
+                results: list[list[TabularColumnDescription]] = []
                 httpfs_ready = False
                 for dataset in datasets:
                     handle.raise_if_aborted()
@@ -476,7 +518,7 @@ class TabularService:
                             columns[index] = column.model_copy(update={"sample_values": sorted(str(row[0]) for row in rows) or None})
                         if not numeric and not categorical:
                             connection.execute("SELECT COUNT(*) FROM tabular_description_table").fetchone()
-                    results.append(columns)
+                    results.append([TabularColumnDescription.from_stored(column, values_read=True) for column in columns])
                 return results
             finally:
                 close_duckdb_connection(handle, connection)
@@ -512,7 +554,7 @@ class TabularService:
         )
 
     @staticmethod
-    def _table_schema(dataset: ResolvedDataset, columns: list[TabularColumnSchema]) -> TabularTableSchema:
+    def _table_schema(dataset: ResolvedDataset, columns: list[TabularColumnDescription]) -> TabularTableSchema:
         """Build the full table view (columns included) exposed by the schemas endpoint."""
 
         artifact = dataset.artifact
@@ -658,7 +700,10 @@ class TabularService:
                 self._mount_datasets(connection=connection, datasets=mounted_datasets, handle=handle)
                 handle.raise_if_aborted()
                 limited_query = f"SELECT * FROM ({validated.sql}) AS fred_result LIMIT {effective_max_rows}"
-                with _redacting_query_execution_errors():
+                with _redacting_query_execution_errors(
+                    diagnostic_relations=validated.diagnostic_relations,
+                    mounted_columns={dataset.query_alias: [column.name for column in dataset.artifact.columns] for dataset in mounted_datasets},
+                ):
                     rows_df = connection.execute(limited_query).df()
                 return validated.sql, dataframe_to_records(rows_df), mounted_datasets
             finally:
@@ -682,6 +727,7 @@ class TabularService:
             sql_query=sql_query,
             rows=rows,
             error=None,
+            message="Requête exécutée avec succès : 0 ligne correspondant aux conditions." if not rows else None,
             dataset_uids=[dataset.metadata.document_uid for dataset in mounted_datasets],
             query_aliases=[dataset.query_alias for dataset in mounted_datasets],
         )
@@ -906,39 +952,26 @@ class TabularService:
         include_session_scope: bool = True,
         include_corpus_scope: bool = True,
         corpus_document_uids: list[str] | None = None,
+        summary: ResolutionSummary | None = None,
     ) -> list[ResolvedDataset]:
         """Resolve scoped corpus tables and explicitly supplied owned attachments.
 
         Source flags keep the branches independent; aliases stay deterministic."""
 
+        summary = summary if summary is not None else ResolutionSummary()
+        attachment_summary = ResolutionSummary()
         lookups = []
         if include_corpus_scope:
-            lookups.extend(
-                [
-                    self.rebac.lookup_user_resources(user, DocumentPermission.READ),
-                    self._resolve_scope_tag_ids(user, document_library_tags_ids=None if corpus_document_uids is not None else document_library_tags_ids, owner_filter=owner_filter, team_id=team_id),
-                ]
+            lookups.append(
+                self._resolve_corpus_documents(
+                    user, document_library_tags_ids=document_library_tags_ids, owner_filter=owner_filter, team_id=team_id, corpus_document_uids=corpus_document_uids, summary=summary
+                )
             )
         if include_session_scope and attachment_uids:
-            lookups.append(self._resolve_owned_attachment_datasets(user, list(dict.fromkeys(attachment_uids))))
+            lookups.append(self._resolve_owned_attachment_datasets(user, list(dict.fromkeys(attachment_uids)), summary=attachment_summary))
         results = await asyncio.gather(*lookups)
-        authorized_document_ref, scoped_tag_ids = results[:2] if include_corpus_scope else ([], None)
+        visible_documents, scoped_tag_ids = results[0] if include_corpus_scope else ([], None)
         owned = results[-1] if include_session_scope and attachment_uids else {}
-
-        if isinstance(authorized_document_ref, RebacDisabledResult):
-            # Tagless fast-ingest documents require uploader authorization, even
-            # when corpus ReBAC is disabled.
-            visible_documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids]
-        elif include_corpus_scope and is_service_agent(user) and not holds_caller_role(user):
-            # EVAL-AUTH (Solution A), mirrors tag_service.resolve_authorized_tag_ids_in_rebac:
-            # the evaluation worker holds no per-user document relations by design, so the
-            # per-user READ lookup above is always empty and would zero out every dataset.
-            # Authorize via the team-scoped tag set instead; fail closed without one.
-            tag_documents = await asyncio.gather(*(self.metadata_store.get_metadata_in_tag(tag_id) for tag_id in scoped_tag_ids or ()))
-            visible_documents = [metadata for documents in tag_documents for metadata in documents]
-        else:
-            authorized_ids = [document.id for document in authorized_document_ref]
-            visible_documents = await self.metadata_store.get_metadata_by_uids(authorized_ids) if authorized_ids else []
 
         resolved_datasets: list[ResolvedDataset] = []
         used_aliases: set[str] = set()
@@ -963,6 +996,7 @@ class TabularService:
                 if metadata.document_uid not in corpus_document_uids and not selected_library:
                     continue
 
+            summary.scoped_metadata_count += 1
             artifact = read_tabular_artifact(metadata)
             if artifact is not None:
                 resolved_datasets.append(
@@ -998,11 +1032,31 @@ class TabularService:
                     )
                 )
 
+        # Stored folder membership supplies candidates, not document permission.
+        # Check only tabular documents, once per workbook, before exposing tables.
+        # Evaluation workers retain their existing team-folder authorization.
+        if not (scoped_tag_ids is not None and is_service_agent(user) and not holds_caller_role(user)):
+            candidate_uids = list(dict.fromkeys(dataset.metadata.document_uid for dataset in resolved_datasets))
+            readable_uids: set[str] = set()
+            for start in range(0, len(candidate_uids), 10):
+                batch = candidate_uids[start : start + 10]
+                permissions = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in batch))
+                readable_uids.update(uid for uid, allowed in zip(batch, permissions) if allowed)
+            denied_count = len(candidate_uids) - len(readable_uids)
+            summary.readable_metadata_count -= denied_count
+            summary.scoped_metadata_count -= denied_count
+            resolved_datasets = [dataset for dataset in resolved_datasets if dataset.metadata.document_uid in readable_uids]
+
         if include_session_scope and attachment_uids:
             corpus_uids = {dataset.metadata.document_uid for dataset in resolved_datasets}
             for uid, datasets in owned.items():
                 if uid not in corpus_uids and datasets[0].metadata.processing.stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE:
                     resolved_datasets.extend(datasets)
+        summary.readable_metadata_count += attachment_summary.readable_metadata_count
+        summary.scoped_metadata_count += attachment_summary.scoped_metadata_count
+        if attachment_summary.readable_metadata_count:
+            summary.authorized_scope_empty = False
+        summary.resolved_table_count = len(resolved_datasets)
         return resolved_datasets
 
     async def _get_dataset_or_raise(
@@ -1134,7 +1188,7 @@ class TabularService:
         datasets = TabularService._as_owned_attachment_datasets(metadata, user=user)
         return datasets[0] if datasets else None
 
-    async def _resolve_owned_attachment_datasets(self, user: KeycloakUser, document_uids: list[str]) -> dict[str, list[ResolvedDataset]]:
+    async def _resolve_owned_attachment_datasets(self, user: KeycloakUser, document_uids: list[str], *, summary: ResolutionSummary | None = None) -> dict[str, list[ResolvedDataset]]:
         """Batch-resolve uploader-owned tables for explicit or authorized conversation UIDs."""
 
         if not document_uids:
@@ -1142,10 +1196,60 @@ class TabularService:
         rows = await self.metadata_store.get_metadata_by_uids(document_uids)
         resolved: dict[str, list[ResolvedDataset]] = {}
         for metadata in rows:
+            if summary is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and metadata.identity.uploaded_by == user.uid and not metadata.tags.tag_ids:
+                summary.readable_metadata_count += 1
+                summary.scoped_metadata_count += 1
             datasets = self._as_owned_attachment_datasets(metadata, user=user)
             if datasets:
                 resolved[metadata.document_uid] = datasets
         return resolved
+
+    async def _resolve_corpus_documents(
+        self,
+        user: KeycloakUser,
+        *,
+        document_library_tags_ids: list[str] | None,
+        owner_filter: OwnerFilter | None,
+        team_id: str | None,
+        corpus_document_uids: list[str] | None,
+        summary: ResolutionSummary,
+    ) -> tuple[list[DocumentMetadata], set[str] | None]:
+        """Corpus candidates and the active scope's authorized tag ids.
+
+        Stored folder membership narrows discovery without enumerating readable
+        documents. The dataset resolver checks tabular candidates individually."""
+
+        scoped_tag_ids = await self._resolve_scope_tag_ids(
+            user, document_library_tags_ids=None if corpus_document_uids is not None else document_library_tags_ids, owner_filter=owner_filter, team_id=team_id
+        )
+        summary.scope_applied = scoped_tag_ids is not None or corpus_document_uids is not None
+        summary.authorized_scope_empty = scoped_tag_ids == set()
+        authorized_tag_ids = scoped_tag_ids
+        if authorized_tag_ids is None:
+            readable_tags = await self.rebac.lookup_user_resources(user, TagPermission.READ)
+            if isinstance(readable_tags, RebacDisabledResult):
+                # Tagless fast-ingest documents require uploader authorization, even
+                # when corpus ReBAC is disabled.
+                documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids]
+                summary.readable_metadata_count = len(documents)
+                return documents, None
+            if is_service_agent(user) and not holds_caller_role(user):
+                # The evaluation worker reads only a supplied team's folders.
+                return [], None
+            authorized_tag_ids = {tag.id for tag in readable_tags}
+
+        if corpus_document_uids is None:
+            documents = await self.metadata_store.metadata_in_tags(list(authorized_tag_ids))
+            summary.readable_metadata_count = len(documents)
+            return documents, scoped_tag_ids
+        selected_tag_ids = authorized_tag_ids.intersection(document_library_tags_ids or [])
+        explicit, selected = await asyncio.gather(
+            self.metadata_store.get_metadata_by_uids(corpus_document_uids),
+            self.metadata_store.metadata_in_tags(list(selected_tag_ids)),
+        )
+        by_uid = {metadata.document_uid: metadata for metadata in [*explicit, *selected] if authorized_tag_ids.intersection(metadata.tags.tag_ids or [])}
+        summary.readable_metadata_count = len(by_uid)
+        return list(by_uid.values()), scoped_tag_ids
 
     async def _resolve_scope_tag_ids(
         self,
@@ -1373,7 +1477,7 @@ class TabularService:
             document_name=dataset.metadata.document_name,
             query_alias=dataset.query_alias,
             row_count=dataset.artifact.row_count,
-            columns=dataset.artifact.columns,
+            columns=[TabularColumnDescription.from_stored(column) for column in dataset.artifact.columns],
             tag_ids=list(dataset.metadata.tags.tag_ids or []),
             tag_names=list(dataset.metadata.tags.tag_names or []),
             source_tag=dataset.metadata.source_tag,

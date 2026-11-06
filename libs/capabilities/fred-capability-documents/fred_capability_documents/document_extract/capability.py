@@ -80,7 +80,7 @@ class DocumentExtractCapability(
     manifest = CapabilityManifest(
         id="document_extract",
         # Pre-GA: version stays 0.1.0 while the platform has not shipped.
-        version="0.1.0",
+        version="0.1.1",
         name="capability.document_extract.name",
         description="capability.document_extract.description",
         icon="find_in_page",
@@ -128,7 +128,7 @@ class DocumentExtractCapability(
             `what_to_extract` describes precisely what to enumerate (e.g.
             "functional requirements", "dates and their surrounding context").
             `document_uid` MUST be the document's opaque uid, not its name — get
-            it from a search hit's 'uid', the document tree, or the
+            it from a vector-search hit's 'document_uid', the document tree, or the
             conversation's attached-files list. NEVER repeat the uid in your
             answer; refer to the document by its display name.
 

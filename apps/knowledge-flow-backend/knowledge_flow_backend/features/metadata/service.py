@@ -129,19 +129,19 @@ class MetadataService:
             readable.update(uid for uid, allowed in zip(batch, results) if allowed)
         return readable
 
+    async def _readable_tag_ids(self, user: KeycloakUser) -> set[str] | RebacDisabledResult:
+        """Readable folders select candidates; stored membership is not a grant."""
+        refs = await self.rebac.lookup_user_resources(user, TagPermission.READ)
+        if isinstance(refs, RebacDisabledResult):
+            return refs
+        return {ref.id for ref in refs}
+
     async def get_documents_metadata(self, user: KeycloakUser, filters_dict: dict) -> list[DocumentMetadata]:
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        readable_tags = await self._readable_tag_ids(user)
 
         try:
             docs = await self.metadata_store.get_all_metadata(filters_dict)
 
-            if isinstance(authorized_doc_ref, RebacDisabledResult):
-                # if rebac is disabled, do not filter
-                return docs
-
-            # Filter by permission (todo: use rebac ids to filter at store (DB) level)
-            authorized_doc_ids = [d.id for d in authorized_doc_ref]
-            return [d for d in docs if d.identity.document_uid in authorized_doc_ids]
         except MetadataDeserializationError as e:
             logger.error(f"[Metadata] Deserialization error: {e}")
             raise MetadataUpdateError(f"Invalid metadata encountered: {e}")
@@ -149,6 +149,12 @@ class MetadataService:
         except Exception as e:
             logger.error(f"Error retrieving document metadata: {e}")
             raise MetadataUpdateError(f"Failed to retrieve metadata: {e}")
+
+        if isinstance(readable_tags, RebacDisabledResult):
+            return docs
+        candidates = [d for d in docs if readable_tags.intersection(d.tags.tag_ids or [])]
+        readable = await self.filter_readable_document_uids(user, [d.document_uid for d in candidates])
+        return [d for d in candidates if d.document_uid in readable]
 
     async def get_documents_by_uids(self, user: KeycloakUser, document_uids: list[str]) -> list[DocumentMetadata]:
         """Targeted, ReBAC-filtered metadata fetch for an already-known uid
@@ -430,7 +436,8 @@ class MetadataService:
             tag_ids = metadata.tags.tag_ids or []
             if new_tag_id not in tag_ids:
                 previous_tag_ids = set(tag_ids)
-                tag_ids.append(new_tag_id)
+                tag_ids = [*tag_ids, new_tag_id]
+                await self._sync_vector_tag_ids(metadata, tag_ids)
                 metadata.tags.tag_ids = tag_ids
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
@@ -456,8 +463,18 @@ class MetadataService:
                 await self._set_tag_as_parent_in_rebac(new_tag_id, metadata.document_uid, actor_uid=user.uid)
 
         except Exception as e:
-            logger.error(f"Error updating retrievable flag for {metadata.document_name}: {e}")
-            raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
+            logger.error(f"Failed to add tag '{new_tag_id}' to document '{metadata.document_name}': {e}")
+            raise MetadataUpdateError(f"Failed to add tag: {e}")
+
+    async def _sync_vector_tag_ids(self, metadata: DocumentMetadata, tag_ids: list[str]) -> None:
+        """Search pre-filters chunks on their copied folder ids. Written before the
+        metadata save so a vector failure leaves the membership change undone;
+        every failure surfaces, and a retry re-applies both writes."""
+        if ProcessingStage.VECTORIZED not in metadata.processing.stages:
+            return
+        if self.vector_store is None:
+            self.vector_store = ApplicationContext.get_instance().get_vector_store()
+        await asyncio.to_thread(self.vector_store.set_document_tag_ids, document_uid=metadata.document_uid, tag_ids=tag_ids)
 
     async def remove_tag_id_from_document(self, user: KeycloakUser, metadata: DocumentMetadata, tag_id_to_remove: str) -> None:
         await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id_to_remove)
@@ -524,6 +541,7 @@ class MetadataService:
                 # TODO: remove all rebac relations for this document
 
             else:
+                await self._sync_vector_tag_ids(metadata, new_ids)
                 metadata.identity.modified = datetime.now(timezone.utc)
                 metadata.identity.last_modified_by = user.uid
                 # Save and release the tag owner that no longer holds this document,
@@ -723,34 +741,21 @@ class MetadataService:
             if not metadata:
                 raise MetadataNotFound(f"Document '{document_uid}' not found.")
 
-            # 1) Update metadata-store view of retrievability
+            # Search filters on the chunks' copy of the flag, so apply it there first: a
+            # failure (or a store without toggle support) fails the request before
+            # anything is persisted. The toggle is idempotent, so a retry converges.
+            if ProcessingStage.VECTORIZED in metadata.processing.stages:
+                if self.vector_store is None:
+                    self.vector_store = ApplicationContext.get_instance().get_vector_store()
+                await asyncio.to_thread(self.vector_store.set_document_retrievable, document_uid=document_uid, value=value)
+                logger.info("[VECTOR] Updated retrievable=%s in vector index for document '%s'.", value, document_uid)
+
             metadata.source.retrievable = value
             metadata.identity.modified = datetime.now(timezone.utc)
             metadata.identity.last_modified_by = modified_by
 
             await self.metadata_store.save_metadata(metadata)
             logger.info(f"[METADATA] Set retrievable={value} for document '{document_uid}' by '{modified_by}'")
-
-            # 2) If the document was vectorized, reflect the toggle in the vector index
-            # to make the change effective immediately in search results, without deleting vectors.
-            try:
-                if ProcessingStage.VECTORIZED in metadata.processing.stages:
-                    if self.vector_store is None:
-                        self.vector_store = ApplicationContext.get_instance().get_vector_store()
-                    try:
-                        self.vector_store.set_document_retrievable(document_uid=document_uid, value=value)
-                        logger.info(
-                            "[VECTOR] Updated retrievable=%s in vector index for document '%s'.",
-                            value,
-                            document_uid,
-                        )
-                    except NotImplementedError:
-                        logger.info(
-                            "[VECTOR] Vector store does not support retrievable toggling; vectors unchanged for document '%s'.",
-                            document_uid,
-                        )
-            except Exception as ve:
-                logger.warning(f"[VECTOR] Could not reflect retrievable toggle in vector index for '{document_uid}': {ve}")
         except Exception as e:
             logger.error(f"Error updating retrievable flag for {document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to update retrievable flag: {e}")
@@ -809,8 +814,8 @@ class MetadataService:
         await self.metadata_store.save_metadata(metadata)
         logger.info(f"[METADATA] Renamed document '{document_uid}' from '{old_name}' to '{new_name}' by '{modified_by}'")
 
-        # Best-effort vector sync, same shape as update_document_retrievable above:
-        # the Postgres write is authoritative and already succeeded; a vector store
+        # Best-effort vector sync (unlike update_document_retrievable, which search
+        # depends on): the Postgres write is authoritative and already succeeded; a vector store
         # that can't (or doesn't need to) reflect the change never fails the request.
         # Offloaded to a thread: every concrete store's set_document_name is a
         # synchronous, blocking client call (opensearchpy/chromadb/clickhouse_connect/
@@ -945,69 +950,58 @@ class MetadataService:
         return await self.metadata_store.get_metadata_by_uids(list(uids))
 
     async def get_documents_with_label_page(self, user: KeycloakUser, label: str, *, offset: int = 0, limit: int = 50) -> tuple[list[DocumentMetadata], int]:
-        """Paginated resolution of one label to its readable documents — the
-        flat, deterministic sibling of `get_documents_with_label`, for a
-        caller that needs an exhaustive, page-by-page result rather than
-        everything in one response (e.g. an agent tool answering "give me
-        every document with label X"). Ordered by document_uid for a stable
-        page boundary; hydrates ONLY the requested page's documents.
+        """Authorize all matching candidates before counting and slicing the page.
 
-        Pushes `offset`/`limit` into the store query
-        (`get_document_uids_with_any_label_page`) rather than fetching every
-        matching uid and slicing in Python — enumerating many pages does not
-        repeat a full, unbounded label scan on each call. The one thing that
-        IS still per-call is the ReBAC `lookup_user_resources` resolution
-        (same cost every other authorized/paginated listing in this service
-        pays per call; there is no cross-call authorization cache here).
+        Each enabled-ReBAC request repeats candidate checks, bounded to ten in
+        flight. Only the requested page is hydrated; denied UIDs create no holes.
         """
         targets = set(normalize_labels([label]))
         if not targets:
             return [], 0
 
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
+        readable_tags = await self._readable_tag_ids(user)
+        if isinstance(readable_tags, RebacDisabledResult):
             page_uids, total = await self.metadata_store.get_document_uids_with_any_label_page(targets, offset=offset, limit=limit)
         else:
-            authorized_ids = {d.id for d in authorized_doc_ref}
-            if not authorized_ids:
+            if not readable_tags:
                 return [], 0
-            page_uids, total = await self.metadata_store.get_document_uids_with_any_label_page(targets, document_uids=authorized_ids, offset=offset, limit=limit)
+            candidates = await self.metadata_store.get_document_uids_with_any_label(targets, tag_ids=readable_tags)
+            readable = sorted(await self.filter_readable_document_uids(user, candidates))
+            total = len(readable)
+            page_uids = readable[offset : offset + limit]
         docs = await self.metadata_store.get_metadata_by_uids(page_uids) if page_uids else []
         return docs, total
 
     async def get_document_uids_with_any_label(self, user: KeycloakUser, labels: list[str]) -> set[str]:
         """Resolve the union of readable document uids carrying ANY of
-        `labels` (OR semantics) — ONE ReBAC resolution, ONE indexed
-        `label IN (...)` query. UID-only: callers that need document
+        `labels` (OR semantics), using one indexed candidate query and bounded
+        document checks. UID-only: callers that need document
         metadata should hydrate afterward (e.g. via `get_documents_by_uids`),
         never call this label-by-label."""
         targets = set(normalize_labels(labels))
         if not targets:
             return set()
 
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
+        readable_tags = await self._readable_tag_ids(user)
+        if isinstance(readable_tags, RebacDisabledResult):
             uids = await self.metadata_store.get_document_uids_with_any_label(targets)
         else:
-            authorized_ids = {d.id for d in authorized_doc_ref}
-            if not authorized_ids:
+            if not readable_tags:
                 return set()
-            uids = await self.metadata_store.get_document_uids_with_any_label(targets, document_uids=authorized_ids)
+            uids = await self.metadata_store.get_document_uids_with_any_label(targets, tag_ids=readable_tags)
+            return await self.filter_readable_document_uids(user, uids)
         return set(uids)
 
     async def list_document_labels(self, user: KeycloakUser) -> list[str]:
-        """Return the distinct labels used across the user's readable documents
-        (UI vocabulary) — an indexed distinct query narrowed to the caller's
-        authorized documents, never revealing a label used only on documents
-        the caller cannot read."""
-        authorized_doc_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-        if isinstance(authorized_doc_ref, RebacDisabledResult):
+        """Return vocabulary from checked documents, including on stale SQL tags."""
+        readable_tags = await self._readable_tag_ids(user)
+        if isinstance(readable_tags, RebacDisabledResult):
             return await self.metadata_store.get_distinct_labels()
 
-        authorized_ids = {d.id for d in authorized_doc_ref}
-        if not authorized_ids:
+        if not readable_tags:
             return []
-        return await self.metadata_store.get_distinct_labels(document_uids=authorized_ids)
+        documents = await self.get_documents_metadata_in_tags(user, list(readable_tags))
+        return sorted({label for doc in documents for label in doc.labels})
 
     async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
@@ -1574,6 +1568,22 @@ class MetadataService:
             logger.warning("[AUDIT] Failed to count vectors for %s: %s", document_uid, e)
             return None
 
+    def _session_scoped_vector_uids(self, candidate_uids: set[str]) -> set[str]:
+        # Chat attachments are vector-only by design, so they are not corpus orphans.
+        # Only a positive classification hides a UID; unsupported or failed lookups keep it reported.
+        store = self._ensure_vector_store()
+        if store is None:
+            return set()
+
+        session_uids: set[str] = set()
+        for document_uid in sorted(candidate_uids):
+            try:
+                if store.is_session_scoped_document(document_uid):
+                    session_uids.add(document_uid)
+            except Exception as e:
+                logger.warning("[AUDIT] Could not classify %s as a session attachment: %s", document_uid, e)
+        return session_uids
+
     async def audit_stores(self, user: KeycloakUser) -> StoreAuditReport:
         """
         Scan metadata, content, and vector stores to surface orphan or partial data.
@@ -1593,6 +1603,8 @@ class MetadataService:
         vector_ids = self._list_vector_document_uids()
         content_ids = self._list_content_document_uids()
         all_ids = sorted(metadata_ids | vector_ids | content_ids)
+        vector_only_ids = vector_ids - metadata_ids
+        session_ids = await asyncio.to_thread(self._session_scoped_vector_uids, vector_only_ids) if vector_only_ids else set()
 
         anomalies: list[StoreAuditFinding] = []
         for doc_uid in all_ids:
@@ -1603,7 +1615,7 @@ class MetadataService:
             issues: list[str] = []
 
             if not in_metadata:
-                if in_vector:
+                if in_vector and doc_uid not in session_ids:
                     issues.append("orphan_vectors")
                 if in_content:
                     issues.append("orphan_content")

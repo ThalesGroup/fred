@@ -14,18 +14,9 @@
  * limitations under the License.
  */
 
-/* The wiki is one card floating in the content area: an inset on every side
-   separates it from the app frame and the navigation panel, so the three
-   columns inside read as one object rather than as page furniture.
-   `box-sizing: border-box` is what keeps the inset from pushing the card past
-   the bottom of the shell.
-   Height is 100%, never a viewport unit — the app shell owns the viewport
-   (FRONTEND_CODING_GUIDELINES §2.5). */
+/* The wiki card fills the page card's content box; the page card owns the inset.
+   Height is 100%, never a viewport unit: the app shell owns the viewport. */
 .frame {
-  --wiki-inset: 16px;
-
-  box-sizing: border-box;
-  padding: var(--wiki-inset);
   width: 100%;
   height: 100%;
 }

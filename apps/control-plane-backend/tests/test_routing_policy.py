@@ -42,7 +42,13 @@ from control_plane_backend.routing_policy.schemas import (
 )
 from control_plane_backend.routing_policy.service import resolve_effective_chat_model
 from control_plane_backend.routing_policy.store import TeamRoutingPolicyStore
-from fred_core import AuthorizationError, KeycloakUser, Resource, TeamPermission
+from fred_core import (
+    AuthorizationError,
+    KeycloakUser,
+    RelationType,
+    Resource,
+    TeamPermission,
+)
 from fred_core.common import TeamId
 from fred_sdk.contracts.capability.manifest import CapabilityCatalogEntry
 from fred_sdk.contracts.context import ModelBinding
@@ -417,6 +423,9 @@ class _FakeDeps:
         source_runtime_ids: list[str] | None = None,
         instances: list[Any] | None = None,
         reasoning_enabled_ids: set[str] | None = None,
+        display_name_overrides: dict[str, str] | None = None,
+        fallback_profile_id: str | None = None,
+        removed_profiles: dict[str, str] | None = None,
     ) -> None:
         self._store = store
         self.team_dependencies = type("_TD", (), {"rebac": rebac})()
@@ -430,6 +439,10 @@ class _FakeDeps:
         self._agent_instance_store = _FakeAgentInstanceStore(records)
         store._instances = self._agent_instance_store
         self._reasoning_enabled_ids = reasoning_enabled_ids or set()
+        self._fallback_profile_id = fallback_profile_id
+        self._removed_profiles = removed_profiles or {}
+        self._display_name_overrides = display_name_overrides or {}
+        self._pod_default_override: str | None = None
         self.configuration = SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=[
@@ -450,6 +463,25 @@ class _FakeDeps:
         class _Store:
             async def list_enabled_model_ids(self):
                 return set(ids)
+
+        return _Store()
+
+    def get_pod_chat_default_store(self):
+        override = self._pod_default_override
+        fallback = self._fallback_profile_id
+
+        class _Store:
+            async def get(self, runtime_id, *, session=None):
+                return override
+
+            async def list_all(self, *, session=None):
+                return {_POD: override} if override is not None else {}
+
+            async def get_fallback(self, runtime_id, *, session=None):
+                return fallback
+
+            async def list_fallbacks(self, *, session=None):
+                return {_POD: fallback} if fallback is not None else {}
 
         return _Store()
 
@@ -1349,6 +1381,105 @@ async def test_available_models_denied_for_plain_team_member(monkeypatch) -> Non
         )
 
 
+class _OrgMarkerRebac:
+    """ReBAC fake for the team-free list: only `enabled` is read directly."""
+
+    enabled = True
+
+
+def _platform_gate(monkeypatch: pytest.MonkeyPatch, *, manager: bool) -> None:
+    async def _gate(rebac, user):
+        if not manager:
+            raise AuthorizationError(
+                user_id=user.uid,
+                action="read",
+                resource=Resource.ORGANIZATION,
+                message="denied",
+            )
+
+    monkeypatch.setattr(routing_policy_service, "require_manage_capabilities", _gate)
+
+
+def _default_on(monkeypatch: pytest.MonkeyPatch, ids: set[str]) -> None:
+    async def _fake(rebac, capability_id, relation):
+        assert relation is RelationType.DEFAULT_ON
+        return capability_id in ids
+
+    monkeypatch.setattr(routing_policy_service, "has_org_relation", _fake)
+
+
+@pytest.mark.asyncio
+async def test_platform_available_models_need_a_capability_manager(
+    monkeypatch, _stub_team_lookup
+) -> None:
+    _platform_gate(monkeypatch, manager=False)
+    with pytest.raises(AuthorizationError):
+        await routing_policy_service.list_available_model_profiles(
+            _user(), None, _deps(store=_FakeStore(), rebac=_OrgMarkerRebac())
+        )
+    assert _stub_team_lookup == []  # no team gate without a team
+
+
+@pytest.mark.asyncio
+async def test_platform_available_models_keep_models_on_for_every_team(
+    monkeypatch, _stub_catalog
+) -> None:
+    """No `can_use`: a model enabled for some teams only is not offered."""
+    _platform_gate(monkeypatch, manager=True)
+    _default_on(monkeypatch, {"model__openai__gpt-4o"})
+    _stub_catalog["model__openai__gpt-4o"] = _stub_catalog[
+        "model__openai__gpt-4o"
+    ].model_copy(update={"model_vision_profile_ids": ("chat.openai.gpt4o",)})
+
+    async def _no_usable(rebac, team_id):
+        raise AssertionError("can_use is a team question")
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _no_usable)
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), None, _deps(store=_FakeStore(), rebac=_OrgMarkerRebac())
+    )
+    assert [(p.profile_id, p.supports_vision) for p in result.profiles] == [
+        ("chat.openai.gpt4o", True)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_platform_available_models_span_every_pod(monkeypatch) -> None:
+    _platform_gate(monkeypatch, manager=True)
+    _default_on(monkeypatch, {"model__openai__gpt-5", "model__openai__gpt-4o"})
+    scopes: list[set[str] | None] = []
+
+    async def _universal(deps, *, source_runtime_ids=None):
+        scopes.append(source_runtime_ids)
+        return frozenset({"chat.openai.gpt5"})
+
+    monkeypatch.setattr(
+        routing_policy_service,
+        "universally_available_chat_model_profile_ids",
+        _universal,
+    )
+    _pod_defaults(monkeypatch, [("chat.openai.gpt5", "model__openai__gpt-5")])
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), None, _deps(store=_FakeStore(), rebac=_OrgMarkerRebac())
+    )
+    assert scopes == [set()]  # every enabled pod
+    assert [p.profile_id for p in result.profiles] == ["chat.openai.gpt5"]
+    assert result.effective_default_profile_id == "chat.openai.gpt5"
+
+
+@pytest.mark.asyncio
+async def test_platform_available_models_unfiltered_without_rebac(monkeypatch) -> None:
+    _platform_gate(monkeypatch, manager=True)
+
+    class _Disabled:
+        enabled = False
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), None, _deps(store=_FakeStore(), rebac=_Disabled())
+    )
+    assert len(result.profiles) == 3
+
+
 @pytest.mark.asyncio
 async def test_elevated_role_check_skipped_for_personal_space() -> None:
     # A personal-space owner holds team_editor unconditionally and must never
@@ -1450,10 +1581,21 @@ class _ResolutionDeps(_FakeDeps):
         instance: _FakeInstanceForResolution | None,
         sources: list[Any] | None = None,
         reasoning_enabled_ids: set[str] | None = None,
+        display_name_overrides: dict[str, str] | None = None,
+        fallback_profile_id: str | None = None,
+        removed_profiles: dict[str, str] | None = None,
+        pod_default_override: str | None = None,
     ) -> None:
-        super().__init__(store=store, rebac=rebac)
+        super().__init__(
+            store=store,
+            rebac=rebac,
+            display_name_overrides=display_name_overrides,
+            fallback_profile_id=fallback_profile_id,
+            removed_profiles=removed_profiles,
+        )
         self._instance = instance
         self._reasoning_enabled_ids = reasoning_enabled_ids or set()
+        self._pod_default_override = pod_default_override
         self.configuration = SimpleNamespace(
             platform=SimpleNamespace(
                 runtime_catalog_sources=sources
@@ -1490,6 +1632,32 @@ class _ResolutionDeps(_FakeDeps):
 
         return _Store()
 
+    def get_model_discovery_state_store(self):
+        removed_profiles = self._removed_profiles
+
+        class _Store:
+            async def list_all(self, session=None):
+                return [
+                    SimpleNamespace(
+                        removed=[
+                            {"id": capability_id, "chat_profile_ids": [profile_id]}
+                        ],
+                        active_url=None,
+                    )
+                    for profile_id, capability_id in removed_profiles.items()
+                ]
+
+        return _Store()
+
+    def get_model_display_name_override_store(self):
+        overrides = self._display_name_overrides
+
+        class _Store:
+            async def list_all(self):
+                return dict(overrides)
+
+        return _Store()
+
 
 def _resolution_deps(
     *,
@@ -1500,6 +1668,10 @@ def _resolution_deps(
     instance: _FakeInstanceForResolution | None = None,
     sources: list[Any] | None = None,
     reasoning_enabled_ids: set[str] | None = None,
+    display_name_overrides: dict[str, str] | None = None,
+    fallback_profile_id: str | None = None,
+    removed_profiles: dict[str, str] | None = None,
+    pod_default_override: str | None = None,
 ) -> ProductServiceDependencies:
     stored: dict[str, Any] = {}
     if stored_default is not None or stored_disabled or stored_reasoning_off:
@@ -1516,6 +1688,10 @@ def _resolution_deps(
         else _FakeInstanceForResolution(source_agent_id="rico"),
         sources=sources,
         reasoning_enabled_ids=reasoning_enabled_ids,
+        display_name_overrides=display_name_overrides,
+        fallback_profile_id=fallback_profile_id,
+        removed_profiles=removed_profiles,
+        pod_default_override=pod_default_override,
     )
 
 
@@ -1577,6 +1753,34 @@ async def test_effective_model_falls_back_to_the_pod_default(
     )
     assert result.name == "gpt-5.1"
     assert result.enabled_for_team is True
+
+
+@pytest.mark.asyncio
+async def test_effective_model_uses_admin_pod_default_and_falls_back_to_yaml(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry("model__openai__yaml", "chat.yaml", name="yaml"),
+            _chat_entry("model__openai__admin", "chat.admin", name="admin"),
+        ],
+        default_chat_profile_id="chat.yaml",
+    )
+    admin = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(pod_default_override="chat.admin"),
+    )
+    assert admin.name == "admin"
+    missing = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(pod_default_override="chat.removed"),
+    )
+    assert missing.name == "yaml"
 
 
 @pytest.mark.asyncio
@@ -1837,6 +2041,117 @@ async def test_effective_model_names_the_entry_owning_the_winning_profile(
 
 
 @pytest.mark.asyncio
+async def test_effective_model_names_manual_fallback_for_removed_choice(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry(
+                "model__openai__manual-safe",
+                "chat.manual.safe",
+                name="manual-safe",
+                display_name="Safe Chat",
+            ),
+            _chat_entry(
+                "model__openai__gone",
+                "discovered.chat.gateway.gone",
+                name="gone",
+            ),
+        ],
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            instance=_FakeInstanceForResolution(
+                source_agent_id="rico", recommended="discovered.chat.gateway.gone"
+            ),
+            fallback_profile_id="chat.manual.safe",
+            removed_profiles={"discovered.chat.gateway.gone": "model__openai__gone"},
+            display_name_overrides={"model__openai__manual-safe": "Platform Safe"},
+        ),
+    )
+    assert result.name == "manual-safe"
+    assert result.display_name == "Platform Safe"
+    assert result.capability_id == "model__openai__manual-safe"
+    assert all(
+        row.profile_id != "discovered.chat.gateway.gone"
+        for row in result.selectable_models
+    )
+
+
+@pytest.mark.asyncio
+async def test_effective_model_uses_pod_fallback_when_saved_discovery_default_is_removed(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry("model__openai__yaml", "chat.yaml", name="yaml"),
+            _chat_entry("model__openai__safe", "chat.safe", name="safe"),
+            _chat_entry(
+                "model__openai__gone", "discovered.chat.gateway.gone", name="gone"
+            ),
+        ],
+        default_chat_profile_id="chat.yaml",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            pod_default_override="discovered.chat.gateway.gone",
+            fallback_profile_id="chat.safe",
+            removed_profiles={"discovered.chat.gateway.gone": "model__openai__gone"},
+        ),
+    )
+    assert result.name == "safe"
+    assert all(row.name != "gone" for row in result.selectable_models)
+
+
+@pytest.mark.asyncio
+async def test_effective_model_and_picker_use_saved_admin_name(
+    monkeypatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[
+            _chat_entry(
+                "model__openai__small",
+                "chat.small",
+                name="chat-small",
+                display_name="Gateway Small",
+            ),
+            _chat_entry(
+                "model__openai__large",
+                "chat.large",
+                name="chat-large",
+                display_name="Gateway Large",
+            ),
+        ],
+        default_chat_profile_id="chat.small",
+    )
+    result = await resolve_effective_chat_model(
+        _user(),
+        TeamId("team-1"),
+        "inst-1",
+        _resolution_deps(
+            stored_default="chat.large",
+            display_name_overrides={"model__openai__large": "Team Large"},
+        ),
+    )
+
+    assert result.name == "chat-large"
+    assert result.display_name == "Team Large"
+    assert {row.name: row.display_name for row in result.selectable_models} == {
+        "chat-small": "Gateway Small",
+        "chat-large": "Team Large",
+    }
+
+
+@pytest.mark.asyncio
 async def test_effective_model_reports_a_model_not_enabled_for_the_team(
     monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
 ) -> None:
@@ -2069,6 +2384,7 @@ async def test_effective_model_is_empty_for_a_deleted_instance(
         "reasoning_enabled": False,
         "selectable_models": [],
         "choice_locked": False,
+        "supports_vision": False,
     }
 
 
@@ -2094,3 +2410,62 @@ async def test_effective_model_is_empty_for_an_instance_of_another_team(
     )
     assert result.name is None
     assert result.capability_id is None
+
+
+@pytest.mark.asyncio
+async def test_available_models_report_supports_vision_per_profile(
+    monkeypatch, _stub_catalog
+) -> None:
+    async def _fake_usable(rebac, team_id):
+        return None
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    _stub_catalog["model__openai__gpt-5"] = _stub_catalog[
+        "model__openai__gpt-5"
+    ].model_copy(update={"model_vision_profile_ids": ("chat.openai.gpt5",)})
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+
+    assert {p.profile_id: p.supports_vision for p in result.profiles} == {
+        "chat.openai.gpt4o": False,
+        "chat.openai.gpt5": True,
+        "chat.openai.gpt5.creative": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_effective_model_reports_supports_vision_of_the_resolved_profile(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    entry = _chat_entry("model__openai__gpt-4o", "chat.vision").model_copy(
+        update={"model_vision_profile_ids": ("chat.vision",)}
+    )
+    _stub_pod_catalog(
+        monkeypatch, entries=[entry], default_chat_profile_id="chat.vision"
+    )
+
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", _resolution_deps()
+    )
+
+    assert result.supports_vision is True
+
+
+@pytest.mark.asyncio
+async def test_effective_model_without_vision_declaration_reports_false(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[_chat_entry("model__openai__mistral-small", "chat.small")],
+        default_chat_profile_id="chat.small",
+    )
+
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", _resolution_deps()
+    )
+
+    assert result.supports_vision is False

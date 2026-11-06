@@ -53,6 +53,9 @@ from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.agent_marketplace.store import AgentMarketplaceStore
 from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.capabilities.display_name_store import (
+    ModelDisplayNameOverrideStore,
+)
 from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
@@ -72,11 +75,16 @@ from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionS
 from control_plane_backend.marketplace_settings.store import (
     PlatformMarketplaceSettingsStore,
 )
+from control_plane_backend.model_discovery.store import (
+    ModelDiscoveryStateStore,
+    PodChatDefaultStore,
+)
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
     PlatformPromptStore,
 )
+from control_plane_backend.platform_skills.store import PlatformSkillPolicyStore
 from control_plane_backend.platform_ui_settings.store import PlatformUiSettingsStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
@@ -120,11 +128,14 @@ class ApplicationContext:
         self._team_capability_settings_store: TeamCapabilitySettingsStore | None = None
         self._team_routing_policy_store: TeamRoutingPolicyStore | None = None
         self._platform_model_binding_store: PlatformModelBindingStore | None = None
+        self._model_discovery_state_store: ModelDiscoveryStateStore | None = None
+        self._pod_chat_default_store: PodChatDefaultStore | None = None
         self._platform_prompt_store: PlatformPromptStore | None = None
         self._creation_assistant_settings_store: (
             CreationAssistantSettingsStore | None
         ) = None
         self._platform_ui_settings_store: PlatformUiSettingsStore | None = None
+        self._platform_skill_policy_store: PlatformSkillPolicyStore | None = None
         self._marketplace_settings_store: PlatformMarketplaceSettingsStore | None = None
         self._agent_marketplace_store: AgentMarketplaceStore | None = None
         self._announcement_store: AnnouncementStore | None = None
@@ -135,6 +146,9 @@ class ApplicationContext:
         self._platform_default_team_store: PlatformDefaultTeamStore | None = None
         self._team_admin_charter_store: TeamAdminCharterStore | None = None
         self._model_reasoning_store: ModelReasoningStore | None = None
+        self._model_display_name_override_store: (
+            ModelDisplayNameOverrideStore | None
+        ) = None
         self._session_metadata_store: SessionMetadataStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
@@ -423,6 +437,20 @@ class ApplicationContext:
             )
         return self._platform_model_binding_store
 
+    def get_model_discovery_state_store(self) -> ModelDiscoveryStateStore:
+        if self._model_discovery_state_store is None:
+            self._model_discovery_state_store = ModelDiscoveryStateStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._model_discovery_state_store
+
+    def get_pod_chat_default_store(self) -> PodChatDefaultStore:
+        if self._pod_chat_default_store is None:
+            self._pod_chat_default_store = PodChatDefaultStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._pod_chat_default_store
+
     def get_platform_prompt_store(self) -> PlatformPromptStore:
         if self._platform_prompt_store is None:
             self._platform_prompt_store = PlatformPromptStore(
@@ -443,6 +471,14 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._platform_ui_settings_store
+
+    def get_platform_skill_policy_store(self) -> PlatformSkillPolicyStore:
+        """Reuse one store backed by the configured shared database pool."""
+        if self._platform_skill_policy_store is None:
+            self._platform_skill_policy_store = PlatformSkillPolicyStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_skill_policy_store
 
     def get_marketplace_settings_store(self) -> PlatformMarketplaceSettingsStore:
         if self._marketplace_settings_store is None:
@@ -499,6 +535,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._model_reasoning_store
+
+    def get_model_display_name_override_store(self) -> ModelDisplayNameOverrideStore:
+        if self._model_display_name_override_store is None:
+            self._model_display_name_override_store = ModelDisplayNameOverrideStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._model_display_name_override_store
 
     def get_session_metadata_store(self) -> SessionMetadataStore:
         if self._session_metadata_store is None:

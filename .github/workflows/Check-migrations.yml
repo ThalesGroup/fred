@@ -48,6 +48,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
 
       - name: Install dependencies (control-plane-backend)
         run: uv sync
@@ -64,6 +66,10 @@ jobs:
       - name: Install dependencies (fred-capability-writable-document)
         run: uv sync
         working-directory: libs/capabilities/fred-capability-writable-document
+
+      - name: Install dependencies (fred-capability-ppt-filler)
+        run: uv sync
+        working-directory: libs/capabilities/fred-capability-ppt-filler
 
       - name: Check single Alembic head per tree
         run: make db-check-combined-heads
@@ -82,6 +88,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
 
       - name: Install dependencies (control-plane-backend)
         run: uv sync
@@ -98,6 +106,10 @@ jobs:
       - name: Install dependencies (fred-capability-writable-document)
         run: uv sync
         working-directory: libs/capabilities/fred-capability-writable-document
+
+      - name: Install dependencies (fred-capability-ppt-filler)
+        run: uv sync
+        working-directory: libs/capabilities/fred-capability-ppt-filler
 
       - name: Run combined SQLite migration checks
         run: make db-check-combined-sqlite
@@ -116,6 +128,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.5"
 
       - name: Install dependencies (control-plane-backend)
         run: uv sync
@@ -132,6 +146,10 @@ jobs:
       - name: Install dependencies (fred-capability-writable-document)
         run: uv sync
         working-directory: libs/capabilities/fred-capability-writable-document
+
+      - name: Install dependencies (fred-capability-ppt-filler)
+        run: uv sync
+        working-directory: libs/capabilities/fred-capability-ppt-filler
 
       - name: Run combined PostgreSQL migration checks
         run: make db-check-combined-postgres

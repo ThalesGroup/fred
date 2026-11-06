@@ -29,11 +29,8 @@ import {
   uiThemeTab,
   type PlatformUiThemes,
   resolveUiTheme,
-  THEME_MODE_STORAGE_KEY,
-  UI_THEME_STORAGE_KEY,
   UI_THEMES,
 } from "./uiThemes";
-import type { ThemeMode } from "./ApplicationContextStruct";
 
 const BOOT_SCRIPT = readFileSync(path.resolve(__dirname, "../../public/theme-boot.js"), "utf8");
 const THEMES_DIR = path.resolve(__dirname, "../styles/themes");
@@ -65,9 +62,9 @@ describe("UI theme catalog", () => {
     expect(JSON.parse(match![1])).toEqual([...UI_THEMES]);
   });
 
-  it("reads the keys the app writes", () => {
-    expect(BOOT_SCRIPT).toContain(`"${localStorageKey(UI_THEME_STORAGE_KEY)}"`);
-    expect(BOOT_SCRIPT).toContain(`"${localStorageKey(THEME_MODE_STORAGE_KEY)}"`);
+  it("reads public catalog settings but not personal browser choices", () => {
+    expect(BOOT_SCRIPT).not.toContain(`"${localStorageKey(UI_THEME_STORAGE_KEY)}"`);
+    expect(BOOT_SCRIPT).not.toContain(`"${localStorageKey(THEME_MODE_STORAGE_KEY)}"`);
     expect(BOOT_SCRIPT).toContain(`"${PLATFORM_UI_THEMES_CACHE_KEY}"`);
     expect(BOOT_SCRIPT).toContain(`"${CUSTOM_UI_THEMES_CACHE_KEY}"`);
   });
@@ -80,7 +77,7 @@ describe("UI theme catalog", () => {
   });
 });
 
-describe("theme resolution before the first paint", () => {
+describe("public theme resolution before authentication", () => {
   const cases: { name: string; theme?: unknown; mode?: unknown; platform?: unknown; prefersDark: boolean }[] = [
     { name: "stored cloud, dark", theme: "cloud", mode: "dark", prefersDark: false },
     { name: "stored cobalt, light", theme: "cobalt", mode: "light", prefersDark: true },
@@ -116,9 +113,9 @@ describe("theme resolution before the first paint", () => {
     if (mode !== undefined) storage[localStorageKey(THEME_MODE_STORAGE_KEY)] = JSON.stringify(mode);
     const attributes = boot(storage, prefersDark);
     const parsed = typeof platform === "object" && platform !== null ? (platform as PlatformUiThemes) : null;
-    expect(attributes["data-ui-theme"]).toBe(resolveUiTheme(theme, parsed));
+    expect(attributes["data-ui-theme"]).toBe(resolveUiTheme(null, parsed));
     expect(attributes["data-ui-base-theme"]).toBe(uiThemeBase(attributes["data-ui-theme"]));
-    const dark = computeDarkMode((mode ?? "system") as ThemeMode, prefersDark);
+    const dark = computeDarkMode("system", prefersDark);
     expect(attributes["data-theme"]).toBe(dark ? "dark" : "light");
   });
 
@@ -138,7 +135,7 @@ describe("theme resolution before the first paint", () => {
     });
   });
 
-  it("resolves an unknown stored theme to pebble", () => {
+  it("ignores an unknown stored theme", () => {
     expect(resolveUiTheme("corporate")).toBe("pebble");
     expect(boot({ [localStorageKey(UI_THEME_STORAGE_KEY)]: JSON.stringify("corporate") }, false)["data-ui-theme"]).toBe(
       "pebble",
@@ -160,6 +157,7 @@ it("offers multiple ZIP themes and applies each inherited base before paint", ()
       boot(
         {
           [CUSTOM_UI_THEMES_CACHE_KEY]: JSON.stringify(custom),
+          [PLATFORM_UI_THEMES_CACHE_KEY]: JSON.stringify({ default_theme: "delta" }),
           [localStorageKey(UI_THEME_STORAGE_KEY)]: JSON.stringify("delta"),
         },
         false,
@@ -245,3 +243,5 @@ describe("resolveUiTheme with platform settings", () => {
     expect(resolveUiTheme(null, null)).toBe("pebble");
   });
 });
+const UI_THEME_STORAGE_KEY = "ApplicationContextProvider.uiTheme";
+const THEME_MODE_STORAGE_KEY = "ApplicationContextProvider.themeMode";

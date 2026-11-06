@@ -88,6 +88,13 @@ class AvailableModelProfile(BaseModel):
             "then can the team set a reasoning default for it."
         ),
     )
+    supports_vision: bool = Field(
+        default=False,
+        description=(
+            "Whether this profile declares `supports_vision` in the pod "
+            "model catalog, so a capability form can offer image reading."
+        ),
+    )
 
 
 class AvailableModelProfileList(BaseModel):
@@ -170,8 +177,8 @@ class EffectiveChatModel(BaseModel):
     display_name: str | None = Field(
         default=None,
         description=(
-            "The ops-authored `model_display_name` for this model, when the pod "
-            "catalog names one. `None` leaves the frontend on its name/id "
+            "The saved administrator name or pod catalog name for this model. "
+            "`None` leaves the frontend on its name/id "
             "prettifying fallback — the same fallback the composer already had."
         ),
     )
@@ -211,6 +218,14 @@ class EffectiveChatModel(BaseModel):
             "and a team override routing to Mistral Medium, the composer used to "
             "render 'Mistral Medium · Élevé' and offer the toggle while the pod "
             "ran no reasoning at all."
+        ),
+    )
+    supports_vision: bool = Field(
+        default=False,
+        description=(
+            "Whether the resolved profile declares `supports_vision`. Always "
+            "False for a platform binding, which carries no such declaration: "
+            "image reading then fails closed."
         ),
     )
 

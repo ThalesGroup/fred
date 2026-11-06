@@ -14,12 +14,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
+import httpx2
 import pytest
+from fastmcp import Client, FastMCP
+from fastmcp.tools import ToolResult
 from fred_core.store import VectorSearchHit
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.react.react_tool_rendering import GENERIC_TOOL_FAILURE_MESSAGE
@@ -36,6 +41,8 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.contracts.runtime import RuntimeServices, ToolProviderPort
+from langchain.mcp import MCPAdapter
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel
 
@@ -208,6 +215,240 @@ async def test_context_aware_read_query_keeps_classified_engine_detail() -> None
     assert [block.text for block in artifact.blocks] == [
         "Binder Error: Referenced column amount_typo not found"
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [400, 401, 422, 503, 504])
+async def test_current_fastmcp_http_failure_survives_provider_resolution(
+    status: int,
+) -> None:
+    from fastapi import FastAPI, HTTPException
+
+    app = FastAPI()
+
+    @app.get("/query", operation_id="read_query")
+    async def query(sql: str) -> dict:
+        raise HTTPException(
+            status,
+            "Binder Error: synthetic missing column"
+            if status == 400
+            else "private provider diagnostic",
+        )
+
+    provider = (await MCPAdapter(Client(FastMCP.from_fastapi(app=app))).list_tools())[0]
+    wrapper = ContextAwareTool(
+        base_tool=provider,
+        context_provider=lambda: None,
+        agent_settings_provider=_AgentSettings,
+    )
+    spec = _resolver()._resolve_runtime_provider_tool(
+        runtime_tool=wrapper, tool_name=wrapper.name, description=wrapper.description
+    )
+    content, artifact = await spec.invoke({"sql": "SELECT missing FROM d_sales"})
+
+    assert artifact is not None and artifact.is_error
+    assert content.strip() and "private provider" not in content
+    assert "Error calling tool" not in content
+    if status == 400:
+        assert content == "Tool error:\nBinder Error: synthetic missing column"
+    else:
+        assert "HTTP" in content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transport", ["legacy", "httpx", "httpx2"])
+@pytest.mark.parametrize(
+    "status,code",
+    [
+        (400, "INVALID_ARGUMENTS"),
+        (401, "AUTHENTICATION_REQUIRED"),
+        (403, "RESOURCE_UNAVAILABLE"),
+        (404, "RESOURCE_UNAVAILABLE"),
+        (422, "INVALID_ARGUMENTS"),
+        (429, "RATE_LIMITED"),
+        (500, "SERVICE_ERROR"),
+        (503, "SERVICE_BUSY"),
+        (504, "TOOL_TIMEOUT"),
+        (502, None),
+    ],
+)
+async def test_caught_mcp_failure_keeps_safe_nonempty_feedback(
+    status: int, code: str | None, transport: str
+) -> None:
+    async def _inventory() -> str:
+        body = {
+            "detail": "private provider diagnostic https://provider.example/?token=secret"
+        }
+        if transport == "httpx2":
+            httpx2.Response(
+                status,
+                json=body,
+                request=httpx2.Request("GET", "https://provider.example"),
+            ).raise_for_status()
+        elif transport == "httpx":
+            httpx.Response(
+                status,
+                json=body,
+                request=httpx.Request("GET", "https://provider.example"),
+            ).raise_for_status()
+        raise RuntimeError(
+            f"Error calling list_tabular_documents. Status code: {status}. Response: {json.dumps(body)}"
+        )
+
+    base_tool = StructuredTool.from_function(
+        coroutine=_inventory,
+        name="list_tabular_documents",
+        description="List available data.",
+        response_format="content_and_artifact",
+    )
+    wrapper = ContextAwareTool(
+        base_tool=base_tool,
+        context_provider=lambda: None,
+        agent_settings_provider=_AgentSettings,
+    )
+    spec = _resolver()._resolve_runtime_provider_tool(
+        runtime_tool=wrapper, tool_name=wrapper.name, description=wrapper.description
+    )
+    content, artifact = await spec.invoke({})
+
+    assert content.strip()
+    assert artifact is not None and artifact.is_error
+    assert artifact.blocks and artifact.blocks[0].text
+    assert (
+        "private" not in content
+        and "secret" not in content
+        and "provider.example" not in content
+    )
+    if code:
+        assert f"{code}: " in content
+    else:
+        assert GENERIC_TOOL_FAILURE_MESSAGE in content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tool_name,payload",
+    [
+        ("list_tabular_documents", {"result": [{"document_uid": "cars"}]}),
+        (
+            "describe_tabular_documents",
+            {"result": [{"tables": [{"query_alias": "d_cars"}]}]},
+        ),
+        ("search_tabular_values", {"matches": [{"value": "available"}]}),
+        (
+            "read_query",
+            {
+                "sql_query": "SELECT * FROM d_sales WHERE 1=0",
+                "rows": [],
+                "error": None,
+                "message": "Requête exécutée avec succès : 0 ligne correspondant aux conditions.",
+            },
+        ),
+        (
+            "provider_data",
+            {"tool_ref": "untrusted", "is_error": True, "ui_parts": [], "sources": []},
+        ),
+    ],
+)
+@pytest.mark.parametrize("structured_only", [False, True])
+async def test_mcp_structured_results_survive_the_agent_tool_path(
+    tool_name: str, payload: dict[str, object], structured_only: bool
+) -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
+    server = FastMCP("Structured result regression")
+
+    @server.tool(name=tool_name, output_schema=None)
+    async def tabular_result() -> ToolResult:
+        return ToolResult(
+            content=[] if structured_only else json.dumps(payload),
+            structured_content=payload,
+        )
+
+    provider = (await MCPAdapter(Client(server)).list_tools())[0]
+    wrapper = ContextAwareTool(
+        base_tool=provider,
+        context_provider=lambda: None,
+        agent_settings_provider=_AgentSettings,
+    )
+    spec = _resolver()._resolve_runtime_provider_tool(
+        runtime_tool=wrapper, tool_name=tool_name, description=wrapper.description
+    )
+    tool = (
+        ReActToolBinder(runtime_tools=[spec], tracer=None, binding=_binding())
+        .build_tools()[0]
+        .tool
+    )
+
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "id": "structured-regression",
+            "name": tool_name,
+            "args": {},
+        }
+    )
+
+    assert isinstance(result, ToolMessage)
+    assert result.status == "success"
+    assert json.loads(str(result.content)) == payload
+    assert isinstance(result.artifact, ToolInvocationResult)
+    assert result.artifact.tool_ref == tool_name
+    assert result.artifact.is_error is False
+    assert result.artifact.sources == ()
+    assert result.artifact.ui_parts == ()
+    assert result.artifact.blocks == (
+        ToolContentBlock(kind=ToolContentKind.JSON, data=payload),
+    )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_mcp_results_keep_each_calls_payload() -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
+    server = FastMCP("Concurrent structured results")
+
+    @server.tool
+    async def read_query(request_id: int) -> dict[str, object]:
+        await asyncio.sleep(0)
+        return {"request_id": request_id, "rows": [{"count": request_id + 1}]}
+
+    provider = (await MCPAdapter(Client(server)).list_tools())[0]
+    wrapper = ContextAwareTool(
+        base_tool=provider,
+        context_provider=lambda: None,
+        agent_settings_provider=_AgentSettings,
+    )
+    spec = _resolver()._resolve_runtime_provider_tool(
+        runtime_tool=wrapper, tool_name=wrapper.name, description=wrapper.description
+    )
+    tool = (
+        ReActToolBinder(runtime_tools=[spec], tracer=None, binding=_binding())
+        .build_tools()[0]
+        .tool
+    )
+
+    results = await asyncio.gather(
+        *(
+            tool.ainvoke(
+                {
+                    "type": "tool_call",
+                    "id": f"concurrent-{request_id}",
+                    "name": tool.name,
+                    "args": {"request_id": request_id},
+                }
+            )
+            for request_id in range(50)
+        )
+    )
+
+    for request_id, result in enumerate(results):
+        expected = {"request_id": request_id, "rows": [{"count": request_id + 1}]}
+        assert isinstance(result, ToolMessage)
+        assert result.status == "success"
+        assert json.loads(str(result.content)) == expected
+        assert isinstance(result.artifact, ToolInvocationResult)
+        assert result.artifact.blocks[0].data == expected
 
 
 def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:

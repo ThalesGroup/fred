@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { forwardRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -205,6 +206,7 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
   },
   ref,
 ) {
+  const { t } = useTranslation();
   const { stableMarkdown, pendingFence } = useMemo(
     () => (streaming ? getStreamingMarkdownState(text) : { stableMarkdown: text, pendingFence: null }),
     [streaming, text],
@@ -296,7 +298,7 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
 
   function pendingFenceStreamingLabel(fence: PendingStreamingFence): string {
     if (fence.kind === "code") {
-      return fence.label === "mermaid" ? "Generating Mermaid code..." : "Generating code block...";
+      return "Generating code block...";
     }
     if (fence.kind === "math") {
       return "Generating math block...";
@@ -307,6 +309,9 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
   function renderPendingFence(fence: PendingStreamingFence | null) {
     if (fence === null) {
       return null;
+    }
+    if (fence.kind === "code" && fence.label === "mermaid") {
+      return <span role="status">{t("mermaid.generating")}</span>;
     }
 
     return (

@@ -58,6 +58,7 @@ from fred_sdk.contracts.runtime import (
     DocumentScopeRefusedError,
     RuntimeServices,
 )
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
 _VERBATIM_EP = "fred_capability_documents.document_verbatim:DocumentVerbatimCapability"
 _EXTRACT_EP = "fred_capability_documents.document_extract:DocumentExtractCapability"
@@ -138,6 +139,21 @@ async def _invoke(cap: Any, ctx: Any, name: str, args: dict[str, Any]):
     return await the_tool.ainvoke(
         {"type": "tool_call", "name": name, "args": args, "id": "call-1"}
     )
+
+
+def test_read_uid_guidance_reaches_provider_schema() -> None:
+    cap = DocumentVerbatimCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_services(), config={}
+    )
+    schema = convert_to_openai_tool(_tools(cap, ctx)["read_document"])
+    field = schema["function"]["parameters"]["properties"]["document_uid"]
+
+    assert field["type"] == "string"
+    assert "pattern" not in field
+    description = field.get("description", "").lower()
+    for guidance in ("unchanged", "search", "file name", "folder", "first"):
+        assert guidance in description
 
 
 # ---------------------------------------------------------------------------
@@ -429,8 +445,29 @@ async def test_403_failure_teaches_uid_recovery() -> None:
     )
     assert msg.artifact.is_error is True
     assert "opaque uid" in msg.content
-    assert "document_uid=cahier.pdf" in msg.content
+    assert "not a file name or Workspace path" in msg.content
     # The recovery hint must also land in the artifact blocks (Graph agent path).
+    assert msg.artifact.blocks[0].text == msg.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [403, 404])
+async def test_read_refusal_gives_bounded_guidance_without_claiming_existence(
+    status: int,
+) -> None:
+    marker = "private upstream body https://internal.invalid/token?secret=value"
+    port = _FakeMarkdownPort(error=DocumentPortCallError(marker, status_code=status))
+    cap = DocumentVerbatimCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_services(port), config={}
+    )
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "cahier.pdf"})
+
+    assert msg.artifact.is_error is True
+    assert "exact opaque uid" in msg.content
+    assert "does not establish whether the document exists" in msg.content
+    assert "continue with accessible sources" in msg.content
+    assert marker not in msg.content
     assert msg.artifact.blocks[0].text == msg.content
 
 

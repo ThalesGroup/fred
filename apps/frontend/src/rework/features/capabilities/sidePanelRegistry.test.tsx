@@ -16,7 +16,7 @@
 // panels their plugins declare; capabilities with no panel are skipped.
 
 import { describe, expect, it } from "vitest";
-import { buildSidePanelRegistry, sidePanelsForCapabilities } from "./sidePanelRegistry";
+import { buildSidePanelRegistry, findSidePanel, sidePanelsForCapabilities } from "./sidePanelRegistry";
 import type { CapabilitySidePanelProps, CapabilityUiPlugin } from "./types";
 
 function StubPanel(_props: CapabilitySidePanelProps) {
@@ -26,7 +26,7 @@ function StubPanel(_props: CapabilitySidePanelProps) {
 describe("sidePanelRegistry (#1979)", () => {
   const withPanel: CapabilityUiPlugin = {
     id: "demo_echo",
-    sidePanels: { demo_notes: { Component: StubPanel, icon: "edit_note" } },
+    sidePanels: { demo_notes: { Component: StubPanel, icon: "chat" } },
   };
   const withoutPanel: CapabilityUiPlugin = { id: "plain", partRenderers: {} };
 
@@ -39,7 +39,7 @@ describe("sidePanelRegistry (#1979)", () => {
       capabilityId: "demo_echo",
       widget: "demo_notes",
       Component: StubPanel,
-      icon: "edit_note",
+      icon: "chat",
     });
   });
 
@@ -67,11 +67,39 @@ describe("sidePanelRegistry (#1979)", () => {
   it("preserves the order the capabilities are supplied", () => {
     const other: CapabilityUiPlugin = {
       id: "other",
-      sidePanels: { other_panel: { Component: StubPanel, icon: "edit_note" } },
+      sidePanels: { other_panel: { Component: StubPanel, icon: "chat" } },
     };
     const registry = buildSidePanelRegistry([withPanel, other]);
     const entries = sidePanelsForCapabilities(["other", "demo_echo"], registry);
 
     expect(entries.map((e) => e.capabilityId)).toEqual(["other", "demo_echo"]);
+  });
+
+  it("offers a widget declared by two active capabilities once, under the first supplied", () => {
+    const filler: CapabilityUiPlugin = {
+      id: "ppt_filler",
+      sidePanels: { ppt_preview_pane: { Component: StubPanel, icon: "slideshow" } },
+    };
+    const builder: CapabilityUiPlugin = {
+      id: "ppt_builder",
+      sidePanels: { ppt_preview_pane: { Component: StubPanel, icon: "slideshow" } },
+    };
+    const registry = buildSidePanelRegistry([filler, builder, withPanel]);
+
+    const both = sidePanelsForCapabilities(["ppt_builder", "demo_echo", "ppt_filler"], registry);
+    expect(both.map((e) => `${e.capabilityId}:${e.widget}`)).toEqual([
+      "ppt_builder:ppt_preview_pane",
+      "demo_echo:demo_notes",
+    ]);
+    expect(sidePanelsForCapabilities(["ppt_filler"], registry)[0].capabilityId).toBe("ppt_filler");
+  });
+
+  it("resolves a key by capability and widget, falling back to the widget's merged entry", () => {
+    const entries = sidePanelsForCapabilities(["demo_echo"], buildSidePanelRegistry([withPanel]));
+
+    expect(findSidePanel(entries, "demo_echo:demo_notes")).toBe(entries[0]);
+    expect(findSidePanel(entries, "other:demo_notes")).toBe(entries[0]);
+    expect(findSidePanel(entries, "demo_echo:unknown")).toBeNull();
+    expect(findSidePanel(entries, null)).toBeNull();
   });
 });

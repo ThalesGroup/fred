@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACCEPTED_APP_PROTOCOL_VERSIONS,
   APPLICATION_REQUEST_METHODS,
+  BINARY_BODIES_CAPABILITY,
   FRED_APP_PROTOCOL_VERSION,
   MAX_APPLICATION_REQUEST_HEADERS,
   MAX_APPLICATION_REQUEST_ID_LENGTH,
@@ -145,6 +146,48 @@ describe("protocol validation", () => {
     { type: "fred:response-error", requestId: {} },
   ])("rejects malformed host input", (wire) => {
     expect(parseApplicationHostMessage(wire)).toBeNull();
+  });
+
+  it("admits Blob bodies and a Blob response type, and rejects other binary shapes", () => {
+    const blob = new Blob(["%PDF"], { type: "application/pdf" });
+    const request = (fields: Record<string, unknown>) =>
+      parseApplicationFrameMessage({ type: "fred:request", requestId: "r", path: "items", method: "POST", ...fields });
+    expect(request({ body: blob, responseType: "blob" })).toMatchObject({ body: blob, responseType: "blob" });
+    expect(request({ body: "text" })).not.toHaveProperty("responseType");
+    for (const body of [new ArrayBuffer(4), new Uint8Array(4), { size: 4 }, ["a"], 1]) {
+      expect(request({ body })).toBeNull();
+    }
+    for (const responseType of ["text", "arraybuffer", "json", null, 1]) {
+      expect(request({ responseType })).toBeNull();
+    }
+
+    const response = (body: unknown) =>
+      parseApplicationHostMessage({ type: "fred:response", requestId: "r", status: 200, headers: {}, body });
+    expect(response(blob)).toMatchObject({ body: blob });
+    for (const body of [new ArrayBuffer(4), null, undefined, { size: 4 }]) {
+      expect(response(body)).toBeNull();
+    }
+  });
+
+  it("preserves announced capabilities and ignores entries it cannot read", () => {
+    const wire = (capabilities: unknown) => ({
+      type: "fred:context",
+      protocolVersion: "1",
+      applicationId: "example",
+      context,
+      capabilities,
+    });
+    expect(parseApplicationHostMessage(wire([BINARY_BODIES_CAPABILITY, "later"]))).toMatchObject({
+      capabilities: [BINARY_BODIES_CAPABILITY, "later"],
+    });
+    expect(parseApplicationHostMessage(wire(undefined))).not.toHaveProperty("capabilities");
+    expect(parseApplicationHostMessage(wire([{ name: "streaming" }, BINARY_BODIES_CAPABILITY, 1]))).toMatchObject({
+      context,
+      capabilities: [BINARY_BODIES_CAPABILITY],
+    });
+    for (const unreadable of ["binary-bodies", null, {}]) {
+      expect(parseApplicationHostMessage(wire(unreadable))).toMatchObject({ context, capabilities: [] });
+    }
   });
 
   it.each([

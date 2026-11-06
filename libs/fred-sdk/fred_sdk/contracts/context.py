@@ -584,6 +584,14 @@ class RuntimeContext(BaseModel):
             "interactive control was offered."
         ),
     )
+    auto_title: bool | None = Field(
+        default=None,
+        description=(
+            "Set on a conversation's first turn: the runtime then generates a "
+            "short title from this turn's input and streams it as a "
+            "`session_title` event. Later renames belong to the user."
+        ),
+    )
     # NOTE (2026-08-12): a per-question `reasoning_effort` override was built
     # and withdrawn the same day — providers disagree on accepted values
     # (Mistral small 400s on low/medium), and the declaration machinery it
@@ -927,6 +935,8 @@ class BoundRuntimeContext(FrozenModel):
       `portable_context` instead of expanding direct `runtime_context` usage
     """
 
+    disabled_platform_skills: tuple[str, ...] = ()
+    is_resuming: bool = False
     runtime_context: RuntimeContext = Field(
         ...,
         description=(
@@ -977,6 +987,22 @@ class BoundRuntimeContext(FrozenModel):
             "which is every deployment before this feature — routing falls "
             "through to the profile-valued levels exactly as before."
         ),
+    )
+    pod_chat_default_profile_id: str | None = Field(
+        default=None,
+        description="Trusted admin override for this agent pod's chat default, resolved on the managed turn.",
+    )
+    platform_chat_model_fallback: ModelBinding | None = Field(
+        default=None,
+        description="Trusted platform fallback used only for a confirmed removed chat profile.",
+    )
+    pod_chat_fallback_profile_id: str | None = Field(
+        default=None,
+        description="Trusted manual catalog chat profile for a confirmed removed selection.",
+    )
+    confirmed_removed_chat_profiles: dict[str, str] = Field(
+        default_factory=dict,
+        description="Trusted removed profile id to model capability id mapping from the last successful inventory.",
     )
     team_disabled_model_ids: tuple[str, ...] = Field(
         default=(),

@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import styles from "./ActionBar.module.css";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import type { MaterialIconType } from "@shared/utils/Type";
 import type { MouseEvent } from "react";
+import styles from "./ActionBar.module.css";
 
 export interface Action {
   id: string;
-  icon: string;
+  icon: MaterialIconType;
   label: string;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
@@ -34,19 +37,16 @@ export function ActionBar({ actions, alwaysVisible = false, className }: ActionB
   return (
     <div className={`${styles.bar} ${alwaysVisible ? styles.alwaysVisible : ""} ${className ?? ""}`} role="toolbar">
       {actions.map((action) => (
-        <button
-          key={action.id}
-          type="button"
-          className={styles.action}
-          onClick={action.onClick}
-          disabled={action.disabled}
-          aria-label={action.label}
-          title={action.label}
-        >
-          <span className="material-symbols-outlined" aria-hidden>
-            {action.icon}
-          </span>
-        </button>
+        <Tooltip key={action.id} text={action.label}>
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: action.icon }}
+            onClick={action.onClick}
+            disabled={action.disabled}
+            aria-label={action.label}
+          />
+        </Tooltip>
       ))}
     </div>
   );

@@ -51,6 +51,14 @@ class MarkdownContentResponse(BaseModel):
     content: str
 
 
+# The raw stream serves uploads inline with their stored MIME type, so an active
+# type (SVG, HTML) must never run if a browser opens it as a document.
+INLINE_STREAM_SAFETY_HEADERS = {
+    "Content-Security-Policy": "sandbox",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
 def parse_range_header(range_str: Optional[str]) -> Optional[tuple[int | None, int | None]]:
     """
     Parse 'Range: bytes=START-END' (inclusive). Returns (start, end) where either can be None.
@@ -434,6 +442,7 @@ class ContentController:
                 headers = {
                     "Accept-Ranges": "bytes",
                     "Content-Disposition": build_content_disposition_header("inline", file_name),
+                    **INLINE_STREAM_SAFETY_HEADERS,
                 }
 
                 window = resolve_range_window(range_header, total_size)

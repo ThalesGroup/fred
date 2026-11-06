@@ -29,7 +29,11 @@ from fred_core.history.history_schema import (
     ChatMetadata,
     CommandDescriptor,
     CommandPromptDescriptor,
+    HitlRequestPart,
     make_assistant_final,
+    make_hitl_request,
+    make_tool_call,
+    make_tool_result,
     make_user_text,
 )
 from fred_core.history.postgres_history_store import (
@@ -52,6 +56,63 @@ async def _store(tmp_path) -> PostgresHistoryStore:
     # The store never creates its own tables (Alembic owns that DDL).
     await create_history_schema(engine)
     return PostgresHistoryStore(engine)
+
+
+@pytest.mark.asyncio
+async def test_invalid_write_history_survives_without_mutating_live_arguments(
+    tmp_path,
+) -> None:
+    store = await _store(tmp_path)
+    args = {
+        "title": "Résumé",
+        "content_markdown": "Décision :\x00 pilote\n\t東京",
+        "nested": [{"text": "another\x00value"}],
+        "literal": "[U+0000] and \\u0000",
+    }
+    call = make_tool_call("s1", "e1", 0, "write-1", "write_document", args)
+    call.metadata = ChatMetadata.model_validate({"note": "invalid\x00metadata"})
+    before = call.model_dump(mode="json")
+    failure = make_tool_result(
+        "s1", "e1", 1, "write-1", "INVALID_DOCUMENT_CONTENT", ok=False
+    )
+    final = make_assistant_final("s1", "e1", 2, "The document was not saved.")
+
+    await store.save("s1", [call, failure, final], "u1")
+    reader = await _store(tmp_path)
+    messages = await reader.get("s1", "u1")
+
+    assert len(messages) == 3
+    persisted_call = messages[0].parts[0].model_dump()
+    assert persisted_call["call_id"] == "write-1"
+    assert persisted_call["args"]["content_markdown"] == (
+        "Décision :[U+0000] pilote\n\t東京"
+    )
+    assert persisted_call["args"]["nested"] == [{"text": "another[U+0000]value"}]
+    assert persisted_call["args"]["literal"] == args["literal"]
+    metadata = messages[0].metadata.model_dump()
+    assert metadata["note"] == "invalid[U+0000]metadata"
+    assert metadata["history_text_normalization"] == {
+        "character": "U+0000",
+        "replacement": "[U+0000]",
+        "count": 3,
+    }
+    result = messages[1].parts[0].model_dump()
+    assert result["call_id"] == "write-1" and result["ok"] is False
+    assert [m.rank for m in messages] == [0, 1, 2]
+    assert call.model_dump(mode="json") == before
+    assert "history_text_normalization" not in before["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_valid_history_text_is_unchanged(tmp_path) -> None:
+    store = await _store(tmp_path)
+    text = "Café\n\t東京 [U+0000] \\u0000"
+    message = make_user_text("s1", "e1", 0, text)
+    await store.save("s1", [message], "u1")
+
+    restored = (await store.get("s1", "u1"))[0]
+    assert restored.parts[0].model_dump()["text"] == text
+    assert "history_text_normalization" not in restored.metadata.model_dump()
 
 
 @pytest.mark.asyncio
@@ -143,3 +204,19 @@ async def test_a_stored_list_over_the_bound_reads_back_without_failing(
     row = (await store.get("s1", user_id="u1"))[0]
     assert row.metadata.command is None
     assert [part.model_dump()["text"] for part in row.parts] == ["assembled text"]
+
+
+@pytest.mark.asyncio
+async def test_hitl_read_exposes_persisted_target_without_modifying_stored_metadata(
+    tmp_path,
+) -> None:
+    store = await _store(tmp_path)
+    message = make_hitl_request("s1", "e1", 0, question="Choose", choices=[])
+    await store.save("s1", [message], user_id="u1", agent_instance_id="instance")
+    loaded = await store.get("s1", user_id="u1")
+    assert loaded[0].metadata.agent_id == "instance"
+    assert message.metadata.agent_id is None
+    part = loaded[0].parts[0]
+    assert isinstance(part, HitlRequestPart)
+    assert part.resume_status is None
+    assert await store.get("s1", user_id="another") == []

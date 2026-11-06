@@ -158,7 +158,7 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
     <div className={styles.pane}>
       <div className={styles.header}>
         <div className={styles.titleGroup}>
-          <Icon category="outlined" type="code" />
+          <Icon category="outlined" type="web" />
           <span className={styles.title}>{selected?.title || untitled}</span>
         </div>
         {selected && (

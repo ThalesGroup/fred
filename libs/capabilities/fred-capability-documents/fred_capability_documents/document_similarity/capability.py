@@ -87,7 +87,7 @@ class DocumentSimilarityCapability(
     manifest = CapabilityManifest(
         id="document_similarity",
         # Pre-GA: version stays 0.1.0 while the platform has not shipped.
-        version="0.1.0",
+        version="0.1.1",
         name="capability.document_similarity.name",
         description="capability.document_similarity.description",
         icon="sync_alt",
@@ -160,7 +160,7 @@ class DocumentSimilarityCapability(
 
             `document_uids` is REQUIRED and must name at least one document: the
             search runs ONLY inside those documents. They must be opaque
-            document uids, not file names - take them from a search hit's 'uid'
+            document uids, not file names - take them from a vector-search hit's 'document_uid'
             or from the document tree. This tool searches the document corpus
             only: a file attached to this conversation is NOT searchable here,
             so its uid would return nothing. Those uids are internal working

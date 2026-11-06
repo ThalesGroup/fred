@@ -57,6 +57,7 @@ Each agentic pod owns a `models_catalog.yaml`. It declares:
 - reusable chat profiles;
 - one local chat default;
 - optional static `agent_id -> profile_id` overrides.
+- optionally, one or more named OpenAI-compatible discovery sources for chat profiles.
 
 The pod catalog is the fallback and the local source of model construction
 settings. It does not contain team, user, operation, or purpose rules.
@@ -90,6 +91,35 @@ The platform binding is absolute. Without it, a pod static override is the
 operator's local escape hatch. Team per-agent selection then wins over the team
 default. No scoring or rule ordering is involved.
 
+To override the pod default platform-wide in either static or discovery mode,
+open **Capabilities > Models > Platform chat model** and select a chat model
+from the Catalog or Discovery section of the selector. The selector carries its validated
+provider, wire ID and inference settings. Models with unsupported or ambiguous
+settings are not offered there; the advanced manual form can set a supported
+binding directly. For Mistral via the OpenAI-compatible client, use `openai`,
+the Mistral model ID, and `{"base_url": "https://api.mistral.ai/v1"}` in that
+form. This binding takes precedence over
+the pod and team defaults. The Models table's `default_on` switch controls
+team access to a model; it does not select the chat default. Remove the platform
+binding to restore team and pod routing. A discovery-only deployment with no
+binding opens a single-action dialog every time a platform administrator enters
+the Models view after every pod has reported that it has no manual chat default. This
+also applies when multiple manual chat profiles exist but none was declared as default.
+With exactly one manual chat profile, the pod uses it as its default automatically.
+The dialog explains that selecting a
+platform model overrides team choices and opens the binding editor; it cannot
+be postponed. Only a platform administrator can write or delete that binding,
+since advanced settings can change the destination for a provider credential.
+
+The same panel has a separate **Fallback chat model**. It is used only when a
+saved choice names a discovered model confirmed absent by a successful refresh.
+It does not override a valid choice or the forced platform binding. Select a
+manual chat profile from the catalog; the picker offers profiles common to the
+available agent pods, and the pod resolves its current connection settings
+when needed. A manual declaration is an operator choice, not a health check.
+Without a usable fallback, that turn fails explicitly. A discovery outage
+does not trigger this fallback.
+
 The four profile-valued levels have **one** implementation,
 `fred_sdk.contracts.context.resolve_effective_chat_profile`, shared by the pod
 runtime (which resolves it per turn to build the chat client) and the control
@@ -112,9 +142,9 @@ Two things it deliberately does:
 - It flags a model that is not enabled for the team. That turn will fail before
   the LLM call, and saying so beats an opaque error later.
 
-It shows nothing at all when nothing resolves — an unreachable pod, a pod
-declaring no chat default with no team policy, or a stored team profile the pod
-no longer advertises. Guessing a model would be worse than naming none.
+It shows nothing when nothing resolves, such as an unreachable pod or a pod
+declaring no chat default with no team policy. For a confirmed removed
+discovered choice, it shows that pod's manual fallback or its manual YAML default.
 
 ## Platform administration
 
@@ -125,6 +155,19 @@ one administrative decision. Profile settings and profile ids remain pod-owned.
 
 For team policy, the control plane offers only profiles explicitly advertised
 as chat profiles. It never infers capability from a profile-id prefix.
+
+In Model defaults > Agent pods, the default selector offers only chat profiles
+whose models are enabled platform-wide for that pod. The fallback selector
+further limits choices to manual profiles. The API applies the same checks on
+save. An existing YAML or saved value remains visible when its model is no
+longer enabled, but it is not offered as a new selection.
+
+An administrator can edit a model's display name in the Models view after the
+model is advertised. The saved name is stored by model capability id and takes
+effect in the admin list and chat model picker without restarting a pod. It
+takes priority over a name supplied by the gateway or a static profile; clearing
+it restores that name, or the model identifier when no name was supplied. The
+display name does not change the inference id, routing identity or team grants.
 
 With several enabled agentic pods, the two catalog views intentionally differ:
 
@@ -140,6 +183,85 @@ picker and write validation fail closed. They do not certify a profile using an
 incomplete deployment view.
 
 ## Agentic pod author guide
+
+### Discover chat models from a gateway
+
+An operator can add several discovery sources alongside manually listed chat profiles:
+
+```yaml
+version: v1
+discovery:
+  - source_id: primary-gateway
+    base_url: https://gateway.example/v1
+    include_model_ids: [chat-small, chat-large]
+  - source_id: secondary-gateway
+    base_url: https://other-gateway.example/v1
+    include_model_ids: [other-chat]
+default_profile_by_capability:
+  chat: chat.manual.safe
+```
+
+`discovery` is optional and always contains a nonempty list, including when
+there is only one endpoint. Source IDs must be unique. Existing catalogs
+without `discovery` remain valid. An explicit chat default stays in
+`default_profile_by_capability` and references a manually declared profile. If
+that setting is absent and exactly one manual chat profile exists, the pod uses
+it as the effective default. Discovered profiles never become implicit defaults.
+
+At pod startup and on administrator refresh, Fred sends an authenticated
+`GET https://gateway.example/v1/models` and reads the OpenAI-compatible JSON
+shape `{"data": [{"id": "chat-small"}]}`. The administrator can edit the
+`/models` URL of each source in **Capabilities > Models**; each YAML URL remains
+its reset value. A successful refresh updates that source's inventory
+immediately while preserving the other sources' models.
+`base_url` is also used for chat inference. Set `OPENAI_API_KEY` in the pod
+environment; never put the key in YAML. Sources on one pod share this key, so
+use separate pods when endpoints need different credentials. `source_id` is a stable operator-chosen
+identity. Changing it creates new model capability and profile ids, which need
+new admin grants. `include_model_ids` is optional; its listed IDs must be
+present during initial catalog validation. A later administrator refresh can
+confirm a listed model's removal and apply that pod's manual fallback.
+
+The standard OpenAI `/models` response does not identify chat models, context
+sizes, or supported reasoning levels. Configure a gateway that lists chat
+models only, or use the allowlist to exclude embeddings and other modalities.
+OpenAI's `GET /models/{id}` also returns only basic model metadata; its model
+documentation publishes context limits, but the list API does not supply them
+for automatic discovery. The admin view leaves unknown limits blank.
+When an entry supplies `capabilities.completion_chat`, only `true` entries are
+discovered; entries without this field remain eligible. Fred shows the exact
+upstream `id` in the admin Models table and uses it for inference. A nonblank
+`name` or `display_name` may provide a label. Positive integer
+`context_length`, `max_model_len`, or Mistral's `max_context_length`, `max_input_tokens`, and
+`max_output_tokens` are shown when present. These optional values are
+informational; they do not change routing, grants, or reasoning controls.
+Reasoning effort levels are available only when declared in manual catalog
+profiles; `/models` does not provide a portable list of supported levels.
+An administrator can open a model's detail icon to request `GET /models/{id}`
+from the same source on demand. The returned fields are shown as a key/value
+tree. OpenAI's detail response still has no context field; Mistral's response
+may include `max_context_length`, already shown in the model row when supplied
+by its list response.
+
+Opening **Capabilities > Models** refreshes the discovered inventory before
+listing models. Pill tabs separate manually declared profiles from models
+advertised by discovery, using the pod's inventory provenance rather than the
+model name. Both tabs offer the same activation, team controls, and text filter.
+The model identity names every pod that advertises it. The Discovery tab has a
+compact refresh button; its details reveal URL settings and unavailable models. If a
+pod advertises discovered models but control-plane lacks registered state for
+that source, the view names it as unavailable for URL management.
+New models are highlighted and start without a team grant.
+Removed models remain visible as unavailable in the discovery summary, while
+static profiles continue to appear in the manual section. A failed
+refresh preserves the last verified inventory and displays an error. If the
+YAML endpoint is unavailable at startup, the pod starts with its static
+profiles; the first managed turn can apply a saved administrator URL. Until a
+discovery URL responds successfully, a discovery-only pod has no chat model
+for direct pod-local turns. A catalog without `discovery` makes no network
+call.
+
+### Static profiles
 
 A minimal catalog is:
 
@@ -244,8 +366,9 @@ that omits them reads as declaring neither.
 - A team write naming an unknown, non-chat, not-universally-available, or
   non-enabled profile is rejected before persistence.
 - A stored team profile missing from a pod, or declaring a non-chat capability,
-  raises a typed drift error at runtime. Fred never silently substitutes the
-  pod default.
+  raises a typed drift error unless a successful discovery refresh confirmed
+  its removal. A confirmed removal uses that pod's manual fallback or manual YAML default;
+  neither case silently substitutes the pod default.
 - A resolved non-platform model that is no longer enabled for the team fails
   closed before the LLM call.
 - With no platform binding and no team policy, behavior reduces to the pod's

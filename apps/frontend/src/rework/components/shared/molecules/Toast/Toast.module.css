@@ -111,14 +111,33 @@
   padding: var(--spacing-3xs) 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
-  font-size: 0.75rem;
-  font-family: monospace;
+  font-family: var(--font-family-mono);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .link {
   color: var(--primary);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--spacing-xs) var(--spacing-xs);
+}
+
+.textAction {
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: var(--spacing-3xs) var(--spacing-xs);
+  color: var(--primary);
+  font: var(--font-label-large);
+}
+
+.textAction:hover {
+  background: var(--state-on-surface-hover);
 }
 
 /* ── Animations: fade + 4 px lift only ───────────────────────────────────── */

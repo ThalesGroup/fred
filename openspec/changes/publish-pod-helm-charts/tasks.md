@@ -28,3 +28,9 @@
 - [x] 5.2 Add the application chart contract as a "Package it as a chart" subsection after step 3 of the FORKING_GUIDE's "Your own applications", pointing at fred-agent-evaluator's chart; verify each requirement of `specs/application-chart-contract` is stated there and that the evaluator chart meets every point
 - [x] 5.3 Add the migration note (`impact: none`, additive charts) and run `make migration-check`
 - [ ] 5.4 Record verification evidence in this change, open the PR linking the GitHub issue, and list the satellite follow-ups (dt-agents, webdav-knowledge-base, fred-samples agents, Knowledge Bases and applications, rags-agents and the RAGS chart) on the issue
+
+## 6. Gateway API HTTPRoute follow-up
+
+- [x] 6.1 Add opt-in HTTPRoute values, strict chart schema and template using the pod base URL and Service; verify default-off and enabled Helm renders
+- [x] 6.2 Document Gateway usage and streaming timeout in the chart README; verify the packaged README contains the example
+- [x] 6.3 Extend offline chart tests and run the chart checks

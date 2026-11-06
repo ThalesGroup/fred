@@ -15,7 +15,7 @@
 // The chat's launcher rail: one icon button per side panel the conversation can
 // open. Two sources feed it — the session's capabilities (viewers a plugin
 // contributes) and first-party launchers the page passes in (session
-// attachments). Page-root sibling of the chat body, so in-flow it reserves its
+// attachments). Page-root sibling of the chat body, outside its cards, in its
 // own right-hand column.
 //
 // A capability launcher is only offered once its panel has something to show:
@@ -80,11 +80,12 @@ function RailButton({
   return (
     <Tooltip text={label} placement="left">
       <IconButton
-        // The open panel's launcher reads as selected through the M3 filled
-        // tonal variant, so the rail says which viewer is showing.
+        // The open panel's launcher reads as a nav rail's active item: tonal
+        // container, filled icon.
         variant={selected ? "tonal" : "icon"}
-        size="small"
-        icon={{ category: "outlined", type: icon, filled: iconFilled }}
+        color={selected ? "secondary" : undefined}
+        size="medium"
+        icon={{ category: "outlined", type: icon, filled: iconFilled || selected }}
         aria-label={label}
         aria-pressed={selected}
         badgeCount={badgeCount}
@@ -131,7 +132,7 @@ export function ChatLauncherRail({
   if (entries.length === 0 && launchers.length === 0 && footerLaunchers.length === 0) return null;
 
   return (
-    <div className={styles.rail}>
+    <div className={styles.rail} data-shell-rail>
       {launchers.map((launcher) => (
         <RailButton
           key={launcher.key}
@@ -143,17 +144,21 @@ export function ChatLauncherRail({
           onOpen={launcher.onOpen}
         />
       ))}
-      {entries.map((entry) => (
-        <PanelLauncher
-          key={entryKey(entry)}
-          entry={entry}
-          label={launcherLabelOf(t, entry)}
-          selected={entryKey(entry) === activeKey}
-          // Clicking the open one closes it, so the launcher is the way in and
-          // the way out.
-          onToggle={() => onActiveKeyChange(entryKey(entry) === activeKey ? null : entryKey(entry))}
-        />
-      ))}
+      {/* A launcher may render nothing yet, so the divider lives in CSS on this
+          wrapper and disappears with it while it is empty. */}
+      <div className={launchers.length > 0 ? `${styles.railViewers} ${styles.railViewersDivided}` : styles.railViewers}>
+        {entries.map((entry) => (
+          <PanelLauncher
+            key={entryKey(entry)}
+            entry={entry}
+            label={launcherLabelOf(t, entry)}
+            selected={entryKey(entry) === activeKey}
+            // Clicking the open one closes it, so the launcher is the way in and
+            // the way out.
+            onToggle={() => onActiveKeyChange(entryKey(entry) === activeKey ? null : entryKey(entry))}
+          />
+        ))}
+      </div>
       {footerLaunchers.length > 0 && (
         <div className={styles.railFooter}>
           {footerLaunchers.map((launcher) => (

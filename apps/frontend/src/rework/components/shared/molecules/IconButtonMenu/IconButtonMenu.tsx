@@ -14,11 +14,21 @@
 
 import styles from "./IconButtonMenu.module.scss";
 import IconButton, { IconButtonProps } from "@shared/atoms/IconButton/IconButton.tsx";
-import { CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import Menu from "@shared/molecules/Menu/Menu.tsx";
 import { OptionModel } from "@models/Option.model.ts";
 import { viewportHeight, viewportWidth } from "@shared/utils/viewport.ts";
+import { lastInputWasKeyboard, useFocusHandoff } from "@shared/utils/useFocusHandoff";
 
 // Gap between the button and the popover (matches --spacing-3xs).
 const MENU_GAP = 4;
@@ -37,6 +47,10 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const baseId = useId();
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const enabled = options.map((option, index) => (option.disabled ? -1 : index)).filter((index) => index >= 0);
+  // Focus sits on the listbox; arrows move the highlighted option (aria-activedescendant).
+  useFocusHandoff(isOpen, popoverRef, (surface) => surface.querySelector<HTMLElement>('[role="listbox"]') ?? surface);
 
   // Position the portaled popover relative to the button. The menu is rendered
   // into document.body so it escapes the table's `overflow: auto` scroll
@@ -96,12 +110,44 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
   }, [isOpen]);
 
   const toggleMenu = () => {
+    // Highlight the first option only for a keyboard open; a click shows none.
+    setActiveIndex(lastInputWasKeyboard() ? (enabled[0] ?? -1) : -1);
     setIsOpen((prev) => !prev);
+  };
+
+  const choose = (value: T) => {
+    onSelect(value);
+    setIsOpen(false);
+  };
+
+  const onListKeyDown = (event: ReactKeyboardEvent) => {
+    const position = enabled.indexOf(activeIndex);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const down = event.key === "ArrowDown";
+      const next =
+        position < 0 ? (down ? 0 : enabled.length - 1) : (position + (down ? 1 : -1) + enabled.length) % enabled.length;
+      setActiveIndex(enabled[next] ?? -1);
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      setActiveIndex((event.key === "Home" ? enabled[0] : enabled[enabled.length - 1]) ?? -1);
+    } else if ((event.key === "Enter" || event.key === " ") && options[activeIndex]) {
+      event.preventDefault();
+      choose(options[activeIndex].value);
+    } else if (event.key === "Tab") {
+      setIsOpen(false);
+    }
   };
 
   return (
     <div ref={containerRef} className={styles["container"]} data-open={isOpen}>
-      <IconButton {...iconButton} onClick={toggleMenu} />
+      <IconButton
+        {...iconButton}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? `${baseId}-listbox` : undefined}
+        onClick={toggleMenu}
+      />
       {isOpen &&
         createPortal(
           <div
@@ -110,14 +156,13 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
             className={styles["menu-popover"]}
             role="presentation"
             style={popoverStyle}
+            onKeyDown={onListKeyDown}
           >
             <Menu
               options={options}
               baseId={baseId}
-              onChange={(v) => {
-                onSelect(v);
-                setIsOpen(false);
-              }}
+              activeId={options[activeIndex] ? `${baseId}-opt-${options[activeIndex].key}` : undefined}
+              onChange={choose}
             />
           </div>,
           document.body,

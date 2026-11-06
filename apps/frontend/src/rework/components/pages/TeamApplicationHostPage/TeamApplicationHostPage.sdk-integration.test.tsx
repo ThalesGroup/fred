@@ -1,4 +1,4 @@
-// @vitest-environment happy-dom
+// @vitest-environment jsdom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Blob as NodeBlob } from "node:buffer";
 import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 
 declare global {
@@ -36,7 +37,7 @@ interface PackedClient {
   onContext(listener: (context: { theme?: "light" | "dark"; locale: string }) => void): () => void;
   navigate(path: string, options?: { replace?: boolean }): void;
   openChat(sessionId?: string | null): void;
-  request(path: string, init?: { method?: string; body?: string; timeoutMs?: number }): Promise<Response>;
+  request(path: string, init?: { method?: string; body?: string | Blob; timeoutMs?: number }): Promise<Response>;
   dispose(): void;
 }
 
@@ -87,6 +88,10 @@ vi.mock("react-router-dom", () => ({
   useParams: () => ({ teamId: h.teamId, appId: h.appId, "*": h.subPath }),
   useNavigate: () => h.navigate,
 }));
+vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
+  useFrontendProperties: () => ({ siteDisplayName: "Acme" }),
+}));
+
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
   useSelectedTeam: () => ({
     teamId: h.teamId,
@@ -123,17 +128,13 @@ let root: Root | undefined;
 let client: PackedClient | undefined;
 
 beforeAll(async () => {
+  // Node Fetch responses carry Node Blobs, so the simulated channel must use that same realm.
+  vi.stubGlobal("Blob", NodeBlob);
   if (!sdkEntry) return;
   sdk = (await import(/* @vite-ignore */ sdkEntry)) as PackedSdkModule;
-  const settings = (globalThis as unknown as { happyDOM?: { settings?: { fetch?: Record<string, unknown> } } }).happyDOM
-    ?.settings;
-  if (settings?.fetch) {
-    settings.fetch.interceptor = {
-      beforeAsyncRequest: async () =>
-        new Response("<!doctype html><title>app</title>", { headers: { "content-type": "text/html" } }),
-    };
-  }
 });
+
+afterAll(() => vi.unstubAllGlobals());
 
 async function rerender() {
   await act(async () => {
@@ -175,7 +176,8 @@ function frameWindow(): Window {
 function createPackedClient(child: Window): PackedClient {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   if (!descriptor) throw new Error("integration setup: global window descriptor is unavailable");
-  Object.defineProperty(globalThis, "window", { ...descriptor, value: child });
+  // jsdom exposes window through an accessor; replace it temporarily for the SDK factory.
+  Object.defineProperty(globalThis, "window", { configurable: true, value: child });
   try {
     return sdk.createFredApplicationClient({
       hostOrigin: FRED_ORIGIN,
@@ -389,5 +391,34 @@ liveIntegration("packed SDK live context with the production FRED host page", ()
     await rerender();
     expect(contexts).toHaveLength(3);
     expect(connected.client.context).toMatchObject({ theme: "dark", locale: "fr" });
+  });
+
+  it("uploads and downloads exact bytes, and still reads JSON from a binary response", async () => {
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0xff, 0x00, 0x80]);
+    h.request.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "exports"
+          ? new Response(bytes, { headers: { "content-type": "application/vnd.ms-excel" } })
+          : new Response('{"é":1}', { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    const connected = await connectPackedSdk();
+    const upload = new Blob([bytes], { type: "application/octet-stream" });
+
+    const download = connected.client.request("exports", { method: "POST", body: upload });
+    await flush();
+    await flush();
+    const response = await download;
+
+    const [, init] = h.request.mock.calls[0] as [string, RequestInit];
+    expect(new Uint8Array(await (init.body as Blob).arrayBuffer())).toEqual(bytes);
+    expect((init.body as Blob).type).toBe("application/octet-stream");
+    expect(response.headers.get("content-type")).toBe("application/vnd.ms-excel");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+
+    const json = connected.client.request("items");
+    await flush();
+    await flush();
+    expect(await (await json).json()).toEqual({ é: 1 });
   });
 });

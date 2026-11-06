@@ -44,7 +44,7 @@ describe("identity provider live diagnostic", () => {
     expect(steps.filter((s) => s.status === "failed")).toEqual([]);
     expect(request).toHaveBeenCalledWith("/fred/agents/v2/agents/sessions", "header.payload.Aignature");
     expect(request).toHaveBeenCalledWith("/control-plane/v1/frontend/config");
-    expect(steps.find((s) => s.id === "identity-coverage")?.status).toBe("skipped");
+    expect(steps.some((s) => s.id === "identity-coverage")).toBe(false);
   });
   it.each([200, 403, 404, 500])("does not mistake HTTP %s for rejection of an invalid token", async (status) => {
     const { steps } = await run({ "/knowledge-flow/v1/tags:invalid-jwt": status });

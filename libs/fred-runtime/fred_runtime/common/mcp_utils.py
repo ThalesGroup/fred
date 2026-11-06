@@ -12,56 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-mcp_utils
-=========
-
-Single-responsibility module that **creates and connects** a `MultiServerMCPClient`
-for a given agent, using the **end-user's identity token** for outbound auth.
-
-This module enforces user identity propagation and **removes M2M fallback**.
-
-Contract
---------
-- Requires an `access_token_provider` (a callable) to fetch the user's token
-  before connecting to any MCP server.
-- Returns a connected `MultiServerMCPClient` plus the tools already fetched
-  while validating each server (see `get_connected_mcp_client_for_agent`).
-- Raises `ExceptionGroup` if **any** server fails to connect.
-
-"""
+"""Discover MCP tools through LangChain's first-party FastMCP adapter."""
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
-from datetime import timedelta
 from functools import partial
-from typing import Dict, Final, List, Tuple
+from typing import Final
 
-import httpx
+import httpx2
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
 from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
 )
-from fred_core.logs.propagation import CONTEXT_HEADER, outbound_context_headers
-from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import scrub_grant_text
 from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.models import MCPServerConfiguration
 from fred_sdk.contracts.runtime import unwrap_run_stop_error
+from langchain.mcp import MCPAdapter
 from langchain_core.tools import BaseTool
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_mcp_adapters.sessions import Connection, StreamableHttpConnection
-from mcp.shared._httpx_utils import create_mcp_http_client
+from mcp.client.caching import CacheConfig, InMemoryResponseCacheStore
 
+from fred_runtime.common.mcp_http_auth import MCPHTTPAuth
 from fred_runtime.common.outbound_credentials import (
-    DelegatedCredentialProvider,
     OutboundCredentialProvider,
     OutboundCredentials,
     grant_query_url,
     resolve_credential_provider,
 )
+from fred_runtime.common.structures import TokenRefreshCallback
 from fred_runtime.runtime_support.authority import (
     AuthorityLostError,
     DelegationUnavailableError,
@@ -69,98 +52,96 @@ from fred_runtime.runtime_support.authority import (
 
 logger = logging.getLogger(__name__)
 
-# ✅ Only allow transports that Fred knows how to configure safely.
-SUPPORTED_TRANSPORTS = ["sse", "stdio", "streamable_http", "websocket"]
-
-# Client auth modes, as strings: the `delegated` value is read from configuration
-# and compared here, so this module needs no enum member that may not exist yet.
+SUPPORTED_TRANSPORTS = ["streamable_http", "stdio"]
 AUTH_MODE_NO_TOKEN: Final[str] = "no_token"
 AUTH_MODE_USER_TOKEN: Final[str] = "user_token"
 AUTH_MODE_DELEGATED: Final[str] = "delegated"
-
-# Transports whose endpoint can carry the grant beside the tool call. A grant
-# cannot ride a pipe, and dropping it would make the call act for nobody.
-GRANT_CARRYING_TRANSPORTS: Final[tuple[str, ...]] = ("streamable_http", "sse")
-
-# What a receiver answers when it will not act for this run's person any more.
-_REFUSAL_STATUSES: Final[tuple[int, ...]] = (401, 403)
-
-# Key under which a fetched tool's originating MCP catalog server id is stashed
-# in `BaseTool.metadata` (issue #2455) — the one generic, already-present field
-# that survives `ContextAwareTool` wrapping and every merge/dedupe step
-# downstream untouched, so no new constructor parameter needs threading
-# through `MCPRuntime`/`McpToolkit`/`FredMcpToolProvider`. Consumed by
-# `react_tool_resolution.py` to group the ReAct prompt's tool listing by
-# server (`react_tool_binding.build_runtime_tool_prompt_suffix`).
+GRANT_CARRYING_TRANSPORTS: Final[tuple[str, ...]] = ("streamable_http",)
 MCP_SERVER_ID_METADATA_KEY: Final[str] = "mcp_server_id"
+MCP_DELEGATED_METADATA_KEY: Final[str] = "mcp_delegated"
+CONNECT_TIMEOUT_SECS = 5.0
+SSE_READ_TIMEOUT_SECS = 30.0
+_tool_catalog_cache = InMemoryResponseCacheStore(max_entries=1024)
 
 
 class MCPConnectionError(Exception):
-    """Raised when one or more MCP servers fail to connect."""
+    """Raised when one or more configured servers fail discovery."""
 
-    def __init__(self, message, exceptions):
+    def __init__(self, message: str, exceptions: list[Exception]):
         super().__init__(message)
         self.exceptions = exceptions
         self.reason = message
 
 
 class UnsupportedTransportError(ValueError):
-    """
-    Raised when an MCP server uses a transport the runtime does not support.
-
-    Why this exists:
-    - surface configuration errors early with a clear, typed exception
-
-    How to use it:
-    - raise when a server transport is not in `SUPPORTED_TRANSPORTS`
-
-    Example:
-        >>> raise UnsupportedTransportError("Unsupported transport 'grpc'.")
-    """
+    """The catalog accepts this transport, but the runtime cannot execute it."""
 
 
-def _mask_auth_value(v: str | None) -> str:
-    """Return a non-sensitive label for Authorization header values."""
-    if not v:
-        return "none"
-    if v.lower().startswith("bearer "):
-        # Never leak token fragments in logs.
-        return "present:Bearer"
-    return "present"
+def _normalize_transport(transport: str | None) -> str:
+    return (transport or "streamable_http").lower()
 
 
-def _auth_headers(authorization: str | None) -> Dict[str, str]:
-    """Build HTTP Authorization headers from a ready header value.
-
-    If there is no credential, returns an empty dict (connection will fail 401).
-    """
-    if authorization:
-        return {"Authorization": authorization}
-    return {}
+def _normalize_auth_mode(auth_mode: object) -> str:
+    return str(getattr(auth_mode, "value", auth_mode) or AUTH_MODE_USER_TOKEN)
 
 
-def _auth_stdio_env(authorization: str | None) -> Dict[str, str]:
-    """Build env vars used to pass auth to stdio transports.
-
-    Mirrors the Authorization header as environment variables.
-    """
-    hdrs = _auth_headers(authorization)
-    if not hdrs:
-        return {}
-    val = hdrs["Authorization"]
-    return {"MCP_AUTHORIZATION": val, "AUTHORIZATION": val}
+async def _runtime_context_token(runtime_context: RuntimeContext) -> str | None:
+    return runtime_context.access_token
 
 
-def _loggable_url(url: str | None) -> str:
-    return scrub_grant_text(url) if url else ""
+def _server_connection_auth(
+    server: MCPServerConfiguration,
+    credentials: OutboundCredentials,
+    transport: str,
+) -> tuple[dict[str, str], dict[str, str], str | None]:
+    auth_mode = _normalize_auth_mode(server.auth_mode)
+    if auth_mode == AUTH_MODE_NO_TOKEN:
+        return {}, {}, server.url
+    if credentials.delegated:
+        if auth_mode != AUTH_MODE_DELEGATED:
+            raise DelegationUnavailableError(
+                "A tool server this agent uses cannot be activated under delegation."
+            )
+        if transport not in GRANT_CARRYING_TRANSPORTS:
+            raise DelegationUnavailableError(
+                "A tool server this agent uses cannot carry a delegation grant."
+            )
+        return {}, {}, grant_query_url(server.url or "", credentials.parameters)
+    authorization = credentials.authorization
+    env = (
+        {"MCP_AUTHORIZATION": authorization, "AUTHORIZATION": authorization}
+        if authorization
+        else {}
+    )
+    return {}, env, server.url
+
+
+def _mcp_http_client_factory(
+    headers: dict[str, str] | None = None,
+    timeout: httpx2.Timeout | None = None,
+    auth: httpx2.Auth | None = None,
+    follow_redirects: bool = False,
+) -> httpx2.AsyncClient:
+    # httpx2 counts one auth retry in redirect history even when redirects are off.
+    # The MCP SDK also follows redirects itself, so reject them before it can.
+    return httpx2.AsyncClient(
+        headers=headers,
+        auth=auth,
+        timeout=timeout,
+        follow_redirects=False,
+        max_redirects=1,
+        event_hooks={"response": [_reject_mcp_redirect]},
+    )
+
+
+async def _reject_mcp_redirect(response: httpx2.Response) -> None:
+    if response.has_redirect_location:
+        raise httpx2.TooManyRedirects(
+            "MCP HTTP redirect refused.", request=response.request
+        )
 
 
 def _refusal_status(error: BaseException) -> int | None:
-    """The 401 or 403 a receiver answered with, anywhere in the failure.
-
-    The tool listing's HTTP failure reaches us wrapped by the adapter and its
-    task group, so the refusal is only visible by walking causes and members.
-    """
     pending: list[BaseException] = [error]
     seen: set[int] = set()
     while pending:
@@ -168,9 +149,9 @@ def _refusal_status(error: BaseException) -> int | None:
         if id(current) in seen:
             continue
         seen.add(id(current))
-        if isinstance(current, httpx.HTTPStatusError):
+        if isinstance(current, httpx2.HTTPStatusError):
             response = current.response
-            if response.status_code in _REFUSAL_STATUSES or (
+            if response.status_code in (401, 403) or (
                 response.status_code == 503
                 and response.headers.get(DENIAL_CAUSE_HEADER)
                 == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
@@ -189,412 +170,144 @@ def _refusal_status(error: BaseException) -> int | None:
     return None
 
 
-def _normalize_auth_mode(auth_mode: object) -> str:
-    """Read a catalog entry's auth mode as a plain string."""
-    return str(getattr(auth_mode, "value", auth_mode) or AUTH_MODE_USER_TOKEN)
-
-
-async def _runtime_context_token(runtime_context: RuntimeContext) -> str | None:
-    return runtime_context.access_token
-
-
-def _server_connection_auth(
-    server: MCPServerConfiguration,
-    credentials: OutboundCredentials,
-    transport: str,
-) -> tuple[Dict[str, str], Dict[str, str], str | None]:
-    """Decide what one server's connection carries: headers, stdio env, endpoint.
-
-    Under delegation the mode is an activation decision, not a hint: only a
-    server declared `delegated` is activated, and its grant travels on the
-    endpoint so it can never be mistaken for a tool argument.
-    """
-    auth_mode = _normalize_auth_mode(server.auth_mode)
-    if auth_mode == AUTH_MODE_NO_TOKEN:
-        return {}, {}, server.url
-
+def _catalog_cache_config(
+    server: MCPServerConfiguration, credentials: OutboundCredentials
+) -> CacheConfig | None:
     if credentials.delegated:
-        if auth_mode != AUTH_MODE_DELEGATED:
-            logger.error(
-                "[MCP] event=server_activation outcome=refused "
-                "reason=incompatible_auth_mode"
-            )
-            raise DelegationUnavailableError(
-                "A tool server this agent uses cannot be activated under delegation."
-            )
-        if transport not in GRANT_CARRYING_TRANSPORTS:
-            logger.error(
-                "[MCP] event=server_activation outcome=refused "
-                "reason=unsupported_grant_transport"
-            )
-            raise DelegationUnavailableError(
-                "A tool server this agent uses cannot carry a delegation grant."
-            )
-        return (
-            _auth_headers(credentials.authorization),
-            {},
-            grant_query_url(server.url or "", credentials.parameters),
-        )
-
-    if not credentials.authorization:
-        logger.warning(
-            "[MCP] event=server_activation outcome=degraded reason=missing_user_token"
-        )
-    return (
-        _auth_headers(credentials.authorization),
-        _auth_stdio_env(credentials.authorization),
-        server.url,
+        return None
+    # Cache only protocol responses; each run still owns fresh callable tools and auth.
+    partition = hashlib.sha256(
+        (credentials.authorization or "anonymous").encode()
+    ).hexdigest()
+    target_id = hashlib.sha256(server.model_dump_json().encode()).hexdigest()
+    return CacheConfig(
+        store=_tool_catalog_cache,
+        partition=partition,
+        target_id=target_id,
+        default_ttl_ms=0,
     )
-
-
-# --- small, clear constants (Fred rationale: fast-fail, let retry loop recover) ---
-CONNECT_TIMEOUT_SECS = 5.0
-SSE_READ_TIMEOUT_SECS = 30.0
-CONNECT_TIMEOUT_TD = timedelta(seconds=CONNECT_TIMEOUT_SECS)
-SSE_READ_TIMEOUT_TD = timedelta(seconds=SSE_READ_TIMEOUT_SECS)
-
-
-def _build_streamable_http_kwargs(
-    server, headers: dict[str, str], env: dict[str, str], url: str | None = None
-) -> StreamableHttpConnection:
-    """
-    Fred rationale: build explicit, inspectable kwargs for one server.
-    Only supports streamable_http here (narrow & simple).
-    """
-    endpoint = url or server.url
-    if not endpoint:
-        raise ValueError(f"{server.name}: missing URL for streamable_http")
-
-    # We only use streamable_http here. Only headers are relevant.
-    kw: StreamableHttpConnection = {
-        "transport": "streamable_http",
-        "url": endpoint,
-        "timeout": CONNECT_TIMEOUT_TD,  # adapter expects timedelta
-        "sse_read_timeout": SSE_READ_TIMEOUT_TD,  # adapter expects timedelta
-    }
-    if headers:
-        kw["headers"] = dict(headers)
-    return kw
-
-
-def _delegated_mcp_http_client(
-    headers: dict[str, str] | None = None,
-    timeout: httpx.Timeout | None = None,
-    auth: httpx.Auth | None = None,
-    *,
-    origin: tuple[str, str, int | None],
-) -> httpx.AsyncClient:
-    """A per-session client stamps each first-party request and refuses redirects."""
-    client = create_mcp_http_client(headers=headers, timeout=timeout, auth=auth)
-    client.follow_redirects = False
-
-    async def attach_context(request: httpx.Request) -> None:
-        request.headers.pop(CONTEXT_HEADER, None)
-        if (request.url.scheme, request.url.host, request.url.port) == origin:
-            request.headers.update(outbound_context_headers())
-
-    client.event_hooks["request"].append(attach_context)
-    return client
-
-
-async def _cleanup_client_quiet(client: MultiServerMCPClient) -> None:
-    """No-op cleanup for MultiServerMCPClient (no persistent contexts).
-
-    Newer langchain-mcp-adapters does not expose an exit_stack or aclose on the
-    client; sessions are opened and closed per-call. Kept for API parity.
-    """
-    logger.debug("[MCP] event=connection_cleanup outcome=skipped")
-
-
-def _normalize_transport(transport: str | None) -> str:
-    """Return a lower-case transport with a sensible default."""
-    if not transport:
-        return "streamable_http"
-    return transport.lower()
-
-
-def _build_stdio_kwargs(
-    server: MCPServerConfiguration, _headers: dict[str, str], env: dict[str, str]
-) -> Connection:
-    """
-    Build stdio transport kwargs.
-
-    The langchain MCP adapter expects a command/args/env payload. We merge auth
-    env with any server-specific env, allowing the server config to override.
-    """
-    if not server.command:
-        raise ValueError(f"{server.name}: missing command for stdio transport")
-
-    merged_env: dict[str, str] = {}
-    if env:
-        merged_env.update(env)
-    if server.env:
-        merged_env.update(server.env)
-
-    conn: Connection = {
-        "transport": "stdio",
-        "command": server.command,
-        "args": list(server.args or []),
-    }
-    if merged_env:
-        conn["env"] = merged_env
-    return conn
 
 
 async def get_connected_mcp_client_for_agent(
     agent_id: str,
-    mcp_servers: List[MCPServerConfiguration],
+    mcp_servers: list[MCPServerConfiguration],
     runtime_context: RuntimeContext,
     *,
-    tool_interceptors: list | None = None,
     credentials: OutboundCredentialProvider | None = None,
-    # -----------------------------------------------
-) -> Tuple[MultiServerMCPClient, List[BaseTool]]:
-    """
-    Creates and connects the MultiServerMCPClient using the token provided by
-    `access_token_provider`. Supports `streamable_http` and `stdio` transports.
-
-    Also returns the tools fetched per server during connection validation, so
-    callers don't have to pay for a second `get_tools()` round trip against
-    every server just to populate their toolkit (see mcp_runtime.py).
-    """
+    refresh_token_cb: TokenRefreshCallback | None = None,
+    refresh_owner: object | None = None,
+) -> tuple[list[MCPAdapter], list[BaseTool]]:
+    """List tools once per server and retain the adapter's callable tools."""
 
     provider = resolve_credential_provider(
         explicit=credentials,
         person_token_getter=partial(_runtime_context_token, runtime_context),
     )
-    confined = provider.delegated
-
-    for s in mcp_servers:
-        transport = _normalize_transport(s.transport)
+    for server in mcp_servers:
+        transport = _normalize_transport(server.transport)
         if transport not in SUPPORTED_TRANSPORTS:
-            if confined:
-                logger.info(
-                    "[MCP] event=connection_init outcome=refused "
-                    "reason=unsupported_transport"
-                )
-            else:
-                logger.info(
-                    "[MCP][%s] connect init: Unsupported transport '%s' found. "
-                    "Supported transports: %s",
-                    agent_id,
-                    s.transport,
-                    SUPPORTED_TRANSPORTS,
-                )
             raise UnsupportedTransportError(
-                f"Unsupported transport '{s.transport}'. Supported: {', '.join(SUPPORTED_TRANSPORTS)}"
+                f"Unsupported transport '{server.transport}'. Supported: {', '.join(SUPPORTED_TRANSPORTS)}"
             )
 
-    # --- Ask the provider ONCE for this connection attempt ---
-    # With act_for_people off it answers with the person's bearer, on with the
-    # grant this run acts under; M2MBearerAuth sets the workload bearer per request.
     needs_credentials = any(
         _normalize_auth_mode(server.auth_mode) != AUTH_MODE_NO_TOKEN
         for server in mcp_servers
     )
-    if needs_credentials:
-        call_credentials = await provider.credentials()
-    else:
-        call_credentials = OutboundCredentials()
-    # --------------------------------------------------
-
-    if not call_credentials.authorization and not confined:
-        logger.warning("MCP connect init: no outbound credential was supplied.")
-
-    auth_label = _mask_auth_value(call_credentials.authorization)
-    # 🟢 LOG 5: Auth status
-    if confined:
-        logger.info(
-            "[MCP] event=credential_resolution outcome=completed delegated=%s",
-            call_credentials.delegated,
-        )
-    else:
-        logger.info(
-            "[MCP] connect init: credential retrieved. Auth status: %s delegated=%s",
-            auth_label,
-            call_credentials.delegated,
-        )
-    # ----------------------------------------------------------------
-
-    # Build connection map for the new client API
-    connections: dict[str, Connection] = {}
-    for server in mcp_servers:
-        transport = _normalize_transport(server.transport)
-        headers, env, url = _server_connection_auth(server, call_credentials, transport)
-        try:
-            if transport == "streamable_http":
-                conn_cfg = _build_streamable_http_kwargs(server, headers, env, url)
-                if _normalize_auth_mode(
-                    server.auth_mode
-                ) != AUTH_MODE_NO_TOKEN and isinstance(
-                    provider, DelegatedCredentialProvider
-                ):
-                    conn_cfg["auth"] = M2MBearerAuth(provider)
-                    endpoint = httpx.URL(str(conn_cfg["url"]))
-                    conn_cfg["httpx_client_factory"] = partial(
-                        _delegated_mcp_http_client,
-                        origin=(endpoint.scheme, endpoint.host, endpoint.port),
-                    )
-            elif transport == "stdio":
-                conn_cfg = _build_stdio_kwargs(server, headers, env)
-            else:
-                # Explicit guard for transports we list but do not yet wire
-                raise UnsupportedTransportError(
-                    f"Transport '{transport}' is not yet implemented."
-                )
-        except Exception as error:
-            if confined:
-                logger.warning(
-                    "[MCP] event=connection_config outcome=failed "
-                    "reason=invalid_configuration"
-                )
-            else:
-                logger.warning(
-                    "[MCP][%s] connect pre-fail for server=%s: Failed to build "
-                    "connection config: %s",
-                    agent_id,
-                    server.id,
-                    error,
-                )
-            raise
-        connections[server.id] = conn_cfg
-
-    client = MultiServerMCPClient(
-        connections, tool_interceptors=tool_interceptors or []
+    call_credentials = (
+        await provider.credentials() if needs_credentials else OutboundCredentials()
     )
 
-    # Validate connections by attempting to load tools per server. This is also
-    # the ONLY tool-fetch round trip we make per server — the fetched tools are
-    # returned to the caller so `MCPRuntime._run_lifecycle` doesn't need to call
-    # `client.get_tools()` again across all servers right after this returns.
-    exceptions: list[Exception] = []
-    failure_messages: list[str] = []
+    adapters: list[MCPAdapter] = []
     fetched_tools: list[BaseTool] = []
+    exceptions: list[Exception] = []
     for server in mcp_servers:
-        conn_entry = connections.get(server.id) or {}
-        transport = conn_entry.get("transport", "unknown")
-        url_for_log = _loggable_url(conn_entry.get("url", "")) or conn_entry.get(
-            "command", ""
-        )
-        auth_label = _mask_auth_value(
-            (conn_entry.get("headers") or {}).get("Authorization")
-        )
-        start = time.perf_counter()
+        transport = _normalize_transport(server.transport)
+        _, env, url = _server_connection_auth(server, call_credentials, transport)
         try:
-            if confined:
-                logger.debug("[MCP] event=connection_validation outcome=started")
-            else:
-                logger.debug(
-                    "[MCP][%s] validate name=%s transport=%s endpoint=%s auth=%s",
-                    agent_id,
-                    server.id,
-                    transport,
-                    url_for_log,
-                    auth_label,
+            if transport == "streamable_http":
+                if not url:
+                    raise ValueError(f"{server.name}: missing URL for streamable_http")
+                auth = (
+                    MCPHTTPAuth(
+                        provider,
+                        refresh=refresh_token_cb if not provider.delegated else None,
+                        refresh_owner=refresh_owner,
+                    )
+                    if _normalize_auth_mode(server.auth_mode) != AUTH_MODE_NO_TOKEN
+                    else None
                 )
-            tools = await client.get_tools(server_name=server.id)
-            duration_ms = (time.perf_counter() - start) * 1000
-            if confined:
-                logger.info("[MCP] event=connection_validation outcome=succeeded")
-            else:
-                logger.info(
-                    "[MCP][%s] connected name=%s transport=%s endpoint=%s "
-                    "tools=%d dur_ms=%.0f",
-                    agent_id,
-                    server.id,
-                    transport,
-                    url_for_log,
-                    len(tools),
-                    duration_ms,
+                mcp_transport = StreamableHttpTransport(
+                    url,
+                    auth=auth,
+                    httpx_client_factory=_mcp_http_client_factory,
                 )
-            # Tag each tool with its originating server id so the ReAct prompt
-            # can group the tool listing later (#2455). `_get_or_connect_mcp_client`
-            # caches and reuses this exact tool-object list across concurrent
-            # requests (see its docstring), so tagging must be non-mutating —
-            # `model_copy` returns a new object, never touching the cached one.
-            tagged_tools = [
+            else:
+                if not server.command:
+                    raise ValueError(
+                        f"{server.name}: missing command for stdio transport"
+                    )
+                merged_env = {**env, **(server.env or {})}
+                mcp_transport = StdioTransport(
+                    command=server.command,
+                    args=list(server.args or []),
+                    env=merged_env or None,
+                    keep_alive=False,
+                )
+
+            adapter = MCPAdapter(
+                Client(
+                    mcp_transport,
+                    init_timeout=CONNECT_TIMEOUT_SECS,
+                    timeout=SSE_READ_TIMEOUT_SECS,
+                    cache=_catalog_cache_config(server, call_credentials),
+                )
+            )
+            started = time.perf_counter()
+            tools = await adapter.list_tools()
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            logger.info(
+                "[MCP] event=connection_validation outcome=succeeded tools=%d dur_ms=%.0f",
+                len(tools),
+                elapsed_ms,
+            )
+            tagged = [
                 tool.model_copy(
                     update={
                         "metadata": {
                             **(tool.metadata or {}),
                             MCP_SERVER_ID_METADATA_KEY: server.id,
+                            MCP_DELEGATED_METADATA_KEY: bool(
+                                call_credentials.delegated
+                                and _normalize_auth_mode(server.auth_mode)
+                                == AUTH_MODE_DELEGATED
+                            ),
                         }
                     }
                 )
                 for tool in tools
             ]
-            fetched_tools.extend(tagged_tools)
-        except Exception as e:
-            run_stop = unwrap_run_stop_error(e)
+            adapters.append(adapter)
+            fetched_tools.extend(tagged)
+        except Exception as exc:
+            run_stop = unwrap_run_stop_error(exc)
             if run_stop is not None:
                 raise run_stop from None
-            refusal = _refusal_status(e) if call_credentials.delegated else None
-            if refusal is not None:
-                # The receiver refused this run's authority. Nothing upstream is
-                # logged or retried: both the endpoint and the failure's own text
-                # carry the grant, and a second attempt asks for what was denied.
-                logger.error(
-                    "[MCP] event=connection_validation outcome=stopped "
-                    "reason=authority_refused status=%d",
-                    refusal,
-                )
+            if call_credentials.delegated and _refusal_status(exc) is not None:
                 raise AuthorityLostError() from None
-            duration_ms = (time.perf_counter() - start) * 1000
-            if confined:
-                logger.warning(
-                    "[MCP] event=connection_validation outcome=failed "
-                    "reason=connection_error"
-                )
-            else:
-                logger.warning(
-                    "[MCP][%s] connect fail name=%s url=%s err=%s dur_ms=%.0f: %s",
-                    agent_id,
-                    server.id,
-                    url_for_log,
-                    e.__class__.__name__,
-                    duration_ms,
-                    scrub_grant_text(str(e).split("\n")[0]),
-                )
-                failure_messages.append(
-                    f"{server.id} ({transport}): {url_for_log}): "
-                    f"{e.__class__.__name__}: "
-                    f"{scrub_grant_text(str(e).splitlines()[0])}\n"
-                )
-            exceptions.extend(getattr(e, "exceptions", [e]))
+            logger.warning(
+                "[MCP] event=connection_validation outcome=failed server=%s error=%s",
+                server.id,
+                type(exc).__name__,
+            )
+            exceptions.append(exc)
 
     if exceptions:
-        if confined:
-            logger.error(
-                "[MCP] event=connection_summary outcome=failed reason=connection_error"
+        reason = "Some MCP connections failed. Check the configured tool servers."
+        if not call_credentials.delegated:
+            reason += " " + "; ".join(
+                scrub_grant_text(f"{type(exc).__name__}: {str(exc).splitlines()[0]}")
+                for exc in exceptions
             )
-            reason = "Some MCP connections failed. Check the configured tool servers."
-        else:
-            logger.error(
-                "MCP summary: %d server(s) failed to connect.", len(exceptions)
-            )
-            for index, exc in enumerate(exceptions, 1):
-                logger.error(
-                    "  [%d] %s: %s",
-                    index,
-                    exc.__class__.__name__,
-                    scrub_grant_text(str(exc)),
-                )
-            reason = (
-                "Some MCP connections failed.\nDetails:\n"
-                + "; ".join(failure_messages)
-                + "Ensure the matching Knowledge Flow controllers are enabled "
-                "or disable the MCP server in Agentic configuration."
-            )
-            logger.error("[MCP][%s] connection summary: %s", agent_id, reason)
-        # Nothing to cleanup on the client instance
         raise MCPConnectionError(reason, exceptions)
-
-    if confined:
-        logger.debug("[MCP] event=connection_summary outcome=succeeded")
-    else:
-        logger.debug(
-            "[MCP][%s] summary: all servers validated, total tools=%d",
-            agent_id,
-            len(fetched_tools),
-        )
-    return client, fetched_tools
+    return adapters, fetched_tools

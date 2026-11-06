@@ -54,6 +54,7 @@ from fred_runtime.react.middleware.tool_observability import (
 )
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
+from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
 from fred_sdk.contracts.capability import HitlSpec
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -118,6 +119,7 @@ def test_middleware_keeps_recovery_outside_model_observability() -> None:
     )
     assert [type(m) for m in middleware] == [
         CheckpointHygieneMiddleware,
+        TurnSteeringMiddleware,
         TodoListMiddleware,
         RateLimitRetryMiddleware,
         ToolCallTextRecoveryMiddleware,
@@ -140,16 +142,17 @@ def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
         available_tool_names=set(),
     )
     assert type(middleware[0]) is CheckpointHygieneMiddleware
-    assert type(middleware[1]) is TodoListMiddleware
-    assert type(middleware[2]) is RateLimitRetryMiddleware
-    assert type(middleware[3]) is ToolCallTextRecoveryMiddleware
-    assert type(middleware[4]) is TracingKpiMiddleware
-    assert type(middleware[5]) is ToolObservabilityMiddleware
-    assert type(middleware[6]) is FredHitlMiddleware
-    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[7:])
+    assert type(middleware[1]) is TurnSteeringMiddleware
+    assert type(middleware[2]) is TodoListMiddleware
+    assert type(middleware[3]) is RateLimitRetryMiddleware
+    assert type(middleware[4]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[5]) is TracingKpiMiddleware
+    assert type(middleware[6]) is ToolObservabilityMiddleware
+    assert type(middleware[7]) is FredHitlMiddleware
+    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[8:])
     # One guard per disabled filesystem tool name (ls/read_file/write_file/
     # edit_file/glob/grep/execute).
-    assert len(middleware) == 6 + 7 + 1
+    assert len(middleware) == 7 + 7 + 1
 
 
 @pytest.mark.parametrize("child", [False, True])
@@ -166,6 +169,9 @@ def test_deep_parent_and_child_get_write_todos(child: bool) -> None:
     todo = [item for item in middleware if isinstance(item, TodoListMiddleware)]
     assert len(todo) == 1
     assert [tool.name for tool in todo[0].tools] == ["write_todos"]
+    assert sum(isinstance(item, TurnSteeringMiddleware) for item in middleware) == (
+        0 if child else 1
+    )
 
 
 def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
@@ -264,13 +270,14 @@ def test_middleware_places_capability_middleware_before_observability() -> None:
         capability_block=capability_block,
     )
     assert type(middleware[0]) is CheckpointHygieneMiddleware
-    assert type(middleware[1]) is TodoListMiddleware
-    assert middleware[2] is marker
-    assert type(middleware[3]) is RateLimitRetryMiddleware
-    assert type(middleware[4]) is ToolCallTextRecoveryMiddleware
-    assert type(middleware[5]) is TracingKpiMiddleware
-    assert type(middleware[6]) is ToolObservabilityMiddleware
-    assert type(middleware[7]) is FredHitlMiddleware
+    assert type(middleware[1]) is TurnSteeringMiddleware
+    assert type(middleware[2]) is TodoListMiddleware
+    assert middleware[3] is marker
+    assert type(middleware[4]) is RateLimitRetryMiddleware
+    assert type(middleware[5]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[6]) is TracingKpiMiddleware
+    assert type(middleware[7]) is ToolObservabilityMiddleware
+    assert type(middleware[8]) is FredHitlMiddleware
 
 
 def test_middleware_threads_capability_hitl_into_fred_hitl_middleware() -> None:
@@ -393,11 +400,12 @@ async def test_deep_build_executor_wires_observability_middleware(
     # clause also fires — this test only cares about the model wrapper order.
     wired = captured["middleware"]
     assert type(wired[0]) is CheckpointHygieneMiddleware
-    assert type(wired[1]) is TodoListMiddleware
-    assert type(wired[2]) is RateLimitRetryMiddleware
-    assert type(wired[3]) is ToolCallTextRecoveryMiddleware
-    assert type(wired[4]) is TracingKpiMiddleware
-    assert type(wired[5]) is ToolObservabilityMiddleware
+    assert type(wired[1]) is TurnSteeringMiddleware
+    assert type(wired[2]) is TodoListMiddleware
+    assert type(wired[3]) is RateLimitRetryMiddleware
+    assert type(wired[4]) is ToolCallTextRecoveryMiddleware
+    assert type(wired[5]) is TracingKpiMiddleware
+    assert type(wired[6]) is ToolObservabilityMiddleware
 
 
 @pytest.mark.asyncio

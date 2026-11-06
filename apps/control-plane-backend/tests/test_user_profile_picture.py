@@ -274,7 +274,7 @@ async def test_team_admin_summaries_carry_the_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _bulk(_rebac, team_ids, _uid):
-        return {team_ids[0]: {"alice"}}, {team_ids[0]: {"alice", "bob"}}, {}
+        return {team_ids[0]: {"alice"}}, {team_ids[0]: {"alice", "bob"}}, {}, {}
 
     monkeypatch.setattr(teams_service, "_bulk_team_membership", _bulk)
     config = MagicMock()
@@ -482,6 +482,9 @@ def _delete_user_app(content_store: _FakeContentStore, calls: list[str]) -> Fast
     attach_application_container(app, container)  # type: ignore[arg-type]
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
         uid="synthetic-admin", username="synthetic-admin", roles=[]
+    )
+    app.dependency_overrides[users_api._get_user_preferences_store] = lambda: (
+        SimpleNamespace(delete=lambda _user_id: _noop())
     )
     app.dependency_overrides[get_user_service_dependencies] = lambda: SimpleNamespace(
         configuration=SimpleNamespace(

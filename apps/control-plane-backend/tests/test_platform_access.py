@@ -46,6 +46,7 @@ from fred_core.security.rebac.rebac_engine import (
     RebacReference,
     RelationType,
 )
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import (
@@ -67,6 +68,7 @@ class MembershipEngine(NoopRebacEngine):
         self.members: dict[str, set[str]] = {}
         self.admin = True
         self.admins: set[str] = set()
+        self.permission_checks: list[OrganizationPermission] = []
         self.writes = []
         self.write_failure = False
 
@@ -77,11 +79,12 @@ class MembershipEngine(NoopRebacEngine):
         ]
 
     async def _has_permission_raw(self, subject, permission, resource, **kwargs):
-        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM:
+        if permission == OrganizationPermission.CAN_MANAGE_PLATFORM_ACCESS:
             return subject.id in self.admins
         return resource.id in self.members.get(subject.id, set())
 
     async def check_user_permission_or_raise(self, *args, **kwargs):
+        self.permission_checks.append(args[1])
         if not self.admin:
             raise HTTPException(403, "forbidden")
 
@@ -127,6 +130,7 @@ async def access(tmp_path):
         )
         session.add(
             TeamMetadataRow(
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
                 id="demo",
                 name="Demonstration",
                 joining_mode="invite_only",
@@ -690,6 +694,9 @@ async def test_admin_endpoints_reject_nonplatform_admins(access):
         )
         assert response.status_code == 403
     assert not (await access.state()).filtering_enabled
+    assert set(access.rebac.permission_checks) == {
+        OrganizationPermission.CAN_MANAGE_PLATFORM_ACCESS
+    }
 
 
 @pytest.mark.asyncio
@@ -755,7 +762,12 @@ async def pg_access(monkeypatch):
                 )
             )
             session.add(
-                TeamMetadataRow(id="demo", name="Demo", platform_access_free=True)
+                TeamMetadataRow(
+                    description=TEAM_DESCRIPTION_PLACEHOLDER,
+                    id="demo",
+                    name="Demo",
+                    platform_access_free=True,
+                )
             )
         yield value
     finally:
@@ -1349,7 +1361,10 @@ async def test_actual_full_member_removal_with_multiple_roles_revokes_other_read
     async with access.store.mutation() as session:
         session.add(
             TeamMetadataRow(
-                id="fredlab", name="Free demonstration", platform_access_free=True
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
+                id="fredlab",
+                name="Free demonstration",
+                platform_access_free=True,
             )
         )
     await free_joiner(access, member.uid, "fredlab")

@@ -55,7 +55,7 @@ function pressKey(key: string) {
 }
 
 function focusedLabel(): string | null {
-  const el = container.querySelector('[role="option"][data-focused="true"]');
+  const el = document.querySelector('[role="option"][data-focused="true"]');
   return el ? el.textContent : null;
 }
 
@@ -90,7 +90,36 @@ describe("Autocomplete empty menu", () => {
       input().focus();
     });
 
-    expect(container.querySelector('[role="status"]')?.textContent).toBe("Searching...");
+    expect(document.querySelector('[role="status"]')?.textContent).toBe("Searching...");
+  });
+});
+
+describe("Autocomplete menu placement", () => {
+  it("renders the menu outside the field's own tree so a scrolling parent cannot clip it", () => {
+    render(
+      <div style={{ overflow: "auto", height: 40 }}>
+        <Autocomplete<Candidate> textInput={{ placeholder: "Search" }} options={options()} onSelect={vi.fn()} />
+      </div>,
+    );
+    act(() => {
+      input().focus();
+    });
+
+    const listbox = document.querySelector('[role="listbox"]') as HTMLElement;
+    expect(listbox).not.toBeNull();
+    expect(container.contains(listbox)).toBe(false);
+    expect((listbox.parentElement as HTMLElement).style.position).toBe("fixed");
+    expect(input().getAttribute("aria-activedescendant")).toBe(document.querySelector('[data-focused="true"]')?.id);
+  });
+
+  it("removes the portaled menu once it closes", () => {
+    render(<Autocomplete<Candidate> textInput={{ placeholder: "Search" }} options={options()} onSelect={vi.fn()} />);
+    act(() => {
+      input().focus();
+    });
+    pressKey("Enter");
+
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
   });
 });
 

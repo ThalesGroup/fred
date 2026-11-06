@@ -28,7 +28,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fred_core import KeycloakUser
+from fred_core import DocumentPermission, KeycloakUser, TagPermission
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -58,7 +58,7 @@ async def _ingest_csv(*, tmp_path: Path, document_uid: str, file_name: str, cont
         identity=Identity(document_name=file_name, document_uid=document_uid, title=file_name),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
         file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
-        tags=Tagging(tag_ids=[], tag_names=[]),
+        tags=Tagging(tag_ids=[f"lib-{document_uid}"], tag_names=[]),
     )
     processed = TabularProcessor().process(str(csv_path), metadata)
     await MetadataService().save_document_metadata(_user(), processed)
@@ -70,11 +70,14 @@ class _FakeRebac:
         self.readable_document_uids = readable_document_uids
 
     async def lookup_user_resources(self, user, permission):
-        del user, permission
-        return [SimpleNamespace(id=uid) for uid in sorted(self.readable_document_uids)]
+        """Readable documents expose their folder; documents are never enumerated."""
+        del user
+        assert permission is TagPermission.READ
+        return [SimpleNamespace(id=f"lib-{uid}") for uid in sorted(self.readable_document_uids)]
 
     async def has_user_permission(self, user, permission, resource_id):
-        del user, permission
+        del user
+        assert permission is DocumentPermission.READ
         return resource_id in self.readable_document_uids
 
 

@@ -129,9 +129,15 @@ def _add_code_block(document: DocxDocument, lines: list[str]) -> None:
     run.font.size = Pt(9)
 
 
-def markdown_to_docx_bytes(content_md: str, *, title: str | None = None) -> bytes:
-    """Convert Markdown text to a .docx document and return it as bytes."""
+def markdown_to_docx_bytes(
+    content_md: str, *, title: str | None = None, author: str = ""
+) -> bytes:
+    """Convert Markdown to DOCX bytes; pass the user's name as author metadata."""
     document = Document()
+    # Word core text properties are limited to 255 characters.
+    author = author[:255]
+    document.core_properties.author = author
+    document.core_properties.last_modified_by = author
     if title:
         _add_inline_runs(document.add_heading(level=0), title)
 

@@ -39,8 +39,18 @@ configuration:
       host: temporal:7233
 ```
 
-The pod registers itself: nothing to add to Fred's values. The chart's
-`appVersion` identifies the `fred-sdk` version used to generate its
+Fred lets the pod declare itself only if its client owns the prefix: add one entry,
+keyed by the client, to `registrations.knowledgeBasePublishers` in the Fred chart's
+values, then upgrade Fred. The install prints it:
+
+```yaml
+registrations:
+  knowledgeBasePublishers:
+    kb-my:
+      prefix: my.kb
+```
+
+The chart's `appVersion` identifies the `fred-sdk` version used to generate its
 configuration schema. Build the pod with a compatible `fred-sdk` version.
 
 ## What it deploys
@@ -111,7 +121,8 @@ volume (`extraVolumes`, `extraVolumeMounts`).
 
 ## Enable in Fred
 
-After the `publish` Job succeeds, the Knowledge Base appears in Fred's admin; a platform
+Once the Fred chart registers the client under `registrations.knowledgeBasePublishers` and the
+`publish` Job succeeds, the Knowledge Base appears in Fred's admin; a platform
 admin enables it for the teams that should use it.
 
 ## Upgrade and uninstall

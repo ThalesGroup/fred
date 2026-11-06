@@ -60,7 +60,12 @@ vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({
 }));
 
 vi.mock("@shared/organisms/TeamCard/TeamCard.tsx", () => ({
-  default: ({ team }: { team: Team }) => <div data-testid={`team-card-${team.id}`}>{team.id}</div>,
+  default: ({ team }: { team: Team }) => (
+    <div data-testid={`team-card-${team.id}`}>
+      {team.id}
+      {team.description}
+    </div>
+  ),
 }));
 
 import MarketplaceTeams from "./MarketplaceTeams";
@@ -200,5 +205,35 @@ describe("MarketplaceTeams search", () => {
     const html = render();
     expect(html).toContain("team-card-fredlab");
     expect(html).toContain("team-card-acme");
+  });
+});
+
+describe("MarketplaceTeams descriptions", () => {
+  beforeEach(() => {
+    h.bootstrap = {
+      activeTeam: { id: "personal-me" } as TeamWithPermissions,
+      availableTeams: [{ id: "personal-me" }, { id: "fredlab" }] as Team[],
+      bootstrap: undefined,
+      isLoading: false,
+      refetch: vi.fn(),
+    };
+  });
+
+  it("hands every card its team, description included, in both sections", () => {
+    h.teams = {
+      data: [
+        { id: "fredlab", name: "fredlab", is_member: true, description: "Prepare board briefs." } as Team,
+        {
+          id: "acme",
+          name: "acme",
+          is_member: false,
+          visibility: "public",
+          description: "Answer IT questions.",
+        } as Team,
+      ],
+    };
+    const html = render();
+    expect(html).toContain("Prepare board briefs.");
+    expect(html).toContain("Answer IT questions.");
   });
 });

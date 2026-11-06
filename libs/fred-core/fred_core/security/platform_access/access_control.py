@@ -128,12 +128,12 @@ class PlatformAccess:
             raise RuntimeError("Incomplete membership authority response")
         return [source for source, member in zip(candidates, memberships) if member]
 
-    async def platform_admin_uid(self, uid: str) -> bool:
-        """Resolve the current platform-admin permission for a person's UID."""
+    async def access_manager_uid(self, uid: str) -> bool:
+        """Resolve the current Platform Access permission for a person's UID."""
         try:
             return await self.rebac.has_permission(
                 RebacReference(Resource.USER, uid),
-                OrganizationPermission.CAN_MANAGE_PLATFORM,
+                OrganizationPermission.CAN_MANAGE_PLATFORM_ACCESS,
                 RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
                 consistency_token=self.rebac.HIGHER_CONSISTENCY,
             )
@@ -141,13 +141,13 @@ class PlatformAccess:
             warn_unavailable("admin check", error)
             raise HTTPException(503, "platform_access_unavailable") from None
 
-    async def platform_admin(self, user: Principal) -> bool:
+    async def access_manager(self, user: Principal) -> bool:
         """Ignore a workload's own identity when checking human admission."""
         if isinstance(user, KeycloakUser) and (
             user.service_account or is_service_agent(user)
         ):
             return False
-        return await self.platform_admin_uid(user.uid)
+        return await self.access_manager_uid(user.uid)
 
     async def eligible(
         self,
@@ -160,7 +160,7 @@ class PlatformAccess:
     ) -> bool:
         if use_current_policy:
             policy = self.policy(await self.state(session))
-        if await self.platform_admin(user):
+        if await self.access_manager(user):
             return True
         uid = UUID(user.uid)
         if isinstance(user, KeycloakUser):

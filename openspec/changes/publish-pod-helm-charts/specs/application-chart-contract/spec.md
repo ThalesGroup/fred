@@ -49,10 +49,9 @@ given.
 
 ### Requirement: The install prints the registration
 
-An application chart's notes SHALL print both registration blocks for Fred's values — the
-Control Plane's `application_sources` entry and the frontend gateway's
-`FRONTEND_APPLICATIONS_JSON` entry — with the same `app_id` and with this release's fully
-qualified Service addresses.
+An application chart's notes SHALL print its registration for Fred's values — the
+`registrations.applications.<app_id>` entry, catalog fields and `gateway` — with this
+release's fully qualified Service addresses.
 
 #### Scenario: Registration after install
 

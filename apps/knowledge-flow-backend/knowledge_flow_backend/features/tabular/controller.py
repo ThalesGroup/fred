@@ -19,6 +19,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import OwnerFilter
 
+from knowledge_flow_backend.features.tabular.diagnostics import TabularDescriptionNotFound, log_description_failure
 from knowledge_flow_backend.features.tabular.execution import (
     TabularCapacityExceededError,
     TabularExecutionTimeoutError,
@@ -55,7 +56,7 @@ class TabularController:
             response_model=List[TabularDocumentListResponse],
             response_model_exclude_none=True,
             tags=["Tabular"],
-            summary="List document names and Excel tables",
+            summary="Discover authorized CSV documents and Excel workbook tables",
             operation_id="list_tabular_documents",
         )
         async def list_documents(
@@ -78,19 +79,18 @@ class TabularController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
-            List visible tabular document names and their technical identifiers.
+            Discover authorized CSV files and Excel workbooks in the current scope.
 
-            Why this exists:
-            - Excel workbooks include their table aliases, sheets and titles.
-              CSV documents expose only their name and document UID.
-            - Team/personal and library scope must be enforced before table
-              aliases are exposed.
+            Returns document_name, document_uid, source_kind and corpus library
+            tag_names. Excel entries also list table aliases, sheets and titles;
+            CSV entries have no table list. The runtime supplies conversation
+            attachment UIDs and enabled sources. Without attachment scope, only
+            corpus documents are listed.
 
-            How to use:
-            - The runtime supplies the current conversation attachment UIDs.
-            - Direct calls without attachment scope list only corpus documents.
-            - Follow up with `/tabular/documents/schemas` for a spreadsheet's
-              catalog and every document's typed tables.
+            Copy document_uid values into describe_tabular_documents. Discovery
+            does not provide column types: describe every selected document
+            before SQL, even if its table aliases are already listed. An empty
+            list is a successful discovery with no visible tabular documents.
             """
 
             try:
@@ -134,15 +134,23 @@ class TabularController:
         @router.get(
             "/tabular/documents/schemas",
             response_model=List[TabularDocumentDescriptionResponse],
+            response_model_exclude_none=True,
             tags=["Tabular"],
-            summary="Read the catalog and typed tables of one or several tabular documents",
+            summary="Inspect document catalogs, SQL aliases and column types",
             operation_id="describe_tabular_documents",
         )
         async def describe_documents(
             document_uids: Annotated[
                 list[str],
-                Query(min_length=1, description="Document UIDs to describe (repeat the parameter for several documents)."),
+                Query(
+                    min_length=1,
+                    description="Document UIDs copied exactly from list_tabular_documents or authorized attachments, not filenames or SQL table aliases. Repeat the parameter for several documents.",
+                ),
             ],
+            table_names: Annotated[
+                list[str] | None,
+                Query(max_length=1000, description="Optional exact query_alias values or unambiguous sheet/title names. Omit or pass an empty list for all tables. Does not rename SQL aliases."),
+            ] = None,
             document_library_tags_ids: Annotated[
                 list[str] | None,
                 Query(description="Optional library tag IDs used to keep documents inside selected libraries."),
@@ -162,33 +170,28 @@ class TabularController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
-            Return the extraction catalog and typed tables of authorized documents.
+            Inspect the catalog, SQL table aliases and column types before querying.
 
-            Why this exists:
-            - Schema inspection must expose every table of a multi-table
-              workbook and follow the same document-level access rules as
-              query execution.
-            - For Excel, the `output.md` catalog comes before the typed tables.
-              Read it to identify relevant sheets and context, then check each
-              selected column's type before constructing SQL filters.
-            - CSV documents have no extraction catalog; their tables still
-              include every column's exact name and type.
-            - Categorical string columns list every distinct value in
-              `sample_values`; integer and float columns include finite
-              `min_value` and `max_value` when available.
-            - One batch call keeps agent round trips low when a SQL query
-              joins tables from several documents.
+            Pass exact document_uids from authorized discovery, not filenames or
+            SQL aliases. Batch several documents when a query will join them.
+            For Excel, read markdown first for sheet/table context and residual
+            notes, then inspect tables[].columns. CSV has no markdown catalog.
+            Describe all tables by default, or select exact table_names to
+            inspect only relevant schemas. The workbook catalog stays complete.
+            Returned tables include query_alias, exact column names and dtypes.
 
-            How to use:
-            - Pass one or several `document_uids` from `/tabular/documents`.
-            - Reuse the same scope parameters as the list endpoint when the
-              caller is bound to one active area.
+            Categorical string categorical_values contain all distinct non-null
+            values when available: preserve their exact spelling and format in
+            filters. Numeric min_value/max_value are finite observed bounds,
+            not query answers. Use query_alias values in SQL FROM/JOIN clauses;
+            use document UIDs only as document selectors.
             """
 
             try:
                 return await self.service.describe_documents(
                     user,
                     document_uids=document_uids,
+                    table_names=table_names,
                     document_library_tags_ids=document_library_tags_ids,
                     owner_filter=owner_filter,
                     team_id=team_id,
@@ -201,6 +204,9 @@ class TabularController:
                 raise HTTPException(status_code=400, detail=str(e))
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
+            except TabularDescriptionNotFound as e:
+                log_description_failure(e)
+                raise HTTPException(status_code=404, detail=str(e))
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
             except (TabularCapacityExceededError, TabularExecutionTimeoutError):
@@ -217,32 +223,32 @@ class TabularController:
             "/tabular/query",
             response_model=RawSQLResponse,
             tags=["Tabular"],
-            summary="Execute one read-only SQL query on authorized datasets",
+            summary="Run one read-only DuckDB SELECT over discovered tables",
             operation_id="read_query",
         )
         async def raw_sql_read(
-            request: TabularQueryRequest = Body(..., description="Dataset-centric SQL query payload"),
+            request: TabularQueryRequest = Body(..., description="Read-only DuckDB query over discovered document tables"),
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
-            Execute one read-only SQL query against authorized datasets.
+            Run one read-only DuckDB SELECT after describing every document it reads.
 
-            Why this exists:
-            - Dataset-scoped queries now run in an ephemeral DuckDB session with
-              only authorized views mounted.
+            Use exact discovered query_alias values in FROM/JOIN. dataset_uids
+            contains document UIDs; one workbook UID selects all its tables.
+            Only referenced authorized tables are mounted. At least one dataset
+            alias is required; cross-table/document joins must stay within the
+            server's dataset limit. max_rows limits returned rows: compute
+            totals and aggregates in SQL instead of inferring them from previews.
 
-            How to use:
-            - Send `sql` and optional `dataset_uids` (document uids; one
-              spreadsheet uid makes every table of the workbook available).
-            - Only the aliases your SQL references are mounted. The query must
-              name at least one dataset alias in its `FROM` clause: a query
-              reading no dataset returns 400, as does one joining more datasets
-              than the server allows per request.
-            - 503 means the server is momentarily at capacity and 504 that the
-              query exceeded its time budget; both are worth one retry, and a
-              504 is a hint to add filters or aggregate. 400 with a memory
-              message means the query needs more memory than one request may
-              use — narrow it rather than retrying.
+            Returns sql_query, rows, error and dataset references. rows=[] with
+            error=null is a successful query with zero matching rows and an
+            explicit success message. A zero count or null aggregate is still a
+            row. Reuse successful results; inspect types/filters before changing
+            an unexpectedly empty query instead of repeating it unchanged.
+
+            HTTP 400 requires correcting SQL/arguments; a memory-budget error
+            requires a narrower query. HTTP 503 indicates temporary capacity;
+            HTTP 504 requires narrowing a query that exceeded its time budget.
             """
 
             try:
@@ -276,28 +282,28 @@ class TabularController:
             "/tabular/search",
             response_model=TabularSearchResponse,
             tags=["Tabular"],
-            summary="Locate a keyword across authorized tabular datasets",
+            summary="Locate a precise value after inspecting document structure",
             operation_id="search_tabular_values",
         )
         async def search_values(
-            request: TabularSearchRequest = Body(..., description="Keyword value-locator payload"),
+            request: TabularSearchRequest = Body(..., description="Precise value lookup over previously described document tables"),
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
-            Locate a precise value across the tables of authorized documents.
+            Locate a precise value when the inspected catalog cannot identify its table.
 
-            Why this exists:
-            - The catalog and schemas describe a workbook's structure but not its
-              cell values. This finds which table(s) and column(s) hold a value,
-              so an agent can then run one targeted `read_query` instead of
-              scanning every table.
+            Use only after describe_tabular_documents, as a last-resort value
+            locator rather than a structure-discovery or aggregation tool.
+            Send a specific keyword of at least two characters, preferably with
+            dataset_uids scoped to exact document UIDs. One workbook UID covers
+            all its tables. Matching ignores case, accents and whitespace;
+            numeric columns are searchable too.
 
-            How to use:
-            - Send a precise `keyword` and, ideally, a `dataset_uids` subset (one
-              spreadsheet uid covers all its tables).
-            - Matching is case/accent/whitespace-insensitive over every column;
-              numeric columns are searchable too. `tables_truncated` /
-              `row_truncated` flag a partial result.
+            Returns matching tables, columns and sample rows. tables_truncated
+            or row_truncated means partial coverage: refine the keyword/scope.
+            max_matching_tables and max_rows_per_table bound returned previews.
+            Empty matches are a successful search with no matches in the searched
+            scope. Use the located table aliases in a subsequent read_query.
             """
 
             try:

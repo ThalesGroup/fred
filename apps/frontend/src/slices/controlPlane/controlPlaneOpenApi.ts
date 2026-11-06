@@ -356,6 +356,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/users/me/avatar`, method: "DELETE" }),
     }),
+    getMyPreferencesControlPlaneV1UsersMePreferencesGet: build.query<
+      GetMyPreferencesControlPlaneV1UsersMePreferencesGetApiResponse,
+      GetMyPreferencesControlPlaneV1UsersMePreferencesGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/me/preferences` }),
+    }),
+    patchMyPreferencesControlPlaneV1UsersMePreferencesPatch: build.mutation<
+      PatchMyPreferencesControlPlaneV1UsersMePreferencesPatchApiResponse,
+      PatchMyPreferencesControlPlaneV1UsersMePreferencesPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/me/preferences`,
+        method: "PATCH",
+        body: queryArg.patchUserPreferences,
+      }),
+    }),
     getUserDetailsControlPlaneV1UserGet: build.query<
       GetUserDetailsControlPlaneV1UserGetApiResponse,
       GetUserDetailsControlPlaneV1UserGetApiArg
@@ -423,6 +439,16 @@ const injectedRtkApi = api.injectEndpoints({
       DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}`, method: "DELETE" }),
+    }),
+    editTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatch: build.mutation<
+      EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiResponse,
+      EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/registry`,
+        method: "PATCH",
+        body: queryArg.editTeamRegistryRequest,
+      }),
     }),
     joinTeamControlPlaneV1TeamsTeamIdJoinPost: build.mutation<
       JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiResponse,
@@ -632,6 +658,16 @@ const injectedRtkApi = api.injectEndpoints({
           url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/with-assets`,
           method: "PATCH",
           body: queryArg.bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch,
+        }),
+      }),
+    postTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPost:
+      build.mutation<
+        PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiResponse,
+        PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/readiness-check`,
+          method: "POST",
         }),
       }),
     getAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGet: build.query<
@@ -980,6 +1016,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.bootstrapPlatformAdminRequest,
       }),
     }),
+    putModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePut: build.mutation<
+      PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiResponse,
+      PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/display-name`,
+        method: "PUT",
+        body: queryArg.setModelDisplayNameRequest,
+      }),
+    }),
     getAdminCapabilitiesControlPlaneV1AdminCapabilitiesGet: build.query<
       GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse,
       GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg
@@ -1047,6 +1093,97 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/capabilities/${queryArg.capabilityId}/reasoning`,
         method: "PATCH",
         body: queryArg.setModelReasoningRequest,
+      }),
+    }),
+    getModelDiscoveryControlPlaneV1AdminModelDiscoveryGet: build.query<
+      GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiResponse,
+      GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/model-discovery` }),
+    }),
+    dismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDelete: build.mutation<
+      DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiResponse,
+      DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/model-discovery/${queryArg.sourceId}/removed-model`,
+        method: "DELETE",
+        params: {
+          model_id: queryArg.modelId,
+        },
+      }),
+    }),
+    getPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGet: build.query<
+      GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiResponse,
+      GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/pod-chat-defaults` }),
+    }),
+    putPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPut: build.mutation<
+      PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiResponse,
+      PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}`,
+        method: "PUT",
+        body: queryArg.setPodChatDefaultRequest,
+      }),
+    }),
+    clearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDelete: build.mutation<
+      ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiResponse,
+      ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}`,
+        method: "DELETE",
+      }),
+    }),
+    putPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPut: build.mutation<
+      PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiResponse,
+      PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}/fallback`,
+        method: "PUT",
+        body: queryArg.setPodChatFallbackRequest,
+      }),
+    }),
+    clearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDelete: build.mutation<
+      ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiResponse,
+      ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/pod-chat-defaults/${queryArg.runtimeId}/fallback`,
+        method: "DELETE",
+      }),
+    }),
+    refreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPost: build.mutation<
+      RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiResponse,
+      RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/model-discovery/refresh`, method: "POST" }),
+    }),
+    getModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGet: build.query<
+      GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiResponse,
+      GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/model-discovery/detail`,
+        params: {
+          source_id: queryArg.sourceId,
+          model_id: queryArg.modelId,
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
+    putModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPut: build.mutation<
+      PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiResponse,
+      PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/model-discovery/${queryArg.sourceId}/url`,
+        method: "PUT",
+        body: queryArg.setDiscoveryUrlRequest,
       }),
     }),
     publishKnowledgeBaseDefinition: build.mutation<
@@ -1143,6 +1280,12 @@ const injectedRtkApi = api.injectEndpoints({
       GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
+    }),
+    getPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGet: build.query<
+      GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiResponse,
+      GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/routing-policy/available-models` }),
     }),
     getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: build.query<
       GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse,
@@ -1371,6 +1514,19 @@ const injectedRtkApi = api.injectEndpoints({
       DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant`, method: "DELETE" }),
+    }),
+    getPlatformSkills: build.query<GetPlatformSkillsApiResponse, GetPlatformSkillsApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills` }),
+    }),
+    getPlatformSkillPolicy: build.query<GetPlatformSkillPolicyApiResponse, GetPlatformSkillPolicyApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills/policy` }),
+    }),
+    setPlatformSkillEnabled: build.mutation<SetPlatformSkillEnabledApiResponse, SetPlatformSkillEnabledApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/skills/${queryArg.skillName}`,
+        method: "PUT",
+        body: queryArg.setPlatformSkillEnabledRequest,
+      }),
     }),
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: build.query<
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse,
@@ -2369,6 +2525,14 @@ export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg = {
 };
 export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse = unknown;
 export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg = void;
+export type GetMyPreferencesControlPlaneV1UsersMePreferencesGetApiResponse =
+  /** status 200 Successful Response */ UserPreferences;
+export type GetMyPreferencesControlPlaneV1UsersMePreferencesGetApiArg = void;
+export type PatchMyPreferencesControlPlaneV1UsersMePreferencesPatchApiResponse =
+  /** status 200 Successful Response */ UserPreferences;
+export type PatchMyPreferencesControlPlaneV1UsersMePreferencesPatchApiArg = {
+  patchUserPreferences: PatchUserPreferences;
+};
 export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ UserDetails;
 export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
 export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Successful Response */ any;
@@ -2402,6 +2566,12 @@ export type UpdateTeamControlPlaneV1TeamsTeamIdPatchApiArg = {
 export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiResponse = unknown;
 export type DeleteTeamControlPlaneV1TeamsTeamIdDeleteApiArg = {
   teamId: string;
+};
+export type EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiResponse =
+  /** status 200 Successful Response */ TeamWithPermissions;
+export type EditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchApiArg = {
+  teamId: string;
+  editTeamRegistryRequest: EditTeamRegistryRequest;
 };
 export type JoinTeamControlPlaneV1TeamsTeamIdJoinPostApiResponse =
   /** status 200 Successful Response */ TeamWithPermissions;
@@ -2530,6 +2700,13 @@ export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstan
     teamId: string;
     agentInstanceId: string;
     bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch;
+  };
+export type PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary;
+export type PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiArg =
+  {
+    teamId: string;
+    agentInstanceId: string;
   };
 export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse =
   /** status 200 Successful Response */ AgentCopyTargetsResponse;
@@ -2767,6 +2944,12 @@ export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiRes
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg = {
   bootstrapPlatformAdminRequest: BootstrapPlatformAdminRequest;
 };
+export type PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiResponse =
+  /** status 200 Successful Response */ ModelDisplayNameResult;
+export type PutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutApiArg = {
+  capabilityId: string;
+  setModelDisplayNameRequest: SetModelDisplayNameRequest;
+};
 export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiResponse =
   /** status 200 Successful Response */ CapabilityEnablementList;
 export type GetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetApiArg = void;
@@ -2809,6 +2992,58 @@ export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdR
 export type PatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchApiArg = {
   capabilityId: string;
   setModelReasoningRequest: SetModelReasoningRequest;
+};
+export type GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiResponse =
+  /** status 200 Successful Response */ ModelDiscoveryStatus;
+export type GetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetApiArg = void;
+export type DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiResponse =
+  /** status 200 Successful Response */ DiscoverySourceStatus;
+export type DismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteApiArg = {
+  sourceId: string;
+  modelId: string;
+};
+export type GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiResponse =
+  /** status 200 Successful Response */ PodChatDefaults;
+export type GetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetApiArg = void;
+export type PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type PutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutApiArg = {
+  runtimeId: string;
+  setPodChatDefaultRequest: SetPodChatDefaultRequest;
+};
+export type ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type ClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteApiArg = {
+  runtimeId: string;
+};
+export type PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type PutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutApiArg = {
+  runtimeId: string;
+  setPodChatFallbackRequest: SetPodChatFallbackRequest;
+};
+export type ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiResponse =
+  /** status 200 Successful Response */ PodChatDefaultStatus;
+export type ClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteApiArg = {
+  runtimeId: string;
+};
+export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiResponse =
+  /** status 200 Successful Response */ ModelDiscoveryStatus;
+export type RefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostApiArg = void;
+export type GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetApiArg = {
+  sourceId: string;
+  modelId: string;
+  runtimeId?: string | null;
+};
+export type PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiResponse =
+  /** status 200 Successful Response */ DiscoverySourceStatus;
+export type PutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutApiArg = {
+  sourceId: string;
+  setDiscoveryUrlRequest: SetDiscoveryUrlRequest;
 };
 export type PublishKnowledgeBaseDefinitionApiResponse =
   /** status 200 Successful Response */ KnowledgeBasePublicationResult;
@@ -2868,6 +3103,9 @@ export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvail
 export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
   teamId: string;
 };
+export type GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiResponse =
+  /** status 200 Successful Response */ AvailableModelProfileList;
+export type GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiArg = void;
 export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse =
   /** status 200 Successful Response */ EffectiveChatModel;
 export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg = {
@@ -3011,6 +3249,15 @@ export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssis
 export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse =
   /** status 200 Successful Response */ CreationAssistantSettings;
 export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg = void;
+export type GetPlatformSkillsApiResponse = /** status 200 Successful Response */ PlatformSkillInventory;
+export type GetPlatformSkillsApiArg = void;
+export type GetPlatformSkillPolicyApiResponse = /** status 200 Successful Response */ PlatformSkillPolicy;
+export type GetPlatformSkillPolicyApiArg = void;
+export type SetPlatformSkillEnabledApiResponse = /** status 200 Successful Response */ PlatformSkillEnabled;
+export type SetPlatformSkillEnabledApiArg = {
+  skillName: string;
+  setPlatformSkillEnabledRequest: SetPlatformSkillEnabledRequest;
+};
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse =
   /** status 200 Successful Response */ PlatformUiSettings;
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg = void;
@@ -3823,6 +4070,7 @@ export type PlatformRoleRelation =
   | "platform_admin"
   | "platform_observer"
   | "team_manager"
+  | "platform_access_manager"
   | "feature_manager"
   | "prompt_editor";
 export type PlatformRoleHolder = {
@@ -3840,6 +4088,23 @@ export type GrantPlatformRoleRequest = {
 export type BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost = {
   /** Profile picture file (max 5MB, JPEG/PNG/WebP) */
   file: string;
+};
+export type UserPreferences = {
+  initialized?: boolean;
+  ui_theme_id?: string | null;
+  theme_mode?: "light" | "dark" | "system";
+  language?: ("fr" | "en") | null;
+  sidebar_collapsed?: boolean;
+  team_sort_mode?: "recent" | "alpha";
+  agent_sort?: "name" | "created_at:desc" | "updated_at:desc";
+};
+export type PatchUserPreferences = {
+  ui_theme_id?: string | null;
+  theme_mode?: ("light" | "dark" | "system") | null;
+  language?: ("fr" | "en") | null;
+  sidebar_collapsed?: boolean | null;
+  team_sort_mode?: ("recent" | "alpha") | null;
+  agent_sort?: ("name" | "created_at:desc" | "updated_at:desc") | null;
 };
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
@@ -3885,9 +4150,11 @@ export type TeamWithPermissions = {
   name: string;
   member_count?: number | null;
   admins?: UserSummary[];
+  pending_admin_ids?: string[];
   is_member?: boolean;
   my_relations?: UserTeamRelation[];
   description?: string | null;
+  description_is_placeholder?: boolean;
   joining_mode?: JoiningMode;
   visibility?: TeamVisibility;
   avatar_image_url?: string | null;
@@ -3907,9 +4174,11 @@ export type Team = {
   name: string;
   member_count?: number | null;
   admins?: UserSummary[];
+  pending_admin_ids?: string[];
   is_member?: boolean;
   my_relations?: UserTeamRelation[];
   description?: string | null;
+  description_is_placeholder?: boolean;
   joining_mode?: JoiningMode;
   visibility?: TeamVisibility;
   avatar_image_url?: string | null;
@@ -3918,6 +4187,7 @@ export type Team = {
 };
 export type CreateTeamRequest = {
   name: string;
+  description: string;
   initial_team_admin_ids: string[];
 };
 export type UpdateTeamRequest = {
@@ -3928,6 +4198,12 @@ export type UpdateTeamRequest = {
   avatar_image_url?: string | null;
   team_delete_grace?: string | null;
   max_idle?: string | null;
+};
+export type EditTeamRegistryRequest = {
+  name?: string | null;
+  description?: string | null;
+  add_admin_ids?: string[];
+  remove_admin_ids?: string[];
 };
 export type RescueTeamAdminRequest = {
   user_id: string;
@@ -4152,6 +4428,32 @@ export type AssetSlot = {
   max_count?: number | null;
 };
 export type TeamScopePolicy = "default_on" | "admin_gated";
+export type ModelBindingSettings = {
+  base_url?: string | null;
+  azure_endpoint?: string | null;
+  azure_openai_api_version?: string | null;
+  azure_ad_client_id?: string | null;
+  azure_ad_client_scope?: string | null;
+  azure_apim_base_url?: string | null;
+  azure_apim_resource_path?: string | null;
+  azure_tenant_id?: string | null;
+  project?: string | null;
+  location?: string | null;
+  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  top_p?: number | null;
+  max_retries?: number | null;
+  streaming?: boolean | null;
+  stream_usage?: boolean | null;
+  request_timeout?: number | null;
+  reasoning_effort?: string | null;
+};
+export type ModelBinding = {
+  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
+  name: string;
+  settings?: ModelBindingSettings;
+};
 export type CapabilityCatalogEntry = {
   id: string;
   runtime_id?: string | null;
@@ -4173,12 +4475,21 @@ export type CapabilityCatalogEntry = {
   route_base_url?: string | null;
   default_capability_ids?: string[];
   model_profile_ids?: string[];
+  model_capabilities?: string[];
+  model_chat_capability_verified?: boolean;
+  model_runtime_ids?: string[];
+  model_discovery_source_id?: string | null;
   model_chat_profile_ids?: string[];
+  model_platform_binding?: ModelBinding | null;
   model_thinking_profile_ids?: string[];
+  model_vision_profile_ids?: string[];
   model_reasoning_efforts?: {
     [key: string]: ("low" | "medium" | "high")[];
   };
   model_display_name?: string | null;
+  model_context_window_tokens?: number | null;
+  model_max_input_tokens?: number | null;
+  model_max_output_tokens?: number | null;
 };
 export type AgentTemplateSummary = {
   template_id: string;
@@ -4205,7 +4516,11 @@ export type AgentTemplateSummary = {
     Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
   default_capability_ids?: string[];
 };
-export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
+export type SuspensionReason =
+  | "capability_unavailable"
+  | "capability_access_revoked"
+  | "capability_config_invalid"
+  | "capability_pending";
 export type AgentMarketplaceState = {
   /** `removed` after an automatic or platform admin removal (shown until hidden); `dismissed` after a removal by the team or Hide. */
   state: "published" | "removed" | "dismissed";
@@ -4235,8 +4550,10 @@ export type ManagedAgentInstanceSummary = {
   /** Chat profile this agent's new conversations start on. Null follows the team default. */
   recommended_chat_profile_id?: string | null;
   status: "enabled" | "disabled";
-  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
+  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid / capability_pending (a capability is still preparing its saved configuration, or failed to). */
   suspension_reason?: SuspensionReason | null;
+  /** Plain-language failure message carried with `suspension_reason=capability_pending` when a capability reported that preparing its configuration failed; null while it is still pending and for every other reason. */
+  suspension_detail?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -4605,32 +4922,6 @@ export type ManagedAgentTuning = {
         };
   };
 };
-export type ModelBindingSettings = {
-  base_url?: string | null;
-  azure_endpoint?: string | null;
-  azure_openai_api_version?: string | null;
-  azure_ad_client_id?: string | null;
-  azure_ad_client_scope?: string | null;
-  azure_apim_base_url?: string | null;
-  azure_apim_resource_path?: string | null;
-  azure_tenant_id?: string | null;
-  project?: string | null;
-  location?: string | null;
-  model_family?: ("mistral" | "llama" | "anthropic" | "claude") | null;
-  temperature?: number | null;
-  max_tokens?: number | null;
-  top_p?: number | null;
-  max_retries?: number | null;
-  streaming?: boolean | null;
-  stream_usage?: boolean | null;
-  request_timeout?: number | null;
-  reasoning_effort?: string | null;
-};
-export type ModelBinding = {
-  provider: "anthropic" | "azure-apim" | "azure-openai" | "ollama" | "openai" | "vertex-ai" | "vertex-ai-model-garden";
-  name: string;
-  settings?: ModelBindingSettings;
-};
 export type ManagedAgentRuntimeBinding = {
   agent_instance_id: string;
   template_agent_id: string;
@@ -4646,9 +4937,23 @@ export type ManagedAgentRuntimeBinding = {
     };
   };
   reasoning_enabled_model_ids?: string[];
+  disabled_platform_skills?: string[];
   team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
+  pod_chat_default_profile_id?: string | null;
+  platform_chat_model_fallback?: ModelBinding | null;
+  pod_chat_fallback_profile_id?: string | null;
+  model_discovery_urls?: {
+    [key: string]: string;
+  };
+  model_discovery_revisions?: {
+    [key: string]: number;
+  };
+  confirmed_removed_chat_profiles?: {
+    [key: string]: string;
+  };
   platform_prompt?: string | null;
+  title_model_profile_id?: string | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -4743,11 +5048,15 @@ export type SkillSummary = {
   name: string;
   description: string;
   argument_hint?: string | null;
+  builtin?: boolean;
+  user_invocable?: boolean;
+  disable_model_invocation?: boolean;
 };
 export type SkillCatalog = {
   supported?: boolean;
   revision?: string;
   skills?: SkillSummary[];
+  policy_supported?: boolean;
 };
 export type SkillDetail = {
   skill: SkillSummary;
@@ -4803,6 +5112,13 @@ export type BootstrapPlatformAdminRequest = {
   /** The one-time root-bootstrap secret. */
   token: string;
 };
+export type ModelDisplayNameResult = {
+  capability_id: string;
+  display_name: string | null;
+};
+export type SetModelDisplayNameRequest = {
+  display_name: string | null;
+};
 export type ImpactedInstanceSummary = {
   agent_instance_id: string;
   team_id: string;
@@ -4848,8 +5164,27 @@ export type CapabilityEnablementItem = {
   thinking_profile_ids?: string[];
   /** Whether this model's thinking-capable profiles may run with reasoning on, platform-wide (REASON-01 §5). GLOBAL, with no subject: an activation, not a permission — per-team model access remains the untouched ReBAC `can_use` axis (§5.1/§5.4). No stored row means `false` (§5.6): enabling a model and enabling its reasoning are two separate admin actions, in that order. */
   reasoning_enabled?: boolean;
-  /** For a `kind="model"` row: the ops-authored `model_display_name` from models_catalog.yaml, carried verbatim. `name` is the wire model value, which several models on one gateway can share, so the admin label prefers this when set. Display only. */
+  /** For a `kind="model"` row: the effective label. A saved admin name takes priority over pod catalog metadata. `name` remains the wire model value. Display only. */
   model_display_name?: string | null;
+  /** The platform administrator's saved label, if any. Clear to restore the pod label. */
+  model_display_name_override?: string | null;
+  /** The pod-advertised discovery source for this model, if any. */
+  model_discovery_source_id?: string | null;
+  /** Runtime pods currently advertising this model. */
+  model_runtime_ids?: string[];
+  model_chat_profile_ids?: string[];
+  model_platform_binding?: ModelBinding | null;
+  model_fallback_profile_ids?: string[];
+  model_capabilities?: string[];
+  model_chat_capability_verified?: boolean;
+  model_reasoning_efforts?: {
+    [key: string]: string[];
+  };
+  model_context_window_tokens?: number | null;
+  model_max_input_tokens?: number | null;
+  model_max_output_tokens?: number | null;
+  /** Ingress-relative base URL of the capability's own routes on its pod, for its platform settings panel; null when it has none. */
+  route_base_url?: string | null;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
@@ -4911,6 +5246,72 @@ export type ModelReasoningResult = {
 };
 export type SetModelReasoningRequest = {
   reasoning_enabled: boolean;
+};
+export type DiscoveredModel = {
+  id: string;
+  name: string;
+  provider: string;
+  display_name?: string | null;
+  profile_ids?: string[];
+  chat_profile_ids?: string[];
+  context_window_tokens?: number | null;
+  max_input_tokens?: number | null;
+  max_output_tokens?: number | null;
+};
+export type DiscoverySourceStatus = {
+  source_id: string;
+  yaml_url: string;
+  override_url?: string | null;
+  effective_url: string;
+  available_models?: DiscoveredModel[];
+  removed_models?: DiscoveredModel[];
+  new_ids?: string[];
+  last_success_at?: string | null;
+  last_attempt_at?: string | null;
+  last_error?: string | null;
+};
+export type UnverifiedRuntime = {
+  runtime_id: string;
+  base_url: string;
+};
+export type ModelDiscoveryStatus = {
+  sources?: DiscoverySourceStatus[];
+  refresh_error?: string | null;
+  unverified_runtimes?: UnverifiedRuntime[];
+  verified_source_ids?: string[];
+  pod_chat_default_available?: boolean | null;
+};
+export type PodChatModelOption = {
+  profile_id: string;
+  model_id: string;
+  name: string;
+  display_name?: string | null;
+  discovery_source_id?: string | null;
+};
+export type PodChatDefaultStatus = {
+  runtime_id: string;
+  base_url: string;
+  reachable: boolean;
+  yaml_profile_id?: string | null;
+  override_profile_id?: string | null;
+  effective_profile_id?: string | null;
+  override_unavailable?: boolean;
+  fallback_override_profile_id?: string | null;
+  effective_fallback_profile_id?: string | null;
+  fallback_unavailable?: boolean;
+  models?: PodChatModelOption[];
+};
+export type PodChatDefaults = {
+  pods?: PodChatDefaultStatus[];
+};
+export type SetPodChatDefaultRequest = {
+  profile_id: string;
+};
+export type SetPodChatFallbackRequest = {
+  profile_id: string;
+};
+export type SetDiscoveryUrlRequest = {
+  url?: string | null;
 };
 export type KnowledgeBasePublicationResult = {
   id: string;
@@ -5009,6 +5410,8 @@ export type AvailableModelProfile = {
   display_name?: string | null;
   /** Whether a platform admin enabled reasoning for this model: only then can the team set a reasoning default for it. */
   reasoning_available?: boolean;
+  /** Whether this profile declares `supports_vision` in the pod model catalog, so a capability form can offer image reading. */
+  supports_vision?: boolean;
 };
 export type AvailableModelProfileList = {
   profiles?: AvailableModelProfile[];
@@ -5029,7 +5432,7 @@ export type SelectableChatModel = {
 export type EffectiveChatModel = {
   /** The concrete model name. `capability_id` below identifies the `(provider, name)` pair uniquely for a caller that needs to join against team enablement or the models admin view. */
   name?: string | null;
-  /** The ops-authored `model_display_name` for this model, when the pod catalog names one. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
+  /** The saved administrator name or pod catalog name for this model. `None` leaves the frontend on its name/id prettifying fallback — the same fallback the composer already had. */
   display_name?: string | null;
   /** The `(provider, name)`-keyed `kind="model"` capability id, so the caller can join this against team enablement and the models admin view. `None` for an unresolved model. */
   capability_id?: string | null;
@@ -5039,6 +5442,8 @@ export type EffectiveChatModel = {
     
     Needed because the reasoning control is emitted from the PLATFORM list — 'some model has reasoning on' — while routing may land on a different model entirely. With reasoning enabled on Mistral Small and a team override routing to Mistral Medium, the composer used to render 'Mistral Medium · Élevé' and offer the toggle while the pod ran no reasoning at all. */
   reasoning_enabled?: boolean;
+  /** Whether the resolved profile declares `supports_vision`. Always False for a platform binding, which carries no such declaration: image reading then fails closed. */
+  supports_vision?: boolean;
   /** Models a member may pick for this agent: chat models served by the instance's pod, `can_use` for the team and not team-disabled. Empty when the choice is locked or the pod is unreachable. */
   selectable_models?: SelectableChatModel[];
   /** True when a platform binding or a pod per-agent override fixes the model, so no choice is offered. */
@@ -5211,6 +5616,8 @@ export type CreationAssistantSettings = {
   missing_language_placeholder?: boolean;
   /** Chat profile the creation assistant uses; None = the pod default. */
   model_profile_id?: string | null;
+  /** Chat profile of generated conversation titles; None = the platform default. */
+  title_model_profile_id?: string | null;
   /** Reasoning of the assistant's own call. Any non-'off' value means on for an on/off profile; a level the profile does not offer is clamped by the pod to the nearest one. */
   reasoning_effort?: "off" | "low" | "medium" | "high";
   /** The pods' default chat profile, when every reachable pod names the same one; tells the UI which reasoning control the platform default offers. */
@@ -5225,8 +5632,31 @@ export type SetCreationAssistantSettingsRequest = {
   text?: string | null;
   /** One of `model_options`; None uses the pod default. */
   model_profile_id?: string | null;
+  /** One of `model_options`; None follows the platform default. */
+  title_model_profile_id?: string | null;
   /** Reasoning of the assistant's call; clamped to the model by the pod. */
   reasoning_effort?: "off" | "low" | "medium" | "high";
+};
+export type PlatformSkillEntry = {
+  skill: SkillSummary;
+  enabled?: boolean;
+  runtime_ids?: string[];
+};
+export type PlatformSkillInventory = {
+  skills?: PlatformSkillEntry[];
+  disabled_skill_names?: string[];
+  unavailable_runtime_ids?: string[];
+  unsupported_runtime_ids?: string[];
+};
+export type PlatformSkillPolicy = {
+  disabled_skill_names?: string[];
+};
+export type PlatformSkillEnabled = {
+  name: string;
+  enabled: boolean;
+};
+export type SetPlatformSkillEnabledRequest = {
+  enabled: boolean;
 };
 export type PlatformUiSettings = {
   /** Theme new users get, or null to use the frontend's own default. */
@@ -5894,6 +6324,9 @@ export const {
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation,
   useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation,
+  useGetMyPreferencesControlPlaneV1UsersMePreferencesGetQuery,
+  useLazyGetMyPreferencesControlPlaneV1UsersMePreferencesGetQuery,
+  usePatchMyPreferencesControlPlaneV1UsersMePreferencesPatchMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
   useValidateGcuControlPlaneV1GcuPostMutation,
@@ -5908,6 +6341,7 @@ export const {
   useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,
   useDeleteTeamControlPlaneV1TeamsTeamIdDeleteMutation,
+  useEditTeamRegistryControlPlaneV1TeamsTeamIdRegistryPatchMutation,
   useJoinTeamControlPlaneV1TeamsTeamIdJoinPostMutation,
   useRescueTeamAdminControlPlaneV1TeamsTeamIdRescueAdminPostMutation,
   useGetDefaultTeamsForNewUsersControlPlaneV1AdminPlatformDefaultTeamsGetQuery,
@@ -5943,6 +6377,7 @@ export const {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
   usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
+  usePostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostMutation,
   useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
   useLazyGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
   usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
@@ -5998,6 +6433,7 @@ export const {
   useLazyGetAgentInstanceSkillDetailQuery,
   usePrepareAgentExecutionMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
+  usePutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useLazyGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
   useGetCapabilityRevokeImpactControlPlaneV1AdminCapabilitiesCapabilityIdRevokeImpactGetQuery,
@@ -6007,6 +6443,19 @@ export const {
   usePutCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPutMutation,
   usePutCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePutMutation,
   usePatchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatchMutation,
+  useGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
+  useLazyGetModelDiscoveryControlPlaneV1AdminModelDiscoveryGetQuery,
+  useDismissRemovedModelControlPlaneV1AdminModelDiscoverySourceIdRemovedModelDeleteMutation,
+  useGetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetQuery,
+  useLazyGetPodChatDefaultsControlPlaneV1AdminPodChatDefaultsGetQuery,
+  usePutPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdPutMutation,
+  useClearPodChatDefaultControlPlaneV1AdminPodChatDefaultsRuntimeIdDeleteMutation,
+  usePutPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackPutMutation,
+  useClearPodChatFallbackControlPlaneV1AdminPodChatDefaultsRuntimeIdFallbackDeleteMutation,
+  useRefreshModelDiscoveryControlPlaneV1AdminModelDiscoveryRefreshPostMutation,
+  useGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery,
+  useLazyGetModelDiscoveryDetailControlPlaneV1AdminModelDiscoveryDetailGetQuery,
+  usePutModelDiscoveryUrlControlPlaneV1AdminModelDiscoverySourceIdUrlPutMutation,
   usePublishKnowledgeBaseDefinitionMutation,
   useListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
   useLazyListKnowledgeBaseDefinitionsControlPlaneV1KnowledgeBasesDefinitionsGetQuery,
@@ -6025,6 +6474,8 @@ export const {
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useGetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetQuery,
+  useLazyGetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetQuery,
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useLazyGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery,
@@ -6064,6 +6515,11 @@ export const {
   useLazyGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
   usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation,
   useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation,
+  useGetPlatformSkillsQuery,
+  useLazyGetPlatformSkillsQuery,
+  useGetPlatformSkillPolicyQuery,
+  useLazyGetPlatformSkillPolicyQuery,
+  useSetPlatformSkillEnabledMutation,
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,

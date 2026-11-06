@@ -121,7 +121,7 @@ export function TuningFieldRenderer({
     return (
       <div className={styles.field}>
         <Select
-          size="medium"
+          size="small"
           label={label}
           value={String(fieldValue)}
           options={field.enum.map((opt) => ({ value: opt, label: optionLabel(opt), key: opt }))}
@@ -207,7 +207,7 @@ export function TuningFieldRenderer({
               color="primary"
               variant="text"
               size="small"
-              icon={{ category: "outlined", type: "edit_note" }}
+              icon={{ category: "outlined", type: "chat" }}
               onClick={() => setPickerExplicit(true)}
               disabled={disabled}
             >

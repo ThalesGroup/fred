@@ -34,6 +34,7 @@ from fred_core.documents.document_structures import (
     Identity,
     SourceInfo,
     SourceType,
+    Tagging,
 )
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
 from fred_core.models.base import Base
@@ -54,12 +55,13 @@ async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
     return engine
 
 
-def _doc(uid: str) -> DocumentMetadata:
+def _doc(uid: str, tag_id: str = "lib") -> DocumentMetadata:
     return DocumentMetadata(
         identity=Identity(document_name=f"{uid}.pdf", document_uid=uid, title=uid),
         source=SourceInfo(
             source_type=SourceType.PUSH, source_tag="fred", pull_location=None
         ),
+        tags=Tagging(tag_ids=[tag_id]),
     )
 
 
@@ -325,19 +327,17 @@ async def test_get_document_uids_with_any_label_deduplicates_a_document_matching
 
 
 @pytest.mark.asyncio
-async def test_get_document_uids_with_any_label_narrows_to_the_given_set(
+async def test_get_document_uids_with_any_label_narrows_to_the_given_tags(
     tmp_path: Path,
 ) -> None:
     engine = await _make_sqlite_engine(tmp_path, "any_label_narrowed.sqlite3")
     store = PostgresDocumentMetadataStore(engine)
-    await store.save_metadata(_doc("doc-1"))
-    await store.save_metadata(_doc("doc-2"))
+    await store.save_metadata(_doc("doc-1", "lib-a"))
+    await store.save_metadata(_doc("doc-2", "lib-b"))
     await store.add_label("doc-1", "DAT")
     await store.add_label("doc-2", "DAT")
 
-    uids = await store.get_document_uids_with_any_label(
-        {"DAT"}, document_uids={"doc-2"}
-    )
+    uids = await store.get_document_uids_with_any_label({"DAT"}, tag_ids={"lib-b"})
 
     assert uids == ["doc-2"]
 
@@ -391,18 +391,18 @@ async def test_get_document_uids_with_any_label_page_second_page(
 
 
 @pytest.mark.asyncio
-async def test_get_document_uids_with_any_label_page_narrows_to_the_given_set(
+async def test_get_document_uids_with_any_label_page_narrows_to_the_given_tags(
     tmp_path: Path,
 ) -> None:
     engine = await _make_sqlite_engine(tmp_path, "any_label_page_narrowed.sqlite3")
     store = PostgresDocumentMetadataStore(engine)
-    await store.save_metadata(_doc("doc-1"))
-    await store.save_metadata(_doc("doc-2"))
+    await store.save_metadata(_doc("doc-1", "lib-a"))
+    await store.save_metadata(_doc("doc-2", "lib-b"))
     await store.add_label("doc-1", "DAT")
     await store.add_label("doc-2", "DAT")
 
     page, total = await store.get_document_uids_with_any_label_page(
-        {"DAT"}, document_uids={"doc-2"}, offset=0, limit=50
+        {"DAT"}, tag_ids={"lib-b"}, offset=0, limit=50
     )
 
     assert page == ["doc-2"]
@@ -435,15 +435,15 @@ async def test_get_distinct_labels_across_documents(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_distinct_labels_narrows_to_the_given_set(tmp_path: Path) -> None:
+async def test_get_distinct_labels_narrows_to_the_given_tags(tmp_path: Path) -> None:
     engine = await _make_sqlite_engine(tmp_path, "distinct_narrowed.sqlite3")
     store = PostgresDocumentMetadataStore(engine)
-    await store.save_metadata(_doc("doc-1"))
-    await store.save_metadata(_doc("doc-2"))
+    await store.save_metadata(_doc("doc-1", "lib-a"))
+    await store.save_metadata(_doc("doc-2", "lib-b"))
     await store.add_label("doc-1", "DAT")
     await store.add_label("doc-2", "MEX")
 
-    assert await store.get_distinct_labels(document_uids={"doc-1"}) == ["DAT"]
+    assert await store.get_distinct_labels(tag_ids={"lib-a"}) == ["DAT"]
 
 
 @pytest.mark.asyncio

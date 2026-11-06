@@ -19,16 +19,19 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useFrontendProperties } from "src/hooks/useFrontendProperties.ts";
 import { getHelpPage, getHelpTree, helpPagePath } from "@rework/features/helpCenter/content";
-import { DEFAULT_SECTION_ID, HELP_LANGS, isHelpLang, type HelpLang } from "@rework/features/helpCenter/manifest";
+import {
+  DEFAULT_SECTION_ID,
+  HELP_LANGS,
+  helpLangFor,
+  isHelpLang,
+  type HelpLang,
+} from "@rework/features/helpCenter/manifest";
 import HelpSidebar from "./HelpSidebar";
 import HelpArticle from "./HelpArticle";
 import HelpSearch from "./HelpSearch";
 import styles from "./HelpCenterPage.module.scss";
-
-/** App-language → help-content language ("fr-FR" → "fr"; anything non-English falls back to fr). */
-function appLangToHelpLang(appLanguage: string | undefined): HelpLang {
-  return appLanguage?.toLowerCase().startsWith("en") ? "en" : "fr";
-}
+import { saveUserPreference, updateCurrentUserPreference } from "../../../../app/userPreferences";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 
 /**
  * The Help Center: a standalone wiki-style documentation page (own tab, no
@@ -40,6 +43,7 @@ export default function HelpCenterPage() {
   const params = useParams<{ lang: string; sectionId: string; pageId: string }>();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  const { showError } = useToast();
   const { contactSupportLink } = useFrontendProperties();
 
   const lang = isHelpLang(params.lang) ? params.lang : null;
@@ -48,11 +52,11 @@ export default function HelpCenterPage() {
   // The URL is the source of truth for the content language; align the app
   // chrome (sidebar labels, buttons) on it so a shared link renders whole.
   useEffect(() => {
-    if (lang && appLangToHelpLang(i18n.language) !== lang) void i18n.changeLanguage(lang);
+    if (lang && helpLangFor(i18n.language) !== lang) void i18n.changeLanguage(lang);
   }, [lang, i18n]);
 
   if (!lang) {
-    return <Navigate to={`/help/${appLangToHelpLang(i18n.language)}/${DEFAULT_SECTION_ID}`} replace />;
+    return <Navigate to={`/help/${helpLangFor(i18n.language)}/${DEFAULT_SECTION_ID}`} replace />;
   }
   if (!params.sectionId) {
     return <Navigate to={`/help/${lang}/${DEFAULT_SECTION_ID}`} replace />;
@@ -74,6 +78,16 @@ export default function HelpCenterPage() {
     // Same page in the target language when it exists, else the section index.
     const twin = getHelpPage(target, section.id, pageId);
     navigate(twin ? helpPagePath(target, section.id, pageId) : `/help/${target}/${section.id}`);
+    void saveUserPreference({ language: target })
+      .then(() => {
+        updateCurrentUserPreference({ language: target });
+      })
+      .catch(() =>
+        showError({
+          summary: t("rework.helpCenter.languageSaveFailed"),
+          detail: t("rework.helpCenter.languageSaveFailedDetail"),
+        }),
+      );
   };
 
   return (

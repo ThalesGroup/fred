@@ -102,6 +102,10 @@ from fred_core.tasks.models import (
     TaskState,
 )
 from fred_core.tasks.service import TaskService
+from fred_core.teams.metadata_store import (
+    TEAM_DESCRIPTION_PLACEHOLDER,
+    team_description_or_placeholder,
+)
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -250,6 +254,8 @@ class MigrationReport:
     # overrides (`agent_profile_overrides_json`, removed from the policy).
     legacy_overrides_mapped: int = 0
     warnings: list[str] = field(default_factory=list)
+    # Summed into one warning at the end: team admins have descriptions to write.
+    teams_given_placeholder_description: int = 0
 
 
 # `MigrationResult.warnings` ends up in a `pg_notify` payload (fred_core.tasks.bus),
@@ -313,6 +319,15 @@ def to_migration_result(report: MigrationReport) -> MigrationResult:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _imported_team_description(row: dict[str, Any], report: MigrationReport) -> str:
+    """An import never fails on a team description: missing or too short
+    gets the placeholder (counted for the report), too long is cut."""
+    description = team_description_or_placeholder(row.get("description"))
+    if description == TEAM_DESCRIPTION_PLACEHOLDER:
+        report.teams_given_placeholder_description += 1
+    return description
 
 
 def _coerce_dt(value: Any) -> datetime | None:
@@ -832,7 +847,11 @@ async def _provision_bundle_teams(
         try:
             created = await create_team(
                 platform_admin,
-                CreateTeamRequest(name=team_name, initial_team_admin_ids=admin_subs),
+                CreateTeamRequest(
+                    name=team_name,
+                    description=TEAM_DESCRIPTION_PLACEHOLDER,
+                    initial_team_admin_ids=admin_subs,
+                ),
                 team_deps,
             )
         except TeamAlreadyExistsError:
@@ -845,6 +864,7 @@ async def _provision_bundle_teams(
 
         team_ids_by_name[team_name] = created.id
         report.teams_provisioned += 1
+        report.teams_given_placeholder_description += 1
 
     return team_ids_by_name
 
@@ -1227,7 +1247,7 @@ async def _run_import_body(
                         # older export (pre-item-9) still imports cleanly
                         # instead of violating the NOT NULL constraint.
                         name=row.get("name") or team_id,
-                        description=row.get("description"),
+                        description=_imported_team_description(row, report),
                         # TEAM-09: pre-migration bundles only ever carry
                         # `is_private`, never `joining_mode` — like the `name`
                         # fallback above, default to the current fallback
@@ -1403,6 +1423,11 @@ async def _run_import_body(
         )
 
     # ── Non-DB warnings ───────────────────────────────────────────────────────
+    if report.teams_given_placeholder_description:
+        count = report.teams_given_placeholder_description
+        report.warnings.append(
+            f"{count} team{'s' if count > 1 else ''} received a default description."
+        )
     if report.warnings:
         logger.warning(
             "[import-export] import %s completed with %d warning(s):\n%s",

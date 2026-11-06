@@ -28,6 +28,7 @@ from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     CreateTeamRequest,
     DefaultTeamForNewUsers,
+    EditTeamRegistryRequest,
     GrantTeamMemberRoleRequest,
     RemoveTeamMemberResponse,
     RescueTeamAdminRequest,
@@ -56,6 +57,9 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.teams.service import create_team as create_team_from_service
 from control_plane_backend.teams.service import delete_team as delete_team_from_service
+from control_plane_backend.teams.service import (
+    edit_team_registry as edit_team_registry_from_service,
+)
 from control_plane_backend.teams.service import (
     get_default_teams_for_new_users as get_default_teams_for_new_users_from_service,
 )
@@ -131,7 +135,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         _request,
         exc: TeamAdminConstraintError,
     ) -> JSONResponse:
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+        return JSONResponse(
+            status_code=409, content={"detail": str(exc), "code": exc.code}
+        )
 
     @app.exception_handler(TeamAdminCharterDisabledError)
     async def team_admin_charter_disabled_handler(
@@ -145,7 +151,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         _request,
         exc: TeamAlreadyExistsError,
     ) -> JSONResponse:
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
+        return JSONResponse(
+            status_code=409, content={"detail": str(exc), "code": exc.code}
+        )
 
     @app.exception_handler(RetentionUpdateError)
     async def retention_update_error_handler(
@@ -275,6 +283,21 @@ async def update_team(
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamWithPermissions:
     return await update_team_from_service(user, team_id, request, deps)
+
+
+@router.patch(
+    "/teams/{team_id}/registry",
+    response_model=TeamWithPermissions,
+    response_model_exclude_none=True,
+    summary="Edit any team's name, description and admins (platform admin only)",
+)
+async def edit_team_registry(
+    team_id: Annotated[TeamId, Path()],
+    request: EditTeamRegistryRequest,
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamWithPermissions:
+    return await edit_team_registry_from_service(user, team_id, request, deps)
 
 
 @router.post(

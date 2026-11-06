@@ -238,10 +238,23 @@ def test_untyped_failure_with_non_erroring_artifact_is_the_generic_message() -> 
 
 
 def test_typed_error_artifact_with_no_blocks_falls_back_to_generic_message() -> None:
-    """An `is_error=True` artifact with no `blocks` renders to an empty
-    string via `render_tool_result` — must fall back to the generic
-    message, not surface that empty string."""
+    """An empty typed failure must render a useful generic explanation."""
     artifact = ToolInvocationResult(tool_ref="ppt_filler", is_error=True)
+    assert _user_facing_tool_error_text(artifact) == _GENERIC_TOOL_FAILURE_MESSAGE
+
+
+@pytest.mark.parametrize("text", ["", " \n\t"])
+def test_error_renderer_fills_empty_text_blocks(text: str) -> None:
+    from fred_runtime.react.react_tool_rendering import render_tool_result
+
+    artifact = ToolInvocationResult(
+        tool_ref="read_query",
+        is_error=True,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+    )
+    assert (
+        render_tool_result(artifact) == f"Tool error:\n{_GENERIC_TOOL_FAILURE_MESSAGE}"
+    )
     assert _user_facing_tool_error_text(artifact) == _GENERIC_TOOL_FAILURE_MESSAGE
 
 

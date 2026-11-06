@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } from "react";
+import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
+import { useFocusHandoff } from "../../utils/useFocusHandoff";
 
 export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
@@ -26,6 +27,10 @@ export interface InlineDrawerResizeSpec {
   /** Viewport-width cap as a fraction (0–1). Default 0.45; raise it for a drawer
    * meant to take most of the page (e.g. a full-height document preview). */
   maxViewportFraction?: number;
+  /** Share (0–1) of the parent's width taken on every opening, whatever was dragged before. */
+  openFraction?: number;
+  /** Runs before each opening is sized; returns the width it is freeing in the parent. */
+  onOpening?: (parentWidth: number) => number;
 }
 
 export interface InlineDrawerProps {
@@ -40,7 +45,7 @@ export interface InlineDrawerProps {
   headerActions?: ReactNode;
   /** Width in CSS units. Defaults to "480px". */
   width?: string;
-  /** Drawer shell background (CSS color/token). Defaults to `--surface-floating`, or `--surface-container-low` for a flush push panel. */
+  /** Drawer shell background (CSS color/token). Defaults to `--surface-floating`, or `--surface-main` for a push panel. */
   background?: string;
   /**
    * Open/close duration for the push layout (any CSS time, ideally a
@@ -52,7 +57,7 @@ export interface InlineDrawerProps {
   /**
    * Layout mode.
    * - `"overlay"` (default): floats over the page with a dimming backdrop.
-   * - `"push"`: takes layout space on the right; the host's main column reflows
+   * - `"push"`: a card of its own on the right; the host's main column reflows
    *   (e.g. the chat shifts left). No backdrop — content stays interactive.
    *
    * `push` only reflows siblings when the drawer's parent is a flex row and the
@@ -71,13 +76,6 @@ export interface InlineDrawerProps {
    * can use the whole width. The content then owns its own insets.
    */
   flushBody?: boolean;
-  /**
-   * Render the panel as a detached floating card (push layout): inset from every
-   * edge, a single `outline-muted` border, `--radius-l` corners and a subtle
-   * shadow, dropping the drawer's flush edge border and the header divider.
-   * Opt-in — default panels stay flush.
-   */
-  floating?: boolean;
   /**
    * Drop the drawer's own title band for content that already has one (a
    * capability pane naming the artefact it holds). The drawer then contributes no
@@ -103,12 +101,12 @@ export function InlineDrawer({
   layout = "overlay",
   resizable,
   flushBody = false,
-  floating = false,
   hideHeader = false,
   children,
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
   const drawerRef = useRef<HTMLElement | null>(null);
+  useFocusHandoff(open, drawerRef);
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
   const seedWidthPx = Number.parseInt(width, 10);
@@ -121,6 +119,14 @@ export function InlineDrawer({
     paneRef: drawerRef,
   });
   const resizeEnabled = resizable !== undefined && layout === "push";
+  const openFraction = resizable?.openFraction;
+  const onOpening = resizable?.onOpening;
+  const { setWidth } = resize;
+  useLayoutEffect(() => {
+    const parentWidth = drawerRef.current?.parentElement?.clientWidth;
+    if (!open || !openFraction || !parentWidth) return;
+    setWidth(Math.round((parentWidth + (onOpening?.(parentWidth) ?? 0)) * openFraction));
+  }, [open, openFraction, onOpening, setWidth]);
   const capVw = (resizable?.maxViewportFraction ?? 0.45) * 100;
   // Push drawers take real layout space from the flex row they sit in — cap
   // at a fraction of the viewport so a wide `width` can't force the sibling
@@ -168,7 +174,6 @@ export function InlineDrawer({
         className={styles.drawer}
         data-open={open}
         data-layout={layout}
-        data-floating={floating ? "true" : undefined}
         data-compact-header={compactHeader ? "true" : undefined}
         data-title-size={titleSize}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}

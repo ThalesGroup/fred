@@ -70,7 +70,11 @@ from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.runtime_context import RuntimeConfig, get_runtime_context
+from fred_runtime.runtime_context import (
+    RuntimeConfig,
+    get_runtime_context,
+    set_runtime_context,
+)
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_runtime.runtime_support.checkpoints import checkpoint_config
 from fred_sdk.authoring import ReActAgent, tool
@@ -94,6 +98,20 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
+
+
+@pytest.fixture(autouse=True)
+def _clear_runtime_context() -> Iterator[None]:
+    set_runtime_context(None)
+    yield
+    set_runtime_context(None)
+
+
+@pytest.fixture
+def offline_runtime_context() -> None:
+    set_runtime_context(
+        FredRuntimeContext(RuntimeConfig(knowledge_flow_url="http://kf.invalid"))
+    )
 
 
 @tool("demo.echo", description="Echo the provided text.")
@@ -2083,8 +2101,9 @@ def test_direct_agent_id_execution_never_receives_or_forges_platform_binding(
     assert "forged-model" not in echoed
 
 
+@pytest.mark.parametrize("stream", [False, True])
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, stream
 ) -> None:
     """
     Ensure agent-instance execution resolves template+tuning from control-plane.
@@ -2169,6 +2188,16 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         lambda config: StaticChatModelFactory(model),
     )
     monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
+    from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
+
+    seen_turn_ids: list[str | None] = []
+    original_before_model = TurnSteeringMiddleware.abefore_model
+
+    async def capture_steering_turn(self, state, runtime):
+        seen_turn_ids.append(self._turn_id)
+        return await original_before_model(self, state, runtime)
+
+    monkeypatch.setattr(TurnSteeringMiddleware, "abefore_model", capture_steering_turn)
 
     definition = _TeamScopeAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
@@ -2182,20 +2211,30 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
 
     with TestClient(app) as client:
         response = client.post(
-            "/pod/v1/agents/execute",
+            "/pod/v1/agents/execute/stream" if stream else "/pod/v1/agents/execute",
             headers={"Authorization": "Bearer test-token"},
             json={
                 "agent_instance_id": "instance-1",
                 "input": "what team am I in?",
                 "session_id": "managed-session",
+                "steering_turn_id": "managed-turn",
                 "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
             },
         )
 
     assert response.status_code == 200
-    payload = response.json()
+    payload = (
+        next(
+            json.loads(line.removeprefix("data: "))
+            for line in response.text.splitlines()
+            if line.startswith("data: ") and '"kind": "final"' in line
+        )
+        if stream
+        else response.json()
+    )
     assert payload["kind"] == "final"
     assert payload["content"] == "Managed execution complete."
+    assert seen_turn_ids == ["managed-turn" if stream else None] * 2
 
 
 def test_managed_execution_rejects_grant_with_mismatched_team(
@@ -2413,10 +2452,12 @@ async def test_resolve_agent_instance_does_not_leak_headers_between_calls(
 
     first, second = calls
     assert first["headers"] == {
+        "X-Fred-Skill-Policy": "1",
         "Authorization": "Bearer token-alice",
         "X-Request-Id": "req-alice",
     }
     assert second["headers"] == {
+        "X-Fred-Skill-Policy": "1",
         "Authorization": "Bearer token-bob",
         "X-Request-Id": "req-bob",
     }
@@ -5400,7 +5441,9 @@ def test_apply_runtime_tuning_ignores_blank_system_prompt() -> None:
         )
 
 
-def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> None:
+def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none(
+    offline_runtime_context,
+) -> None:
     """
     Ensure _apply_runtime_tuning distinguishes None from [] for MCP activation.
 
@@ -5462,7 +5505,9 @@ def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> N
     assert list(disabled.default_mcp_servers) == []
 
 
-def test_capability_block_delivers_mcp_agent_instructions_for_active_server() -> None:
+def test_capability_block_delivers_mcp_agent_instructions_for_active_server(
+    offline_runtime_context,
+) -> None:
     """
     Ensure `_build_capability_block` delivers an active MCP server's catalog
     `agent_instructions` as an `McpPromptGroup`.
@@ -5539,7 +5584,9 @@ def test_capability_block_delivers_mcp_agent_instructions_for_active_server() ->
     assert fragments == ["Always cite retrieved claims."]
 
 
-def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> None:
+def test_capability_block_skips_mcp_agent_instructions_for_inactive_server(
+    offline_runtime_context,
+) -> None:
     """
     Ensure `_build_capability_block` skips a non-selected MCP server's
     behavioral instructions.
@@ -5613,7 +5660,9 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
     assert server_ids == ["mcp-storage"]
 
 
-def test_build_capability_block_for_graph_agent_returns_tools() -> None:
+def test_build_capability_block_for_graph_agent_returns_tools(
+    offline_runtime_context,
+) -> None:
     """
     Ensure `_build_capability_block` builds a non-empty block for a Graph agent.
 
@@ -5746,7 +5795,9 @@ def test_build_capability_block_for_graph_agent_returns_tools() -> None:
     assert [t.name for t in block.tools] == ["graph_probe"]
 
 
-def test_build_capability_block_rejects_react_only_capability_for_graph_agent() -> None:
+def test_build_capability_block_rejects_react_only_capability_for_graph_agent(
+    offline_runtime_context,
+) -> None:
     """
     A capability declaring `execution_models=("react",)` (a `middleware()`-only
     hook `tools()` can't express) must fail LOUDLY when a Graph agent selects
@@ -5862,7 +5913,9 @@ def test_build_capability_block_rejects_react_only_capability_for_graph_agent() 
         )
 
 
-def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent() -> None:
+def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent(
+    offline_runtime_context,
+) -> None:
     """Graph now consumes the same capability HITL declarations as ReAct/Deep."""
     from collections.abc import Mapping as _Mapping
 
@@ -5980,9 +6033,9 @@ def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent() 
     assert block.hitl["gated_probe"].spec.require
 
 
-def test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent() -> (
-    None
-):
+def test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent(
+    offline_runtime_context,
+) -> None:
     """
     A `GraphAgentDefinition` that leaves `supports_capabilities` at its False
     default (the honest "this agent doesn't support capabilities" signal, see
@@ -6116,7 +6169,9 @@ def test_build_capability_block_ignores_stale_selection_for_capability_unsupport
     assert block is None
 
 
-def test_capability_block_orders_mcp_prompt_groups_by_server_id() -> None:
+def test_capability_block_orders_mcp_prompt_groups_by_server_id(
+    offline_runtime_context,
+) -> None:
     """
     Ensure `block.mcp_prompt_groups` comes back id-sorted, not in selection
     order.
@@ -7031,3 +7086,52 @@ async def test_web_activity_endpoints_restrict_readers_and_erasers(
     assert result == (
         [] if endpoint_name == "list_web_research_activity" else {"deleted": 0}
     )
+
+
+def test_steering_lifespan_sweeps_every_minute_and_joins_task(monkeypatch, tmp_path):
+    import threading
+
+    swept = threading.Event()
+    sleeps: list[float] = []
+    cancelled: list[bool] = []
+
+    class Clock:
+        def __getattr__(self, name):
+            return getattr(asyncio, name)
+
+        async def sleep(self, seconds):
+            if seconds != 60:
+                await asyncio.sleep(seconds)
+                return
+            sleeps.append(seconds)
+            if len(sleeps) == 1:
+                return
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.append(True)
+
+    async def sweep():
+        if sleeps:
+            swept.set()
+
+    cleanup = AsyncMock(side_effect=sweep)
+    monkeypatch.setattr(agent_app_module, "asyncio", Clock())
+    monkeypatch.setattr(
+        agent_app_module.turn_steering_mailbox, "cleanup_expired", cleanup
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    app = create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=_build_test_config(tmp_path),
+    )
+    with TestClient(app):
+        assert swept.wait(timeout=2)
+        assert cleanup.await_count >= 2
+    assert sleeps == [60, 60]
+    assert cancelled == [True]

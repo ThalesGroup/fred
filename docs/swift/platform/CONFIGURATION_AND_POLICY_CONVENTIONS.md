@@ -221,7 +221,8 @@ of what it exposes**.
 Cloudops creates one confidential Keycloak client per prefix, sets the prefix
 and the client credentials in the Deployment's environment, and deploys. For a
 Knowledge Base it also lists that client with its prefix under the Control
-Plane's `knowledge_bases.publishers`, without which publication is refused. The
+Plane's `knowledge_bases.publishers` (in the Helm chart,
+`registrations.knowledgeBasePublishers`), without which publication is refused. The
 only check is a lookup, never a judgement: *is this prefix already owned by a
 different client?*
 
@@ -258,8 +259,15 @@ Converging the two is open work, not a decision already taken:
   two halves are separate because the control plane never proxies and the
   gateway never authorizes.
 
-Because the halves are separate, an `app_id` registered in one and not the
-other is not detected at startup. Forward (control plane only): the
+The Fred Helm chart writes both halves from one entry,
+`registrations.applications.<app_id>` (the catalog fields, plus the gateway's
+under `gateway`), and Knowledge Base publishers from
+`registrations.knowledgeBasePublishers.<client_id>`. These are maps, so each
+application's values file composes with the others, and the chart refuses values
+that set the derived lists or `FRONTEND_APPLICATIONS_JSON` directly.
+
+Where the halves are written separately (Docker Compose), an `app_id` registered
+in one and not the other is not detected at startup. Forward (control plane only): the
 application appears in the catalog and its frame 404s. Reverse (gateway only):
 the prefixes proxy for an application no team was ever granted — the gateway
 performs no authorization of its own, so keep the gateway list a subset of the

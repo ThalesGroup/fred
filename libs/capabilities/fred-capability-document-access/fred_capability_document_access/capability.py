@@ -117,10 +117,9 @@ _RAG_SCOPES = ("corpus_only", "hybrid", "general_only")
 
 # Only the fields the LLM needs for citation, reasoning, and tool chaining are
 # exposed to the model. URL and operational fields are excluded so the model
-# cannot reproduce broken or internal paths. `uid` stays: it is the working
-# identifier the (separate) document_summarize capability's tool takes —
-# internal to the agent, never repeated to the end user (each tool docstring
-# says so).
+# cannot reproduce broken or internal paths. The source hit's `uid` is exposed
+# as `document_uid`, matching reading/summary arguments. Typed citation sources
+# retain their backend field names.
 _LLM_FIELDS = frozenset(
     {"uid", "title", "content", "file_name", "page", "section", "score"}
 )
@@ -630,9 +629,11 @@ class DocumentAccessCapability(
             dataset (a "dataset pointer"), do not answer from it directly — pivot
             to the tabular/SQL tool it names instead.
 
-            Returns ranked hits with title and content. Only use information
-            actually present in the returned hits; never invent facts beyond
-            them.
+            Returns ranked passages with title, content and document_uid. Copy
+            document_uid unchanged into read_document or summarize_document's
+            document_uid
+            argument; file_name and title are display names, not identifiers.
+            Only use information actually present in the returned hits.
             """
 
             port = services.document_search
@@ -678,7 +679,7 @@ class DocumentAccessCapability(
                 "query": question,
                 "hits": [
                     {
-                        k: v
+                        "document_uid" if k == "uid" else k: v
                         for k, v in hit.model_dump(mode="json").items()
                         if k in _LLM_FIELDS
                     }

@@ -35,6 +35,9 @@ from control_plane_backend.announcements.store import AnnouncementStore
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.capabilities.display_name_store import (
+    ModelDisplayNameOverrideStore,
+)
 from control_plane_backend.capabilities.reasoning_store import ModelReasoningStore
 from control_plane_backend.capabilities.settings_store import (
     TeamCapabilitySettingsStore,
@@ -44,10 +47,15 @@ from control_plane_backend.knowledge_bases.instance_store import (
     KnowledgeBaseInstanceStore,
 )
 from control_plane_backend.knowledge_bases.store import KnowledgeBaseDefinitionStore
+from control_plane_backend.model_discovery.store import (
+    ModelDiscoveryStateStore,
+    PodChatDefaultStore,
+)
 from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
     PlatformPromptStore,
 )
+from control_plane_backend.platform_skills.store import PlatformSkillPolicyStore
 from control_plane_backend.platform_ui_settings.store import PlatformUiSettingsStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
@@ -94,9 +102,12 @@ class ProductServiceDependencies:
     get_team_capability_settings_store: Callable[[], TeamCapabilitySettingsStore]
     get_team_routing_policy_store: Callable[[], TeamRoutingPolicyStore]
     get_platform_model_binding_store: Callable[[], PlatformModelBindingStore]
+    get_model_discovery_state_store: Callable[[], ModelDiscoveryStateStore]
+    get_pod_chat_default_store: Callable[[], PodChatDefaultStore]
     get_platform_prompt_store: Callable[[], PlatformPromptStore]
     get_creation_assistant_settings_store: Callable[[], CreationAssistantSettingsStore]
     get_platform_ui_settings_store: Callable[[], PlatformUiSettingsStore]
+    get_platform_skill_policy_store: Callable[[], PlatformSkillPolicyStore]
     get_announcement_store: Callable[[], AnnouncementStore]
     get_knowledge_base_definition_store: Callable[[], KnowledgeBaseDefinitionStore]
     get_knowledge_base_instance_store: Callable[[], KnowledgeBaseInstanceStore]
@@ -105,6 +116,7 @@ class ProductServiceDependencies:
     # is actually dispatched.
     get_temporal_client: Callable[[], Awaitable["TemporalClient"]]
     get_model_reasoning_store: Callable[[], ModelReasoningStore]
+    get_model_display_name_override_store: Callable[[], ModelDisplayNameOverrideStore]
     get_session_metadata_store: Callable[[], SessionMetadataStore]
     get_team_metadata_store: Callable[[], TeamMetadataStore]
     get_session_attachment_store: Callable[[], SessionAttachmentStore]
@@ -151,9 +163,12 @@ def build_product_service_dependencies(
         get_team_capability_settings_store=container.get_team_capability_settings_store,
         get_team_routing_policy_store=container.get_team_routing_policy_store,
         get_platform_model_binding_store=container.get_platform_model_binding_store,
+        get_model_discovery_state_store=container.get_model_discovery_state_store,
+        get_pod_chat_default_store=container.get_pod_chat_default_store,
         get_platform_prompt_store=container.get_platform_prompt_store,
         get_creation_assistant_settings_store=container.get_creation_assistant_settings_store,
         get_platform_ui_settings_store=container.get_platform_ui_settings_store,
+        get_platform_skill_policy_store=container.get_platform_skill_policy_store,
         get_announcement_store=container.get_announcement_store,
         get_knowledge_base_definition_store=container.get_knowledge_base_definition_store,
         get_knowledge_base_instance_store=container.get_knowledge_base_instance_store,
@@ -161,6 +176,7 @@ def build_product_service_dependencies(
             container.get_temporal_client_provider().get_client()
         ),
         get_model_reasoning_store=container.get_model_reasoning_store,
+        get_model_display_name_override_store=container.get_model_display_name_override_store,
         get_session_metadata_store=container.get_session_metadata_store,
         get_team_metadata_store=container.get_team_metadata_store,
         get_session_attachment_store=container.get_session_attachment_store,

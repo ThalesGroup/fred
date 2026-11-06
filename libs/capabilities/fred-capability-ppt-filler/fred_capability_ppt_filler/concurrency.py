@@ -29,10 +29,11 @@ unavailable, never queue: see the acceptance criteria on #2183.
 
 from __future__ import annotations
 
+import asyncio
 import gc
 import traceback
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
@@ -54,6 +55,20 @@ def release_heavy_job_slot() -> None:
     """Release a slot reserved by a successful :func:`acquire_heavy_job_slot`."""
     global _active_jobs
     _active_jobs = max(0, _active_jobs - 1)
+
+
+async def in_slot_thread(operation: Callable[..., T], *args: object) -> T:
+    """Run ``operation`` in a thread for a slot already acquired. A cancelled
+    caller leaves the thread running: the slot is freed when it really ends."""
+    work = asyncio.ensure_future(asyncio.to_thread(operation, *args))
+    work.add_done_callback(_slot_thread_ended)
+    return await asyncio.shield(work)
+
+
+def _slot_thread_ended(work: asyncio.Future[Any]) -> None:
+    release_heavy_job_slot()
+    if not work.cancelled():
+        work.exception()  # retrieved: an abandoned thread's error is not re-logged
 
 
 def run_heavy_ppt_job(operation: Callable[..., T], *args: object) -> T:

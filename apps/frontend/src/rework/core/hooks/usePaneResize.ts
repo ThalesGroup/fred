@@ -66,6 +66,7 @@ export function usePaneResize({
   paneRef,
 }: UsePaneResizeOptions): {
   width: number;
+  setWidth: (width: number) => void;
   dragging: boolean;
   handleProps: PaneResizeHandleProps;
 } {
@@ -108,7 +109,8 @@ export function usePaneResize({
       // emits moves too, but never holds the capture.
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
       const distance = anchor === "right" ? dragAnchorRef.current - e.clientX : e.clientX - dragAnchorRef.current;
-      setWidth(clamp(Math.round(distance)));
+      const next = clamp(Math.round(distance));
+      setWidth(next);
     },
     [clamp, setWidth, anchor],
   );
@@ -119,6 +121,7 @@ export function usePaneResize({
     // Clamp on read so a persisted value left over from different bounds (or a
     // narrower window) can never produce an out-of-range drawer.
     width: clamp(width),
+    setWidth,
     dragging,
     handleProps: { onPointerDown, onPointerMove, onPointerUp: endDrag, onPointerCancel: endDrag },
   };

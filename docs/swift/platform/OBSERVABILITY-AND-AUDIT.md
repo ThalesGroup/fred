@@ -6,7 +6,7 @@ audit posture. For implementation detail (file/line references, phased commits),
 document describes the target state and its guarantees, not the diff to get there.
 
 > Frontend/access-control counterpart: [`REBAC.md`](./REBAC.md) — this document assumes the
-> reader already knows Fred's authorization model (Keycloak authenticates, OpenFGA authorizes).
+> reader already knows Fred's authorization model (the configured identity provider authenticates, OpenFGA authorizes).
 
 ## 1. The problem this solves
 
@@ -188,6 +188,29 @@ Existing standard-library `%s`, `%d` and named-placeholder log calls remain supp
 in both output formats. They can also supply `extra={...}` structured properties,
 allowing gradual migration without rewriting every message or switching to f-strings.
 
+Stdout exception diagnostics preserve the ordinary exception message, type, traceback
+frames and visible causes in both delegation modes. JSON carries the rendered trace
+in `exception`; readable output retains multiline formatting. Known `token`,
+`access_token` and `id_token` query values and free-access/join-link secrets are
+redacted from rendered exceptions as well as server messages and string arguments.
+This is targeted redaction: arbitrary exception text can contain sensitive values
+outside those patterns. Local variables, request bodies and headers are not added
+automatically. The optional generic store keeps its existing representation.
+
+An uncaught HTTP failure is reported by `fred_core.logs.http` before request context
+closes, using the same request-owned snapshot as the separate `http` completion
+event. Both retain available admitted user/session/agent/team and request/correlation
+references across middleware task boundaries. For an otherwise unlogged exception
+that produces HTTP 500, these are two ERROR events and only the exception event has
+a traceback. The generic response handler retains response/KPI bookkeeping; the
+middleware re-raises the original exception after reporting it. A separate minimal
+filter suppresses only Uvicorn's duplicate of that exact marked exception. Unreported
+server failures remain visible, with whatever context exists at their boundary.
+Controllers that log and convert a failure to a handled HTTP error keep ownership
+of their diagnostic; an explicit 500 without an underlying logged exception has only
+completion. Audit, dependency filtering and runtime support references are unchanged.
+The durable behavior contract is the
+[structured-logging specification](../../../openspec/specs/structured-logging/spec.md).
 
 Ordinary application logs (startup messages, warnings, day-to-day diagnostics) are the lowest-
 sensitivity, highest-volume stream. They are stored in OpenSearch alongside — but in a separate
@@ -195,7 +218,8 @@ index from — product analytics, with no long-retention requirement. Their diag
 decreases over time; they are not an audit or compliance artifact and should never be treated as
 one.
 
-This stream carries no content (§7). Fred does not expose its own query surface for these logs —
+Ordinary event fields carry no content (section 7); exception stdout follows the targeted
+redaction policy above. Fred does not expose its own query surface for these logs —
 there is no Log Console UI and no `/logs/query` endpoint or agent tool. Consultation and
 exploration happen directly against the backing OpenSearch index via **OpenSearch Dashboards**,
 outside Fred's authorization model; that index is a meaningfully different exposure than "an
@@ -263,6 +287,69 @@ first-party origin, including handshake/listing and tool invocation. Delegated t
 do not follow redirects. External/no-token tools and authentication endpoints receive no
 Fred context. This metadata requires no new delegation switch and never enables delegation.
 
+### 6.1.1 Inner MCP and tabular failure diagnostics
+
+The first-party MCP bridge emits `mcp.inner_http_failure` as the stable log
+`message` for each completed inner HTTP status >= 400 (warning for 4xx, error
+for 5xx). Outer MCP HTTP 200 does not mean the tool succeeded. Structured extras
+carry `tool_name` and `upstream_route` from the registered ASGI operation,
+`method`, `upstream_http_status`, and valid UUIDv4 `upstream_request_id` /
+`upstream_correlation_id` response references. Missing route metadata or invalid
+references remain absent. Local `request_id` and `correlation_id` retain their
+own values. Join `upstream_request_id` to the inner HTTP access event's
+`request_id`; delegated session/team/user/run/agent context remains available
+under existing admission rules. Non-UUID inherited correlation references are
+omitted from this optional upstream reference field.
+
+The dedicated HTTP client sanitizes model-controlled grant fields and replaces
+supplied diagnostic context with the current admitted context per invocation.
+It does not follow redirects. Ordinary tool failures use upstream MCP
+status/detail text; authority refusals retain the typed `authority_lost` result.
+The explicit diagnostic contains no response body, raw path/query, tool arguments,
+SQL, exception text or arbitrary headers. FastMCP dependency diagnostics use
+the existing sanitized console-only path and cannot enter the generic store.
+Transport errors/cancellation without a response produce no invented HTTP status;
+success adds no bridge failure event.
+
+Tabular diagnostics use these stable messages and closed reasons:
+
+| Message | Level | Reason | Meaning |
+| --- | --- | --- | --- |
+| `tabular.discovery_empty` | info | `no_readable_documents` | Unscoped resolution observed no eligible metadata. |
+| `tabular.discovery_empty` | info | `empty_authorized_scope` | The requested scope resolved to no authorized folders, with no eligible owned attachments. |
+| `tabular.discovery_empty` | info | `no_documents_in_scope` | An active scope yielded no eligible metadata. |
+| `tabular.discovery_empty` | info | `no_registered_tables` | Eligible scoped metadata yielded no usable, authorized registered tables. |
+| `tabular.description_failure` | warning | `datasets_not_resolved` | A requested dataset remained unresolved after existing permission checks allowed the request. |
+| `tabular.description_failure` | warning | `preview_not_ready` | A resolved spreadsheet's preview stage is incomplete. |
+| `tabular.description_failure` | warning | `preview_artifact_unavailable` | The catalog read raised FileNotFoundError at the storage boundary. |
+
+Empty discovery emits one summary with nonnegative signed-64-bit
+`readable_metadata_count`, `scoped_metadata_count` and `resolved_table_count`.
+These are observed metadata candidates from existing authorized-folder/ownership
+lookups, after known document denials are removed, and the final resolved table
+count. They are not a global readable-document inventory: targeted scoped
+lookups may already have excluded other documents before the first count.
+Classify a known empty authorized scope first, then unscoped absence, scope
+exclusion and absence of usable tables. No extra storage, authorization or
+artifact I/O is performed, and successful nonempty discovery emits no summary.
+Description diagnostics never bind model-supplied document/library lists and
+permission denials emit no dataset-existence hint. Existing HTTP statuses and
+response details are unchanged.
+
+GCP Logs Explorer example (select your normal cluster/namespace filters):
+
+```text
+resource.type="k8s_container"
+jsonPayload.service="knowledge-flow"
+jsonPayload.message="mcp.inner_http_failure"
+jsonPayload.tool_name="read_query"
+jsonPayload.upstream_http_status=400
+```
+
+Copy `jsonPayload.upstream_request_id` into a query on
+`jsonPayload.request_id` to inspect the receiver's access record. The optional
+generic store uses its existing DTO (`msg` and `extra`) for the same safe facts.
+
 ### 6.2 Worker and ingestion diagnostic context
 
 Knowledge Flow and Control Plane worker entrypoints use the selected `app.log_format`
@@ -313,6 +400,12 @@ and [GKE logging](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/
 
 ## 7. Data protection summary
 
+The exclusions below govern deliberately recorded fields. Exception stdout is the
+explicit exception described in section 6: it preserves diagnostic text with known
+URL-pattern redaction and cannot promise that every free-form value is scrubbed.
+This exception does not apply to audit events or authorize adding content or secrets
+to ordinary event fields.
+
 | Field category | Example fields | Where it may appear |
 |---|---|---|
 | Directly identifying | user email, full name | **Nowhere** — Fred uses opaque platform identifiers everywhere an identity reference is needed |
@@ -335,6 +428,27 @@ deliberately turn the content exclusion off, and only for a Langfuse they run th
 switch is `observability.langfuse.capture_content` in `configuration.yaml`, overridable per-run by
 the `LANGFUSE_CAPTURE_CONTENT` env var. It is **off by default**, and enabling it exports prompts,
 model answers, and tool arguments/results to Langfuse.
+
+Model input capture uses the model-start callback after middleware has composed
+the prompt and bound tools, including Deep's native skills catalogue and pinned
+instructions. Capture retains the existing serialization limits and remains a
+LangChain model input view; provider-specific wire normalization is outside it.
+Trace preparation time remains excluded from model-call latency diagnostics.
+
+For Deep turns, the root agent observation input includes the actual `messages`
+and `pinned_skills` submitted to the graph. The selection is not added to trace
+metadata or the model's request: native middleware consumes it and appends the
+skill instructions as conversation messages before inference. A resume submits
+no new messages or selections, so both lists are empty; restored context is
+visible in the model observation. These names describe the submitted selection,
+not successful loading, and are exported only when content capture is enabled.
+ReAct keeps its existing input shape.
+
+Langfuse child observations are created through their parent observation, not
+through a new client call with explicit trace context. The latter marks another
+application root in the SDK and can replace the trace overview's input with a
+model prompt. Only the turn root owns the overview input/output; generation
+observations retain their actual model messages and tool schemas.
 
 Why this is bounded rather than a hole in the rule:
 

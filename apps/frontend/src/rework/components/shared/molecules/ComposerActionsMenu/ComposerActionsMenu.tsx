@@ -13,13 +13,22 @@
 // limitations under the License.
 
 import { ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { type IconProps } from "@shared/atoms/Icon/Icon";
+import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 import styles from "./ComposerActionsMenu.module.css";
+
+// The first control, not the active one: the menu opens on its first action.
+const firstControl = (surface: HTMLElement) =>
+  surface.querySelector<HTMLElement>("button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])") ?? surface;
 
 interface ComposerActionsMenuProps {
   disabled?: boolean;
+  align?: "left" | "right";
+  size?: "2xs" | "small";
+  portal?: boolean;
   /** Trigger glyph — defaults to the "add" (+) icon. */
   icon?: IconProps;
   /** aria-label for the trigger button; defaults to the add-menu string. */
@@ -34,6 +43,9 @@ interface ComposerActionsMenuProps {
 
 export function ComposerActionsMenu({
   disabled = false,
+  align = "left",
+  size = "small",
+  portal = false,
   icon = { category: "outlined", type: "add" },
   openAriaLabel,
   dialogAriaLabel,
@@ -42,8 +54,12 @@ export function ComposerActionsMenu({
 }: ComposerActionsMenuProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top?: number; right: number; bottom?: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const closeMenu = () => setOpen(false);
+  // Focus moves into the menu on open and back to the trigger on close.
+  useFocusHandoff(open, menuRef, firstControl);
 
   useEffect(() => {
     if (disabled && open) {
@@ -54,7 +70,7 @@ export function ComposerActionsMenu({
   useEffect(() => {
     if (!open) return;
     const handleMouseDown = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
+      if (!containerRef.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) {
         setOpen(false);
       }
     };
@@ -69,28 +85,54 @@ export function ComposerActionsMenu({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !portal) return;
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [open, portal]);
+
+  const menu = open && (
+    <div
+      ref={menuRef}
+      className={styles.menu}
+      data-align={align}
+      data-portal={portal}
+      style={portal ? (menuPosition ?? undefined) : undefined}
+      role="dialog"
+      aria-label={dialogAriaLabel ?? t("chatbot.composerActions.dialogAria")}
+    >
+      {children ? (
+        <div className={styles.menuBody}>{typeof children === "function" ? children({ closeMenu }) : children}</div>
+      ) : null}
+    </div>
+  );
+
   return (
     <div ref={containerRef} className={styles.container} data-open={open}>
       <IconButton
         variant="icon"
-        size="small"
+        size={size}
         icon={icon}
         aria-label={openAriaLabel ?? t("chatbot.composerActions.openAria")}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
+        onClick={(event) => {
+          if (portal) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setMenuPosition(
+              rect.top < 100
+                ? { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+                : { bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right },
+            );
+          }
+          setOpen((value) => !value);
+        }}
       />
       {badge && <span className={styles.badge} aria-hidden />}
-      {open && (
-        <div
-          className={styles.menu}
-          role="dialog"
-          aria-label={dialogAriaLabel ?? t("chatbot.composerActions.dialogAria")}
-        >
-          {children ? (
-            <div className={styles.menuBody}>{typeof children === "function" ? children({ closeMenu }) : children}</div>
-          ) : null}
-        </div>
-      )}
+      {portal && menu ? createPortal(menu, document.body) : menu}
     </div>
   );
 }

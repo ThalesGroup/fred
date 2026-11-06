@@ -18,6 +18,8 @@ export interface NormalizedApiError {
   kind: ApiErrorKind;
   status?: number;
   detail?: string;
+  /** Stable machine-readable reason some refusals carry next to `detail`. */
+  code?: string;
 }
 
 type RecordLike = Record<string, unknown>;
@@ -103,9 +105,11 @@ export function normalizeApiError(error: unknown): NormalizedApiError {
     return { kind: "unknown" };
   }
 
+  const data = (error as RecordLike).data;
   return {
     kind: kindFromStatus(statusValue),
     status: statusValue,
-    detail: getDetailFromData((error as RecordLike).data),
+    detail: getDetailFromData(data),
+    code: isRecord(data) ? asString(data.code) : undefined,
   };
 }

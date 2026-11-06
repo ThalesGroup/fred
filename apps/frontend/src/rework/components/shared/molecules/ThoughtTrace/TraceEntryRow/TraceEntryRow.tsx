@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import type { TraceEntry, TraceStatus } from "../../../../../utils/traceUtils";
 import {
   entryLabel,
+  inactiveHitlStatus,
   isCancelledByUser,
   primaryTextForEntry,
   secondaryTextForEntry,
@@ -27,6 +28,7 @@ import { useTraceDrawer } from "../traceDrawerContext";
 import { HitlAnswerSummary } from "../../HitlAnswerSummary/HitlAnswerSummary";
 import type { HitlAnswerSummary as Summary } from "@rework/utils/hitlAnswerSummary";
 import styles from "./TraceEntryRow.module.css";
+import { skillPresentation } from "@rework/utils/skillPresentation";
 
 interface TraceEntryRowProps {
   entry: TraceEntry;
@@ -49,12 +51,14 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
   const skill = entry.kind === "solo" ? skillLoadOf(entry.message) : null;
+  const skillDisplay = skill ? skillPresentation(t, skill) : null;
   if (skill)
     return (
       <button
         type="button"
         className={`${styles.row} ${styles.skillRow}`}
-        aria-label={`${index !== null ? `${index}. ` : ""}${t("chatbot.skills.loaded")}: ${skill.name}`}
+        aria-label={`${index !== null ? `${index}. ` : ""}${label}: ${skillDisplay.title}`}
+        title={skillDisplay.description || skill.name}
         onClick={() => openTrace(entry)}
       >
         <span className={styles.marker}>
@@ -63,8 +67,8 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
             {index ?? ""}
           </span>
         </span>
-        <span className={styles.label}>{t("chatbot.skills.loaded")}</span>
-        <span className={styles.primary}>{skill.name}</span>
+        <span className={styles.label}>{label}</span>
+        <span className={styles.primary}>{skillDisplay.title}</span>
         <span className={styles.secondary}>
           {t(
             skill.origin === "user"
@@ -84,8 +88,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   const isCrashLine = entry.kind === "solo" && status === "error";
   const isCancelled = isCancelledByUser(entry);
 
-  // Curated volume metadata (never raw args/content) so two calls to the same
-  // tool are distinguishable — "Reading query" ×2 was byte-identical (#2172).
+  // Safe result metadata distinguishes repeated calls with the same label.
   const discriminator = toolDiscriminator(entry);
   const discriminatorText = discriminator
     ? `${t(`rework.chatTrace.${discriminator.kind}`, { count: discriminator.count })}${discriminator.partial ? ` · ${t("rework.chatTrace.tabular.partialResult")}` : ""}`
@@ -124,16 +127,18 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
       <span
         className={`${styles.primary} ${isPending || isAwaitingConfirmation ? styles.primaryPending : ""} ${isPending ? styles.primaryRunning : ""} ${isCrashLine ? styles.errorText : ""}`}
       >
-        {primary ||
-          (isCancelled
-            ? t("rework.chatTrace.cancelledByUser")
-            : isAwaitingConfirmation
-              ? t("rework.chatTrace.awaitingConfirmation")
-              : isPending
-                ? t("rework.chatTrace.running")
-                : isCrashLine
-                  ? t("rework.chatTrace.turnFailed")
-                  : "")}
+        {inactiveHitlStatus(entry)
+          ? t(`rework.hitlPrompt.${inactiveHitlStatus(entry)}`)
+          : primary ||
+            (isCancelled
+              ? t("rework.chatTrace.cancelledByUser")
+              : isAwaitingConfirmation
+                ? t("rework.chatTrace.awaitingConfirmation")
+                : isPending
+                  ? t("rework.chatTrace.running")
+                  : isCrashLine
+                    ? t("rework.chatTrace.turnFailed")
+                    : "")}
       </span>
 
       {/* A cancelled tool never ran — its latency is meaningless, so drop it. */}

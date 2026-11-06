@@ -231,11 +231,18 @@ export async function assertOfflineConsumerReferences({
       !isLocalReference(installed.resolved),
       `${dependency.name} cached registry cannot use local fallback`,
     );
-    assert.equal(
-      new URL(installed.resolved).origin,
-      new URL(dependency.registry).origin,
-      `${dependency.name} cached registry differs`,
-    );
+    if (dependency.tarball)
+      assert.equal(
+        new URL(installed.resolved).href,
+        new URL(dependency.tarball).href,
+        `${dependency.name} cached registry tarball differs`,
+      );
+    else
+      assert.equal(
+        new URL(installed.resolved).origin,
+        new URL(dependency.registry).origin,
+        `${dependency.name} cached registry differs`,
+      );
   }
   for (const name of allowed.keys()) {
     const manifestReference = manifest.dependencies?.[name];

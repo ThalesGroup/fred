@@ -21,6 +21,7 @@ import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
 import type { CommandDescriptor, SkillInvocation } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
+import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./UserTurn.module.css";
 
 interface UserTurnProps {
@@ -35,7 +36,8 @@ interface UserTurnProps {
   command?: CommandDescriptor | null;
   skillName?: SkillInvocation["name"] | null;
   skillNames?: SkillInvocation["name"][];
-  skillDescriptions?: ReadonlyMap<string, string>;
+  builtinSkillNames?: string[];
+  skillSummaries?: ReadonlyMap<string, SkillSummary>;
   skillDescription?: string | null;
   onOpenSkill?: (name: string) => void;
   /** Takes the turn's own values rather than a closure, so the caller can
@@ -52,7 +54,8 @@ export const UserTurn = memo(function UserTurn({
   command,
   skillName,
   skillNames,
-  skillDescriptions,
+  builtinSkillNames,
+  skillSummaries,
   skillDescription,
   onOpenSkill,
   onOpenCommand,
@@ -82,7 +85,14 @@ export const UserTurn = memo(function UserTurn({
   const actions: Action[] = useMemo(
     () => [
       ...(onEdit
-        ? [{ id: "edit", icon: "edit", label: t("chatbot.editMessage"), onClick: () => onEdit(invocationText) }]
+        ? [
+            {
+              id: "edit",
+              icon: "edit" as const,
+              label: t("chatbot.editMessage"),
+              onClick: () => onEdit(invocationText),
+            },
+          ]
         : []),
       {
         id: "copy",
@@ -102,7 +112,8 @@ export const UserTurn = memo(function UserTurn({
         text={text}
         command={command}
         skillNames={skillNames}
-        skillDescriptions={skillDescriptions}
+        builtinSkillNames={builtinSkillNames}
+        skillSummaries={skillSummaries}
         skillName={skillName}
         skillDescription={skillDescription}
         onOpenSkill={onOpenSkill}

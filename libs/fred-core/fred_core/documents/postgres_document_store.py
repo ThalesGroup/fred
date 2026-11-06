@@ -457,7 +457,10 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         if not unique:
             return []
         if not self._is_postgres:
-            return await super().metadata_in_tags(unique, session=session)
+            # No array overlap on SQLite: one scan, not one table load per tag.
+            wanted = set(unique)
+            docs = await self.get_all_metadata({}, session=session)
+            return [d for d in docs if wanted.intersection(d.tags.tag_ids or [])]
 
         cond = cast(ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(unique))
         async with use_session(self._sessions, session) as s:
@@ -839,10 +842,33 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             rows = (await s.execute(stmt)).scalars().all()
         return list(rows)
 
+    async def _labels_in_tags(
+        self, tag_ids: set[str], session: AsyncSession | None
+    ) -> ColumnElement[bool]:
+        """Restrict label rows to documents filed under `tag_ids`. A subquery
+        keeps one array parameter; an expanded uid list hits the bind limit."""
+        if self._is_postgres:
+            cond = cast(
+                ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(list(tag_ids))
+            )
+            in_tags = select(DocumentMetadataRow.document_uid).where(cond)
+            return DocumentLabelRow.document_uid.in_(in_tags)
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(
+                        DocumentMetadataRow.document_uid, DocumentMetadataRow.tag_ids
+                    )
+                )
+            ).all()
+        return DocumentLabelRow.document_uid.in_(
+            {uid for uid, row_tags in rows if tag_ids.intersection(row_tags or [])}
+        )
+
     async def get_document_uids_with_any_label(
         self,
         labels: set[str],
-        document_uids: set[str] | None = None,
+        tag_ids: set[str] | None = None,
         session: AsyncSession | None = None,
     ) -> List[str]:
         if not labels:
@@ -852,10 +878,10 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             .distinct()
             .where(DocumentLabelRow.label.in_(labels))
         )
-        if document_uids is not None:
-            if not document_uids:
+        if tag_ids is not None:
+            if not tag_ids:
                 return []
-            stmt = stmt.where(DocumentLabelRow.document_uid.in_(document_uids))
+            stmt = stmt.where(await self._labels_in_tags(tag_ids, session))
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(stmt)).scalars().all()
         return list(rows)
@@ -863,7 +889,7 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     async def get_document_uids_with_any_label_page(
         self,
         labels: set[str],
-        document_uids: set[str] | None = None,
+        tag_ids: set[str] | None = None,
         *,
         offset: int = 0,
         limit: int = 50,
@@ -881,10 +907,10 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             .distinct()
             .where(DocumentLabelRow.label.in_(labels))
         )
-        if document_uids is not None:
-            if not document_uids:
+        if tag_ids is not None:
+            if not tag_ids:
                 return [], 0
-            base = base.where(DocumentLabelRow.document_uid.in_(document_uids))
+            base = base.where(await self._labels_in_tags(tag_ids, session))
         count_stmt = select(func.count()).select_from(base.subquery())
         page_stmt = (
             base.order_by(DocumentLabelRow.document_uid.asc())
@@ -898,16 +924,16 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
 
     async def get_distinct_labels(
         self,
-        document_uids: set[str] | None = None,
+        tag_ids: set[str] | None = None,
         session: AsyncSession | None = None,
     ) -> List[str]:
         stmt = (
             select(DocumentLabelRow.label).distinct().order_by(DocumentLabelRow.label)
         )
-        if document_uids is not None:
-            if not document_uids:
+        if tag_ids is not None:
+            if not tag_ids:
                 return []
-            stmt = stmt.where(DocumentLabelRow.document_uid.in_(document_uids))
+            stmt = stmt.where(await self._labels_in_tags(tag_ids, session))
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(stmt)).scalars().all()
         return list(rows)

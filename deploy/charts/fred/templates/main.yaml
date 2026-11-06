@@ -1,8 +1,18 @@
 {{- include "fred.validate-ingestion-worker-roles" $ }}
+{{- include "fred.validate-registrations" $ }}
+{{- $registrations := include "fred.registrations" $ | fromYaml }}
 {{- range $name, $rawApp := .Values.applications }}
   {{- $app := $rawApp }}
   {{- if hasKey $rawApp "inheritFrom" }}
     {{- $app = include "fred.resolvedApp" (dict "app" $rawApp "root" $ "name" $name) | fromYaml }}
+  {{- end }}
+  {{- /* Merged here so that its ConfigMap and its checksum annotation both carry them. */}}
+  {{- if eq ($app.applicationName | toString) "control-plane-backend" }}
+    {{- $app = deepCopy $app }}
+    {{- $configuration := $app.configuration | default dict }}
+    {{- $_ := set $configuration "platform" (merge (dict "application_sources" $registrations.application_sources) ($configuration.platform | default dict)) }}
+    {{- $_ := set $configuration "knowledge_bases" (merge (dict "publishers" $registrations.publishers) ($configuration.knowledge_bases | default dict)) }}
+    {{- $_ := set $app "configuration" $configuration }}
   {{- end }}
   {{- $appEnabled := true }}
   {{- if hasKey $app "enabled" }}

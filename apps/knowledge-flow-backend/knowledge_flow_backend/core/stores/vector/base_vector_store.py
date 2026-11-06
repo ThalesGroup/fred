@@ -111,6 +111,14 @@ class BaseVectorStore(ABC):
         """
         raise NotImplementedError("This vector store does not support renaming.")
 
+    @abstractmethod
+    def set_document_tag_ids(self, *, document_uid: str, tag_ids: Sequence[str]) -> None:
+        """Replace the folder ids copied onto every chunk of a document.
+
+        Search pre-filters chunks on these copies, so a failure must raise.
+        """
+        raise NotImplementedError
+
     def get_vectors_for_document(self, document_uid: str, with_document: bool = True) -> List[Dict[str, Any]]:
         """Optional capability: fetch raw vector data for all chunks of a document."""
         raise NotImplementedError("This vector store does not support fetching raw vectors.")

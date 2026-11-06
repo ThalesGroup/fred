@@ -488,7 +488,7 @@ async def _stop_group(process: BaseProcess, group: _ChildGroup) -> bool:
     deadline = loop.time() + REAP_TIMEOUT_SECONDS
     while True:
         alive = process.is_alive()
-        leftovers = _live_group_members(group.pgid)
+        leftovers = _live_members(group.pgid)
         if not alive and not leftovers:
             logger.info("[EXTRACTION] child pid=%s and its process group are gone", pid)
             return True
@@ -500,11 +500,19 @@ async def _stop_group(process: BaseProcess, group: _ChildGroup) -> bool:
                 leftovers,
             )
             return False
+        # A helper leading a group of its own (LibreOffice, so its own timeout can
+        # kill it) is out of reach of the group signal, but not of its session.
+        for member in leftovers:
+            _signal_pid(member, signal.SIGKILL)
         await asyncio.sleep(_POLL_INTERVAL_SECONDS)
 
 
-def _live_group_members(pgid: int | None) -> list[int]:
-    """The pids still running in `pgid`, zombies excluded (Linux only).
+def _live_members(pgid: int | None) -> list[int]:
+    """The pids still running in `pgid` or in the session it leads, zombies
+    excluded (Linux only).
+
+    The child calls `setsid()`, so its group id is also its session id, and a
+    helper that moved to a group of its own is still found by its session.
 
     Zombies are excluded deliberately: a helper killed here is reparented to pid
     1, and when pid 1 is the worker itself — the usual container layout — nothing
@@ -527,14 +535,23 @@ def _live_group_members(pgid: int | None) -> list[int]:
             continue
         try:
             with open(f"/proc/{entry}/stat", "rb") as stat_file:
-                # `pid (comm) state ppid pgrp ...`; the name can hold anything,
+                # `pid (comm) state ppid pgrp session ...`; the name can hold anything,
                 # including spaces and parentheses, so it is cut off at the last one.
                 fields = stat_file.read().rpartition(b")")[2].split()
         except OSError:
             continue  # exited while being read, which is the answer we wanted
-        if len(fields) >= 3 and fields[2] == target and fields[0] != b"Z":
+        if len(fields) >= 4 and target in (fields[2], fields[3]) and fields[0] != b"Z":
             members.append(int(entry))
     return members
+
+
+def _signal_pid(pid: int, sig: int) -> None:
+    try:
+        os.kill(pid, sig)
+    except ProcessLookupError:
+        pass  # already gone, which is the outcome we wanted
+    except PermissionError:
+        logger.warning("[EXTRACTION] not allowed to signal leftover %s", pid)
 
 
 def _signal_child(pid: int, pgid: int | None, sig: int) -> None:

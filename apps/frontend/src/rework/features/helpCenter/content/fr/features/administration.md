@@ -103,6 +103,30 @@ marketplace ; la confirmation annonce d'abord combien. Baisser le nombre
 d'agents max garde les agents déjà publiés mais bloque les nouvelles
 publications.
 
+## Le template de présentation de la plateforme
+
+Sur la page **Fonctionnalités**, la ligne **Générer une présentation** a une
+icône **Réglages de la plateforme**. Un **Admin plateforme** ou un
+**Gestionnaire de fonctionnalités** y choisit le template PowerPoint des agents
+qui n'en ont pas à eux (le template Fred tant que rien n'est changé) :
+
+- **Téléverser un template .pptx** — le fichier est lu en arrière-plan. Tant
+  que la lecture n'a pas réussi, ou si elle échoue, les agents gardent le
+  template précédent.
+- **Utiliser un modèle de vision** — le modèle d'IA qui lit les slides de ce
+  template ; par défaut, le modèle par défaut de la plateforme. Le choix vaut
+  au prochain téléversement ou à **Relancer la lecture**, et ne change rien aux
+  agents. Il n'a aucun effet sur le template Fred, déjà lu.
+- **Vérifier les slides** — renommez une slide, changez son type ou
+  mettez-la de côté. Les corrections s'enregistrent à la fermeture et valent
+  pour tous les agents qui utilisent ce template. Une nouvelle lecture du même
+  fichier les garde ; un autre fichier repart sans corrections. Sans template
+  téléversé, vous corrigez de la même façon les slides du template Fred.
+- **Réinitialiser au template Fred** — supprime le template et toutes les
+  corrections, celles du template Fred comprises, après confirmation.
+
+Un changement atteint tous les agents en moins d'une minute.
+
 ## Qui ouvre les fonctions à votre équipe
 
 L'ouverture d'une fonction relève d'un **Admin plateforme** ou d'un

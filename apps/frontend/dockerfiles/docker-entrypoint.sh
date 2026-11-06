@@ -409,7 +409,25 @@ cat <<'EOF'
         try_files $uri =404;
     }
 
+    # Hashed bundles never change, so cache them for good; a missing one must
+    # 404, not fall back to index.html, which the browser rejects as a module.
+    location ^~ /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+
+        # ^~ skips the \.mjs$ location below, and the pdf.js worker lives here.
+        location ~ \.mjs$ {
+            try_files $uri =404;
+            default_type application/javascript;
+            types {
+                application/javascript                       mjs;
+            }
+        }
+    }
+
+    # index.html names the current chunks; a cached copy points at a past deploy.
     location / {
+        add_header Cache-Control "no-cache";
         try_files $uri /index.html;
     }
 

@@ -91,15 +91,4 @@ export async function identityProbeScenario(token: string, uid: string | null, r
     },
     { optional: true },
   );
-  await runStep(
-    report,
-    "identity-coverage",
-    "Additional identity and delegation coverage",
-    async () => {
-      throw new SkipStep(
-        "Run the functional document/agent test for delegation and document access; use a second session for account isolation. Workload JWT claims require backend tests; no service secrets are exposed here.",
-      );
-    },
-    { optional: true },
-  );
 }

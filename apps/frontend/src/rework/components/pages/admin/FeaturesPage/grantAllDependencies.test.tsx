@@ -62,6 +62,11 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAdminCapabilitiesQuery: () => ({ data: { items: h.items }, isLoading: false, isError: false }),
+  useModelDiscoveryQuery: () => ({ data: { sources: [] } }),
+  useRefreshModelDiscoveryMutation: () => [
+    () => ({ unwrap: async () => ({ sources: [] }) }),
+    { isLoading: false, isError: false },
+  ],
   useListAllTeamsQuery: () => ({ data: [], isLoading: false, isError: false }),
   useSetCapabilityDefaultOnMutation: () => [
     (args: { capabilityId: string; setCapabilityDefaultOnRequest: { default_on: boolean } }) => ({
@@ -108,6 +113,15 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   }),
   useSetPlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
   useDeletePlatformModelBindingMutation: () => [vi.fn(), { isLoading: false }],
+  usePlatformModelFallbackQuery: () => ({ data: { binding: null }, isLoading: false, isError: false }),
+  useSetPlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useDeletePlatformModelFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useSetModelDiscoveryUrlMutation: () => [vi.fn(), { isLoading: false }],
+  usePodChatDefaultsQuery: () => ({ data: { pods: [] }, isFetching: false, isError: false }),
+  useSetPodChatDefaultMutation: () => [vi.fn(), { isLoading: false }],
+  useClearPodChatDefaultMutation: () => [vi.fn(), { isLoading: false }],
+  useSetPodChatFallbackMutation: () => [vi.fn(), { isLoading: false }],
+  useClearPodChatFallbackMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -127,7 +141,13 @@ vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
   useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
 }));
 
+// Same reason: the admin gate reads the frontend bootstrap through RTK Query.
+vi.mock("@rework/core/hooks/useUserCapabilities", () => ({
+  useUserCapabilities: () => ({ canAdmin: true }),
+}));
+
 vi.mock("./SuspendedInstancesDrawer", () => ({ SuspendedInstancesDrawer: () => null }));
+vi.mock("./CapabilityPlatformDrawer", () => ({ CapabilityPlatformDrawer: () => null }));
 vi.mock("./PlatformModelBindingsPanel/PlatformModelBindingsPanel", () => ({
   PlatformModelBindingsPanel: () => null,
 }));

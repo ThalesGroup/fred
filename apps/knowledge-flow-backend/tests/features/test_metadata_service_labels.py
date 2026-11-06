@@ -30,7 +30,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fred_core import RebacDisabledResult
+from fred_core import RebacDisabledResult, TagPermission
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     Identity,
@@ -38,9 +38,11 @@ from fred_core.documents.document_structures import (
     SourceType,
     Tagging,
 )
+from fred_core.documents.label_models import DocumentLabelRow
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
 from fred_core.models.base import Base
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy import insert
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 from knowledge_flow_backend.features.metadata import service as service_module
 from knowledge_flow_backend.features.metadata.service import (
@@ -66,17 +68,19 @@ def _doc(uid: str, *, tag_ids: list[str] | None = None) -> DocumentMetadata:
             modified=datetime.now(timezone.utc),
         ),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="fred"),
-        tags=Tagging(tag_ids=tag_ids or []),
+        tags=Tagging(tag_ids=[f"lib-{uid}"] if tag_ids is None else tag_ids),
     )
 
 
 class _FakeRebac:
     """`check_user_permission_or_raise` denies only uids in `denied`;
-    `lookup_user_resources` returns `readable_uids` (or `RebacDisabledResult`
-    when `disabled=True`, which the service must treat as "everything")."""
+    `lookup_user_resources` returns the folders (`lib-<uid>`) of `readable_uids`
+    — documents are readable through their folders and never enumerated — or
+    `RebacDisabledResult` when `disabled=True` ("everything")."""
 
-    def __init__(self, *, readable_uids: set[str] | None = None, denied: set[str] | None = None, disabled: bool = False):
+    def __init__(self, *, readable_uids: set[str] | None = None, readable_tags: set[str] | None = None, denied: set[str] | None = None, disabled: bool = False):
         self._readable_uids = readable_uids or set()
+        self._readable_tags = readable_tags if readable_tags is not None else {f"lib-{uid}" for uid in self._readable_uids}
         self._denied = denied or set()
         self._disabled = disabled
 
@@ -88,9 +92,10 @@ class _FakeRebac:
         return self._disabled or resource_id in self._readable_uids
 
     async def lookup_user_resources(self, user, permission):
+        assert permission == TagPermission.READ
         if self._disabled:
             return RebacDisabledResult()
-        return [SimpleNamespace(id=uid) for uid in self._readable_uids]
+        return [SimpleNamespace(id=tag_id) for tag_id in self._readable_tags]
 
 
 def _user(uid: str = "u-1") -> SimpleNamespace:
@@ -439,7 +444,7 @@ async def test_a_stale_save_cannot_reintroduce_a_label_removed_after_the_snapsho
     snapshot must not resurrect 'DAT'."""
     engine = await _make_sqlite_engine(tmp_path, "stale_snapshot.sqlite3")
     service = _build_service(engine, _FakeRebac(), monkeypatch)
-    await service.metadata_store.save_metadata(_doc("doc-1"))
+    await service.metadata_store.save_metadata(_doc("doc-1", tag_ids=[]))
     await service.add_label_to_document(_user(), "doc-1", "DAT", "u-1")
 
     # The activity's snapshot: hydrated while 'DAT' was still present.
@@ -465,7 +470,7 @@ async def test_a_stale_save_does_not_erase_a_label_added_after_the_snapshot(tmp_
     survive a later save of that (label-less) snapshot."""
     engine = await _make_sqlite_engine(tmp_path, "stale_snapshot_add.sqlite3")
     service = _build_service(engine, _FakeRebac(), monkeypatch)
-    await service.metadata_store.save_metadata(_doc("doc-1"))
+    await service.metadata_store.save_metadata(_doc("doc-1", tag_ids=[]))
 
     stale_snapshot = await service.metadata_store.get_metadata_by_uid("doc-1")
     assert stale_snapshot is not None
@@ -476,3 +481,44 @@ async def test_a_stale_save_does_not_erase_a_label_added_after_the_snapshot(tmp_
     await service.save_document_metadata(_user(), stale_snapshot)
 
     assert await service.metadata_store.get_labels_for_document("doc-1") == ["MEX"]
+
+
+@pytest.mark.asyncio
+async def test_label_lookups_cover_a_folder_larger_than_the_authorization_inventory(tmp_path, monkeypatch) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "large_folder.sqlite3")
+    uids = [f"doc-{index:04}" for index in range(1500)]
+    service = _build_service(engine, _FakeRebac(readable_uids=set(uids), readable_tags={"lib-shared"}), monkeypatch)
+    async with AsyncSession(engine) as session, session.begin():
+        for uid in uids:
+            await service.metadata_store.save_metadata(_doc(uid, tag_ids=["lib-shared"]), session=session)
+        await session.execute(insert(DocumentLabelRow), [{"document_uid": uid, "label": "DAT"} for uid in uids])
+
+    assert await service.get_document_uids_with_any_label(_user(), ["DAT"]) == set(uids)
+    page, total = await service.get_documents_with_label_page(_user(), "DAT", offset=1400, limit=200)
+    assert total == 1500
+    assert [doc.document_uid for doc in page] == uids[1400:]
+    assert await service.list_document_labels(_user()) == ["DAT"]
+
+
+@pytest.mark.asyncio
+async def test_label_pages_count_and_slice_only_checked_candidates(tmp_path, monkeypatch) -> None:
+    engine = await _make_sqlite_engine(tmp_path, "checked_pages.sqlite3")
+    try:
+        service = _build_service(engine, _FakeRebac(readable_uids={"b", "d", "f"}, readable_tags={"folder"}), monkeypatch)
+        for uid in ["a", "b", "c", "d", "e", "f"]:
+            await service.metadata_store.save_metadata(_doc(uid, tag_ids=["folder"]))
+            await service.metadata_store.add_label(uid, "shared")
+        await service.metadata_store.add_label("a", "secret")
+
+        first, total = await service.get_documents_with_label_page(_user(), "shared", offset=0, limit=2)
+        second, second_total = await service.get_documents_with_label_page(_user(), "shared", offset=2, limit=2)
+        last, last_total = await service.get_documents_with_label_page(_user(), "shared", offset=3, limit=2)
+
+        assert [doc.document_uid for doc in first] == ["b", "d"]
+        assert [doc.document_uid for doc in second] == ["f"]
+        assert last == []
+        assert total == second_total == last_total == 3
+        assert await service.get_document_uids_with_any_label(_user(), ["shared", "secret"]) == {"b", "d", "f"}
+        assert await service.list_document_labels(_user()) == ["shared"]
+    finally:
+        await engine.dispose()

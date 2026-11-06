@@ -7,6 +7,9 @@
     "^x-": {}
   },
   "properties": {
+    "global": {
+      "type": "object"
+    },
     "image": {
       "type": "object",
       "properties": {

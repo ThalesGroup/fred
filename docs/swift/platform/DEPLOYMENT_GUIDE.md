@@ -7,6 +7,9 @@ It is intended for:
 - **DevOps / Platform engineers** in charge of provisioning infrastructure (Kubernetes, databases, OpenSearch, object storage, etc.).
 - **Technical leads / architects** who need to understand the main moving parts and dependencies.
 
+For a site-owned Docker Compose deployment, prepare the
+[rollback runbook](../ops/DOCKER_COMPOSE_ROLLBACK.md) before upgrading Fred.
+
 For day-to-day **developer onboarding**, refer to the main [`README.md`](../README.md).
 
 > [!IMPORTANT]

@@ -60,7 +60,7 @@ from fred_core import (
     TeamPermission,
 )
 from fred_core.common import TeamId
-from fred_core.teams.metadata_store import TeamMetadata
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER, TeamMetadata
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -148,11 +148,13 @@ class _FakeMetadataStore:
     async def get_by_name(self, name, session=None):
         return next((t for t in self.teams.values() if t.name == name), None)
 
-    async def create(self, team_id, name, session=None) -> TeamMetadata:
+    async def create(self, team_id, name, description, session=None) -> TeamMetadata:
         if self._create_raises is not None:
             raise self._create_raises
         self.created.append((str(team_id), name))
-        metadata = TeamMetadata(id=TeamId(str(team_id)), name=name)
+        metadata = TeamMetadata(
+            id=TeamId(str(team_id)), name=name, description=description
+        )
         self.teams[str(team_id)] = metadata
         return metadata
 
@@ -280,7 +282,11 @@ async def test_create_team_translates_db_integrity_error_to_already_exists() -> 
     with pytest.raises(TeamAlreadyExistsError):
         await create_team(
             _user(),
-            CreateTeamRequest(name="swiftpost", initial_team_admin_ids=["alice"]),
+            CreateTeamRequest(
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
+                name="swiftpost",
+                initial_team_admin_ids=["alice"],
+            ),
             _deps(rebac, store),
         )
 
@@ -301,7 +307,11 @@ async def test_create_team_rolls_back_metadata_when_structural_write_fails() -> 
     with pytest.raises(RuntimeError, match="openfga unavailable"):
         await create_team(
             _user(),
-            CreateTeamRequest(name="swiftpost", initial_team_admin_ids=["alice"]),
+            CreateTeamRequest(
+                description=TEAM_DESCRIPTION_PLACEHOLDER,
+                name="swiftpost",
+                initial_team_admin_ids=["alice"],
+            ),
             _deps(rebac, store),
         )
 
@@ -472,12 +482,14 @@ async def test_update_team_accepts_the_name_the_team_already_has(
     team = await update_team(
         _user(),
         TeamId("t1"),
-        UpdateTeamRequest(name="Northbridge", description="Storage team"),
+        UpdateTeamRequest(
+            name="Northbridge", description="Storage team for shared reports"
+        ),
         _deps(_FakeRebac(), store),
     )
 
     assert team.name == "Northbridge"
-    assert store.teams["t1"].description == "Storage team"
+    assert store.teams["t1"].description == "Storage team for shared reports"
 
 
 @pytest.mark.asyncio
@@ -519,7 +531,7 @@ async def test_update_team_does_not_mask_an_integrity_error_without_a_rename(
         await update_team(
             _user(),
             TeamId("t1"),
-            UpdateTeamRequest(description="Storage team"),
+            UpdateTeamRequest(description="Storage team for shared reports"),
             _deps(_FakeRebac(), store),
         )
 
@@ -538,7 +550,11 @@ def test_create_and_rename_agree_on_trimming() -> None:
     deep: a team created as `"Ops "` and a rename to `"Ops"` would each pass
     the pre-check and the unique index, leaving two teams a reader cannot tell
     apart."""
-    created = CreateTeamRequest(name="  Ops  ", initial_team_admin_ids=["alice"])
+    created = CreateTeamRequest(
+        description=TEAM_DESCRIPTION_PLACEHOLDER,
+        name="  Ops  ",
+        initial_team_admin_ids=["alice"],
+    )
     renamed = UpdateTeamRequest(name="  Ops  ")
 
     assert created.name == "Ops"
@@ -552,9 +568,14 @@ def test_create_and_rename_agree_on_trimming() -> None:
 
 @pytest.mark.parametrize("value", [None, "", "   "])
 def test_update_team_request_keeps_clearing_other_fields(value: str | None) -> None:
-    """Guard against the name rule leaking onto its neighbours: `description`
-    still accepts `null` (clear it) and any string."""
-    assert UpdateTeamRequest.model_validate({"description": value}).description == value
+    """Guard against the name rule leaking onto its neighbours: the retention
+    fields still accept `null` (re-inherit the platform cap)."""
+    assert UpdateTeamRequest.model_validate({"max_idle": None}).max_idle is None
+    assert "description" not in UpdateTeamRequest.model_validate(
+        {"max_idle": None}
+    ).model_dump(exclude_unset=True)
+    with pytest.raises(ValidationError):
+        UpdateTeamRequest.model_validate({"description": value})
 
 
 # --------------------------- can_rescue_team_admin ---------------------------
@@ -854,7 +875,11 @@ async def test_team_manager_creates_a_team_with_no_further_gate(
 
     team = await create_team(
         _team_manager(),
-        CreateTeamRequest(name="Northbridge", initial_team_admin_ids=["alice"]),
+        CreateTeamRequest(
+            description=TEAM_DESCRIPTION_PLACEHOLDER,
+            name="Northbridge",
+            initial_team_admin_ids=["alice"],
+        ),
         _deps(
             rebac,
             store,

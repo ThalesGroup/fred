@@ -74,9 +74,22 @@ an environment variable of the name the configuration gives the M2M secret is pr
 
 The `agent-pod` chart SHALL expose the pod's HTTP port through a Service, expose its metrics
 port when the configuration enables Prometheus metrics, and optionally route the pod's base
-URL through an Ingress. After install, it SHALL print the `runtime_catalog_sources` entry that
-registers the pod in Fred, filled in with this release's runtime id, service address and
-ingress prefix.
+URL through an Ingress or a Gateway API HTTPRoute. An enabled HTTPRoute SHALL match the pod's
+base URL and forward to this release's Service. The route SHALL be absent by default and
+allow the operator to select the Gateway, hostname and request timeout. After install, the
+chart SHALL print the `runtime_catalog_sources` entry that registers the pod in Fred, filled
+in with this release's runtime id, service address and ingress prefix.
+
+#### Scenario: Gateway route is disabled by default
+
+- **WHEN** an operator renders the agent-pod chart without enabling an HTTPRoute
+- **THEN** no HTTPRoute is rendered
+
+#### Scenario: Gateway route exposes the pod
+
+- **WHEN** an operator enables HTTPRoute with a Gateway parent, hostname and request timeout
+- **THEN** the chart renders a route for `configuration.app.base_url` to this release's
+  Service and port, attached to the selected Gateway with the selected hostname and timeout
 
 #### Scenario: Install notes give the registration
 

@@ -155,6 +155,9 @@ def test_requested_skills_precede_task_tools_without_replacing_native_loading(
     shipped: PlatformPromptFile,
 ) -> None:
     flat = " ".join(shipped.platform_instructions.split())
+    assert "MUST check the catalog" in flat
+    assert "even without a skill name or slash command" in flat
+    assert "Do not reread that SKILL.md" in flat
 
     assert (
         "Use only the skills advertised in the current configured skill catalog" in flat

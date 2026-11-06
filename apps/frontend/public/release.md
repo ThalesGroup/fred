@@ -1,3 +1,128 @@
+**v3.10.0** - 2026-11-04
+
+- **Summary**
+
+  Create presentations from your instructions using a corporate template. Keep working while agents answer, send follow-up instructions during a response, and bring email files into your libraries. Personal settings are saved across visits, and new conversations receive clear titles automatically.
+
+- **Features**
+
+  - Build presentations from instructions with your own template or a shared platform template, preview them and download the result (#2679)
+  - Queue follow-up messages or send instructions to an agent while it is answering (#3284)
+  - Upload Outlook and email files to libraries or attach them to conversations (#3306)
+  - Keep your language, theme and display preferences across visits (#3282)
+  - Give new conversations a short automatic title, with an administrator-selected model (#3346)
+  - Discover available chat models from compatible gateways and manage their defaults (#3230)
+  - Use packaged skills for guided tasks, with platform-wide enablement controls (#3299)
+
+- **Improvements**
+
+  - Read speaker notes and chart values from PowerPoint attachments (#3318)
+  - Preview diagrams using your current theme (#3252)
+  - Find suggested team agents on the home page before your first conversation (#3340)
+  - Run grouped administration self-tests with broader platform coverage (#3210)
+
+- **Security**
+
+  - Require team membership before listing a team's conversations (#3209)
+  - Isolate document previews from the rest of the application (#3200)
+
+- **Bug Fixes**
+
+  - Keep approval answers after retryable errors and clearly distinguish pending, answered and expired requests (#2337)
+  - Answers keep running during in-app navigation, with completion and input requests announced on every page (#2603, #3427, #3428)
+  - Find documents in their current folders and honor disabled search visibility on supported stores (#3199, #3202, #3203)
+  - Read structured table results reliably and show their query details (#3325, #3365)
+  - Show a single card for each document or result in a message (#3353)
+  - Reject invalid Word uploads clearly and use your name as the author of exported documents (#3338, #3421)
+
+- **Deployment note**
+
+  Apply database migrations and follow the coordinated service rollout in the operator guide. Review skill defaults and custom email processor lists; pgvector deployments must reapply previously disabled search visibility. Model discovery is optional.
+
+**v3.9.2** - 2026-10-23
+
+- **Summary**
+
+  This security update fixes vulnerabilities in PDF reading, network communication and the display of formatted content.
+
+- **Security**
+
+  - PDF reading is updated to fix vulnerabilities (#3268)
+  - Network communication components are updated to fix a critical vulnerability (#3268)
+  - Formatted content and diagrams are cleaned with an updated library before they are displayed (#3269)
+
+- **Deployment note**
+
+  No configuration or data change: deploy normally, no additional action is needed.
+
+**v3.9.1** - 2026-10-23
+
+- **Summary**
+
+  This security update fixes critical vulnerabilities in image handling. The chat trace is easier to read, with clear, translated labels for tool actions and agent questions.
+
+- **Improvements**
+
+  - Tool actions in the chat trace have clear, translated labels (#3261)
+  - The empty chat screen no longer shows a background gradient around the message box (#3250)
+
+- **Security**
+
+  - Image handling is updated to fix critical vulnerabilities (#3243)
+
+- **Bug Fixes**
+
+  - Agent questions to the user appear in your language in the chat trace (#3257)
+
+- **Deployment note**
+
+  No configuration or data change: deploy normally, no additional action is needed.
+
+**v3.9.0** - 2026-10-22
+
+- **Summary**
+
+  Administrators can delegate Platform Access management, and hosted applications can exchange files with their services. Chat and administration screens behave more reliably while commands or Free links are in use and after future updates.
+
+- **Features**
+
+  - Delegate Platform Access management without granting full platform administrator rights (#3235)
+  - Upload and download files in compatible hosted applications (#3195)
+
+- **Bug Fixes**
+
+  - Chat tabs opened after this release recover if a later update makes part of the page unavailable (#3193)
+  - The slash-command menu stays open while typing a command (#3221)
+  - Free link history stays visible and joiner activity can be refreshed on demand (#3227)
+
+- **Deployment note**
+
+  If your authorization model is pinned, publish and pin the new model before deploying. Move existing application or Knowledge Base registrations to the new chart values, and review log rules for exception messages. See the operator guide for details.
+
+**v3.8.0** - 2026-10-20
+
+- **Summary**
+
+  Platform administrators can create and edit teams from the administration page, and every team now has a description. Agents find documents and spreadsheets more reliably in large libraries. Agent pod installations can use a Gateway API route supplied by their Helm chart.
+
+- **Features**
+
+  - Create and edit teams, descriptions, and team administrators from platform administration (#3067, #3145)
+
+- **Improvements**
+
+  - Install agent and Knowledge Base pods through a parent Helm chart (#3182)
+  - Configure an agent pod's Gateway API route through its Helm chart (#3187)
+
+- **Bug Fixes**
+
+  - Agents find and read documents and spreadsheets reliably in large libraries, with recovery from incorrect document references (#2845)
+  - Complete the initial platform access import without a request error (#3176)
+
+- **Deployment note**
+
+  Apply the control-plane database migration before upgrading services. Deployments with a pinned authorization model must publish the updated model first. Gateway route activation is optional; existing documents need no re-ingestion.
+
 **v3.7.1** - 2026-10-19
 
 - **Summary**

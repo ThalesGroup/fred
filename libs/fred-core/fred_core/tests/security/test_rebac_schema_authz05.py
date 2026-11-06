@@ -222,14 +222,52 @@ def test_no_legacy_organization_role_relations_survive() -> None:
 
 def test_destructive_team_registry_capabilities_stay_platform_admin_only() -> None:
     """AUTHZ-05 review item 9 (RFC Part 6 §32): the registry capabilities
-    govern the *existence* of teams, never a team's data. Deleting a team and
-    rescuing its admin are deliberately excluded from `team_manager` and must
+    govern the *existence* of teams, never a team's data. Deleting a team,
+    rescuing its admin and editing its registry entry (name, description,
+    admins) are deliberately excluded from `team_manager` and must
     stay `platform_admin`-only; none of them may ever be redefined to also
     accept a team relation, which would let a platform role reach team data
     through the registry surface - the exact escalation this RFC closes."""
     organization = _type_definition("organization")
 
-    for capability in ("can_delete_team", "can_rescue_team_admin"):
+    for capability in (
+        "can_delete_team",
+        "can_rescue_team_admin",
+        "can_edit_team_registry",
+    ):
         assert organization["relations"][capability] == {
             "computedUserset": {"relation": "platform_admin"}
         }, f"{capability} must be platform_admin-only."
+
+
+def test_delegated_platform_access_is_isolated() -> None:
+    organization = _type_definition("organization")
+    relations = organization["relations"]
+
+    assert relations["platform_access_manager"] == {
+        "union": {
+            "child": [{"this": {}}, {"computedUserset": {"relation": "platform_admin"}}]
+        }
+    }
+    assert relations["can_manage_platform_access"] == {
+        "computedUserset": {"relation": "platform_access_manager"}
+    }
+    assert {
+        child["computedUserset"]["relation"]
+        for child in relations["can_list_all_teams"]["union"]["child"]
+    } == {
+        "platform_admin",
+        "team_manager",
+        "feature_manager",
+        "platform_access_manager",
+    }
+    assert relations["can_manage_platform"] == {
+        "computedUserset": {"relation": "platform_admin"}
+    }
+    for name, expression in relations.items():
+        if name not in {
+            "platform_access_manager",
+            "can_manage_platform_access",
+            "can_list_all_teams",
+        }:
+            assert "platform_access_manager" not in json.dumps(expression), name

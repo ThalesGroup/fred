@@ -19,7 +19,6 @@
   flex-direction: column;
   gap: var(--spacing-m);
   margin: 0 auto;
-  padding: var(--spacing-l) var(--spacing-xl);
   width: 100%;
   max-width: 1080px;
   /* Gives DataTable's 100% height something definite to resolve against

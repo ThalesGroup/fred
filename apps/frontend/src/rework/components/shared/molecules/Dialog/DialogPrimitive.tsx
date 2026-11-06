@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import Button, { type ButtonProps } from "../../atoms/Button/Button";
 import { type ColorTheme } from "../../utils/Type";
 import { isTopmostModal, Portal, uiPortalRoot } from "../../utils/Portal";
+import { lastInputWasKeyboard } from "../../utils/useFocusHandoff";
 import styles from "./Dialog.module.css";
 
 const NON_TEXT_INPUT_TYPES = new Set([
@@ -84,6 +85,9 @@ export interface DialogProps {
   /** Optional content on the left of the action bar, facing the buttons (e.g. a short hint or a
    *  secondary removal); a control there never takes the opening focus. */
   footerStart?: ReactNode;
+  /** `false` ignores Escape and scrim clicks, for a form that is costly to lose by accident;
+   *  Cancel stays the way out. */
+  dismissible?: boolean;
 }
 
 export function DialogPrimitive({
@@ -112,6 +116,7 @@ export function DialogPrimitive({
   compactTitle = false,
   dense = false,
   footerStart,
+  dismissible = true,
 }: DialogProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -120,8 +125,8 @@ export function DialogPrimitive({
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [bodyScrolls, setBodyScrolls] = useState(false);
-  const callbacks = useRef({ onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm });
-  callbacks.current = { onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm };
+  const callbacks = useRef({ onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm, dismissible });
+  callbacks.current = { onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm, dismissible };
   const focusDialogFirst = useRef(initialFocus === "dialog");
   focusDialogFirst.current = initialFocus === "dialog";
   const attachDialog = useCallback((node: HTMLDivElement | null) => {
@@ -139,6 +144,8 @@ export function DialogPrimitive({
   useLayoutEffect(() => {
     if (!open) return;
     openingFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // A dialog opened by a click gives focus back without a keyboard ring.
+    const ringOnReturn = lastInputWasKeyboard();
     const originRoot = uiPortalRoot(originRef.current);
     if (portalContainer && originRoot !== document.body && !originRoot.contains(portalContainer)) {
       throw new Error("Dialog portalContainer must be inside its originating .fred-ui root");
@@ -148,7 +155,7 @@ export function DialogPrimitive({
       const target = openingFocus.current;
       openingFocus.current = null;
       setPortalRoot(null);
-      if (target?.isConnected) target.focus();
+      if (target?.isConnected) target.focus({ focusVisible: ringOnReturn } as FocusOptions);
     };
   }, [open, portalContainer]);
 
@@ -159,7 +166,7 @@ export function DialogPrimitive({
       // A dialog opened over this one (e.g. a confirmation) owns the keyboard.
       if (!dialog || !isTopmostModal(dialog)) return;
       if (event.key === "Escape") {
-        if (event.defaultPrevented) return;
+        if (event.defaultPrevented || !callbacks.current.dismissible) return;
         event.preventDefault();
         callbacks.current.onCancel();
         return;
@@ -233,7 +240,7 @@ export function DialogPrimitive({
             inert={inactive}
             aria-hidden={inactive || undefined}
             onClick={(event) => {
-              if (event.target === event.currentTarget) onCancel();
+              if (dismissible && event.target === event.currentTarget) onCancel();
             }}
           >
             <div

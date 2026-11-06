@@ -241,40 +241,36 @@ def test_the_canary_probe_can_actually_see_a_leak() -> None:
     assert "rendered" in sink.sightings(marker)
 
 
-@pytest.mark.parametrize("message", ["body grant", "redirect", "malformed request"])
-def test_delegation_request_log_confinement_precedes_parsing(
-    monkeypatch, message: str
-) -> None:
-    monkeypatch.setattr(log_setup_module, "_delegation_in_use", lambda: True)
+def test_server_url_redaction_keeps_the_diagnostic() -> None:
     record = logging.LogRecord(
-        name="uvicorn.access",
-        level=logging.INFO,
-        pathname="",
-        lineno=0,
-        msg=f"{message} synthetic-identifier",
-        args=("synthetic-client", "POST", "/synthetic-path", "1.1", 403),
-        exc_info=None,
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "failure at /join/synthetic-invitation?token=synthetic-token&ordinary=visible",
+        (),
+        None,
     )
     log_setup_module.UvicornSensitiveQueryFilter().filter(record)
-    rendered = logging.Formatter().format(record)
-    assert rendered == "access event=request outcome=responded method=POST status=403"
-    assert record.exc_info is None
+    assert (
+        record.getMessage()
+        == "failure at /join/<redacted>?token=<redacted>&ordinary=visible"
+    )
 
 
-def test_delegation_server_failure_keeps_a_bounded_failed_outcome(monkeypatch) -> None:
-    monkeypatch.setattr(log_setup_module, "_delegation_in_use", lambda: True)
+def test_mcp_grant_query_redaction_keeps_parameter_names() -> None:
     record = logging.LogRecord(
-        name="uvicorn.error",
-        level=logging.ERROR,
-        pathname="",
-        lineno=0,
-        msg="failure at synthetic-path",
-        args=(),
-        exc_info=None,
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "failure at /mcp?person=private-person&run=private-run&agent=private-agent&ordinary=visible",
+        (),
+        None,
     )
     log_setup_module.UvicornSensitiveQueryFilter().filter(record)
-    assert logging.Formatter().format(record) == (
-        "server event=uvicorn outcome=failed reason=server_error"
+    assert record.getMessage() == (
+        "failure at /mcp?person=<redacted>&run=<redacted>&agent=<redacted>&ordinary=visible"
     )
 
 

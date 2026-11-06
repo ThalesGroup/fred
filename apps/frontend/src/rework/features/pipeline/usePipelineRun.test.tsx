@@ -39,6 +39,8 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     [
       "useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation",
       "useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation",
+      "useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery",
+      "useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery",
       "usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation",
       "usePrepareAgentExecutionMutation",
       "usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation",
@@ -119,6 +121,28 @@ describe("diagnostic enrollment", () => {
       expect(created).toBe("created");
       expect(h.instances).not.toHaveBeenCalled();
       expect(h.remove).not.toHaveBeenCalled();
+    } finally {
+      act(() => view.root.unmount());
+    }
+  });
+
+  it("gives every enrollment its own name, so a leftover never blocks the next run", async () => {
+    h.templates.mockReturnValue({
+      unwrap: async () => [{ source_agent_id: "source", template_id: "template", status: "available" }],
+    });
+    h.enroll.mockReturnValue({ unwrap: async () => ({ agent_instance_id: "created" }) });
+    const view = mount(async (deps, _report, signal) => {
+      await deps.provisionAgentInstance("source", {}, signal);
+      await deps.provisionAgentInstance("source", {}, signal);
+    });
+    try {
+      await act(async () => {
+        view.start();
+      });
+      const names = h.enroll.mock.calls.map(([arg]) => arg.createAgentInstanceRequest.display_name as string);
+      expect(names).toHaveLength(2);
+      expect(names.every((n) => n.startsWith("Self-test (auto) "))).toBe(true);
+      expect(new Set(names).size).toBe(2);
     } finally {
       act(() => view.root.unmount());
     }

@@ -101,6 +101,11 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v5
 
+      - name: Read frontend Node version
+        if: matrix.name == 'frontend'
+        id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
       # PRs and release tags export an image tar for scanning. Release tags
       # also push, so their builder must support multiple outputs.
       - name: Set up Docker Buildx
@@ -136,7 +141,9 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          build-args: ${{ matrix.build_args }}
+          build-args: |
+            ${{ matrix.build_args }}
+            ${{ matrix.name == 'frontend' && format('NODE_VERSION={0}', steps.node.outputs.version) || '' }}
           push: ${{ inputs.publish }}
           outputs: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') && 'type=docker,dest=/tmp/tag-image.tar' || (github.event_name == 'pull_request' && !inputs.publish && matrix.scan && 'type=docker,dest=/tmp/pr-image.tar' || '') }}
           # A Docker tar output disables the action's default provenance.
@@ -153,11 +160,15 @@ jobs:
           cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.name) || '' }}
 
       # Trivy's vuln scanner matches make sbom CVES=true for the pushed tag.
+      - name: Install Trivy for release SBOM
+        if: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') }}
+        uses: ./.github/actions/setup-trivy
+
       - name: Generate CycloneDX with CVEs for published image
         if: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          version: v0.75.0
+          skip-setup-trivy: true
           input: /tmp/tag-image.tar
           scanners: vuln
           vuln-type: os,library
@@ -183,6 +194,8 @@ jobs:
       - name: Set up uv for PDF corpus generation
         if: ${{ github.event_name == 'pull_request' && !inputs.publish && startsWith(matrix.name, 'knowledge-flow-backend') }}
         uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
 
       - name: Verify PDF image inventory and real processors
         timeout-minutes: 15
@@ -241,10 +254,13 @@ jobs:
           name: scan-image-${{ matrix.name }}
           path: /tmp
 
+      - name: Install Trivy
+        uses: ./.github/actions/setup-trivy
+
       - name: Scan built image for CVEs
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          version: v0.75.0
+          skip-setup-trivy: true
           input: /tmp/pr-image.tar
           scanners: vuln
           vuln-type: os,library
@@ -252,29 +268,29 @@ jobs:
           list-all-pkgs: true
           format: json
           output: trivy-results.json
-          exit-code: '0'
-
-      - name: Record image licenses and SBOM
-        if: ${{ startsWith(matrix.name, 'knowledge-flow-backend') }}
-        run: |
-          trivy image --input /tmp/pr-image.tar --scanners license --license-full --format json --output image-licenses.json
-          trivy image --input /tmp/pr-image.tar --format cyclonedx --output image-sbom.cdx.json
-
-      - name: Retain image license evidence
-        if: ${{ startsWith(matrix.name, 'knowledge-flow-backend') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: licenses-${{ matrix.name }}
-          path: |
-            image-licenses.json
-            image-sbom.cdx.json
-          retention-days: 14
+          exit-code: "0"
 
       - name: Upload Trivy report
         uses: actions/upload-artifact@v4
         with:
           name: trivy-${{ matrix.name }}
           path: trivy-results.json
+          retention-days: 14
+
+      - name: Record image licenses and SBOM
+        if: ${{ matrix.name == 'fred-agents' || startsWith(matrix.name, 'knowledge-flow-backend') }}
+        run: |
+          trivy image --input /tmp/pr-image.tar --scanners license --license-full --format json --output image-licenses.json
+          trivy image --input /tmp/pr-image.tar --format cyclonedx --timeout 15m --output image-sbom.cdx.json
+
+      - name: Retain image license evidence
+        if: ${{ matrix.name == 'fred-agents' || startsWith(matrix.name, 'knowledge-flow-backend') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: licenses-${{ matrix.name }}
+          path: |
+            image-licenses.json
+            image-sbom.cdx.json
           retention-days: 14
 
       - name: Report scan findings
@@ -321,10 +337,13 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v5
 
+      - name: Install Trivy
+        uses: ./.github/actions/setup-trivy
+
       - name: Scan frontend dependencies
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          version: v0.75.0
+          skip-setup-trivy: true
           scan-type: fs
           scan-ref: apps/frontend
           trivy-config: .github/trivy-frontend.yaml
@@ -334,7 +353,7 @@ jobs:
           list-all-pkgs: true
           format: json
           output: trivy-frontend-dependencies.json
-          exit-code: '0'
+          exit-code: "0"
 
       - name: Upload frontend dependency report
         uses: actions/upload-artifact@v4

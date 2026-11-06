@@ -187,6 +187,7 @@ export default function PlatformRolesPage() {
 
   const relationOptions: PlatformRoleRelation[] = [
     "team_manager",
+    "platform_access_manager",
     "feature_manager",
     "prompt_editor",
     "platform_observer",

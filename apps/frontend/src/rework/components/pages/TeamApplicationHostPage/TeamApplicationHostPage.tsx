@@ -22,11 +22,13 @@ import {
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import { ApplicationErrorBoundary } from "@rework/features/applications/ApplicationErrorBoundary.tsx";
 import {
   ACCEPTED_APP_PROTOCOL_VERSIONS,
   applicationFrameTarget,
+  BINARY_BODIES_CAPABILITY,
   FRED_APP_PROTOCOL_VERSION,
   parseApplicationFrameMessage,
   type ApplicationHostMessage,
@@ -53,12 +55,13 @@ export const MAX_IN_FLIGHT_APPLICATION_REQUESTS = 16;
 
 function ApplicationHostState({ state }: { state: HostState }) {
   const { t } = useTranslation();
+  const { siteDisplayName } = useFrontendProperties();
   const loading = state === "catalog-loading" || state === "connecting";
   return (
     <div className={styles.state} role={loading ? "status" : "alert"}>
       <PageEmptyState
         icon={loading ? "sync" : "widgets"}
-        message={t(`teamAppsPage.host.${state}`, { defaultValue: t("teamAppsPage.host.unavailable") })}
+        message={t(`teamAppsPage.host.${state}`, { siteDisplayName, defaultValue: t("teamAppsPage.host.unavailable") })}
       />
     </div>
   );
@@ -196,6 +199,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
           locale: currentLocale,
           theme: currentTheme,
         },
+        capabilities: [BINARY_BODIES_CAPABILITY],
       } satisfies ApplicationHostMessage,
       targetOrigin,
     );
@@ -213,10 +217,17 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
       frame.contentWindow?.postMessage(message, targetOrigin);
     };
 
-    const proxyRequest = async (requestId: string, path: string, init: RequestInit, signal: AbortSignal) => {
+    const proxyRequest = async (
+      requestId: string,
+      path: string,
+      init: RequestInit,
+      asBlob: boolean,
+      signal: AbortSignal,
+    ) => {
       try {
         const response = await request(path, { ...init, signal });
-        const body = await response.text();
+        // Only a frame that asked for a Blob gets one: an older SDK parses text bodies only.
+        const body = asBlob ? await response.blob() : await response.text();
         if (disposed) return;
         post({
           type: "fred:response",
@@ -295,6 +306,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
         message.requestId,
         message.path,
         { method: message.method, headers: message.headers, body: message.body ?? undefined },
+        message.responseType === "blob",
         controller.signal,
       );
     };
@@ -330,7 +342,7 @@ function ApplicationFrame({ application, src, targetOrigin, teamId, teamName, su
 
   const connected = status === "connecting" || status === "ready";
   return (
-    <div className={styles.host}>
+    <div className={styles.host} data-shell-inset="none">
       {status !== "ready" && <ApplicationHostState state={status === "connecting" ? "connecting" : status} />}
       {connected && (
         <iframe

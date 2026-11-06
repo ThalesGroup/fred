@@ -114,18 +114,23 @@ def wait_until(check: Callable[[], bool], *, description: str, timeout: float) -
         time.sleep(min(1, max(0, deadline - time.monotonic())))
 
 
-def ingest(client: ApiClient, libraries: list[str], marker: str) -> str:
-    filename = f"validation-{uuid4().hex}.md"
+def ingest(
+    client: ApiClient,
+    libraries: list[str],
+    marker: str,
+    *,
+    file: tuple[str, str, str] | None = None,
+) -> str:
+    """Upload and process one document: a marker note, or `file` (name, body, type)."""
+    file = file or (
+        f"validation-{uuid4().hex}.md",
+        f"# Validation observatory\n\nThe validation observatory access code is {marker}.\n",
+        "text/markdown",
+    )
     response = checked(
         client.post(
             "/upload-process-documents",
-            files={
-                "files": (
-                    filename,
-                    f"# Validation observatory\n\nThe validation observatory access code is {marker}.\n",
-                    "text/markdown",
-                )
-            },
+            files={"files": file},
             data={"metadata_json": json.dumps({"tags": libraries, "profile": "fast"})},
             timeout=180,
         )

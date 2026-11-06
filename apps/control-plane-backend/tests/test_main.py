@@ -38,6 +38,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from control_plane_backend.agent_instances.store import (
+    ANY_REASON,
     AgentInstanceRecord,
     AgentInstanceStore,
 )
@@ -96,6 +97,9 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+
+# Offline: saves and sweeps must not call a pod for capability readiness.
+pytestmark = pytest.mark.usefixtures("pods_report_ready")
 
 
 @pytest.fixture(autouse=True)
@@ -266,6 +270,8 @@ class _FakeAgentInstanceStore:
         team_id: TeamId,
         *,
         reason: str | None,
+        detail: str | None = None,
+        expected_reason: Any = ANY_REASON,
     ) -> AgentInstanceRecord | None:
         record = next(
             (
@@ -277,7 +283,9 @@ class _FakeAgentInstanceStore:
         )
         if record is None:
             return None
-        record.suspension_reason = reason
+        if expected_reason is ANY_REASON or record.suspension_reason == expected_reason:
+            record.suspension_reason = reason
+            record.suspension_detail = detail
         return record
 
     async def delete(
@@ -1069,8 +1077,10 @@ async def test_list_teams_returns_personal_when_team_metadata_registry_is_empty(
             "name": "Equipe personnelle",
             "member_count": 1,
             "admins": [],
+            "pending_admin_ids": [],
             "is_member": True,
             "my_relations": ["team_editor"],
+            "description_is_placeholder": False,
             "joining_mode": "invite_only",
             # #2433: a personal space is stated private explicitly — it is
             # never marketplace-listed and unreadable to non-members.
@@ -1155,23 +1165,31 @@ async def test_applications_feature_flag_keeps_contract_mounted_but_fails_closed
 
 
 @pytest.mark.asyncio
-async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from_rebac(
+@pytest.mark.parametrize(
+    ("held_permission", "expected_role"),
+    [
+        (
+            OrganizationPermission.CAN_MANAGE_PLATFORM,
+            PlatformRoleRelation.PLATFORM_ADMIN,
+        ),
+        (
+            OrganizationPermission.IS_PLATFORM_ACCESS_MANAGER,
+            PlatformRoleRelation.PLATFORM_ACCESS_MANAGER,
+        ),
+    ],
+)
+async def test_frontend_bootstrap_permission_summary_derives_roles_from_rebac(
     monkeypatch: pytest.MonkeyPatch,
+    held_permission: OrganizationPermission,
+    expected_role: PlatformRoleRelation,
 ) -> None:
-    """AUTHZ-05 review item 4: the admin role must come from the OpenFGA
-    `platform_admin` relation (via `CAN_MANAGE_PLATFORM`), not from the
-    caller's Keycloak roles. A user with no Keycloak `admin` role but an
-    OpenFGA `platform_admin` relation must still see `platform_admin` in
-    `platform_roles`, and each other role is driven by its own independent
-    check — a fake that answers only `CAN_MANAGE_PLATFORM` yields exactly one
-    role, never the schema union the real engine would resolve.
-    """
+    """The bootstrap reports the independently checked OpenFGA role."""
 
     class _FakePlatformAdminRebac:
         async def has_user_permission(
             self, _user, permission, _resource_id, *, consistency_token=None
         ) -> bool:
-            return permission == OrganizationPermission.CAN_MANAGE_PLATFORM
+            return permission == held_permission
 
         # AUTHZ-05 review item 9: `_list_teams` (called from bootstrap's team
         # listing) now also touches these collaborators.
@@ -1210,7 +1228,7 @@ async def test_frontend_bootstrap_permission_summary_derives_platform_admin_from
 
     assert resp.status_code == 200
     permissions = resp.json()["permissions"]
-    assert permissions["platform_roles"] == [PlatformRoleRelation.PLATFORM_ADMIN.value]
+    assert permissions["platform_roles"] == [expected_role.value]
 
 
 @pytest.mark.asyncio
@@ -1658,7 +1676,9 @@ async def test_get_personal_team_returns_shared_system_team_contract() -> None:
         "name": "Equipe personnelle",
         "member_count": 1,
         "admins": [],
+        "pending_admin_ids": [],
         "is_member": True,
+        "description_is_placeholder": False,
         "joining_mode": "invite_only",
         # #2433: a personal space is stated private explicitly.
         "visibility": "private",
@@ -2868,6 +2888,7 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
                     description VARCHAR(500),
                     enabled BOOLEAN NOT NULL,
                     suspension_reason VARCHAR(64),
+                    suspension_detail TEXT,
                     created_by VARCHAR,
                     updated_by VARCHAR,
                     tuning_json TEXT,
@@ -3469,11 +3490,17 @@ def _build_erasure_deps(
         get_temporal_client=_no_temporal,
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_model_discovery_state_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_pod_chat_default_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_creation_assistant_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_ui_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_platform_skill_policy_store=lambda: SimpleNamespace(  # type: ignore[arg-type,return-value]
+            list_disabled_skill_names=AsyncMock(return_value=set())
+        ),
         get_announcement_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_model_display_name_override_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
         get_team_metadata_store=lambda: team_metadata_store,  # type: ignore[arg-type,return-value]
         get_session_attachment_store=lambda: attachment_store,  # type: ignore[arg-type,return-value]
@@ -5916,7 +5943,7 @@ async def test_update_team_checks_can_update_info_permission(
         resp = await client.patch(
             "/control-plane/v1/teams/thales",
             json={
-                "description": "Updated description",
+                "description": "Updated description for the team",
                 "joining_mode": "open",
                 "avatar_image_url": "https://example.test/banner.webp",
             },
@@ -5931,7 +5958,7 @@ async def test_update_team_checks_can_update_info_permission(
         (
             "thales",
             {
-                "description": "Updated description",
+                "description": "Updated description for the team",
                 "joining_mode": "open",
                 "banner_image_url": "https://example.test/banner.webp",
             },
@@ -6142,7 +6169,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
             return "https://example.test/banner.png"
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
-        return {}, {}, {}
+        return {}, {}, {}, {}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {}
@@ -6219,7 +6246,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
 
     async def _fake_bulk_team_membership(*_args, **_kwargs):
         members = {"user-1", "marc"}
-        return {"team-1": members}, {"team-1": members}, {"team-1": set()}
+        return {"team-1": members}, {"team-1": members}, {"team-1": set()}, {}
 
     async def _fake_get_users_by_ids(*_args, **_kwargs):
         return {
@@ -7186,6 +7213,7 @@ def _fake_pod_validate_config_echo(monkeypatch: pytest.MonkeyPatch) -> None:
         agent_instance_id,
         authorization,
         asset_files=(),
+        routing_params=None,
     ) -> dict[str, Any]:
         # `asset_files` (#1903) accepted for signature parity with the
         # production call in `_apply_capability_selection`; these MCP-config

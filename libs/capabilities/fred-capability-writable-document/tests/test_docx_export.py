@@ -49,6 +49,12 @@ def test_docx_is_valid_zip_with_title():
     assert ("Heading 1", "Hello") in paras
 
 
+def test_docx_without_author_has_no_library_author_metadata():
+    doc = Document(io.BytesIO(markdown_to_docx_bytes("Body")))
+    assert doc.core_properties.author == ""
+    assert doc.core_properties.last_modified_by == ""
+
+
 def test_docx_maps_common_markdown_constructs():
     md = (
         "# H1\n\n"

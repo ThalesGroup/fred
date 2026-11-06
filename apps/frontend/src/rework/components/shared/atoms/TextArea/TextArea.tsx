@@ -17,12 +17,31 @@ import styles from "./TextArea.module.scss";
 
 export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
   label: string;
+  /** What the field is for, shown between the label and the field. Use it for a
+   *  sentence or more: `explanation` is a one-line hint and gets cut off. */
+  description?: string;
   explanation?: string;
   error?: string;
 }
 
-export default function TextArea({ label, explanation, error, maxLength, value, required, ...props }: TextAreaProps) {
+export default function TextArea({
+  label,
+  description,
+  explanation,
+  error,
+  maxLength,
+  value,
+  required,
+  "aria-describedby": callerDescribedBy,
+  "aria-invalid": callerInvalid,
+  ...props
+}: TextAreaProps) {
   const id = useId();
+  const descriptionId = useId();
+  const hintId = useId();
+  const hint = error || explanation;
+  const describedBy =
+    [callerDescribedBy, description && descriptionId, hint && hintId].filter(Boolean).join(" ") || undefined;
   const characterCounter = String(value).length;
   // No hint/error/counter to show — drop the container entirely rather than
   // leaving an empty row under the field.
@@ -36,11 +55,27 @@ export default function TextArea({ label, explanation, error, maxLength, value, 
         {required ? `${label} *` : label}
       </label>
 
-      <textarea id={id} value={value} maxLength={maxLength} required={required} {...props} />
+      {description && (
+        <span id={descriptionId} className={styles.description}>
+          {description}
+        </span>
+      )}
+
+      <textarea
+        id={id}
+        value={value}
+        maxLength={maxLength}
+        required={required}
+        aria-describedby={describedBy}
+        aria-invalid={error ? true : callerInvalid}
+        {...props}
+      />
 
       {hasInformation && (
         <span className={styles.information}>
-          <span className={styles.hint}>{error || explanation || null}</span>
+          <span className={styles.hint} id={hint ? hintId : undefined}>
+            {hint || null}
+          </span>
           <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
         </span>
       )}

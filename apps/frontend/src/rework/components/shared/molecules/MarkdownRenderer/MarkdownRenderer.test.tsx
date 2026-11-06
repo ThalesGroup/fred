@@ -133,4 +133,16 @@ describe("MarkdownRenderer code routing", () => {
     expect(mindmap?.dataset.language).toBe("mindmap");
     expect(codeBlocks()).toHaveLength(0);
   });
+
+  it("keeps a streaming diagram's source private until its complete fence can render", () => {
+    const source = "sequenceDiagram\nparticipant A as Équipe\nA->>A: Valider";
+    act(() => root.render(<MarkdownRenderer text={`\`\`\`mermaid\n${source}`} streaming />));
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("sequenceDiagram");
+    expect(codeBlocks()).toHaveLength(0);
+    expect(container.querySelector("[data-mermaid-block]")).toBeNull();
+    act(() => root.render(<MarkdownRenderer text={`\`\`\`mermaid\n${source}\n\`\`\``} streaming />));
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.querySelector("[data-mermaid-block]")?.textContent).toBe(source);
+  });
 });

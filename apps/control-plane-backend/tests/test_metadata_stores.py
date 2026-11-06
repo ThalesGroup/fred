@@ -42,6 +42,7 @@ from control_plane_backend.sessions.store import (
 from fred_core.common import TeamId
 from fred_core.models import Base as CoreBase
 from fred_core.teams.metadata_store import (
+    TEAM_DESCRIPTION_PLACEHOLDER,
     JoiningMode,
     TeamMetadataPatch,
     TeamMetadataStore,
@@ -148,12 +149,14 @@ async def test_team_metadata_store_create_list_all_get_by_name_and_delete(
     try:
         store = TeamMetadataStore(engine)
 
-        created = await store.create(TeamId("team-alpha"), "Alpha")
+        created = await store.create(
+            TeamId("team-alpha"), "Alpha", TEAM_DESCRIPTION_PLACEHOLDER
+        )
         assert created.id == "team-alpha"
         assert created.name == "Alpha"
-        assert created.description is None
+        assert created.description == TEAM_DESCRIPTION_PLACEHOLDER
 
-        await store.create(TeamId("team-beta"), "Beta")
+        await store.create(TeamId("team-beta"), "Beta", TEAM_DESCRIPTION_PLACEHOLDER)
 
         all_teams = await store.list_all()
         assert {t.id for t in all_teams} == {"team-alpha", "team-beta"}
@@ -228,11 +231,11 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
 
     try:
         store = TeamMetadataStore(engine)
-        await store.create(TeamId("fredlab"), "Fredlab")
+        await store.create(TeamId("fredlab"), "Fredlab", TEAM_DESCRIPTION_PLACEHOLDER)
         created = await store.upsert(
             TeamId("fredlab"),
             TeamMetadataPatch(
-                description="Operations team",
+                description="Operations team for incident reports",
                 joining_mode=JoiningMode.OPEN,
                 banner_object_storage_key="teams/fredlab/banner-v1.png",
             ),
@@ -244,11 +247,11 @@ async def test_team_metadata_store_upsert_persists_and_updates_records(
         fetched = await store.get_by_team_ids([TeamId("fredlab"), TeamId("missing")])
 
         assert created is not None
-        assert created.description == "Operations team"
+        assert created.description == "Operations team for incident reports"
         assert created.joining_mode == JoiningMode.OPEN
         assert created.banner_object_storage_key == "teams/fredlab/banner-v1.png"
         assert updated is not None
-        assert updated.description == "Operations team"
+        assert updated.description == "Operations team for incident reports"
         assert updated.joining_mode == JoiningMode.OPEN
         assert updated.banner_object_storage_key == "teams/fredlab/banner-v2.png"
         assert fetched == {
@@ -397,7 +400,7 @@ async def test_team_metadata_retention_round_trips(
         # No row yet → retention fields default to None.
         assert await store.get_by_team_id(team) is None
 
-        await store.create(team, "Swiftpost")
+        await store.create(team, "Swiftpost", TEAM_DESCRIPTION_PLACEHOLDER)
 
         created = await store.upsert(
             team,
@@ -429,12 +432,14 @@ async def test_team_metadata_retention_round_trips(
 
         # An edit that does not touch retention preserves the retention fields
         # (omitted fields keep their stored value).
-        after_desc = await store.upsert(team, TeamMetadataPatch(description="hi"))
+        after_desc = await store.upsert(
+            team, TeamMetadataPatch(description="Edited without retention")
+        )
         assert after_desc is not None
         assert after_desc.team_delete_grace == "P1D"
         assert after_desc.max_idle is None
         assert after_desc.retention_updated_by == "bob"
-        assert after_desc.description == "hi"
+        assert after_desc.description == "Edited without retention"
 
         # A fresh read reflects the latest persisted state.
         refetched = await store.get_by_team_id(team)

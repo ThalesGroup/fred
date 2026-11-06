@@ -526,6 +526,39 @@ async def test_a_document_follows_its_source_when_the_source_moves_it(tag_store)
     assert document.tags.tag_ids == [final.id]
 
 
+@pytest.mark.asyncio
+async def test_a_refiled_document_is_searchable_only_from_its_new_folder(tag_store, monkeypatch):
+    from fred_core.documents.document_structures import DocumentMetadata, Identity, Processing, SourceInfo, SourceType, Tagging
+    from langchain_community.embeddings import FakeEmbeddings
+    from langchain_core.documents import Document
+
+    from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, SearchFilter
+    from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
+
+    lib = library(tag_store)
+    vectors = InMemoryLangchainVectorStore(embedding_model=FakeEmbeddings(size=8), embedding_model_name="fake")
+    monkeypatch.setattr(ApplicationContext.get_instance(), "_vector_store_instance", vectors)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    target = await service._resolve_folder(pod(), lib, ["final"])
+    existing = DocumentMetadata(
+        identity=Identity(document_name="spec.md", document_uid="doc-refiled"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag="fred", pull_location=None),
+        processing=Processing(stages={ProcessingStage.VECTORIZED: ProcessingStatus.DONE}),
+        tags=Tagging(tag_ids=[lib.id]),
+    )
+    await _metadata_store().save_metadata(existing)
+    vectors.add_documents([Document(page_content="spec", metadata={CHUNK_ID_FIELD: "doc-refiled::0", "document_uid": "doc-refiled", "tag_ids": [lib.id]})])
+
+    await service._refile(pod(), existing, target)
+
+    def found(tag_id: str) -> bool:
+        return bool(vectors.ann_search("spec", k=5, search_filter=SearchFilter(tag_ids=[tag_id])))
+
+    assert (found(lib.id), found(target)) == (False, True)
+    stored = await _metadata_store().get_metadata_by_uid("doc-refiled")
+    assert stored is not None and stored.tags.tag_ids == [target]
+
+
 # --------------------------------------------------------------------------
 # Removal
 # --------------------------------------------------------------------------

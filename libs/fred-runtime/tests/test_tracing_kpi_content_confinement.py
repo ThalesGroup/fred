@@ -24,8 +24,12 @@ only lengths/names/counts are logged, never message/argument/answer text.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Awaitable, Callable, Sequence
+from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import Mock
 
 import pytest
 from fred_core.security.delegation import DelegationConfig
@@ -35,9 +39,16 @@ from fred_runtime.common.outbound_credentials import (
 )
 from fred_runtime.react.middleware import tracing_kpi as tracing_kpi_module
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
+from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.utils.function_calling import convert_to_openai_tool
+from pydantic import Field
 
 SECRET_QUESTION = (
     "what is my confidential account balance of $1,000,000"  # pragma: allowlist secret
@@ -143,8 +154,6 @@ def test_the_captured_prompt_carries_the_tools_the_model_was_given() -> None:
     the tools payload to actually reach the trace).
     """
 
-    import asyncio
-
     from fred_sdk.contracts.runtime import SpanPort, TracerPort
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel
@@ -189,7 +198,7 @@ def test_the_captured_prompt_carries_the_tools_the_model_was_given() -> None:
             return _Span()
 
     request = ModelRequest(
-        model=cast(BaseChatModel, None),
+        model=_RecordingModel(),
         messages=[HumanMessage(content="combien de voitures ?")],
         system_prompt="be helpful",
         tools=[
@@ -207,8 +216,13 @@ def test_the_captured_prompt_carries_the_tools_the_model_was_given() -> None:
         tracer=cast(Any, _Tracer()), kpi=None, binding=cast(Any, _Binding())
     )
 
-    async def _handler(_: ModelRequest) -> ModelResponse:
-        return ModelResponse(result=[AIMessage(content="8")])
+    async def _handler(req: ModelRequest) -> ModelResponse:
+        messages = list(req.messages)
+        if req.system_message is not None:
+            messages.insert(0, req.system_message)
+        return ModelResponse(
+            result=[await req.model.bind_tools(req.tools).ainvoke(messages)]
+        )
 
     asyncio.run(middleware.awrap_model_call(request, _handler))
 
@@ -224,3 +238,134 @@ def test_the_captured_prompt_carries_the_tools_the_model_was_given() -> None:
     assert attrs["chars_system"] == len("be helpful")
     assert attrs["chars_messages"] == len("combien de voitures ?")
     assert attrs["chars_tools"] > 0
+
+
+class _RecordingModel(BaseChatModel):
+    calls: list[tuple[list[BaseMessage], list[dict[str, Any]]]] = Field(
+        default_factory=list
+    )
+
+    @property
+    def _llm_type(self) -> str:
+        return "final-input-test"
+
+    def bind_tools(
+        self,
+        tools: Sequence[dict[str, Any] | type | Callable[..., Any] | BaseTool],
+        **kwargs: Any,
+    ) -> Runnable[Any, Any]:
+        return self.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: Any = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        self.calls.append((messages, kwargs.get("tools", [])))
+        return ChatResult(
+            generations=[ChatGeneration(message=AIMessage(content="done"))]
+        )
+
+    async def _agenerate(
+        self,
+        messages: list[BaseMessage],
+        stop: Any = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        return self._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("captures_content", [True, False])
+async def test_compiled_trace_captures_final_model_input(
+    captures_content: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from fred_runtime.runtime_support.trace_payloads import serialize_model_request
+
+    model = _RecordingModel()
+    early_tool = StructuredTool.from_function(
+        lambda query: "unused", name="early_tool", description="Initial tool"
+    )
+    final_tool = StructuredTool.from_function(
+        lambda query: "unused", name="final_tool", description="Final tool disclosure"
+    )
+
+    class _LaterMiddleware(AgentMiddleware):
+        async def awrap_model_call(
+            self,
+            request: ModelRequest,
+            handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+        ) -> ModelResponse:
+            return await handler(
+                request.override(
+                    system_message=SystemMessage(content="final skill catalogue"),
+                    messages=[*request.messages, HumanMessage(content="later message")],
+                    tools=[final_tool],
+                )
+            )
+
+    spans: list[Mock] = []
+
+    def start_span(**kwargs: Any) -> Mock:
+        span = Mock()
+        spans.append(span)
+        return span
+
+    tracer = SimpleNamespace(captures_content=captures_content, start_span=start_span)
+    binding = SimpleNamespace(
+        portable_context=SimpleNamespace(agent_id="test", agent_name="test")
+    )
+    telemetry = TracingKpiMiddleware(
+        tracer=cast(Any, tracer), kpi=None, binding=cast(Any, binding)
+    )
+    serialize = Mock(wraps=serialize_model_request)
+    monkeypatch.setattr(tracing_kpi_module, "serialize_model_request", serialize)
+    agent = create_agent(
+        model,
+        tools=[early_tool, final_tool],
+        system_prompt="initial",
+        middleware=[telemetry, _LaterMiddleware()],
+    )
+    caplog.set_level(logging.INFO, logger=tracing_kpi_module.__name__)
+
+    await asyncio.gather(
+        *(
+            agent.ainvoke({"messages": [HumanMessage(content=question)]})
+            for question in (SECRET_QUESTION, "second concurrent question")
+        )
+    )
+
+    assert len(model.calls) == len(spans) == 2
+    assert model.callbacks is None
+    expected = [
+        serialize_model_request(messages, tools=tools)
+        for messages, tools in model.calls
+    ]
+    captured = [
+        call.kwargs["input"]
+        for span in spans
+        for call in span.set_io.call_args_list
+        if "input" in call.kwargs
+    ]
+    if captures_content:
+        assert sorted(captured, key=str) == sorted(expected, key=str)
+        assert serialize.call_count == 2
+        for span in spans:
+            assert (
+                sum("input" in call.kwargs for call in span.set_io.call_args_list) == 1
+            )
+            attrs = {
+                call.args[0]: call.args[1] for call in span.set_attribute.call_args_list
+            }
+            assert attrs["chars_system"] == len("final skill catalogue")
+    else:
+        assert captured == []
+        serialize.assert_not_called()
+        assert SECRET_QUESTION not in repr([span.mock_calls for span in spans])
+    assert SECRET_QUESTION not in repr([vars(record) for record in caplog.records])
+    assert all(span.end.call_count == 1 for span in spans)

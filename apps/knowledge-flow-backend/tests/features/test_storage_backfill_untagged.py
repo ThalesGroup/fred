@@ -133,3 +133,36 @@ async def test_untagged_rows_do_not_stop_tagged_rows_from_being_counted() -> Non
     _user_sizes, team_sizes = await module.calculate_ingested_documents_sizes(session, _Rebac())
 
     assert team_sizes.get("team-a") == 1024
+
+
+class _WriteSession:
+    """Records what `update_database` adds; no team or user row exists yet."""
+
+    def __init__(self):
+        self.added = []
+        self.committed = False
+
+    async def get(self, _model, _key):
+        return None
+
+    def add(self, row):
+        self.added.append(row)
+
+    async def commit(self):
+        self.committed = True
+
+
+@pytest.mark.asyncio
+async def test_a_team_record_created_by_the_backfill_carries_the_placeholder_description() -> None:
+    """A team description is required by the database: the record this script
+    creates for a team it only knows by its storage must still be writable."""
+    module = _load_backfill_module()
+    session = _WriteSession()
+
+    await module.update_database(session, {}, {"team-a": 1024})
+
+    (team_row,) = session.added
+    assert team_row.id == "team-a"
+    assert team_row.description == module.TEAM_DESCRIPTION_PLACEHOLDER
+    assert team_row.current_resources_storage_size == 1024
+    assert session.committed

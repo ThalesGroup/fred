@@ -26,13 +26,14 @@
 // ppt_filler and writable_document active shows no chrome at all until the agent
 // actually produces a deck or a document.
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Component, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useChatNavRoom } from "@core/hooks/useChatNavPanel";
 import { useDispatch } from "react-redux";
 import type { TFunction } from "i18next";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
-import { sidePanelsForCapabilities, type SidePanelEntry } from "./sidePanelRegistry";
+import { findSidePanel, sidePanelsForCapabilities, type SidePanelEntry } from "./sidePanelRegistry";
 import { requestSidePanelOpen } from "./sidePanelOpenRequestSlice";
 import { wasPanelOpen } from "./capabilityPanelMemory";
 import { useOpenSessionId } from "./useOpenSessionId";
@@ -99,10 +100,45 @@ function PanelRestorer({ entry }: { entry: SidePanelEntry }) {
 // missing translation falls back to the widget id (never a blank label).
 const titleOf = (t: TFunction, entry: SidePanelEntry): string =>
   t(`capability.${entry.capabilityId}.panel.${entry.widget}.title`, { defaultValue: entry.widget });
+
+// A pane that fails to load or render stays inside its drawer instead of
+// tearing down the whole chat page through the router's error element.
+class PaneErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
 export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyChange }: CapabilitySidePanelHostProps) {
   const { t } = useTranslation();
   const entries = useMemo(() => sidePanelsForCapabilities(capabilityIds), [capabilityIds]);
-  const active = entries.find((entry) => entryKey(entry) === activeKey) ?? null;
+  const active = findSidePanel(entries, activeKey);
+  // A request keyed by a capability whose widget is merged into another's entry
+  // is renamed to that entry's key, so the launcher rail highlights it.
+  useEffect(() => {
+    if (active && entryKey(active) !== activeKey) onActiveKeyChange(entryKey(active));
+  }, [active, activeKey, onActiveKeyChange]);
+  const open = active !== null;
+  const { makeRoom, releaseRoom } = useChatNavRoom();
+  useEffect(() => (open ? releaseRoom : undefined), [open, releaseRoom]);
+  // A panel coming back with its conversation stays beside the nav panel: the
+  // user just picked that conversation there. Read before the page records the opening.
+  const sessionId = useOpenSessionId();
+  const opening = useRef({ sessionId, activeKey });
+  opening.current = { sessionId, activeKey };
+  const makeRoomUnlessRestored = useCallback(
+    (chatBodyWidth: number) => {
+      const { sessionId: session, activeKey: key } = opening.current;
+      return key && wasPanelOpen(session, key) ? 0 : makeRoom(chatBodyWidth);
+    },
+    [makeRoom],
+  );
 
   // `active` drives the drawer open/close; `rendered` is what is mounted inside
   // it, and lags at BOTH ends of the slide — a closing panel leaves with the
@@ -145,7 +181,7 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
       ))}
       {entries.length > 0 && (
         <InlineDrawer
-          open={active !== null}
+          open={open}
           onClose={() => onActiveKeyChange(null)}
           // Dressed for the panel it is opening onto, not the one mounted:
           // reading `rendered` alone flipped the chrome mid-slide.
@@ -154,22 +190,31 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
           hideHeader={shown?.ownsHeader ?? false}
           flushBody={shown?.ownsHeader ?? false}
           layout="push"
-          // Same inset card as the chat's own panels (ChatSidePanel): equal
-          // height, corners and surface, so the column looks the same whichever
-          // panel is showing.
-          floating
-          // One shared width across every capability panel (writable-document
-          // editor, PPT preview, …) — the same behaviour the legacy chat's
-          // ResizablePaneShell had with its single persisted pane width.
-          resizable={{ persistKey: "capability-side-panel" }}
+          // Every capability panel opens at half of the chat body.
+          resizable={{
+            persistKey: "capability-side-panel",
+            openFraction: 0.5,
+            maxViewportFraction: 0.5,
+            maxWidth: 1600,
+            onOpening: makeRoomUnlessRestored,
+          }}
         >
           {rendered ? (
             // A code-split panel suspends only while its chunk is in flight —
             // the first open of a page load — which is why the placeholder
             // cannot live here alone.
-            <Suspense fallback={paneLoading}>
-              <rendered.Component capabilityId={rendered.capabilityId} onClose={() => onActiveKeyChange(null)} />
-            </Suspense>
+            <PaneErrorBoundary
+              key={`${rendered.capabilityId}:${rendered.widget}`}
+              fallback={
+                <div className={styles.paneLoading} role="alert">
+                  {t("capability.panelLoadFailed")}
+                </div>
+              }
+            >
+              <Suspense fallback={paneLoading}>
+                <rendered.Component capabilityId={rendered.capabilityId} onClose={() => onActiveKeyChange(null)} />
+              </Suspense>
+            </PaneErrorBoundary>
           ) : (
             // Sliding, nothing mounted yet. Same placeholder either way, so the
             // wait reads the same and a pane owning its ✕ never leaves the

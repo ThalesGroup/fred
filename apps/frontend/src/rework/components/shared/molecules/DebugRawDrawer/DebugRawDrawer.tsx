@@ -48,14 +48,7 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
   };
 
   return (
-    <ChatSidePanel
-      open={open}
-      onClose={onClose}
-      title={t("chatbot.debugRaw.title")}
-      persistKey="debug-raw-panel"
-      width="560px"
-      fill
-    >
+    <ChatSidePanel open={open} onClose={onClose} title={t("chatbot.debugRaw.title")} persistKey="debug-raw-panel" fill>
       <div className={styles.toolbar}>
         <ButtonGroup
           size="small"

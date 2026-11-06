@@ -24,6 +24,7 @@ is exercised only by the separate `integration/test_rebac.py` suite).
 
 from __future__ import annotations
 
+import itertools
 from types import SimpleNamespace
 from typing import Any
 
@@ -59,12 +60,13 @@ class _FakeOpenFgaClient:
     def __init__(self) -> None:
         self.read_tuples: list[Any] = []
         self.read_calls: list[Any] = []
+        self.listed_objects: list[str] = []
 
     async def check(self, body, options) -> SimpleNamespace:
         return SimpleNamespace(allowed=True)
 
     async def list_objects(self, body, options) -> SimpleNamespace:
-        return SimpleNamespace(objects=[])
+        return SimpleNamespace(objects=self.listed_objects)
 
     async def list_users(self, body, options) -> SimpleNamespace:
         return SimpleNamespace(users=[])
@@ -113,6 +115,55 @@ async def test_lookup_resources_emits_list_objects_operation() -> None:
     await engine.lookup_resources(_SUBJECT, TeamPermission.CAN_READ, Resource.TEAM)
 
     assert writer.emitted[0]["dims"]["rebac_operation"] == "list_objects"
+
+
+@pytest.mark.asyncio
+async def test_lookup_resources_warns_at_the_default_result_limit(caplog) -> None:
+    """OpenFGA's default listObjectsMaxResults cuts the response without a signal."""
+    engine, client = _make_engine()
+    client.listed_objects = [f"team:t-{i}" for i in range(1000)]
+
+    with caplog.at_level("WARNING", logger="fred_core.security.rebac.openfga_engine"):
+        await engine.lookup_resources(_SUBJECT, TeamPermission.CAN_READ, Resource.TEAM)
+
+    assert (
+        "outcome=possibly_truncated type=team relation=can_read returned=1000"
+        in caplog.text
+    )
+
+
+@pytest.mark.asyncio
+async def test_lookup_resources_warns_near_the_server_deadline(
+    monkeypatch, caplog
+) -> None:
+    engine, client = _make_engine()
+    client.listed_objects = ["team:t-1"]
+    clock = itertools.count(step=2.6)
+    monkeypatch.setattr(
+        "fred_core.security.rebac.openfga_engine.time.monotonic", lambda: next(clock)
+    )
+
+    with caplog.at_level("WARNING", logger="fred_core.security.rebac.openfga_engine"):
+        await engine.lookup_resources(_SUBJECT, TeamPermission.CAN_READ, Resource.TEAM)
+
+    assert (
+        "outcome=possibly_truncated type=team relation=can_read returned=1"
+        in caplog.text
+    )
+
+
+@pytest.mark.asyncio
+async def test_lookup_resources_stays_quiet_below_the_limits(caplog) -> None:
+    engine, client = _make_engine()
+    client.listed_objects = [f"team:t-{i}" for i in range(999)]
+
+    with caplog.at_level("WARNING", logger="fred_core.security.rebac.openfga_engine"):
+        refs = await engine.lookup_resources(
+            _SUBJECT, TeamPermission.CAN_READ, Resource.TEAM
+        )
+
+    assert isinstance(refs, list) and len(refs) == 999
+    assert "possibly_truncated" not in caplog.text
 
 
 @pytest.mark.asyncio

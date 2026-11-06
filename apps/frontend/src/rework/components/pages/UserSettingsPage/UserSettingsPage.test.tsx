@@ -29,6 +29,12 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "fr", changeLanguage: vi.fn() } }),
 }));
 
+vi.mock("../../../../app/userPreferences.ts", () => ({
+  persistUserPreference: vi.fn(),
+  saveUserPreference: vi.fn(),
+  updateCurrentUserPreference: vi.fn(),
+}));
+
 vi.mock("../../../../security/KeycloakService.ts", () => ({
   KeyCloakService: {
     GetUserFullName: () => "Ada Lovelace",

@@ -76,6 +76,11 @@ from control_plane_backend.users.platform_roles import (
 from control_plane_backend.users.platform_roles import (
     revoke_platform_role as revoke_platform_role_from_service,
 )
+from control_plane_backend.users.preferences import (
+    PatchUserPreferences,
+    UserPreferences,
+    UserPreferencesStore,
+)
 from control_plane_backend.users.schemas import (
     AccountSuspensionDisabledError,
     CreateUserRequest,
@@ -149,6 +154,12 @@ def _get_prompt_store(request: Request) -> PromptStore:
 
 def _get_announcement_store(request: Request) -> AnnouncementStore:
     return get_application_container(request).get_announcement_store()
+
+
+def _get_user_preferences_store(request: Request) -> UserPreferencesStore:
+    return UserPreferencesStore(
+        get_application_container(request).get_pg_async_engine()
+    )
 
 
 def _parse_user_uuid(user: KeycloakUser) -> UUID:
@@ -435,6 +446,9 @@ async def delete_user(
     ],
     prompt_store: Annotated[PromptStore, Depends(_get_prompt_store)],
     announcement_store: Annotated[AnnouncementStore, Depends(_get_announcement_store)],
+    preferences_store: Annotated[
+        UserPreferencesStore, Depends(_get_user_preferences_store)
+    ],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rebac.check_user_permission_or_raise(
@@ -450,6 +464,7 @@ async def delete_user(
         if not rebac.requires_active_accounts:
             raise AccountSuspensionDisabledError()
         await rebac.suspend_account(user_id)
+        await preferences_store.delete(user_id)
         await _mark_user_join_history_deleted(request, user_id)
         return
 
@@ -462,6 +477,7 @@ async def delete_user(
     # Before the account, so a failure here is retried rather than orphaned.
     await prompt_store.delete_favorites_for_user(user_id)
     await announcement_store.delete_seen_for_user(user_id)
+    await preferences_store.delete(user_id)
     await remove_user_avatar(user_id, deps)
     try:
         await delete_user_from_service(admin, user_id)
@@ -498,6 +514,31 @@ async def delete_my_avatar(
 ) -> None:
     """Remove the caller's profile picture; succeeds when there is none."""
     await remove_user_avatar(user.uid, deps)
+
+
+@router.get(
+    "/users/me/preferences",
+    response_model=UserPreferences,
+    summary="Read the caller's display preferences.",
+)
+async def get_my_preferences(
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
+    store: UserPreferencesStore = Depends(_get_user_preferences_store),
+) -> UserPreferences:
+    return await store.get(user.uid)
+
+
+@router.patch(
+    "/users/me/preferences",
+    response_model=UserPreferences,
+    summary="Partially update the caller's display preferences.",
+)
+async def patch_my_preferences(
+    patch: PatchUserPreferences,
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
+    store: UserPreferencesStore = Depends(_get_user_preferences_store),
+) -> UserPreferences:
+    return await store.patch(user.uid, patch)
 
 
 class UserDetails(BaseModel):

@@ -176,11 +176,28 @@ expected: 403        actual 200 means your data is readable by the whole realm
 Repeat for a user who *is* in a team but whose team was never granted the app —
 that one must be refused too, and it is the case most often missed.
 
-### 3. Register both in deployment configuration
+### 3. Register it in deployment configuration
 
-Registration is Helm values, not source. Two blocks, one `app_id`:
+Registration is Helm values, not source: one entry, keyed by its `app_id`, in
+its own values file if you like. Helm merges maps, so it composes with every
+other application's file without restating them:
 
 ```yaml
+registrations:
+  applications:
+    acme-forecast:
+      ui_prefix: /apps/acme-forecast
+      version: 1.0.0
+      icon: insights
+      display_name:
+        en: "Forecast"
+      description:
+        en: "Demand forecasting for the selected team."
+      enabled: true
+      gateway:
+        ui_upstream: http://acme-forecast-ui.acme-apps.svc.cluster.local:80
+        service_upstream: http://acme-forecast-api.acme-apps.svc.cluster.local:8000
+        service_required: true
 applications:
   control-plane-backend:
     configuration:
@@ -188,29 +205,13 @@ applications:
         frontend:
           feature_flags:
             enableApplications: true
-        application_sources:
-          - app_id: acme-forecast
-            ui_prefix: /apps/acme-forecast
-            version: 1.0.0
-            icon: insights
-            display_name:
-              en: "Forecast"
-            description:
-              en: "Demand forecasting for the selected team."
-            enabled: true
-  frontend:
-    env:
-      - name: FRONTEND_APPLICATIONS_JSON
-        value: |
-          [
-            {
-              "app_id": "acme-forecast",
-              "ui_upstream": "http://acme-forecast-ui.acme-apps.svc.cluster.local:80",
-              "service_upstream": "http://acme-forecast-api.acme-apps.svc.cluster.local:8000",
-              "service_required": true
-            }
-          ]
 ```
+
+The chart derives the control plane's `platform.application_sources` and the
+frontend gateway's `FRONTEND_APPLICATIONS_JSON` from that entry, and refuses
+values that set either directly. `null` in a later values file unregisters an
+application. On Docker Compose, which has no chart, the same two halves are the
+control plane's configuration file and the frontend container's variable.
 
 **On Kubernetes, both upstreams must be fully qualified.** A bare Service name
 resolves for most workloads because the pod's `search` list completes it, but
@@ -221,10 +222,8 @@ path does not apply the search list. A short name yields
 works from a shell in the very same pod. Write
 `<service>.<namespace>.svc.cluster.local`.
 
-The control-plane entry owns what the browser and the catalog see; the frontend
-entry owns the server-side addresses nginx proxies to. `app_id` is the only
-value you write twice, and the two must agree — nothing checks it for you, so
-see "What the registration refuses" below for what each mismatch looks like.
+The entry's catalog fields own what the browser and the catalog see; its
+`gateway` owns the server-side addresses nginx proxies to.
 
 `ui_prefix` is deliberately configuration rather than a convention: pointing it
 at an absolute `https://` URL is all that has to change the day you move the UI
@@ -252,9 +251,9 @@ is your code. Your chart meets this contract:
 - **Credentials by reference.** A Secret the operator names (`existingSecret`) or
   environment variables read from existing Secrets (`extraEnvVars`); never a literal value
   in a values file. Refuse to render when the service needs credentials and none is given.
-- **The install prints the registration.** `NOTES.txt` prints both blocks of step 3 under
-  one `app_id`, with this release's fully qualified Service addresses, so the operator
-  copies them instead of writing them.
+- **The install prints the registration.** `NOTES.txt` prints the
+  `registrations.applications.<app_id>` entry of step 3, with this release's fully
+  qualified Service addresses, so the operator copies it instead of writing it.
 - **Validated values, documented.** A `values.schema.json` that refuses unknown keys, and
   a README (`helm show readme`) giving the install command, what Fred must provide, the
   required values, the credentials and the addresses to override.
@@ -320,8 +319,9 @@ The control plane maps that catalog id to the OpenFGA authorization object
 
 ### What it does not refuse
 
-The two halves are validated independently, so a mismatched `app_id` starts
-cleanly and fails later:
+The chart writes both halves from one entry. Where they are written separately
+(Docker Compose), they are validated independently, so a mismatched `app_id`
+starts cleanly and fails later:
 
 - **In the control plane only** — the application appears on the team's Apps
   page, and opening it shows "The application did not respond" after about
@@ -331,7 +331,8 @@ cleanly and fails later:
   application no team was ever granted, because the gateway performs no
   authorization. Keep the gateway list a subset of the control-plane list.
 - **`enabled: false`** withdraws the application from the catalog and the UI
-  but leaves its gateway routes serving. Remove both halves to retire one.
+  but leaves its gateway routes serving. Remove the entry (both halves on Docker
+  Compose) to retire one.
 
 ### Applications are trusted code, and the frame is not a sandbox
 
@@ -414,6 +415,6 @@ a mismatch shows as an explicit error state rather than a broken page.
 - [ ] Brand release notes (if any) are in `apps/frontend/public/contrib/<your-brand>/release.md`, or in the theme archive
 - [ ] No `.tsx`, `.ts`, `.scss`, or `.json` file from `src/` exists in your fork's overlay
 - [ ] Product UI code, if any, is its own container image serving under `/apps/<app_id>/`, with no file added to this repository
-- [ ] Each application is registered in both `platform.application_sources` and `FRONTEND_APPLICATIONS_JSON` under the same `app_id`
+- [ ] Each application is registered once, as `registrations.applications.<app_id>` with its `gateway`, in the Helm values
 - [ ] Agent code (Meridian only) is isolated under `contrib/<your-brand>/` and registered via Helm, not via source patches
 - [ ] `git merge develop` has no handwritten-source conflicts

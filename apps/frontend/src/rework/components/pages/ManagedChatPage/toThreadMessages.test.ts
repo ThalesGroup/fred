@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
-import { groupTraceEntries, isCancelledByUser, traceSummary } from "../../../utils/traceUtils";
+import { groupTraceEntries, isCancelledByUser, statusForEntry, traceSummary } from "../../../utils/traceUtils";
 import { hitlResponseKey, reconstructPendingHitl, reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 
 function msg(overrides: Partial<ChatMessage>): ChatMessage {
@@ -39,6 +39,78 @@ const LINK = { type: "link", href: "https://example.test/report.pdf", title: "Re
 const GEO = { type: "geo", geojson: { type: "FeatureCollection", features: [] } };
 const DEMO_CARD = { type: "demo_card", title: "Demo echo", body: "HELLO" };
 const UNKNOWN = { type: "part_kind_from_the_future", payload: { x: 1 } };
+
+it("shows a steered user message in the current exchange", () => {
+  const rows = toThreadMessages(
+    [
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Find notes" }] }),
+      msg({
+        role: "system",
+        channel: "system_note",
+        rank: 1,
+        metadata: { extras: { skill_load: { name: "review", origin: "user", load_id: "load" } } },
+      }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 2,
+        parts: [{ type: "tool_call", call_id: "call-1", name: "search", args: {} }],
+      }),
+      msg({
+        role: "tool",
+        channel: "tool_result",
+        rank: 3,
+        parts: [{ type: "tool_result", call_id: "call-1", ok: true, content: "Found notes" }],
+      }),
+      msg({
+        role: "user",
+        rank: 4,
+        parts: [{ type: "text", text: "Focus on October" }],
+      }),
+      msg({ role: "assistant", rank: 5, parts: [{ type: "text", text: "October notes" }] }),
+    ],
+    false,
+  );
+
+  expect(rows.map((row) => row.role)).toEqual(["user", "assistant", "user", "assistant"]);
+  expect(rows[0].skillName).toBe("review");
+  expect(
+    rows[1].traceMessages.filter((message) => ["tool_call", "tool_result"].includes(message.channel)),
+  ).toHaveLength(2);
+  expect(rows[2].text).toBe("Focus on October");
+  expect(rows[2].skillName).toBeNull();
+  expect(rows[2].id).toBe("e1:steer:4:user");
+  expect(rows[3].text).toBe("October notes");
+});
+
+it("preserves the context token anchor across a steered tool segment", () => {
+  const rows = toThreadMessages(
+    [
+      msg({
+        exchange_id: "previous",
+        rank: 0,
+        metadata: { context_tokens: 100, token_usage: { input_tokens: 100, output_tokens: 5, total_tokens: 105 } },
+      }),
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Find notes" }] }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 1,
+        parts: [{ type: "tool_call", call_id: "call-1", name: "search", args: {} }],
+      }),
+      msg({ role: "user", rank: 2, parts: [{ type: "text", text: "Focus on October" }] }),
+      msg({
+        role: "assistant",
+        rank: 3,
+        parts: [{ type: "text", text: "October notes" }],
+        metadata: { context_tokens: 120, token_usage: { input_tokens: 110, output_tokens: 10, total_tokens: 120 } },
+      }),
+    ],
+    false,
+  );
+
+  expect(rows[rows.length - 1]?.marginalTokenUsage).toEqual({ input_tokens: 20, output_tokens: 10, total_tokens: 30 });
+});
 
 describe("explicit skill selection on user turns", () => {
   const user = () => msg({ role: "user", parts: [{ type: "text", text: "Notes\nAction" }] });
@@ -667,5 +739,75 @@ describe("persisted tool refusals", () => {
     expect(assistants).toHaveLength(1);
     expect(assistants[0].id).toBe("e1:assistant");
     expect(reconstructPendingHitl(messages)?.payload.pending_calls?.[0].tool_call_id).toBe("call-1");
+  });
+});
+
+describe("HITL runtime availability", () => {
+  const question = (status: "pending" | "unavailable" | "unknown" | undefined, id = "call"): ChatMessage =>
+    msg({
+      role: "system",
+      channel: "hitl_request",
+      rank: 2,
+      parts: [
+        {
+          type: "hitl_request",
+          stage: "agent_question",
+          question: "Choose a style",
+          choices: [],
+          occurrence_id: id,
+          interrupt_id: `pause-${id}`,
+          resume_status: status,
+        },
+      ],
+    });
+  const call = msg({
+    channel: "tool_call",
+    rank: 1,
+    parts: [{ type: "tool_call", name: "ask_user", call_id: "call", args: {} }],
+  });
+
+  it.each(["unavailable", "unknown"] as const)(
+    "keeps %s questions readable without live controls or running trace",
+    (status) => {
+      const history = [call, question(status)];
+      expect(reconstructPendingHitls(history)).toEqual([]);
+      const thread = toThreadMessages(history, false);
+      expect(thread.find((m) => m.role === "hitl_request")).toMatchObject({
+        text: "Choose a style",
+        hitlResumeStatus: status,
+      });
+      const entries = groupTraceEntries(thread.find((m) => m.role === "assistant")!.traceMessages);
+      expect(statusForEntry(entries[0])).toBe("unavailable");
+      expect(traceSummary(entries).running).toBe(false);
+      expect(history[0].metadata?.extras?.hitl_resume_status).toBeUndefined();
+    },
+  );
+
+  it.each([undefined, "pending"] as const)(
+    "preserves pending controls for status %s and distinct siblings",
+    (status) => {
+      expect(
+        reconstructPendingHitls([question("unavailable"), question(status, "other")]).map(
+          (e) => e.payload.occurrence_id,
+        ),
+      ).toEqual(["other"]);
+    },
+  );
+
+  it("gives a real tool result precedence over a stale display annotation", () => {
+    const history = [
+      call,
+      question("unavailable"),
+      msg({
+        role: "tool",
+        channel: "tool_result",
+        rank: 3,
+        parts: [{ type: "tool_result", call_id: "call", ok: true, content: "answered" }],
+      }),
+    ];
+    const entries = groupTraceEntries(
+      toThreadMessages(history, false).find((m) => m.role === "assistant")!.traceMessages,
+    );
+    expect(statusForEntry(entries[0])).toBe("ok");
   });
 });

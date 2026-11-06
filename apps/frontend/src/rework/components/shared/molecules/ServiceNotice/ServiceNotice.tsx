@@ -14,6 +14,7 @@
 
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import type { MaterialIconType } from "../../utils/Type.ts";
+import type { ReactNode } from "react";
 import styles from "./ServiceNotice.module.scss";
 
 export interface ServiceNoticeProps {
@@ -24,6 +25,12 @@ export interface ServiceNoticeProps {
    *  the only content in the available area (e.g. service not running, nothing
    *  to show). Omit for inline banners rendered alongside other content. */
   centered?: boolean;
+  /** `info` paints the notice in info-container / on-info-container, for a
+   *  reminder that asks the reader to act. Defaults to the neutral surface. */
+  color?: "neutral" | "info";
+  /** A control shown at the end of the notice, e.g. a link to where the
+   *  reader can act on it. */
+  action?: ReactNode;
 }
 
 /**
@@ -43,9 +50,16 @@ export interface ServiceNoticeProps {
  * Example:
  * - `<ServiceNotice icon="cloud_off" title={t("...")} description={t("...")} centered />`
  */
-export default function ServiceNotice({ icon = "info", title, description, centered }: ServiceNoticeProps) {
+export default function ServiceNotice({
+  icon = "info",
+  title,
+  description,
+  centered,
+  color = "neutral",
+  action,
+}: ServiceNoticeProps) {
   const notice = (
-    <div className={styles.serviceNotice}>
+    <div className={styles.serviceNotice} data-color={color}>
       <span className={styles.icon}>
         <Icon type={icon} />
       </span>
@@ -53,6 +67,7 @@ export default function ServiceNotice({ icon = "info", title, description, cente
         <span className={styles.title}>{title}</span>
         {description && <span className={styles.description}>{description}</span>}
       </div>
+      {action && <div className={styles.action}>{action}</div>}
     </div>
   );
 

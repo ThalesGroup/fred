@@ -99,6 +99,19 @@ def isolated_database_path() -> pathlib.Path:
     return _run_database_path()
 
 
+@pytest.fixture
+def pods_report_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The pod readiness call answers "every capability ready", offline: saves
+    then lift earlier suspensions and never call a pod for readiness."""
+    from control_plane_backend.agent_instances.suspension import ReadinessVerdict
+    from control_plane_backend.product import service
+
+    async def _ready(**_: object) -> ReadinessVerdict:
+        return ReadinessVerdict(ready=True)
+
+    monkeypatch.setattr(service, "_fetch_capability_readiness", _ready)
+
+
 @pytest.fixture(scope="session")
 def isolated_config_path() -> pathlib.Path:
     """A test configuration whose storage paths stay under the run root.
@@ -133,6 +146,7 @@ def _setup_test_schema() -> None:
     import control_plane_backend.models.agent_instance_models  # noqa: F401
     import control_plane_backend.models.agent_marketplace_models  # noqa: F401
     import control_plane_backend.models.announcement_models  # noqa: F401
+    import control_plane_backend.models.model_discovery_models  # noqa: F401
     import control_plane_backend.models.model_reasoning_models  # noqa: F401
     import control_plane_backend.models.platform_model_binding_models  # noqa: F401
     import control_plane_backend.models.prompt_models  # noqa: F401

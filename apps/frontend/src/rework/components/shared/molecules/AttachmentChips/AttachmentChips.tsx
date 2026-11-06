@@ -20,6 +20,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 import { TERMINAL_STATES, type TaskState } from "../../../../features/tasks/taskTypes";
+import { attachmentIcon } from "../../../../utils/fileIconSpec";
 import styles from "./AttachmentChips.module.css";
 
 interface AttachmentChipsProps {
@@ -55,7 +56,7 @@ function AttachmentTaskStatus({ taskIds }: { taskIds: string[] }) {
   });
 
   if (!displayTaskId) return null;
-  return <TaskIndicator taskId={displayTaskId} size="sm" />;
+  return <TaskIndicator taskId={displayTaskId} size="sm" trigger="hover" />;
 }
 
 export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps) {
@@ -82,12 +83,25 @@ export function AttachmentChips({ attachments, onRemove }: AttachmentChipsProps)
       {attachments.map((attachment) => (
         <Chip
           key={attachment.id}
-          tone={attachment.status === "error" ? "error" : "default"}
-          leading={<Icon category="outlined" type={attachment.isImage ? "image" : "attach_file"} />}
+          tone={attachment.status === "error" ? "error" : attachment.status === "ready" ? "success" : "tertiary"}
+          leading={
+            <span className={styles.fileIcon}>
+              <Icon category="outlined" type={attachmentIcon(attachment.name, attachment.mime)} />
+            </span>
+          }
           label={attachment.name}
-          secondary={attachment.taskIds.length === 0 ? fileLabel(attachment, t) : undefined}
-          trailing={<AttachmentTaskStatus taskIds={attachment.taskIds} />}
+          secondary={
+            attachment.taskIds.length === 0 ? (
+              fileLabel(attachment, t)
+            ) : (
+              <span className={styles.status}>
+                <AttachmentTaskStatus taskIds={attachment.taskIds} />
+              </span>
+            )
+          }
           onRemove={() => onRemove(attachment.id)}
+          removeButtonSize="small"
+          removeIcon={attachment.status === "ready" || attachment.status === "error" ? "delete" : "close"}
           removeAriaLabel={t("chatbot.attachmentChip.removeAria", { name: attachment.name })}
         />
       ))}

@@ -34,7 +34,10 @@ import pytest
 from fred_core.common.team_id import TeamId
 from fred_core.models.base import Base
 from fred_core.sql.async_session import make_session_factory
-from fred_core.teams.metadata_store import TeamMetadataStore
+from fred_core.teams.metadata_store import (
+    TEAM_DESCRIPTION_PLACEHOLDER,
+    TeamMetadataStore,
+)
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.store.postgres_user_store import PostgresUserStore
 from fred_core.users.user_models import UserRow
@@ -58,6 +61,7 @@ async def _seed_team(engine: AsyncEngine, team_id: str, current: int) -> None:
                 TeamMetadataRow(
                     id=team_id,
                     name=f"name-{team_id}",
+                    description=TEAM_DESCRIPTION_PLACEHOLDER,
                     current_resources_storage_size=current,
                 )
             )

@@ -9,6 +9,9 @@
   },
   "devDependencies": {
     "typescript": "5.9.3",
-    "vite": "6.4.3"
+    "vite": "6.4.5"
+  },
+  "engines": {
+    "node": ">=24.21.0 <25"
   }
 }

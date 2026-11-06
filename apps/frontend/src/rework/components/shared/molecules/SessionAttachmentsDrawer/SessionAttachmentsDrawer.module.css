@@ -94,6 +94,12 @@
   gap: var(--spacing-2xs);
 }
 
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-title-small);
+}
+
 .empty {
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);

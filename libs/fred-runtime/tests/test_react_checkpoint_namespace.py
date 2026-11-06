@@ -168,7 +168,11 @@ def test_resume_probes_the_graph_thread_then_the_session_thread() -> None:
         resume_payload={"choice_id": "proceed"},
     )
 
-    assert _resume_checkpoint_locations(request, "session-1") == (
+    assert _resume_checkpoint_locations(
+        "session-1",
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ) == (
         ("session-1:instance-123", ""),
         ("session-1", ""),
     )
@@ -184,7 +188,11 @@ def test_resume_locations_fall_back_to_the_template_agent_id() -> None:
         resume_payload={"choice_id": "proceed"},
     )
 
-    assert _resume_checkpoint_locations(request, "session-1") == (
+    assert _resume_checkpoint_locations(
+        "session-1",
+        agent_id=request.agent_id,
+        agent_instance_id=request.agent_instance_id,
+    ) == (
         ("session-1:react.agent", ""),
         ("session-1", ""),
     )

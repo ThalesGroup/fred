@@ -67,7 +67,7 @@ from fred_core import (
 )
 from fred_core.common import TeamId
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
-from fred_core.teams.metadata_store import TeamMetadata
+from fred_core.teams.metadata_store import TEAM_DESCRIPTION_PLACEHOLDER, TeamMetadata
 
 _ALL_PERMISSIONS = frozenset(TeamPermission)
 
@@ -104,9 +104,14 @@ class _FakeMetadataStore:
     async def get_by_name(self, name: str, session=None) -> TeamMetadata | None:
         return next((t for t in self._teams.values() if t.name == name), None)
 
-    async def create(self, team_id: TeamId, name: str, session=None) -> TeamMetadata:
+    async def create(
+        self, team_id: TeamId, name: str, description: str, session=None
+    ) -> TeamMetadata:
         metadata = TeamMetadata(
-            id=team_id, name=name, visibility=self._create_visibility
+            id=team_id,
+            name=name,
+            description=description,
+            visibility=self._create_visibility,
         )
         self._teams[str(team_id)] = metadata
         return metadata
@@ -443,7 +448,11 @@ async def test_create_get_update_share_the_same_assembler(
     store = _FakeMetadataStore({})
     created = await create_team(
         _user("platform-admin"),
-        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
+        CreateTeamRequest(
+            description=TEAM_DESCRIPTION_PLACEHOLDER,
+            name="new-team",
+            initial_team_admin_ids=["alice"],
+        ),
         _deps(engine, store),
     )
     assert calls == [created.id]
@@ -483,7 +492,7 @@ async def test_create_get_update_share_the_same_assembler(
         await update_team(
             _user("alice"),
             TeamId("fredlab"),
-            UpdateTeamRequest(description="x"),
+            UpdateTeamRequest(description="Denied before the assembler"),
             _deps(engine4, store2),
         )
     assert calls == [created.id, fetched.id]  # still denied before the assembler
@@ -494,11 +503,11 @@ async def test_create_get_update_share_the_same_assembler(
     updated = await update_team(
         _user("alice"),
         TeamId("fredlab"),
-        UpdateTeamRequest(description="Updated"),
+        UpdateTeamRequest(description="Updated through the assembler"),
         _deps(engine5, store2),
     )
     assert calls == [created.id, fetched.id, updated.id]
-    assert updated.description == "Updated"
+    assert updated.description == "Updated through the assembler"
 
 
 @pytest.mark.asyncio
@@ -569,7 +578,11 @@ async def test_create_team_response_includes_admins_immediately() -> None:
 
     created = await create_team(
         _user("platform-admin"),
-        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
+        CreateTeamRequest(
+            description=TEAM_DESCRIPTION_PLACEHOLDER,
+            name="new-team",
+            initial_team_admin_ids=["alice"],
+        ),
         _deps(engine, store, admin_summaries=summaries),
     )
 
@@ -607,7 +620,11 @@ async def test_create_team_is_private_by_default_and_never_granted_public() -> N
 
     created = await create_team(
         _user("platform-admin"),
-        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
+        CreateTeamRequest(
+            description=TEAM_DESCRIPTION_PLACEHOLDER,
+            name="new-team",
+            initial_team_admin_ids=["alice"],
+        ),
         _deps(engine, store),
     )
 
@@ -629,7 +646,11 @@ async def test_create_team_grants_public_when_metadata_is_public() -> None:
 
     created = await create_team(
         _user("platform-admin"),
-        CreateTeamRequest(name="new-team", initial_team_admin_ids=["alice"]),
+        CreateTeamRequest(
+            description=TEAM_DESCRIPTION_PLACEHOLDER,
+            name="new-team",
+            initial_team_admin_ids=["alice"],
+        ),
         _deps(engine, store),
     )
 

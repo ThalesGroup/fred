@@ -27,7 +27,7 @@ A team, its corpus, then its agents — in that order. Governance sits underneat
 rather than bolted on top, because the AI Act, GDPR and your security team leave
 no other option.
 
-Apache 2.0 end to end. No licence, no hosted tier, nothing to sign. **A third
+Fred's own code is Apache 2.0 end to end. No licence, no hosted tier, nothing to sign. **A third
 party can install the whole thing without us — that is deliberate.**
 
 > The default PDF/PPTX pipeline uses pypdf, Docling and pypdfium2. PyMuPDF is
@@ -168,7 +168,7 @@ When the terminal prompt appears, the workspace is ready but you still need to r
 | Python       | Programming language             | 3.12.8                                                                                              | Use `pyenv install 3.12.8`                                                                  |
 | python3-venv | Python venv module/package       | matching                                                                                            | Bundled with Python 3 on most systems; otherwise `apt install python3-venv` (Debian/Ubuntu) |
 | nvm          | Node installer                   | latest                                                                                              | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)      |
-| Node.js      | Programming language             | 22.13.0                                                                                             | Use `nvm install 22.13.0`                                                                   |
+| Node.js      | Programming language             | Defined in `.nvmrc`                                                                                  | Use `nvm install` and `nvm use` (reads `.nvmrc`)                                              |
 | Make         | Utility                          | system                                                                                              | Install via system package manager (e.g., `apt install make`, `brew install make`)          |
 | yq           | Utility                          | system                                                                                              | Install via system package manager                                                          |
 | SQLite       | Local RDBMS engine               | ≥ 3.35.0                                                                                            | Install via system package manager                                                          |
@@ -197,7 +197,7 @@ graph TD
         Pandoc["Pandoc"]
         libmagic["libmagic"]
         Pyenv["Pyenv (Python installer)"]
-        Node["Node 22.13.0"]
+        Node["Node version from .nvmrc"]
         NVM["nvm (Node installer)"]
     end
 
@@ -689,23 +689,24 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 | fred-runtime | `./libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI |
 | fred-capability-* | `./libs/capabilities` | First-party capabilities, one package each — a pod installs those it offers |
 
-Each package has its own version. From the repository root, use the previous
-stable code tag to prepare and validate the next release:
+Each package has its own version. From the repository root, prepare the next
+release from the previous stable code tag, then publish against PyPI:
 
 ```bash
 make python-release-plan BASE_TAG=code/vX.Y.Z
 make prepare-python-release BASE_TAG=code/vX.Y.Z \
   CAPABILITY_PACKAGES="fred-capability-documents" \
   CAPABILITY_MANIFESTS="libs/capabilities/fred-capability-documents/fred_capability_documents/document_summarize/capability.py"
-make publish-libs-dry-run BASE_TAG=code/vX.Y.Z
-PYPI_TOKEN=... make publish-libs BASE_TAG=code/vX.Y.Z
+make publish-libs-dry-run
+PYPI_TOKEN=... make publish-libs
 ```
 
 Select only changed capability packages and affected manifests; leave those
 arguments empty when none changed. `fred-pod` requires `POD_CHANGED=true` if its
 package changed. Review the version and lockfile diff before release approval.
-PyPI publication requires separate authorization and skips coordinates already
-published. See [the release strategy](docs/swift/RELEASE-STRATEGY.md) for the full
+PyPI publication requires separate authorization. It uploads the packages whose
+version is above PyPI's latest and stops, before any upload, if a package at
+PyPI's latest version does not build the published wheel. See [the release strategy](docs/swift/RELEASE-STRATEGY.md) for the full
 sequence.
 
 > `agentic-backend` (`./agentic-backend`) remains during migration. Do not add new features there.
@@ -799,11 +800,12 @@ Persistence options:
 
 Fred's own code is released under the **Apache License 2.0**. Optional integrations (like OpenSearch) are configured externally and do not contaminate Fred's licensing.
 
-Fred currently depends on a small number of third-party Python packages under copyleft licenses, tracked under `LICENSE-01`/`LICENSE-02`/`LICENSE-03`. Full detail, severity assessment, and remediation status for each: [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
+Fred also ships third-party packages under their own licenses. Copyleft dependencies in Python packages and images are tracked under `LICENSE-01` through `LICENSE-04` in [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
 
 - `pymupdf` / `pymupdf4llm` are optional under AGPL-3.0 or Artifex commercial terms. The locked extra also includes `pymupdf-layout`, under PolyForm Noncommercial 1.0.0; it is not covered by an AGPL-only assessment. These packages are excluded from ordinary development installs and the standard Knowledge Flow image. See [installation and deployment](apps/knowledge-flow-backend/README.md#optional-pymupdf-processing) and [issue #3159](https://github.com/ThalesGroup/fred/issues/3159).
 - `psycopg2-binary` / `psycopg` (PostgreSQL driver, `fred-core` / `knowledge-flow-backend`) — **LGPL-3.0-only**, used as an unmodified, dynamically imported package (not statically linked or embedded).
 - `jwcrypto` (transitive, via `python-keycloak`'s admin client, `fred-core` / `control-plane-backend` / `knowledge-flow-backend` / `fred-agents`) — **LGPL-3.0-or-later**, used as an unmodified, dynamically imported package; never directly invoked by Fred's own code (Fred's JWT verification path uses PyJWT).
+- `fonts-urw-base35` in the `fred-agents` image is **AGPL-3.0 with a PostScript/PDF font exception**. It is an unmodified font package, separate from Fred's Apache-2.0 code. The image includes the [font notices and source directions](apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md).
 
 If your use case requires a fully copyleft-free dependency tree, audit these packages before deployment.
 
