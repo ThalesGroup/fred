@@ -62,11 +62,6 @@ for (const [sourcePath, from, to] of [
     'import Icon, { type IconProps } from "../Icon/Icon.tsx";',
     'import { MaterialIcon as Icon, type MaterialIconProps as IconProps } from "../Icon/Icon.tsx";',
   ],
-  [
-    "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
-    'import Icon from "../Icon/Icon";',
-    'import { MaterialIcon as Icon } from "../Icon/Icon";',
-  ],
 ])
   materialIconImportRewrites.set(sourcePath, { from, to });
 const generatedIconPath =
