@@ -113,12 +113,14 @@ export function WikiEditor({
       {placement && (
         <div className={styles.fields}>
           <TextInput
+            compact
             size="small"
             label={t("rework.wiki.editor.titleLabel")}
             value={titleDraft}
             onChange={(event) => setTitleDraft(event.target.value)}
           />
           <Select
+            compact
             size="small"
             label={t("rework.wiki.editor.parentLabel")}
             value={parentDraft}
