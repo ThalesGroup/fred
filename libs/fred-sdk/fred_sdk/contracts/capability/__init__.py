@@ -65,6 +65,15 @@ from .manifest import (
     UploadedFile,
     chat_part_kind,
 )
+from .preparation import (
+    PreparationArtifactStore,
+    PreparationAsset,
+    PreparationAssetReader,
+    PreparationContext,
+    PreparationResult,
+    PreparationSpec,
+    PreparationWork,
+)
 from .scope import (
     AssetKey,
     Public,
@@ -99,6 +108,13 @@ __all__ = [
     "HitlGateRequest",
     "HitlSpec",
     "Public",
+    "PreparationArtifactStore",
+    "PreparationAsset",
+    "PreparationAssetReader",
+    "PreparationContext",
+    "PreparationResult",
+    "PreparationSpec",
+    "PreparationWork",
     "SaveContext",
     "ScopePrivate",
     "SidePanelSpec",

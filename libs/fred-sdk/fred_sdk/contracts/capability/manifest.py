@@ -41,6 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..context import ModelBinding
 from ..models import FieldSpec, TeamScopePolicy
+from .preparation import PreparationSpec
 
 # Capability ids live in OpenFGA object ids (`capability:<id>`, RFC §8.1) and
 # URL path segments (`/capabilities/{id}/...`, §9.1). OpenFGA forbids `:`,
@@ -281,6 +282,7 @@ class CapabilityManifest(BaseModel):
     # side.
     team_settings_fields: list[FieldSpec] = Field(default_factory=list)
     assets: list[AssetSlot] = Field(default_factory=list)
+    preparation: PreparationSpec | None = None
     chat_parts: list[type[BaseModel]] = Field(default_factory=list)
     side_panels: list[SidePanelSpec] = Field(default_factory=list)
 
@@ -313,6 +315,14 @@ class CapabilityManifest(BaseModel):
 
     @model_validator(mode="after")
     def _check_execution_models(self) -> "CapabilityManifest":
+        if self.preparation is not None:
+            declared = {slot.key for slot in self.assets}
+            missing = set(self.preparation.asset_slots) - declared
+            if missing:
+                raise ValueError(
+                    f"CapabilityManifest '{self.id}': preparation refers to "
+                    f"undeclared asset slots: {sorted(missing)}"
+                )
         if not self.execution_models:
             raise ValueError(
                 f"CapabilityManifest '{self.id}': execution_models must not be empty."

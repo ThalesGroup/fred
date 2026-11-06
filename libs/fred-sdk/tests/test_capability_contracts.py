@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, Literal
+from uuid import uuid4
 
 import pytest
 from fred_core.security.rebac.capability_authz import (
@@ -38,6 +39,10 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     CapabilityManifest,
     CapabilityReadiness,
+    PreparationContext,
+    PreparationResult,
+    PreparationSpec,
+    PreparationWork,
     ChatControlSpec,
     EmptyModel,
     HitlGateRequest,
@@ -183,6 +188,86 @@ def test_default_readiness_is_ready() -> None:
         cap.readiness(_StoredConfig(), CapabilityIdentity(user_id="u-1"))
     )
     assert verdict == CapabilityReadiness.ready()
+
+
+def test_existing_capability_has_no_preparation() -> None:
+    assert _MinimalCapability.manifest.preparation is None
+
+
+def test_preparation_contract_dispatches_a_declared_hook() -> None:
+    class _Reader:
+        async def read(self, asset_id: object) -> bytes:
+            del asset_id
+            return b""
+
+    class _Store:
+        async def write(self, path: str, content: bytes) -> None:
+            del path, content
+
+        async def read(self, path: str) -> bytes:
+            del path
+            return b""
+
+        async def delete(self, path: str) -> None:
+            del path
+
+    class _PreparingCapability(AgentCapability[_Config, _Config, EmptyModel]):
+        manifest = _manifest(
+            id="preparing_cap",
+            assets=[AssetSlot(key="input", accepted_types=[".txt"])],
+            preparation=PreparationSpec(asset_slots=("input",), rules_version="1"),
+        )
+        ConfigModel = _Config
+
+        async def prepare(self, ctx: PreparationContext) -> PreparationResult:
+            return PreparationResult(reference=f"results/{ctx.work.preparation_id}")
+
+    work = PreparationWork(
+        preparation_id=uuid4(),
+        owner_kind="agent",
+        owner_id="agent-1",
+        runtime_id="fred-agents",
+        capability_id="preparing_cap",
+        input_revision="revision-1",
+        rules_version="1",
+    )
+    ctx = PreparationContext(work=work, assets=_Reader(), artifacts=_Store())
+    result = asyncio.run(_PreparingCapability().prepare(ctx))
+    assert result.reference == f"results/{work.preparation_id}"
+
+
+def test_preparation_declaration_rejects_unknown_slot() -> None:
+    with pytest.raises(ValidationError, match="undeclared asset slots"):
+        _manifest(preparation=PreparationSpec(asset_slots=("missing",), rules_version="1"))
+
+
+def test_preparation_declaration_rejects_duplicate_slot_and_unbounded_work() -> None:
+    with pytest.raises(ValidationError, match="nonempty and unique"):
+        PreparationSpec(asset_slots=("input", "input"), rules_version="1")
+    with pytest.raises(ValidationError):
+        PreparationSpec(rules_version="1", max_attempts=0)
+    with pytest.raises(ValidationError, match="config exceeds"):
+        PreparationWork(
+            preparation_id=uuid4(),
+            owner_kind="agent",
+            owner_id="agent-1",
+            runtime_id="fred-agents",
+            capability_id="test_cap",
+            input_revision="revision-1",
+            rules_version="1",
+            config={"large": "x" * (128 * 1024)},
+        )
+
+
+def test_declared_preparation_requires_hook() -> None:
+    with pytest.raises(ValueError, match="no prepare hook"):
+
+        class _BrokenCapability(AgentCapability[_Config, _Config, EmptyModel]):
+            manifest = _manifest(
+                id="broken_cap",
+                preparation=PreparationSpec(rules_version="1"),
+            )
+            ConfigModel = _Config
 
 
 def test_readiness_failure_carries_its_detail() -> None:
