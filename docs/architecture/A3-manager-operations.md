@@ -321,15 +321,13 @@ the same verification. Outside Kubernetes, run `control-plane initialize-schema`
 before starting the API. This separates schema execution from normal startup;
 database roles enforce the schema boundary independently of the application.
 
-The matching original 0001/0002 history can upgrade through 0003 after backup. This
-supports the document-tree view change, not conversion of historical public tables or
-other draft histories. Deployed migrations are immutable. The five-second lock timeout
-fails the hook safely under contention; retry after the blocker ends. The regression
-`cp_read_document_tree_is_granted_to_its_reader_only` checks actual Knowledge Flow
-reader access on a fresh schema; initialization replay and incompatible-history
-rejection have a separate regression.
-Older binaries require their exact history and may refuse to restart after upgrade;
-prefer forward repair rather than manually deleting migration rows for rollback.
+Weaver currently supports fresh installations only: no upgrade from an earlier schema
+or draft history is supported. Pushed migrations are immutable. An incompatible local
+database is recreated; recreating a shared one requires separate authorization. The
+five-second lock timeout fails the hook safely under contention; retry after the
+blocker ends. The regression `cp_read_document_tree_is_granted_to_its_reader_only`
+checks actual Knowledge Flow reader access on a fresh schema; initialization replay
+and incompatible-history rejection have a separate regression.
 
 These read-only queries inspect an installation without reading user profiles or
 document contents. Run them in the configured control-plane database (`fred` in

@@ -617,7 +617,7 @@ an assistant message. Existing inference observation and usage reporting count
 consumption under its actual offer, including output rejected as an invalid title.
 A provider's unreturned usage cannot be inferred after cancellation.
 
-These contracts are covered by focused simulated-provider, SQL-upgrade and UI
+These contracts are covered by focused simulated-provider, SQL and UI
 component tests. They do not certify a local k3d or integration-platform journey.
 Deploy Control Plane, SDK/runtime and frontend coherently; see the
 [operator note](../../deploy/release-notes/changes/weaver-conversation-titles.md).
@@ -938,23 +938,18 @@ and [SQLx operations](../../docs/architecture/A3-manager-operations.md#sqlx-sche
 `migrations/0001_schema.sql` creates the baseline tables; `0002_cp_read.sql` creates
 the consumer views and grants. `0003_cp_read_document_tree.sql` appends display
 columns to three views without replacing their grants or changing stored data.
-All deployed migration files are immutable. SQLx records their fingerprints in
+All pushed migration files are immutable. SQLx records their fingerprints in
 `control_plane._sqlx_migrations`, serializes initialization and runs each migration
 transactionally. `control-plane initialize-schema` creates a fresh schema or applies
 pending migrations from a matching history. Repeating it preserves data. API startup
 only verifies the complete fingerprint and does not apply migrations.
 
 The k3d profile enables the pre-install/pre-upgrade `control-plane-backend-schema-init`
-Job through the shared chart's `migration` settings. Back up the target database before
-upgrading. The document-tree upgrade supports the original matching 0001/0002 history;
-it does not convert historical draft schemas or public tables. Changed, missing or
-incomplete migration history is refused without resetting data or rewriting checksums.
-The view upgrade has a five-second lock timeout: a busy database fails the hook safely
+Job through the shared chart's `migration` settings. Weaver currently supports fresh
+installations only: changed, missing or incomplete migration history is refused without
+resetting data or rewriting checksums, and an incompatible local database is recreated.
+Initialization has a five-second lock timeout: a busy database fails the hook safely
 and can be retried after the blocker ends. Python runtimes retain their Alembic histories.
-
-Older binaries enforce an exact migration history and may refuse to restart after
-0003 is applied. Prefer a forward fix; a database rollback requires a coherent backup
-and an explicitly planned recovery, never removing SQLx history rows in place.
 
 Role mutations, initial space grants and bootstrap commit atomically in PostgreSQL.
 The service and binary are named `control-plane`; the image remains
