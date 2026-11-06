@@ -1151,12 +1151,43 @@ applications:
     replicaCount: 1
     command:
       enabled: true
-      data: ["python", "-m", "fred_agents.preparation_worker"]
+      data: ["python", "-m", "fred_runtime", "preparation-worker"]
     ports: []
     service:
       enabled: false
     metricsService:
       enabled: false
+    serviceAccount:
+      enabled: true
+      name: fred-agents-preparation-worker
+      automountServiceAccountToken: false
+      rbac:
+        enabled: false
+    kubeconfig:
+      enabled: false
+    volumeMounts:
+      - name: fred-agents-preparation-worker-vol
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: fred-agents-preparation-worker-catalog-vol
+        mountPath: /app/config/models_catalog.yaml
+        subPath: models_catalog.yaml
+      - name: fred-agents-preparation-worker-catalog-vol
+        mountPath: /app/config/mcp_catalog_external.yaml
+        subPath: mcp_catalog_external.yaml
+      - name: fred-agents-preparation-worker-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: fred-agents-preparation-worker-vol
+        configMap:
+          name: fred-agents-preparation-worker-back
+      - name: fred-agents-preparation-worker-catalog-vol
+        configMap:
+          name: fred-agents-preparation-worker-catalog
+      - name: fred-agents-preparation-worker-env-vol
+        secret:
+          secretName: fred-agents-preparation-worker-env
     probes:
       livenessProbe:
         enabled: false

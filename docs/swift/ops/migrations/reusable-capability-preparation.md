@@ -26,6 +26,10 @@ pods. `preparation.max_concurrent_jobs` bounds work per worker replica, and
 work within that replica. Set control-plane runtime catalog source
 `preparation_enabled` and serving pod `preparation.enabled_capabilities` only
 after backfill and worker deployment are complete.
+The deployment command is `python -m fred_runtime preparation-worker`, also
+available through `make run-worker` and `make run-worker-docker` in `fred-agents`.
+Other agent pod images with `fred-runtime` installed use the same command; the
+generic `agent-pod` chart exposes it with `preparationWorker.enabled: true`.
 Temporal retries a worker activity after two minutes without a heartbeat.
 Agent multipart saves accept at most 64 MiB across all capability assets.
 

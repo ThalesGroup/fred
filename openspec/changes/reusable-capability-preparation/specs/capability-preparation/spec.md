@@ -30,6 +30,12 @@ The system SHALL store immutable input references and committed results in share
 - **WHEN** one replica accepts a resource and another worker replica performs preparation
 - **THEN** the worker reads the same input and all serving replicas can read the committed result
 
+#### Scenario: Another agent pod enables preparation
+
+- **GIVEN** an agent pod image installs fred-runtime and a capability with a preparation hook
+- **WHEN** its operator enables the generic chart's preparation worker and registers the pod as preparation-enabled
+- **THEN** a separate worker runs the installed hook through the shared runtime command and receives no HTTP traffic from the pod Service
+
 #### Scenario: Identical save
 
 - **WHEN** an editor saves an unchanged resource and preparation settings after a successful preparation

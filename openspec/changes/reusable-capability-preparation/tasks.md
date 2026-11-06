@@ -14,6 +14,7 @@
 - [x] 2.3 Derive agent readiness from every current gating preparation plus existing suspension/enabled rules in listings, picker and turn admission; verify two capabilities preparing concurrently, one failure, and a separate suspension.
 - [x] 2.4 Add fenced result publication and idempotent cleanup for superseded/deleted resources; verify replacement, deletion, duplicate completion and late callback races.
 - [x] 2.5 Exercise the public contract with a minimal second test capability through the same save, dispatch, status and readiness path; verify no capability-ID-specific control-plane branch is needed and document the extension points.
+- [x] 2.6 Expose the worker through a fred-runtime command, local and Docker Make targets, VS Code tasks and an opt-in agent-pod Deployment; verify another pod image can enable it without fred-agents code and the worker is excluded from HTTP service selection.
 
 ## 3. Knowledge Flow vision service
 

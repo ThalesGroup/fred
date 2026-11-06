@@ -59,6 +59,18 @@ Runtime contract:
 - `.env` + `configuration.yaml` stay externalized under `/app/config`
 - `models_catalog.yaml` and `mcp_catalog_external.yaml` are mounted by the Fred chart
 
+The preparation worker is a separate process using the same installed capability
+registry. Run `make run-worker` locally or `make run-worker-docker` with the built
+image. Both invoke `python -m fred_runtime preparation-worker`; the Docker target
+uses `WORKER_CONFIG_FILE` (default `./config/configuration_prod.yaml`) and the
+same `.env` as the API. The local target accepts `WORKER_ENV_FILE` when the
+credentials live outside the checkout; `make run-worker-prod` selects the
+production YAML. The worker needs Temporal, the Control
+Plane URL, workload credentials and shared object storage. The serving API
+remains a separate process.
+Any agent pod with `fred-runtime` installed can use the same library command
+without a `fred-agents` module.
+
 The production image includes the default `models_catalog.yaml`. Deployments
 outside the Fred chart can use that default, mount another file at
 `/app/config/models_catalog.yaml`, or set `FRED_MODELS_CATALOG_FILE` to their

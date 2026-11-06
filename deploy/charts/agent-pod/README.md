@@ -114,6 +114,8 @@ Secrets the platform already owns (`valueFrom.secretKeyRef`), under other key na
 | `httpRoute` | off | browser route on `base_url` through a Gateway API HTTPRoute |
 | `service.port` | `80` | |
 | `replicaCount`, `resources` | `1`, see `values.yaml` | |
+| `preparationWorker.enabled` | `false` | deploy a separate Temporal worker from this image and its installed capability registry |
+| `preparationWorker.replicaCount`, `preparationWorker.resources` | `1`, see `values.yaml` | independent worker capacity; no HTTP Service is created for it |
 | `extraVolumes`, `extraVolumeMounts` | `[]` | e.g. a CA bundle |
 | `imagePullSecrets` | `[]` | for a private registry |
 
@@ -140,6 +142,18 @@ httpRoute:
 `requestTimeout` for long-running streams. Set Fred's `runtime_catalog_sources`
 `ingress_prefix` to that same base URL; the installation notes print the entry.
 The HTTPRoute remains disabled unless selected in the values file.
+
+### Capability preparation worker
+
+Set `preparationWorker.enabled: true` to run `python -m fred_runtime
+preparation-worker` in a separate Deployment. It uses the same image, mounted
+configuration, credentials and object storage as the serving pod. Set
+`configuration.platform.control_plane_url`, `configuration.scheduler.temporal`,
+and `configuration.preparation.enabled_capabilities` for the pod. The chart
+rejects an enabled worker without a Control Plane URL. The worker has its own
+replica count and resource limits and is never selected by the HTTP Service.
+Add this pod's `preparation_client_id` and `preparation_enabled: true` to the
+Control Plane runtime catalog source when ready to accept preparations.
 
 ## Register in Fred
 
