@@ -142,113 +142,73 @@ Conversations whose agents still exist SHALL retain their existing message submi
 - **THEN** the pending submission does not start a runtime turn or clear the next conversation's state
 - **AND** returning to its original session does not revive the revoked submission
 
-### Requirement: Plain text can wait while a managed agent works
+### Requirement: Active-turn text appears directly in the conversation
 
-During an active managed ReAct or Deep turn, the composer SHALL accept additional plain-text messages into a conversation-scoped ordered list. The list SHALL appear in a compact disclosure panel above the composer, with each message on one ellipsized line. Each waiting message SHALL be editable or removable through a menu with icons until immediate delivery is requested. A message awaiting immediate delivery SHALL remain visible but locked until its outcome is known. The list SHALL submit its next message as an ordinary turn only after the active turn ends and the conversation is available for another user turn. The ordinary pending list SHALL live in browser-tab memory per conversation and survive in-app navigation while its turn continues or finishes in the background. Queued ordinary turns SHALL start only while that conversation is open. Stop, deletion, reload, tab close or a genuinely interrupted stream SHALL clear the matching queue without restoration or replay. Delivery acknowledgements SHALL remove consumed steering messages even while detached. Late callbacks SHALL NOT restore a discarded queue or modify another conversation.
+During an active managed ReAct or Deep turn, submitting plain text SHALL create a durable user message at the end of the visible thread. A subtle pending indicator SHALL remain while its provisional rank is fixed. Incorporation SHALL replace it with a brief acknowledgement. Commands, attachments, and human-input answers SHALL retain their dedicated paths.
 
-#### Scenario: Queue and edit a message
+#### Scenario: Submit during a tool call
 
-- **GIVEN** an active agent turn
-- **WHEN** the user submits a plain-text message and edits it in the pending list
-- **THEN** its text returns to the composer for revision and can be queued again without interrupting the active turn
+- **GIVEN** an active turn with a dispatched tool call
+- **WHEN** the user submits plain text
+- **THEN** the message appears at the bottom of the chat with a pending indicator
+- **AND** its provisional rank stays fixed while tool results and trace updates arrive
 
-#### Scenario: Drain after completion
+#### Scenario: Reload before delivery
 
-- **GIVEN** two plain-text messages waiting in order
-- **WHEN** the active agent turn ends without a human-input pause
-- **THEN** the first message begins the next ordinary turn, and the second waits for that turn to end
+- **GIVEN** a submitted message has not reached a model boundary
+- **WHEN** the browser reloads or the user returns to the conversation
+- **THEN** the same message and pending state are restored from history without a duplicate submission
 
-#### Scenario: Pending human input
+### Requirement: In-thread messages reach a safe model boundary
 
-- **GIVEN** a pending human-input request or interrupted execution that requires a decision
-- **WHEN** an agent turn ends
-- **THEN** queued ordinary messages remain pending until the human-input path is resolved
+The runtime SHALL give an eligible submitted message to the active ReAct or Deep agent once, after dispatched tool results and before the next model decision. At that boundary it SHALL persist a definitive canonical rank and delivered state. Conversation history SHALL remain ordered by rank, with each tool call/result group intact. Messages missing the boundary SHALL remain pending for the next eligible turn.
 
-#### Scenario: Leave or interrupt the chat
+#### Scenario: Delivery after tool results
 
-- **GIVEN** messages waiting during an active turn
-- **WHEN** the user leaves the conversation within Fred
-- **THEN** its queue remains in tab memory and sends no ordinary turn in the background
-- **AND** reopening the conversation restores it and resumes FIFO after generation and human-input holds end
-- **WHEN** its stream is genuinely interrupted, or the user stops or deletes it, reloads or closes the tab
-- **THEN** its queue is discarded without affecting another conversation or allowing late events to restore it
+- **GIVEN** a tool batch is running when the user submits a message
+- **WHEN** all dispatched results are available and the agent resumes model work
+- **THEN** the agent receives the message once after those results
+- **AND** its definitive rank places it after the completed tool batch in reloaded history
 
-#### Scenario: Delivery while detached
+#### Scenario: End before another model call
 
-- **GIVEN** a queued message offered to an agent before navigating elsewhere
-- **WHEN** the runtime acknowledges delivery while the conversation is detached
-- **THEN** that message is absent from the queue on return and is not sent again
+- **GIVEN** a submitted message is still pending
+- **WHEN** the active turn ends without another model decision
+- **THEN** the message remains visible and is submitted as the next ordinary turn
 
-### Requirement: A pending message can steer the active turn
+#### Scenario: Human-input pause and another pod
 
-The user SHALL be able to request immediate delivery of a pending plain-text message using Fred's shared secondary tonal button labeled `Send` or `Envoyer`. For an active ReAct or Deep turn, the runtime SHALL make it available before the next model decision after the already dispatched tool batch completes. It MUST NOT split an outstanding assistant tool-call/result group. A message that has not reached that boundary before the turn ends SHALL remain available as the next ordinary turn. The interface SHALL distinguish pending from actually delivered messages.
+- **GIVEN** a message is submitted during a turn that pauses for human input
+- **WHEN** the user answers and another runtime replica resumes the turn
+- **THEN** the message remains pending until the resumed agent reaches its next safe model boundary
+- **AND** it is incorporated once with the same message identity
 
-#### Scenario: Delivery after tools
+#### Scenario: Graph fallback pauses for human input
 
-- **GIVEN** a ReAct or Deep turn with tools running and an eligible pending message
-- **WHEN** the tools complete and the agent is about to call the model again
-- **THEN** the model sees the new user message once after the tool results and before it decides its next action
-- **AND** the conversation shows and persists the message in that order
+- **GIVEN** a pending message starts the next ordinary Graph turn
+- **WHEN** Graph reaches a human-input pause before a final answer
+- **THEN** the message receives its definitive opening rank and no longer appears pending
 
-#### Scenario: No further decision boundary
+### Requirement: In-thread submission survives concurrency and failure
 
-- **GIVEN** a pending message marked for immediate delivery
-- **WHEN** the active turn ends before another model decision
-- **THEN** the message remains pending and is eligible for the next ordinary turn
+The runtime SHALL authorize the session and managed agent before storing a submitted message. Message identity SHALL make retries idempotent across runtime replicas. Concurrent submissions and history writes SHALL not overwrite or duplicate messages or canonical ranks. A runtime crash SHALL leave an unincorporated message visible and eligible for a later continuation or ordinary turn. Deleting a conversation SHALL delete its submitted messages with the rest of its history.
 
-#### Scenario: Human confirmation between offer and delivery
+#### Scenario: Duplicate HTTP submission
 
-- **GIVEN** an immediate message was accepted during an active turn
-- **WHEN** the agent pauses for tool confirmation before reaching another model boundary
-- **THEN** the message remains undelivered during the pause
-- **AND** the matching resumed turn consumes it once after the tool results and before its next model decision
+- **WHEN** the same authorized message identity is submitted twice to different replicas
+- **THEN** only one user message exists in history and at most one incorporation occurs
 
-#### Scenario: Unauthorized steering
+#### Scenario: Failed or interrupted stream
 
-- **WHEN** a caller tries to steer a session they do not own or an agent they cannot use
-- **THEN** the runtime refuses the request without making the message visible to the active agent
+- **GIVEN** a submitted message is not durably incorporated
+- **WHEN** the executing replica stops or its stream is interrupted
+- **THEN** the message remains visible and pending after reload
+- **AND** the next eligible continuation can incorporate it
 
-### Requirement: Steering works across runtime replicas
+#### Scenario: Unauthorized submission
 
-An active ReAct or Deep turn SHALL accept a steering request handled by another runtime replica. The runtime SHALL use a turn identity to reject stale requests for a later turn of the same session. A matching HITL resume on another replica SHALL retain an accepted but undelivered message. A stale or absent active turn SHALL refuse immediate delivery without claiming the message was delivered.
-
-#### Scenario: Cross-replica steering and HITL resume
-
-- **GIVEN** a turn running on replica A and an authenticated steering request handled by replica B
-- **WHEN** the turn reaches its next model boundary, including after a HITL resume handled by replica B
-- **THEN** the agent sees the message once and the client receives a delivery event
-
-#### Scenario: Stale turn request
-
-- **GIVEN** a request carrying the identity of an earlier turn
-- **WHEN** another turn is now active in the same session
-- **THEN** the runtime rejects the request without injecting it into the later turn
-
-### Requirement: Prototype limits are explicit
-
-The first implementation SHALL offer immediate steering only for plain-text messages in active ReAct and Deep turns. Graph turns MAY use the ordinary pending queue but SHALL NOT receive immediate steering. Commands, attachments and human-input answers SHALL NOT be queued or steered during an active turn. If immediate steering is unavailable, the message SHALL stay pending rather than appear delivered.
-
-#### Scenario: Unsupported active execution
-
-- **GIVEN** an active Graph turn or an expired active turn
-- **WHEN** the user requests immediate delivery
-- **THEN** the interface keeps the message pending and identifies that delivery did not occur
-
-### Requirement: Abandoned steering ownership is reclaimed
-
-The runtime SHALL complete turn cleanup despite request cancellation, stop lease renewal and preserve any replacement turn's ownership. A normal human-input pause SHALL keep its existing resume semantics; an interrupted stream SHALL release its temporary steering messages. Expired steering rows SHALL be reclaimed at startup and every 60 seconds while SQL and a healthy runtime remain available, in bounded batches.
-
-#### Scenario: Cancellation during teardown
-
-- **WHEN** a streamed turn is cancelled while teardown awaits I/O
-- **THEN** the heartbeat is stopped and the matching steering ownership is released before cancellation propagates
-- **AND** a later turn is preserved
-
-#### Scenario: Runtime crash
-
-- **WHEN** a runtime stops before cleanup and its lease expires
-- **THEN** a healthy runtime reclaims the expired row without reopening the conversation
-- **AND** a late heartbeat does not revive it
+- **WHEN** a caller submits text to another user's session or an unauthorized agent
+- **THEN** the runtime refuses the request and stores no message
 
 ### Requirement: Background conversation states are visually distinct
 
@@ -289,7 +249,7 @@ The sidebar SHALL distinguish running turns, pending user input and completed un
 - **WHEN** the page reloads in the same tab after a known pending-input pause or completed unread answer
 - **THEN** the sidebar restores the waiting chip or unread dot without extra requests or notifications
 - **AND** opening clears unread, history reconciles waiting, a new turn clears waiting, and Stop or deletion clears both
-- **AND** running turns and pending-message queues are not restored
+- **AND** running turns are not restored; pending in-thread user messages are restored from history
 
 #### Scenario: Local indicator storage is unavailable
 

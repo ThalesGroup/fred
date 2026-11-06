@@ -2,7 +2,7 @@
 
 ### Requirement: Active-turn text appears directly in the conversation
 
-During an active managed ReAct or Deep turn, submitting plain text SHALL create a durable user message in that conversation immediately. It SHALL appear at the end of the visible thread with a subtle pending indicator. The message SHALL retain a fixed provisional rank while pending, regardless of later trace events. The interface SHALL replace the pending indicator with a brief acknowledgement when the agent incorporates the message, then remove the acknowledgement. Commands, attachments, and human-input answers SHALL retain their dedicated submission paths.
+During an active managed ReAct or Deep turn, submitting plain text SHALL create a durable user message at the end of the visible thread. A subtle pending indicator SHALL remain while its provisional rank is fixed. Incorporation SHALL replace it with a brief acknowledgement. Commands, attachments, and human-input answers SHALL retain their dedicated paths.
 
 #### Scenario: Submit during a tool call
 
@@ -19,7 +19,7 @@ During an active managed ReAct or Deep turn, submitting plain text SHALL create 
 
 ### Requirement: In-thread messages reach a safe model boundary
 
-The runtime SHALL give an eligible submitted message to the active ReAct or Deep agent once, after already dispatched tool calls and their results and before the next model decision. It SHALL assign the message one definitive canonical rank at that boundary and persist its delivered state. Canonical conversation history SHALL remain ordered by rank, and a tool call/result group SHALL remain intact. A message submitted too late for that boundary SHALL remain pending for the next ordinary turn. A human-input pause SHALL retain pending messages until the matching continuation reaches a safe boundary.
+The runtime SHALL give an eligible submitted message to the active ReAct or Deep agent once, after dispatched tool results and before the next model decision. At that boundary it SHALL persist a definitive canonical rank and delivered state. Conversation history SHALL remain ordered by rank, with each tool call/result group intact. Messages missing the boundary SHALL remain pending for the next eligible turn.
 
 #### Scenario: Delivery after tool results
 
@@ -40,6 +40,12 @@ The runtime SHALL give an eligible submitted message to the active ReAct or Deep
 - **WHEN** the user answers and another runtime replica resumes the turn
 - **THEN** the message remains pending until the resumed agent reaches its next safe model boundary
 - **AND** it is incorporated once with the same message identity
+
+#### Scenario: Graph fallback pauses for human input
+
+- **GIVEN** a pending message starts the next ordinary Graph turn
+- **WHEN** Graph reaches a human-input pause before a final answer
+- **THEN** the message receives its definitive opening rank and no longer appears pending
 
 ### Requirement: In-thread submission survives concurrency and failure
 
@@ -124,7 +130,7 @@ The sidebar SHALL distinguish running turns, pending user input and completed un
 
 **Reason**: In-thread submission supersedes the browser-only pending queue and its edit/remove/send controls.
 
-**Migration**: Existing unsent browser-only drafts cannot be recovered after reload; existing server-side unconsumed steering messages are migrated into conversation history. New submissions use the chat composer and appear in the thread.
+**Migration**: Existing unsent browser-only drafts and unconsumed server-side mailbox entries are discarded during upgrade. Messages already delivered and persisted in conversation history remain. New submissions use the chat composer and appear in the thread.
 
 ### Requirement: A pending message can steer the active turn
 

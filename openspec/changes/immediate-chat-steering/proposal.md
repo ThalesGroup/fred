@@ -7,7 +7,7 @@ An active managed turn currently puts additional user text in a browser-only que
 - Submit plain text directly into the conversation during an active ReAct or Deep turn. Show it immediately with a subtle pending indicator; replace that indicator briefly when the model has incorporated it.
 - Persist each submitted message in conversation history at a fixed provisional rank. Keep it visually at the end while pending, then assign its definitive rank once at the safe model boundary. Continue ordering canonical history by rank.
 - Deliver after the current tool-call/result batch, preserve the message across pod changes and restarts, and run it as the next ordinary turn if the current turn ends first. Hold it through a human-input pause.
-- Remove the browser queue, its disclosure and actions, the steering mailbox table, and its cleanup path. Migrate existing unconsumed mailbox messages into durable conversation history before dropping the table in the same migration.
+- Remove the browser queue, its disclosure and actions, the steering mailbox table, and its cleanup path. Drop unconsumed mailbox entries during the same migration; already persisted conversation messages remain intact.
 
 ## Capabilities
 
