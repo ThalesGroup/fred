@@ -40,7 +40,7 @@ export interface PromptsDeps {
   renameCategory: (args: RenamePromptCategoryApiArg) => Promise<PromptCategory>;
   listCategories: (spaceId: string) => Promise<PromptCategory[]>;
   deleteCategory: (args: DeletePromptCategoryApiArg) => Promise<void>;
-  marketplaceCount: (spaceId: string) => Promise<number>;
+  marketplaceCount?: (spaceId: string) => Promise<number>;
 }
 
 /** Validate the library consumed by the composer, without the retired session-context attachment path. */
@@ -141,7 +141,7 @@ export const promptsScenario: Scenario<PromptsDeps> = async (deps, report, signa
         return { value: undefined, detail: "updated title and full text; identity and omitted fields preserved" };
       },
     );
-    await runStep(report, "prompt-command", "The immutable logical name supplies the slash command", async () => {
+    await runStep(report, "prompt-command", "The prompt catalog preserves the slash-command identity", async () => {
       signal.throwIfAborted();
       if (!promptId) throw new SkipStep("prompt missing");
       const offered = (await deps.listPrompts(spaceId)).some(
@@ -174,10 +174,12 @@ export const promptsScenario: Scenario<PromptsDeps> = async (deps, report, signa
         throw new Error("the category kept its old name or moved space");
       return { value: undefined, detail: name };
     });
-    await runStep(report, "marketplace", "The prompt marketplace can be read", async () => {
-      signal.throwIfAborted();
-      return { value: undefined, detail: `${await deps.marketplaceCount(spaceId)} published prompt(s)` };
-    });
+    const marketplaceCount = deps.marketplaceCount;
+    if (marketplaceCount)
+      await runStep(report, "marketplace", "The prompt marketplace can be read", async () => {
+        signal.throwIfAborted();
+        return { value: undefined, detail: `${await marketplaceCount(spaceId)} published prompt(s)` };
+      });
   } finally {
     await cleanup(
       report,
@@ -187,6 +189,8 @@ export const promptsScenario: Scenario<PromptsDeps> = async (deps, report, signa
       (id) => deps.deletePrompt({ spaceId, promptId: id }),
       async (id) => {
         await expectRefused(() => deps.readPrompt({ spaceId, promptId: id }), "reading the deleted prompt", [404]);
+        if ((await deps.listPrompts(spaceId)).some((prompt) => prompt.prompt_id === id))
+          throw new Error("Deleted prompt remains in its catalog.");
       },
     );
     await cleanup(

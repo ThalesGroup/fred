@@ -14,18 +14,20 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
-import type { SelfTestFamily } from "../../../../features/pipeline/families";
+import type { SelfTestFamily } from "../../../../features/pipeline/familyCatalog";
 import { StepReportPanel } from "./StepReportPanel";
 import styles from "./SelfTestPage.module.css";
 
 interface FamilySectionProps {
   family: SelfTestFamily;
+  reportTitle?: string;
   busy: boolean;
+  weaver?: boolean;
   notice?: ReactNode;
   children?: ReactNode;
 }
 
-export function FamilySection({ family, busy, notice, children }: FamilySectionProps) {
+export function FamilySection({ family, busy, weaver, notice, children, reportTitle }: FamilySectionProps) {
   const { t } = useTranslation();
   const { run } = family;
   return (
@@ -43,9 +45,15 @@ export function FamilySection({ family, busy, notice, children }: FamilySectionP
           {run.isRunning ? t("rework.selftest.report.running") : t("rework.selftest.family.run")}
         </Button>
       </div>
-      <p className={styles.subtitle}>{t(`rework.selftest.families.${family.id}.subtitle`)}</p>
+      <p className={styles.subtitle}>{t(`rework.selftest.families.${family.id}.${weaver ? "weaver" : "subtitle"}`)}</p>
       {notice}
-      <StepReportPanel steps={run.steps} isRunning={run.isRunning} emptyLabel={t("rework.selftest.report.empty")} />
+      <StepReportPanel
+        reportTitle={reportTitle}
+        steps={run.steps}
+        isRunning={run.isRunning}
+        durationMs={run.durationMs}
+        emptyLabel={t("rework.selftest.report.empty")}
+      />
       {children}
     </section>
   );

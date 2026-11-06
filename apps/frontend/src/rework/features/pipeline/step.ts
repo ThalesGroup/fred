@@ -21,14 +21,10 @@ export class SkipStep extends Error {}
 export function describeError(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (err && typeof err === "object" && "status" in err) {
-    const { status, data, error } = err as { status: unknown; data?: unknown; error?: unknown };
-    const body = data && typeof data === "object" && "detail" in data ? (data as { detail: unknown }).detail : data;
-    const detail = body ?? error;
-    const text =
-      detail === undefined || detail === null ? "" : typeof detail === "string" ? detail : JSON.stringify(detail);
-    return text ? `HTTP ${String(status)}: ${text}` : `HTTP ${String(status)}`;
+    // Generated error bodies can contain input or private service details.
+    return `HTTP ${String(err.status)}`;
   }
-  return String(err);
+  return "The request failed.";
 }
 
 /**

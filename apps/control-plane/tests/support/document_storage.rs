@@ -1746,7 +1746,7 @@ async fn powerpoint_space_deletion_waits_for_original_and_derived_cleanup() {
     lifecycle.catalog.space_policies.purge.default.retention =
         serde_yaml_ng::from_str("PT0S").unwrap();
     let receipt = lifecycle
-        .accept(&d.e.pool, "fixture-root", org)
+        .accept(&d.e.pool, "fixture-root", org, false)
         .await
         .unwrap();
     for _ in 0..4 {

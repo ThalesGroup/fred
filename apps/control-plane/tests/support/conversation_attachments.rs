@@ -1257,7 +1257,7 @@ async fn session_purge_waits_for_admitted_original_and_derived_writers() {
         .await
         .unwrap();
     let deletion = lifecycle
-        .accept_session(&d.e.pool, "reader", team, session)
+        .accept_session(&d.e.pool, "reader", team, session, false)
         .await
         .unwrap();
     finish_processing(&d, document).await;

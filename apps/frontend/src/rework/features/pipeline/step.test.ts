@@ -21,17 +21,9 @@ describe("describeError", () => {
     expect(describeError(new Error("boom"))).toBe("boom");
   });
 
-  it("reads the status and detail of a generated-client failure", () => {
-    expect(describeError({ status: 409, data: { detail: "An agent named 'x' already exists." } })).toBe(
-      "HTTP 409: An agent named 'x' already exists.",
-    );
-    expect(describeError({ status: 422, data: { detail: [{ msg: "field required" }] } })).toBe(
-      'HTTP 422: [{"msg":"field required"}]',
-    );
-    expect(describeError({ status: "FETCH_ERROR", error: "TypeError: Failed to fetch" })).toBe(
-      "HTTP FETCH_ERROR: TypeError: Failed to fetch",
-    );
-    expect(describeError({ status: 500 })).toBe("HTTP 500");
+  it("reports the status without copying server payloads or credential data", () => {
+    expect(describeError({ status: 409, data: { detail: "private request content" } })).toBe("HTTP 409");
+    expect(describeError({ status: "FETCH_ERROR", error: "private upstream address" })).toBe("HTTP FETCH_ERROR");
   });
 });
 
@@ -46,6 +38,6 @@ describe("runStep", () => {
         throw { status: 409, data: { detail: "taken" } };
       },
     );
-    expect(steps[steps.length - 1]).toMatchObject({ status: "failed", error: "HTTP 409: taken" });
+    expect(steps[steps.length - 1]).toMatchObject({ status: "failed", error: "HTTP 409" });
   });
 });

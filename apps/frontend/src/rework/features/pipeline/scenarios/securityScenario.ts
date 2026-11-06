@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { runStep, SkipStep } from "../step";
-import type { Scenario } from "../types";
+import type { Reporter, Scenario } from "../types";
 import { cleanup, newRunScope } from "./runScope";
 
 export type HeaderMap = Record<string, string>;
@@ -32,7 +32,14 @@ export interface SecurityDeps {
 
 export const HARDENING_HEADERS = ["content-security-policy", "x-content-type-options", "referrer-policy"];
 const ACTIVE_TYPES = ["image/svg+xml", "text/html", "application/xhtml+xml"];
-const LEAKS = [/Traceback \(most recent call last\)/, /File "\/[^"]+\.py", line \d+/, /sqlalchemy\.exc\./i];
+const LEAKS = [
+  /Traceback \(most recent call last\)/,
+  /File "\/[^"]+\.py", line \d+/,
+  /sqlalchemy\.exc\./i,
+  /thread\s+['"][^'"]+['"]\s+panicked at/i,
+  /stack backtrace:/i,
+  /(?:^|\n)\s*at [^\n]*\([^\n]+:\d+:\d+\)/,
+];
 
 /** Whether a response can run script on the platform origin when opened as a document. */
 export function runsActiveContent(headers: HeaderMap): boolean {
@@ -54,10 +61,12 @@ export function svgFixture(name: string, marker: string): File {
   return new File([svg], name, { type: "image/svg+xml" });
 }
 
-export const securityScenario: Scenario<SecurityDeps> = async (deps, report) => {
-  const scope = newRunScope();
-  let libraryId: string | null = null;
-
+export async function runSecurityBaseline(
+  deps: Pick<SecurityDeps, "origin" | "headersOf" | "token">,
+  report: Reporter,
+  probes: string[],
+  deniedStatuses?: number[],
+) {
   await runStep(report, "transport", "The platform is served over HTTPS", async () => {
     if (deps.origin.https) return { value: undefined, detail: "https" };
     if (deps.origin.local) throw new SkipStep("plain HTTP on a local address");
@@ -80,22 +89,46 @@ export const securityScenario: Scenario<SecurityDeps> = async (deps, report) => 
     },
     { optional: true },
   );
-  await runStep(report, "error-bodies", "Error responses expose no stack trace", async () => {
-    const token = await deps.token();
-    if (!token) throw new SkipStep("no session token");
-    const probes = [
-      `/knowledge-flow/v1/documents/metadata/${scope.name("missing")}`,
-      `/control-plane/v1/teams/${scope.name("missing")}`,
-      `/control-plane/v1/teams/${scope.name("missing")}/prompts/${scope.name("missing")}`,
-    ];
-    for (const path of probes) {
-      const { status, body } = await deps.headersOf(path, token);
-      if (status < 400) throw new Error(`${path} answered HTTP ${status} for an unknown id`);
-      if (LEAKS.some((leak) => leak.test(body))) throw new Error(`${path} leaks server internals in its body`);
-    }
-    return { value: undefined, detail: `${probes.length} error bodies clean` };
-  });
+  await runStep(
+    report,
+    "error-bodies",
+    "Sampled error responses contain no recognized stack-trace patterns",
+    async () => {
+      const token = await deps.token();
+      if (!token) throw new SkipStep("no session token");
+      for (const path of probes) {
+        const { status, headers, body } = await deps.headersOf(path, token);
+        if (deniedStatuses ? !deniedStatuses.includes(status) : status < 400 || status >= 500)
+          throw new Error(`${path} answered HTTP ${status} for an unknown id`);
+        if (LEAKS.some((leak) => leak.test(body))) throw new Error(`${path} leaks server internals in its body`);
+        if (deniedStatuses) {
+          let error: { code?: unknown; detail?: unknown } | null = null;
+          if (headers["content-type"]?.toLowerCase().includes("application/json")) {
+            try {
+              error = JSON.parse(body);
+            } catch {
+              // Report the contract failure without including the response body.
+            }
+          }
+          if (!error || typeof error.code !== "string" || typeof error.detail !== "string") {
+            throw new Error("The protected route did not return its application error response.");
+          }
+        }
+      }
+      return { value: undefined, detail: `${probes.length} error bodies clean` };
+    },
+  );
+}
 
+export const securityScenario: Scenario<SecurityDeps> = async (deps, report) => {
+  const scope = newRunScope();
+  let libraryId: string | null = null;
+
+  await runSecurityBaseline(deps, report, [
+    `/knowledge-flow/v1/documents/metadata/${scope.name("missing")}`,
+    `/control-plane/v1/teams/${scope.name("missing")}`,
+    `/control-plane/v1/teams/${scope.name("missing")}/prompts/${scope.name("missing")}`,
+  ]);
   try {
     const uid = await runStep(report, "upload-svg", "Upload an SVG document to your personal space", async () => {
       libraryId = await deps.createLibrary(scope.name("fred-selftest-security"));

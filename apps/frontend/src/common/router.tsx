@@ -50,7 +50,6 @@ import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet, useLocation } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
-import { PromptsSelfTestPage } from "@components/pages/admin/SelfTestPage/SelfTestPage";
 import { Protected } from "@core/guards/Protected";
 import { adminIndexPath } from "@core/guards/organizationOwnerPages";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
@@ -126,6 +125,7 @@ const AdminIndexRoute = () => {
   return <Navigate to={target} replace />;
 };
 
+const WeaverSelfTests = lazy(() => import("@components/pages/admin/SelfTestPage/WeaverSelfTestPage"));
 const TaskPlayground = lazy(() => import("../pages/TaskPlayground"));
 const LibraryTreePlayground = lazy(() => import("@components/pages/LibraryTreePlayground/LibraryTreePlayground.tsx"));
 // Lazy: the Help Center chunk carries its whole markdown corpus (HELP-01).
@@ -366,7 +366,11 @@ const applicationRoutes: RouteObject[] = [
       },
       {
         path: "admin/self-test",
-        element: <PromptsSelfTestPage />,
+        element: (
+          <SuspenseWrapper>
+            <WeaverSelfTests />
+          </SuspenseWrapper>
+        ),
       },
       {
         // Corpus audit (#2112): platform-admin-only surface over the document

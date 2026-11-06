@@ -43,6 +43,14 @@
   font: var(--font-title-medium);
 }
 
+.groupHeader {
+  flex-wrap: wrap;
+}
+
+.groupProgress {
+  flex-basis: 100%;
+}
+
 .subtitle {
   margin: 0;
   color: var(--on-surface-retreat);

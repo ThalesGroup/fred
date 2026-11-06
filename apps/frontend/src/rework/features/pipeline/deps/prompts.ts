@@ -15,45 +15,61 @@
 import { useMemo } from "react";
 import { enhancedControlPlaneApi } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { PromptsDeps } from "../scenarios/promptsScenario";
-import { useApiRead, useApiDispatch } from "./api";
+import { useApiRead, useApiDispatch, type ApiDispatch, type ApiRead } from "./api";
+
+const cp = enhancedControlPlaneApi.endpoints;
+
+export async function countMarketplacePrompts(read: ApiRead, organizationId: string) {
+  return (await read(cp.marketplaceEntries, { marketplaceSpaceId: organizationId, kind: "prompt" })).items.length;
+}
 
 /** Prompt validation uses the same generated requests and complete catalogs as the product. */
+export function createPromptsDeps(
+  dispatch: ApiDispatch,
+  read: ApiRead,
+  resolveSpaceId: PromptsDeps["resolveSpaceId"],
+): PromptsDeps {
+  return {
+    resolveSpaceId,
+    createPrompt: (args) => dispatch(cp.createPrompt.initiate(args)).unwrap(),
+    updatePrompt: (args) => dispatch(cp.updatePrompt.initiate(args)).unwrap(),
+    readPrompt: (args) => read(cp.getPrompt, args),
+    deletePrompt: async (args) => {
+      await dispatch(cp.deletePrompt.initiate(args)).unwrap();
+    },
+    listPrompts: async (spaceId) => (await read(cp.listPrompts, { spaceId })).items,
+    setFavorite: async (spaceId, promptId, favorite) => {
+      const endpoint = favorite ? cp.addPromptFavorite : cp.removePromptFavorite;
+      await dispatch(endpoint.initiate({ spaceId, promptId })).unwrap();
+    },
+    createCategory: (args) => dispatch(cp.createPromptCategory.initiate(args)).unwrap(),
+    renameCategory: (args) => dispatch(cp.renamePromptCategory.initiate(args)).unwrap(),
+    listCategories: async (spaceId) => (await read(cp.listPromptCategories, { spaceId })).items,
+    deleteCategory: async (args) => {
+      await dispatch(cp.deletePromptCategory.initiate(args)).unwrap();
+    },
+  };
+}
+
 export function usePromptsDeps(spaceId: string | undefined): PromptsDeps {
   const dispatch = useApiDispatch();
-  const read = useApiRead();
-  return useMemo(() => {
-    const cp = enhancedControlPlaneApi.endpoints;
-    return {
-      resolveSpaceId: async () => {
+  const read = useApiRead(dispatch);
+  return useMemo(
+    () => ({
+      ...createPromptsDeps(dispatch, read, async () => {
         if (!spaceId) throw new Error("Select a Weaver space in the Prompts section before running this scenario");
         const spaces = await read(cp.mySpaces, undefined);
         if (!spaces.some((space) => space.id === spaceId))
           throw new Error("Selected prompt scenario space is no longer available; select a Weaver space again");
         return spaceId;
-      },
-      createPrompt: (args) => dispatch(cp.createPrompt.initiate(args)).unwrap(),
-      updatePrompt: (args) => dispatch(cp.updatePrompt.initiate(args)).unwrap(),
-      readPrompt: (args) => read(cp.getPrompt, args),
-      deletePrompt: async (args) => {
-        await dispatch(cp.deletePrompt.initiate(args)).unwrap();
-      },
-      listPrompts: async (spaceId) => (await read(cp.listPrompts, { spaceId })).items,
-      setFavorite: async (spaceId, promptId, favorite) => {
-        const endpoint = favorite ? cp.addPromptFavorite : cp.removePromptFavorite;
-        await dispatch(endpoint.initiate({ spaceId, promptId })).unwrap();
-      },
-      createCategory: (args) => dispatch(cp.createPromptCategory.initiate(args)).unwrap(),
-      renameCategory: (args) => dispatch(cp.renamePromptCategory.initiate(args)).unwrap(),
-      listCategories: async (spaceId) => (await read(cp.listPromptCategories, { spaceId })).items,
-      deleteCategory: async (args) => {
-        await dispatch(cp.deletePromptCategory.initiate(args)).unwrap();
-      },
-      marketplaceCount: async (spaceId) => {
+      }),
+      marketplaceCount: async (spaceId: string) => {
         const spaces = await read(cp.mySpaces, undefined);
         const organizationId = spaces.find((space) => space.id === spaceId)?.organization_id;
         if (!organizationId) throw new Error("Prompt marketplace organization unavailable");
-        return (await read(cp.marketplaceEntries, { marketplaceSpaceId: organizationId, kind: "prompt" })).items.length;
+        return countMarketplacePrompts(read, organizationId);
       },
-    };
-  }, [spaceId, dispatch, read]);
+    }),
+    [spaceId, dispatch, read],
+  );
 }

@@ -121,6 +121,10 @@ buckets. User-timezone bucketing is deferred. A turn counts once at its first
 consumption; resuming after human validation adds tokens at their consumption
 time without another turn, even across days or query boundaries.
 
+## Operator diagnostics
+
+The browser offers [self-tests](../../apps/frontend/README.md#weaver-self-tests) to platform administrators who also directly own at least one organization, team, or project. Operators reserve this combination of grants for pre-production testing. A run checks the platform and session once, then exercises each selected space along the organization, team and project path using the operator's rights in that space. The report groups results and skip reasons by level. Two-person isolation and an admitted turn that outlives its original user token are separate manual tests. Results stay on the page until the operator changes the path or leaves. Only identifiers needed to recover disposable fixtures survive a reload.
+
 ## Logs and lifecycle
 
 Rust and Python processes write one line per event to stdout, in one format, and never

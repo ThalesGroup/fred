@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -21,7 +21,7 @@ import { TaskProgressBar } from "@shared/atoms/TaskProgressBar/TaskProgressBar.t
 import type { TaskState } from "../../../../features/tasks/taskTypes";
 import type { StepReport, StepStatus } from "../../../../features/pipeline/types";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
-import { buildReport } from "./report";
+import { buildReport, overallState } from "./report";
 import styles from "./SelfTestPage.module.css";
 
 // The Task atoms speak the fred-core TaskState vocabulary; map the pipeline
@@ -34,20 +34,11 @@ const STEP_TO_TASK_STATE: Record<StepStatus, TaskState> = {
   skipped: "cancelled",
 };
 
-function overallState(steps: StepReport[], isRunning: boolean): TaskState | "partial" {
-  if (isRunning || steps.length === 0) return "running";
-  if (steps.some((s) => s.status === "failed")) return "failed";
-  // A run that skipped out before validating anything reports as cancelled, the
-  // same verdict its own steps carry: there is nothing to call a failure.
-  const validated = steps.some((s) => s.status === "passed" || s.status === "running");
-  if (!validated && steps.some((s) => s.status === "skipped")) return "cancelled";
-  if (steps.some((s) => s.status === "skipped" && !s.optional)) return "partial";
-  return "succeeded";
-}
-
 interface StepReportPanelProps {
   steps: StepReport[];
+  reportTitle?: string;
   isRunning: boolean;
+  durationMs?: number;
   /** Shown instead of the step list before the first run. */
   emptyLabel: string;
 }
@@ -57,13 +48,17 @@ interface StepReportPanelProps {
  * Shared by every family on the page, so the report looks the same whichever
  * scenario produced it.
  */
-export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPanelProps) {
+export function StepReportPanel({ steps, isRunning, emptyLabel, durationMs, reportTitle }: StepReportPanelProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [collapsed, setCollapsed] = useState(true);
 
   const passed = steps.filter((s) => s.status === "passed").length;
   const failed = steps.filter((s) => s.status === "failed").length;
+  const hasFailed = failed > 0;
+  useEffect(() => {
+    setCollapsed(!hasFailed);
+  }, [hasFailed]);
   const skipped = steps.filter((s) => s.status === "skipped").length;
   const verdict = overallState(steps, isRunning);
   const state = verdict === "partial" ? "cancelled" : verdict;
@@ -72,7 +67,7 @@ export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPane
   const progress = total > 0 ? completed / total : null;
 
   const handleCopy = async () => {
-    const ok = await writeRichClipboard("", buildReport(steps));
+    const ok = await writeRichClipboard("", buildReport(steps, reportTitle));
     if (ok) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
@@ -95,6 +90,7 @@ export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPane
           <TaskStateBadge state={state} size="md" />
         )}
         <span className={styles.counts}>{t("rework.selftest.report.counts", { passed, failed, skipped, total })}</span>
+        {durationMs != null && <span className={styles.duration}>{(durationMs / 1000).toFixed(1)} s</span>}
         <IconButton
           icon={{ category: "outlined", type: collapsed ? "expand_more" : "expand_less" }}
           variant="icon"
@@ -116,6 +112,14 @@ export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPane
       </div>
       <TaskProgressBar state={state} progress={progress} />
 
+      {collapsed &&
+        steps
+          .filter((step) => step.status === "skipped" && (step.error || step.detail))
+          .map((step) => (
+            <p key={step.id} className={styles.subtitle}>
+              {step.title}: {step.error ?? step.detail}
+            </p>
+          ))}
       {!collapsed && (
         <ul className={styles.steps}>
           {steps.map((step) => (

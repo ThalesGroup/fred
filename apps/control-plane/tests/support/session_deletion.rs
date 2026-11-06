@@ -26,6 +26,65 @@ fn lifecycle(retention: &str) -> Lifecycle {
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
+async fn immediate_session_deletion_requires_platform_owner_and_preserves_accepted_deadline() {
+    use control_plane::{api, authorization, roles::PlatformRole};
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Member, "bob").await;
+    let mut lifecycle = lifecycle("P7D");
+    lifecycle.config.temporal.host = "127.0.0.1:1".into();
+    lifecycle.config.temporal.connect_timeout_seconds = 1;
+    let retained = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
+    let receipt = lifecycle
+        .accept_session(&e.pool, "alice", team.id, retained, false)
+        .await
+        .unwrap();
+    assert!(receipt.due_at > receipt.requested_at);
+    let fresh = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
+    let identity = support::IdentityServer::start().await;
+    let app = api::routes(api::AppState {
+        pool: e.pool.clone(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        directory: None,
+        agent_catalog: Default::default(),
+        onboarding: Default::default(),
+        lifecycle,
+        content: None,
+        processing: None,
+    });
+    let path = format!("/spaces/{}/sessions/{fresh}?immediate=true", team.id);
+    let (status, _) =
+        support::request(&app, &identity, Some("alice"), "DELETE", &path, json!(null)).await;
+    assert_eq!(status, 403);
+    for actor in ["alice", "bob"] {
+        authorization::write_platform(
+            &mut e.pool.acquire().await.unwrap(),
+            actor,
+            PlatformRole::PlatformAdmin,
+            true,
+        )
+        .await
+        .unwrap();
+    }
+    let (status, _) =
+        support::request(&app, &identity, Some("bob"), "DELETE", &path, json!(null)).await;
+    assert_eq!(status, 404);
+    let (status, accepted) =
+        support::request(&app, &identity, Some("alice"), "DELETE", &path, json!(null)).await;
+    assert_eq!(status, 202);
+    assert_eq!(accepted["target_id"], fresh.to_string());
+    assert_eq!(accepted["due_at"], accepted["requested_at"]);
+
+    let path = format!("/spaces/{}/sessions/{retained}?immediate=true", team.id);
+    let (status, replay) =
+        support::request(&app, &identity, Some("alice"), "DELETE", &path, json!(null)).await;
+    assert_eq!(status, 202);
+    assert_eq!(replay, serde_json::to_value(receipt).unwrap());
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
 async fn embedded_session_purge_observes_retention_and_is_idempotent() {
     let e = env().await;
     let (_, team) = org_and_team(&e).await;
@@ -37,7 +96,7 @@ async fn embedded_session_purge_observes_retention_and_is_idempotent() {
         .await
         .unwrap();
     let receipt = lifecycle("P7D")
-        .accept_session(&e.pool, "alice", team.id, id)
+        .accept_session(&e.pool, "alice", team.id, id, false)
         .await
         .unwrap();
     cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
@@ -92,7 +151,7 @@ async fn session_deletion_audit_has_runtime_independent_provenance() {
         for runtime in [fred_rust_agent::DEFINITION.provider, "python"] {
             let id = session(&e, &team, runtime).await;
             let receipt = lifecycle("PT0S")
-                .accept_session(&e.pool, "alice", team.id, id)
+                .accept_session(&e.pool, "alice", team.id, id, false)
                 .await
                 .unwrap();
             cleanup::batch(&e.pool, receipt.id, &pod.runtime, None)
@@ -167,7 +226,7 @@ async fn team_retirement_hides_sessions_before_bounded_receipts_and_preserves_re
     let (_, team) = org_and_team(&e).await;
     let old = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
     let old_receipt = lifecycle("P7D")
-        .accept_session(&e.pool, "alice", team.id, old)
+        .accept_session(&e.pool, "alice", team.id, old, false)
         .await
         .unwrap();
     let fresh = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
@@ -175,7 +234,7 @@ async fn team_retirement_hides_sessions_before_bounded_receipts_and_preserves_re
     sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) select gen_random_uuid(),user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision from session_metadata cross join generate_series(1,100) where session_id=$1")
         .bind(fresh).execute(&e.pool).await.unwrap();
     let parent = lifecycle("PT0S")
-        .accept(&e.pool, "root", team.id)
+        .accept(&e.pool, "root", team.id, false)
         .await
         .unwrap();
     let still_unmarked: Option<Uuid> =
@@ -288,7 +347,7 @@ async fn organization_retirement_keeps_python_conversations_and_their_space_unti
     let ralph = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
     let python = session(&e, &project, "python").await;
     let parent = lifecycle("PT0S")
-        .accept(&e.pool, "root", org.id)
+        .accept(&e.pool, "root", org.id, false)
         .await
         .unwrap();
     for _ in 0..2 {
@@ -361,7 +420,7 @@ async fn organization_purge_drains_conversations_and_attachments_in_teams_projec
             .bind(Uuid::new_v4()).bind(space.id).bind(conversation).bind("a".repeat(64)).bind(format!("fixture/{conversation}")).execute(&e.pool).await.unwrap();
     }
     let parent = lifecycle("PT0S")
-        .accept(&e.pool, "root", org.id)
+        .accept(&e.pool, "root", org.id, false)
         .await
         .unwrap();
     let retired_attachments: i64 =
@@ -523,7 +582,7 @@ async fn python_purge_retries_blocked_receipts_and_requires_effective_erasure() 
     let id = session(&e, &team, "python").await;
     let untouched = session(&e, &team, "python").await;
     let receipt = lifecycle("PT0S")
-        .accept_session(&e.pool, "alice", team.id, id)
+        .accept_session(&e.pool, "alice", team.id, id, false)
         .await
         .unwrap();
     cleanup::batch(&e.pool, receipt.id, &Default::default(), None)
@@ -608,7 +667,7 @@ async fn python_purge_resumes_after_cancelled_call_and_unblocks_parent_deletion(
     let (org, team) = org_and_team(&e).await;
     let id = session(&e, &team, "python").await;
     let parent = lifecycle("PT0S")
-        .accept(&e.pool, "root", org.id)
+        .accept(&e.pool, "root", org.id, false)
         .await
         .unwrap();
     let pod = PythonPurge::start(e.pool.clone()).await;

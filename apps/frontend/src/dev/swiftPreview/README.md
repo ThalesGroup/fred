@@ -8,9 +8,11 @@ HTML is not a production build entry; its bootstrap refuses other modes.
 
 The original Swift components stay at their original paths to keep upcoming
 Swift merges manageable. The gallery mounts them with an independent Redux
-store and a fixed fictional team. Production routes show the pending feature
-notice and never mount these original screens. Existing manager documents,
-imports, folder management and processing keep their Control Plane path.
+store and a fixed fictional team. The production Self-test route shares the
+expandable panels with this preview and runs Weaver checks. Unported screens
+show a pending feature notice on their production routes; the gallery displays
+their simulated previews. Existing manager documents, imports, folder management
+and processing keep their Control Plane path.
 
 Before any UI/API module loads, this window replaces `fetch` with an explicit
 fixture dispatcher. Unknown URLs/methods return 501 and never fall through to
@@ -27,7 +29,7 @@ The separate origin isolates local storage and Redux caches from the regular UI.
 | Knowledge Bases    | One source, instance cards, configuration form                   | Actual source catalog, then save/configuration                |
 | KB documents       | Read-only fictional library                                      | Bind the instance to a Control Plane folder                   |
 | Documents          | Folder browsing, failed/ready rows, rename and labels            | Port each action independently, then ZIP/replacement/rollups  |
-| Diagnostics        | Original families and controls                                   | One real scenario at a time; execution is not simulated       |
+| Diagnostics        | Original families and controls                                   | Use Platform Administration for real Weaver runs              |
 | Platform migration | Fictional counters and original import/export controls           | Define scope; import/export/reset are not simulated           |
 | Dictation          | Original composer, local microphone, constant fake transcription | Actual transcription contract; audio is never sent in preview |
 

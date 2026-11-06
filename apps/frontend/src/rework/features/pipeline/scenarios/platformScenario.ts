@@ -15,10 +15,9 @@ import type {
   AgentTemplateSummary,
   AvailableModelProfileList,
   CapabilityEnablementItem,
-  FrontendConfig,
 } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { runStep, SkipStep } from "../step";
-import type { Scenario } from "../types";
+import type { Reporter, Scenario } from "../types";
 import { SELF_TEST_AGENT_ID } from "./corpus";
 
 export const MAX_CLOCK_SKEW_SECONDS = 120;
@@ -29,20 +28,23 @@ export interface TokenClaims {
   exp?: number;
 }
 
+export interface PlatformSessionDeps {
+  frontendConfig: () => Promise<{ user_auth: { enabled: boolean; realm_url?: string; provider?: string } }>;
+  tokenClaims: () => TokenClaims | null;
+  serverDate: () => Promise<Date | null>;
+  now: () => number;
+}
+
 /** Read-only probes of the deployment, as the signed-in admin. */
-export interface PlatformDeps {
+export interface PlatformDeps extends PlatformSessionDeps {
   controlPlaneHealth: () => Promise<void>;
   knowledgeFlowHealth: () => Promise<void>;
   platformRoles: () => Promise<string[]>;
-  frontendConfig: () => Promise<FrontendConfig>;
-  tokenClaims: () => TokenClaims | null;
-  serverDate: () => Promise<Date | null>;
   templates: () => Promise<AgentTemplateSummary[]>;
   modelProfiles: () => Promise<AvailableModelProfileList>;
   capabilities: () => Promise<CapabilityEnablementItem[]>;
   /** Settings the admin pages read; each returns a short detail. */
   reads: Array<{ id: string; title: string; read: () => Promise<string> }>;
-  now: () => number;
 }
 
 const trimSlash = (url: string) => url.replace(/\/+$/, "");
@@ -70,36 +72,7 @@ export const platformScenario: Scenario<PlatformDeps> = async (deps, report) => 
     return { value: undefined, detail: roles.length ? roles.join(", ") : "no platform role" };
   });
 
-  const config = await runStep(report, "provider-config", "Public identity provider configuration", async () => {
-    const value = await deps.frontendConfig();
-    if (!value.user_auth.enabled) throw new SkipStep("user authentication is disabled on this deployment");
-    return {
-      value,
-      detail: `${value.user_auth.provider ?? "keycloak"}, directory ${value.user_auth.user_directory ?? "keycloak"}`,
-    };
-  });
-  await runStep(report, "token-issuer", "The session token comes from the configured issuer", async () => {
-    if (!config) throw new SkipStep("provider configuration unavailable");
-    const claims = deps.tokenClaims();
-    if (!claims?.iss || !config.user_auth.realm_url) throw new SkipStep("no signed session token to compare");
-    if (trimSlash(claims.iss) === trimSlash(config.user_auth.realm_url))
-      return { value: undefined, detail: claims.iss };
-    // Generic OIDC providers may declare an issuer distinct from the discovery URL.
-    if (config.user_auth.provider === "oidc") throw new SkipStep(`issuer ${claims.iss} differs from the provider URL`);
-    throw new Error(`token issuer ${claims.iss} differs from the configured realm ${config.user_auth.realm_url}`);
-  });
-  await runStep(report, "clocks", "Browser, token and server clocks agree", async () => {
-    const now = deps.now() / 1000;
-    const claims = deps.tokenClaims();
-    if (claims?.iat && claims.iat - now > MAX_CLOCK_SKEW_SECONDS)
-      throw new Error(`the token was issued ${Math.round(claims.iat - now)} s in the future`);
-    if (claims?.exp && claims.exp < now) throw new Error("the session token is already expired");
-    const server = await deps.serverDate();
-    if (!server) throw new SkipStep("the server sent no Date header");
-    const skew = Math.round(server.getTime() / 1000 - now);
-    if (Math.abs(skew) > MAX_CLOCK_SKEW_SECONDS) throw new Error(`server clock is ${skew} s away from this browser`);
-    return { value: undefined, detail: `server skew ${skew} s` };
-  });
+  await runPlatformSessionChecks(deps, report);
 
   const templates = await runStep(report, "runtimes", "Every agent runtime serves an available template", async () => {
     const value = await deps.templates();
@@ -134,3 +107,38 @@ export const platformScenario: Scenario<PlatformDeps> = async (deps, report) => 
     await runStep(report, read.id, read.title, async () => ({ value: undefined, detail: await read.read() }));
   }
 };
+
+export async function runPlatformSessionChecks(deps: PlatformSessionDeps, report: Reporter): Promise<void> {
+  const config = await runStep(report, "provider-config", "Public identity provider configuration", async () => {
+    const value = await deps.frontendConfig();
+    if (!value.user_auth.enabled) throw new SkipStep("user authentication is disabled on this deployment");
+    return {
+      value,
+      detail: "Public sign-in configuration is available.",
+    };
+  });
+  await runStep(report, "token-issuer", "The session token comes from the configured issuer", async () => {
+    if (!config) throw new SkipStep("provider configuration unavailable");
+    const claims = deps.tokenClaims();
+    if (!claims?.iss || !config.user_auth.realm_url) throw new SkipStep("no signed session token to compare");
+    if (trimSlash(claims.iss) === trimSlash(config.user_auth.realm_url))
+      return { value: undefined, detail: "Session issuer matches the configured identity provider." };
+    // Generic OIDC providers may declare an issuer distinct from the discovery URL.
+    if (config.user_auth.provider === "oidc")
+      throw new SkipStep("The generic identity provider uses a distinct issuer; comparison is unavailable.");
+    throw new Error("The session issuer differs from the configured identity provider.");
+  });
+  await runStep(report, "clocks", "Browser, token and server clocks agree", async () => {
+    const now = deps.now() / 1000;
+    const claims = deps.tokenClaims();
+    if (typeof claims?.iat === "number" && claims.iat - now > MAX_CLOCK_SKEW_SECONDS)
+      throw new Error("The session issue time is too far ahead of the browser clock.");
+    if (typeof claims?.exp === "number" && claims.exp < now) throw new Error("the session token is already expired");
+    const server = await deps.serverDate();
+    if (!server || !Number.isFinite(server.getTime())) throw new SkipStep("The server sent no usable Date header.");
+    const skew = Math.round(server.getTime() / 1000 - now);
+    if (Math.abs(skew) > MAX_CLOCK_SKEW_SECONDS)
+      throw new Error("The server and browser clocks differ beyond the accepted tolerance.");
+    return { value: undefined, detail: "Browser, session and server clocks are within tolerance." };
+  });
+}

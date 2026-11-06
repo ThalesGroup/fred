@@ -56,6 +56,15 @@ vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
 vi.mock("@core/hooks/useOrganizationOwner", () => ({
   useOrganizationOwner: () => ({ isOwner: h.organizationOwner, organizationId: "org-1", currentData: h.spaces }),
 }));
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useMySpacesQuery: () => ({
+    currentData: h.spaces,
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({
   useManagerPlatformAdmin: () => ({ isAdmin: h.platformOwner }),
 }));
@@ -134,6 +143,32 @@ describe("AdminNavbar", () => {
     h.spaces = ACME;
     render("/admin/organizations");
     expect(hrefs()).toEqual(PLATFORM_PAGES);
+  });
+
+  it.each(["organization", "team", "project"])("offers self-tests for a platform admin owning a %s", (kind) => {
+    h.spaces = [{ kind, name: "Owned space", roles: ["owner"], id: "owned" }];
+    h.organizationOwner = false;
+    render("/admin/organizations");
+    expect(hrefs()).toContain("/admin/self-test");
+  });
+  it.each([[], ["member"], ["editor"], ["analyst"], ["organization_admin"]].map((roles) => ({ roles })))(
+    "hides self-tests without ownership ($roles)",
+    ({ roles }) => {
+      h.spaces = [{ kind: "organization", name: "Space", roles, id: "space" }];
+      render("/admin/organizations");
+      expect(hrefs()).not.toContain("/admin/self-test");
+    },
+  );
+  it("excludes personal-space ownership", () => {
+    h.spaces = [{ kind: "personal", name: "Personal", roles: ["owner"], id: "personal" }];
+    render("/admin/organizations");
+    expect(hrefs()).not.toContain("/admin/self-test");
+  });
+  it("hides self-tests from an owner without platform administration", () => {
+    h.platformOwner = false;
+    h.spaces = ACME;
+    render("/admin/organizations");
+    expect(hrefs()).not.toContain("/admin/self-test");
   });
 
   it("lists only organization pages in the organization space", () => {

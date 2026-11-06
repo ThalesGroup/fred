@@ -238,7 +238,13 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({ url: `/control-plane/v1/document-uploads/${queryArg.id}/acknowledgment`, method: "PUT" }),
     }),
     deleteDocument: build.mutation<DeleteDocumentApiResponse, DeleteDocumentApiArg>({
-      query: (queryArg) => ({ url: `/control-plane/v1/documents/${queryArg.id}`, method: "DELETE" }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/documents/${queryArg.id}`,
+        method: "DELETE",
+        params: {
+          immediate: queryArg.immediate,
+        },
+      }),
     }),
     content: build.query<ContentApiResponse, ContentApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/documents/${queryArg.id}/content` }),
@@ -281,7 +287,13 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({ url: `/control-plane/v1/folders`, method: "POST", body: queryArg.createFolder }),
     }),
     deleteFolder: build.mutation<DeleteFolderApiResponse, DeleteFolderApiArg>({
-      query: (queryArg) => ({ url: `/control-plane/v1/folders/${queryArg.id}`, method: "DELETE" }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/folders/${queryArg.id}`,
+        method: "DELETE",
+        params: {
+          empty_only: queryArg.emptyOnly,
+        },
+      }),
     }),
     renameFolder: build.mutation<RenameFolderApiResponse, RenameFolderApiArg>({
       query: (queryArg) => ({
@@ -456,7 +468,16 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces`, method: "POST", body: queryArg.createSpace }),
     }),
     deleteSpace: build.mutation<DeleteSpaceApiResponse, DeleteSpaceApiArg>({
-      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}`, method: "DELETE" }),
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.id}`,
+        method: "DELETE",
+        params: {
+          immediate: queryArg.immediate,
+        },
+      }),
+    }),
+    projectDeletionStatus: build.query<ProjectDeletionStatusApiResponse, ProjectDeletionStatusApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/deletion` }),
     }),
     receipts: build.query<ReceiptsApiResponse, ReceiptsApiArg>({
       query: (queryArg) => ({
@@ -838,6 +859,9 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}`,
         method: "DELETE",
+        params: {
+          immediate: queryArg.immediate,
+        },
       }),
     }),
     updateSession: build.mutation<UpdateSessionApiResponse, UpdateSessionApiArg>({
@@ -1348,6 +1372,8 @@ export type AcknowledgeApiArg = {
 export type DeleteDocumentApiResponse = /** status 200 undefined */ Receipt | /** status 202 undefined */ Receipt;
 export type DeleteDocumentApiArg = {
   id: string;
+  /** Request immediate purge for an eligible resource as a platform administrator. */
+  immediate?: boolean;
 };
 export type ContentApiResponse = /** status 200 undefined */ string;
 export type ContentApiArg = {
@@ -1387,6 +1413,8 @@ export type CreateFolderApiArg = {
 export type DeleteFolderApiResponse = unknown;
 export type DeleteFolderApiArg = {
   id: string;
+  /** Refuse deletion if any child folder or document remains */
+  emptyOnly?: boolean;
 };
 export type RenameFolderApiResponse = unknown;
 export type RenameFolderApiArg = {
@@ -1528,6 +1556,12 @@ export type DeleteSpaceApiResponse = /** status 200 Already completed */
   | Receipt
   | /** status 202 Durably accepted */ Receipt;
 export type DeleteSpaceApiArg = {
+  id: string;
+  /** Request immediate purge for an eligible resource as a platform administrator. */
+  immediate?: boolean;
+};
+export type ProjectDeletionStatusApiResponse = /** status 200 undefined */ Receipt;
+export type ProjectDeletionStatusApiArg = {
   id: string;
 };
 export type ReceiptsApiResponse = /** status 200 undefined */ UploadReceipt[];
@@ -1848,6 +1882,8 @@ export type DeleteSessionApiResponse = /** status 200 undefined */ Receipt | /**
 export type DeleteSessionApiArg = {
   spaceId: string;
   sessionId: string;
+  /** Request immediate purge for an eligible resource as a platform administrator. */
+  immediate?: boolean;
 };
 export type UpdateSessionApiResponse = /** status 200 undefined */ SessionDetails;
 export type UpdateSessionApiArg = {
@@ -4068,6 +4104,8 @@ export const {
   useLazyDefaultSkillsQuery,
   useCreateSpaceMutation,
   useDeleteSpaceMutation,
+  useProjectDeletionStatusQuery,
+  useLazyProjectDeletionStatusQuery,
   useReceiptsQuery,
   useLazyReceiptsQuery,
   useEntriesQuery,

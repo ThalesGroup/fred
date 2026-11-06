@@ -190,19 +190,29 @@ pub async fn rename_folder<'e>(
 
 /// One SQL statement removes the whole subtree or fails its document foreign key.
 /// The caller holds the owning organization lock through commit.
-pub async fn delete_folder<'e>(pool: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<()> {
-    sqlx::query(
+pub async fn delete_folder<'e>(
+    pool: impl sqlx::PgExecutor<'e>,
+    id: Uuid,
+    empty_only: bool,
+) -> sqlx::Result<bool> {
+    let query = if empty_only {
+        "delete from folder where id = $1
+         and not exists (select 1 from folder where parent_id = $1)
+         and not exists (select 1 from document where folder_id = $1)"
+    } else {
         "with recursive subtree as (
         select id, space_id from folder where id = $1
         union all
         select f.id, f.space_id from folder f join subtree p
             on f.space_id = p.space_id and f.parent_id = p.id
-    ) delete from folder f using subtree s where f.id = s.id",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
-    Ok(())
+    ) delete from folder f using subtree s where f.id = s.id"
+    };
+    Ok(sqlx::query(query)
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected()
+        > 0)
 }
 
 /// A live drive document. An attachment is absent here: only its conversation routes reach it.

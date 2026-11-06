@@ -15,20 +15,14 @@
 import type { KeycloakRealmConfig } from "../../../security/KeycloakService";
 
 /**
- * Short-lived Keycloak password-grant login, used only by the admin
- * self-test's "test another profile" diagnostic (`authzProbeScenario.ts`).
- * Never touches the app's own session — the token this returns is held only
- * for the duration of that one probe run and then discarded.
- *
- * Requires the target realm/client to have `directAccessGrantsEnabled`,
- * documented as test/dev-only (`fred-deployment-factory/validation/README.md`).
- * On a realm where it's off, Keycloak rejects the grant and this throws a
- * message that says so, rather than "wrong password".
+ * Obtain a short-lived test account token independently of the operator's session.
+ * Password grants must be enabled on the test client.
  */
 export async function loginWithPassword(
   config: KeycloakRealmConfig,
   username: string,
   password: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const tokenUrl = `${config.url}realms/${config.realm}/protocol/openid-connect/token`;
   const body = new URLSearchParams({
@@ -40,35 +34,36 @@ export async function loginWithPassword(
 
   let response: Response;
   try {
+    const timeout = AbortSignal.timeout(15_000);
     response = await fetch(tokenUrl, {
       method: "POST",
+      credentials: "omit",
+      redirect: "error",
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
     });
-  } catch (err) {
-    throw new Error(`could not reach Keycloak at ${tokenUrl}: ${(err as Error).message}`);
+  } catch {
+    throw new Error("Could not reach the test account sign-in endpoint");
   }
 
+  const payload = (await response.json().catch(() => null)) as {
+    error?: string;
+    access_token?: string;
+  } | null;
   if (!response.ok) {
-    let errorCode: string | undefined;
-    try {
-      errorCode = (await response.json())?.error;
-    } catch {
-      // body wasn't JSON — fall through with no error code
+    const errorCode = payload?.error;
+    if (errorCode === "unauthorized_client" || errorCode === "invalid_client") {
+      throw new Error("This Keycloak client does not allow direct-grant login for test accounts");
     }
     if (response.status === 401 || errorCode === "invalid_grant") {
-      throw new Error(`invalid username or password for '${username}'`);
+      throw new Error("Invalid test account username or password");
     }
-    if (errorCode === "unauthorized_client" || errorCode === "invalid_client") {
-      throw new Error(
-        "this realm/client does not allow direct-grant (password) login — that's a test/dev-only Keycloak " +
-          "setting, so this diagnostic isn't available on this deployment",
-      );
-    }
-    throw new Error(`Keycloak token request failed: HTTP ${response.status}${errorCode ? ` (${errorCode})` : ""}`);
+    throw new Error(`Test account sign-in failed: HTTP ${response.status}`);
   }
 
-  const payload = (await response.json()) as { access_token?: string };
-  if (!payload.access_token) throw new Error("Keycloak token response had no access_token");
+  if (typeof payload?.access_token !== "string" || !payload.access_token.trim()) {
+    throw new Error("Test account sign-in returned no usable access token");
+  }
   return payload.access_token;
 }

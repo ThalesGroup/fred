@@ -17,29 +17,36 @@ import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { HeaderMap, SecurityDeps } from "../scenarios/securityScenario";
 import type { KnowledgeDeps } from "../scenarios/knowledgeScenario";
 
-const LOCAL = /^(localhost|127\.|\[::1\])/;
+const LOCAL = /^(?:localhost|.+\.localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
+
+export function browserSecurity(): Pick<SecurityDeps, "origin" | "headersOf" | "token"> {
+  return {
+    origin: { https: window.location.protocol === "https:", local: LOCAL.test(window.location.hostname) },
+    // Headers and raw error bodies are beyond what the generated client exposes.
+    headersOf: async (path, token) => {
+      const response = await fetch(path, {
+        credentials: "omit",
+        cache: "no-store",
+        redirect: "manual",
+        signal: AbortSignal.timeout(15000),
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const headers: HeaderMap = {};
+      response.headers.forEach((value, key) => {
+        headers[key.toLowerCase()] = value;
+      });
+      const body = response.status >= 400 ? (await response.text()).slice(0, 4000) : "";
+      if (response.status < 400) await response.body?.cancel();
+      return { status: response.status, headers, body };
+    },
+    token: async () => ((await KeyCloakService.ensureFreshToken(30)) ? KeyCloakService.GetToken() : null),
+  };
+}
 
 export function useSecurityDeps(knowledge: KnowledgeDeps): SecurityDeps {
   return useMemo(
     () => ({
-      origin: { https: window.location.protocol === "https:", local: LOCAL.test(window.location.hostname) },
-      // Headers and raw error bodies are beyond what the generated client exposes.
-      headersOf: async (path, token) => {
-        const response = await fetch(path, {
-          credentials: "omit",
-          cache: "no-store",
-          redirect: "manual",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const headers: HeaderMap = {};
-        response.headers.forEach((value, key) => {
-          headers[key.toLowerCase()] = value;
-        });
-        const body = response.status >= 400 ? (await response.text()).slice(0, 4000) : "";
-        if (response.status < 400) await response.body?.cancel();
-        return { status: response.status, headers, body };
-      },
-      token: async () => ((await KeyCloakService.ensureFreshToken(30)) ? KeyCloakService.GetToken() : null),
+      ...browserSecurity(),
       createLibrary: knowledge.createLibrary,
       deleteLibrary: knowledge.deleteLibrary,
       listLibraries: knowledge.listLibraries,

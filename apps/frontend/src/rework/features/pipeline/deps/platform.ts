@@ -18,6 +18,7 @@ import { KeyCloakService } from "../../../../security/KeycloakService";
 import { personalTeamId } from "../../../components/shared/utils/teamId";
 import type { PlatformDeps } from "../scenarios/platformScenario";
 import { FRESH, useApiDispatch } from "./api";
+import { platformSessionDeps } from "./platformSession";
 
 export function usePlatformDeps(): PlatformDeps {
   const dispatch = useApiDispatch();
@@ -40,15 +41,7 @@ export function usePlatformDeps(): PlatformDeps {
         ).unwrap();
         return bootstrap.permissions?.platform_roles ?? [];
       },
-      frontendConfig: () =>
-        dispatch(cp.getFrontendConfigControlPlaneV1FrontendConfigGet.initiate(undefined, FRESH)).unwrap(),
-      tokenClaims: () => KeyCloakService.GetTokenParsed() ?? null,
-      // A response header is beyond what the generated client exposes; the route is public.
-      serverDate: async () => {
-        const response = await fetch("/control-plane/v1/healthz", { credentials: "omit", cache: "no-store" });
-        const header = response.headers.get("Date");
-        return header ? new Date(header) : null;
-      },
+      ...platformSessionDeps(dispatch),
       templates: () =>
         dispatch(
           cp.getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet.initiate(
@@ -116,7 +109,6 @@ export function usePlatformDeps(): PlatformDeps {
           },
         },
       ],
-      now: () => Date.now(),
     };
   }, [dispatch, teamId]);
 }

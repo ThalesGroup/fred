@@ -106,7 +106,7 @@ impl Fixture {
         let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
         lifecycle.config.enabled = true;
         let receipt = lifecycle
-            .accept_session(&self.pool, "alice", self.space, self.session)
+            .accept_session(&self.pool, "alice", self.space, self.session, false)
             .await
             .unwrap();
         // Simulate the retention deadline, keeping acceptance and cleanup real.

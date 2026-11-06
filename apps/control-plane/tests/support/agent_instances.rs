@@ -1022,7 +1022,10 @@ async fn instances_retention_and_exact_space_purge() {
     tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
         .await
         .unwrap();
-    let receipt = lifecycle.accept(&e.pool, "root", team.id).await.unwrap();
+    let receipt = lifecycle
+        .accept(&e.pool, "root", team.id, false)
+        .await
+        .unwrap();
     gate.release.notify_one();
     assert_eq!(pending.await.unwrap().0, 409);
     cleanup::batch(&e.pool, receipt.id, &Default::default(), None)

@@ -4,7 +4,6 @@
 export const weaverFeatures = [
   { id: "audit", preview: "/admin/corpus-audit" },
   { id: "tasks", preview: "/admin/tasks" },
-  { id: "diagnostics", preview: "/admin/self-test" },
   { id: "migration", preview: "/admin/migration" },
   { id: "knowledge-bases", preview: "/team/preview-team/knowledge-bases" },
   { id: "knowledge-documents", preview: "/team/preview-team/knowledge-bases/preview-kb" },

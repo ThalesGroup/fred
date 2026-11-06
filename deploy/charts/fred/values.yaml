@@ -891,11 +891,9 @@ applications:
         value: "fred.dev"
       - name: FRONTEND_AGENTIC_UPSTREAM
         value: "http://fred-agents"
-      - name: FRONTEND_KNOWLEDGE_FLOW_UPSTREAM
-        value: "http://knowledge-flow-backend:8000"
-      # Manager/control-plane upstreams default to the release namespace's full
+      # Gateway upstreams default to the release namespace's full
       # service DNS name in the Deployment template, even when env is replaced.
-      # Set FRONTEND_CONTROL_PLANE_UPSTREAM here
+      # Set FRONTEND_CONTROL_PLANE_UPSTREAM or FRONTEND_KNOWLEDGE_FLOW_UPSTREAM here
       # or in extraEnvVars to override them (for example with a custom DNS domain).
       - name: FRONTEND_CLIENT_MAX_BODY_SIZE
         value: "150m"

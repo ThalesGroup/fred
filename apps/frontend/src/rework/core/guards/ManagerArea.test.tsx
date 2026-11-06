@@ -104,6 +104,8 @@ function render(path = "/home") {
               }
             />
             <Route path="/admin/provisioning" element={<p>Provisioning</p>} />
+            <Route path="/admin/self-test" element={<p>Self-tests</p>} />
+            <Route path="/unauthorized" element={<p>Access denied</p>} />
             <Route path="/settings" element={<p>Profile</p>} />
           </Route>
         </Routes>
@@ -187,6 +189,7 @@ it("fails closed on authority error and retries without business fallback", () =
   expect(h.access.refetch).toHaveBeenCalledOnce();
 });
 it("does not mount platform business navigation or its bootstrap hooks", () => {
+  member();
   act(() =>
     root.render(
       <MemoryRouter initialEntries={["/admin/organizations"]}>
@@ -220,4 +223,59 @@ it("keeps a failed authority check blocked while retry is pending with cached da
   h.access.isFetching = false;
   render();
   expect(host.querySelector("[data-business]")).not.toBeNull();
+});
+
+it("rejects the platform role alone on the direct self-test URL", () => {
+  render("/admin/self-test");
+  expect(host.textContent).toContain("Access denied");
+});
+it.each(["organization", "team", "project"])("admits a platform admin owning a %s without a selected scope", (kind) => {
+  h.spaces.currentData = [{ id: "owned", kind, roles: ["owner"] }];
+  render("/admin/self-test");
+  expect(host.textContent).toContain("Self-tests");
+});
+it.each(["member", "editor", "analyst", "organization_admin"])(
+  "rejects platform admin with only %s membership",
+  (role) => {
+    h.spaces.currentData = [{ id: "space", kind: "organization", roles: [role] }];
+    render("/admin/self-test");
+    expect(host.textContent).toContain("Access denied");
+  },
+);
+it("rejects personal ownership without ownership of a shared space", () => {
+  h.spaces.currentData = [{ id: "personal", kind: "personal", roles: ["owner"] }];
+  render("/admin/self-test");
+  expect(host.textContent).toContain("Access denied");
+});
+it("waits for initial ownership evidence before mounting self-tests", () => {
+  h.spaces.currentData = undefined;
+  h.spaces.isLoading = true;
+  render("/admin/self-test");
+  expect(host.querySelector('[role="status"]')).not.toBeNull();
+  expect(host.textContent).not.toContain("Self-tests");
+});
+it("retains the page during background ownership refresh and closes it on failure", () => {
+  member();
+  render("/admin/self-test");
+  h.spaces.isFetching = true;
+  render("/admin/self-test");
+  expect(host.textContent).toContain("Self-tests");
+  h.spaces.isFetching = false;
+  h.spaces.isError = true;
+  h.spaces.error = { status: 503 };
+  render("/admin/self-test");
+  expect(host.textContent).toContain("Access denied");
+});
+it("closes self-tests when refreshed ownership is revoked", () => {
+  member();
+  render("/admin/self-test");
+  h.spaces.currentData = [];
+  render("/admin/self-test");
+  expect(host.textContent).toContain("Access denied");
+});
+it("rejects a direct Self-tests URL for a business member without the platform role", () => {
+  h.access.isAdmin = false;
+  member();
+  render("/admin/self-test");
+  expect(host.textContent).toContain("Access denied");
 });

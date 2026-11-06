@@ -189,7 +189,9 @@ async def dispatch_step(
 
     text = state.latest_user_text.lower().strip()
 
-    if text.startswith("echo"):
+    if text.startswith("runtime probe "):
+        scenario = "runtime_probe"
+    elif text.startswith("echo"):
         scenario = "echo"
     elif text.startswith("model"):
         scenario = "model_probe"

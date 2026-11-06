@@ -179,6 +179,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/autho
 | --- | --- | --- | --- |
 | POST | `/spaces` | `create_space` | Required |
 | DELETE | `/spaces/{id}` | `delete_space` | Required |
+| GET | `/spaces/{id}/deletion` | `project_deletion_status` | Required |
 | GET | `/spaces/{id}/document-uploads` | `receipts` | Required |
 | GET | `/spaces/{id}/entries` | `entries` | Required |
 | GET | `/spaces/{id}/member-candidates` | `space_member_candidates` | Required |

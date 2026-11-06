@@ -1847,3 +1847,13 @@ La réception déployée reste à faire : installation PostgreSQL neuve, mise à
 pendant modèle/outil, réouverture, HITL, suppression et pièces jointes. Les tests
 hors réseau ne prouvent ni comportement PostgreSQL en production ni latence.
 Aucun service démarré, reset, benchmark, push ou déploiement effectué.
+
+## Auto-tests d'administration
+
+Les auto-tests d'administration proposent onze familles de contrôles, des rapports dépliables et deux contrôles manuels.
+
+Les contrôles utilisent les droits de la personne et de l'espace sélectionné. La recherche et l'expiration passent par l'agent de diagnostic. La campagne de rôles modifie uniquement un projet temporaire et reprend son nettoyage à partir du reçu de suppression. Les parcours qui n'ont pas d'équivalent intégré sont indiqués dans les résultats ou dans la [documentation opérateur](apps/frontend/README.md#weaver-self-tests).
+
+Vérifications locales : garde d'accès et navigation, exécution séquentielle, rapports et copie, outils de l'agent de diagnostic, refus de suppression d'un dossier non vide et reprise d'un projet par son opérateur (tests HTTP avec PostgreSQL). Aucun stockage de rapports côté serveur.
+
+La réception k3d requiert les images locales et un compte administrateur de plateforme également propriétaire d'au moins une organisation, équipe ou projet. Les contrôles de ressources nécessitent un espace de test accessible et, pour l'isolation, un second compte. La suite de validation en ligne de commande est indépendante.
