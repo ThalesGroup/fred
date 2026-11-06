@@ -14,13 +14,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fred_core.common import TemporalSchedulerConfig
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from control_plane_backend.capability_preparations.dispatcher import run_dispatcher
 from control_plane_backend.scheduler.dependencies import LifecycleActionDependencies
 from control_plane_backend.scheduler.temporal.activities import (
     LifecycleActivities,
@@ -37,6 +40,7 @@ logger = logging.getLogger(__name__)
 async def run_worker(
     config: TemporalSchedulerConfig,
     lifecycle_deps: LifecycleActionDependencies,
+    preparation_sessions: async_sessionmaker[AsyncSession] | None = None,
 ) -> None:
     """
     Connect to Temporal and run the control-plane lifecycle worker.
@@ -88,4 +92,13 @@ async def run_worker(
     )
 
     logger.info("[TEMPORAL] Control-plane Temporal worker running.")
-    await worker.run()
+    if preparation_sessions is None:
+        await worker.run()
+        return
+    stop = asyncio.Event()
+    dispatcher = asyncio.create_task(run_dispatcher(client, preparation_sessions, stop))
+    try:
+        await worker.run()
+    finally:
+        stop.set()
+        await dispatcher

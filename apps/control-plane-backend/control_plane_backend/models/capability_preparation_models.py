@@ -80,6 +80,9 @@ class CapabilityPreparationRow(Base):
             "max_attempts between 1 and 10", name="ck_cap_prep_max_attempts"
         ),
         CheckConstraint(
+            "dispatch_attempts between 0 and 10", name="ck_cap_prep_dispatch_attempts"
+        ),
+        CheckConstraint(
             "not (is_current and state = 'obsolete')", name="ck_cap_prep_current"
         ),
         UniqueConstraint(
@@ -119,6 +122,7 @@ class CapabilityPreparationRow(Base):
     state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    dispatch_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     deadline_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

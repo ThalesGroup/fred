@@ -77,6 +77,9 @@ def _tables() -> tuple[sa.Table, sa.Table, sa.Table]:
         sa.Column("state", sa.String(16), nullable=False),
         sa.Column("attempts", sa.Integer(), nullable=False),
         sa.Column("max_attempts", sa.Integer(), nullable=False),
+        sa.Column(
+            "dispatch_attempts", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column("deadline_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("lease_until", sa.DateTime(timezone=True)),
         sa.Column("workflow_id", sa.String(255), nullable=False),
@@ -110,6 +113,9 @@ def _tables() -> tuple[sa.Table, sa.Table, sa.Table]:
         ),
         sa.CheckConstraint(
             "max_attempts between 1 and 10", name="ck_cap_prep_max_attempts"
+        ),
+        sa.CheckConstraint(
+            "dispatch_attempts between 0 and 10", name="ck_cap_prep_dispatch_attempts"
         ),
         sa.CheckConstraint(
             "not (is_current and state = 'obsolete')", name="ck_cap_prep_current"
