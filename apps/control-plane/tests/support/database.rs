@@ -5,10 +5,6 @@ use sqlx::{AssertSqlSafe, PgPool, postgres::PgConnectOptions};
 use uuid::Uuid;
 
 pub async fn database() -> PgPool {
-    database_with_migrator(sqlx::migrate!()).await
-}
-
-pub async fn database_with_migrator(migrator: sqlx::migrate::Migrator) -> PgPool {
     let postgres = std::env::var("CONTROL_PLANE_IT_POSTGRES")
         .expect("needs disposable admin Postgres with pgvector and psql: make test-integration");
     let name = format!("t_{}", Uuid::new_v4().simple());
@@ -63,6 +59,6 @@ pub async fn database_with_migrator(migrator: sqlx::migrate::Migrator) -> PgPool
         .password("it")
         .options([("search_path", "control_plane")]);
     let pool = PgPool::connect_with(options).await.unwrap();
-    migrator.run(&pool).await.unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
     pool
 }

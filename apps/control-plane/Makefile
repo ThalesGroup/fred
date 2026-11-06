@@ -62,6 +62,8 @@ test-browser: ## Run the real provisioning browser journey and integration regre
 # Fixed secrets belong only to disposable integration fixtures.
 test-integration: export CONTROL_PLANE_TEST_BOOTSTRAP_TOKEN := integration-bootstrap-secret
 test-integration: export FRED_TEST_INFERENCE_CREDENTIAL := synthetic-inference-key
+# Added to the shared recipe's `--test integration`; a command-line value replaces this list.
+test-integration: CARGO_TEST_OPTS = --test schema_constraints --test document_move_schema --test resource_schema --test storage_budget_schema
 
 LIFECYCLE_TEMPORAL_IMAGE ?= mirror.gcr.io/temporalio/admin-tools:1.28
 .PHONY: test-lifecycle-temporal

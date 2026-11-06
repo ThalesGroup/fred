@@ -325,9 +325,9 @@ The matching original 0001/0002 history can upgrade through 0003 after backup. T
 supports the document-tree view change, not conversion of historical public tables or
 other draft histories. Deployed migrations are immutable. The five-second lock timeout
 fails the hook safely under contention; retry after the blocker ends. The regression
-`document_tree_upgrade_preserves_data_history_and_reader_grants` checks upgrade,
-replay, preserved baseline checksums/data and actual Knowledge Flow reader access;
-initialization replay and incompatible-history rejection have a separate regression.
+`cp_read_document_tree_is_granted_to_its_reader_only` checks actual Knowledge Flow
+reader access on a fresh schema; initialization replay and incompatible-history
+rejection have a separate regression.
 Older binaries require their exact history and may refuse to restart after upgrade;
 prefer forward repair rather than manually deleting migration rows for rollback.
 

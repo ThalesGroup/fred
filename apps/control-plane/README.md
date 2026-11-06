@@ -207,7 +207,7 @@ matching content. A new turn or resume observes current policy while history
 remains intact. Embedded Ralph and graph agents cannot load skills.
 
 See the [operator note](../../deploy/release-notes/changes/weaver-pod-skills-and-space-ceilings.md)
-for rollout/rollback and `tests/support/pod_skills.rs` for disposable SQL upgrade,
+for rollout/rollback and `tests/support/pod_skills.rs` for disposable SQL,
 concurrency, isolation and execution-preparation proofs. These tests do not
 replace a deployed k3d acceptance journey.
 

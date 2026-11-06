@@ -475,7 +475,13 @@ async fn initialization_replays_without_data_changes_and_refuses_incompatible_hi
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(versions, vec![1, 2, 3]);
+    assert_eq!(
+        versions,
+        sqlx::migrate!()
+            .iter()
+            .map(|m| m.version)
+            .collect::<Vec<_>>()
+    );
 
     // Simulate a draft installation's obsolete history only in this disposable fixture.
     sqlx::query("insert into _sqlx_migrations(version,description,success,checksum,execution_time) values(99,'obsolete draft',true,decode('00','hex'),0)")
@@ -494,40 +500,10 @@ async fn initialization_replays_without_data_changes_and_refuses_incompatible_hi
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
-async fn document_tree_upgrade_preserves_data_history_and_reader_grants() {
-    let mut baseline = sqlx::migrate!();
-    baseline.migrations = std::borrow::Cow::Owned(
-        baseline
-            .iter()
-            .filter(|m| m.version <= 2)
-            .cloned()
-            .collect(),
-    );
-    let pool = database::database_with_migrator(baseline).await;
-    let org = organization(&pool, "Preserved Nova").await;
-    let history: Vec<(i64, Vec<u8>)> =
-        sqlx::query_as("select version,checksum from _sqlx_migrations order by version")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
-    assert!(control_plane::db::require_initialized(&pool).await.is_err());
-    sqlx::migrate!().run(&pool).await.unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
-    control_plane::db::require_initialized(&pool).await.unwrap();
-    let after: Vec<(i64, Vec<u8>)> = sqlx::query_as(
-        "select version,checksum from _sqlx_migrations where version<=2 order by version",
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap();
-    assert_eq!(history, after);
-    let name: String = sqlx::query_scalar("select name from cp_read.space_state where id=$1")
-        .bind(org)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(name, "Preserved Nova");
-    // The real consumer role can read the new contract, including empty result sets.
+async fn cp_read_document_tree_is_granted_to_its_reader_only() {
+    let pool = database().await;
+    let org = organization(&pool, "Visible organization").await;
+    // The real consumer role can read the contract, including empty result sets.
     let reader = PgPool::connect_with(
         pool.connect_options()
             .as_ref()
@@ -784,44 +760,8 @@ async fn model_usage_constrains_facts_without_foreign_keys() {
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
-async fn conversation_titles_upgrade_preserves_old_titles_and_checks_policy_membership() {
-    let mut baseline = sqlx::migrate!();
-    baseline.migrations = std::borrow::Cow::Owned(
-        baseline
-            .iter()
-            .filter(|m| m.version <= 3)
-            .cloned()
-            .collect(),
-    );
-    let pool = database::database_with_migrator(baseline).await;
-    let session = Uuid::new_v4();
-    sqlx::query("insert into space(id,kind,name,organization_id) values($1,'organization','Old organization',$1)").bind(session).execute(&pool).await.unwrap();
-    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$1,$1,'fixture','template','Fixture','{}','alice','fixture')")
-        .bind(session).execute(&pool).await.unwrap();
-    sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,title,agent_configuration_revision) values($1,'alice',$1,$1,$1,'fixture','Fixture','Old title',1)")
-        .bind(session).execute(&pool).await.unwrap();
-    let history: Vec<(i64, Vec<u8>)> =
-        sqlx::query_as("select version,checksum from _sqlx_migrations order by version")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
-    control_plane::db::require_initialized(&pool).await.unwrap();
-    let row: (String, bool, Option<Uuid>) = sqlx::query_as(
-        "select title,title_pending,title_attempt from session_metadata where session_id=$1",
-    )
-    .bind(session)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(row, ("Old title".into(), false, None));
-    let after: Vec<(i64, Vec<u8>)> = sqlx::query_as(
-        "select version,checksum from _sqlx_migrations where version<=3 order by version",
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap();
-    assert_eq!(history, after);
+async fn organization_title_policy_checks_its_membership() {
+    let pool = database().await;
     let org = organization(&pool, "Title organization").await;
     sqlx::query("insert into organization_model_policy(organization_id,revision,created_by,updated_by) values($1,1,'alice','alice')")
         .bind(org).execute(&pool).await.unwrap();

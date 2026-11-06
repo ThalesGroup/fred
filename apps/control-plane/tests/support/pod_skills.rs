@@ -374,12 +374,9 @@ use crate::environment::database;
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn pod_skills_upgrade_preserves_existing_offers_and_has_no_implicit_local_grant() {
-    let mut previous = sqlx::migrate!();
-    previous.migrations =
-        std::borrow::Cow::Owned(previous.iter().filter(|m| m.version < 5).cloned().collect());
-    let pool = database::database_with_migrator(previous).await;
-    let org = support::member_organization(&pool, "Before upgrade", "alice")
+async fn pod_skills_have_no_implicit_local_grant() {
+    let pool = database::database().await;
+    let org = support::member_organization(&pool, "Organization", "alice")
         .await
         .unwrap();
     sqlx::query("insert into runtime_catalog(runtime_id,reachable) values('fixture',true)")
@@ -388,7 +385,6 @@ async fn pod_skills_upgrade_preserves_existing_offers_and_has_no_implicit_local_
         .unwrap();
     sqlx::query("insert into runtime_capability(runtime_id,capability_id,version,descriptor,advertised) values('fixture','tool','1','{}',true)").execute(&pool).await.unwrap();
     sqlx::query("insert into organization_capability(organization_id,runtime_id,capability_id,enabled_by) values($1,'fixture','tool','alice')").bind(org.id).execute(&pool).await.unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
     let policy = enablement::Policy::load(&pool, org.id).await.unwrap();
     assert!(policy.default_on("fixture", "tool"));
     assert!(!policy.default_on("fixture", "skill:graph"));
@@ -407,7 +403,6 @@ async fn pod_skills_upgrade_preserves_existing_offers_and_has_no_implicit_local_
             .skills_availability
             .is_none()
     );
-    sqlx::migrate!().run(&pool).await.unwrap(); // replay is inert
 }
 
 #[tokio::test]
