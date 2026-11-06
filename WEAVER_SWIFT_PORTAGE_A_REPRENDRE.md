@@ -1481,7 +1481,7 @@ Branche : `merge/swift-89baab5b6`. Quatre étapes, dans l'ordre de l'ascendance 
 
 | Etape | Commits Swift | Etat |
 | --- | --- | --- |
-| 1 | `b00551906` (#3460) tabulaire | Fusion résolue et préparée, non commitée, en attente de relecture |
+| 1 | `b00551906` (#3460) tabulaire | Commitée en `d294b0e4e` sur la branche, non poussée, non fusionnée dans `weaver`, non reçue |
 | 2 | `a2ebfe48c` (#3476) Azure APIM | Non commencée |
 | 3 | `d9eb3738f` (#3453), `303b7456e` (#3483) | Non commencée |
 | 4 | `507866562` (#3475), `89baab5b6` (#3455) | Non commencée |
