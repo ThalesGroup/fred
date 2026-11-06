@@ -13,7 +13,7 @@ follow the relevant domain chapter.
 | [2. Journeys](02-journeys.md) | How do the architectural rules work together in practice? |
 | [2.1. User journeys](02.1-user-journeys.md) | How does a user go from first login to creating a folder? |
 | [2.2. Document journey](02.2-document-journey.md) | How does a user import a document and read the result? |
-| [2.3. Models and assistant use](02.3-agent-administration.md) | How does Alice authorize models, and how does Bob use an assistant to answer questions and prepare a document? |
+| [2.3. An assistant in a space](02.3-agent-administration.md) | How do authorization, assistant configuration and user's own conversation fit together? |
 | [3. Security](03-security.md) | Who is authenticated, admitted and authorized, and why? |
 | [4. Organizations and spaces](04-organizations.md) | How are people, spaces and their relationships organized? |
 | [5. Documents and knowledge](05-documents.md) | How do drive documents and conversation documents differ, and how are they used? |
@@ -32,7 +32,7 @@ the annexes. Validation records live in each lot's PR; remaining work in GitHub 
 | [Independent platform initialization with shared SSO](03-security.md#independent-platform-initialization) | [Contract and validation scope](A6-security.md#independent-platform-initialization) | `onboarding.rs`, `bootstrap.rs`, `OnboardingGuard`, `BootstrapPage`; [source map](../../apps/control-plane/src/README.md) |
 | Login, CGU, first platform admin | [Journey](02.1-user-journeys.md#from-an-empty-platform-to-an-organizations-first-user), [Security](03-security.md) | [Source map](../../apps/control-plane/src/README.md) rows authentication, CGU, bootstrap |
 | Organization admin/owner selection and creation | [Organization creation](02.1-user-journeys.md#a-platform-admin-creates-an-organization), [Organizations](04-organizations.md#platform-administration) | Source map rows directory and organizations |
-| Organization totals, team detail and their disclosure boundary | [Overview](04-organizations.md#organization-supervision), [Supervision contract](A8-organizations.md#organization-supervision), [Read budget](09-quality.md#organization-supervision-read-budget) | [Implementation trace](A8-organizations.md#pagination-freshness-and-implementation-trace); organization supervision page |
+| Organization totals, team detail and their disclosure boundary | [Overview](04-organizations.md#organization-supervision), [Supervision contract](A8-organizations.md#organization-supervision) | [Implementation trace](A8-organizations.md#pagination-freshness-and-implementation-trace); organization supervision page |
 | Import accounts, teams and roles | [Provisioning journey](02.1-user-journeys.md#provisioning-the-business-account), [ZIP contract](A2-manager-contracts.md#provisioning-declarations) | Source map row ZIP import |
 | What does each role mean, and where do current permissions differ? | [Roles and responsibility boundaries](A11-roles.md) | Role definitions, attribution and SSI comparison in the annex |
 | Who can enter a space or create a folder? | [Resources journey](02.1-user-journeys.md#bob-opens-resources), [Action/role matrix](A7-action-role-matrix.md), [Security](03-security.md) | Source map rows spaces, authorization, folders and roles |

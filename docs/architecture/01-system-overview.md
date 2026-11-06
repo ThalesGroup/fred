@@ -1,205 +1,97 @@
 # 1. System overview
 
-The following views describe Fred's core platform, which supports both its
-ready-to-use workspace and SDK extensions, through document ingestion, agent
-access, governance and model use.
-
-## 1.1. Six components and their responsibilities
-
-The frontend provides the workspace for documents, conversations and
-administration. It calls Control Plane API for resource management and Agent Pods
-directly for chat. An Agent Pod is a runtime that hosts agents and their
-capabilities. Fred supplies `fred-agent` as its default Agent Pod.
-
-Control Plane API governs spaces, access and document operations; its worker
-handles lifecycle cleanup, including space deletion. Knowledge Flow worker
-extracts and indexes document content, while Knowledge Flow API serves that
-knowledge to agent capabilities through internal endpoints.
+The [space](00-introduction.md#start-with-the-space) is a work perimeter, not a
+separate deployment. Fred's components carry its identity and the user's authority
+through each operation. They serve many spaces without merging their access rights.
 
 **Legend:** 🟦 Fred · 🟨 COTS · 🟪 Extensions · ⬜ Concepts
 
+## 1.1. Components serving the space
+
 ```mermaid
 flowchart TB
-    ui["Frontend<br/>Documents, chat and administration"]
-    subgraph cp["Control Plane"]
-        api["Control Plane API<br/>Governance and document drive"]
-        worker["Control Plane worker<br/>Background lifecycle operations"]
-    end
-    pod["Agent Pod<br/>Assistant and capability execution<br/>Default: fred-agent"]
-    subgraph kf["Knowledge Flow"]
-        kfa["Knowledge Flow API<br/>Internal knowledge access"]
-        kfw["Knowledge Flow worker<br/>Extraction, embeddings and indexing"]
-    end
-    ui -->|"Documents / administration"| api
-    ui <-->|"Chat / streamed answers"| pod
-    pod -->|"Resolve authorized context"| api
-    pod -->|"Capabilities"| kfa
-    api -.->|"Processing via Temporal"| kfw
+    ui["Frontend<br/>Work in a selected space"]
+    cp["Control Plane<br/>Rights, placement and lifecycle"]
+    pod["Agent Pod<br/>Agents and capability libraries"]
+    kf["Knowledge Flow<br/>Document processing and retrieval"]
+    ui -->|"Manage resources"| cp
+    ui <-->|"Chat"| pod
+    pod -->|"Resolve authorized context"| cp
+    pod -->|"Search authorized documents"| kf
+    cp -.->|"Processing via Temporal"| kf
 
     classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
-    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class ui,api,worker,pod,kfa,kfw fred
-    class cp,kf neutral
+    class ui,cp,pod,kf fred
 ```
 
-These are six logical responsibilities. Control Plane API and its worker
-currently share a process. The dotted arrow represents asynchronous processing
-coordinated through Temporal, the workflow engine.
+Control Plane owns placement and access decisions. Agent Pods execute assistants;
+Fred supplies `fred-agent`, and developers can provide other pods. Capability
+libraries belong to their pod. Knowledge Flow processes documents and serves
+knowledge through its API. Each backend also has background work: grouping it
+here with its owner does not imply a single process or replica.
 
-## 1.2. Ingestion: the path from a document to knowledge
-
-A document enters Fred through Control Plane API, within a space where the user
-may contribute. Control Plane stores the original and starts processing through
-Temporal. Knowledge Flow worker extracts content, computes embeddings (numerical
-representations used for semantic search) and writes the processing results.
+## 1.2. Importing a document
 
 ```mermaid
 flowchart TB
-    ui["Frontend"]
-    api["Control Plane API<br/>Admission and publication"]
+    cp["Control Plane<br/>Accept upload into a space"]
+    original[("Object storage<br/>Original file")]
     temporal["Temporal<br/>Durable processing"]
-    kfw["Knowledge Flow worker<br/>Extract, embed and index"]
-    artifacts[("Object storage / vector index<br/>Originals and processing results")]
-    facts[("PostgreSQL<br/>Placement and publication")]
-    ui -->|"Upload into a space"| api
-    api -->|"Store original"| artifacts
-    api -->|"Start processing"| temporal
-    temporal -->|"Run processing"| kfw
-    kfw -->|"Read original / submit result"| api
-    kfw -->|"Write extracted content and vectors"| artifacts
-    api -->|"Publish accepted result"| facts
+    kf["Knowledge Flow worker<br/>Extract and index"]
+    result[("Object storage and search index<br/>Processing results")]
+    publish["Control Plane / PostgreSQL<br/>Accept and publish result references"]
+    cp -->|"Store"| original
+    cp -->|"Request processing"| temporal
+    temporal --> kf
+    kf -->|"Write"| result
+    kf -->|"Submit result"| publish
 
     classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
     classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
-    class ui,api,kfw fred
-    class temporal,artifacts,facts cots
+    class cp,kf,publish fred
+    class original,temporal,result cots
 ```
 
 <a id="13-coordinating-document-writes"></a>
 
-Control Plane controls publication: producing an artifact does not by itself
-make it available. Document placement, lifecycle and publication state determine
-which results can be exposed. The
-[document journey](02.2-document-journey.md#concurrent-imports-and-publication)
-explains the coordination of concurrent imports and publication; the
-[open performance question](A10-open-issues.md#oi-1-document-write-concurrency)
-records the evidence needed to assess its cost under load.
+File bytes live in object storage; PostgreSQL records their placement and
+publication. Knowledge Flow reads the authorized original through Control Plane.
+Producing a file does not publish it: Control Plane accepts the result before
+exposing it. The [document journey](02.2-document-journey.md) explains the user
+experience; the [storage annex](A9-documents.md) details coordination and cleanup.
 
-## 1.3. Agents: accessing knowledge during a conversation
-
-The Agent Pod resolves the user's authorized execution context with Control
-Plane for each turn. When the assistant needs documents, it invokes a capability
-that calls Knowledge Flow API on the user's behalf, using their delegated
-identity and the space bound to that turn.
+## 1.3. Answering in a conversation
 
 <a id="15-document-search-during-a-conversation"></a>
-
-```mermaid
-flowchart TB
-    ui["Frontend<br/>Chat"]
-    subgraph pod["Agent Pod - default: fred-agent"]
-        agent["Assistant execution"]
-        capability["Document Search capability"]
-        agent -->|"Invoke tool"| capability
-    end
-    cp["Control Plane API"]
-    kfa["Knowledge Flow API<br/>Search and content retrieval"]
-    stores[("Knowledge stores<br/>Index, cp_read publication facts and content")]
-    ui <-->|"Messages / streamed answers"| agent
-    agent -->|"Resolve authorized turn context"| cp
-    capability -->|"Delegated identity / bound space"| kfa
-    kfa -->|"Resolve authorized document scope"| cp
-    kfa -->|"Search / verify visibility / retrieve"| stores
-
-    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
-    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
-    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class ui,agent,capability,cp,kfa fred
-    class stores cots
-    class pod neutral
-```
-
-Knowledge Flow API checks the user's access to the requested space, searches
-the index and verifies document visibility before returning content. The
-capability stays with the agent; knowledge retrieval and storage access stay
-with Knowledge Flow.
-
-## 1.4. Governance: administering resources by space
-
-The organization owner sets business choices, including permitted agents, models
-and the capabilities each Agent Pod offers. Each person's
-space roles determine what they may
-manage, contribute to or read. The owner's separate institutional mandate and
-the precise role boundaries are defined in the [roles annex](A11-roles.md).
-
-```mermaid
-flowchart TB
-    owner["Organization owner"]
-    policy["Organization policy<br/>Permitted agents and models"]
-    person["Person"]
-    roles["Roles in a space<br/>Read / contribute / administer"]
-    space["Working space<br/>Organization, team, project or personal"]
-    documents["Space documents"]
-    assistants["Agent instances<br/>configured in the space"]
-    owner -->|"Sets"| policy
-    person -->|"Holds"| roles
-    roles -->|"Determine allowed actions"| space
-    space -->|"Contains"| documents
-    space -->|"Contains"| assistants
-    policy -->|"Constrains available choices"| assistants
-
-    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class owner,policy,person,roles,space,documents,assistants neutral
-```
-
-An assistant must satisfy both controls: the organization's usage policy and
-the person's access rights in the working space. The [security chapter](03-security.md)
-defines inheritance and isolation rules.
-
-## 1.5. Models: authorization, selection and invocation
-
 <a id="14-model-governance-and-agent-execution"></a>
 
-**Assistant model: selection and execution**
-
-Control Plane maintains the model catalog and the organization's permitted
-choices. The user selects an available model; the Agent Pod resolves the
-authorized choice for the turn, calls the model service and streams the answer
-directly to the frontend.
-
 ```mermaid
 flowchart TB
-    ui["Frontend<br/>Model selection"]
-    cp["Control Plane API<br/>Catalog and organization policy"]
-    pod["Agent Pod<br/>Assistant execution"]
-    model["Generation model service"]
-    ui -->|"Prepare selected model"| cp
-    pod -->|"Resolve authorized model for the turn"| cp
-    cp -->|"Discover model offerings"| model
-    pod -->|"Generate response"| model
+    ui["Frontend<br/>Send a message"]
+    pod["Agent Pod<br/>Execute the assistant"]
+    cp["Control Plane<br/>Admit user, space and selected offers"]
+    model["Model service<br/>Generate the response"]
+    kf["Knowledge Flow API<br/>Retrieve authorized knowledge"]
+    ui <-->|"Message / streamed answer"| pod
+    pod -->|"Resolve context for this turn"| cp
+    pod -->|"Call selected model"| model
+    pod -->|"Use document-search tool"| kf
+    kf -->|"Resolve authorized corpus"| cp
 
     classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
     classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
-    class ui,cp,pod fred
+    class ui,pod,cp,kf fred
     class model cots
 ```
 
-**Knowledge embeddings: indexing and search**
+The pod obtains an authorized context for each turn. Selecting an assistant or
+model in the browser does not grant execution. Document search uses the person's
+authority within the conversation's space and permitted ancestor resources;
+it does not give the model unrestricted access. The answer streams from the pod
+to the frontend. Knowledge Flow's embedding models are configured separately
+from the conversation's generation model.
 
-Knowledge Flow also uses models: its worker embeds document chunks during
-indexing, and its API embeds queries during search. This embedding configuration
-is separate from the generation model selected for a conversation.
-
-```mermaid
-flowchart TB
-    kfa["Knowledge Flow API<br/>Document search"]
-    kfw["Knowledge Flow worker<br/>Document indexing"]
-    embed["Embedding model service"]
-    kfa -->|"Embed query"| embed
-    kfw -->|"Embed document chunks"| embed
-
-    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
-    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
-    class kfa,kfw fred
-    class embed cots
-```
+Organization-level policy limits which models and pod offers may be used; local
+capability restrictions can narrow it. Roles in the working space determine what
+the person may do. [Security](03-security.md) explains these two controls;
+[journey 2.3](02.3-agent-administration.md) shows how people use them.

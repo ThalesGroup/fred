@@ -1,82 +1,46 @@
 # 0. Introduction
 
-Fred is an open-source platform that lets organizations use their knowledge
-with AI while retaining control over data and its use. It brings together data
-lifecycle management, access security and usage governance.
+Fred is an open-source platform for working with knowledge and AI assistants.
+Its central concept is the **space**: a work perimeter that brings together
+resources, configured assistants and people's access rights.
 
-Fred provides a ready-to-use workspace for documents, AI assistants and
-administration. With a document-writing capability, an assistant can help users
-[draft, revise and download a deliverable](02.3-agent-administration.md#bob-prepares-a-report-with-his-assistant)
-within their conversation.
-
-Its [SDK](../../libs/fred-sdk/README.md) lets teams extend the platform with agents, knowledge
-bases and complete business applications, including their own UI, backend
-services and data, with or without agents. The platform and its extensions
-follow a cloud-native deployment model based on Kubernetes.
+## Start with the space
 
 ```mermaid
 flowchart TB
-    ready["Ready to use<br/>Fred workspace<br/>Documents, assistants and administration"]
-
-    extend["Extend through the SDK<br/>Agents and knowledge bases<br/>Complete business applications<br/>Custom UI, backend services and data"]
-
-    foundation["Shared Fred foundation<br/>Governance and access rights<br/>Security and data lifecycle"]
-
-    k8s["Cloud-native deployment<br/>Kubernetes"]
-
-    ready --> foundation
-    extend --> foundation
-    foundation --> k8s
-
-    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class ready,extend,foundation,k8s neutral
-```
-
-## A shared foundation for collaboration
-
-This shared foundation organizes collaboration into three levels: **organization,
-team and project**. Each provides a **space** for shared knowledge, assistants and
-business resources. This structure supports both Fred's native workspace and
-applications built on its foundation.
-
-The organization holds common resources. Teams organize their own work; projects
-focus collaboration within a team. Subject to [access rights](03-security.md),
-a team can use organization resources, and a project can use resources from both
-its team and organization.
-
-The same [four business roles](A11-roles.md#reference-roles) apply at every level:
-**owners** (French: *responsables*) manage the workspace and its business choices, **analysts** evaluate agents
-and their use, **editors** contribute content, and **members** consult it.
-Management and content access remain separate permissions; a person can combine
-roles. Technical Admin roles exist separately at platform and organization level.
-
-```mermaid
-flowchart TB
-    subgraph organization["Organization space"]
+    subgraph space["Working space"]
         direction TB
-        common["Common knowledge<br/>Assistants and resources<br/>Owner / Analyst<br/>Editor / Member"]
-
-        subgraph team["Team space"]
-            direction TB
-            shared["Team knowledge<br/>Assistants and resources<br/>Owner / Analyst<br/>Editor / Member"]
-
-            subgraph project["Project space"]
-                focused["Resources for a shared objective<br/>Owner / Analyst<br/>Editor / Member"]
-            end
-        end
-
-        common -->|"Available according to access rights"| team
-        shared -->|"Available according to access rights"| project
+        person["A person"]
+        roles["Roles here<br/>Manage · contribute · read"]
+        shared["Shared resources<br/>Documents and assistants"]
+        conversation["That person's conversation<br/>Messages and working documents"]
+        person --> roles --> shared
+        shared -->|"Use an authorized assistant"| conversation
     end
 
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class common,shared,focused,organization,team,project neutral
+    class person,roles,shared,conversation,space neutral
 ```
 
-Each project belongs to a team; each team belongs to an organization. The nested
-spaces show where collaboration happens; the arrows show how shared resources
-support it.
+**Shared space does not mean shared conversations.** Access to a space's resources
+does not open another person's conversations. Roles apply to the space where they
+are granted; they do not automatically extend to other spaces.
 
-The [system overview](01-system-overview.md) explains how Fred's components deliver
-this foundation. The [journeys](02-journeys.md), with their
-[example people and spaces](02-journeys.md#example-people-and-spaces), show it in use.
+In a collective space, the **Owner / Responsable** governs business uses. **Editors** contribute,
+**analysts** read and evaluate, and **members** read and use authorized assistants.
+Technical **Admins** have separate, limited duties. Management alone grants no
+content access; people can hold several roles.
+
+Collective spaces form an organization → team → project hierarchy. A personal
+space is individual. These distinctions matter where a rule depends on the level;
+otherwise the journeys simply speak of a space. [Spaces](04-organizations.md)
+and [security](03-security.md) explain the boundaries.
+
+## Use Fred or extend it
+
+Fred supplies a workspace for documents, assistants and administration. Developers
+can also supply their own Agent Pods and applications through its SDK. An Agent
+Pod hosts agents and their tools; Fred provides a native pod. The
+[system overview](01-system-overview.md) explains their responsibilities, and
+[journey 2.3](02.3-agent-administration.md) follows an assistant from configuration
+to a useful result in a space.
