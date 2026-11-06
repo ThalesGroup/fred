@@ -4114,8 +4114,6 @@
       "article": {
         "breadcrumb": "Breadcrumb",
         "edit": "Edit",
-        "rename": "Rename or move this page",
-        "delete": "Delete this page",
         "history": "Version history",
         "empty": "This page is empty.",
         "writtenByAgent": "Written by an agent",
@@ -4131,7 +4129,11 @@
         "cancel": "Cancel",
         "conflict": "Someone else saved this page while you were writing. Your text is still here — load their version to start again from it, or save to keep yours.",
         "loadCurrent": "Load their version",
-        "tooLong": "This page is too long. Keep it under {{max}} characters — a wiki page is a summary, not a document."
+        "tooLong": "This page is too long. Keep it under {{max}} characters — a wiki page is a summary, not a document.",
+        "titleLabel": "Page title",
+        "parentLabel": "Parent page",
+        "root": "None — top level",
+        "delete": "Delete page"
       },
       "history": {
         "title": "Version history",
@@ -4169,13 +4171,6 @@
         "childTitle": "New page under “{{parent}}”",
         "label": "Page title",
         "confirm": "Create page"
-      },
-      "renameDialog": {
-        "title": "Title and location",
-        "label": "Page title",
-        "parentLabel": "Parent page",
-        "root": "None — top level",
-        "confirm": "Save"
       },
       "leaveDialog": {
         "title": "Discard your changes?",

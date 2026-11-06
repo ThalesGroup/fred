@@ -43,11 +43,21 @@
   overflow-wrap: anywhere;
 }
 
+.titleField {
+  flex: 1;
+  min-width: 0;
+}
+
 .actions {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-2xs);
+}
+
+/* Kept apart from Cancel and Save so a destructive click is not a slip. */
+.deleteAction {
+  margin-right: var(--spacing-s);
 }
 
 /* The page moved on while this draft was open. Error colours, because losing

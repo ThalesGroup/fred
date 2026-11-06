@@ -4114,8 +4114,6 @@
       "article": {
         "breadcrumb": "Fil d’Ariane",
         "edit": "Modifier",
-        "rename": "Renommer ou déplacer cette page",
-        "delete": "Supprimer cette page",
         "history": "Historique des versions",
         "empty": "Cette page est vide.",
         "writtenByAgent": "Écrit par un agent",
@@ -4131,7 +4129,11 @@
         "cancel": "Annuler",
         "conflict": "Quelqu'un a enregistré cette page pendant que vous écriviez. Votre texte est toujours là — chargez sa version pour repartir de celle-ci, ou enregistrez pour garder la vôtre.",
         "loadCurrent": "Charger sa version",
-        "tooLong": "Cette page est trop longue. Restez sous {{max}} caractères — une page de wiki est une synthèse, pas un document."
+        "tooLong": "Cette page est trop longue. Restez sous {{max}} caractères — une page de wiki est une synthèse, pas un document.",
+        "titleLabel": "Titre de la page",
+        "parentLabel": "Page parente",
+        "root": "Aucune — premier niveau",
+        "delete": "Supprimer la page"
       },
       "history": {
         "title": "Historique des versions",
@@ -4169,13 +4171,6 @@
         "childTitle": "Nouvelle page sous « {{parent}} »",
         "label": "Titre de la page",
         "confirm": "Créer la page"
-      },
-      "renameDialog": {
-        "title": "Titre et emplacement",
-        "label": "Titre de la page",
-        "parentLabel": "Page parente",
-        "root": "Aucune — premier niveau",
-        "confirm": "Enregistrer"
       },
       "leaveDialog": {
         "title": "Abandonner vos modifications ?",

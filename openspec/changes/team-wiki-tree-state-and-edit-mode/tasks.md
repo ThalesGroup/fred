@@ -6,10 +6,10 @@
 
 ## 2. Edit mode
 
-- [ ] 2.1 Remove rename and delete icons from `WikiArticle`, and delete the rename `Dialog`, its state and `renameDialog` i18n keys (fr/en). Verify the reading view shows only History + Edit.
-- [ ] 2.2 `WikiEditor`: editable title field and parent select (root + `moveTargets`) for ordinary pages; fixed title for rules. Verify with a test for both page kinds.
-- [ ] 2.3 Delete `IconButton` (`color="error"`, tooltip "Supprimer la page" / "Delete page") on the left of the editor actions, opening the existing confirmation. Verify with an interaction test.
-- [ ] 2.4 Save: metadata PATCH when title/parent changed, then content PUT; duplicate title keeps the editor open. Verify with interaction tests.
+- [x] 2.1 Remove rename and delete icons from `WikiArticle`, and delete the rename `Dialog`, its state and `renameDialog` i18n keys (fr/en). Verify the reading view shows only History + Edit.
+- [x] 2.2 `WikiEditor`: editable title field and parent select (root + `moveTargets`) for ordinary pages; fixed title for rules. Verify with a test for both page kinds.
+- [x] 2.3 Delete `IconButton` (`color="error"`, tooltip "Supprimer la page" / "Delete page") on the left of the editor actions, opening the existing confirmation. Verify with an interaction test.
+- [x] 2.4 Save: metadata PATCH when title/parent changed, then content PUT; duplicate title keeps the editor open. Verify with interaction tests.
 
 ## 3. Close-out
 
