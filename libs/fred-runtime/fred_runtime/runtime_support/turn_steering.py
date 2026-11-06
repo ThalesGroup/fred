@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
+from typing import cast
 
 from fred_core.history.history_schema import TextPart
 from fred_core.history.postgres_history_store import (
@@ -17,8 +18,9 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langchain_core.messages.ai import InputTokenDetails, UsageMetadata
+from langchain_openai.chat_models.base import BaseChatOpenAI
 from langgraph.config import get_stream_writer
 
 from fred_runtime.runtime_support.model_metadata import (
@@ -26,7 +28,7 @@ from fred_runtime.runtime_support.model_metadata import (
     sum_token_usage,
 )
 from fred_runtime.runtime_support.run_scope import RunScope
-from fred_runtime.support.thinking import content_to_text
+from fred_runtime.support.thinking import content_to_text, strip_reasoning_from_history
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,43 @@ def _continue_after_steered_reply(request: ModelRequest) -> ModelRequest:
                 )
             ),
         ]
+    )
+
+
+def _visible_reply_request(
+    request: ModelRequest, instruction: SystemMessage
+) -> ModelRequest:
+    model = request.model
+    settings = {
+        key: value
+        for key, value in request.model_settings.items()
+        if key != "tool_choice"
+    }
+    messages = request.messages
+    tools = []
+    tool_choice = None
+    if isinstance(model, BaseChatOpenAI):
+        # This call needs visible text; reasoning-only output cannot answer the update.
+        model = model.model_copy(update={"reasoning_effort": None, "reasoning": None})
+        messages = cast(list[AnyMessage], strip_reasoning_from_history(messages))
+        settings = {
+            key: value
+            for key, value in settings.items()
+            if key not in {"reasoning_effort", "reasoning"}
+        }
+        tools = request.tools
+        tool_choice = "none"
+        if not request.tools:
+            # LangChain forwards request.tool_choice only when tools are bound.
+            settings["tool_choice"] = "none"
+    return request.override(
+        model=model,
+        model_settings=settings,
+        messages=messages,
+        tools=tools,
+        tool_choice=tool_choice,
+        response_format=None,
+        system_message=instruction,
     )
 
 
@@ -236,12 +275,7 @@ class TurnSteeringMiddleware(AgentMiddleware):
                 "Do not call tools or give a final answer to the original task."
             )
         )
-        reply_request = request.override(
-            tools=[],
-            tool_choice="none",
-            response_format=None,
-            system_message=instruction,
-        )
+        reply_request = _visible_reply_request(request, instruction)
         reply: AIMessage | None = None
         reply_usage: dict[str, int] | None = None
         for attempt in range(2):

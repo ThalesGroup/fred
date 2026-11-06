@@ -3,7 +3,9 @@
 import asyncio
 from typing import Any, cast
 
+import fred_runtime.deep.deep_runtime as deep_runtime
 import pytest
+from deepagents.backends import StateBackend
 from fred_core.history.history_schema import (
     ChatMessage,
     TextPart,
@@ -28,14 +30,38 @@ from fred_runtime.runtime_context import (
 from fred_runtime.runtime_support import turn_steering
 from fred_runtime.runtime_support.run_scope import RunScope
 from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
-from fred_sdk.contracts.models import GraphAgentDefinition
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    PortableContext,
+    PortableEnvironment,
+    RuntimeContext,
+)
+from fred_sdk.contracts.models import (
+    GraphAgentDefinition,
+    ReActAgentDefinition,
+    ToolApprovalPolicy,
+)
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.runnables import RunnableBinding
+from langchain_core.tools import tool
+from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.runtime import Runtime
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
 
 
 async def _replicas(tmp_path):
@@ -55,6 +81,30 @@ def _text(message: ChatMessage) -> str:
     part = message.parts[0]
     assert isinstance(part, TextPart)
     return part.text
+
+
+class _ScriptedSteeringModel(BaseChatModel):
+    script: list[AIMessage] = Field(default_factory=list)
+    calls: list[list[BaseMessage]] = Field(default_factory=list)
+
+    @property
+    def _llm_type(self) -> str:
+        return "scripted-steering-integration"
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> "_ScriptedSteeringModel":
+        return self
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        self.calls.append(list(messages))
+        if not self.script:
+            raise AssertionError("Unexpected model call")
+        return ChatResult(generations=[ChatGeneration(message=self.script.pop(0))])
 
 
 class _UnusedGraph(GraphAgentDefinition):
@@ -601,6 +651,152 @@ def test_steered_continuation_serializes_for_provider(model_name):
     assert [message["role"] for message in wire] == ["user", "assistant", "user"]
 
 
+@pytest.mark.parametrize("model_name", ["mistral-medium-latest", "gpt-6-luna"])
+@pytest.mark.parametrize("with_tools", [False, True])
+def test_visible_reply_disables_openai_compatible_reasoning_only_for_interim(
+    model_name: str, with_tools: bool
+) -> None:
+    @tool
+    def read_document(uid: str) -> str:
+        """Read one document."""
+        return uid
+
+    model = ChatOpenAI.model_validate(
+        {
+            "model": model_name,
+            "api_key": "offline-test",
+            "reasoning_effort": "high",
+            **(
+                {"base_url": "https://api.mistral.ai/v1"}
+                if model_name.startswith("mistral")
+                else {}
+            ),
+        }
+    )
+    if model_name.startswith("mistral"):
+        model = cast(ChatOpenAI, with_mistral_reasoning_replay(model))
+    prior = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "Private reasoning"},
+            {"type": "text", "text": "One document read."},
+        ],
+        tool_calls=[
+            {"name": "read_document", "args": {"uid": "tool-args"}, "id": "call1"}
+        ],
+    )
+    messages = [
+        HumanMessage(content="Read the documents."),
+        prior,
+        ToolMessage(
+            content="Found one title.", tool_call_id="call1", name="read_document"
+        ),
+        HumanMessage(content="Where are you?"),
+    ]
+    request = ModelRequest(
+        model=model,
+        messages=messages,
+        model_settings={"reasoning_effort": "high"},
+        tools=[read_document] if with_tools else [],
+    )
+    interim = turn_steering._visible_reply_request(
+        request, SystemMessage(content="Answer the update briefly.")
+    )
+    interim_model = cast(ChatOpenAI, interim.model)
+
+    assert type(interim_model) is type(model)
+    assert interim_model is not model
+    assert interim_model.client is model.client
+    assert interim_model.async_client is model.async_client
+    assert interim_model.reasoning_effort is None
+    assert "reasoning_effort" not in interim.model_settings
+    assert interim.tool_choice == "none"
+    assert interim.tools == request.tools
+    if with_tools:
+        assert "tool_choice" not in interim.model_settings
+        bound = interim_model.bind_tools(
+            interim.tools, tool_choice=interim.tool_choice, **interim.model_settings
+        )
+        assert isinstance(bound, RunnableBinding)
+        payload_settings = bound.kwargs
+    else:
+        assert interim.model_settings["tool_choice"] == "none"
+        payload_settings = interim.model_settings
+    interim_payload = interim_model._get_request_payload(
+        interim.messages, **payload_settings
+    )
+    assert "reasoning_effort" not in interim_payload
+    assert interim_payload["tool_choice"] == "none"
+    if "messages" in interim_payload:
+        wire_messages = interim_payload["messages"]
+        assert [message["role"] for message in wire_messages] == [
+            "user",
+            "assistant",
+            "tool",
+            "user",
+        ]
+        assert wire_messages[1]["content"] == "One document read."
+        assert wire_messages[2]["content"] == "Found one title."
+    else:
+        wire_items = interim_payload["input"]
+        assert [item["type"] for item in wire_items] == [
+            "message",
+            "message",
+            "function_call",
+            "function_call_output",
+            "message",
+        ]
+        assert "One document read." in str(wire_items[1]["content"])
+        assert wire_items[3]["output"] == "Found one title."
+    assert isinstance(prior.content, list)
+    assert model._get_request_payload(messages)["reasoning_effort"] == "high"
+    assert request.model is model
+    assert request.model_settings == {"reasoning_effort": "high"}
+
+
+def test_visible_reply_uses_provider_neutral_tool_suppression() -> None:
+    @tool
+    def read_document(uid: str) -> str:
+        """Read one document."""
+        return uid
+
+    model = ChatAnthropic.model_validate(
+        {"model": "claude-sonnet-4-5", "api_key": "offline-test"}
+    )
+    messages: list[AnyMessage] = [
+        HumanMessage(content="Read the documents."),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "read_document", "args": {"uid": "one"}, "id": "call1"}
+            ],
+        ),
+        ToolMessage(content="Found one title.", tool_call_id="call1"),
+        HumanMessage(content="Where are you?"),
+    ]
+    request = ModelRequest(model=model, messages=messages, tools=[read_document])
+
+    interim = turn_steering._visible_reply_request(
+        request, SystemMessage(content="Answer the update briefly.")
+    )
+
+    assert interim.model is model
+    assert interim.messages is messages
+    assert interim.tools == []
+    assert interim.tool_choice is None
+    assert request.tools == [read_document]
+    assert request.tool_choice is None
+    payload = model._get_request_payload(interim.messages)
+    assert "tools" not in payload
+    assert "tool_choice" not in payload
+    assert [message["role"] for message in payload["messages"]] == [
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert payload["messages"][1]["content"][0]["type"] == "tool_use"
+    assert payload["messages"][2]["content"][0]["type"] == "tool_result"
+
+
 @pytest.mark.asyncio
 async def test_failed_steered_reply_does_not_emit_delivery(monkeypatch):
     events = []
@@ -674,7 +870,7 @@ async def test_invalid_interim_reply_falls_back_and_continues(
         calls.append(request)
         if len(calls) <= 2:
             assert request.tools == []
-            assert request.tool_choice == "none"
+            assert request.tool_choice is None
             return invalid
         assert isinstance(request.messages[-1], HumanMessage)
         return ModelResponse(result=[AIMessage(content="Original task continues.")])
@@ -1179,6 +1375,180 @@ async def test_two_steers_during_tool_call_continue_one_turn(monkeypatch, tmp_pa
             "Read the sources and summarize them",
             "Where are you?",
             "Also include two more documents",
+        ]
+    finally:
+        turn_steering.turn_messages.configure(None)
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("agent_kind", ["react", "deep"])
+@pytest.mark.parametrize("timing", ["before_first_model", "during_tool"])
+async def test_compiled_agent_handles_two_steers(
+    monkeypatch, tmp_path, agent_kind: str, timing: str
+) -> None:
+    from types import SimpleNamespace
+
+    from fred_runtime.app.agent_app import _HistoryRanker, _rank_runtime_event
+
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    turn_steering.turn_messages.configure(second)
+    events: asyncio.Queue[Any] = asyncio.Queue()
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: events.put_nowait)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    @tool
+    async def read_source(query: str) -> str:
+        """Read a source in the test corpus."""
+        entered.set()
+        await release.wait()
+        return f"Source for {query}"
+
+    tool_call = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "read_source", "args": {"query": "first"}, "id": "call-1"}
+        ],
+    )
+    interim = AIMessage(content="I will include the additional sources.")
+    final = AIMessage(content="The summary includes all requested sources.")
+    model = _ScriptedSteeringModel(
+        script=[interim, tool_call, final]
+        if timing == "before_first_model"
+        else [tool_call, interim, final]
+    )
+    binding = BoundRuntimeContext(
+        runtime_context=RuntimeContext(
+            session_id="s", user_id="u", team_id="t", language="en"
+        ),
+        portable_context=PortableContext(
+            request_id="request-1",
+            correlation_id="correlation-1",
+            actor="u",
+            tenant="t",
+            environment=PortableEnvironment.DEV,
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            baggage={"steering_enabled": "true"},
+        ),
+    )
+    graph: Any
+    if agent_kind == "react":
+        graph = build_tool_loop_compiled_react_agent(
+            model=model,
+            tools=[read_source],
+            system_prompt="Summarize the sources.",
+            binding=binding,
+            approval_policy=ToolApprovalPolicy(enabled=False),
+            checkpointer=InMemorySaver(),
+            definition=cast(
+                ReActAgentDefinition, SimpleNamespace(agent_id="test.steering")
+            ),
+            available_tool_names={"read_source"},
+        )
+    else:
+        middleware = deep_runtime._build_deepagent_runtime_middleware(
+            tracer=None,
+            kpi=None,
+            binding=binding,
+            approval_policy=ToolApprovalPolicy(enabled=False),
+            available_tool_names={"read_source"},
+        )
+        graph = deep_runtime._create_compiled_deep_agent(
+            model=model,
+            tools=[read_source],
+            system_prompt="Summarize the sources.",
+            checkpointer=InMemorySaver(),
+            subagent_middleware=[],
+            middleware=middleware,
+            backend=StateBackend(),
+            permissions=[],
+        )
+    try:
+        await first.save("s", [make_user_text("s", "ex", 0, "Summarize sources")], "u")
+        if timing == "before_first_model":
+            for message_id, content in (
+                ("m1", "Where are you?"),
+                ("m2", "Include two more sources."),
+            ):
+                await first.submit_steered_message(
+                    session_id="s",
+                    user_id="u",
+                    team_id="t",
+                    agent_instance_id="a",
+                    message_id=message_id,
+                    content=content,
+                )
+        ranker = _HistoryRanker(
+            1,
+            opening_rank=0,
+            pending_message_id=None,
+            previously_pending_occurrence_ids=(),
+        )
+
+        async def persist_reply() -> dict[str, Any]:
+            assert await events.get() == {"kind": "_steered_reply_start"}
+            event = await events.get()
+            return await _rank_runtime_event(
+                event.model_dump(mode="json"),
+                ranker,
+                session_id="s",
+                user_id="u",
+                exchange_id="ex",
+            )
+
+        with RunScope.open():
+            consumer = asyncio.create_task(persist_reply())
+            run = asyncio.create_task(
+                graph.ainvoke(
+                    {"messages": [HumanMessage(content="Summarize sources")]},
+                    {"configurable": {"thread_id": "s"}},
+                )
+            )
+            await asyncio.wait_for(entered.wait(), 10)
+            if timing == "during_tool":
+                for message_id, content in (
+                    ("m1", "Where are you?"),
+                    ("m2", "Include two more sources."),
+                ):
+                    await first.submit_steered_message(
+                        session_id="s",
+                        user_id="u",
+                        team_id="t",
+                        agent_instance_id="a",
+                        message_id=message_id,
+                        content=content,
+                    )
+            release.set()
+            state = await asyncio.wait_for(run, 15)
+            reply_event = await asyncio.wait_for(consumer, 5)
+
+        assert [item["rank"] for item in reply_event["deliveries"]] == [1, 2]
+        assert reply_event["rank"] == 3
+        assert [
+            message.content
+            for message in state["messages"]
+            if isinstance(message, ToolMessage)
+        ] == ["Source for first"]
+        assert (
+            state["messages"][-1].content
+            == "The summary includes all requested sources."
+        )
+        assert len(model.calls) == 3
+        interim_index = 0 if timing == "before_first_model" else 1
+        assert [message.type for message in model.calls[interim_index][-2:]] == [
+            "human",
+            "human",
+        ]
+        assert [
+            _text(row) for row in await first.get("s", "u") if row.role.value == "user"
+        ] == [
+            "Summarize sources",
+            "Where are you?",
+            "Include two more sources.",
         ]
     finally:
         turn_steering.turn_messages.configure(None)
