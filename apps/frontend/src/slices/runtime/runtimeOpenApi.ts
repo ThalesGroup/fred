@@ -568,11 +568,17 @@ export type ReadinessRequest = {
   items?: ReadinessRequestItem[];
   team_id?: string | null;
 };
+export type PreparationCopyAsset = {
+  content_base64: string;
+  filename: string;
+  slot_key: string;
+};
 export type CapabilityConfigCopyResult = {
   config?: {
     [key: string]: any;
   };
   notices?: string[];
+  preparation_assets?: PreparationCopyAsset[];
   schema_version: string;
 };
 export type CapabilityConfigCopyRequest = {
@@ -581,6 +587,7 @@ export type CapabilityConfigCopyRequest = {
     [key: string]: string;
   } | null;
   config: StoredCapabilityConfig;
+  preparation_assets?: PreparationCopyAsset[] | null;
   source_agent_instance_id: string;
   source_team_id: string;
   target_agent_instance_id: string;
@@ -598,6 +605,7 @@ export type CapabilityConfigExportResult = {
 export type CapabilityConfigExportRequest = {
   agent_instance_id: string;
   config: StoredCapabilityConfig;
+  preparation_assets?: PreparationCopyAsset[] | null;
   team_id: string;
 };
 export type CheckpointThreadSummary = {
@@ -1440,6 +1448,16 @@ export type FieldSpec = {
     | "url";
   ui?: UiHints;
 };
+export type PreparationSpec = {
+  activation_field?: string | null;
+  asset_slots?: string[];
+  gates_readiness?: boolean;
+  max_attempts?: number;
+  max_input_bytes?: number;
+  min_assets?: number;
+  rules_version: string;
+  timeout_seconds?: number;
+};
 export type TeamScopePolicy = "default_on" | "admin_gated";
 export type CapabilityCatalogEntry = {
   assets?: AssetSlot[];
@@ -1470,6 +1488,7 @@ export type CapabilityCatalogEntry = {
   model_vision_profile_ids?: string[];
   /** i18n key */
   name: string;
+  preparation?: PreparationSpec | null;
   public_version?: string | null;
   route_base_url?: string | null;
   runtime_id?: string | null;

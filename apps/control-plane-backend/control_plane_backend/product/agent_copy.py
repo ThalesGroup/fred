@@ -24,6 +24,9 @@ openspec/changes/copy-agent-across-teams/.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import hashlib
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -42,6 +45,19 @@ from fred_core.common import TeamId
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.rebac.rebac_engine import RebacDisabledResult
 from fred_sdk.contracts.capability import CapabilityConfigCopyRequest
+from fred_sdk.contracts.capability import CapabilityCatalogEntry, PreparationCopyAsset
+from sqlalchemy import select
+
+from control_plane_backend.capability_preparations.admission import (
+    cleanup_staged_assets,
+    persist_agent_preparations,
+    stage_assets,
+)
+from control_plane_backend.models.capability_preparation_models import (
+    CapabilityAssetRow,
+    CapabilityPreparationAssetRow,
+    CapabilityPreparationRow,
+)
 
 from control_plane_backend.agent_instances.names import (
     CopyLocale,
@@ -116,6 +132,7 @@ class CopySource:
     base_url: str
     capability_ids: list[str]
     names: dict[str, str]
+    available: tuple[CapabilityCatalogEntry, ...] = ()
 
 
 async def effective_capability_ids(
@@ -164,6 +181,7 @@ async def _resolve_copy_source(
         base_url=base_url,
         capability_ids=await effective_capability_ids(record, template, deps),
         names={entry.id: entry.name for entry in template.available_capabilities},
+        available=tuple(template.available_capabilities),
     )
 
 
@@ -282,6 +300,135 @@ async def _copy_capability_config_via_pod(
     return envelope
 
 
+async def _copy_catalog(
+    record: AgentInstanceRecord,
+    source: CopySource,
+    deps: ProductServiceDependencies,
+) -> tuple[CapabilityCatalogEntry, ...]:
+    if source.available:
+        return source.available
+    templates = await product_service._fetch_runtime_templates(
+        source.base_url, include_non_public=True
+    )
+    template = next(
+        (
+            item
+            for item in templates
+            if item.template_agent_id == record.source_agent_id
+        ),
+        None,
+    )
+    if template is None:
+        raise EnrollmentError(
+            "Runtime template is unavailable for copy.", http_status=503
+        )
+    return tuple(template.available_capabilities)
+
+
+async def _source_preparation_assets(
+    record: AgentInstanceRecord,
+    capability_ids: list[str],
+    deps: ProductServiceDependencies,
+) -> dict[str, list[PreparationCopyAsset]]:
+    if deps.get_sql_session_factory is None or deps.get_content_store is None:
+        raise EnrollmentError("Preparation storage is unavailable.", http_status=503)
+    async with deps.get_sql_session_factory()() as session:
+        rows = (
+            await session.execute(
+                select(CapabilityPreparationRow, CapabilityAssetRow)
+                .join(
+                    CapabilityPreparationAssetRow,
+                    CapabilityPreparationAssetRow.preparation_id
+                    == CapabilityPreparationRow.id,
+                )
+                .join(
+                    CapabilityAssetRow,
+                    CapabilityAssetRow.id == CapabilityPreparationAssetRow.asset_id,
+                )
+                .where(
+                    CapabilityPreparationRow.owner_kind == "agent",
+                    CapabilityPreparationRow.owner_id == record.agent_instance_id,
+                    CapabilityPreparationRow.team_id == str(record.team_id),
+                    CapabilityPreparationRow.is_current.is_(True),
+                    CapabilityPreparationRow.capability_id.in_(capability_ids),
+                    CapabilityAssetRow.state == "stored",
+                )
+                .order_by(
+                    CapabilityPreparationRow.capability_id,
+                    CapabilityPreparationAssetRow.position,
+                )
+            )
+        ).all()
+    result: dict[str, list[PreparationCopyAsset]] = {}
+    content_store = deps.get_content_store()
+    for preparation, asset in rows:
+        content = await asyncio.to_thread(
+            content_store.read_object, asset.object_key, max_bytes=asset.size
+        )
+        if (
+            len(content) != asset.size
+            or hashlib.sha256(content).hexdigest() != asset.sha256
+        ):
+            raise EnrollmentError("Preparation asset is incomplete.", http_status=503)
+        result.setdefault(preparation.capability_id, []).append(
+            PreparationCopyAsset(
+                slot_key=asset.slot_key,
+                filename=asset.filename,
+                content_base64=base64.b64encode(content).decode("ascii"),
+            )
+        )
+    return result
+
+
+@dataclass(frozen=True)
+class _CopyUpload:
+    slot_key: str
+    filename: str
+    content: bytes
+    content_type: str = "application/octet-stream"
+
+
+def _copy_uploads(
+    prepared: list[tuple[str, dict[str, Any] | None]],
+    available: tuple[CapabilityCatalogEntry, ...],
+) -> dict[str, list[_CopyUpload]]:
+    declarations = {entry.id: entry.preparation for entry in available}
+    uploads: dict[str, list[_CopyUpload]] = {}
+    for capability_id, envelope in prepared:
+        if envelope is None:
+            continue
+        assets = [
+            PreparationCopyAsset.model_validate(item)
+            for item in envelope.get("preparation_assets") or []
+        ]
+        if len(assets) > 32:
+            raise EnrollmentError(
+                "Too many copied preparation assets.", http_status=422
+            )
+        spec = declarations.get(capability_id)
+        if assets and spec is None:
+            raise EnrollmentError(
+                "Undeclared copied preparation assets.", http_status=422
+            )
+        if spec is not None and sum(len(asset.content_base64) for asset in assets) > (
+            (spec.max_input_bytes + 2) // 3 * 4 + 128 * len(assets)
+        ):
+            raise EnrollmentError(
+                "Copied preparation assets exceed the size limit.", http_status=422
+            )
+        for asset in assets:
+            try:
+                content = base64.b64decode(asset.content_base64, validate=True)
+            except (binascii.Error, ValueError) as exc:
+                raise EnrollmentError(
+                    "Invalid copied preparation asset.", http_status=422
+                ) from exc
+            uploads.setdefault(capability_id, []).append(
+                _CopyUpload(asset.slot_key, asset.filename, content)
+            )
+    return uploads
+
+
 async def _copy_name(
     record: AgentInstanceRecord,
     target_team_id: TeamId,
@@ -337,6 +484,28 @@ async def copy_agent_instance_to_team(
     if display_name is not None:
         await _ensure_duplicate_name_free(target_team_id, display_name, deps)
     new_instance_id = str(uuid4())
+    runtime_source = next(
+        (
+            item
+            for item in deps.configuration.platform.runtime_catalog_sources
+            if item.runtime_id == record.source_runtime_id and item.enabled
+        ),
+        None,
+    )
+    preparation_enabled = bool(runtime_source and runtime_source.preparation_enabled)
+    preparation_catalog = (
+        await _copy_catalog(record, source, deps) if preparation_enabled else ()
+    )
+    preparation_ids = [
+        entry.id
+        for entry in preparation_catalog
+        if entry.id in source.capability_ids and entry.preparation is not None
+    ]
+    source_assets = (
+        await _source_preparation_assets(record, preparation_ids, deps)
+        if preparation_ids and asset_files is None
+        else {}
+    )
     routing_params = (
         await product_service._capability_save_routing_params(
             deps,
@@ -367,6 +536,7 @@ async def copy_agent_instance_to_team(
                 "asset_files": (
                     asset_files.get(cap_id, {}) if asset_files is not None else None
                 ),
+                "preparation_assets": source_assets.get(cap_id),
             }
         )
         return cap_id, await _copy_capability_config_via_pod(
@@ -391,6 +561,23 @@ async def copy_agent_instance_to_team(
         if env is not None
         for message in env.get("notices") or []
     ]
+    staged = []
+    content_store = None
+    if preparation_ids:
+        if deps.get_content_store is None or deps.get_sql_session_factory is None:
+            raise EnrollmentError(
+                "Preparation storage is unavailable.", http_status=503
+            )
+        content_store = deps.get_content_store()
+        try:
+            staged = await stage_assets(
+                content_store,
+                available=preparation_catalog,
+                selected_ids=list(kept),
+                uploads=_copy_uploads(prepared, preparation_catalog),
+            )
+        except ValueError as exc:
+            raise EnrollmentError(str(exc), http_status=422) from exc
 
     def capability(cap_id: str) -> AgentCopyCapability:
         return AgentCopyCapability(id=cap_id, name=source.names.get(cap_id, cap_id))
@@ -415,17 +602,41 @@ async def copy_agent_instance_to_team(
         tuning=tuning,
     )
     store = deps.get_agent_instance_store()
+
+    async def create_with_preparations() -> AgentInstanceRecord:
+        if not preparation_ids:
+            return await store.create(copy)
+        assert deps.get_sql_session_factory is not None
+        async with deps.get_sql_session_factory()() as session:
+            async with session.begin():
+                created_record = await store.create(copy, session=session)
+                await persist_agent_preparations(
+                    session,
+                    owner_id=new_instance_id,
+                    team_id=str(target_team_id),
+                    runtime_id=record.source_runtime_id,
+                    available=preparation_catalog,
+                    selected_ids=list(kept),
+                    capability_config=kept,
+                    staged=staged,
+                )
+        return created_record
+
     try:
-        created = await store.create(copy)
-    except AgentNameAlreadyExistsError as exc:
-        if display_name is not None:
-            raise agent_name_conflict(target_team_id, display_name) from exc
-        # A concurrent copy took the name: pick the next free one, once.
-        copy.display_name = await _copy_name(record, target_team_id, deps, locale)
         try:
-            created = await store.create(copy)
-        except AgentNameAlreadyExistsError as again:
-            raise agent_name_conflict(target_team_id, copy.display_name) from again
+            created = await create_with_preparations()
+        except AgentNameAlreadyExistsError as exc:
+            if display_name is not None:
+                raise agent_name_conflict(target_team_id, display_name) from exc
+            copy.display_name = await _copy_name(record, target_team_id, deps, locale)
+            try:
+                created = await create_with_preparations()
+            except AgentNameAlreadyExistsError as again:
+                raise agent_name_conflict(target_team_id, copy.display_name) from again
+    except Exception:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise
     # A copied capability may start preparing again in the destination.
     created = await product_service.settle_capability_save(
         deps, created, authorization=authorization

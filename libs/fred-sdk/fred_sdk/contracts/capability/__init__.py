@@ -35,6 +35,7 @@ from __future__ import annotations
 from ..models import (
     CapabilityConfigCopyRequest,
     CapabilityConfigCopyResult,
+    PreparationCopyAsset,
     CapabilityConfigExportRequest,
     CapabilityConfigExportResult,
     StoredCapabilityConfig,
@@ -91,6 +92,7 @@ __all__ = [
     "CapabilityCatalogEntry",
     "CapabilityConfigCopyRequest",
     "CapabilityConfigCopyResult",
+    "PreparationCopyAsset",
     "CapabilityConfigExportRequest",
     "CapabilityConfigExportResult",
     "CapabilityContext",
