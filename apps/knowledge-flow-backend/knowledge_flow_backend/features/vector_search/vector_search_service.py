@@ -18,6 +18,7 @@ import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
+from functools import cached_property
 from threading import Lock
 from typing import Any, List, Optional, Protocol, cast, runtime_checkable
 from uuid import UUID
@@ -29,7 +30,7 @@ from fred_core.documents.transport import DocumentAccessContext
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.security.delegation import AssertedUser
 from fred_core.store import VectorSearchHit
-from fred_knowledge.vector.base_vector_store import AnnHit, BaseVectorHit, FullTextHit, HybridHit, SearchFilter
+from fred_knowledge.vector.base_vector_store import AnnHit, BaseVectorHit, BaseVectorStore, FullTextHit, HybridHit, SearchFilter
 from fred_knowledge.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from langchain_core.documents import Document
 
@@ -102,18 +103,24 @@ class VectorSearchService:
     def __init__(self):
         ctx = ApplicationContext.get_instance()
         self.embedder = ctx.get_embedder()
-        self.vector_store = ctx.get_create_vector_store(self.embedder, read_only=True)
         self.kpi: BaseKPIWriter = ctx.get_kpi_writer()
         self._crossencoder_model: Optional[Any] = None
         self._crossencoder_lock = Lock()
 
+    @cached_property
+    def vector_store(self) -> BaseVectorStore:
+        # Opened on first search: building this service for route registration or
+        # OpenAPI generation must not reach a database.
+        return ApplicationContext.get_instance().get_create_vector_store(self.embedder, read_only=True)
+
     async def _require_corpus_ready(self) -> None:
-        if isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
-            try:
-                await asyncio.to_thread(self.vector_store.ensure_ready)
-            except Exception:
-                logger.warning("corpus is not ready", exc_info=True)
-                raise HTTPException(status_code=503, detail="corpus_not_ready") from None
+        try:
+            store = await asyncio.to_thread(lambda: self.vector_store)
+            if isinstance(store, OpenSearchVectorStoreAdapter):
+                await asyncio.to_thread(store.ensure_ready)
+        except Exception:
+            logger.warning("corpus is not ready", exc_info=True)
+            raise HTTPException(status_code=503, detail="corpus_not_ready") from None
 
     @property
     def crossencoder_model(self) -> Any:

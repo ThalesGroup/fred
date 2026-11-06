@@ -1520,9 +1520,9 @@ Branche : `merge/swift-89baab5b6`. Quatre étapes, dans l'ordre de l'ascendance 
 - Une colonne inexistante produit un diagnostic qui ne cite que les tables de la requête, et le panneau de
   traces montre les arguments envoyés et la cause.
 
-### Défauts constatés, non corrigés dans ce lot
+### Défauts d'outillage corrigés après l'étape 1
 
-- `make generate-openapi` de Knowledge Flow initialise pgvector à la création de l'application et se connecte
-  donc à `localhost:5432`. Le client a été généré par un script temporaire neutralisant cet appel.
-- `make test-knowledge-flow-contracts` charge `validation/conftest.py`, qui exige un Control Plane en marche,
-  et `--disable-socket` bloque le test de Parquet signé sur `127.0.0.1`.
+- `make generate-openapi` de Knowledge Flow ne touche plus de base : `VectorSearchService` ouvre son vector store
+  à la première recherche, comme son modèle de reranking. L'API démarre donc sans vector store joignable, et la
+  première recherche répond 503 `corpus_not_ready`.
+- `make test-knowledge-flow-contracts` n'exige plus de Control Plane et n'autorise que `127.0.0.1` : 58 réussis.

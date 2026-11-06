@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid5
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fred_core.documents.access import SearchScope
 from fred_core.documents.selection import DocumentScope
@@ -165,6 +165,7 @@ def test_simultaneous_first_reranks_load_crossencoder_once(monkeypatch):
     monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
     service = module.VectorSearchService()
     context.get_crossencoder_model.assert_not_called()
+    context.get_create_vector_store.assert_not_called()
     lock = service._crossencoder_lock
 
     def enter():
@@ -190,3 +191,13 @@ def test_simultaneous_first_reranks_load_crossencoder_once(monkeypatch):
     for result in results:
         assert result == [hits[1], hits[0]]
         assert [hit.score for hit in result] == [0.2, 0.8]
+
+
+@pytest.mark.asyncio
+async def test_unreachable_vector_store_is_reported_as_not_ready(monkeypatch):
+    context = MagicMock()
+    context.get_create_vector_store.side_effect = OSError("unreachable")
+    monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
+    with pytest.raises(HTTPException) as failure:
+        await module.VectorSearchService()._require_corpus_ready()
+    assert failure.value.status_code == 503

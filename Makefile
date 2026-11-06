@@ -401,4 +401,4 @@ migration-tests: ## Validate release migration tooling offline with synthetic Gi
 .PHONY: test-knowledge-flow-contracts
 test-knowledge-flow-contracts:
 	$(MAKE) -C apps/knowledge-flow-worker dev
-	PYTHONPATH=$(CURDIR)/validation/knowledge_flow:$(CURDIR)/apps/knowledge-flow-backend:$(CURDIR)/apps/knowledge-flow-worker apps/knowledge-flow-worker/.venv/bin/python -m pytest validation/knowledge_flow/tests --disable-socket --allow-unix-socket
+	PYTHONPATH=$(CURDIR)/validation/knowledge_flow:$(CURDIR)/apps/knowledge-flow-backend:$(CURDIR)/apps/knowledge-flow-worker apps/knowledge-flow-worker/.venv/bin/python -m pytest validation/knowledge_flow/tests --confcutdir=validation/knowledge_flow --allow-hosts=127.0.0.1 --allow-unix-socket
