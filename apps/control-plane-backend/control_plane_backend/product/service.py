@@ -93,6 +93,11 @@ from control_plane_backend.capabilities.authz import (
     filter_entries_by_usable,
     usable_capability_ids,
 )
+from control_plane_backend.capability_preparations.admission import (
+    cleanup_staged_assets,
+    persist_agent_preparations,
+    stage_assets,
+)
 from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
@@ -1331,12 +1336,10 @@ def _validate_capability_ids(
 @dataclass(frozen=True)
 class CapabilityAssetFile:
     """
-    One uploaded capability asset relayed to the pod at agent save
-    (#1903, RFC AGENT-CAPABILITY §3.4).
+    One bounded uploaded capability asset at agent save.
 
-    Control-plane never opens the bytes: it is a pure multipart relay between
-    the browser and the pod's `validate-config` endpoint, which enforces the
-    declared `AssetSlot` (cardinality, extension) before capability code runs.
+    Validation still relays bytes to the pod. Capabilities declaring preparation
+    also store immutable originals in the control-plane object store.
     """
 
     slot_key: str
@@ -3160,12 +3163,73 @@ async def enroll_agent_instance(
     )
 
     store = deps.get_agent_instance_store()
+    preparation_enabled = any(
+        entry.preparation is not None for entry in template.available_capabilities
+    )
+    staged = []
+    content_store = (
+        deps.get_content_store()
+        if preparation_enabled and asset_uploads and deps.get_content_store
+        else None
+    )
+    if preparation_enabled and asset_uploads:
+        if content_store is None:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            )
+        try:
+            staged = await stage_assets(
+                content_store,
+                available=template.available_capabilities,
+                selected_ids=tuning.selected_capability_ids or [],
+                uploads=asset_uploads,
+            )
+        except ValueError as exc:
+            raise EnrollmentError(str(exc), http_status=422) from exc
+        except OSError as exc:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            ) from exc
     try:
-        created = await store.create(
-            record, recommended_capability_id=recommended_capability_id
-        )
+        if preparation_enabled:
+            if deps.get_sql_session_factory is None:
+                raise EnrollmentError(
+                    "Preparation database is unavailable.", http_status=503
+                )
+            session_factory = deps.get_sql_session_factory()
+            async with session_factory() as session:
+                async with session.begin():
+                    created = await store.create(
+                        record,
+                        session=session,
+                        recommended_capability_id=recommended_capability_id,
+                    )
+                    await persist_agent_preparations(
+                        session,
+                        owner_id=agent_instance_id,
+                        team_id=str(team_id),
+                        runtime_id=source.runtime_id,
+                        available=template.available_capabilities,
+                        selected_ids=tuning.selected_capability_ids or [],
+                        capability_config=tuning.capability_config,
+                        staged=staged,
+                    )
+        else:
+            created = await store.create(
+                record, recommended_capability_id=recommended_capability_id
+            )
     except AgentNameAlreadyExistsError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
         raise agent_name_conflict(team_id, request.display_name) from exc
+    except ValueError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise EnrollmentError(str(exc), http_status=422) from exc
+    except Exception:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise
     created = await settle_capability_save(deps, created, authorization=authorization)
     emit_agent_created_kpi(created, user=user, deps=deps)
     return _record_to_summary(created)
@@ -3265,6 +3329,7 @@ async def update_agent_instance(
 
     tuning_fields_set = request.model_fields_set
     new_tuning: ManagedAgentTuning | None = None
+    preparation_catalog: Sequence[CapabilityCatalogEntry] = ()
     if {
         "tuning_field_values",
         "capability_ids",
@@ -3332,6 +3397,7 @@ async def update_agent_instance(
                     "cannot be changed.",
                     http_status=503,
                 )
+            preparation_catalog = template.available_capabilities
             selected = (
                 request.capability_ids
                 if "capability_ids" in tuning_fields_set
@@ -3401,8 +3467,36 @@ async def update_agent_instance(
             update={"recommended_chat_profile_id": request.recommended_chat_profile_id}
         )
 
+    preparation_enabled = any(
+        entry.preparation is not None for entry in preparation_catalog
+    )
+    staged = []
+    content_store = (
+        deps.get_content_store()
+        if preparation_enabled and asset_uploads and deps.get_content_store
+        else None
+    )
+    if preparation_enabled and asset_uploads:
+        if content_store is None:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            )
+        try:
+            staged = await stage_assets(
+                content_store,
+                available=preparation_catalog,
+                selected_ids=(new_tuning or record.tuning).selected_capability_ids
+                or [],
+                uploads=asset_uploads,
+            )
+        except ValueError as exc:
+            raise EnrollmentError(str(exc), http_status=422) from exc
+        except OSError as exc:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            ) from exc
     try:
-        updated = await store.update(
+        update_kwargs = dict(
             agent_instance_id=agent_instance_id,
             team_id=team_id,
             display_name=request.display_name,
@@ -3411,11 +3505,42 @@ async def update_agent_instance(
             tuning=new_tuning,
             updated_by=user.uid,
             recommended_capability_id=recommended_capability_id,
-            # Never write back a recommendation a policy write cleared meanwhile.
             keep_stored_recommendation=not recommendation_set,
         )
+        if preparation_enabled:
+            if deps.get_sql_session_factory is None:
+                raise EnrollmentError(
+                    "Preparation database is unavailable.", http_status=503
+                )
+            session_factory = deps.get_sql_session_factory()
+            async with session_factory() as session:
+                async with session.begin():
+                    updated = await store.update(**update_kwargs, session=session)
+                    if updated is not None:
+                        await persist_agent_preparations(
+                            session,
+                            owner_id=agent_instance_id,
+                            team_id=str(team_id),
+                            runtime_id=record.source_runtime_id,
+                            available=preparation_catalog,
+                            selected_ids=updated.tuning.selected_capability_ids or [],
+                            capability_config=updated.tuning.capability_config,
+                            staged=staged,
+                        )
+        else:
+            updated = await store.update(**update_kwargs)
     except AgentNameAlreadyExistsError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
         raise agent_name_conflict(team_id, exc.display_name) from exc
+    except ValueError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise EnrollmentError(str(exc), http_status=422) from exc
+    except Exception:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise
     # A save that re-validated every ACTIVE capability slice through the pod
     # resolves any earlier suspension (RFC §3.9); readiness then decides, in
     # one write, whether the agent is available or `capability_pending`.

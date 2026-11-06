@@ -392,6 +392,7 @@ class CapabilityCatalogEntry(BaseModel):
     # without a parallel hand-declared copy.
     team_settings_fields: list[FieldSpec] = Field(default_factory=list)
     assets: list[AssetSlot] = Field(default_factory=list)
+    preparation: PreparationSpec | None = None
     team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED
     # "tool" (pod-advertised capability), "agent" (control-plane-side
     # projection of an agent template into this catalog, CAPAB-01 RFC §8.6),
@@ -504,6 +505,7 @@ class CapabilityCatalogEntry(BaseModel):
                 f.model_copy(deep=True) for f in manifest.team_settings_fields
             ],
             assets=[slot.model_copy(deep=True) for slot in manifest.assets],
+            preparation=manifest.preparation,
             team_scope=manifest.team_scope,
             kind=manifest.kind,
             execution_models=manifest.execution_models,

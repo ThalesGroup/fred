@@ -4,7 +4,7 @@
 
 - [x] 1.1 Add an optional preparation declaration, `prepare` hook and bounded context/result types to fred-sdk; verify contract tests keep existing capabilities valid and reject invalid declarations.
 - [x] 1.2 Add generic asset and preparation tables with owner/revision constraints, indexes and one migration for the PR; verify migration upgrade/downgrade and duplicate/stale revision constraints against PostgreSQL.
-- [ ] 1.3 Extend control-plane save validation to admit declared assets, persist immutable originals and a preparation intention atomically with the agent revision; verify authorized/unauthorized, oversized, unchanged and failed-upload cases with focused API tests.
+- [x] 1.3 Extend control-plane save validation to admit declared assets, persist immutable originals and a preparation intention atomically with the agent revision; verify authorized/unauthorized, oversized, unchanged and failed-upload cases with focused API tests.
 - [ ] 1.4 Add generic status, retry and scoped worker input/result APIs; verify permissions, bounded responses and cross-team isolation with API tests and an endpoint contract description.
 
 ## 2. Durable dispatch, worker and readiness

@@ -234,6 +234,11 @@ def test_preparation_contract_dispatches_a_declared_hook() -> None:
     ctx = PreparationContext(work=work, assets=_Reader(), artifacts=_Store())
     result = asyncio.run(_PreparingCapability().prepare(ctx))
     assert result.reference == f"results/{work.preparation_id}"
+    advertised = CapabilityCatalogEntry.from_manifest(_PreparingCapability.manifest)
+    assert advertised.preparation == _PreparingCapability.manifest.preparation
+    assert CapabilityCatalogEntry.model_validate_json(
+        advertised.model_dump_json()
+    ).preparation == advertised.preparation
 
 
 def test_preparation_declaration_rejects_unknown_slot() -> None:

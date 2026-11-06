@@ -55,8 +55,8 @@ class _FakeUploadFile:
         self.filename = filename
         self.content_type = content_type
 
-    async def read(self) -> bytes:
-        return self._content
+    async def read(self, size: int = -1) -> bytes:
+        return self._content[:size] if size >= 0 else self._content
 
 
 # ---------------------------------------------------------------------------
