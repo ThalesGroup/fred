@@ -228,25 +228,13 @@ class PodChartTests(unittest.TestCase):
             "configuration.platform.control_plane_url is required",
         )
 
-        collision_values = merged(
-            values, {"fullnameOverride": "a" * 58 + "-prep"}
-        )
+        collision_values = merged(values, {"fullnameOverride": "a" * 58 + "-prep"})
         collision_result = self.render("agent-pod", collision_values)
         self.assertEqual(collision_result.returncode, 0, collision_result.stderr)
         self.assertIn("name: prep-" + "a" * 58, collision_result.stdout)
 
     def test_fred_preparation_worker_uses_its_own_unprivileged_account(self):
-        result = self.render(
-            "fred",
-            {
-                "applications": {
-                    "fred-agents-preparation-worker": {
-                        "enabled": True,
-                        "deployment": {"enabled": True},
-                    }
-                }
-            },
-        )
+        result = self.render("fred", {})
         self.assertEqual(result.returncode, 0, result.stderr)
         documents = result.stdout.split("---")
         worker = next(
@@ -266,6 +254,20 @@ class PodChartTests(unittest.TestCase):
         self.assertIn("name: fred-agents-preparation-worker-env", worker)
         self.assertNotIn("name: fred-agents-kube", worker)
         self.assertIn("automountServiceAccountToken: false", account)
+        self.assertFalse(
+            any(
+                "kind: Service\n" in doc
+                and "name: fred-agents-preparation-worker" in doc
+                for doc in documents
+            )
+        )
+
+        disabled = self.render(
+            "fred",
+            {"applications": {"fred-agents-preparation-worker": {"enabled": False}}},
+        )
+        self.assertEqual(disabled.returncode, 0, disabled.stderr)
+        self.assertNotIn("name: fred-agents-preparation-worker", disabled.stdout)
 
     def test_agent_pod_http_route_requires_gateway_and_hostname(self):
         enabled = merged(AGENT, {"httpRoute": {"enabled": True}})

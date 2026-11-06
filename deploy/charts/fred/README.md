@@ -14,7 +14,7 @@ setting.
 | Application | Role | Enabled by default |
 | --- | --- | --- |
 | `fred-agents` | agent runtime: executes conversations and agents | yes |
-| `fred-agents-preparation-worker` | prepares installed capabilities through Temporal | no |
+| `fred-agents-preparation-worker` | prepares installed capabilities through Temporal | yes |
 | `frontend` | web UI, behind your ingress | yes |
 | `knowledge-flow-backend` | document ingestion, search and storage API | yes |
 | `knowledge-flow-worker`, `knowledge-flow-worker-extraction-{fast,medium,rich}` | ingestion workers, one per queue | no |
@@ -26,9 +26,9 @@ Each application can also run its database migration as a Helm hook Job
 
 `fred-agents-preparation-worker` inherits the serving pod's image, credentials,
 storage and runtime configuration, then runs `python -m fred_runtime
-preparation-worker` without an HTTP Service. It is opt-in: set both
-`applications.fred-agents-preparation-worker.enabled` and its
-`deployment.enabled` to `true`. After the worker is ready, add capability IDs to
+preparation-worker` without an HTTP Service. The Fred chart starts one worker
+by default; set `applications.fred-agents-preparation-worker.enabled: false` to
+omit it. After the worker is ready, add capability IDs to
 `applications.fred-agents.configuration.preparation.enabled_capabilities` and
 set `preparation_enabled: true` on the corresponding Control Plane runtime
 catalog source. `preparation.max_concurrent_jobs` caps each worker replica;

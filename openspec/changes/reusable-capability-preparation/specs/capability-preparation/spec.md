@@ -36,6 +36,11 @@ The system SHALL store immutable input references and committed results in share
 - **WHEN** its operator enables the generic chart's preparation worker and registers the pod as preparation-enabled
 - **THEN** a separate worker runs the installed hook through the shared runtime command and receives no HTTP traffic from the pod Service
 
+#### Scenario: Fred deploys a worker before PPT cutover
+
+- **WHEN** the Fred Helm chart is installed with its default values
+- **THEN** a separate preparation worker starts, while PPT Builder continues to use the legacy path until the capability and control-plane preparation flags are enabled
+
 #### Scenario: Identical save
 
 - **WHEN** an editor saves an unchanged resource and preparation settings after a successful preparation

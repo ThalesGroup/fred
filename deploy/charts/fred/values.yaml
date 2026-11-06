@@ -1139,13 +1139,13 @@ applications:
       #     sse_read_timeout: 2000
       #     auth_mode: "no_token"
 
-  # Separate Temporal worker for preparation hooks from installed capabilities.
+  # Start the worker; capability cutover still requires explicit preparation flags.
   fred-agents-preparation-worker:
     inheritFrom: fred-agents
-    enabled: false
+    enabled: true
     applicationName: fred-agents-preparation-worker
     deployment:
-      enabled: false
+      enabled: true
     migration:
       enabled: false
     replicaCount: 1

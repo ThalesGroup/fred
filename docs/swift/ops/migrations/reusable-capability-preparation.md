@@ -18,14 +18,15 @@ the form preserves the saved choice and reports that it could not be checked.
 
 The Helm chart defines `applications.fred-agents-preparation-worker` as a
 separate deployment using the same capability registry and runtime storage as
-`applications.fred-agents`. Enable its `enabled` and `deployment.enabled`
-values for the cutover. Give it the same `ai.knowledge_flow_url`, service
-credentials, Temporal namespace and object-store configuration as the serving
-pods. `preparation.max_concurrent_jobs` bounds work per worker replica, and
-`preparation.per_capability_concurrency` bounds each installed capability's
-work within that replica. Set control-plane runtime catalog source
-`preparation_enabled` and serving pod `preparation.enabled_capabilities` only
-after backfill and worker deployment are complete.
+`applications.fred-agents`. The Fred chart starts this worker by default;
+the cutover still requires explicit preparation flags after backfill. Give it
+the same `ai.knowledge_flow_url`, service credentials, Temporal namespace and
+object-store configuration as the serving pods. `preparation.max_concurrent_jobs`
+bounds work per worker replica. `preparation.per_capability_concurrency` bounds
+each installed capability's work within that replica. Set the control-plane
+runtime catalog source's `preparation_enabled` and serving pod's
+`preparation.enabled_capabilities` only after backfill and worker readiness
+checks are complete.
 The deployment command is `python -m fred_runtime preparation-worker`, also
 available through `make run-worker` and `make run-worker-docker` in `fred-agents`.
 Other agent pod images with `fred-runtime` installed use the same command; the
@@ -86,11 +87,11 @@ writes to the control-plane database or either object store.
 After reconciliation, enable `ppt_builder` in
 `preparation.enabled_capabilities` on every `fred-agents` serving pod and set
 the matching control-plane runtime catalog source to `preparation_enabled`.
-Deploy the preparation worker with the same capability registry, runtime object
-store, and Temporal namespace. Existing agent configs retain their historical
-fields in SQL but the enabled reader uses the imported result; the next save
-removes the legacy model selection. A failed imported preparation can be retried
-without a new upload.
+Verify the already deployed worker uses the same capability registry, runtime
+object store, and Temporal namespace. Existing agent configs retain their
+historical fields in SQL, but the enabled reader uses the imported result. The
+next save removes the legacy model selection. A failed imported preparation can
+be retried without a new upload.
 
 Before new template edits, rollback is a switch back to the old reader and
 writer because the legacy SQL rows were not deleted. After new edits begin, do
