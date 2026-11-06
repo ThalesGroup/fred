@@ -103,6 +103,7 @@ describe("WikiEditor", () => {
       setter.call(input, "  Getting started ");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    expect(container.querySelector("h1")?.textContent).toBe("Getting started");
     act(() => button("rework.wiki.editor.save")!.click());
     expect(onSave).toHaveBeenCalledWith("hello", { title: "Getting started", parentId: "" });
   });

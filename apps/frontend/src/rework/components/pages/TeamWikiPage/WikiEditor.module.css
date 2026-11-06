@@ -28,10 +28,15 @@
   color: var(--on-surface);
 }
 
+/* Pinned so Save stays at hand however long the page grows. */
 .header {
   display: flex;
+  position: sticky;
+  top: 0;
   align-items: center;
   gap: var(--spacing-m);
+  z-index: 1;
+  background: var(--surface-container);
 }
 
 .title {
@@ -43,11 +48,13 @@
   overflow-wrap: anywhere;
 }
 
-/* Title and parent stacked, flush: one block describing where the page sits. */
 .fields {
   display: flex;
+  gap: var(--spacing-s);
+}
+
+.fields > * {
   flex: 1;
-  flex-direction: column;
   min-width: 0;
 }
 

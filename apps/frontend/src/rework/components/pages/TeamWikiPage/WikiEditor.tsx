@@ -80,25 +80,8 @@ export function WikiEditor({
   return (
     <section className={styles.editor}>
       <header className={styles.header}>
-        {placement ? (
-          <div className={styles.fields}>
-            <TextInput
-              size="small"
-              label={t("rework.wiki.editor.titleLabel")}
-              value={titleDraft}
-              onChange={(event) => setTitleDraft(event.target.value)}
-            />
-            <Select
-              size="small"
-              label={t("rework.wiki.editor.parentLabel")}
-              value={parentDraft}
-              onChange={setParentDraft}
-              options={placement.parentOptions}
-            />
-          </div>
-        ) : (
-          <h1 className={styles.title}>{title}</h1>
-        )}
+        {/* Follows the title field as it is typed, so the bar always names the page being saved. */}
+        <h1 className={styles.title}>{placement ? titleDraft.trim() || title : title}</h1>
         <div className={styles.actions}>
           {placement && (
             <span className={styles.deleteAction}>
@@ -126,6 +109,24 @@ export function WikiEditor({
           </Button>
         </div>
       </header>
+
+      {placement && (
+        <div className={styles.fields}>
+          <TextInput
+            size="small"
+            label={t("rework.wiki.editor.titleLabel")}
+            value={titleDraft}
+            onChange={(event) => setTitleDraft(event.target.value)}
+          />
+          <Select
+            size="small"
+            label={t("rework.wiki.editor.parentLabel")}
+            value={parentDraft}
+            onChange={setParentDraft}
+            options={placement.parentOptions}
+          />
+        </div>
+      )}
 
       {/* Someone else saved while this draft was open. The user's own text is
           never discarded for them: they are shown what landed and choose. */}
