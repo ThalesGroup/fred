@@ -127,7 +127,7 @@ async def test_claim_survives_dispatcher_crash_and_fences_stale_owner() -> None:
                 )
             ).scalar_one()
             assert row.run_id == "run-2"
-            assert row.attempts == 1
+            assert row.attempts == 0
             assert row.dispatch_attempts == 2
         expired_id = str(uuid4())
         async with sessions() as session:

@@ -14,7 +14,7 @@ from fred_core import (
     TeamPermission,
     get_principal_context,
     require_own_credential,
-    require_workload_caller,
+    is_service_agent,
 )
 from fred_core.common import TeamId
 from fred_core.security.structure import PrincipalContext
@@ -27,8 +27,10 @@ from control_plane_backend.capability_preparations.schemas import (
     PreparationStatusPage,
     WorkerPreparationResult,
     WorkerResultAck,
+    WorkerAttemptResponse,
 )
 from control_plane_backend.capability_preparations.service import (
+    begin_worker_attempt,
     get_work_asset,
     get_worker_work,
     list_agent_preparations,
@@ -75,7 +77,8 @@ async def _require_worker(
     preparation_id: str,
 ) -> CapabilityPreparationRow:
     if deps.configuration.security.m2m.enabled:
-        require_workload_caller(principals.caller)
+        if not is_service_agent(principals.caller):
+            raise HTTPException(status_code=403, detail="workload_caller_not_allowed")
     elif principals.caller.client_id != LOCAL_DEV_CLIENT_ID:
         raise HTTPException(status_code=403, detail="workload_caller_not_allowed")
     row = await session.get(CapabilityPreparationRow, preparation_id)
@@ -176,6 +179,25 @@ async def get_capability_preparation_work(
     if work is None:
         raise HTTPException(status_code=404, detail="Preparation not found")
     return work
+
+
+@router.post(
+    "/internal/capability-preparations/{preparation_id}/attempts/{attempt}",
+    response_model=WorkerAttemptResponse,
+)
+async def post_capability_preparation_attempt(
+    preparation_id: UUID,
+    attempt: Annotated[int, Path(ge=1, le=10)],
+    deps: Dependencies,
+    principals: PrincipalContext = Depends(get_principal_context),
+) -> WorkerAttemptResponse:
+    async with _sessions(deps)() as session:
+        async with session.begin():
+            await _require_worker(session, deps, principals, str(preparation_id))
+            work = await begin_worker_attempt(
+                session, preparation_id=str(preparation_id), attempt=attempt
+            )
+    return WorkerAttemptResponse(work=work)
 
 
 @router.get(

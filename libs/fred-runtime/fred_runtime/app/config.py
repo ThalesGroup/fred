@@ -409,6 +409,24 @@ class PodSchedulerConfig(BaseModel):
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 
+class PodPreparationConfig(BaseModel):
+    """Bounded concurrency for a pod's separate capability preparation worker."""
+
+    max_concurrent_jobs: int = Field(default=4, ge=1, le=32)
+    per_capability_concurrency: dict[str, int] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_budgets(self) -> "PodPreparationConfig":
+        if any(
+            not capability_id or not 1 <= limit <= 32
+            for capability_id, limit in self.per_capability_concurrency.items()
+        ):
+            raise ValueError(
+                "Preparation capability concurrency must be between 1 and 32"
+            )
+        return self
+
+
 class PodPlatformConfig(BaseModel):
     """
     Small set of Fred platform service URLs needed by the pod runtime.
@@ -469,6 +487,7 @@ class AgentPodConfig(BaseModel):
     )
     storage: PodStorageConfig = Field(default_factory=PodStorageConfig)
     scheduler: PodSchedulerConfig = Field(default_factory=PodSchedulerConfig)
+    preparation: PodPreparationConfig = Field(default_factory=PodPreparationConfig)
     platform: PodPlatformConfig = Field(default_factory=PodPlatformConfig)
     web_research: WebResearchDeploymentConfig = Field(
         default_factory=WebResearchDeploymentConfig

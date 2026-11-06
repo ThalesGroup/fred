@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Literal
 
 from fred_sdk.contracts.capability.preparation import PreparationResult
+from fred_sdk.contracts.capability.preparation import PreparationWork
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -56,3 +57,9 @@ class WorkerResultAck(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     accepted: bool
+
+
+class WorkerAttemptResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    work: PreparationWork | None = None

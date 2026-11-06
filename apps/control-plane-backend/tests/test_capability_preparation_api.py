@@ -42,8 +42,8 @@ async def test_team_status_requires_editor_permission_before_reading(
 async def test_worker_work_is_scoped_to_configured_runtime_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    require = Mock()
-    monkeypatch.setattr(api, "require_workload_caller", require)
+    require = Mock(return_value=True)
+    monkeypatch.setattr(api, "is_service_agent", require)
     row = SimpleNamespace(runtime_id="fred-agents")
     session = SimpleNamespace(get=AsyncMock(return_value=row))
     source = SimpleNamespace(

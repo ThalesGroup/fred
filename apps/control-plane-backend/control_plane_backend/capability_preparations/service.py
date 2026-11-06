@@ -174,6 +174,7 @@ async def get_worker_work(
         input_revision=row.input_revision,
         rules_version=row.rules_version,
         attempt=row.attempts,
+        max_attempts=row.max_attempts,
         assets=tuple(
             PreparationAsset(
                 asset_id=UUID(asset.id),
@@ -208,6 +209,30 @@ async def get_work_asset(
             )
         )
     ).scalar_one_or_none()
+
+
+async def begin_worker_attempt(
+    session: AsyncSession, *, preparation_id: str, attempt: int
+) -> PreparationWork | None:
+    row = (
+        await session.execute(
+            select(CapabilityPreparationRow)
+            .where(CapabilityPreparationRow.id == preparation_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if row is None or not row.is_current or row.state != "running":
+        return None
+    if attempt < row.attempts:
+        return None
+    if attempt > row.max_attempts or utcnow() >= row.deadline_at:
+        row.state = "failed"
+        row.error_code = "preparation_attempts_exhausted"
+        row.completed_at = utcnow()
+        return None
+    row.attempts = attempt
+    await session.flush()
+    return await get_worker_work(session, preparation_id)
 
 
 async def publish_worker_result(

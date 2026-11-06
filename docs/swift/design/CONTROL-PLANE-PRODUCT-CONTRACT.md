@@ -5300,6 +5300,7 @@ preparation ID, never asset bytes or configuration:
 | Route | Response or effect |
 | --- | --- |
 | `GET /internal/capability-preparations/{id}/work` | Bounded `PreparationWork` for a current running attempt. |
+| `POST /internal/capability-preparations/{id}/attempts/{attempt}` | Fences a Temporal activity attempt and returns its current bounded work, or `work=null` for a terminal or superseded intention. Attempts cannot exceed the declaration's limit. |
 | `GET /internal/capability-preparations/{id}/assets/{asset_id}` | Bounded asset bytes when that asset belongs to the current running attempt. |
 | `POST /internal/capability-preparations/{id}/result` | Accepts the input revision, attempt, state and a result reference or safe error. Publication succeeds only for the current running attempt; stale or duplicate completions return `accepted=false`. Result references must stay under `capability-results/{id}/{attempt}/`. |
 

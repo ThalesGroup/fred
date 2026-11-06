@@ -76,7 +76,6 @@ async def claim_due(
             deliveries: list[Delivery] = []
             for row in rows:
                 row.state = "running"
-                row.attempts = max(1, row.attempts)
                 row.dispatch_attempts += 1
                 row.dispatch_owner = claim_id
                 row.dispatch_until = now + _DISPATCH_LEASE

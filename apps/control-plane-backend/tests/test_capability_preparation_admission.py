@@ -31,8 +31,8 @@ from control_plane_backend.capability_preparations.schemas import (
     WorkerPreparationResult,
 )
 from control_plane_backend.capability_preparations.service import (
+    begin_worker_attempt,
     get_work_asset,
-    get_worker_work,
     list_agent_preparations,
     publish_worker_result,
     retry_agent_preparation,
@@ -368,11 +368,17 @@ async def test_preparation_intention_is_atomic_and_unchanged_save_reuses_it() ->
                     )
                 ).scalar_one()
                 current.state = "running"
-                current.attempts = 1
                 await session.flush()
-                work = await get_worker_work(session, current.id)
+                work = await begin_worker_attempt(
+                    session, preparation_id=current.id, attempt=1
+                )
                 assert work is not None
                 assert work.attempt == 1
+                assert (
+                    await begin_worker_attempt(
+                        session, preparation_id=current.id, attempt=1
+                    )
+                ) is not None
                 assert work.assets[0].asset_id == UUID(uploaded.id)
                 assert (
                     await get_work_asset(

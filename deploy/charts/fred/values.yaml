@@ -886,6 +886,11 @@ applications:
           workflow_id_prefix: "task"
           connect_timeout_seconds: 5
 
+      preparation:
+        max_concurrent_jobs: 4
+        per_capability_concurrency:
+          ppt_builder: 2
+
       ai:
         knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v1"
         timeout:
@@ -1143,6 +1148,28 @@ applications:
       #     url: "https://jira.example.com/mcp"
       #     sse_read_timeout: 2000
       #     auth_mode: "no_token"
+
+  # Separate Temporal worker for preparation hooks from installed capabilities.
+  fred-agents-preparation-worker:
+    inheritFrom: fred-agents
+    enabled: false
+    applicationName: fred-agents-preparation-worker
+    deployment:
+      enabled: false
+    replicaCount: 1
+    command:
+      enabled: true
+      data: ["python", "-m", "fred_agents.preparation_worker"]
+    ports: []
+    service:
+      enabled: false
+    metricsService:
+      enabled: false
+    probes:
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
 
   # ── 3.2 Frontend ───────────────────────────────────────────────────
   frontend:
