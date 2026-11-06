@@ -11,7 +11,12 @@ from fred_sdk.contracts.capability.preparation import (
     PreparationContext,
     PreparationWork,
 )
-from fred_sdk.contracts.capability.context import CapabilityIdentity, SaveContext
+from fred_sdk.contracts.capability.context import (
+    CapabilityContext,
+    CapabilityIdentity,
+    EmptyModel,
+    SaveContext,
+)
 from fred_sdk.contracts.capability.manifest import UploadedFile
 from fred_sdk.contracts.runtime import RuntimeServices
 
@@ -103,6 +108,55 @@ async def test_shared_save_validates_template_without_legacy_job(
     assert stored.preparation_mode == "shared"
     assert stored.labelling_model is None
     assert stored.template_sha256 == hashlib.sha256(template).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_turn_reads_only_the_bound_preparation_revision() -> None:
+    template, inventory = builtin_template()
+
+    class BoundArtifacts:
+        async def read_result(self, capability_id: str) -> bytes:
+            assert capability_id == "ppt_builder"
+            return inventory.model_dump_json().encode()
+
+        async def read_sibling(self, capability_id: str, filename: str) -> bytes:
+            assert (capability_id, filename) == ("ppt_builder", "template.pptx")
+            return template
+
+    ctx = CapabilityContext(
+        identity=CapabilityIdentity(
+            user_id="user", agent_instance_id=str(uuid4())
+        ),
+        config=builder.PptBuilderConfig(
+            template_sha256=hashlib.sha256(template).hexdigest(),
+            preparation_mode="shared",
+            use_vision=False,
+        ),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(preparation_artifacts=BoundArtifacts()),
+    )
+    middleware = builder._PptBuilderMiddleware(ctx)
+    assert await middleware._resolve() is not None
+    assert await middleware._load_template() == template
+
+
+@pytest.mark.asyncio
+async def test_shared_turn_never_falls_back_to_legacy_inventory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        builder, "get_analysis_store", lambda: pytest.fail("legacy inventory accessed")
+    )
+    ctx = CapabilityContext(
+        identity=CapabilityIdentity(user_id="user", agent_instance_id=str(uuid4())),
+        config=builder.PptBuilderConfig(
+            template_sha256="a" * 64, preparation_mode="shared", use_vision=False
+        ),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(),
+    )
+    middleware = builder._PptBuilderMiddleware(ctx)
+    assert await middleware._resolve() is None
 
 
 @pytest.mark.asyncio

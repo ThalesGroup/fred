@@ -73,6 +73,7 @@ class WorkerArtifactStore:
         self.prefix = f"capability-results/{preparation_id}/{attempt}/"
         self._writes = 0
         self._bytes = 0
+        self._written_paths: set[str] = set()
 
     def _require_path(self, path: str) -> None:
         if not path.startswith(self.prefix) or ".." in path.split("/"):
@@ -88,6 +89,7 @@ class WorkerArtifactStore:
             raise ValueError("Preparation artifacts exceed the bounded output budget")
         self._writes += 1
         self._bytes += len(content)
+        self._written_paths.add(path)
         await self._filesystem.write(path, content)
 
     async def read(self, path: str) -> bytes:
@@ -101,6 +103,10 @@ class WorkerArtifactStore:
     async def exists(self, path: str) -> bool:
         self._require_path(path)
         return await self._filesystem.exists(path)
+
+    async def cleanup_failed_attempt(self) -> None:
+        for path in sorted(self._written_paths):
+            await self._filesystem.delete(path)
 
 
 class CapabilityPreparationActivities:
@@ -165,6 +171,7 @@ class CapabilityPreparationActivities:
                 "result": result.model_dump(mode="json"),
             }
         except Exception as exc:
+            await artifacts.cleanup_failed_attempt()
             if attempt < work.max_attempts:
                 raise ApplicationError("Preparation attempt failed") from exc
             logger.warning(
