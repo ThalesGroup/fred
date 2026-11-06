@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from control_plane_backend.capability_preparations.admission import StagedAsset
 from control_plane_backend.capability_preparations import api as preparation_api
 from control_plane_backend.capability_preparations.platform import (
+    refresh_platform_candidate,
     reset_platform_selection,
     retry_platform_candidate,
     set_platform_selection_settings,
@@ -26,7 +27,10 @@ from control_plane_backend.capability_preparations.platform import (
 from control_plane_backend.capability_preparations.schemas import (
     WorkerPreparationResult,
 )
-from control_plane_backend.capability_preparations.service import publish_worker_result
+from control_plane_backend.capability_preparations.service import (
+    current_platform_results,
+    publish_worker_result,
+)
 from control_plane_backend.models.capability_preparation_models import (
     CapabilityAssetRow,
     CapabilityPreparationAssetRow,
@@ -87,7 +91,7 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
                 await connection.run_sync(lambda sync, table=table: table.create(sync))
         sessions = async_sessionmaker(engine, expire_on_commit=False)
 
-        async def start() -> CapabilityPreparationRow:
+        async def start(sha: str = "a" * 64) -> CapabilityPreparationRow:
             asset_id = str(uuid4())
             async with sessions() as session:
                 async with session.begin():
@@ -106,7 +110,7 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
                             slot_key="source",
                             filename="source.txt",
                             content_type="text/plain",
-                            sha256="a" * 64,
+                            sha256=sha,
                             size=1,
                             object_key=f"capability-assets/{asset_id}",
                         ),
@@ -205,6 +209,34 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
                 )
         assert (await selection()).settings_json["overrides"]
         async with sessions() as session:
+            references, settings = await current_platform_results(
+                session, runtime_id="r"
+            )
+            assert references["example:platform:source"].endswith("/result.json")
+            assert settings["example:platform:source"]["overrides"]
+        async with sessions() as session:
+            async with session.begin():
+                refreshed = await refresh_platform_candidate(
+                    session,
+                    runtime_id="r",
+                    capability_id="example",
+                    slot_key="source",
+                    spec=PreparationSpec(
+                        asset_slots=("source",),
+                        config_fields=("use_vision",),
+                        public_config_fields=("use_vision",),
+                        rules_version="v1",
+                    ),
+                    config={"use_vision": True},
+                )
+                assert refreshed is not None
+        assert (await selection()).active_preparation_id == replacement.id
+        assert await complete(refreshed, state="succeeded")
+        assert (await selection()).settings_json["overrides"]
+        changed = await start("b" * 64)
+        assert await complete(changed, state="succeeded")
+        assert (await selection()).settings_json == {}
+        async with sessions() as session:
             async with session.begin():
                 await reset_platform_selection(
                     session,
@@ -214,7 +246,9 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
                 )
         assert (await selection()).active_preparation_id is None
         assert (await selection()).settings_json == {}
-        assert not await complete(replacement, state="failed")
+        async with sessions() as session:
+            assert await current_platform_results(session, runtime_id="r") == ({}, {})
+        assert not await complete(changed, state="failed")
     finally:
         await engine.dispose()
         with sync_engine.begin() as connection:

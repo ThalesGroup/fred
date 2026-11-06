@@ -106,7 +106,10 @@ def _second_entry() -> CapabilityCatalogEntry:
             "id": "reverse",
             "name": "reverse",
             "preparation": PreparationSpec(
-                asset_slots=("source",), rules_version="v2", config_fields=("mode",)
+                asset_slots=("source",),
+                rules_version="v2",
+                config_fields=("mode",),
+                public_config_fields=("mode",),
             ),
         }
     )
@@ -589,6 +592,9 @@ async def test_two_capabilities_share_save_dispatch_status_and_readiness() -> No
                 session, agent_instance_id="a1", team_id="t1", limit=20, offset=0
             )
             assert {item.capability_id for item in page.items} == {"example", "reverse"}
+            assert next(
+                item for item in page.items if item.capability_id == "reverse"
+            ).public_config == {"mode": "reverse"}
         async with sessions() as session:
             async with session.begin():
                 reverse = await session.get(

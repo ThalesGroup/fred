@@ -123,6 +123,9 @@ class CapabilityPreparationRow(Base):
     input_revision: Mapped[str] = mapped_column(String(128), nullable=False)
     rules_version: Mapped[str] = mapped_column(String(64), nullable=False)
     config_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    public_config_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     gates_readiness: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")

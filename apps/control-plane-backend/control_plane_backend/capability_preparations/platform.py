@@ -122,6 +122,9 @@ async def start_platform_candidate(
         input_revision=str(uuid4()),
         rules_version=spec.rules_version,
         config_json=config,
+        public_config_json={
+            key: config[key] for key in spec.public_config_fields if key in config
+        },
         gates_readiness=False,
         is_current=True,
         state="pending",
@@ -255,6 +258,7 @@ async def retry_platform_candidate(
         input_revision=str(uuid4()),
         rules_version=previous.rules_version,
         config_json=previous.config_json,
+        public_config_json=previous.public_config_json,
         gates_readiness=False,
         is_current=True,
         state="pending",
@@ -263,6 +267,85 @@ async def retry_platform_candidate(
         deadline_at=now + duration,
         workflow_id=f"capability-preparation/{preparation_id}",
         task_queue=previous.task_queue,
+    )
+    session.add(row)
+    await session.flush()
+    for position, association in enumerate(linked):
+        session.add(
+            CapabilityPreparationAssetRow(
+                preparation_id=preparation_id,
+                position=position,
+                asset_id=association.asset_id,
+            )
+        )
+    selection.candidate_preparation_id = preparation_id
+    return row
+
+
+async def refresh_platform_candidate(
+    session: AsyncSession,
+    *,
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+    spec: PreparationSpec,
+    config: dict[str, object],
+) -> CapabilityPreparationRow | None:
+    """Reanalyse a stored candidate or active source without removing the active result."""
+    selection = await _selection(
+        session, runtime_id=runtime_id, capability_id=capability_id, slot_key=slot_key
+    )
+    source_id = selection.candidate_preparation_id or selection.active_preparation_id
+    if source_id is None:
+        return None
+    source = await session.get(
+        CapabilityPreparationRow, source_id, with_for_update=True
+    )
+    if source is None:
+        return None
+    if source_id == selection.candidate_preparation_id and source.state in (
+        "pending",
+        "running",
+    ):
+        raise ValueError("Candidate preparation is already running")
+    if len(json.dumps(config, sort_keys=True).encode()) > 128 * 1024:
+        raise ValueError("Preparation config exceeds 128 KiB")
+    linked = (
+        (
+            await session.execute(
+                select(CapabilityPreparationAssetRow)
+                .where(CapabilityPreparationAssetRow.preparation_id == source.id)
+                .order_by(CapabilityPreparationAssetRow.position)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if source_id == selection.candidate_preparation_id:
+        source.is_current = False
+        source.superseded_at = utcnow()
+    preparation_id = str(uuid4())
+    row = CapabilityPreparationRow(
+        id=preparation_id,
+        owner_kind="platform",
+        owner_id=f"platform:{preparation_id}",
+        team_id=None,
+        runtime_id=runtime_id,
+        capability_id=capability_id,
+        input_revision=str(uuid4()),
+        rules_version=spec.rules_version,
+        config_json=config,
+        public_config_json={
+            key: config[key] for key in spec.public_config_fields if key in config
+        },
+        gates_readiness=False,
+        is_current=True,
+        state="pending",
+        attempts=0,
+        max_attempts=spec.max_attempts,
+        deadline_at=utcnow() + timedelta(seconds=spec.timeout_seconds),
+        workflow_id=f"capability-preparation/{preparation_id}",
+        task_queue=f"capability-preparation-{runtime_id}",
     )
     session.add(row)
     await session.flush()

@@ -34,6 +34,7 @@ async def test_route_reader_scopes_artifacts_to_control_plane_status() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         reader = RuntimePreparationRouteReader(
             control_plane_url="https://control-plane/control-plane/v1",
+            runtime_id="fred-agents",
             client=client,
             filesystem=Filesystem(),  # type: ignore[arg-type]
             authorization="Bearer person",
@@ -61,6 +62,7 @@ async def test_route_reader_does_not_expose_artifacts_after_denial() -> None:
     ) as client:
         reader = RuntimePreparationRouteReader(
             control_plane_url="https://control-plane/control-plane/v1",
+            runtime_id="fred-agents",
             client=client,
             filesystem=object(),  # type: ignore[arg-type]
             authorization="Bearer denied",
@@ -70,3 +72,45 @@ async def test_route_reader_does_not_expose_artifacts_after_denial() -> None:
         assert error.value.status_code == 403
         with pytest.raises(PermissionError):
             await reader.read_result("capability-results/current/1/inventory.json")
+
+
+@pytest.mark.asyncio
+async def test_platform_port_uses_scoped_control_plane_routes() -> None:
+    methods: list[tuple[str, str]] = []
+    reference = "capability-results/platform/1/inventory.json"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        methods.append((request.method, request.url.path))
+        assert request.headers.get("Authorization") == "Bearer manager"
+        assert "/fred-agents/ppt_builder/template" in request.url.path
+        return httpx.Response(
+            200,
+            json={"active": {"result_reference": reference}, "candidate": None},
+        )
+
+    class Filesystem:
+        async def read(self, path: str) -> bytes:
+            return path.encode()
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        port = RuntimePreparationRouteReader(
+            control_plane_url="https://control-plane/control-plane/v1",
+            runtime_id="fred-agents",
+            client=client,
+            filesystem=Filesystem(),  # type: ignore[arg-type]
+            authorization="Bearer manager",
+        )
+        assert (await port.platform_status("ppt_builder", "template"))["active"]
+        assert await port.read_result(reference) == reference.encode()
+        await port.upload_platform_candidate(
+            "ppt_builder", "template", b"pptx", "template.pptx", {"use_vision": False}
+        )
+        await port.retry_platform_candidate("ppt_builder", "template")
+        await port.refresh_platform_candidate(
+            "ppt_builder", "template", {"use_vision": True}
+        )
+        await port.set_platform_settings("ppt_builder", "template", {"overrides": []})
+        await port.reset_platform_selection("ppt_builder", "template")
+    assert [method for method, _ in methods] == [
+        "GET", "PUT", "POST", "POST", "PUT", "DELETE"
+    ]

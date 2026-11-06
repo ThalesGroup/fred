@@ -48,6 +48,7 @@ from fred_sdk.contracts.runtime import (
     CAPABILITY_MANAGER_DENIED,
     CAPABILITY_PLATFORM_MODEL_STATE,
     CAPABILITY_PREPARATION_READER_STATE,
+    CAPABILITY_PREPARATION_MANAGER_STATE,
     CAPABILITY_TEAM_AUTHORIZER_STATE,
     CapabilityModelPort,
     CapabilityModelUnavailableError,
@@ -314,18 +315,23 @@ def _bind(request: Request, user: KeycloakUser | None, enforce: bool) -> None:
         config = runtime.config
         if (
             config.control_plane_url is not None
+            and config.service_name is not None
             and config.control_plane_http_client is not None
             and config.filesystem is not None
         ):
+            preparation_port = RuntimePreparationRouteReader(
+                control_plane_url=config.control_plane_url,
+                runtime_id=config.service_name,
+                client=config.control_plane_http_client,
+                filesystem=config.filesystem,
+                authorization=request.headers.get("Authorization"),
+                enabled_capabilities=config.preparation_capabilities,
+            )
             setattr(
-                request.state,
-                CAPABILITY_PREPARATION_READER_STATE,
-                RuntimePreparationRouteReader(
-                    control_plane_url=config.control_plane_url,
-                    client=config.control_plane_http_client,
-                    filesystem=config.filesystem,
-                    authorization=request.headers.get("Authorization"),
-                ),
+                request.state, CAPABILITY_PREPARATION_READER_STATE, preparation_port
+            )
+            setattr(
+                request.state, CAPABILITY_PREPARATION_MANAGER_STATE, preparation_port
             )
 
 

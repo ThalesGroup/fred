@@ -180,6 +180,7 @@ class RuntimeConfig:
     # Grouped code-default quotas for the two conversation filesystem namespaces.
     conversation_filesystem_quotas: ConversationFilesystemQuotaSettings | None = None
     skills: SkillsPort | None = None
+    preparation_capabilities: tuple[str, ...] = ()
 
 
 class RuntimeContext:

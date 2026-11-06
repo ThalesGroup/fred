@@ -11,10 +11,20 @@ from fred_core.filesystem.structures import BaseFilesystem
 
 class BoundPreparationArtifacts:
     def __init__(
-        self, filesystem: BaseFilesystem, references: Mapping[str, str]
+        self,
+        filesystem: BaseFilesystem,
+        references: Mapping[str, str],
+        settings: Mapping[str, Mapping[str, object]] | None = None,
     ) -> None:
         self._filesystem = filesystem
         self._references = dict(references)
+        self._settings = {key: dict(value) for key, value in (settings or {}).items()}
+
+    def has_result(self, capability_id: str) -> bool:
+        return capability_id in self._references
+
+    def settings(self, capability_id: str) -> Mapping[str, object]:
+        return self._settings.get(capability_id, {})
 
     async def read_result(self, capability_id: str) -> bytes | None:
         reference = self._references.get(capability_id)

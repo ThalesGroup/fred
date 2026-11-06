@@ -988,6 +988,7 @@ def _build_runtime_services(
     conversation_filesystem: ConversationFilesystemService | None = None,
     bound_library_ids: Sequence[str] | None = None,
     preparation_results: Mapping[str, str] | None = None,
+    platform_preparation_settings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -1204,10 +1205,16 @@ def _build_runtime_services(
         conversation_filesystem=conversation_port,
         skills=skills,
         preparation_artifacts=(
-            BoundPreparationArtifacts(runtime_config.filesystem, preparation_results)
-            if runtime_config.filesystem is not None and preparation_results
+            BoundPreparationArtifacts(
+                runtime_config.filesystem,
+                preparation_results or {},
+                platform_preparation_settings or {},
+            )
+            if runtime_config.filesystem is not None
+            and (preparation_results or platform_preparation_settings)
             else None
         ),
+        preparation_enabled_capabilities=runtime_config.preparation_capabilities,
     )
 
 
@@ -1788,6 +1795,9 @@ class _ResolvedAgentInstance(BaseModel):
     enabled: bool = True
     tuning: AgentTuning
     preparation_results: dict[str, str] = Field(default_factory=dict)
+    platform_preparation_settings: dict[str, dict[str, Any]] = Field(
+        default_factory=dict
+    )
     preparation_blocked: bool = False
     # Per-team enablement settings resolved control-plane-side at session prep
     # (CAPAB-01 / #1980, RFC §8.2), keyed by capability id and already
@@ -1834,6 +1844,9 @@ class _ResolvedExecutionTarget:
     # direct template execution — no capabilities there.
     tuning: AgentTuning | None = None
     preparation_results: dict[str, str] = field(default_factory=dict)
+    platform_preparation_settings: dict[str, dict[str, Any]] = field(
+        default_factory=dict
+    )
     # Per-team enablement settings (CAPAB-01 / #1980, RFC §8.2), keyed by
     # capability id. Reaches each capability as `CapabilityContext.team_settings`
     # — never an LLM tool signature. Empty for direct template execution.
@@ -2207,6 +2220,7 @@ async def _resolve_agent_instance(
         agent_instance_name=resolution.display_name or None,
         tuning=resolution.tuning,
         preparation_results=resolution.preparation_results,
+        platform_preparation_settings=resolution.platform_preparation_settings,
         team_settings=resolution.team_capability_settings,
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
         team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
@@ -4126,6 +4140,7 @@ async def _stream(
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     preparation_results: Mapping[str, str] | None = None,
+    platform_preparation_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     disabled_platform_skills: tuple[str, ...] = (),
@@ -4214,6 +4229,7 @@ async def _stream(
         capability_registry=capability_registry,
         team_settings=team_settings,
         preparation_results=preparation_results,
+        platform_preparation_settings=platform_preparation_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
         disabled_platform_skills=disabled_platform_skills,
@@ -4872,6 +4888,7 @@ async def _iterate_runtime_event_payloads(
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     preparation_results: Mapping[str, str] | None = None,
+    platform_preparation_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     disabled_platform_skills: tuple[str, ...] = (),
@@ -4902,6 +4919,7 @@ async def _iterate_runtime_event_payloads(
         capability_registry=capability_registry,
         team_settings=team_settings,
         preparation_results=preparation_results,
+        platform_preparation_settings=platform_preparation_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
         disabled_platform_skills=disabled_platform_skills,
@@ -5025,6 +5043,7 @@ async def _iterate_runtime_event_payloads_inner(
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
     preparation_results: Mapping[str, str] | None = None,
+    platform_preparation_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     disabled_platform_skills: tuple[str, ...] = (),
@@ -5249,6 +5268,7 @@ async def _iterate_runtime_event_payloads_inner(
             capability_registry, tuning, definition
         ),
         preparation_results=preparation_results,
+        platform_preparation_settings=platform_preparation_settings,
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -7143,6 +7163,7 @@ def _build_agent_router(
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
                 preparation_results=target.preparation_results,
+                platform_preparation_settings=target.platform_preparation_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 disabled_platform_skills=target.disabled_platform_skills,
@@ -7257,6 +7278,7 @@ def _build_agent_router(
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
                 preparation_results=target.preparation_results,
+                platform_preparation_settings=target.platform_preparation_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 disabled_platform_skills=target.disabled_platform_skills,
@@ -7435,6 +7457,7 @@ def _build_agent_router(
             capability_registry=_capability_registry_of(http_request),
             team_settings=target.team_settings,
             preparation_results=target.preparation_results,
+            platform_preparation_settings=target.platform_preparation_settings,
             reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
             team_disabled_model_ids=target.team_disabled_model_ids,
             disabled_platform_skills=target.disabled_platform_skills,
@@ -7696,6 +7719,7 @@ def create_agent_app(
                         checkpointer=checkpointer,
                         history_store=history_store,
                         filesystem=container.get_filesystem(),
+                        preparation_capabilities=config.preparation.enabled_capabilities,
                         skills=skills,
                         conversation_filesystem_quotas=(
                             config.storage.conversation_filesystem

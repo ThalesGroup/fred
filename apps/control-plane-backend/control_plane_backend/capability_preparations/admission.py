@@ -252,6 +252,11 @@ async def persist_agent_preparations(
                 input_revision=revision,
                 rules_version=spec.rules_version,
                 config_json=config,
+                public_config_json={
+                    key: config[key]
+                    for key in spec.public_config_fields
+                    if key in config
+                },
                 gates_readiness=spec.gates_readiness,
                 is_current=True,
                 state="pending",

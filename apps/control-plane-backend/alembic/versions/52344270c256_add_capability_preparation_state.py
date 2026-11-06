@@ -72,6 +72,7 @@ def _tables() -> tuple[sa.Table, sa.Table, sa.Table, sa.Table]:
         sa.Column("input_revision", sa.String(128), nullable=False),
         sa.Column("rules_version", sa.String(64), nullable=False),
         sa.Column("config_json", sa.JSON(), nullable=False),
+        sa.Column("public_config_json", sa.JSON(), nullable=False, server_default="{}"),
         sa.Column("gates_readiness", sa.Boolean(), nullable=False),
         sa.Column("is_current", sa.Boolean(), nullable=False),
         sa.Column("state", sa.String(16), nullable=False),

@@ -52,9 +52,11 @@ from fred_sdk.contracts.capability.preparation import (
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
     CapabilityModelUnavailableError,
+    CapabilityPreparationManager,
     CapabilityPreparationReader,
     CapabilityTeamAuthorizer,
     capability_platform_model,
+    capability_preparation_manager,
     capability_preparation_reader,
     capability_team_authorizer,
 )
@@ -325,6 +327,43 @@ class PlatformAnalysisRequest(BaseModel):
     vision_profile_id: Optional[str] = None
 
 
+async def _shared_platform_response(
+    reader: CapabilityPreparationReader,
+) -> PlatformTemplateResponse:
+    selection = await reader.platform_status(PPT_BUILDER_CAPABILITY_ID, TEMPLATE_SLOT)
+    active = selection.get("active")
+    candidate = selection.get("candidate")
+    settings = selection.get("settings") or {}
+    overrides = [
+        PatternOverride.model_validate(item) for item in settings.get("overrides", [])
+    ]
+    latest = candidate or active or {}
+
+    async def status(item: Mapping[str, Any] | None) -> AnalysisStatusResponse | None:
+        return await _shared_analysis_status(item, reader) if item else None
+
+    def filename(item: Mapping[str, Any] | None) -> str | None:
+        if item is None:
+            return None
+        return next(
+            (
+                asset.get("filename")
+                for asset in item.get("assets", [])
+                if asset.get("slot_key") == TEMPLATE_SLOT
+            ),
+            None,
+        )
+
+    return PlatformTemplateResponse(
+        analysis=await status(active),
+        template_filename=filename(active),
+        overrides=overrides,
+        replacement=await status(candidate),
+        replacement_filename=filename(candidate),
+        use_vision=latest.get("public_config", {}).get("use_vision", True),
+    )
+
+
 async def _platform_response(*, recover: bool = False) -> PlatformTemplateResponse:
     store = get_analysis_store()
     current = await store.get(PLATFORM_ID)
@@ -440,12 +479,35 @@ def _build_router() -> APIRouter:
         response_model=PlatformTemplateResponse,
         operation_id="getPptBuilderPlatform",
     )
-    async def platform() -> PlatformTemplateResponse:
+    async def platform(
+        reader: Optional[CapabilityPreparationReader] = Depends(
+            capability_preparation_reader
+        ),
+    ) -> PlatformTemplateResponse:
         """The platform default template and its analysis (any signed-in user)."""
+        if reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+            return await _shared_platform_response(reader)
         return await _platform_response(recover=True)
 
     @router.get("/platform/patterns.pdf", operation_id="getPptBuilderPlatformPatterns")
-    async def platform_patterns() -> Response:
+    async def platform_patterns(
+        reader: Optional[CapabilityPreparationReader] = Depends(
+            capability_preparation_reader
+        ),
+    ) -> Response:
+        if reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+            selection = await reader.platform_status(
+                PPT_BUILDER_CAPABILITY_ID, TEMPLATE_SLOT
+            )
+            active = selection.get("active") or {}
+            reference = active.get("result_reference")
+            if not isinstance(reference, str):
+                raise HTTPException(status_code=404, detail="No thumbnails.")
+            try:
+                pdf = await reader.read_sibling(reference, "patterns.pdf")
+            except FileNotFoundError as exc:
+                raise HTTPException(status_code=404, detail="No thumbnails.") from exc
+            return Response(content=pdf, media_type=_PDF_CONTENT_TYPE)
         pdf = await get_analysis_store().patterns_pdf(PLATFORM_ID)
         if pdf is None:
             raise HTTPException(status_code=404, detail="No thumbnails.")
@@ -462,10 +524,27 @@ def _build_router() -> APIRouter:
         vision_profile_id: Optional[str] = Form(None),
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
         port: CapabilityModelPort = Depends(capability_platform_model),
+        reader: Optional[CapabilityPreparationReader] = Depends(
+            capability_preparation_reader
+        ),
+        manager: Optional[CapabilityPreparationManager] = Depends(
+            capability_preparation_manager
+        ),
     ) -> PlatformTemplateResponse:
         """Replace the platform default template; the current one stays in use
         until the replacement's analysis succeeds."""
         await authorizer.require_capability_manager()
+        if reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+            assert manager is not None
+            content = await _readable_upload(file)
+            await manager.upload_platform_candidate(
+                PPT_BUILDER_CAPABILITY_ID,
+                TEMPLATE_SLOT,
+                content,
+                (file.filename or "template.pptx")[:255],
+                {"use_vision": use_vision},
+            )
+            return await _shared_platform_response(reader)
         key = await _platform_labelling_key(port, use_vision, vision_profile_id)
         content = await _readable_upload(file)
         store = get_analysis_store()
@@ -499,10 +578,24 @@ def _build_router() -> APIRouter:
         body: PlatformAnalysisRequest,
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
         port: CapabilityModelPort = Depends(capability_platform_model),
+        reader: Optional[CapabilityPreparationReader] = Depends(
+            capability_preparation_reader
+        ),
+        manager: Optional[CapabilityPreparationManager] = Depends(
+            capability_preparation_manager
+        ),
     ) -> PlatformTemplateResponse:
         """Analyse the platform template again, with this vision choice: the
         failed replacement, else the current template, which stays in use."""
         await authorizer.require_capability_manager()
+        if reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+            assert manager is not None
+            await manager.refresh_platform_candidate(
+                PPT_BUILDER_CAPABILITY_ID,
+                TEMPLATE_SLOT,
+                {"use_vision": body.use_vision},
+            )
+            return await _shared_platform_response(reader)
         key = await _platform_labelling_key(
             port, body.use_vision, body.vision_profile_id
         )
@@ -536,10 +629,37 @@ def _build_router() -> APIRouter:
     async def put_platform_overrides(
         body: PlatformOverridesRequest,
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
+        reader: Optional[CapabilityPreparationReader] = Depends(
+            capability_preparation_reader
+        ),
+        manager: Optional[CapabilityPreparationManager] = Depends(
+            capability_preparation_manager
+        ),
     ) -> PlatformTemplateResponse:
         """The manager's pattern edits of the template in effect: the platform
         template, else the Fred template."""
         await authorizer.require_capability_manager()
+        if reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+            assert manager is not None
+            selection = await reader.platform_status(
+                PPT_BUILDER_CAPABILITY_ID, TEMPLATE_SLOT
+            )
+            active = selection.get("active") or {}
+            reference = active.get("result_reference")
+            inventory = (
+                TemplateInventory.model_validate_json(
+                    await reader.read_result(reference)
+                )
+                if isinstance(reference, str)
+                else builtin_template()[1]
+            )
+            kept, _ = prune_overrides(body.overrides, inventory)
+            await manager.set_platform_settings(
+                PPT_BUILDER_CAPABILITY_ID,
+                TEMPLATE_SLOT,
+                {"overrides": [item.model_dump(mode="json") for item in kept]},
+            )
+            return await _shared_platform_response(reader)
         store = get_analysis_store()
         current = await store.get(PLATFORM_ID)
         if current is None:
@@ -564,10 +684,22 @@ def _build_router() -> APIRouter:
     )
     async def reset_platform_template(
         authorizer: CapabilityTeamAuthorizer = Depends(capability_team_authorizer),
+        reader: Optional[CapabilityPreparationReader] = Depends(
+            capability_preparation_reader
+        ),
+        manager: Optional[CapabilityPreparationManager] = Depends(
+            capability_preparation_manager
+        ),
     ) -> PlatformTemplateResponse:
         """Back to the Fred template, which itself cannot be removed, without
         the manager's edits of it."""
         await authorizer.require_capability_manager()
+        if reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+            assert manager is not None
+            await manager.reset_platform_selection(
+                PPT_BUILDER_CAPABILITY_ID, TEMPLATE_SLOT
+            )
+            return await _shared_platform_response(reader)
         store = get_analysis_store()
         await store.delete(PLATFORM_NEXT_ID)
         await store.delete(PLATFORM_ID)
@@ -607,11 +739,7 @@ def _build_router() -> APIRouter:
         ),
     ) -> AnalysisStatusResponse:
         """Status, summary and inventory of the instance's template analysis."""
-        if team_id:
-            if reader is None:
-                raise HTTPException(
-                    status_code=503, detail="Preparation results unavailable"
-                )
+        if team_id and reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
             await authorizer.require_agent_editor(team_id)
             item = await reader.agent_status(
                 team_id, instance_id, PPT_BUILDER_CAPABILITY_ID
@@ -633,11 +761,7 @@ def _build_router() -> APIRouter:
         ),
     ) -> Response:
         """One PDF page per pattern of the analysed template (the thumbnails)."""
-        if team_id:
-            if reader is None:
-                raise HTTPException(
-                    status_code=503, detail="Preparation results unavailable"
-                )
+        if team_id and reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
             await authorizer.require_agent_editor(team_id)
             item = await reader.agent_status(
                 team_id, instance_id, PPT_BUILDER_CAPABILITY_ID
@@ -783,9 +907,17 @@ class _PptBuilderMiddleware(AgentMiddleware):
         self._instance = identity.agent_instance_id
         self._key = config.labelling_key()
         self._shared = config.preparation_mode == "shared" and self._sha is not None
-        self._prepared = ctx.services.preparation_artifacts if self._shared else None
+        self._shared_platform = (
+            PPT_BUILDER_CAPABILITY_ID in ctx.services.preparation_enabled_capabilities
+            and self._sha is None
+        )
+        self._prepared = (
+            ctx.services.preparation_artifacts
+            if self._shared or self._shared_platform
+            else None
+        )
 
-        if self._sha is None:
+        if self._sha is None and not self._shared_platform:
             known, platform = analysis_job.platform_snapshot()
             if known:  # the usual turn: no DB read
                 self.tools = self._default_tools(platform)
@@ -858,6 +990,57 @@ class _PptBuilderMiddleware(AgentMiddleware):
     async def _resolve(self) -> Optional[List[BaseTool]]:
         if self._resolved is not None:
             return self._resolved
+        if self._shared_platform:
+            try:
+                content, inventory = builtin_template()
+                overrides: List[PatternOverride] = []
+                if self._prepared is not None:
+                    settings = self._prepared.settings(
+                        f"{PPT_BUILDER_CAPABILITY_ID}:platform:{TEMPLATE_SLOT}"
+                    )
+                    overrides = [
+                        PatternOverride.model_validate(item)
+                        for item in settings.get("overrides", [])
+                    ]
+                    if self._prepared.has_result(
+                        f"{PPT_BUILDER_CAPABILITY_ID}:platform:{TEMPLATE_SLOT}"
+                    ):
+                        raw = await self._prepared.read_result(
+                            f"{PPT_BUILDER_CAPABILITY_ID}:platform:{TEMPLATE_SLOT}"
+                        )
+                        if raw is None:
+                            return None
+                        inventory = TemplateInventory.model_validate_json(raw)
+
+                        async def load() -> bytes:
+                            template = await self._prepared.read_sibling(
+                                f"{PPT_BUILDER_CAPABILITY_ID}:platform:{TEMPLATE_SLOT}",
+                                "template.pptx",
+                            )
+                            if template is None:
+                                raise LookupError("Platform template is unavailable")
+                            return template
+
+                    else:
+
+                        async def load() -> bytes:
+                            return content
+
+                else:
+
+                    async def load() -> bytes:
+                        return content
+
+                effective, _ = apply_overrides(inventory, overrides)
+                self._resolved = build_builder_tools(
+                    self._ctx, load, effective, self._messages, self._asks
+                )
+                return self._resolved
+            except Exception:
+                logger.warning(
+                    "Platform template preparation unreadable", exc_info=True
+                )
+                return None
         if self._sha is None:  # the pod's first read of the platform default
             self._resolved = self._default_tools(
                 await analysis_job.refresh_platform_default()
@@ -1051,6 +1234,7 @@ class PptBuilderCapability(
             min_assets=1,
             activation_field="template_sha256",
             config_fields=("template_sha256", "use_vision"),
+            public_config_fields=("use_vision",),
             rules_version=str(ANALYSIS_VERSION),
             max_input_bytes=MAX_TEMPLATE_UPLOAD_BYTES,
         ),

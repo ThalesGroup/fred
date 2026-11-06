@@ -258,6 +258,10 @@ def test_preparation_declaration_rejects_duplicate_slot_and_unbounded_work() -> 
         ValidationError, match="config fields must be nonempty and unique"
     ):
         PreparationSpec(rules_version="1", config_fields=("mode", "mode"))
+    with pytest.raises(ValidationError, match="Public preparation fields"):
+        PreparationSpec(
+            rules_version="1", config_fields=("mode",), public_config_fields=("secret",)
+        )
     with pytest.raises(ValidationError):
         PreparationSpec(rules_version="1", max_attempts=0)
     with pytest.raises(ValidationError, match="config exceeds"):

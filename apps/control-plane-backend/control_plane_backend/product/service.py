@@ -103,6 +103,7 @@ from control_plane_backend.capability_preparations.readiness import (
 )
 from control_plane_backend.capability_preparations.service import (
     current_agent_results,
+    current_platform_results,
     retire_agent_preparations,
 )
 from control_plane_backend.common.field_values import validate_field_values
@@ -4168,6 +4169,13 @@ async def get_runtime_binding_for_team(
             team_id=team_id, session=session
         )
         results: dict[str, str] = {}
+        platform_settings: dict[str, dict[str, object]] = {}
+        platform_preparation_enabled = any(
+            source.runtime_id == instance.source_runtime_id
+            and source.enabled
+            and source.preparation_enabled
+            for source in deps.configuration.platform.runtime_catalog_sources
+        )
         session_factory_provider = getattr(deps, "get_sql_session_factory", None)
         if session_factory_provider is not None:
             if session is None:
@@ -4177,13 +4185,29 @@ async def get_runtime_binding_for_team(
                         agent_instance_id=agent_instance_id,
                         team_id=str(team_id),
                     )
+                    if platform_preparation_enabled:
+                        (
+                            platform_results,
+                            platform_settings,
+                        ) = await current_platform_results(
+                            results_session, runtime_id=instance.source_runtime_id
+                        )
+                        results.update(platform_results)
             else:
                 results = await current_agent_results(
                     session,
                     agent_instance_id=agent_instance_id,
                     team_id=str(team_id),
                 )
-        return instance, settings, policy, results
+                if platform_preparation_enabled:
+                    (
+                        platform_results,
+                        platform_settings,
+                    ) = await current_platform_results(
+                        session, runtime_id=instance.source_runtime_id
+                    )
+                    results.update(platform_results)
+        return instance, settings, policy, results, platform_settings
 
     async def _platform_reads(session: AsyncSession | None):
         reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(
@@ -4223,7 +4247,13 @@ async def get_runtime_binding_for_team(
     )
     if team_result is None:
         return None
-    instance, all_team_settings, routing_policy, preparation_results = team_result
+    (
+        instance,
+        all_team_settings,
+        routing_policy,
+        preparation_results,
+        platform_preparation_settings,
+    ) = team_result
     preparation_verdict = (await _preparation_verdicts(deps, [instance])).get(
         instance.agent_instance_id
     )
@@ -4259,6 +4289,7 @@ async def get_runtime_binding_for_team(
         enabled=instance.enabled,
         tuning=instance.tuning,
         preparation_results=preparation_results,
+        platform_preparation_settings=platform_preparation_settings,
         preparation_blocked=(
             preparation_verdict is not None and not preparation_verdict.ready
         ),

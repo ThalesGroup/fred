@@ -47,6 +47,7 @@ def _status(
         error_detail=row.error_detail,
         result_reference=row.result_reference,
         assets=assets or [],
+        public_config=row.public_config_json,
     )
 
 
@@ -168,6 +169,7 @@ async def retry_agent_preparation(
         input_revision=str(uuid4()),
         rules_version=previous.rules_version,
         config_json=previous.config_json,
+        public_config_json=previous.public_config_json,
         gates_readiness=previous.gates_readiness,
         is_current=True,
         state="pending",
@@ -259,6 +261,49 @@ async def current_agent_results(
         )
     ).all()
     return {capability_id: reference for capability_id, reference in rows if reference}
+
+
+async def current_platform_results(
+    session: AsyncSession, *, runtime_id: str
+) -> tuple[dict[str, str], dict[str, dict[str, object]]]:
+    selections = (
+        (
+            await session.execute(
+                select(CapabilityPlatformSelectionRow).where(
+                    CapabilityPlatformSelectionRow.runtime_id == runtime_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    active_ids = [
+        selection.active_preparation_id
+        for selection in selections
+        if selection.active_preparation_id is not None
+    ]
+    active_rows = {
+        row.id: row
+        for row in (
+            await session.execute(
+                select(CapabilityPreparationRow).where(
+                    CapabilityPreparationRow.id.in_(active_ids),
+                    CapabilityPreparationRow.is_current.is_(True),
+                    CapabilityPreparationRow.state == "succeeded",
+                )
+            )
+        ).scalars()
+    }
+    results = {}
+    settings = {}
+    for selection in selections:
+        key = f"{selection.capability_id}:platform:{selection.slot_key}"
+        row = active_rows.get(selection.active_preparation_id)
+        if row is not None and row.result_reference:
+            results[key] = row.result_reference
+        if selection.settings_json:
+            settings[key] = selection.settings_json
+    return results, settings
 
 
 async def get_work_asset(
@@ -357,6 +402,16 @@ async def publish_worker_result(
     row.completed_at = utcnow()
     if selection is not None and completion.state == "succeeded":
         if selection.active_preparation_id is not None:
+            old_assets = await _assets_by_preparation(
+                session, [selection.active_preparation_id, row.id]
+            )
+            old_hashes = [
+                asset.sha256
+                for asset in old_assets.get(selection.active_preparation_id, [])
+            ]
+            new_hashes = [asset.sha256 for asset in old_assets.get(row.id, [])]
+            if old_hashes != new_hashes:
+                selection.settings_json = {}
             previous = await session.get(
                 CapabilityPreparationRow,
                 selection.active_preparation_id,

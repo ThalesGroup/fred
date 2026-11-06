@@ -50,6 +50,7 @@ from control_plane_backend.capability_preparations.admission import (
 )
 from control_plane_backend.capability_preparations.platform import (
     platform_selection_status,
+    refresh_platform_candidate,
     reset_platform_selection,
     retry_platform_candidate,
     set_platform_selection_settings,
@@ -245,6 +246,42 @@ async def post_platform_capability_candidate_retry(
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
     if row is None:
         raise HTTPException(status_code=404, detail="Candidate not found")
+    return await _platform_view(deps, runtime_id, capability_id, slot_key)
+
+
+@router.post(
+    "/platform/capability-preparations/{runtime_id}/{capability_id}/{slot_key}/candidate/refresh",
+    response_model=PlatformPreparationSelection,
+)
+async def post_platform_capability_candidate_refresh(
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+    config: dict[str, object],
+    deps: Dependencies,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> PlatformPreparationSelection:
+    await require_manage_capabilities(deps.team_dependencies.rebac, user)
+    entry = await _platform_declaration(deps, runtime_id, capability_id)
+    spec = entry.preparation
+    assert spec is not None
+    if slot_key not in spec.asset_slots:
+        raise HTTPException(status_code=422, detail="Undeclared preparation asset slot")
+    async with _sessions(deps)() as session:
+        async with session.begin():
+            try:
+                row = await refresh_platform_candidate(
+                    session,
+                    runtime_id=runtime_id,
+                    capability_id=capability_id,
+                    slot_key=slot_key,
+                    spec=spec,
+                    config=config,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail="No platform template")
     return await _platform_view(deps, runtime_id, capability_id, slot_key)
 
 

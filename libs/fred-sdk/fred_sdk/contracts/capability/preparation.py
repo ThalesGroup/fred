@@ -19,6 +19,7 @@ class PreparationSpec(BaseModel):
     min_assets: int = Field(default=0, ge=0, le=32)
     activation_field: str | None = Field(default=None, min_length=1, max_length=128)
     config_fields: tuple[str, ...] | None = None
+    public_config_fields: tuple[str, ...] = ()
     rules_version: str = Field(min_length=1, max_length=64)
     gates_readiness: bool = True
     max_input_bytes: int = Field(default=64 * 1024 * 1024, ge=1, le=64 * 1024 * 1024)
@@ -38,6 +39,15 @@ class PreparationSpec(BaseModel):
             or len(set(self.config_fields)) != len(self.config_fields)
         ):
             raise ValueError("Preparation config fields must be nonempty and unique")
+        if (
+            any(not key or len(key) > 128 for key in self.public_config_fields)
+            or len(set(self.public_config_fields)) != len(self.public_config_fields)
+            or (
+                self.config_fields is not None
+                and not set(self.public_config_fields) <= set(self.config_fields)
+            )
+        ):
+            raise ValueError("Public preparation fields must be unique input fields")
         return self
 
 

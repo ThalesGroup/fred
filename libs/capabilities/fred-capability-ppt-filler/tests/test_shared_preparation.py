@@ -194,6 +194,12 @@ async def test_shared_agent_routes_read_current_inventory_and_preview() -> None:
                 raise HTTPException(status_code=403)
 
     class Reader(CapabilityPreparationReader):
+        def enabled(self, capability_id):
+            return True
+
+        async def platform_status(self, capability_id, slot_key):
+            return {}
+
         async def agent_status(self, team_id, agent_instance_id, capability_id):
             assert (team_id, agent_instance_id, capability_id) == (
                 "t1",
@@ -244,4 +250,117 @@ async def test_shared_agent_routes_read_current_inventory_and_preview() -> None:
             "/capabilities/ppt_builder/analysis/a1/patterns.pdf",
             params={"team_id": "t1"},
         )
+        assert preview.content == b"%PDF"
+
+
+@pytest.mark.asyncio
+async def test_shared_platform_turn_uses_active_inventory_and_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template, inventory = builtin_template()
+    monkeypatch.setattr(
+        builder, "get_analysis_store", lambda: pytest.fail("legacy store accessed")
+    )
+
+    class BoundArtifacts:
+        def has_result(self, capability_id):
+            return capability_id == "ppt_builder:platform:template"
+
+        def settings(self, capability_id):
+            assert capability_id == "ppt_builder:platform:template"
+            return {
+                "overrides": [
+                    {"pattern_id": inventory.patterns[0].id, "label": "Managed"}
+                ]
+            }
+
+        async def read_result(self, capability_id):
+            assert capability_id == "ppt_builder:platform:template"
+            return inventory.model_dump_json().encode()
+
+        async def read_sibling(self, capability_id, filename):
+            assert (capability_id, filename) == (
+                "ppt_builder:platform:template",
+                "template.pptx",
+            )
+            return template
+
+    ctx = CapabilityContext(
+        identity=CapabilityIdentity(user_id="user", agent_instance_id=str(uuid4())),
+        config=builder.PptBuilderConfig(),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(
+            preparation_artifacts=BoundArtifacts(),
+            preparation_enabled_capabilities=("ppt_builder",),
+        ),
+    )
+    middleware = builder._PptBuilderMiddleware(ctx)
+    assert await middleware._resolve() is not None
+
+
+@pytest.mark.asyncio
+async def test_shared_platform_routes_preserve_active_on_failed_candidate() -> None:
+    template, inventory = builtin_template()
+    reference = "capability-results/active/1/inventory.json"
+    active = {
+        "state": "succeeded",
+        "assets": [
+            {
+                "slot_key": "template",
+                "sha256": hashlib.sha256(template).hexdigest(),
+                "filename": "current.pptx",
+            }
+        ],
+        "result_reference": reference,
+        "created_at": "2026-11-06T12:00:00Z",
+        "public_config": {"use_vision": False},
+    }
+    candidate = {
+        "state": "failed",
+        "assets": [
+            {"slot_key": "template", "sha256": "a" * 64, "filename": "next.pptx"}
+        ],
+        "created_at": "2026-11-06T12:01:00Z",
+        "public_config": {"use_vision": True},
+        "error_code": "analysis_failed",
+    }
+    selection = {"active": active, "candidate": candidate, "settings": {}}
+
+    class Reader(CapabilityPreparationReader):
+        def enabled(self, capability_id):
+            return capability_id == "ppt_builder"
+
+        async def platform_status(self, capability_id, slot_key):
+            assert (capability_id, slot_key) == ("ppt_builder", "template")
+            return selection
+
+        async def agent_status(self, team_id, agent_instance_id, capability_id):
+            return None
+
+        async def read_result(self, result_reference):
+            assert result_reference == reference
+            return inventory.model_dump_json().encode()
+
+        async def read_sibling(self, result_reference, filename):
+            assert (result_reference, filename) == (reference, "patterns.pdf")
+            return b"%PDF"
+
+        async def sibling_exists(self, result_reference, filename):
+            return True
+
+    app = FastAPI()
+    app.include_router(builder.PptBuilderCapability.manifest.router)
+    app.dependency_overrides[capability_preparation_reader] = Reader
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://pod"
+    ) as client:
+        response = await client.get("/platform")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["analysis"]["inventory"]["patterns"]
+        assert body["replacement"]["status"] == "failed"
+        assert body["template_filename"] == "current.pptx"
+        assert body["replacement_filename"] == "next.pptx"
+        assert body["use_vision"] is True
+        preview = await client.get("/platform/patterns.pdf")
         assert preview.content == b"%PDF"

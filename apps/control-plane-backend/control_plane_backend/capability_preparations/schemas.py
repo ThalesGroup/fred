@@ -31,6 +31,7 @@ class PreparationStatus(BaseModel):
     error_detail: str | None = None
     result_reference: str | None = None
     assets: list[PreparationAsset] = Field(default_factory=list, max_length=32)
+    public_config: dict[str, Any] = Field(default_factory=dict)
 
 
 class PreparationStatusPage(BaseModel):

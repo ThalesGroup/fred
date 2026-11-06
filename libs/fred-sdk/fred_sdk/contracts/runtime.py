@@ -644,6 +644,7 @@ class CapabilityModelPort(ABC):
 CAPABILITY_TEAM_AUTHORIZER_STATE: Final = "fred_capability_team_authorizer"
 CAPABILITY_PLATFORM_MODEL_STATE: Final = "fred_capability_platform_model"
 CAPABILITY_PREPARATION_READER_STATE: Final = "fred_capability_preparation_reader"
+CAPABILITY_PREPARATION_MANAGER_STATE: Final = "fred_capability_preparation_manager"
 
 
 class CapabilityTeamAuthorizer(ABC):
@@ -665,6 +666,9 @@ class CapabilityPreparationReader(ABC):
     """Authenticated current status and artifacts for a capability router."""
 
     @abstractmethod
+    def enabled(self, capability_id: str) -> bool: ...
+
+    @abstractmethod
     async def agent_status(
         self, team_id: str, agent_instance_id: str, capability_id: str
     ) -> Mapping[str, Any] | None: ...
@@ -678,6 +682,45 @@ class CapabilityPreparationReader(ABC):
     @abstractmethod
     async def sibling_exists(self, reference: str, filename: str) -> bool: ...
 
+    @abstractmethod
+    async def platform_status(
+        self, capability_id: str, slot_key: str
+    ) -> Mapping[str, Any]: ...
+
+
+class CapabilityPreparationManager(ABC):
+    """Authenticated platform mutation port for capability managers."""
+
+    @abstractmethod
+    async def upload_platform_candidate(
+        self,
+        capability_id: str,
+        slot_key: str,
+        content: bytes,
+        filename: str,
+        config: Mapping[str, Any],
+    ) -> Mapping[str, Any]: ...
+
+    @abstractmethod
+    async def retry_platform_candidate(
+        self, capability_id: str, slot_key: str
+    ) -> Mapping[str, Any]: ...
+
+    @abstractmethod
+    async def refresh_platform_candidate(
+        self, capability_id: str, slot_key: str, config: Mapping[str, Any]
+    ) -> Mapping[str, Any]: ...
+
+    @abstractmethod
+    async def reset_platform_selection(
+        self, capability_id: str, slot_key: str
+    ) -> Mapping[str, Any]: ...
+
+    @abstractmethod
+    async def set_platform_settings(
+        self, capability_id: str, slot_key: str, settings: Mapping[str, Any]
+    ) -> Mapping[str, Any]: ...
+
 
 CAPABILITY_MANAGER_DENIED: Final = "You cannot manage the platform's capabilities."
 
@@ -685,6 +728,7 @@ _ROUTE_DEPENDENCIES = (
     "capability_team_authorizer",
     "capability_platform_model",
     "capability_preparation_reader",
+    "capability_preparation_manager",
 )
 
 
@@ -1669,6 +1713,10 @@ class TeamWikiPort(ABC):
 
 
 class PreparationArtifactsPort(Protocol):
+    def has_result(self, capability_id: str) -> bool: ...
+
+    def settings(self, capability_id: str) -> Mapping[str, Any]: ...
+
     async def read_result(self, capability_id: str) -> bytes | None: ...
 
     async def read_sibling(self, capability_id: str, filename: str) -> bytes | None: ...
@@ -1768,6 +1816,7 @@ class RuntimeServices:
     # Appended last to preserve positional compatibility.
     capability_model: CapabilityModelPort | None = None
     preparation_artifacts: PreparationArtifactsPort | None = None
+    preparation_enabled_capabilities: tuple[str, ...] = ()
     preparation_vision: PreparationVisionAvailabilityPort | None = None
 
 

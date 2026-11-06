@@ -15,7 +15,11 @@ async def test_artifact_reader_is_bound_to_published_result() -> None:
     reader = BoundPreparationArtifacts(
         Filesystem(),
         {"ppt_builder": "capability-results/job-1/1/result.json"},
+        {"ppt_builder:platform:template": {"overrides": []}},
     )
+    assert reader.has_result("ppt_builder")
+    assert not reader.has_result("ppt_builder:platform:template")
+    assert reader.settings("ppt_builder:platform:template") == {"overrides": []}
     assert await reader.read_result("other") is None
     assert await reader.read_result("ppt_builder") == (
         b"capability-results/job-1/1/result.json"
