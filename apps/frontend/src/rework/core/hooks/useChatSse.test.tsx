@@ -131,6 +131,7 @@ import {
   setCachedSessionHistory,
 } from "../../components/pages/ManagedChatPage/sessionHistoryCache";
 import type { RuntimeAwaitingHumanEvent } from "./useChatSse";
+import { toThreadMessages } from "../../components/pages/ManagedChatPage/toThreadMessages";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>) => void }) {
   const hook = useChatSse({
@@ -535,9 +536,79 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(
       latest.messages.find((message) => message.metadata?.extras?.steered_message_id === "message-1"),
     ).toMatchObject({
-      rank: -1,
+      rank: expect.any(Number),
       metadata: { extras: { steering_state: "pending" } },
     });
+    finishStream(new Response("", { status: 200 }));
+    await act(async () => await sendPromise);
+    fetchSpy.mockRestore();
+  });
+
+  it("keeps pending messages in send order when steering responses arrive out of order", async () => {
+    let finishStream!: (response: Response) => void;
+    const firstResponse = deferred<Response>();
+    const secondResponse = deferred<Response>();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finishStream = resolve)))
+      .mockImplementationOnce(() => firstResponse.promise)
+      .mockImplementationOnce(() => secondResponse.promise);
+    mount();
+    let sendPromise!: Promise<boolean>;
+    await act(async () => {
+      sendPromise = latest.send("original", "session-1");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    let firstSteer!: Promise<"accepted" | "rejected" | "uncertain">;
+    let secondSteer!: Promise<"accepted" | "rejected" | "uncertain">;
+    await act(async () => {
+      firstSteer = latest.steerActiveTurn("session-1", "m1", "first update");
+      secondSteer = latest.steerActiveTurn("session-1", "m2", "second update");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(3));
+    });
+    const pendingTexts = () =>
+      toThreadMessages(latest.messages, true)
+        .filter((message) => message.role === "user" && message.steeringState === "pending")
+        .map((message) => message.text);
+    expect(pendingTexts()).toEqual(["first update", "second update"]);
+    await act(async () => {
+      secondResponse.resolve(
+        new Response(
+          JSON.stringify({
+            session_id: "session-1",
+            exchange_id: "pending:m2",
+            rank: -2,
+            timestamp: "2026-11-06T12:00:01Z",
+            role: "user",
+            channel: "final",
+            parts: [{ type: "text", text: "second update" }],
+            metadata: { extras: { steered_message_id: "m2", steering_state: "pending" } },
+          }),
+          { status: 202 },
+        ),
+      );
+      expect(await secondSteer).toBe("accepted");
+    });
+    expect(pendingTexts()).toEqual(["first update", "second update"]);
+    await act(async () => {
+      firstResponse.resolve(
+        new Response(
+          JSON.stringify({
+            session_id: "session-1",
+            exchange_id: "pending:m1",
+            rank: -1,
+            timestamp: "2026-11-06T12:00:00Z",
+            role: "user",
+            channel: "final",
+            parts: [{ type: "text", text: "first update" }],
+            metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+          }),
+          { status: 202 },
+        ),
+      );
+      expect(await firstSteer).toBe("accepted");
+    });
+    expect(pendingTexts()).toEqual(["first update", "second update"]);
     finishStream(new Response("", { status: 200 }));
     await act(async () => await sendPromise);
     fetchSpy.mockRestore();
@@ -578,6 +649,9 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(
       latest.messages.find((message) => message.metadata?.extras?.steered_message_id === "message-1")?.metadata?.extras,
     ).toMatchObject({ steering_submission: "uncertain" });
+    const provisionalRank = latest.messages.find(
+      (message) => message.metadata?.extras?.steered_message_id === "message-1",
+    )?.rank;
     finishStream(new Response("", { status: 200 }));
     await act(async () => await sendPromise);
     await act(async () => {
@@ -588,7 +662,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       latest.messages.filter((message) => message.metadata?.extras?.steered_message_id === "message-1"),
     ).toHaveLength(1);
     expect(latest.messages.find((message) => message.metadata?.extras?.steered_message_id === "message-1")?.rank).toBe(
-      -1,
+      provisionalRank,
     );
     fetchSpy.mockRestore();
   });

@@ -1747,10 +1747,17 @@ export function useChatSse(
       const read = () => (turn ? readTurnMessages(turn) : messagesRef.current);
       const write = (next: ChatMessage[]) => (turn ? writeTurnMessages(turn, next) : setAll(next));
       const current = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
+      const provisionalRank =
+        Math.min(
+          0,
+          ...read()
+            .filter((message) => message.metadata?.extras?.steering_state === "pending")
+            .map((message) => message.rank),
+        ) - 1;
       const optimistic: ChatMessage = {
         session_id: sessionId,
         exchange_id: `pending:${messageId}`,
-        rank: -Date.now(),
+        rank: provisionalRank,
         timestamp: new Date().toISOString(),
         role: "user",
         channel: "final",
@@ -1784,7 +1791,7 @@ export function useChatSse(
           const persisted = (await response.json()) as ChatMessage;
           const latest = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
           if (latest?.metadata?.extras?.steering_state === "pending") {
-            write(upsertOne(read(), persisted));
+            write(upsertOne(read(), { ...persisted, rank: latest.rank, timestamp: latest.timestamp }));
           }
           return "accepted";
         }
