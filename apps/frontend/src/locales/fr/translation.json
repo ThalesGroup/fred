@@ -4177,8 +4177,8 @@
       "leaveDialog": {
         "title": "Abandonner vos modifications ?",
         "message": "Vous êtes en train de modifier « {{title}} ». Si vous ouvrez une autre page, le texte que vous n’avez pas enregistré sera perdu.",
-        "confirm": "Abandonner les modifications",
-        "cancel": "Continuer à écrire"
+        "confirm": "Abandonner",
+        "cancel": "Continuer"
       },
       "deleteDialog": {
         "title": "Supprimer cette page ?",

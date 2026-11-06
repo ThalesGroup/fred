@@ -4177,8 +4177,8 @@
       "leaveDialog": {
         "title": "Discard your changes?",
         "message": "You are editing “{{title}}”. Opening another page will lose the text you have not saved.",
-        "confirm": "Discard changes",
-        "cancel": "Keep writing"
+        "confirm": "Discard",
+        "cancel": "Keep editing"
       },
       "deleteDialog": {
         "title": "Delete this page?",
