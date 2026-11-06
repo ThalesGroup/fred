@@ -102,6 +102,7 @@ from control_plane_backend.capability_preparations.readiness import (
     agent_preparation_readiness,
 )
 from control_plane_backend.capability_preparations.service import (
+    current_agent_results,
     retire_agent_preparations,
 )
 from control_plane_backend.common.field_values import validate_field_values
@@ -2618,13 +2619,14 @@ async def _preparation_verdicts(
     deps: ProductServiceDependencies,
     records: Sequence[AgentInstanceRecord],
 ) -> dict[str, ReadinessVerdict]:
-    if not records or deps.get_sql_session_factory is None:
+    session_factory_provider = getattr(deps, "get_sql_session_factory", None)
+    if not records or session_factory_provider is None:
         return {}
     by_team: dict[str, list[str]] = {}
     for record in records:
         by_team.setdefault(str(record.team_id), []).append(record.agent_instance_id)
     verdicts: dict[str, ReadinessVerdict] = {}
-    async with deps.get_sql_session_factory()() as session:
+    async with session_factory_provider()() as session:
         for team_id, ids in by_team.items():
             verdicts.update(
                 await agent_preparation_readiness(
@@ -4164,7 +4166,23 @@ async def get_runtime_binding_for_team(
         policy = await deps.get_team_routing_policy_store().get(
             team_id=team_id, session=session
         )
-        return instance, settings, policy
+        results: dict[str, str] = {}
+        session_factory_provider = getattr(deps, "get_sql_session_factory", None)
+        if session_factory_provider is not None:
+            if session is None:
+                async with session_factory_provider()() as results_session:
+                    results = await current_agent_results(
+                        results_session,
+                        agent_instance_id=agent_instance_id,
+                        team_id=str(team_id),
+                    )
+            else:
+                results = await current_agent_results(
+                    session,
+                    agent_instance_id=agent_instance_id,
+                    team_id=str(team_id),
+                )
+        return instance, settings, policy, results
 
     async def _platform_reads(session: AsyncSession | None):
         reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(
@@ -4204,7 +4222,10 @@ async def get_runtime_binding_for_team(
     )
     if team_result is None:
         return None
-    instance, all_team_settings, routing_policy = team_result
+    instance, all_team_settings, routing_policy, preparation_results = team_result
+    preparation_verdict = (await _preparation_verdicts(deps, [instance])).get(
+        instance.agent_instance_id
+    )
     (
         reasoning_enabled_model_ids,
         platform_chat_model_binding,
@@ -4236,6 +4257,10 @@ async def get_runtime_binding_for_team(
         owner_team_id=instance.team_id,
         enabled=instance.enabled,
         tuning=instance.tuning,
+        preparation_results=preparation_results,
+        preparation_blocked=(
+            preparation_verdict is not None and not preparation_verdict.ready
+        ),
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
         team_disabled_model_ids=(

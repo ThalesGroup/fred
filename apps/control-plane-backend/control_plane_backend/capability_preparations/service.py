@@ -190,6 +190,31 @@ async def get_worker_work(
     )
 
 
+async def current_agent_results(
+    session: AsyncSession,
+    *,
+    agent_instance_id: str,
+    team_id: str,
+) -> dict[str, str]:
+    """Return only published references from the current agent revisions."""
+    rows = (
+        await session.execute(
+            select(
+                CapabilityPreparationRow.capability_id,
+                CapabilityPreparationRow.result_reference,
+            ).where(
+                CapabilityPreparationRow.owner_kind == "agent",
+                CapabilityPreparationRow.owner_id == agent_instance_id,
+                CapabilityPreparationRow.team_id == team_id,
+                CapabilityPreparationRow.is_current.is_(True),
+                CapabilityPreparationRow.state == "succeeded",
+                CapabilityPreparationRow.result_reference.is_not(None),
+            )
+        )
+    ).all()
+    return {capability_id: reference for capability_id, reference in rows if reference}
+
+
 async def get_work_asset(
     session: AsyncSession, *, preparation_id: str, asset_id: str
 ) -> CapabilityAssetRow | None:

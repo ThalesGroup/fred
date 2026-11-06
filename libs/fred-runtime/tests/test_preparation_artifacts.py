@@ -1,0 +1,27 @@
+"""Only current, bound capability result paths are readable during a turn."""
+
+import pytest
+
+from fred_runtime.capabilities.preparation_artifacts import BoundPreparationArtifacts
+
+
+class Filesystem:
+    async def read(self, path: str) -> bytes:
+        return path.encode()
+
+
+@pytest.mark.asyncio
+async def test_artifact_reader_is_bound_to_published_result() -> None:
+    reader = BoundPreparationArtifacts(
+        Filesystem(),
+        {"ppt_builder": "capability-results/job-1/1/result.json"},
+    )
+    assert await reader.read_result("other") is None
+    assert await reader.read_result("ppt_builder") == (
+        b"capability-results/job-1/1/result.json"
+    )
+    assert await reader.read_sibling("ppt_builder", "template.pptx") == (
+        b"capability-results/job-1/1/template.pptx"
+    )
+    with pytest.raises(ValueError):
+        await reader.read_sibling("ppt_builder", "../secret")

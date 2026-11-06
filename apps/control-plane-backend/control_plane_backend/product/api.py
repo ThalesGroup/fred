@@ -1790,6 +1790,11 @@ async def get_team_agent_instance_runtime(
         raise HTTPException(
             status_code=409, detail="Managed agent instance is disabled."
         )
+    if getattr(binding, "preparation_blocked", False):
+        raise HTTPException(
+            status_code=409,
+            detail="Managed agent instance is waiting for capability preparation.",
+        )
     if (
         binding.disabled_platform_skills
         and request.headers.get("X-Fred-Skill-Policy") != "1"

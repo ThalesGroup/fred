@@ -21,6 +21,7 @@ from control_plane_backend.capability_preparations.schemas import (
     WorkerPreparationResult,
 )
 from control_plane_backend.capability_preparations.service import (
+    current_agent_results,
     publish_worker_result,
     retire_agent_preparations,
 )
@@ -134,6 +135,7 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
                     ("a1", "t1", "gamma", "failed", False, True),
                     ("a2", "t1", "delta", "failed", True, False),
                     ("a3", "t2", "epsilon", "failed", True, True),
+                    ("a4", "t1", "zeta", "succeeded", True, True),
                 ]:
                     preparation_id = str(uuid4())
                     session.add(
@@ -155,6 +157,11 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
                             workflow_id=f"capability-preparation/{preparation_id}",
                             task_queue="capability-preparation-r",
                             error_detail="Invalid slide" if cap_id == "beta" else None,
+                            result_reference=(
+                                f"capability-results/{preparation_id}/1/result.json"
+                                if cap_id == "zeta"
+                                else None
+                            ),
                         )
                     )
         async with sessions() as session:
@@ -167,6 +174,18 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
         assert verdicts["a1"].detail == "Invalid slide"
         assert "a2" not in verdicts
         assert "a3" not in verdicts
+        async with sessions() as session:
+            assert (
+                await current_agent_results(
+                    session, agent_instance_id="a4", team_id="t1"
+                )
+            )["zeta"].endswith("/result.json")
+            assert (
+                await current_agent_results(
+                    session, agent_instance_id="a4", team_id="t2"
+                )
+                == {}
+            )
         async with sessions() as session:
             async with session.begin():
                 running = await session.scalar(

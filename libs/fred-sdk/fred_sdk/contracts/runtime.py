@@ -1645,6 +1645,12 @@ class TeamWikiPort(ABC):
         """
 
 
+class PreparationArtifactsPort(Protocol):
+    async def read_result(self, capability_id: str) -> bytes | None: ...
+
+    async def read_sibling(self, capability_id: str, filename: str) -> bytes | None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -1734,6 +1740,7 @@ class RuntimeServices:
     # Turn-free model access for save-time and background capability work.
     # Appended last to preserve positional compatibility.
     capability_model: CapabilityModelPort | None = None
+    preparation_artifacts: PreparationArtifactsPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)
