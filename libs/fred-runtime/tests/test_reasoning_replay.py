@@ -185,9 +185,13 @@ def test_mistral_payload_carries_reasoning_chunks() -> None:
     model = with_mistral_reasoning_replay(_chat("mistral-medium-latest"))
     assert isinstance(model, ChatOpenAI)
 
-    payload = model._get_request_payload(keep_native_reasoning(_history()))
+    payload = model._get_request_payload(
+        keep_native_reasoning(_history()), max_tokens=384
+    )
 
     wire = payload["messages"]
+    assert payload["max_tokens"] == 384
+    assert "max_completion_tokens" not in payload
     assert wire[1]["content"] == [
         _thinking("old plan"),
         {"type": "text", "text": "old answer"},

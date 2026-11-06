@@ -653,7 +653,15 @@ def test_steered_continuation_serializes_for_provider(model_name):
     assert [message["role"] for message in wire] == ["user", "assistant", "user"]
 
 
-@pytest.mark.parametrize("model_name", ["mistral-medium-latest", "gpt-6-luna"])
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "mistral-medium-latest",
+        "mistral-small-latest",
+        "mistral-large-4",
+        "gpt-6-luna",
+    ],
+)
 @pytest.mark.parametrize("with_tools", [False, True])
 def test_visible_reply_disables_openai_compatible_reasoning_only_for_interim(
     model_name: str, with_tools: bool
@@ -709,8 +717,18 @@ def test_visible_reply_disables_openai_compatible_reasoning_only_for_interim(
     assert interim_model is not model
     assert interim_model.client is model.client
     assert interim_model.async_client is model.async_client
-    assert interim_model.reasoning_effort is None
-    assert "reasoning_effort" not in interim.model_settings
+    expected_effort = (
+        "none"
+        if model_name.startswith(("mistral-medium", "mistral-small"))
+        else "low"
+        if model_name.startswith("mistral-large-4")
+        else None
+    )
+    assert interim_model.reasoning_effort == expected_effort
+    if expected_effort is None:
+        assert "reasoning_effort" not in interim.model_settings
+    else:
+        assert interim.model_settings["reasoning_effort"] == expected_effort
     assert interim.tool_choice == "none"
     assert interim.tools == request.tools
     if with_tools:
@@ -726,7 +744,12 @@ def test_visible_reply_disables_openai_compatible_reasoning_only_for_interim(
     interim_payload = interim_model._get_request_payload(
         interim.messages, **payload_settings
     )
-    assert "reasoning_effort" not in interim_payload
+    if expected_effort is None:
+        assert "reasoning_effort" not in interim_payload
+    else:
+        assert interim_payload["reasoning_effort"] == expected_effort
+    if model_name.startswith("mistral"):
+        assert interim_payload["max_tokens"] == turn_steering.MAX_STEERED_REPLY_TOKENS
     assert interim_payload["tool_choice"] == "none"
     if "messages" in interim_payload:
         wire_messages = interim_payload["messages"]
@@ -788,6 +811,49 @@ def test_visible_reply_preserves_explicitly_disabled_reasoning() -> None:
     assert payload["reasoning_effort"] == "none"
     assert payload["tool_choice"] == "none"
     assert model.reasoning_effort == "none"
+
+
+@pytest.mark.parametrize(
+    ("model_limit", "request_settings", "expected_limit"),
+    [
+        (96, {}, 96),
+        (None, {"max_tokens": 96}, 96),
+        (None, {"max_completion_tokens": 96}, 96),
+        (128, {"max_completion_tokens": 96}, 96),
+    ],
+)
+def test_visible_reply_keeps_a_stricter_mistral_token_limit(
+    model_limit: int | None,
+    request_settings: dict[str, int],
+    expected_limit: int,
+) -> None:
+    model = cast(
+        ChatOpenAI,
+        with_mistral_reasoning_replay(
+            ChatOpenAI(
+                model="mistral-medium-latest",
+                api_key=SecretStr("test-key"),
+                max_tokens=model_limit,
+            )
+        ),
+    )
+    request = ModelRequest(
+        model=model,
+        messages=[HumanMessage(content="Where are you?")],
+        model_settings=request_settings,
+    )
+
+    interim = turn_steering._visible_reply_request(
+        request, SystemMessage(content="Answer briefly.")
+    )
+    payload = cast(ChatOpenAI, interim.model)._get_request_payload(
+        interim.messages, **interim.model_settings
+    )
+
+    assert payload["max_tokens"] == expected_limit
+    assert "max_completion_tokens" not in payload
+    assert model.max_tokens == model_limit
+    assert request.model_settings == request_settings
 
 
 def test_visible_reply_uses_provider_neutral_tool_suppression() -> None:

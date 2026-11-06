@@ -29,10 +29,12 @@ from fred_runtime.runtime_support.model_metadata import (
     sum_token_usage,
 )
 from fred_runtime.runtime_support.run_scope import RunScope
+from fred_runtime.support.reasoning_replay import replays_native_reasoning
 from fred_runtime.support.thinking import content_to_text, strip_reasoning_from_history
 
 logger = logging.getLogger(__name__)
 MAX_STEERED_REPLY_CHARS = 600
+MAX_STEERED_REPLY_TOKENS = 384
 
 
 def _visible_reply_text(message: AIMessage | None) -> tuple[str | None, str]:
@@ -127,12 +129,21 @@ def _visible_reply_request(
     tool_choice = None
     if isinstance(model, BaseChatOpenAI):
         # This call needs visible text; reasoning-only output cannot answer the update.
-        disabled_effort = (
-            "none"
-            if request.model_settings.get("reasoning_effort") == "none"
-            or model.reasoning_effort == "none"
-            else None
+        mistral_model = (
+            model.model_name.lower().rsplit("/", 1)[-1]
+            if replays_native_reasoning(model)
+            else ""
         )
+        disabled_effort = None
+        if mistral_model.startswith(("mistral-medium", "mistral-small")):
+            disabled_effort = "none"
+        elif mistral_model.startswith("mistral-large-4"):
+            disabled_effort = "low"
+        elif (
+            request.model_settings.get("reasoning_effort") == "none"
+            or model.reasoning_effort == "none"
+        ):
+            disabled_effort = "none"
         model = model.model_copy(
             update={"reasoning_effort": disabled_effort, "reasoning": None}
         )
@@ -144,6 +155,16 @@ def _visible_reply_request(
         }
         if disabled_effort is not None:
             settings["reasoning_effort"] = disabled_effort
+        if mistral_model:
+            limits = [MAX_STEERED_REPLY_TOKENS]
+            for value in (
+                model.max_tokens,
+                settings.pop("max_tokens", None),
+                settings.pop("max_completion_tokens", None),
+            ):
+                if isinstance(value, int) and value > 0:
+                    limits.append(value)
+            settings["max_tokens"] = min(limits)
         tools = request.tools
         tool_choice = "none"
         if not request.tools:
