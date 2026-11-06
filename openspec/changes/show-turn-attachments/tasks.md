@@ -6,18 +6,11 @@
 
 ## 2. Frontend
 
-- [x] 2.1 Send this turn's ready attachments in `sendTurn`, keep them on the optimistic user row, re-send them on restart, and block a send without text.
-- [x] 2.2 Map `extras.attachments` in `toThreadMessages`; render read-only tonal chips inside the bubble in `UserMessage`, with tests (live, reload, absent field, restart, no text).
+- [x] 2.1 Send this turn's ready attachments in `sendTurn`, keep them on the optimistic row and on restart; no send without text.
+- [x] 2.2 Map `extras.attachments` in `toThreadMessages`; render tonal chips in `UserMessage`, with tests.
 
-## 3. Verification and close-out
+## 3. Close-out
 
-- [x] 3.1 `make code-quality` and `make test` in touched projects; `openspec validate show-turn-attachments --strict`.
-- [x] 3.2 Dated §8 entry and a line next to skill selections in `RUNTIME-EXECUTION-CONTRACT.md`.
-- [x] 3.3 Migration note in `docs/swift/ops/migrations/` (no operator action, patch).
-- [x] 3.4 Help Center: no update expected (chips are self-explanatory); confirm `features/chat.md` fr+en stays accurate.
-
-## Verification
-
-- fred-sdk, fred-runtime: `make code-quality` and `make test` green; new tests in `tests/test_context.py` and `tests/test_history.py`.
-- frontend: `make code-quality` and `make test` green; new tests in `UserTurn.test.tsx`, `toThreadMessages.test.ts`, `runtimeContextBuilder.test.ts`, `useManagedChat.test.tsx`.
-- Help Center `features/chat.md` (fr+en) unchanged: still accurate.
+- [x] 3.1 Root `make code-quality`, `make test` in frontend (5119), fred-sdk (668), fred-runtime (2537); `openspec validate --strict`.
+- [x] 3.2 `RUNTIME-EXECUTION-CONTRACT.md` §2.3 line and dated §8 entry; migration note (impact none).
+- [x] 3.3 Help Center `features/chat.md` (fr+en) checked: still accurate.

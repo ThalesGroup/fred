@@ -7412,10 +7412,6 @@ the corresponding migration note for validation and compatibility limits.
 
 ### Turn attachments on user messages (2026-11-06)
 
-`RuntimeContext` gains optional `attachments: list[TurnAttachment]`, the files
-sent with the turn (`attachment_id`, `name`, optional `mime`). The runtime
-persists them as `metadata.extras.attachments` on the user row, beside
-`skill_invocations`, and the transcript renders them live and after reload.
-`attachments_markdown` is unchanged. Older pods ignore the field; messages
-without it render as before. The `managed-conversations` specification owns the
-acceptance contract.
+`RuntimeContext` gains optional `attachments` (see §2.3), stored on the user row
+as `metadata.extras.attachments`. Older pods ignore it; older rows render as
+before. The `managed-conversations` specification owns the acceptance contract.

@@ -252,7 +252,7 @@ describe("explicit skill selection on user turns", () => {
     );
     expect(turn.attachments).toEqual([
       { attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" },
-      { attachment_id: "a-2", name: "notes.txt", mime: null },
+      { attachment_id: "a-2", name: "notes.txt" },
     ]);
   });
   it("leaves attachments undefined on a message stored without them", () => {

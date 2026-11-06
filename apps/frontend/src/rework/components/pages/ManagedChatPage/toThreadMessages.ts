@@ -40,23 +40,11 @@ import { hitlAnswerSummary, type HitlAnswerSummary } from "../../../utils/hitlAn
 
 // Stored extras are untyped JSON: keep only well-formed entries.
 function turnAttachmentsOf(value: unknown): TurnAttachment[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const attachments = value.flatMap((item: unknown): TurnAttachment[] =>
-    item &&
-    typeof item === "object" &&
-    "attachment_id" in item &&
-    typeof item.attachment_id === "string" &&
-    "name" in item &&
-    typeof item.name === "string"
-      ? [
-          {
-            attachment_id: item.attachment_id,
-            name: item.name,
-            mime: "mime" in item && typeof item.mime === "string" ? item.mime : null,
-          },
-        ]
-      : [],
-  );
+  const attachments = Array.isArray(value)
+    ? value.filter(
+        (item): item is TurnAttachment => typeof item?.attachment_id === "string" && typeof item?.name === "string",
+      )
+    : [];
   return attachments.length > 0 ? attachments : undefined;
 }
 
