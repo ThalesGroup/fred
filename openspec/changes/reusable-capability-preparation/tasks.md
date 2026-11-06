@@ -36,7 +36,7 @@
 
 ## 6. Data cutover and integration
 
-- [ ] 6.1 Backfill old PPT SQL blobs and successful inventories into immutable assets and results, preserving overrides, active platform default and `use_vision`; verify row/hash/count reconciliation and no re-upload for existing agents.
+- [x] 6.1 Backfill old PPT SQL blobs and successful inventories into immutable assets and results, preserving overrides, active platform default and `use_vision`; verify row/hash/count reconciliation and no re-upload for existing agents.
 - [ ] 6.2 Add a rollout switch and legacy reader for the migration window, fence old jobs at cutover, then remove old background/blob paths after verification; verify forward cutover and rollback on a staging copy with active and failed preparations.
 - [ ] 6.3 Run multi-replica and concurrency integration checks for hundreds of saves, two capabilities on one agent, worker/KF outages, stale callbacks and cleanup; verify bounded queues, memory and connection usage under the target load.
 - [ ] 6.4 Run the required root quality gate and full branch audit against the actual target branch, obtain independent read-only review for the cross-service contracts, reconcile the specs/tasks with the implementation, and record results in the PR.

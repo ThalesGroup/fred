@@ -6531,10 +6531,21 @@ def _build_agent_router(
             agent_instance_id=body.agent_instance_id,
         )
         results: list[_ReadinessResult] = []
+        preparation_enabled = frozenset(
+            get_runtime_context().config.preparation_capabilities
+        )
         for item in body.items:
             if item.capability_id not in capability_registry:
                 continue
             capability = capability_registry.capability(item.capability_id)
+            if (
+                item.capability_id in preparation_enabled
+                and capability.manifest.preparation is not None
+            ):
+                results.append(
+                    _ReadinessResult(capability_id=item.capability_id, state="ready")
+                )
+                continue
             try:
                 stored = (
                     capability.StoredConfigModel.model_validate(item.stored.config)

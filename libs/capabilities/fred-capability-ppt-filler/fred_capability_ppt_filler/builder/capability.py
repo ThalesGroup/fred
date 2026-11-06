@@ -729,13 +729,16 @@ def _build_router() -> APIRouter:
         ),
     ) -> AnalysisStatusResponse:
         """Status, summary and inventory of the instance's template analysis."""
-        if team_id and reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+        if reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+            if not team_id:
+                raise HTTPException(status_code=422, detail="team_id is required")
             await authorizer.require_agent_editor(team_id)
             item = await reader.agent_status(
                 team_id, instance_id, PPT_BUILDER_CAPABILITY_ID
             )
             if item is not None:
                 return await _shared_analysis_status(item, reader)
+            raise HTTPException(status_code=404, detail="No template analysis.")
         return status_response(await _authorised_record(instance_id, authorizer))
 
     @router.get(
@@ -751,7 +754,9 @@ def _build_router() -> APIRouter:
         ),
     ) -> Response:
         """One PDF page per pattern of the analysed template (the thumbnails)."""
-        if team_id and reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+        if reader is not None and reader.enabled(PPT_BUILDER_CAPABILITY_ID):
+            if not team_id:
+                raise HTTPException(status_code=422, detail="team_id is required")
             await authorizer.require_agent_editor(team_id)
             item = await reader.agent_status(
                 team_id, instance_id, PPT_BUILDER_CAPABILITY_ID
@@ -767,6 +772,7 @@ def _build_router() -> APIRouter:
                         status_code=404, detail="No thumbnails."
                     ) from exc
                 return Response(content=pdf, media_type=_PDF_CONTENT_TYPE)
+            raise HTTPException(status_code=404, detail="No thumbnails.")
         await _authorised_record(instance_id, authorizer)
         pdf = await get_analysis_store().patterns_pdf(instance_id)
         if pdf is None:
@@ -896,11 +902,11 @@ class _PptBuilderMiddleware(AgentMiddleware):
         self._sha = config.template_sha256
         self._instance = identity.agent_instance_id
         self._key = config.labelling_key()
-        self._shared = config.preparation_mode == "shared" and self._sha is not None
-        self._shared_platform = (
+        shared_enabled = (
             PPT_BUILDER_CAPABILITY_ID in ctx.services.preparation_enabled_capabilities
-            and self._sha is None
         )
+        self._shared = shared_enabled and self._sha is not None
+        self._shared_platform = shared_enabled and self._sha is None
         self._prepared = (
             ctx.services.preparation_artifacts
             if self._shared or self._shared_platform

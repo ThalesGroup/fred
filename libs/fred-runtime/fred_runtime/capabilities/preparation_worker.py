@@ -74,6 +74,7 @@ class WorkerArtifactStore:
         self._writes = 0
         self._bytes = 0
         self._written_paths: set[str] = set()
+        self._directory_ready = False
 
     def _require_path(self, path: str) -> None:
         if not path.startswith(self.prefix) or ".." in path.split("/"):
@@ -90,6 +91,9 @@ class WorkerArtifactStore:
         self._writes += 1
         self._bytes += len(content)
         self._written_paths.add(path)
+        if not self._directory_ready:
+            await self._filesystem.mkdir(self.prefix.rstrip("/"))
+            self._directory_ready = True
         await self._filesystem.write(path, content)
 
     async def read(self, path: str) -> bytes:

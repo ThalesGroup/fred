@@ -139,11 +139,14 @@ async def test_turn_reads_only_the_bound_preparation_revision() -> None:
         identity=CapabilityIdentity(user_id="user", agent_instance_id=str(uuid4())),
         config=builder.PptBuilderConfig(
             template_sha256=hashlib.sha256(template).hexdigest(),
-            preparation_mode="shared",
+            preparation_mode="legacy",
             use_vision=False,
         ),
         turn_options=EmptyModel(),
-        services=RuntimeServices(preparation_artifacts=BoundArtifacts()),
+        services=RuntimeServices(
+            preparation_artifacts=BoundArtifacts(),
+            preparation_enabled_capabilities=("ppt_builder",),
+        ),
     )
     middleware = builder._PptBuilderMiddleware(ctx)
     assert await middleware._resolve() is not None
@@ -163,7 +166,7 @@ async def test_shared_turn_never_falls_back_to_legacy_inventory(
             template_sha256="a" * 64, preparation_mode="shared", use_vision=False
         ),
         turn_options=EmptyModel(),
-        services=RuntimeServices(),
+        services=RuntimeServices(preparation_enabled_capabilities=("ppt_builder",)),
     )
     middleware = builder._PptBuilderMiddleware(ctx)
     assert await middleware._resolve() is None

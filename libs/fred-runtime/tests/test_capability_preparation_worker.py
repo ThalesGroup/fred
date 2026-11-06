@@ -28,6 +28,10 @@ from fred_runtime.capabilities.registry import CapabilityRegistry
 class MemoryFilesystem:
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
+        self.directories: set[str] = set()
+
+    async def mkdir(self, path: str) -> None:
+        self.directories.add(path)
 
     async def write(self, path: str, content: bytes) -> None:
         self.objects[path] = content
@@ -167,6 +171,7 @@ async def test_new_worker_instance_resumes_without_serving_pod_state() -> None:
         filesystem.objects[f"capability-results/{preparation_id}/2/result.bin"]
         == b"DECK"
     )
+    assert f"capability-results/{preparation_id}/2" in filesystem.directories
 
 
 @pytest.mark.asyncio
