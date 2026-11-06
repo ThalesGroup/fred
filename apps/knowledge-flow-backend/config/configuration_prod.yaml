@@ -328,6 +328,7 @@ embedding_model:
   settings:
     base_url: https://api.mistral.ai/v1
     check_embedding_ctx_length: false
+vision_worker_client_id: agentic
 vision_model:
   provider: openai
   name: pixtral-12b-2409 # mistral-medium-latest is NOT vision-capable; pixtral-12b-2409 or mistral-small-3.1 required

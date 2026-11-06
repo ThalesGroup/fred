@@ -1571,6 +1571,7 @@ applications:
       document_sources: *kf-document-sources
       embedding_model: *kf-embedding-model
       chat_model:      *kf-chat-model
+      vision_worker_client_id: agentic
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage

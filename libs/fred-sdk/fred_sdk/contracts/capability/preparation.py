@@ -24,9 +24,9 @@ class PreparationSpec(BaseModel):
 
     @model_validator(mode="after")
     def _unique_slots(self) -> "PreparationSpec":
-        if any(not key for key in self.asset_slots) or len(set(self.asset_slots)) != len(
-            self.asset_slots
-        ):
+        if any(not key for key in self.asset_slots) or len(
+            set(self.asset_slots)
+        ) != len(self.asset_slots):
             raise ValueError("Preparation asset slots must be nonempty and unique")
         return self
 
@@ -92,8 +92,15 @@ class PreparationArtifactStore(Protocol):
     async def delete(self, path: str) -> None: ...
 
 
+class PreparationVisionPort(Protocol):
+    async def describe(self, image: bytes, prompt: str) -> str: ...
+
+    async def available(self) -> bool: ...
+
+
 @dataclass(frozen=True)
 class PreparationContext:
     work: PreparationWork
     assets: PreparationAssetReader
     artifacts: PreparationArtifactStore
+    vision: PreparationVisionPort | None = None

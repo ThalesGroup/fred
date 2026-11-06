@@ -37,6 +37,7 @@ from fred_runtime.capabilities.registry import (
     boot_capability_registry,
 )
 from fred_runtime.capabilities.preparation_workflow import CapabilityPreparationWorkflow
+from fred_runtime.capabilities.vision_client import KnowledgeFlowVisionClient
 
 logger = logging.getLogger(__name__)
 
@@ -109,11 +110,13 @@ class CapabilityPreparationActivities:
         client: httpx.AsyncClient,
         filesystem: BaseFilesystem,
         config: AgentPodConfig,
+        vision_client: KnowledgeFlowVisionClient | None = None,
     ) -> None:
         self._registry = registry
         self._client = client
         self._filesystem = filesystem
         self._runtime_id = config.app.runtime_id
+        self._vision_client = vision_client
         self._semaphores = {
             capability_id: asyncio.Semaphore(
                 config.preparation.per_capability_concurrency.get(capability_id, 1)
@@ -146,6 +149,7 @@ class CapabilityPreparationActivities:
             work=work,
             assets=WorkerAssetReader(self._client, work),
             artifacts=artifacts,
+            vision=self._vision_client,
         )
         try:
             async with self._semaphores[work.capability_id]:
@@ -230,13 +234,24 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
         namespace=temporal.namespace,
         data_converter=pydantic_data_converter,
     )
-    async with httpx.AsyncClient(
-        base_url=config.platform.control_plane_url.rstrip("/"),
-        auth=auth,
-        timeout=httpx.Timeout(60.0, connect=5.0),
-    ) as http_client:
+    async with (
+        httpx.AsyncClient(
+            base_url=config.platform.control_plane_url.rstrip("/"),
+            auth=auth,
+            timeout=httpx.Timeout(60.0, connect=5.0),
+        ) as http_client,
+        httpx.AsyncClient(
+            base_url=config.ai.knowledge_flow_url.rstrip("/"),
+            auth=auth,
+            timeout=httpx.Timeout(50.0, connect=5.0),
+        ) as vision_http_client,
+    ):
         activities = CapabilityPreparationActivities(
-            registry, http_client, filesystem, config
+            registry,
+            http_client,
+            filesystem,
+            config,
+            KnowledgeFlowVisionClient(vision_http_client),
         )
         worker = Worker(
             client=temporal_client,
