@@ -26,8 +26,9 @@
 // ppt_filler and writable_document active shows no chrome at all until the agent
 // actually produces a deck or a document.
 
-import { Component, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Component, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useChatNavRoom } from "@core/hooks/useChatNavPanel";
 import { useDispatch } from "react-redux";
 import type { TFunction } from "i18next";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
@@ -123,6 +124,21 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
   useEffect(() => {
     if (active && entryKey(active) !== activeKey) onActiveKeyChange(entryKey(active));
   }, [active, activeKey, onActiveKeyChange]);
+  const open = active !== null;
+  const { makeRoom, releaseRoom } = useChatNavRoom();
+  useEffect(() => (open ? releaseRoom : undefined), [open, releaseRoom]);
+  // A panel coming back with its conversation stays beside the nav panel: the
+  // user just picked that conversation there. Read before the page records the opening.
+  const sessionId = useOpenSessionId();
+  const opening = useRef({ sessionId, activeKey });
+  opening.current = { sessionId, activeKey };
+  const makeRoomUnlessRestored = useCallback(
+    (chatBodyWidth: number) => {
+      const { sessionId: session, activeKey: key } = opening.current;
+      return key && wasPanelOpen(session, key) ? 0 : makeRoom(chatBodyWidth);
+    },
+    [makeRoom],
+  );
 
   // `active` drives the drawer open/close; `rendered` is what is mounted inside
   // it, and lags at BOTH ends of the slide — a closing panel leaves with the
@@ -165,7 +181,7 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
       ))}
       {entries.length > 0 && (
         <InlineDrawer
-          open={active !== null}
+          open={open}
           onClose={() => onActiveKeyChange(null)}
           // Dressed for the panel it is opening onto, not the one mounted:
           // reading `rendered` alone flipped the chrome mid-slide.
@@ -174,14 +190,14 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
           hideHeader={shown?.ownsHeader ?? false}
           flushBody={shown?.ownsHeader ?? false}
           layout="push"
-          // Same inset card as the chat's own panels (ChatSidePanel): equal
-          // height, corners and surface, so the column looks the same whichever
-          // panel is showing.
-          floating
-          // One shared width across every capability panel (writable-document
-          // editor, PPT preview, …) — the same behaviour the legacy chat's
-          // ResizablePaneShell had with its single persisted pane width.
-          resizable={{ persistKey: "capability-side-panel" }}
+          // Every capability panel opens at half of the chat body.
+          resizable={{
+            persistKey: "capability-side-panel",
+            openFraction: 0.5,
+            maxViewportFraction: 0.5,
+            maxWidth: 1600,
+            onOpening: makeRoomUnlessRestored,
+          }}
         >
           {rendered ? (
             // A code-split panel suspends only while its chunk is in flight —

@@ -656,7 +656,9 @@
       "textOnly": "Only plain text can wait during an active turn",
       "forceUnavailable": "Could not send into the active turn. The message is still pending."
     },
-    "newConversation": "New conversation",
+    "newConversation": "New conversation with this agent",
+    "hideNavPanel": "Hide navigation panel",
+    "showNavPanel": "Show navigation panel",
     "uiParts": {
       "ariaLabel": "Agent cards",
       "geoAria": "Map data",
@@ -815,12 +817,13 @@
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
+      "uploadedSection": "Attachments",
       "deleteAria": "Delete {{name}}",
-      "empty": "No attachments in this conversation.",
-      "filePreviewTitle": "Attachment preview",
-      "loading": "Loading attachments...",
+      "empty": "No documents in this conversation.",
+      "filePreviewTitle": "Document preview",
+      "loading": "Loading documents…",
       "noSummary": "_(No summary returned by Knowledge Flow)_",
-      "title": "Attachments"
+      "title": "Conversation documents"
     },
     "sessionTitleEditor": {
       "untitled": "Untitled conversation",

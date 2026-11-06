@@ -28,7 +28,7 @@
   justify-content: center;
   /* Fade from transparent so the field appears to float above the thread */
   background: linear-gradient(to bottom, transparent 0%, var(--surface-main) 40%);
-  padding: 0 var(--spacing-l);
+  padding: 0 var(--spacing-m);
 }
 
 .field {
@@ -44,7 +44,7 @@
     box-shadow 120ms ease;
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--surface-container-high);
   /* Tighter at the bottom: the control row already carries its own spacing, so
      a full pad there read as a gap under the buttons. */
@@ -95,6 +95,11 @@
   gap: var(--spacing-2xs);
 }
 
+/* Nothing to show: without this the field's gap still pads the text from above. */
+.aboveTextSlot:empty {
+  display: none;
+}
+
 .textarea {
   display: block;
   flex: 1 1 0;
@@ -143,6 +148,7 @@
 /* Bottom row: options (left, flex-1) + send button (right) */
 .bottomRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-xs);
 }
@@ -165,9 +171,12 @@
 .rightSlot {
   display: flex;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-2xs); /* rightExtraSlot chip ↔ action group */
   margin-left: auto; /* pushes to right edge whether or not bottomLeft is present */
+  max-width: 100%;
 }
 
 .actionGroup {

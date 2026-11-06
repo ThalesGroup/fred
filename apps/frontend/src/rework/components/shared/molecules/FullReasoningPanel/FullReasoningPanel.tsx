@@ -96,7 +96,6 @@ export function FullReasoningPanel({ open, onClose, messages }: FullReasoningPan
       onClose={onClose}
       title={t("chatbot.fullReasoning.title")}
       persistKey="full-reasoning-panel"
-      width="560px"
       fill
       headerActions={
         <Tooltip text={copyLabel}>

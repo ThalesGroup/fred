@@ -19,6 +19,7 @@
   visibility: hidden;
   opacity: 0;
   z-index: 9;
+  backdrop-filter: blur(4px);
   transition:
     opacity 250ms ease-out,
     visibility 250ms;
@@ -67,15 +68,12 @@
   position: relative;
   flex-shrink: 0;
   visibility: hidden;
-  /* Above the capability launcher rail (z-index 2): the panel opens over the
-     rail and, on close, finishes its width animation in front of it — the rail
-     only reappears once the panel is fully gone, never on top of it. */
   z-index: 3;
   transition:
     width var(--drawer-duration) var(--easing-standard),
     visibility var(--drawer-duration);
-  /* Transparent shell — the panel below carries the visible surface (background
-     + left divider) so the shell only reserves the animated width. */
+  /* Transparent shell — the panel below carries the visible surface, so the shell
+     only reserves the animated width. */
   background: transparent;
   width: 0;
   overflow: hidden;
@@ -107,73 +105,49 @@
      instead of being clipped away (the host keeps it mounted for the duration). */
   opacity: 1;
   transition: opacity 200ms ease-out;
-  /* Full-height flush panel: a 1px left divider separates it from the content,
-     square corners, flush right against the viewport edge; clip the content
-     (iframe, header, tabs) to the edge. */
-  border-left: 1px solid var(--outline-muted);
-  background: var(--drawer-background, var(--surface-container-low));
-  width: var(--drawer-width);
+  /* A card of its own beside the host's. The gap between them is part of the
+     drawer's width, so it opens with the slide and holds the resize handle. Width
+     stays fixed so content doesn't reflow while the drawer animates from 0. */
+  border-radius: var(--radius-s) var(--radius-l) var(--radius-l) var(--radius-s);
+  background: var(--drawer-background, var(--surface-main));
+  width: calc(var(--drawer-width) - var(--spacing-2xs));
   overflow: hidden;
+}
+
+@media (pointer: coarse) {
+  .drawer[data-layout="push"] .panel {
+    border-radius: var(--radius-s) var(--radius-m) var(--radius-m) var(--radius-s);
+  }
+}
+
+.drawer[data-layout="push"] .header {
+  border-bottom: none;
 }
 
 .drawer[data-layout="push"]:not([data-open="true"]) .panel {
   opacity: 0;
 }
 
-/* ── Floating-card variant (opt-in, push layout) ──────────────────────────
- * The panel detaches into a rounded, bordered, elevated card inset from every
- * edge instead of a full-height flush panel. The drawer's own flush edge
- * border and the header divider are dropped — the card carries the only
- * border. Width stays fixed (not `auto`) so content doesn't reflow while the
- * drawer animates its width from 0, matching the flush panel's behaviour. */
-.drawer[data-floating="true"] {
-  background: transparent;
-}
-
-.drawer[data-floating="true"][data-layout="push"][data-open="true"] {
-  border-left-color: transparent;
-}
-
-/* Asymmetric on purpose: 12px against the page edges and the conversation, 8px
-   on the right where the launcher rail sits — a gap to a neighbouring control
-   wants to be tighter than a gap to the edge of the page. */
-.drawer[data-floating="true"][data-layout="push"] .panel {
-  top: var(--spacing-s);
-  right: var(--spacing-xs);
-  bottom: var(--spacing-s);
-  left: auto;
-  box-shadow: var(--shadow-s);
-  border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-m);
-  background: var(--drawer-background, var(--surface-container-high));
-  width: calc(var(--drawer-width) - var(--spacing-s) - var(--spacing-xs));
-  overflow: hidden;
-}
-
-.drawer[data-floating="true"] .header {
-  border-bottom: none;
-}
-
 /* ── Drag-to-resize handle (push + `resizable`) ───────────────────────────
  * The grip idiom ported from the legacy chat's ResizablePaneShell: a slim
- * col-resize strip hugging the drawer's left edge, with a small rounded bar
- * that highlights while hovered or dragged. */
+ * col-resize strip hugging the drawer's left edge, with a small rounded bar in
+ * the gap, shown only while hovered or dragged. */
 .resizeHandle {
   display: flex;
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  justify-content: center;
   align-items: center;
   z-index: 2;
   cursor: col-resize;
-  width: var(--spacing-s);
+  width: var(--spacing-xs);
   touch-action: none;
 }
 
 .resizeHandle::before {
   transition:
+    opacity 0.15s,
     background-color 0.15s,
     height 0.15s;
   border-radius: var(--radius-s);
@@ -189,6 +163,19 @@
   height: 56px;
 }
 
+@media (pointer: coarse) {
+  .resizeHandle {
+    width: var(--spacing-s);
+  }
+}
+
+/* Touch has no hover: the bar stays, or nothing would say the panel resizes. */
+@media (hover: hover) {
+  .drawer:not([data-dragging="true"]) .resizeHandle:not(:hover)::before {
+    opacity: 0;
+  }
+}
+
 /* A width transition mid-drag would lag the pointer — the drag must be 1:1. */
 .drawer[data-layout="push"][data-dragging="true"] {
   transition: none;
@@ -198,12 +185,11 @@
  * drawer's own content (e.g. ~169px on a 375px phone) — go full-width and
  * fixed instead, the same footprint as the overlay layout, so narrow
  * viewports get a usable panel rather than a squeezed sliver. */
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .drawer[data-layout="push"] {
     position: fixed;
     z-index: 10;
     inset: 0;
-    border-left: none;
   }
 
   .drawer[data-layout="push"][data-open="true"] {
@@ -213,8 +199,8 @@
   .drawer[data-layout="push"] .panel {
     top: 0;
     bottom: 0;
-    /* Full-screen panel: no left divider, edge to edge. */
-    border-left: none;
+    /* Full-screen panel, edge to edge. */
+    border-radius: 0;
     width: 100%;
   }
 

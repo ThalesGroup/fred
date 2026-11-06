@@ -15,6 +15,7 @@
 import MainNavBar from "./MainNavBar/MainNavBar.tsx";
 import HomeNavPanel from "./HomeNavPanel/HomeNavPanel.tsx";
 import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
+import { isChatRoute, useChatNavPanel } from "@core/hooks/useChatNavPanel";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
 import { useLocation } from "react-router-dom";
@@ -22,6 +23,7 @@ import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
 import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
 export default function Sidebar() {
   const { pathname } = useLocation();
+  const { collapsed } = useChatNavPanel();
 
   const getSidebarMode = (): SidebarMode => {
     if (pathname.startsWith("/home")) return "HOME";
@@ -41,7 +43,7 @@ export default function Sidebar() {
           <UserProfile />
         </div>
       </div>
-      <div className={styles["nav-panel-card"]} data-nav-panel>
+      <div className={styles["nav-panel-card"]} data-nav-panel hidden={collapsed && isChatRoute(pathname)}>
         {sidebarMode === "HOME" && <HomeNavPanel />}
         {sidebarMode === "TEAM" && <TeamContentNavbar />}
         {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}

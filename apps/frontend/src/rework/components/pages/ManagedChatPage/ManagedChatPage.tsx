@@ -59,6 +59,7 @@ import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useRefetchOnWindowFocus } from "../../../core/hooks/crossSessionRefresh";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
 import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
+import { ChatNavPanelToggle } from "./ChatNavPanelToggle";
 import { hitlHoldsComposer } from "./hitlHoldsComposer";
 import { useManagedChat } from "./useManagedChat";
 import { useComposerCommands } from "./useComposerCommands";
@@ -80,6 +81,7 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import Chip from "@shared/atoms/Chip/Chip";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Button from "@shared/atoms/Button/Button";
@@ -165,7 +167,7 @@ export default function ManagedChatPage() {
   const pendingListId = useId();
   const [pendingExpanded, setPendingExpanded] = useState(true);
   const { t, i18n } = useTranslation();
-  const { agentsNicknameSingular } = useFrontendProperties();
+  const { agentsNicknameSingular, agentIconName } = useFrontendProperties();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
   const { showError } = useToast();
 
@@ -467,7 +469,7 @@ export default function ManagedChatPage() {
             {
               key: "attachments",
               label: t("chatbot.sessionAttachments.title"),
-              icon: "attach_file" as const,
+              icon: "folder" as const,
               badgeCount: attachmentsCount,
               selected: attachmentsDrawerOpen,
               onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
@@ -479,7 +481,7 @@ export default function ManagedChatPage() {
             {
               key: "prompt-library",
               label: t("chatbot.promptSelectionPanel.menuRow"),
-              icon: "edit_note" as const,
+              icon: "chat" as const,
               selected: activePushDrawer?.kind === "prompt-library",
               onOpen: () =>
                 setActivePushDrawer((v) => (v?.kind === "prompt-library" ? null : { kind: "prompt-library" })),
@@ -736,6 +738,16 @@ export default function ManagedChatPage() {
     onRecall: recallLine,
   });
 
+  // A deleted agent has no instance left: its name alone still picks an icon.
+  const agentChipIcon = (
+    <span className={styles.agentChipIcon}>
+      <Icon
+        category="outlined"
+        type={resolveAgentIcon(chat.agentInstance ?? { display_name: chat.agentDisplayName, role: "" }, agentIconName)}
+      />
+    </span>
+  );
+
   const composer = (
     <RichInputField
       value={commands.composerValue}
@@ -847,9 +859,7 @@ export default function ManagedChatPage() {
     {
       key: "full-reasoning",
       label: t("chatbot.fullReasoning.title"),
-      // The glyph a reasoning row carries in the chain of thought.
-      icon: "settings" as const,
-      iconFilled: true,
+      icon: "neurology" as const,
       selected: activePushDrawer?.kind === "full-reasoning",
       onOpen: () =>
         setActivePushDrawer((v) => (v?.kind === "full-reasoning" ? null : { kind: "full-reasoning" as const })),
@@ -859,7 +869,7 @@ export default function ManagedChatPage() {
           {
             key: "debug",
             label: t("chatbot.debugRaw.title"),
-            icon: "build" as const,
+            icon: "bug_report" as const,
             selected: activePushDrawer?.kind === "debug",
             onOpen: () => setActivePushDrawer((v) => (v?.kind === "debug" ? null : { kind: "debug" as const })),
           },
@@ -872,6 +882,7 @@ export default function ManagedChatPage() {
       <div
         className={styles.page}
         data-shell-inset="none"
+        data-shell-card="none"
         onDragEnter={handleDragOver}
         onDragOver={handleDragOver}
         onDragLeave={(event) => {
@@ -891,75 +902,72 @@ export default function ManagedChatPage() {
             event.currentTarget.value = "";
           }}
         />
-        {/* Page body — a row of [ left stack ][ full-height push drawers ]. A
-            side panel now reflows the WHOLE left stack (header included) instead
-            of sliding under the header, so viewers span the full page height. */}
+        {/* Chat body — a row of [ chat card ][ viewer card ]. */}
         <div className={styles.pageBody}>
           <div className={styles.leftStack}>
-            {/* Conversation header. When a side panel opens it reflows left
-            together with the content below — the panel sits at the page body's
-            right edge at full height, no longer under this bar. The inner row is
-            capped to the composer field width so title and composer stay
-            aligned. Hidden on a new conversation (no session yet), where the
-            welcome block already names the agent. */}
-            {!(isInitialState && chat.sessionId == null) && (
-              <div className={styles.topBar}>
-                <div className={styles.topBarInner}>
-                  <div className={styles.topBarTitle}>
-                    {chat.sessionId && chat.sessionTitle != null && (
-                      <div className={styles.topBarTitleRow}>
-                        <span className={styles.titleLabel}>
-                          {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
-                        </span>
-                        {/* Absolutely positioned: reserves no layout space, revealed on topBar hover */}
-                        <span className={styles.editButtonSlot}>
-                          <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
-                        </span>
-                      </div>
-                    )}
-                    {chat.isReadOnly ? (
-                      <Tooltip
-                        text={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
-                      >
-                        <span
-                          className={styles.topBarAgentName}
-                          data-agent-deleted="true"
-                          tabIndex={0}
-                          aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
+            {/* Conversation header, inside the chat card. On a new conversation it only
+                holds the panel toggle: the welcome block names the agent. */}
+            <div className={styles.topBar}>
+              <div className={styles.topBarInner}>
+                <ChatNavPanelToggle />
+                {!(isInitialState && chat.sessionId == null) && (
+                  <>
+                    <div className={styles.topBarTitle}>
+                      {chat.isReadOnly ? (
+                        <Tooltip
+                          text={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
                         >
-                          <span className={styles.deletedAgentName}>{chat.agentDisplayName}</span>
-                          <span className={styles.deletedAgentSuffix}> {t("chatbot.deletedAgentSuffix")}</span>
+                          <span
+                            className={`${styles.topBarAgentName} ${styles.deletedAgent}`}
+                            data-agent-deleted="true"
+                            tabIndex={0}
+                            aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip", { agentsNicknameSingular })}`}
+                          >
+                            <Chip size="large" leading={agentChipIcon} label={chat.agentDisplayName} />
+                            <span className={styles.deletedAgentSuffix}>{t("chatbot.deletedAgentSuffix")}</span>
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <div className={styles.topBarAgentName}>
+                          <Chip size="large" leading={agentChipIcon} label={chat.agentDisplayName} />
+                        </div>
+                      )}
+                      {chat.sessionId && chat.sessionTitle != null && (
+                        <div className={styles.topBarTitleRow}>
+                          <span className={styles.titleLabel}>
+                            {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
+                          </span>
+                          <span className={styles.editButtonSlot}>
+                            <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className={styles.topBarRight}>
+                      {conversationTokens.total_tokens > 0 && (
+                        <span className={styles.conversationTokens}>
+                          {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
                         </span>
-                      </Tooltip>
-                    ) : (
-                      <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
-                    )}
-                  </div>
-                  <div className={styles.topBarRight}>
-                    {conversationTokens.total_tokens > 0 && (
-                      <span className={styles.conversationTokens}>
-                        {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
-                      </span>
-                    )}
-                    {chat.sessionId && !chat.executionDisabled && (
-                      <Tooltip text={t("chatbot.newConversation")}>
-                        <IconButton
-                          variant="outlined"
-                          size="medium"
-                          icon={{ category: "outlined", type: "add_comment" }}
-                          aria-label={t("chatbot.newConversation")}
-                          className={styles.newConversationButton}
-                          onClick={chat.startNewConversation}
-                        />
-                      </Tooltip>
-                    )}
-                  </div>
-                </div>
+                      )}
+                      {chat.sessionId && !chat.executionDisabled && (
+                        <Tooltip text={t("chatbot.newConversation")}>
+                          <IconButton
+                            variant="icon"
+                            size="medium"
+                            color="on-surface-retreat"
+                            icon={{ category: "outlined", type: "add_comment" }}
+                            aria-label={t("chatbot.newConversation")}
+                            className={styles.newConversationButton}
+                            onClick={chat.startNewConversation}
+                          />
+                        </Tooltip>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
-            )}
-
-            {/* Conversation column — holds only the main column now; the push drawers
-            moved up to the page body so they reflow the header too. */}
+            </div>
+            {/* Conversation column — holds only the main column now. */}
             <div className={styles.contentRow}>
               <div className={styles.mainColumn} data-chat-main>
                 {allowChatAttachments && dragActive && (
@@ -1169,8 +1177,8 @@ export default function ManagedChatPage() {
             </div>
           </div>
 
-          {/* Capability side-panel slot — full-height sibling of the left stack:
-            its push drawer reflows the header and the conversation together. */}
+          {/* Capability side-panel slot — sibling of the left stack: its push
+            drawer reflows the chat card, header included. */}
           <CapabilitySidePanelHost
             capabilityIds={chat.capabilityIds}
             activeKey={activeCapabilityKey}
@@ -1275,8 +1283,8 @@ export default function ManagedChatPage() {
         </div>
         {/* /pageBody */}
 
-        {/* Launcher rail — page-root sibling of the body (not inside it) so it
-            reserves its own in-flow column at the far right. */}
+        {/* Launcher rail — page-root sibling of the body, outside the cards, at
+            the far right. */}
         <ChatLauncherRail
           capabilityIds={chat.capabilityIds}
           activeKey={activeCapabilityKey}

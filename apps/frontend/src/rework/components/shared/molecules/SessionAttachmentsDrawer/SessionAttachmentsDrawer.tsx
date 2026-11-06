@@ -74,11 +74,12 @@ export function SessionAttachmentsDrawer({
         onClose={onClose}
         title={t("chatbot.sessionAttachments.title")}
         persistKey="session-attachments-panel"
-        width="460px"
         fill
       >
         <UploadWarningBanner />
         <div className={styles.list}>
+          {/* The user's uploads; the agent's generated deliverables will get their own section. */}
+          <h3 className={styles.sectionTitle}>{t("chatbot.sessionAttachments.uploadedSection")}</h3>
           {isLoading && attachments.length === 0 ? (
             <div className={styles.empty}>{t("chatbot.sessionAttachments.loading")}</div>
           ) : attachments.length === 0 ? (
