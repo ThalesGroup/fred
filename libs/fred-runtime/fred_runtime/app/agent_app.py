@@ -5294,7 +5294,6 @@ async def _iterate_runtime_event_payloads_inner(
                 "team_id": resolved_team_id,
                 "exchange_id": exchange_id,
                 "pending_message_id": request.pending_message_id,
-                "steering_enabled": "true" if steering_enabled else None,
                 "agent_instance_id": request.agent_instance_id,
                 "template_agent_id": definition.agent_id,
                 "run_id": getattr(credential_provider, "run_id", None),
@@ -5345,6 +5344,7 @@ async def _iterate_runtime_event_payloads_inner(
                 "execution_action": execution_action,
                 "exchange_id": exchange_id,
                 "pending_message_id": request.pending_message_id,
+                "steering_enabled": "true" if steering_enabled else None,
                 "is_service_agent": ctx.get("is_service_agent"),
             }.items()
             if isinstance(value, str) and value

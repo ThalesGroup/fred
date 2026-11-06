@@ -1,7 +1,7 @@
 """History-backed in-thread user messages across runtime replicas."""
 
 import asyncio
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fred_core.history.history_schema import ChatMessage, TextPart, make_user_text
@@ -9,6 +9,14 @@ from fred_core.history.postgres_history_store import (
     PostgresHistoryStore,
     create_history_schema,
     steered_reply_id,
+)
+from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.runtime_context import (
+    RuntimeConfig,
+    set_runtime_context,
+)
+from fred_runtime.runtime_context import (
+    RuntimeContext as FredRuntimeContext,
 )
 from fred_runtime.runtime_support import turn_steering
 from fred_runtime.runtime_support.run_scope import RunScope
@@ -64,6 +72,41 @@ class _UnusedGraph(GraphAgentDefinition):
 
     def node_handlers(self):
         raise NotImplementedError
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_runtime_steering_gate_reaches_middleware_binding(monkeypatch, enabled):
+    class BindingCaptured(Exception):
+        pass
+
+    captured: dict[str, Any] = {}
+
+    def capture_binding(_definition, binding, **_kwargs):
+        captured["binding"] = binding
+        raise BindingCaptured
+
+    monkeypatch.setattr(agent_app_module, "_build_runtime_services", capture_binding)
+    set_runtime_context(
+        FredRuntimeContext(RuntimeConfig(knowledge_flow_url="http://kf.invalid"))
+    )
+    try:
+        request = agent_app_module._AgentExecuteRequest.model_construct(
+            agent_id="test.graph",
+            message="hello",
+            context={"session_id": "s", "steering_enabled": "true"},
+        )
+        with pytest.raises(BindingCaptured):
+            await anext(
+                agent_app_module._iterate_runtime_event_payloads_inner(
+                    _UnusedGraph(), request, steering_enabled=enabled
+                )
+            )
+        assert captured["binding"].portable_context.baggage.get("steering_enabled") == (
+            "true" if enabled else None
+        )
+    finally:
+        set_runtime_context(None)
 
 
 def test_graph_fallback_acknowledges_at_hitl_pause_once():
