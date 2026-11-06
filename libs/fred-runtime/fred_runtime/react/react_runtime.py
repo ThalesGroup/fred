@@ -67,6 +67,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
     StatusRuntimeEvent,
+    SteeredAssistantMessageRuntimeEvent,
     SteeredUserMessageRuntimeEvent,
     ThoughtDeltaEvent,
     ThoughtEndEvent,
@@ -582,6 +583,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         recovery_marker_seen = False
         recovery_buffer: list[str] = []
         recovery_buffer_chars = 0
+        steered_reply_streaming = False
 
         def _assistant_delta(text: str) -> AssistantDeltaRuntimeEvent | None:
             nonlocal sequence
@@ -764,6 +766,22 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     break
                 mode, update = _split_stream_event_mode(raw_event)
 
+                if (
+                    mode == "custom"
+                    and isinstance(update, dict)
+                    and update.get("kind") == "_steered_reply_start"
+                ):
+                    steered_reply_streaming = True
+                    continue
+
+                if mode == "custom" and isinstance(
+                    update, SteeredAssistantMessageRuntimeEvent
+                ):
+                    steered_reply_streaming = False
+                    yield update.model_copy(update={"sequence": sequence})
+                    sequence += 1
+                    continue
+
                 if mode == "custom" and (
                     isinstance(update, SteeredUserMessageRuntimeEvent)
                     or isinstance(update, StatusRuntimeEvent)
@@ -774,6 +792,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     continue
 
                 if mode == "messages":
+                    if steered_reply_streaming:
+                        continue
                     # Token usage is deliberately not read here: "updates" mode
                     # (below) delivers the same completed AIMessage exactly
                     # once per model call and is the sole accumulation point —
@@ -888,6 +908,15 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     continue
 
                 for message in _extract_messages_from_update(update):
+                    if isinstance(message, AIMessage) and message.additional_kwargs.get(
+                        "steered_reply_for"
+                    ):
+                        _, token_usage, _ = _runtime_metadata_from_message(message)
+                        total_token_usage = _sum_token_usage(
+                            total_token_usage, token_usage
+                        )
+                        observe_model_call(token_usage)
+                        continue
                     if isinstance(message, ToolMessage):
                         # Approval feedback is model context, not an executed tool result.
                         if message.additional_kwargs.get("fred_tool_approval_rejected"):

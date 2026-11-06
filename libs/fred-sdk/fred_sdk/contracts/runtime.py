@@ -160,6 +160,7 @@ def unwrap_run_stop_error(exc: BaseException) -> RunStopError | None:
 class RuntimeEventKind(str, Enum):
     STATUS = "status"
     STEERED_USER_MESSAGE = "steered_user_message"
+    STEERED_ASSISTANT_MESSAGE = "steered_assistant_message"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     THOUGHT_START = "thought_start"
@@ -200,6 +201,7 @@ class ExecutionConfig(FrozenModel):
 
     checkpoint_strategy: CheckpointStrategy = CheckpointStrategy.SESSION
     session_id: str | None = None
+    pending_message_id: str | None = None
     interrupt_id: str | None = None
     adapter_config: dict[str, object] = Field(default_factory=dict)
     max_steps: int = Field(default=100, ge=1)
@@ -214,6 +216,7 @@ class ExecutionConfig(FrozenModel):
 
 class RuntimeEventBase(FrozenModel):
     sequence: int = Field(default=0, ge=0)
+    rank: int | None = None
 
 
 # Phase discriminator for THOUGHT_START/DELTA/END events.
@@ -243,6 +246,22 @@ class SteeredUserMessageRuntimeEvent(RuntimeEventBase):
     )
     message_id: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1)
+
+
+class SteeredUserMessageDelivery(FrozenModel):
+    message_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
+    rank: int | None = None
+
+
+class SteeredAssistantMessageRuntimeEvent(RuntimeEventBase):
+    kind: Literal[RuntimeEventKind.STEERED_ASSISTANT_MESSAGE] = (
+        RuntimeEventKind.STEERED_ASSISTANT_MESSAGE
+    )
+    message_ids: tuple[str, ...] = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
+    token_usage: dict[str, int] | None = None
+    deliveries: tuple[SteeredUserMessageDelivery, ...] = ()
 
 
 class ThoughtStartEvent(RuntimeEventBase):
@@ -430,6 +449,7 @@ class AwaitingHumanRuntimeEvent(RuntimeEventBase):
     model_name: str | None = None
     token_usage: dict[str, int] | None = None
     context_tokens: int | None = None
+    pause_metadata_rank: int | None = None
 
 
 class ExecutionInterruptedRuntimeEvent(RuntimeEventBase):
@@ -563,6 +583,7 @@ class RuntimeErrorEvent(RuntimeEventBase):
 RuntimeEvent: TypeAlias = Annotated[
     StatusRuntimeEvent
     | SteeredUserMessageRuntimeEvent
+    | SteeredAssistantMessageRuntimeEvent
     | ThoughtStartEvent
     | ThoughtDeltaEvent
     | ThoughtEndEvent

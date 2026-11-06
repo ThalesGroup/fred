@@ -48,6 +48,7 @@ from fred_sdk.contracts.runtime import (
     ExecutionConfig,
     FinalRuntimeEvent,
     RuntimeEvent,
+    SteeredAssistantMessageRuntimeEvent,
     ThoughtDeltaEvent,
     ToolCallRuntimeEvent,
 )
@@ -164,6 +165,48 @@ async def test_final_token_usage_sums_every_model_call_not_just_the_last() -> No
         "cache_read_tokens": 0,
         "cache_creation_tokens": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_steered_reply_streams_once_and_counts_both_model_calls() -> None:
+    reply = AIMessage(
+        content="Checking sources.",
+        additional_kwargs={"steered_reply_for": ["m1"]},
+        usage_metadata={"input_tokens": 10, "output_tokens": 2, "total_tokens": 12},
+    )
+    final = AIMessage(
+        content="Done.",
+        usage_metadata={"input_tokens": 15, "output_tokens": 3, "total_tokens": 18},
+    )
+    events = [
+        ("custom", {"kind": "_steered_reply_start"}),
+        ("messages", (AIMessageChunk(content="Checking sources."), {})),
+        (
+            "custom",
+            SteeredAssistantMessageRuntimeEvent(
+                message_ids=("m1",), content="Checking sources."
+            ),
+        ),
+        ("updates", {"agent": {"messages": [reply]}}),
+        ("messages", (AIMessageChunk(content="Done."), {})),
+        ("updates", {"agent": {"messages": [final]}}),
+    ]
+    collected = await _run_stream(events)
+    assert [
+        event.content
+        for event in collected
+        if isinstance(event, SteeredAssistantMessageRuntimeEvent)
+    ] == ["Checking sources."]
+    assert [
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    ] == ["Done."]
+    final_event = next(
+        event for event in collected if isinstance(event, FinalRuntimeEvent)
+    )
+    assert final_event.token_usage is not None
+    assert final_event.token_usage["total_tokens"] == 30
 
 
 @pytest.mark.asyncio
