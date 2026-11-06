@@ -56,6 +56,13 @@ vi.mock("./sidePanelRegistry", async (importActual) => ({
   sidePanelsForCapabilities: () => state.entries,
 }));
 
+const navRoom = vi.hoisted(() => ({
+  makeRoom: vi.fn(() => 254),
+  releaseRoom: vi.fn(),
+  onOpening: undefined as ((width: number) => number) | undefined,
+}));
+vi.mock("@core/hooks/useChatNavPanel", () => ({ useChatNavRoom: () => navRoom }));
+
 vi.mock("@shared/atoms/IconButton/IconButton", () => ({
   default: ({ icon, ...rest }: { icon: { type: string }; "aria-label": string }) => (
     <button data-icon={icon.type} aria-label={rest["aria-label"]} />
@@ -71,18 +78,23 @@ vi.mock("@shared/molecules/InlineDrawer/InlineDrawer", () => ({
     open,
     title,
     hideHeader,
+    resizable,
     children,
   }: {
     open: boolean;
     title: string;
     hideHeader?: boolean;
+    resizable: { onOpening: (width: number) => number };
     children: React.ReactNode;
-  }) => (
-    <div data-drawer data-open={open}>
-      {!hideHeader && <div data-drawer-title>{title}</div>}
-      {children}
-    </div>
-  ),
+  }) => {
+    navRoom.onOpening = resizable.onOpening;
+    return (
+      <div data-drawer data-open={open}>
+        {!hideHeader && <div data-drawer-title>{title}</div>}
+        {children}
+      </div>
+    );
+  },
 }));
 
 function StubPanel(_props: CapabilitySidePanelProps) {
@@ -126,7 +138,7 @@ describe("CapabilitySidePanelHost panel drawer", () => {
   });
 
   it("keeps the drawer's title band for a panel that has no header of its own", () => {
-    state.entries = [entry("demo_echo", "edit_note", undefined, false)];
+    state.entries = [entry("demo_echo", "chat", undefined, false)];
 
     expect(render("demo_echo:demo_echo_pane")).toContain("data-drawer-title");
   });
@@ -189,7 +201,7 @@ describe("CapabilitySidePanelHost — the drawer animates before the panel mount
 
   beforeEach(() => {
     vi.useFakeTimers();
-    state.entries = [entry("writable_document", "edit_document", () => true, true), entry("demo_echo", "edit_note")];
+    state.entries = [entry("writable_document", "edit_document", () => true, true), entry("demo_echo", "chat")];
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -251,6 +263,26 @@ describe("CapabilitySidePanelHost — the drawer animates before the panel mount
 
     slideEnds();
     expect(panelIsMounted()).toBe(false);
+  });
+
+  it("makes room for a viewer the user opens, and gives it back on close", () => {
+    navRoom.makeRoom.mockClear();
+    navRoom.releaseRoom.mockClear();
+    show(KEY);
+    expect(navRoom.onOpening?.(1000)).toBe(254);
+    expect(navRoom.makeRoom).toHaveBeenCalledWith(1000);
+
+    show(null);
+    expect(navRoom.releaseRoom).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the nav panel for a viewer coming back with its conversation", () => {
+    navRoom.makeRoom.mockClear();
+    restore.openPanels = [KEY];
+    show(KEY);
+    expect(navRoom.onOpening?.(1000)).toBe(0);
+    expect(navRoom.makeRoom).not.toHaveBeenCalled();
+    restore.openPanels = [];
   });
 
   it("does not mount the panel if the drawer is closed again mid-slide", () => {
@@ -427,10 +459,7 @@ describe("CapabilitySidePanelHost — a pane that fails to load", () => {
     const Broken = lazy<typeof StubPanel>(() =>
       Promise.reject(new Error("Failed to fetch dynamically imported module")),
     );
-    state.entries = [
-      { ...entry("writable_document", "edit_document"), Component: Broken },
-      entry("demo_echo", "edit_note"),
-    ];
+    state.entries = [{ ...entry("writable_document", "edit_document"), Component: Broken }, entry("demo_echo", "chat")];
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);

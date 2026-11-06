@@ -128,7 +128,7 @@ class DocumentExtractCapability(
             `what_to_extract` describes precisely what to enumerate (e.g.
             "functional requirements", "dates and their surrounding context").
             `document_uid` MUST be the document's opaque uid, not its name — get
-            it from a search hit's 'uid', the document tree, or the
+            it from a vector-search hit's 'document_uid', the document tree, or the
             conversation's attached-files list. NEVER repeat the uid in your
             answer; refer to the document by its display name.
 

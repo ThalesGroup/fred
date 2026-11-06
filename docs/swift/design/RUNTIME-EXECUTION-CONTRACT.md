@@ -4679,7 +4679,7 @@ uids and a model that carried that habit over would read the empty result as
 **Frontend.** It rides the **team-resources** pack (`toolPacks.ts`), corpus-only,
 not the document-reading one. Two reasons, and the first is what settles it: the
 tool takes document uids it cannot produce, and `document_access` - the pack's
-uid source, through `list_document_tree` and the `uid` on every search hit -
+uid source, through `list_document_tree` and the `document_uid` on native vector-search hits -
 lives here. A document-reading pack that carried it alone would hand an agent
 three uid-taking tools and no way to obtain one. Second, it belongs here anyway:
 Knowledge Flow runs this mode over the corpus with `include_session_scope=False`,
@@ -5773,6 +5773,11 @@ boundary and feeds both `ToolResultRuntimeEvent.content` and
   from `message.content`. Runtime-provider/MCP error artifacts are first
   replaced at resolution by a generic Fred-owned result; provider blocks,
   sources, UI parts, and paired content do not cross that boundary.
+- Caught `ContextAwareTool` failures carry non-empty Fred-owned diagnoses.
+  Recognized HTTP errors use fixed category messages; only the existing
+  Knowledge Flow `read_query` HTTP 400 contract preserves redacted dynamic SQL
+  detail. Both legacy FastApiMCP and current FastMCP HTTP envelopes are supported.
+  Empty/whitespace error artifacts render the fixed generic failure message.
 - Every other failure (a bare `status == "error"`, or an artifact that
   renders to no real text) is untrusted and collapses to one fixed, bounded
   generic message; `message.content` is never read for this case.
@@ -7376,3 +7381,26 @@ a disconnected turn. Section 8.89 remains unchanged. Clients without this field
 retain legacy rendering; deploy the updated runtime and frontend for the new
 availability display. See the `managed-conversations` specification and the
 existing HITL migration note.
+
+### Tabular results and failure details (#3458, 2026-11-04)
+
+Successful SQL responses keep `sql_query`, `rows` and `error`; an optional
+`message` explains zero matching rows. A zero/null aggregate is still one row
+and does not receive that message. The packaged MCP prompt describes discovery,
+schema inspection, exact references/types and successful/empty/error handling;
+reuse of successful results is model guidance, without runtime deduplication.
+The trace drawer presents the submitted business arguments and a safe localized
+cause. Model recovery guidance remains outside this explanatory drawer.
+
+### Document tool reliability (2026-11-05)
+
+Native vector-search model results expose `document_uid`, matching read and
+summary arguments and their exact-copy guidance. Typed citation/backend hits
+retain `uid`. Writable-document tools remove U+0000 from title and Markdown
+before title matching and storage, save the cleaned text and disclose removal
+counts in successful tool content. Editor output uses the same cleaned text.
+The history store represents NUL in serialized string values as `[U+0000]`,
+attributed by `history_text_normalization` metadata, without changing live tool
+arguments. Scope checks and database schemas are retained.
+The `document-tool-reliability` specification owns the acceptance contract; see
+the corresponding migration note for validation and compatibility limits.

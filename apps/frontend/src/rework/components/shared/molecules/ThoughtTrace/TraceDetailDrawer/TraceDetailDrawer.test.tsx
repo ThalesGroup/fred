@@ -28,6 +28,13 @@ vi.mock("react-i18next", () => ({
       if (key === "chatbot.hitlOtherAnswerWithText") return `Other: ${options?.answer ?? ""}`;
       if (key === "rework.chatTrace.sqlQuery") return "Query";
       if (key === "rework.chatTrace.sqlResponse") return "Response";
+      if (key === "rework.chatTrace.emptyQuerySuccess")
+        return "Query executed successfully: 0 rows matched the conditions.";
+      if (key === "rework.chatTrace.failure.arguments") return "Call arguments:";
+      if (key === "rework.chatTrace.failure.error") return "Error:";
+      if (key === "rework.chatTrace.failure.authentication") return "Authentication was refused (HTTP 401).";
+      if (key === "rework.chatTrace.failure.unknown")
+        return "The call failed. No further usable diagnostic was recorded.";
       if (key === "rework.chatTrace.tabular.keyword") return "Search term:";
       if (key === "rework.chatTrace.tabular.catalogForDocument")
         return `Reading the summary of document “${options?.name}”.`;
@@ -283,7 +290,7 @@ describe("TraceDetailDrawer read_query failure", () => {
     expect(html).toContain("Query");
     expect(html).toContain("SELECT\n  amount_typo\nFROM\n  d_sales");
     expect(html).toContain('data-copy-text="SELECT amount_typo FROM d_sales"');
-    expect(html).toContain("Response");
+    expect(html).toContain("Error:");
     expect(html).toContain("Referenced column &quot;amount_typo&quot; not found in FROM clause!");
     expect(html).not.toContain("Binder Error");
     expect(html).not.toContain("Candidate bindings");
@@ -335,6 +342,7 @@ describe("TraceDetailDrawer read_query failure", () => {
     expect(html).toMatch(
       /<header>Reading data<span[^>]*>Success<\/span><span[^>]*aria-label="Execution time: 12ms"[^>]*>12ms<\/span><\/header>/,
     );
+    expect(html).toContain("Query executed successfully: 0 rows matched the conditions.");
     expect(html).toContain("0 rows");
     expect(html).toContain('<pre data-language="json">[]</pre>');
     expect(html.match(/aria-label="Copy code"/g)).toHaveLength(2);
@@ -356,10 +364,110 @@ function tabularEntry(
     result: message({
       channel: "tool_result",
       role: "tool",
-      parts: [{ type: "tool_result", call_id: callId, ok, content: JSON.stringify(content), latency_ms: 18 }],
+      parts: [
+        {
+          type: "tool_result",
+          call_id: callId,
+          ok,
+          content: typeof content === "string" ? content : JSON.stringify(content),
+          latency_ms: 18,
+        },
+      ],
     }),
   };
 }
+
+describe("TraceDetailDrawer safe tabular diagnostics", () => {
+  it.each([
+    "Exactly one SQL statement is allowed",
+    "Query exceeded the per-query memory budget. Add filters, aggregate, or select fewer columns.",
+    "Out of Range Error: overflow in addition",
+  ])("preserves existing curated SQL errors: %s", (content) => {
+    const entry = webEntry("read_query", { sql: "SELECT 1", dataset_uids: ["bad-id"] }, content, false);
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain(content);
+    expect(html).not.toContain("No further usable diagnostic");
+  });
+
+  it.each([42, null])("keeps invalid SQL arguments inspectable: %s", (sql) => {
+    const entry = webEntry("read_query", { sql }, "", false);
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain(`&quot;sql&quot;: ${String(sql)}`);
+  });
+
+  it.each([
+    "AUTHENTICATION_REQUIRED: unrelated malformed provider content",
+    "Provider Error: password=example-secret",
+    "Authentication Error: access_token=example-token",
+    "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying. extra provider text",
+  ])("does not invent diagnoses from malformed catalog content: %s", (content) => {
+    const html = renderToStaticMarkup(
+      <TraceDetailDrawer
+        entry={webEntry("read_query", { sql: "SELECT 1" }, content, false)}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain("No further usable diagnostic");
+    expect(html).not.toContain("Authentication was refused");
+    expect(html).not.toContain("provider content");
+    expect(html).not.toContain("example-secret");
+    expect(html).not.toContain("example-token");
+  });
+
+  it("shows the actual submitted arguments and a safe cause without recovery advice", () => {
+    const entry = webEntry(
+      "mcp__knowledge_flow__describe_tabular_documents_2",
+      {
+        document_uids: ["invalid-workbook.xlsx"],
+        table_names: ["Commandes"],
+        access_token: "private-token",
+        team_id: "hidden-team",
+      },
+      "",
+      false,
+    );
+    if (entry.result)
+      entry.result.parts = [
+        {
+          type: "tool_result",
+          call_id: "web-1",
+          ok: false,
+          content:
+            "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
+        },
+      ];
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("Call arguments:");
+    expect(html).toContain("invalid-workbook.xlsx");
+    expect(html).toContain("table_names");
+    expect(html).toContain("Commandes");
+    expect(html).toContain("Authentication was refused (HTTP 401).");
+    for (const hidden of [
+      "private-token",
+      "hidden-team",
+      "access_token",
+      "team_id",
+      "restored",
+      "retrying",
+      "Reconnect",
+      "Suite",
+    ]) {
+      expect(html).not.toContain(hidden);
+    }
+  });
+
+  it.each(["", "private exception https://internal.example/?token=secret"])(
+    "keeps no-argument failures understandable and redacted: %s",
+    (content) => {
+      const entry = tabularEntry("list_tabular_documents", content, false);
+      const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+      expect(html).toContain("No further usable diagnostic");
+      expect(html).toContain("{}");
+      expect(html).not.toContain("private exception");
+      expect(html).not.toContain("internal.example");
+    },
+  );
+});
 
 describe("TraceDetailDrawer ask_user choices", () => {
   it("highlights the selected choice and keeps descriptions in the drawer", () => {
@@ -752,7 +860,11 @@ describe("TraceDetailDrawer tabular tools", () => {
       const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
       expect(html).not.toContain("private");
       expect(html).not.toContain("SELECT secret");
-      expect(html).toContain("action");
+      expect(html).toContain(
+        entry.result?.parts.some((part) => part.type === "tool_result" && !part.ok)
+          ? "No further usable diagnostic"
+          : "action",
+      );
     }
     const failed = renderToStaticMarkup(
       <TraceDetailDrawer entry={tabularEntry("list_tabular_documents", opaque, false)} onClose={() => undefined} />,

@@ -51,6 +51,7 @@ import { parseTabularTraceResult, tabularToolKind } from "../../../../../utils/t
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "../../../../../utils/webResearchTrace";
 import phaseStyles from "../phaseBadge.module.css";
 import { formatSqlForDisplay } from "./formatSqlForDisplay";
+import { toolFailureDetail } from "../../../../../utils/toolFailureTrace";
 import { historicalDocumentTreeText, parseDocumentTreeTrace } from "../../../../../utils/documentTreeTrace";
 import { DocumentTreeDetail } from "./DocumentTreeDetail";
 import { TabularToolDetail } from "./TabularToolDetail";
@@ -128,7 +129,10 @@ function SqlToolDetail({ data }: { data: SqlQueryResult }) {
         {data.error ? (
           <div className={styles.errorBox}>{data.error}</div>
         ) : (
-          <CodeBlock code={JSON.stringify(data.rows.slice(0, 50), null, 2)} language="json" />
+          <>
+            {data.rows.length === 0 && <p>{t("rework.chatTrace.emptyQuerySuccess")}</p>}
+            <CodeBlock code={JSON.stringify(data.rows.slice(0, 50), null, 2)} language="json" />
+          </>
         )}
       </div>
     </div>
@@ -260,9 +264,37 @@ function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
   );
 }
 
+function FailedToolDetail({ detail }: { detail: NonNullable<ReturnType<typeof toolFailureDetail>> }) {
+  const { t } = useTranslation();
+  const { sql, ...argumentsWithoutSql } = detail.arguments ?? {};
+  const argumentsToDisplay = typeof sql === "string" ? argumentsWithoutSql : detail.arguments;
+  return (
+    <div className={styles.detail}>
+      {typeof sql === "string" && (
+        <div className={styles.toolSection}>
+          <p className={styles.sectionLabel}>{t("rework.chatTrace.sqlQuery")}</p>
+          <CodeBlock code={formatSqlForDisplay(sql)} copyText={sql} language="sql" />
+        </div>
+      )}
+      {detail.arguments && (typeof sql !== "string" || Object.keys(argumentsWithoutSql).length > 0) && (
+        <div className={styles.toolSection}>
+          <p className={styles.sectionLabel}>{t("rework.chatTrace.failure.arguments")}</p>
+          <CodeBlock code={JSON.stringify(argumentsToDisplay, null, 2)} language="json" />
+        </div>
+      )}
+      <div className={styles.toolSection}>
+        <p className={styles.sectionLabel}>{t("rework.chatTrace.failure.error")}</p>
+        <div className={styles.errorBox}>{detail.error ?? t(detail.errorKey)}</div>
+      </div>
+    </div>
+  );
+}
+
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
 function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
   if (toolSlug(toolName(entry.call)) === "execute_code") return <SandboxToolDetail entry={entry} />;
+  const failure = toolFailureDetail(entry);
+  if (failure) return <FailedToolDetail detail={failure} />;
   if (toolName(entry.call) === "ask_user") {
     const summary = messages ? hitlAnswerSummaryForTool(messages, entry.call) : null;
     if (summary) return <HitlChoiceRecap summary={summary} />;

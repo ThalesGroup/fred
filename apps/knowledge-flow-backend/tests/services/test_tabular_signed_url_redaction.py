@@ -17,6 +17,7 @@
 import duckdb
 import pytest
 
+from knowledge_flow_backend.features.tabular.diagnostics import VisibleQueryRelation
 from knowledge_flow_backend.features.tabular.service import (
     TabularDatasetReadError,
     TabularQueryError,
@@ -127,5 +128,26 @@ def test_query_execution_redacts_and_severs_cause_on_client_error():
 
     assert "<redacted-signed-url>" in str(exc_info.value)
     assert "storage.googleapis.com" not in str(exc_info.value)
+    assert exc_info.value.__cause__ is None
+    assert exc_info.value.__suppress_context__ is True
+
+
+def test_enriched_column_error_redacts_metadata_candidates_and_severs_cause():
+    """New metadata text must pass the same signed-URL scrub as engine text."""
+
+    def fail_query() -> None:
+        with _redacting_query_execution_errors(
+            diagnostic_relations=(VisibleQueryRelation("Commandes", "c"),),
+            mounted_columns={"Commandes": ["commande_id", _GCS_SIGNED_URL]},
+        ):
+            raise duckdb.BinderException('Binder Error: Table "c" does not have a column named "region"')
+
+    exc_info = pytest.raises(TabularQueryError, fail_query)
+    message = str(exc_info.value)
+    assert "Available column examples" in message
+    assert "commande_id" in message
+    assert "<redacted-signed-url>" in message
+    assert "storage.googleapis.com" not in message
+    assert "X-Goog" not in message
     assert exc_info.value.__cause__ is None
     assert exc_info.value.__suppress_context__ is True

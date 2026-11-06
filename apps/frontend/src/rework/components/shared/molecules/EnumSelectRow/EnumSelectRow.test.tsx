@@ -84,8 +84,10 @@ function options(): HTMLButtonElement[] {
   return Array.from(container.querySelectorAll('[role="option"]'));
 }
 
+// A real click: the pointer press is what the shared focus handoff reads as a user action.
 function click(el: HTMLElement) {
   act(() => {
+    el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
 }

@@ -17,7 +17,7 @@
 .favicon {
   display: block;
   flex-shrink: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   object-fit: contain;
 }
 

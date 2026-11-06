@@ -101,7 +101,7 @@ export default function UserProfile() {
                 ? [
                     <MenuPopoverItem
                       key="support"
-                      icon={{ category: "outlined", type: "chat" }}
+                      icon={{ category: "outlined", type: "contact_support" }}
                       label={t("rework.profileMenu.contactSupport")}
                       onClick={() => {
                         setOpen(false);

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { useSelector } from "react-redux";
@@ -22,7 +23,6 @@ import { relativeTime, stepLabel, taskSupportDetails } from "../../../../feature
 import { TaskProgressBar } from "../../atoms/TaskProgressBar/TaskProgressBar";
 import { TaskStateBadge } from "../../atoms/TaskStateBadge/TaskStateBadge";
 import Button from "@shared/atoms/Button/Button.tsx";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useCopyConfirmation } from "../../../../core/hooks/useCopyConfirmation";
 import { writeRichClipboard } from "../../../../utils/clipboardUtils";
@@ -39,12 +39,12 @@ interface TaskDetailPopoverProps {
 export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetailPopoverProps) {
   const { t } = useTranslation();
   const task = useSelector(selectTask(taskId));
-  const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
-  const { copied: errorCopied, confirmCopied: confirmErrorCopied } = useCopyConfirmation();
   const popoverRef = React.useRef<HTMLDivElement>(null);
 
-  // Position the popover below the anchor element
-  const [pos, setPos] = React.useState<{ top: number; left: number } | null>(null);
+  // Below the anchor by default; above it, held by its bottom edge, when a low anchor leaves more room there.
+  const [pos, setPos] = React.useState<{ top?: number; bottom?: number; left: number; maxHeight?: number } | null>(
+    null,
+  );
 
   React.useLayoutEffect(() => {
     if (!open || !anchorEl) {
@@ -54,20 +54,25 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
     const rect = anchorEl.getBoundingClientRect();
     const POPOVER_WIDTH = 280;
     const MARGIN = 8;
-    // Matches .popover's max-height (`min(400px, 100vh - 16px)` in
-    // TaskDetailPopover.module.css) — used here to keep the popover's bottom
-    // edge on-screen without measuring the real DOM height (the CSS cap is
-    // the worst case; content scrolls internally). Capped to the viewport
-    // itself too: on a short viewport (mobile landscape, a squeezed split
-    // window) the fixed 400px alone would still get clipped past the bottom
-    // even with internal scroll.
+    const GAP = 6;
+    // Matches .popover's max-height in TaskDetailPopover.module.css: the worst-case
+    // height, so the box never needs measuring (content scrolls internally).
     const POPOVER_MAX_HEIGHT = Math.min(400, viewportHeight() - 2 * MARGIN);
-    // Prefer opening below the anchor; clamp upward when a long error would
-    // otherwise push the popover's bottom edge past the viewport.
-    const top = Math.max(MARGIN, Math.min(rect.bottom + 6, viewportHeight() - MARGIN - POPOVER_MAX_HEIGHT));
+    const spaceBelow = viewportHeight() - MARGIN - rect.bottom - GAP;
+    const spaceAbove = rect.top - GAP - MARGIN;
     // Prefer left-aligned; flip to right-aligned when it would overflow the viewport.
     const left =
       rect.left + POPOVER_WIDTH + MARGIN > viewportWidth() ? Math.max(MARGIN, rect.right - POPOVER_WIDTH) : rect.left;
+    if (spaceBelow < POPOVER_MAX_HEIGHT && spaceAbove > spaceBelow) {
+      setPos({
+        bottom: viewportHeight() - rect.top + GAP,
+        left,
+        maxHeight: Math.min(POPOVER_MAX_HEIGHT, spaceAbove),
+      });
+      return;
+    }
+    // Below, clamped upward when a long error would push its bottom edge off-screen.
+    const top = Math.max(MARGIN, Math.min(rect.bottom + GAP, viewportHeight() - MARGIN - POPOVER_MAX_HEIGHT));
     setPos({ top, left });
   }, [open, anchorEl]);
 
@@ -93,7 +98,39 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
     return () => document.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
 
+  useFocusHandoff(open && !!task && !!pos, popoverRef);
+
   if (!open || !task || !pos) return null;
+
+  return createPortal(
+    <div
+      ref={popoverRef}
+      className={styles.popover}
+      role="dialog"
+      aria-modal="false"
+      aria-label={t("rework.tasks.popover.title", { label: task.target?.label ?? task.taskId })}
+      style={{ top: pos.top, bottom: pos.bottom, left: pos.left, maxHeight: pos.maxHeight }}
+    >
+      <TaskDetailContent taskId={taskId} onClose={onClose} />
+    </div>,
+    document.body,
+  );
+}
+
+interface TaskDetailContentProps {
+  taskId: string;
+  /** Without it the panel is passive (a hover panel): no close button, no acknowledgement. */
+  onClose?: () => void;
+}
+
+/** The task's state, progress, step and error; the surface around it belongs to the caller. */
+export function TaskDetailContent({ taskId, onClose }: TaskDetailContentProps) {
+  const { t } = useTranslation();
+  const task = useSelector(selectTask(taskId));
+  const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
+  const { copied: errorCopied, confirmCopied: confirmErrorCopied } = useCopyConfirmation();
+
+  if (!task) return null;
 
   const handleCopyError = () => {
     if (!task.error) return;
@@ -107,56 +144,43 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
   const targetLabel = task.target?.label ?? task.taskId;
   const needsAttention = (task.state === "failed" || task.state === "cancelled") && task.acknowledgedAt === null;
 
-  return createPortal(
-    <div
-      ref={popoverRef}
-      className={styles.popover}
-      role="dialog"
-      aria-modal="false"
-      aria-label={t("rework.tasks.popover.title", { label: targetLabel })}
-      style={{ top: pos.top, left: pos.left }}
-    >
-      {/* Header */}
+  return (
+    <div className={styles.content}>
       <div className={styles.header}>
         <span className={styles.title} title={targetLabel}>
           {targetLabel}
         </span>
-        <button
-          className={styles.closeBtn}
-          onClick={onClose}
-          aria-label={t("rework.tasks.popover.close")}
-          type="button"
-        >
-          <Icon category="outlined" type="close" />
-        </button>
+        {onClose && (
+          <IconButton
+            variant="icon"
+            size="medium"
+            icon={{ category: "outlined", type: "close" }}
+            aria-label={t("rework.tasks.popover.close")}
+            onClick={onClose}
+          />
+        )}
       </div>
 
-      {/* State + progress % */}
       <div className={styles.stateRow}>
         <TaskStateBadge state={task.state} size="sm" />
-        {progressPct && <span className={styles.pct}>{progressPct}</span>}
+        {progressPct && <span className={styles.meta}>{progressPct}</span>}
       </div>
 
-      {/* Progress bar */}
-      <div className={styles.barWrap}>
-        <TaskProgressBar state={task.state} progress={task.progress} />
-      </div>
+      <TaskProgressBar state={task.state} progress={task.progress} />
 
-      {/* Step + elapsed */}
       {task.step && (
         <div className={styles.stepRow}>
           <span className={styles.step}>{stepLabel(task, t)}</span>
-          <span className={styles.elapsed}>· {elapsedLabel}</span>
+          <span className={styles.meta}>· {elapsedLabel}</span>
         </div>
       )}
 
-      {/* Error */}
       {task.error && (
         <div className={styles.errorRow}>
           <span className={styles.errorText}>{task.error}</span>
           <IconButton
             variant="icon"
-            size="small"
+            size="medium"
             icon={{ category: "outlined", type: errorCopied ? "check_circle" : "content_copy" }}
             aria-label={errorCopied ? t("rework.tasks.popover.errorCopied") : t("rework.tasks.popover.copyError")}
             onClick={handleCopyError}
@@ -165,23 +189,24 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
       )}
 
       {task.error && (
-        <span className={styles.errorText}>{t("rework.tasks.popover.supportReference", { id: task.taskId })}</span>
+        <span className={styles.supportRef}>{t("rework.tasks.popover.supportReference", { id: task.taskId })}</span>
       )}
 
-      {needsAttention && (
+      {onClose && needsAttention && (
         <div className={styles.ackRow}>
           <Button
             color="on-surface"
             variant="text"
             size="small"
-            onClick={() => acknowledge(task.taskId, task.kind, task.localOnly)}
+            onClick={async () => {
+              if (await acknowledge(task.taskId, task.kind, task.localOnly)) onClose();
+            }}
             disabled={isAcknowledging(task.taskId)}
           >
             {t("rework.tasks.popover.acknowledge")}
           </Button>
         </div>
       )}
-    </div>,
-    document.body,
+    </div>
   );
 }

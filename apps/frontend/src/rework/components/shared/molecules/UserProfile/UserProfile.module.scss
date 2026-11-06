@@ -57,3 +57,12 @@
 .popoverBox {
   width: 100%;
 }
+
+/* In the bottom bar the menu opens upwards, aligned to the right edge. */
+@media (max-width: 767px) {
+  .popoverWrap {
+    right: 0;
+    bottom: calc(100% + var(--spacing-xs));
+    left: auto;
+  }
+}

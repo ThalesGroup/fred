@@ -47,7 +47,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, List
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import JsonValue, TypeAdapter, ValidationError
 from sqlalchemy import MetaData, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -134,6 +134,30 @@ def _serialize_metadata(metadata: Any) -> dict:
     if isinstance(metadata, dict):
         return metadata
     return {}
+
+
+def _normalize_history_text(value: JsonValue) -> tuple[JsonValue, int]:
+    """Represent NUL in serialized values without mutating live message data."""
+    if isinstance(value, str):
+        count = value.count("\x00")
+        return (value.replace("\x00", "[U+0000]") if count else value), count
+    if isinstance(value, list):
+        normalized_items: list[JsonValue] = []
+        count = 0
+        for item in value:
+            normalized, replaced = _normalize_history_text(item)
+            normalized_items.append(normalized)
+            count += replaced
+        return normalized_items, count
+    if isinstance(value, dict):
+        normalized_fields: dict[str, JsonValue] = {}
+        count = 0
+        for key, item in value.items():
+            normalized, replaced = _normalize_history_text(item)
+            normalized_fields[key] = normalized
+            count += replaced
+        return normalized_fields, count
+    return value, 0
 
 
 def history_metadata() -> MetaData:
@@ -236,24 +260,38 @@ class PostgresHistoryStore(BaseHistoryStore):
         """
         if not messages:
             return
-        rows = [
-            {
-                "session_id": session_id,
-                "user_id": user_id,
-                "rank": msg.rank,
-                "timestamp": _normalize_ts(msg.timestamp),
-                "role": msg.role.value if isinstance(msg.role, Role) else msg.role,
-                "channel": msg.channel.value
-                if isinstance(msg.channel, Channel)
-                else msg.channel,
-                "exchange_id": msg.exchange_id,
-                "team_id": team_id,
-                "agent_instance_id": agent_instance_id,
-                "parts_json": [_serialize_part(p) for p in (msg.parts or [])],
-                "metadata_json": _serialize_metadata(msg.metadata),
-            }
-            for msg in messages
-        ]
+        rows = []
+        for msg in messages:
+            parts, part_count = _normalize_history_text(
+                [_serialize_part(p) for p in (msg.parts or [])]
+            )
+            metadata, metadata_count = _normalize_history_text(
+                _serialize_metadata(msg.metadata)
+            )
+            assert isinstance(metadata, dict)
+            if count := part_count + metadata_count:
+                metadata["history_text_normalization"] = {
+                    "character": "U+0000",
+                    "replacement": "[U+0000]",
+                    "count": count,
+                }
+            rows.append(
+                {
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "rank": msg.rank,
+                    "timestamp": _normalize_ts(msg.timestamp),
+                    "role": msg.role.value if isinstance(msg.role, Role) else msg.role,
+                    "channel": msg.channel.value
+                    if isinstance(msg.channel, Channel)
+                    else msg.channel,
+                    "exchange_id": msg.exchange_id,
+                    "team_id": team_id,
+                    "agent_instance_id": agent_instance_id,
+                    "parts_json": parts,
+                    "metadata_json": metadata,
+                }
+            )
         stmt = _dialect_insert(self._engine)(SessionHistoryRow).values(rows)
         upsert_stmt = stmt.on_conflict_do_update(
             index_elements=["session_id", "user_id", "rank"],

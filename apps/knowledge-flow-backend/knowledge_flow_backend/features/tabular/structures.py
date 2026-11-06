@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from fred_core.common import OwnerFilter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, GetJsonSchemaHandler, SerializerFunctionWrapHandler, model_serializer
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 # -- Constants for consistent types --
 DTypes = Literal["string", "integer", "float", "boolean", "datetime", "unknown"]
@@ -28,6 +30,8 @@ TabularDocumentKind = Literal["csv", "spreadsheet"]
 
 
 class TabularColumnSchema(BaseModel):
+    """Stored column types/classification, including readable legacy values."""
+
     name: str
     dtype: DTypes
     is_categorical: Optional[bool] = Field(
@@ -37,10 +41,6 @@ class TabularColumnSchema(BaseModel):
             "between 1 and max_categories(row_count), with null rows included in "
             "row_count. None for non-string or older columns without this analysis."
         ),
-    )
-    has_two_values: Optional[bool] = Field(
-        default=None,
-        description=("For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values."),
     )
     sample_values: Optional[list[str]] = Field(
         default=None,
@@ -54,6 +54,51 @@ class TabularColumnSchema(BaseModel):
         default=None,
         description="Largest finite non-null value of an integer or float column. None when unavailable.",
     )
+
+
+class TabularColumnDescription(BaseModel):
+    """Compact public schema, separate from stored ingestion classification."""
+
+    name: str
+    dtype: DTypes
+    categorical_values: list[str] | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description="Exact distinct non-null categories, preserving spelling and case. Present only for a described categorical string column.",
+    )
+    min_value: int | float | None = Field(default=None, description="Smallest finite value. Present only for integer/float columns; null if none exist.")
+    max_value: int | float | None = Field(default=None, description="Largest finite value. Present only for integer/float columns; null if none exist.")
+
+    @model_serializer(mode="wrap")
+    def _compact(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Pydantic's handler returns the model's heterogeneous field dictionary.
+        result = handler(self)
+        if self.dtype != "string":
+            result.pop("categorical_values", None)
+        if self.dtype in {"integer", "float"}:
+            result.update(min_value=self.min_value, max_value=self.max_value)
+        else:
+            result.pop("min_value", None)
+            result.pop("max_value", None)
+        return result
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        # Advertise the declared fields, not the serializer's generic dictionary.
+        if handler.mode == "serialization":
+            schema = schema.copy()
+            schema.pop("serialization", None)
+        return handler(schema)
+
+    @classmethod
+    def from_stored(cls, column: TabularColumnSchema, *, values_read: bool = False) -> "TabularColumnDescription":
+        return cls(
+            name=column.name,
+            dtype=column.dtype,
+            categorical_values=(column.sample_values or []) if values_read and column.dtype == "string" and column.is_categorical else None,
+            min_value=column.min_value if values_read else None,
+            max_value=column.max_value if values_read else None,
+        )
 
 
 class TabularDatasetResponse(BaseModel):
@@ -73,7 +118,7 @@ class TabularDatasetResponse(BaseModel):
     document_name: str
     query_alias: str
     row_count: Optional[int] = None
-    columns: list[TabularColumnSchema] = Field(default_factory=list)
+    columns: list[TabularColumnDescription] = Field(default_factory=list)
     tag_ids: list[str] = Field(default_factory=list)
     tag_names: list[str] = Field(default_factory=list)
     source_tag: Optional[str] = None
@@ -155,7 +200,7 @@ class TabularTableSchema(TabularTableSummary):
     - Returned inside `TabularDocumentDescriptionResponse.tables`.
     """
 
-    columns: list[TabularColumnSchema] = Field(default_factory=list)
+    columns: list[TabularColumnDescription] = Field(default_factory=list)
 
 
 class TabularDocumentDescriptionResponse(BaseModel):
@@ -174,45 +219,30 @@ class TabularDocumentDescriptionResponse(BaseModel):
     document_uid: str
     document_name: str
     kind: TabularDocumentKind
-    markdown: str | None
+    markdown: str | None = None
     tables: list[TabularTableSchema] = Field(default_factory=list)
     source_tag: Optional[str] = None
 
 
 class TabularQueryRequest(BaseModel):
     """
-    Read-only SQL query request for authorized tabular datasets.
+    One read-only DuckDB SELECT over authorized document tables.
 
-    Why this exists:
-    - The new tabular runtime can query several document-scoped datasets at once.
-
-    How to use:
-    - Send `sql` and an optional `dataset_uids` subset.
-    - Leave `dataset_uids` empty to make every readable dataset in the active
-      tabular scope available to the query. Only the aliases the SQL actually
-      references are mounted, so leaving it empty costs nothing.
-    - The query must reference at least one dataset alias in its `FROM` clause;
-      a query that reads no dataset (`SELECT 1`) is rejected with 400.
-    - A query joining more datasets than the server's per-request limit is also
-      rejected with 400 — split it or scope `dataset_uids`.
-    - Optionally pass `owner_filter`, `team_id`, and
-      `document_library_tags_ids` so SQL execution stays inside the current
-      personal/team area and selected libraries.
-
-    Example:
-    ```python
-    request = TabularQueryRequest(
-        sql="SELECT city, COUNT(*) FROM d_doc_sales GROUP BY city",
-        dataset_uids=["doc-sales"],
-        owner_filter=OwnerFilter.TEAM,
-        team_id="team-a",
-        max_rows=50,
-    )
-    ```
+    sql uses discovered table aliases; dataset_uids scopes exact document UIDs.
+    If omitted, SQL may reference any table in the active authorized scope;
+    only referenced tables are mounted. The query must read at least one table
+    and respect the server's dataset limit. Scope parameters do not grant access.
+    max_rows caps the returned preview; compute totals and statistics in SQL.
     """
 
-    sql: str = Field(..., min_length=1)
-    dataset_uids: Optional[list[str]] = None
+    sql: str = Field(
+        ...,
+        min_length=1,
+        description="One read-only DuckDB SELECT using exact tables[].query_alias values from describe_tabular_documents. These aliases are SQL table names, not document UIDs or filenames.",
+    )
+    dataset_uids: Optional[list[str]] = Field(
+        default=None, description="Document UIDs copied exactly from authorized discovery. One workbook UID selects all its tables. Do not pass filenames, SQL aliases or shortened identifiers."
+    )
     attachment_uids: list[str] | None = Field(default=None, max_length=1000, description="Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory.")
     include_session_scope: bool = True
     include_corpus_scope: bool = True
@@ -229,7 +259,9 @@ class TabularQueryRequest(BaseModel):
         default=None,
         description="Team ID required when owner_filter is 'team'.",
     )
-    max_rows: Optional[int] = Field(default=None, ge=1)
+    max_rows: Optional[int] = Field(
+        default=None, ge=1, description="Maximum result rows to return, capped by the server. For totals or statistics, aggregate in SQL rather than counting this preview."
+    )
 
     @property
     def sql_text(self) -> str:
@@ -251,6 +283,9 @@ class RawSQLResponse(BaseModel):
     sql_query: str
     rows: list[dict] = Field(default_factory=list)
     error: Optional[str] = None
+    message: str | None = Field(
+        default=None, description="Explicit success explanation when the query returned zero rows; not an error or a claim that the whole document has no relevant information."
+    )
     dataset_uids: list[str] = Field(default_factory=list)
     query_aliases: list[str] = Field(default_factory=list)
 
@@ -264,33 +299,24 @@ SEARCH_MAX_MATCHING_TABLES = 30
 
 class TabularSearchRequest(BaseModel):
     """
-    Keyword value-locator request over authorized tabular datasets.
+    Bounded lookup of a precise value after inspecting document structure.
 
-    Why this exists:
-    - The catalog and schemas expose a workbook's structure but never its cell
-      values, so a question about a value otherwise forces a blind table-by-table
-      scan — one MCP/LLM round trip per table. This locates the value once,
-      server-side.
-
-    How to use:
-    - Send a precise `keyword`; scope with `dataset_uids` when possible (one
-      spreadsheet uid covers all its tables). Leave `dataset_uids` empty to search
-      every readable dataset in the active scope.
-    - `max_rows_per_table` and `max_matching_tables` are ceilings (module
-      constants) — lower them, never raise them.
-
-    Example:
-    ```python
-    request = TabularSearchRequest(keyword="ABC-123", dataset_uids=["doc-sales"])
-    ```
+    Schemas expose types and categorical values; this locator helps find other
+    cell values across tables. dataset_uids scopes exact document UIDs, with
+    one workbook UID covering all its tables. If omitted, all readable datasets
+    in the active scope may be searched. Prefer a narrow scope and keyword.
+    Preview ceilings can be lowered, never raised; truncation means partial
+    coverage and requires refining the search.
     """
 
     keyword: str = Field(
         ...,
         min_length=1,
-        description="Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate.",
+        description="Precise word or expression of at least two characters after trimming. Use after document description; generic terms match too many tables to locate a value.",
     )
-    dataset_uids: Optional[list[str]] = None
+    dataset_uids: Optional[list[str]] = Field(
+        default=None, description="Document UIDs copied exactly from authorized discovery. Do not pass filenames or SQL table aliases. One workbook UID selects all its tables."
+    )
     attachment_uids: list[str] | None = Field(default=None, max_length=1000, description="Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory.")
     include_session_scope: bool = True
     include_corpus_scope: bool = True

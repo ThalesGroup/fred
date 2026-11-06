@@ -284,7 +284,6 @@ def describe_string_column(column: TabularColumnSchema, distinct_values: Iterabl
     return column.model_copy(
         update={
             "is_categorical": is_categorical,
-            "has_two_values": len(values) == 2,
             "sample_values": None,
         }
     )

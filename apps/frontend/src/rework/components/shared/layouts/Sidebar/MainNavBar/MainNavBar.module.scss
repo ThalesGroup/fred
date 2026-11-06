@@ -13,15 +13,82 @@
  * limitations under the License.
  */
 
-/* Primary navigation rail: a fixed 48px-wide, top-aligned column of icon
- * buttons. 8px top/bottom padding per spec, no horizontal padding — the medium
- * (40px) buttons are centred in the 48px width (their glyph is shrunk to the
- * small tier's 1.25rem in MainNavBar.tsx). */
+/* Primary navigation rail: a top-aligned column of icon buttons filling the rail.
+ * 8px top/bottom padding per spec, no horizontal padding; the medium (40px)
+ * buttons are centred in the 48px rail (their glyph is shrunk to the small
+ * tier's 1.25rem in MainNavBar.tsx). */
 .bar {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: var(--spacing-xs) 0;
-  width: 48px;
+  width: 100%;
   height: 100%;
+}
+
+/* Touch rail (M3 navigation rail): icon in a 56x32 indicator with the label under
+ * it; the whole item is the target, at least 56px tall. */
+.bar[data-touch] {
+  gap: var(--spacing-xs);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: var(--spacing-2xs) 0;
+  width: 100%;
+  min-height: var(--spacing-4xl);
+  color: var(--on-surface-retreat);
+}
+
+.indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-full);
+  width: var(--spacing-4xl);
+  height: var(--spacing-xl);
+  font-size: 1.5rem;
+}
+
+.item:hover .indicator {
+  background-color: var(--state-on-surface-hover);
+}
+
+/* The ring sits on the indicator, like the icon buttons of the compact rail. */
+.item:focus-visible {
+  outline: none;
+}
+
+.item:focus-visible .indicator {
+  outline: 2px solid var(--on-surface);
+}
+
+.item[data-active] {
+  color: var(--on-surface);
+}
+
+.item[data-active] .indicator {
+  background-color: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.label {
+  font: var(--font-label-medium);
+  text-align: center;
+}
+
+@media (max-width: 767px) {
+  .bar {
+    flex-direction: row;
+    justify-content: space-around;
+    padding: var(--spacing-2xs) 0;
+    width: 100%;
+    height: auto;
+  }
 }

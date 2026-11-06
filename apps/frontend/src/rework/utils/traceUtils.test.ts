@@ -16,6 +16,7 @@ import i18next, { type i18n as I18n } from "i18next";
 import { beforeAll, describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
 import en from "../../locales/en/translation.json";
+import { toolFailureDetail } from "./toolFailureTrace";
 import fr from "../../locales/fr/translation.json";
 import {
   skillLoadOf,
@@ -375,6 +376,33 @@ describe("categorized tool labels", () => {
         );
 
   const translate = (key: string): string => instances.fr.t(key);
+
+  it.each(["en", "fr"] as const)("localizes safe failure causes without recovery advice in %s", (language) => {
+    const [entry] = groupTraceEntries([
+      toolCallMsg("failed", "describe_tabular_documents", { document_uids: ["invalid-id"] }),
+      toolResultMsg(
+        "failed",
+        "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
+        false,
+      ),
+    ]);
+    if (entry.kind !== "combo") throw new Error("Expected paired tool messages");
+    const detail = toolFailureDetail(entry);
+    expect(detail?.arguments).toEqual({ document_uids: ["invalid-id"] });
+    const cause = instances[language].t(detail!.errorKey);
+    expect(cause).toContain("HTTP 401");
+    expect(cause).not.toMatch(/restored|retry|reconnect|relance|suite/i);
+    for (const field of Object.keys(en.rework.chatTrace.failure)) {
+      const key = `rework.chatTrace.failure.${field}`;
+      expect(instances[language].t(key)).not.toBe(key);
+    }
+    expect(instances[language].t("rework.chatTrace.emptyQuerySuccess")).toBe(
+      (language === "fr" ? fr : en).rework.chatTrace.emptyQuerySuccess,
+    );
+    expect(instances.fr.t("rework.chatTrace.emptyQuerySuccess")).toBe(
+      "Requête exécutée avec succès : 0 ligne correspondant aux conditions.",
+    );
+  });
 
   it("has matching French and English labels for each tool source", () => {
     expect(labelPaths(enLabels).sort()).toEqual(labelPaths(frLabels).sort());

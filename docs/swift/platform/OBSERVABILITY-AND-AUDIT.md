@@ -6,7 +6,7 @@ audit posture. For implementation detail (file/line references, phased commits),
 document describes the target state and its guarantees, not the diff to get there.
 
 > Frontend/access-control counterpart: [`REBAC.md`](./REBAC.md) — this document assumes the
-> reader already knows Fred's authorization model (Keycloak authenticates, OpenFGA authorizes).
+> reader already knows Fred's authorization model (the configured identity provider authenticates, OpenFGA authorizes).
 
 ## 1. The problem this solves
 

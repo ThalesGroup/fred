@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -73,6 +73,289 @@ def _transport(payload: object, *, status: int = 200) -> httpx.MockTransport:
         return httpx.Response(status, json=payload)
 
     return httpx.MockTransport(respond)
+
+
+def _apim_catalog(**discovery: object) -> ModelCatalog:
+    return ModelCatalog.model_validate(
+        {
+            "discovery": [
+                {
+                    "source_id": "apim",
+                    "base_url": "https://api.example/ai-models/openai/v1",
+                    "provider": "azure-apim",
+                    "azure_apim_settings": {
+                        "azure_tenant_id": "tenant",
+                        "azure_ad_client_id": "client",
+                        "azure_ad_client_scope": "api://models/.default",
+                        "azure_apim_base_url": "https://api.example",
+                        "azure_apim_resource_path": "/ai-models/openai",
+                        "azure_openai_api_version": "2024-06-01",
+                        "stream_usage": False,
+                    },
+                    **discovery,
+                }
+            ],
+        }
+    )
+
+
+def test_azure_apim_discovery_uses_oauth_and_routable_provider(monkeypatch) -> None:
+    from azure import identity
+
+    monkeypatch.setenv("AZURE_AD_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("AZURE_APIM_SUBSCRIPTION_KEY", "subscription-secret")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    token_requests = []
+
+    class Credential:
+        def __init__(self, *, tenant_id, client_id, client_secret):
+            assert (tenant_id, client_id, client_secret) == (
+                "tenant",
+                "client",
+                "client-secret",
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def get_token(self, scope):
+            token_requests.append(scope)
+            return SimpleNamespace(token="oauth-token")
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://api.example/ai-models/openai/v1/models"
+        assert request.headers["Authorization"] == "Bearer oauth-token"
+        assert (
+            request.headers["TrustNest-Apim-Subscription-Key"] == "subscription-secret"
+        )
+        return httpx.Response(200, json={"data": [{"id": "gpt-chat"}]})
+
+    monkeypatch.setattr(identity, "ClientSecretCredential", Credential)
+    resolved = _apim_catalog().resolve_discovery(transport=httpx.MockTransport(respond))
+    profile = resolved.profiles[0]
+    assert token_requests == ["api://models/.default"]
+    assert profile.model.provider == "azure-apim"
+    assert profile.model.name == "gpt-chat"
+    assert profile.model.settings is not None
+    assert profile.model.settings["azure_apim_resource_path"] == "/ai-models/openai"
+    assert profile.model.settings["temperature"] is None
+    assert "client-secret" not in str(profile.model.settings)
+    assert "subscription-secret" not in str(profile.model.settings)
+    from fred_core.model import factory as model_factory
+
+    monkeypatch.setattr(model_factory, "AzureChatOpenAI", lambda **kwargs: kwargs)
+    model = cast(dict[str, Any], model_factory.get_model(profile.model))
+    assert model["azure_endpoint"].endswith(
+        "/ai-models/openai/deployments/gpt-chat/chat/completions?api-version=2024-06-01"
+    )
+    assert callable(model["azure_ad_token_provider"])
+    assert (
+        model["default_headers"]["TrustNest-Apim-Subscription-Key"]
+        == "subscription-secret"
+    )
+
+
+@pytest.mark.asyncio
+async def test_azure_apim_async_discovery_and_detail_use_oauth(monkeypatch) -> None:
+    from azure.identity import aio
+
+    monkeypatch.setenv("AZURE_AD_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("AZURE_APIM_SUBSCRIPTION_KEY", "subscription-secret")
+    token_requests = []
+
+    class Credential:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get_token(self, scope):
+            token_requests.append(scope)
+            return SimpleNamespace(token="oauth-token")
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer oauth-token"
+        assert (
+            request.headers["TrustNest-Apim-Subscription-Key"] == "subscription-secret"
+        )
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "gpt-chat"}]})
+        assert request.url.path.endswith("/models/gpt-chat")
+        return httpx.Response(200, json={"id": "gpt-chat", "context_length": 128000})
+
+    monkeypatch.setattr(aio, "ClientSecretCredential", Credential)
+    transport = httpx.MockTransport(respond)
+    resolved = await _apim_catalog().resolve_discovery_async(transport=transport)
+    detail = await resolved.fetch_discovered_model_detail(
+        source_id="apim", model_id="gpt-chat", transport=transport
+    )
+    assert detail["context_length"] == 128000
+    assert token_requests == ["api://models/.default"] * 2
+
+
+def test_azure_apim_rejects_redirect_before_oauth(monkeypatch) -> None:
+    from azure import identity
+
+    monkeypatch.setenv("AZURE_AD_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("AZURE_APIM_SUBSCRIPTION_KEY", "subscription-secret")
+    monkeypatch.setattr(
+        identity,
+        "ClientSecretCredential",
+        lambda **_kwargs: pytest.fail("OAuth must not start for a rejected URL"),
+    )
+    for url in (
+        "https://evil.example/ai-models/openai/v1/models",
+        "https://api.example/other/v1/models",
+        "https://api.example/ai-models/openai/%2e%2e/models",
+    ):
+        with pytest.raises(ValueError, match="outside the configured gateway"):
+            _apim_catalog().resolve_discovery(models_url=url)
+
+
+def test_azure_apim_allows_url_change_within_product(monkeypatch) -> None:
+    from azure import identity
+
+    monkeypatch.setenv("AZURE_AD_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("AZURE_APIM_SUBSCRIPTION_KEY", "subscription-secret")
+
+    class Credential:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def get_token(self, _scope):
+            return SimpleNamespace(token="oauth-token")
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://api.example/ai-models/openai/v2/models"
+        return httpx.Response(200, json={"data": [{"id": "gpt-chat"}]})
+
+    monkeypatch.setattr(identity, "ClientSecretCredential", Credential)
+    resolved = _apim_catalog().resolve_discovery(
+        models_url="https://api.example/ai-models/openai/v2/models",
+        transport=httpx.MockTransport(respond),
+    )
+    assert resolved.discovery_sources[0].base_url.endswith("/v2")
+    assert resolved.profiles[0].model.settings is not None
+    assert (
+        resolved.profiles[0].model.settings["azure_apim_resource_path"]
+        == "/ai-models/openai"
+    )
+
+
+def test_azure_apim_discovery_reuses_matching_manual_model_settings(
+    monkeypatch,
+) -> None:
+    from fred_runtime.model_routing import catalog as catalog_module
+
+    source = _apim_catalog().model_dump()["discovery"][0]
+    settings = source["azure_apim_settings"] | {
+        "use_responses_api": True,
+        "reasoning": {"effort": "low"},
+        "temperature": None,
+    }
+    catalog = ModelCatalog.model_validate(
+        {
+            "discovery": [source],
+            "profiles": [
+                {
+                    "profile_id": "chat.apim.astra",
+                    "capability": "chat",
+                    "model": {
+                        "provider": "azure-apim",
+                        "name": "gpt-6-astra",
+                        "settings": settings,
+                    },
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        catalog_module,
+        "_discovery_headers",
+        lambda _source: {"Authorization": "Bearer local-test"},
+    )
+    resolved = catalog.resolve_discovery(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(200, json={"data": [{"id": "gpt-6-astra"}]})
+        )
+    )
+    discovered = next(
+        profile
+        for profile in resolved.profiles
+        if profile.profile_id in resolved.discovered_profile_ids
+    )
+    assert discovered.model.settings is not None
+    assert discovered.model.settings["use_responses_api"] is True
+    assert discovered.model.settings["reasoning"] == {"effort": "low"}
+    assert discovered.model.settings["azure_apim_resource_path"] == "/ai-models/openai"
+
+
+def test_azure_apim_requires_credentials_and_rejects_extra_fields(monkeypatch) -> None:
+    monkeypatch.delenv("AZURE_AD_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("AZURE_APIM_SUBSCRIPTION_KEY", raising=False)
+    with pytest.raises(ValueError, match="credentials are unavailable"):
+        _apim_catalog().resolve_discovery()
+    settings = _apim_catalog().discovery_sources[0].azure_apim_settings
+    assert settings is not None
+    with pytest.raises(ValidationError):
+        _apim_catalog(
+            azure_apim_settings={
+                **settings.model_dump(),
+                "unexpected_option": "placeholder",
+            },
+        )
+
+
+def test_azure_apim_token_failure_is_redacted(monkeypatch) -> None:
+    from azure import identity
+
+    monkeypatch.setenv("AZURE_AD_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("AZURE_APIM_SUBSCRIPTION_KEY", "subscription-secret")
+
+    class Credential:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def get_token(self, _scope):
+            raise RuntimeError("client-secret subscription-secret")
+
+    monkeypatch.setattr(identity, "ClientSecretCredential", Credential)
+    with pytest.raises(ValueError, match="token acquisition failed") as exc:
+        _apim_catalog().resolve_discovery()
+    assert "client-secret" not in str(exc.value)
+    assert "subscription-secret" not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"provider": "azure-apim", "azure_apim_settings": None},
+        {"base_url": "https://elsewhere.example/ai-models/openai/v1"},
+        {"base_url": "https://api.example/ai-models/openai/%2e%2e/v1"},
+    ],
+)
+def test_azure_apim_rejects_invalid_source(changes) -> None:
+    with pytest.raises(ValidationError):
+        _apim_catalog(**changes)
 
 
 def test_refresh_permission_requires_platform_admin_for_new_endpoint() -> None:
