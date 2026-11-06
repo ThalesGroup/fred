@@ -355,7 +355,7 @@ export default function Select<T>({
               <div className={styles["menu-search"]}>
                 <TextInput
                   compact
-                  size="small"
+                  size="xs"
                   autoFocus
                   placeholder={search.placeholder}
                   aria-label={search.placeholder}
