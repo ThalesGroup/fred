@@ -10,8 +10,9 @@ env:
   REGISTRY_NAMESPACE: thalesgroup/fred-agent
 
 jobs:
+  # Dev test tags exercise image publication without the paired release ceremony.
   migration-guide:
-    if: startsWith(github.ref, 'refs/tags/code/v')
+    if: ${{ startsWith(github.ref, 'refs/tags/code/v') && !contains(github.ref_name, '-devtest.') }}
     permissions:
       contents: read
     uses: ./.github/workflows/Validate-release-migration.yml
@@ -21,7 +22,7 @@ jobs:
   # runs with publish: false.
   build-and-push:
     needs: migration-guide
-    if: ${{ !cancelled() && (needs.migration-guide.result == 'success' || github.ref_type != 'tag') }}
+    if: ${{ !cancelled() && (needs.migration-guide.result == 'success' || github.ref_type != 'tag' || contains(github.ref_name, '-devtest.')) }}
     permissions:
       contents: read
       packages: write
@@ -32,7 +33,7 @@ jobs:
   create-release:
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/code/v')
+    if: ${{ startsWith(github.ref, 'refs/tags/code/v') && !contains(github.ref_name, '-devtest.') }}
     permissions:
       contents: write
     steps:
