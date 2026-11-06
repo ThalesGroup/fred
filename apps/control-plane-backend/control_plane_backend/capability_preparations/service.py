@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from fred_sdk.contracts.capability.preparation import PreparationAsset, PreparationWork
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.capability_preparations.schemas import (
@@ -269,3 +270,24 @@ async def publish_worker_result(
     row.state = completion.state
     row.completed_at = utcnow()
     return True
+
+
+async def retire_agent_preparations(
+    session: AsyncSession, *, team_id: str, agent_instance_ids: list[str]
+) -> None:
+    """Fence every in-flight result in the agent deletion transaction."""
+    if not agent_instance_ids:
+        return
+    for start in range(0, len(agent_instance_ids), 500):
+        await session.execute(
+            update(CapabilityPreparationRow)
+            .where(
+                CapabilityPreparationRow.owner_kind == "agent",
+                CapabilityPreparationRow.team_id == team_id,
+                CapabilityPreparationRow.owner_id.in_(
+                    agent_instance_ids[start : start + 500]
+                ),
+                CapabilityPreparationRow.is_current.is_(True),
+            )
+            .values(is_current=False, state="obsolete", updated_at=utcnow())
+        )

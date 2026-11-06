@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 from fred_core.common import TeamId
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
@@ -16,6 +16,13 @@ from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.capability_preparations.readiness import _verdict
 from control_plane_backend.capability_preparations.readiness import (
     agent_preparation_readiness,
+)
+from control_plane_backend.capability_preparations.schemas import (
+    WorkerPreparationResult,
+)
+from control_plane_backend.capability_preparations.service import (
+    publish_worker_result,
+    retire_agent_preparations,
 )
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.base import utcnow
@@ -160,6 +167,34 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
         assert verdicts["a1"].detail == "Invalid slide"
         assert "a2" not in verdicts
         assert "a3" not in verdicts
+        async with sessions() as session:
+            async with session.begin():
+                running = await session.scalar(
+                    select(CapabilityPreparationRow).where(
+                        CapabilityPreparationRow.owner_id == "a1",
+                        CapabilityPreparationRow.capability_id == "alpha",
+                    )
+                )
+                assert running is not None
+                running.attempts = 1
+                await session.flush()
+                await retire_agent_preparations(
+                    session, team_id="t1", agent_instance_ids=["a1"]
+                )
+                assert not await publish_worker_result(
+                    session,
+                    preparation_id=running.id,
+                    completion=WorkerPreparationResult(
+                        input_revision=running.input_revision,
+                        attempt=1,
+                        state="failed",
+                        error_code="late_completion",
+                    ),
+                )
+        async with sessions() as session:
+            assert not await agent_preparation_readiness(
+                session, team_id="t1", agent_instance_ids=["a1"]
+            )
     finally:
         await engine.dispose()
         with sync_engine.begin() as connection:

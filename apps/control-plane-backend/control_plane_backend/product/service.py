@@ -101,6 +101,9 @@ from control_plane_backend.capability_preparations.admission import (
 from control_plane_backend.capability_preparations.readiness import (
     agent_preparation_readiness,
 )
+from control_plane_backend.capability_preparations.service import (
+    retire_agent_preparations,
+)
 from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
@@ -3646,9 +3649,25 @@ async def unenroll_agent_instance(
     - `deleted = await unenroll_agent_instance(team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
     store = deps.get_agent_instance_store()
-    deleted = await store.delete(
-        agent_instance_id, team_id, actor_uid=user.uid if user else None
-    )
+    if deps.get_sql_session_factory is None:
+        deleted = await store.delete(
+            agent_instance_id, team_id, actor_uid=user.uid if user else None
+        )
+    else:
+        async with deps.get_sql_session_factory()() as session:
+            async with session.begin():
+                deleted = await store.delete(
+                    agent_instance_id,
+                    team_id,
+                    session=session,
+                    actor_uid=user.uid if user else None,
+                )
+                if deleted:
+                    await retire_agent_preparations(
+                        session,
+                        team_id=str(team_id),
+                        agent_instance_ids=[agent_instance_id],
+                    )
     if deleted:
         try:
             deps.get_kpi_writer().count(
