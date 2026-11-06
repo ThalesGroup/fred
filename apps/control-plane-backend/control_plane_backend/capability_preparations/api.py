@@ -23,6 +23,8 @@ from fred_sdk.contracts.capability.preparation import PreparationWork
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.capability_preparations.schemas import (
+    CleanupBatch,
+    CleanupCompletion,
     PreparationStatus,
     PreparationStatusPage,
     WorkerPreparationResult,
@@ -31,6 +33,8 @@ from control_plane_backend.capability_preparations.schemas import (
 )
 from control_plane_backend.capability_preparations.service import (
     begin_worker_attempt,
+    claim_cleanup,
+    finish_cleanup,
     get_work_asset,
     get_worker_work,
     list_agent_preparations,
@@ -76,19 +80,28 @@ async def _require_worker(
     principals: PrincipalContext,
     preparation_id: str,
 ) -> CapabilityPreparationRow:
+    row = await session.get(CapabilityPreparationRow, preparation_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Preparation not found")
+    _require_runtime_worker(deps, principals, row.runtime_id)
+    return row
+
+
+def _require_runtime_worker(
+    deps: ProductServiceDependencies,
+    principals: PrincipalContext,
+    runtime_id: str,
+) -> None:
     if deps.configuration.security.m2m.enabled:
         if not is_service_agent(principals.caller):
             raise HTTPException(status_code=403, detail="workload_caller_not_allowed")
     elif principals.caller.client_id != LOCAL_DEV_CLIENT_ID:
         raise HTTPException(status_code=403, detail="workload_caller_not_allowed")
-    row = await session.get(CapabilityPreparationRow, preparation_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail="Preparation not found")
     source = next(
         (
             source
             for source in deps.configuration.platform.runtime_catalog_sources
-            if source.runtime_id == row.runtime_id and source.enabled
+            if source.runtime_id == runtime_id and source.enabled
         ),
         None,
     )
@@ -98,7 +111,22 @@ async def _require_worker(
         or source.preparation_client_id != principals.caller.client_id
     ):
         raise HTTPException(status_code=404, detail="Preparation not found")
-    return row
+
+
+@router.post(
+    "/internal/capability-preparations/cleanup/claim", response_model=CleanupBatch
+)
+async def claim_capability_cleanup(
+    runtime_id: Annotated[str, Query(min_length=1)],
+    deps: Dependencies,
+    limit: Annotated[int, Query(ge=1, le=20)] = 8,
+    principals: PrincipalContext = Depends(get_principal_context),
+) -> CleanupBatch:
+    _require_runtime_worker(deps, principals, runtime_id)
+    async with _sessions(deps)() as session:
+        async with session.begin():
+            items = await claim_cleanup(session, runtime_id=runtime_id, limit=limit)
+    return CleanupBatch(items=items)
 
 
 @router.get(
@@ -250,4 +278,28 @@ async def post_capability_preparation_result(
                 )
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return WorkerResultAck(accepted=accepted)
+
+
+@router.post(
+    "/internal/capability-preparations/{preparation_id}/cleanup/complete",
+    response_model=WorkerResultAck,
+)
+async def complete_capability_cleanup(
+    preparation_id: UUID,
+    body: CleanupCompletion,
+    deps: Dependencies,
+    principals: PrincipalContext = Depends(get_principal_context),
+) -> WorkerResultAck:
+    if deps.get_content_store is None:
+        raise HTTPException(status_code=503, detail="Asset storage is unavailable")
+    async with _sessions(deps)() as session:
+        async with session.begin():
+            await _require_worker(session, deps, principals, str(preparation_id))
+            accepted = await finish_cleanup(
+                session,
+                preparation_id=str(preparation_id),
+                claim_id=str(body.claim_id),
+                content_store=deps.get_content_store(),
+            )
     return WorkerResultAck(accepted=accepted)

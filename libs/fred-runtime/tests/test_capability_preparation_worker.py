@@ -339,3 +339,66 @@ async def test_two_installed_capabilities_use_the_same_worker_path() -> None:
         ]
         == b"dexim"
     )
+
+
+@pytest.mark.asyncio
+async def test_cleanup_deletes_only_the_leased_preparation_prefix() -> None:
+    preparation_id = uuid4()
+    claim_id = uuid4()
+    completed: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/cleanup/claim"):
+            assert request.url.params["runtime_id"] == "fred-agents"
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "preparation_id": str(preparation_id),
+                            "claim_id": str(claim_id),
+                        }
+                    ]
+                },
+            )
+        if request.url.path.endswith("/cleanup/complete"):
+            import json
+
+            completed.append(json.loads(request.content))
+            return httpx.Response(200, json={"accepted": True})
+        return httpx.Response(404)
+
+    class Filesystem(MemoryFilesystem):
+        async def delete(self, path: str) -> None:
+            assert path == f"capability-results/{preparation_id}"
+            self.objects = {
+                key: value
+                for key, value in self.objects.items()
+                if not key.startswith(path + "/")
+            }
+
+    filesystem = Filesystem()
+    filesystem.objects = {
+        f"capability-results/{preparation_id}/1/result.bin": b"old",
+        "capability-results/other/1/result.bin": b"keep",
+    }
+    config = cast(
+        AgentPodConfig,
+        SimpleNamespace(
+            app=SimpleNamespace(runtime_id="fred-agents"),
+            preparation=SimpleNamespace(per_capability_concurrency={}),
+        ),
+    )
+    async with httpx.AsyncClient(
+        base_url="http://control-plane/control-plane/v1",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        worker = CapabilityPreparationActivities(
+            cast(CapabilityRegistry, Registry(Capability())),
+            client,
+            cast(Any, filesystem),
+            config,
+        )
+        assert await worker.cleanup_once() == 1
+    assert filesystem.objects == {"capability-results/other/1/result.bin": b"keep"}
+    assert completed == [{"claim_id": str(claim_id)}]

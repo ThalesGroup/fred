@@ -4,6 +4,7 @@
 
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from fred_sdk.contracts.capability.preparation import PreparationResult
 from fred_sdk.contracts.capability.preparation import PreparationWork
@@ -57,6 +58,19 @@ class WorkerResultAck(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     accepted: bool
+
+
+class CleanupLease(BaseModel):
+    preparation_id: UUID
+    claim_id: UUID
+
+
+class CleanupBatch(BaseModel):
+    items: list[CleanupLease] = Field(default_factory=list, max_length=20)
+
+
+class CleanupCompletion(BaseModel):
+    claim_id: UUID
 
 
 class WorkerAttemptResponse(BaseModel):

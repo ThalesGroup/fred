@@ -206,6 +206,23 @@ class CapabilityPreparationActivities:
         )
         response.raise_for_status()
 
+    async def cleanup_once(self) -> int:
+        response = await self._client.post(
+            "/internal/capability-preparations/cleanup/claim",
+            params={"runtime_id": self._runtime_id, "limit": 8},
+        )
+        response.raise_for_status()
+        items = response.json().get("items", [])
+        for item in items:
+            preparation_id = str(UUID(item["preparation_id"]))
+            await self._filesystem.delete(f"capability-results/{preparation_id}")
+            completion = await self._client.post(
+                f"/internal/capability-preparations/{preparation_id}/cleanup/complete",
+                json={"claim_id": item["claim_id"]},
+            )
+            completion.raise_for_status()
+        return len(items)
+
     @activity.defn(name="prepare_capability")
     async def prepare_capability(self, preparation_id: str) -> None:
         await self.prepare_once(preparation_id, activity.info().attempt)
@@ -272,4 +289,18 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
             config.app.runtime_id,
             config.preparation.max_concurrent_jobs,
         )
-        await worker.run()
+
+        async def cleanup_loop() -> None:
+            while True:
+                try:
+                    await activities.cleanup_once()
+                except Exception:
+                    logger.exception("Capability preparation cleanup pass failed")
+                await asyncio.sleep(60)
+
+        cleanup_task = asyncio.create_task(cleanup_loop())
+        try:
+            await worker.run()
+        finally:
+            cleanup_task.cancel()
+            await asyncio.gather(cleanup_task, return_exceptions=True)

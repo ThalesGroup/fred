@@ -105,7 +105,13 @@ class CapabilityPreparationRow(Base):
         ),
         Index("ix_cap_prep_due", "state", "delivery_due_at", "id"),
         Index("ix_cap_prep_readiness", "owner_kind", "owner_id", "is_current", "state"),
-        Index("ix_cap_prep_cleanup", "state", "cleaned_at"),
+        Index(
+            "ix_cap_prep_cleanup",
+            "runtime_id",
+            "is_current",
+            "cleaned_at",
+            "superseded_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -146,6 +152,7 @@ class CapabilityPreparationRow(Base):
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cleaned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

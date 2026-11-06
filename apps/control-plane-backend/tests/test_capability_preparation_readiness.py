@@ -21,13 +21,17 @@ from control_plane_backend.capability_preparations.schemas import (
     WorkerPreparationResult,
 )
 from control_plane_backend.capability_preparations.service import (
+    claim_cleanup,
     current_agent_results,
+    finish_cleanup,
     publish_worker_result,
     retire_agent_preparations,
 )
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.capability_preparation_models import (
+    CapabilityAssetRow,
+    CapabilityPreparationAssetRow,
     CapabilityPreparationRow,
 )
 from control_plane_backend.product import service
@@ -124,9 +128,16 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
     )
     try:
         async with engine.begin() as connection:
-            await connection.run_sync(CapabilityPreparationRow.__table__.create)
+            for table in (
+                CapabilityAssetRow.__table__,
+                CapabilityPreparationRow.__table__,
+                CapabilityPreparationAssetRow.__table__,
+            ):
+                await connection.run_sync(lambda sync, table=table: table.create(sync))
         sessions = async_sessionmaker(engine, expire_on_commit=False)
         now = utcnow()
+        alpha_id = ""
+        asset_id = str(uuid4())
         async with sessions() as session:
             async with session.begin():
                 for owner_id, team_id, cap_id, state, current, gate in [
@@ -138,6 +149,8 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
                     ("a4", "t1", "zeta", "succeeded", True, True),
                 ]:
                     preparation_id = str(uuid4())
+                    if cap_id == "alpha":
+                        alpha_id = preparation_id
                     session.add(
                         CapabilityPreparationRow(
                             id=preparation_id,
@@ -164,6 +177,29 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
                             ),
                         )
                     )
+                session.add(
+                    CapabilityAssetRow(
+                        id=asset_id,
+                        owner_kind="agent",
+                        owner_id="a1",
+                        team_id="t1",
+                        runtime_id="r",
+                        capability_id="alpha",
+                        slot_key="source",
+                        sha256="a" * 64,
+                        filename="source.txt",
+                        content_type="text/plain",
+                        size=1,
+                        object_key=f"capability-assets/{asset_id}",
+                        state="stored",
+                    )
+                )
+                await session.flush()
+                session.add(
+                    CapabilityPreparationAssetRow(
+                        preparation_id=alpha_id, asset_id=asset_id, position=0
+                    )
+                )
         async with sessions() as session:
             verdicts = await agent_preparation_readiness(
                 session,
@@ -200,6 +236,7 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
                 await retire_agent_preparations(
                     session, team_id="t1", agent_instance_ids=["a1"]
                 )
+                running.superseded_at = now - timedelta(hours=25)
                 assert not await publish_worker_result(
                     session,
                     preparation_id=running.id,
@@ -214,6 +251,38 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
             assert not await agent_preparation_readiness(
                 session, team_id="t1", agent_instance_ids=["a1"]
             )
+        deleted: list[str] = []
+        async with sessions() as session:
+            async with session.begin():
+                leases = await claim_cleanup(session, runtime_id="r")
+        assert len(leases) == 1 and str(leases[0].preparation_id) == alpha_id
+        async with sessions() as session:
+            async with session.begin():
+                running = await session.get(CapabilityPreparationRow, alpha_id)
+                assert running is not None
+                running.dispatch_until = now - timedelta(seconds=1)
+                assert not await finish_cleanup(
+                    session,
+                    preparation_id=alpha_id,
+                    claim_id=str(leases[0].claim_id),
+                    content_store=SimpleNamespace(delete_object=deleted.append),
+                )
+        assert deleted == []
+        async with sessions() as session:
+            async with session.begin():
+                leases = await claim_cleanup(session, runtime_id="r")
+        assert len(leases) == 1 and str(leases[0].preparation_id) == alpha_id
+        async with sessions() as session:
+            async with session.begin():
+                assert await finish_cleanup(
+                    session,
+                    preparation_id=alpha_id,
+                    claim_id=str(leases[0].claim_id),
+                    content_store=SimpleNamespace(delete_object=deleted.append),
+                )
+        assert deleted == [f"capability-assets/{asset_id}"]
+        async with sessions() as session:
+            assert await claim_cleanup(session, runtime_id="r") == []
     finally:
         await engine.dispose()
         with sync_engine.begin() as connection:

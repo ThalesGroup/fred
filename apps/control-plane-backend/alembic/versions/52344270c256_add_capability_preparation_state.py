@@ -95,6 +95,7 @@ def _tables() -> tuple[sa.Table, sa.Table, sa.Table]:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("completed_at", sa.DateTime(timezone=True)),
+        sa.Column("superseded_at", sa.DateTime(timezone=True)),
         sa.Column("cleaned_at", sa.DateTime(timezone=True)),
         sa.CheckConstraint(
             "owner_kind in ('agent', 'platform')", name="ck_cap_prep_owner"
@@ -152,7 +153,13 @@ def _tables() -> tuple[sa.Table, sa.Table, sa.Table]:
         preparation.c.is_current,
         preparation.c.state,
     )
-    sa.Index("ix_cap_prep_cleanup", preparation.c.state, preparation.c.cleaned_at)
+    sa.Index(
+        "ix_cap_prep_cleanup",
+        preparation.c.runtime_id,
+        preparation.c.is_current,
+        preparation.c.cleaned_at,
+        preparation.c.superseded_at,
+    )
 
     link = sa.Table(
         "capability_preparation_asset",

@@ -156,6 +156,7 @@ async def persist_agent_preparations(
     for cap_id, row in current.items():
         if cap_id not in declarations:
             row.is_current = False
+            row.superseded_at = utcnow()
             if row.state in ("pending", "running"):
                 row.state = "obsolete"
 
@@ -211,6 +212,7 @@ async def persist_agent_preparations(
         if spec.activation_field and not config.get(spec.activation_field):
             if previous is not None:
                 previous.is_current = False
+                previous.superseded_at = utcnow()
                 if previous.state in ("pending", "running"):
                     previous.state = "obsolete"
             continue
@@ -228,6 +230,7 @@ async def persist_agent_preparations(
             continue
         if previous is not None:
             previous.is_current = False
+            previous.superseded_at = utcnow()
             if previous.state in ("pending", "running"):
                 previous.state = "obsolete"
             await session.flush()

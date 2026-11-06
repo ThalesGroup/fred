@@ -4,15 +4,18 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from uuid import UUID, uuid4
 
 from fred_sdk.contracts.capability.preparation import PreparationAsset, PreparationWork
-from sqlalchemy import select
+from fred_core.store.base_content_store import ContentStore
+from sqlalchemy import or_, select
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.capability_preparations.schemas import (
+    CleanupLease,
     PreparationStatus,
     PreparationStatusPage,
     WorkerPreparationResult,
@@ -109,6 +112,7 @@ async def retry_agent_preparation(
         .all()
     )
     previous.is_current = False
+    previous.superseded_at = utcnow()
     await session.flush()
     now = utcnow()
     preparation_id = str(uuid4())
@@ -314,5 +318,119 @@ async def retire_agent_preparations(
                 ),
                 CapabilityPreparationRow.is_current.is_(True),
             )
-            .values(is_current=False, state="obsolete", updated_at=utcnow())
+            .values(
+                is_current=False,
+                state="obsolete",
+                superseded_at=utcnow(),
+                updated_at=utcnow(),
+            )
         )
+
+
+async def claim_cleanup(
+    session: AsyncSession, *, runtime_id: str, limit: int = 8
+) -> list[CleanupLease]:
+    """Lease old revisions after turns and worker attempts have aged out."""
+    now = utcnow()
+    rows = (
+        (
+            await session.execute(
+                select(CapabilityPreparationRow)
+                .where(
+                    CapabilityPreparationRow.runtime_id == runtime_id,
+                    CapabilityPreparationRow.is_current.is_(False),
+                    CapabilityPreparationRow.state.in_(
+                        ("obsolete", "succeeded", "failed")
+                    ),
+                    CapabilityPreparationRow.cleaned_at.is_(None),
+                    CapabilityPreparationRow.superseded_at <= now - timedelta(hours=24),
+                    or_(
+                        CapabilityPreparationRow.dispatch_until.is_(None),
+                        CapabilityPreparationRow.dispatch_until <= now,
+                    ),
+                )
+                .order_by(
+                    CapabilityPreparationRow.superseded_at, CapabilityPreparationRow.id
+                )
+                .limit(min(limit, 20))
+                .with_for_update(skip_locked=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    leases = []
+    for row in rows:
+        claim_id = uuid4()
+        row.dispatch_owner = str(claim_id)
+        row.dispatch_until = now + timedelta(minutes=5)
+        leases.append(CleanupLease(preparation_id=UUID(row.id), claim_id=claim_id))
+    return leases
+
+
+async def finish_cleanup(
+    session: AsyncSession,
+    *,
+    preparation_id: str,
+    claim_id: str,
+    content_store: ContentStore,
+) -> bool:
+    row = (
+        await session.execute(
+            select(CapabilityPreparationRow)
+            .where(CapabilityPreparationRow.id == preparation_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if (
+        row is None
+        or row.is_current
+        or row.cleaned_at is not None
+        or row.dispatch_owner != claim_id
+        or row.dispatch_until is None
+        or row.dispatch_until <= utcnow()
+    ):
+        return False
+    row.cleaned_at = utcnow()
+    row.dispatch_owner = None
+    row.dispatch_until = None
+    await session.flush()
+    assets = (
+        (
+            await session.execute(
+                select(CapabilityAssetRow)
+                .join(
+                    CapabilityPreparationAssetRow,
+                    CapabilityPreparationAssetRow.asset_id == CapabilityAssetRow.id,
+                )
+                .where(CapabilityPreparationAssetRow.preparation_id == preparation_id)
+                .with_for_update(of=CapabilityAssetRow)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for asset in assets:
+        if asset.state != "stored":
+            continue
+        still_used = await session.scalar(
+            select(CapabilityPreparationRow.id)
+            .join(
+                CapabilityPreparationAssetRow,
+                CapabilityPreparationAssetRow.preparation_id
+                == CapabilityPreparationRow.id,
+            )
+            .where(
+                CapabilityPreparationAssetRow.asset_id == asset.id,
+                or_(
+                    CapabilityPreparationRow.is_current.is_(True),
+                    CapabilityPreparationRow.cleaned_at.is_(None),
+                ),
+            )
+            .limit(1)
+        )
+        if still_used is None:
+            await asyncio.to_thread(content_store.delete_object, asset.object_key)
+            asset.state = "retired"
+            asset.retired_at = utcnow()
+    return True
