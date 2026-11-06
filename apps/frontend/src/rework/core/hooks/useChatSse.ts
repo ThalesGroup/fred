@@ -562,21 +562,8 @@ export function useChatSse(
             role: "user",
             channel: "final",
             parts: [{ type: "text", text: event.content }],
-            metadata: { extras: { steered_message_id: event.message_id, steering_state: "acknowledged" } },
+            metadata: { extras: { steered_message_id: event.message_id, steering_state: "delivered" } },
           });
-          window.setTimeout(() => {
-            const current = readTurnMessages(turn).find(
-              (message) => message.metadata?.extras?.steered_message_id === event.message_id,
-            );
-            if (current?.metadata?.extras?.steering_state !== "acknowledged") return;
-            writeTurnMessages(
-              turn,
-              upsertOne(readTurnMessages(turn), {
-                ...current,
-                metadata: { ...current.metadata, extras: { ...current.metadata?.extras, steering_state: "delivered" } },
-              }),
-            );
-          }, 1500);
           break;
         }
         case "assistant_delta": {

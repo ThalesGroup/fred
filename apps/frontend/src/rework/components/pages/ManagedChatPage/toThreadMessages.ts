@@ -325,11 +325,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         text: textOf(userMsg),
         isStreaming: false,
         steeringState:
-          userMsg.metadata?.extras?.steering_state === "pending"
-            ? "pending"
-            : userMsg.metadata?.extras?.steering_state === "acknowledged"
-              ? "acknowledged"
-              : undefined,
+          userMsg.metadata?.extras?.steering_state === "pending" ? "pending" : undefined,
         pendingMessageId:
           userMsg.metadata?.extras?.steering_state === "pending" &&
           typeof userMsg.metadata?.extras?.steered_message_id === "string"

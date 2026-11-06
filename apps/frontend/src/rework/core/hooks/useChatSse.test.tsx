@@ -650,7 +650,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       latest.messages.find((message) => message.metadata?.extras?.steered_message_id === "message-1"),
     ).toMatchObject({
       rank: 2,
-      metadata: { extras: { steering_state: "acknowledged" } },
+      metadata: { extras: { steering_state: "delivered" } },
     });
     await act(async () => {
       streamController.enqueue(new TextEncoder().encode('data: {"kind":"final","content":"done"}\n\n'));

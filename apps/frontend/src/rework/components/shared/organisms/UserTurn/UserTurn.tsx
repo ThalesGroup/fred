@@ -27,7 +27,7 @@ import styles from "./UserTurn.module.css";
 
 interface UserTurnProps {
   text: string;
-  steeringState?: "pending" | "acknowledged";
+  steeringState?: "pending";
   onRetryPending?: () => void;
   /** Anchor for the outline rail: its marks scroll to this node, and the
    *  scroll-spy reads its position to say which turn is being read. */
@@ -134,9 +134,9 @@ export const UserTurn = memo(function UserTurn({
         >
           <Icon category="outlined" type="schedule" />
         </button>
-      ) : steeringState ? (
-        <span className={styles.delivery} role="status" aria-label={t(`chatbot.steering.${steeringState}`)}>
-          <Icon category="outlined" type={steeringState === "pending" ? "schedule" : "check"} />
+      ) : steeringState === "pending" ? (
+        <span className={styles.delivery} role="status" aria-label={t("chatbot.steering.pending")}>
+          <Icon category="outlined" type="schedule" />
         </span>
       ) : null}
     </div>

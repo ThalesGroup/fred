@@ -112,9 +112,9 @@ it("shows a quiet pending clock that can retry when the turn is idle", async () 
   expect(retry).toHaveBeenCalledTimes(1);
 });
 
-it("shows a brief noninteractive acknowledgement", () => {
-  render(<UserTurn text="New instruction" steeringState="acknowledged" />);
-  expect(container.querySelector('[role="status"][aria-label="chatbot.steering.acknowledged"]')).not.toBeNull();
+it("shows no delivery indicator once the message is incorporated", () => {
+  render(<UserTurn text="New instruction" />);
+  expect(container.querySelector('[role="status"][aria-label="chatbot.steering.pending"]')).toBeNull();
   expect(container.querySelector('button[aria-label="chatbot.steering.retry"]')).toBeNull();
 });
 

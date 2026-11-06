@@ -32,7 +32,7 @@ After a completed turn with pending rows and no human-input hold, the open chat 
 
 ### UI state follows the persisted row
 
-The composer creates an optimistic in-thread message keyed by a UUID, calls the authenticated runtime endpoint, and reconciles its rank and state from the response. A small clock is shown for `pending`. Delivery changes it to a check for roughly 1.5 seconds, then removes the icon. History reload uses the durable state; no browser pending queue or queue disclosure remains. If the next-turn attempt fails, the clock becomes a retry control while the chat is idle. Retrying keeps the same message identity. A network uncertainty resolves by refetching the same message ID, not by creating another identity.
+The composer creates an optimistic in-thread message keyed by a UUID, calls the authenticated runtime endpoint, and reconciles its rank and state from the response. A small clock is shown for `pending` and disappears on delivery. History reload uses the durable state; no browser pending queue or queue disclosure remains. If the next-turn attempt fails, the clock becomes a retry control while the chat is idle. Retrying keeps the same message identity. A network uncertainty resolves by refetching the same message ID, not by creating another identity.
 
 ## Risks / Trade-offs
 

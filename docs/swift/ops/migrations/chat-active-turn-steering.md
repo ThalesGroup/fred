@@ -27,7 +27,7 @@ Messages still pending in the old runtime mailbox or browser queue are discarded
 
 ## Validation
 
-With two runtime replicas, start a ReAct or Deep turn on one pod and submit another text message through the other. The message should appear in the thread with a pending indicator, remain at the bottom while tool events continue, and gain its final rank and a brief acknowledgement after the next model boundary. Reload the conversation and confirm its order. Repeat across a human-input pause and a restart. A message that misses the active turn should start as the next ordinary turn.
+With two runtime replicas, start a ReAct or Deep turn on one pod and submit another text message through the other. The message should appear in the thread with a pending indicator, remain at the bottom while tool events continue, and gain its final rank without the indicator after the next model boundary. Reload the conversation and confirm its order. Repeat across a human-input pause and a restart. A message that misses the active turn should start as the next ordinary turn.
 
 ## Rollback
 

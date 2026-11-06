@@ -144,7 +144,7 @@ Conversations whose agents still exist SHALL retain their existing message submi
 
 ### Requirement: Active-turn text appears directly in the conversation
 
-During an active managed ReAct or Deep turn, submitting plain text SHALL create a durable user message at the end of the visible thread. A subtle pending indicator SHALL remain while its provisional rank is fixed. Incorporation SHALL replace it with a brief acknowledgement. Commands, attachments, and human-input answers SHALL retain their dedicated paths.
+During an active managed ReAct or Deep turn, submitting plain text SHALL create a durable user message at the end of the visible thread. A subtle pending indicator SHALL remain while its provisional rank is fixed and disappear when the agent incorporates it. Commands, attachments, and human-input answers SHALL retain their dedicated paths.
 
 #### Scenario: Submit during a tool call
 

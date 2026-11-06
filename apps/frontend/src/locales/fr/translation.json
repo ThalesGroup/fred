@@ -646,7 +646,6 @@
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
     "steering": {
       "pending": "En attente de l'agent",
-      "acknowledged": "Pris en compte par l'agent",
       "retry": "Réessayer le message en attente",
       "textOnly": "Seul un message texte simple peut être envoyé pendant ce tour",
       "unavailable": "Impossible d'envoyer ce message. Réessayez.",
