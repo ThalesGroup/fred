@@ -99,6 +99,48 @@ def _targets(inventory: TemplateInventory) -> List[str]:
 
 
 @pytest.mark.asyncio
+async def test_preparation_vision_port_keeps_ppt_prompt_and_fallback(
+    template: bytes, inventory: TemplateInventory, patterns_pdf: bytes
+) -> None:
+    class Vision:
+        def __init__(self, response: str | None):
+            self.response = response
+            self.calls: list[tuple[bytes, str]] = []
+
+        async def describe(self, image: bytes, prompt: str) -> str:
+            self.calls.append((image, prompt))
+            if self.response is None:
+                raise RuntimeError("Knowledge Flow unavailable")
+            return self.response
+
+    valid = Vision(
+        json.dumps(
+            {
+                "kind": "quote",
+                "label": "Vision label",
+                "slots": {},
+                "max_items": None,
+                "reusable": True,
+            }
+        )
+    )
+    labelled = await label_inventory(
+        inventory, template, patterns_pdf, None, vision=valid
+    )
+    assert len(valid.calls) == len(_targets(inventory))
+    assert valid.calls[0][0].startswith(b"\x89PNG")
+    assert "Pink numbered boxes" in valid.calls[0][1]
+    assert "Slots:" in valid.calls[0][1]
+    assert any(pattern.labelled_by == "vision" for pattern in labelled.patterns)
+
+    for response in ("not JSON", None):
+        fallback = await label_inventory(
+            inventory, template, patterns_pdf, None, vision=Vision(response)
+        )
+        assert all(pattern.labelled_by == "heuristic" for pattern in fallback.patterns)
+
+
+@pytest.mark.asyncio
 async def test_valid_answers_merge_into_the_inventory(
     template: bytes, inventory: TemplateInventory, patterns_pdf: bytes
 ) -> None:
