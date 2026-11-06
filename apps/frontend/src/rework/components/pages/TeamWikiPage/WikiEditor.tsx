@@ -81,11 +81,19 @@ export function WikiEditor({
     <section className={styles.editor}>
       <header className={styles.header}>
         {placement ? (
-          <div className={styles.titleField}>
+          <div className={styles.fields}>
             <TextInput
+              size="small"
               label={t("rework.wiki.editor.titleLabel")}
               value={titleDraft}
               onChange={(event) => setTitleDraft(event.target.value)}
+            />
+            <Select
+              size="small"
+              label={t("rework.wiki.editor.parentLabel")}
+              value={parentDraft}
+              onChange={setParentDraft}
+              options={placement.parentOptions}
             />
           </div>
         ) : (
@@ -96,6 +104,7 @@ export function WikiEditor({
             <span className={styles.deleteAction}>
               <Tooltip text={t("rework.wiki.editor.delete")}>
                 <DeleteIconButton
+                  size="small"
                   onClick={placement.onDelete}
                   disabled={saving}
                   aria-label={t("rework.wiki.editor.delete")}
@@ -117,16 +126,6 @@ export function WikiEditor({
           </Button>
         </div>
       </header>
-
-      {placement && (
-        <Select
-          size="medium"
-          label={t("rework.wiki.editor.parentLabel")}
-          value={parentDraft}
-          onChange={setParentDraft}
-          options={placement.parentOptions}
-        />
-      )}
 
       {/* Someone else saved while this draft was open. The user's own text is
           never discarded for them: they are shown what landed and choose. */}

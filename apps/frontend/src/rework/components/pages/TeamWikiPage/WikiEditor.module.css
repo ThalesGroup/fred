@@ -43,8 +43,11 @@
   overflow-wrap: anywhere;
 }
 
-.titleField {
+/* Title and parent stacked, flush: one block describing where the page sits. */
+.fields {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
 }
 
@@ -124,6 +127,11 @@
 .surface > :global(.mdxeditor) {
   flex: 1;
   min-height: 0;
+}
+
+/* Same reading size as the published page, so writing does not feel like a footnote. */
+.surface :global(.fred-writable-document) {
+  font: var(--font-body-large);
 }
 
 /* MDXEditor paints its toolbar with `--baseBg`, a Radix slate step outside this
