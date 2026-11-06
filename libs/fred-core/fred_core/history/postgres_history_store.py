@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any, List
 
@@ -161,6 +162,27 @@ def _normalize_history_text(value: JsonValue) -> tuple[JsonValue, int]:
     return value, 0
 
 
+def _serialize_history_payload(
+    parts: Sequence[Any], metadata: Any
+) -> tuple[list[JsonValue], dict[str, JsonValue]]:
+    """Prepare parts and metadata identically for every history write."""
+    serialized_parts, part_count = _normalize_history_text(
+        [_serialize_part(part) for part in parts]
+    )
+    serialized_metadata, metadata_count = _normalize_history_text(
+        _serialize_metadata(metadata)
+    )
+    assert isinstance(serialized_parts, list)
+    assert isinstance(serialized_metadata, dict)
+    if count := part_count + metadata_count:
+        serialized_metadata["history_text_normalization"] = {
+            "character": "U+0000",
+            "replacement": "[U+0000]",
+            "count": count,
+        }
+    return serialized_parts, serialized_metadata
+
+
 def history_metadata() -> MetaData:
     """
     Return a ``MetaData`` holding only the ``session_history`` table.
@@ -263,19 +285,7 @@ class PostgresHistoryStore(BaseHistoryStore):
             return
         rows = []
         for msg in messages:
-            parts, part_count = _normalize_history_text(
-                [_serialize_part(p) for p in (msg.parts or [])]
-            )
-            metadata, metadata_count = _normalize_history_text(
-                _serialize_metadata(msg.metadata)
-            )
-            assert isinstance(metadata, dict)
-            if count := part_count + metadata_count:
-                metadata["history_text_normalization"] = {
-                    "character": "U+0000",
-                    "replacement": "[U+0000]",
-                    "count": count,
-                }
+            parts, metadata = _serialize_history_payload(msg.parts or [], msg.metadata)
             rows.append(
                 {
                     "session_id": session_id,
@@ -512,20 +522,15 @@ class PostgresHistoryStore(BaseHistoryStore):
         content: str,
     ) -> ChatMessage:
         """Persist one user update before the active turn reaches a model boundary."""
-        normalized_content, normalized_count = _normalize_history_text(content)
-        assert isinstance(normalized_content, str)
         metadata: dict[str, Any] = {
             "extras": {
                 "steered_message_id": message_id,
                 "steering_state": "pending",
             }
         }
-        if normalized_count:
-            metadata["history_text_normalization"] = {
-                "character": "U+0000",
-                "replacement": "[U+0000]",
-                "count": normalized_count,
-            }
+        parts_json, metadata_json = _serialize_history_payload(
+            [{"type": "text", "text": content}], metadata
+        )
         for attempt in range(3):
             try:
                 async with self._sessions.begin() as session:
@@ -540,11 +545,7 @@ class PostgresHistoryStore(BaseHistoryStore):
                         )
                     ).scalar_one_or_none()
                     if existing is not None:
-                        existing_parts = existing.parts_json or []
-                        if (
-                            not existing_parts
-                            or existing_parts[0].get("text") != normalized_content
-                        ):
+                        if existing.parts_json != parts_json:
                             raise ValueError("message_id_reused_with_different_content")
                         return self._steered_row(existing)
                     count = (
@@ -577,8 +578,8 @@ class PostgresHistoryStore(BaseHistoryStore):
                         exchange_id=f"pending:{message_id}",
                         team_id=team_id,
                         agent_instance_id=agent_instance_id,
-                        parts_json=[{"type": "text", "text": normalized_content}],
-                        metadata_json=metadata,
+                        parts_json=parts_json,
+                        metadata_json=metadata_json,
                         message_id=message_id,
                         delivery_state="pending",
                     )
