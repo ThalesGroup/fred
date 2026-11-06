@@ -32,7 +32,8 @@ import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities";
 import { rulesDraft } from "@rework/features/teamWiki/rulesDraft";
-import { buildWikiTree, findRulesPage, moveTargets, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
+import { findRulesPage, moveTargets, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
+import { useWikiTreeState } from "@rework/features/teamWiki/useWikiTreeState";
 import { conflictFrom, errorText, type StaleWrite } from "@rework/features/teamWiki/wikiErrors";
 import {
   useCreateWikiPageMutation,
@@ -146,12 +147,9 @@ export default function TeamWikiPage() {
   const pages = useMemo(() => tree?.pages ?? [], [tree]);
   const rulesPage = useMemo(() => findRulesPage(pages), [pages]);
 
-  const isRules = slug === RULES_PAGE_SLUG;
-  // The first ROOT of the rendered tree, not the first row of a flat list
-  // ordered globally: landing on a nested child while the rail highlights it
-  // three levels down reads as a bug.
-  const firstSlug = useMemo(() => buildWikiTree(pages)[0]?.page.slug ?? null, [pages]);
-  const activeSlug = slug ?? firstSlug;
+  const treeState = useWikiTreeState(teamId, pages, slug);
+  const { activeSlug } = treeState;
+  const isRules = activeSlug === RULES_PAGE_SLUG;
 
   const { data: pageDetail, isFetching: pageLoading } = useWikiPageQuery(
     { teamId, slug: activeSlug ?? "" },
@@ -199,7 +197,10 @@ export default function TeamWikiPage() {
   }, [pages, detail, t]);
 
   /** Open a wiki page, or the wiki's root when `target` is null. */
-  const goTo = (target: string | null) => navigate(target ? `/team/${teamId}/wiki/${target}` : `/team/${teamId}/wiki`);
+  const goTo = (target: string | null) => {
+    if (!target) treeState.forgetLastPage();
+    navigate(target ? `/team/${teamId}/wiki/${target}` : `/team/${teamId}/wiki`);
+  };
 
   // Leaving an open editor throws the draft away — the page is re-read from the
   // server on arrival — so the user is asked first rather than told afterwards.
@@ -226,7 +227,7 @@ export default function TeamWikiPage() {
     setEditorSeed(null);
     setBaseOverride(null);
     setShowHistory(false);
-  }, [slug]);
+  }, [activeSlug]);
 
   const handleSave = async (contentMd: string) => {
     if (!editingTarget) return;
@@ -405,6 +406,9 @@ export default function TeamWikiPage() {
             pages={pages}
             rulesPage={rulesPage ?? { page_id: "", slug: RULES_PAGE_SLUG, title: "Rules", kind: "rules" }}
             activeSlug={activeSlug}
+            expanded={treeState.expanded}
+            onToggle={treeState.toggle}
+            onExpand={(pageId) => treeState.expand([pageId])}
             onSelect={goTo}
             onSelectRules={() => goTo(RULES_PAGE_SLUG)}
             canEdit={canEdit && !editing}
@@ -504,7 +508,7 @@ export default function TeamWikiPage() {
             // A new page id already needs a fresh walk; folding it into the key
             // (rather than a separate effect keyed on the prop) means a local
             // mutation and a page change are the same "start over" mechanism,
-            // not two. `slug` already closes the panel on navigation (below),
+            // not two. Changing page already closes the panel (below),
             // so this never fights the close-on-navigate behavior.
             key={`${detail.page.page_id}-${historyGeneration}`}
             open={showHistory}
