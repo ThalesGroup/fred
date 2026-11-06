@@ -7,7 +7,7 @@ import asyncio
 import os
 from dataclasses import dataclass
 from typing import Any, Callable
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -18,6 +18,7 @@ from fred_core.common import TeamId
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
 from fred_sdk.contracts.capability.manifest import AssetSlot
 from fred_sdk.contracts.capability.preparation import PreparationSpec
+from fred_sdk.contracts.capability.preparation import PreparationResult
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -25,6 +26,16 @@ from control_plane_backend.capability_preparations.admission import (
     StagedAsset,
     persist_agent_preparations,
     stage_assets,
+)
+from control_plane_backend.capability_preparations.schemas import (
+    WorkerPreparationResult,
+)
+from control_plane_backend.capability_preparations.service import (
+    get_work_asset,
+    get_worker_work,
+    list_agent_preparations,
+    publish_worker_result,
+    retry_agent_preparation,
 )
 from control_plane_backend.agent_instances.store import (
     AgentInstanceRecord,
@@ -310,6 +321,89 @@ async def test_preparation_intention_is_atomic_and_unchanged_save_reuses_it() ->
                 )
                 == 1
             )
+            assert (
+                await list_agent_preparations(
+                    session, agent_instance_id="a1", team_id="t2", limit=32, offset=0
+                )
+            ).items == []
+            assert (
+                len(
+                    (
+                        await list_agent_preparations(
+                            session,
+                            agent_instance_id="a1",
+                            team_id="t1",
+                            limit=32,
+                            offset=0,
+                        )
+                    ).items
+                )
+                == 1
+            )
+        async with sessions() as session:
+            async with session.begin():
+                current = (
+                    await session.execute(
+                        select(CapabilityPreparationRow).where(
+                            CapabilityPreparationRow.is_current.is_(True)
+                        )
+                    )
+                ).scalar_one()
+                current.state = "failed"
+                retry = await retry_agent_preparation(
+                    session,
+                    agent_instance_id="a1",
+                    team_id="t1",
+                    capability_id="example",
+                )
+                assert retry is not None and retry.state == "pending"
+                assert retry.preparation_id != current.id
+        async with sessions() as session:
+            async with session.begin():
+                current = (
+                    await session.execute(
+                        select(CapabilityPreparationRow).where(
+                            CapabilityPreparationRow.is_current.is_(True)
+                        )
+                    )
+                ).scalar_one()
+                current.state = "running"
+                current.attempts = 1
+                await session.flush()
+                work = await get_worker_work(session, current.id)
+                assert work is not None
+                assert work.attempt == 1
+                assert work.assets[0].asset_id == UUID(uploaded.id)
+                assert (
+                    await get_work_asset(
+                        session, preparation_id=current.id, asset_id=uploaded.id
+                    )
+                ) is not None
+                assert (
+                    await get_work_asset(
+                        session, preparation_id=current.id, asset_id=str(uuid4())
+                    )
+                ) is None
+                stale = WorkerPreparationResult(
+                    input_revision="stale",
+                    attempt=1,
+                    state="succeeded",
+                    result=PreparationResult(
+                        reference=f"capability-results/{current.id}/1/result.json"
+                    ),
+                )
+                assert not await publish_worker_result(
+                    session, preparation_id=current.id, completion=stale
+                )
+                complete = stale.model_copy(
+                    update={"input_revision": current.input_revision}
+                )
+                assert await publish_worker_result(
+                    session, preparation_id=current.id, completion=complete
+                )
+                assert not await publish_worker_result(
+                    session, preparation_id=current.id, completion=complete
+                )
         store = AgentInstanceStore(engine)
         with pytest.raises(ValueError, match="exceeds 128 KiB"):
             async with sessions() as session:

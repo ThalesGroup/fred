@@ -55,6 +55,7 @@ class PreparationWork(BaseModel):
     capability_id: str = Field(min_length=1, max_length=255)
     input_revision: str = Field(min_length=1, max_length=128)
     rules_version: str = Field(min_length=1, max_length=64)
+    attempt: int = Field(default=0, ge=0, le=10)
     assets: tuple[PreparationAsset, ...] = Field(default=(), max_length=32)
     config: dict[str, JsonValue] = Field(default_factory=dict)
 

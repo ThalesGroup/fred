@@ -82,6 +82,9 @@ from control_plane_backend.platform_ui_settings.api import (
     router as platform_ui_settings_router,
 )
 from control_plane_backend.product.api import router as product_router
+from control_plane_backend.capability_preparations.api import (
+    router as capability_preparations_router,
+)
 from control_plane_backend.routing_policy.api import (
     register_exception_handlers as register_routing_policy_exception_handlers,
 )
@@ -454,6 +457,7 @@ def create_app() -> FastAPI:
     router.include_router(teams_router)
     router.include_router(applications_router)
     router.include_router(product_router)
+    router.include_router(capability_preparations_router)
     router.include_router(bootstrap_router)
     router.include_router(capabilities_router)
     router.include_router(model_discovery_router)

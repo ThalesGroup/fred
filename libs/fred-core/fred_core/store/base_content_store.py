@@ -52,6 +52,11 @@ class ContentStore(Protocol):
 
         ...
 
+    def read_object(self, key: str, *, max_bytes: int) -> bytes:
+        """Read an object only when its content fits within `max_bytes`."""
+
+        ...
+
     def get_presigned_url(
         self, key: str, expires: timedelta = timedelta(hours=1)
     ) -> str:

@@ -1750,8 +1750,8 @@ Body (`multipart/form-data`):
 | `asset_slots` | One `{capability_id}:{slot_key}` reference per uploaded file, aligned by index with `asset_files`                    |
 | `asset_files` | The uploaded binaries                                                                                                |
 
-Semantics: control-plane is a pure relay — it never opens the bytes. Files are
-grouped per capability and forwarded to the pod's
+Semantics: files are read with a 64 MiB per-file bound, grouped per capability
+and forwarded to the pod's
 `POST /agents/capabilities/{id}/validate-config` as multipart fields keyed by
 slot key; the pod's declared `AssetSlot` gate (cardinality, extension) and the
 capability's own content validation both run pod-side, and their 422 wording
@@ -5273,3 +5273,36 @@ The capability routes those panels call (ppt_builder `/platform*`) live on the p
 and are gated by the pod's capability-manager check
 (`RUNTIME-EXECUTION-CONTRACT.md` §8.122). Acceptance scenarios:
 `openspec/specs/ppt-builder/spec.md`.
+
+## 72. Contract Notes - reusable capability preparation (2026-11-06)
+
+A capability may advertise `preparation` with asset slots, rules version, input
+limit, retry count, timeout and readiness policy. For a declared preparation,
+agent saves keep bounded originals under immutable object keys and commit a
+current `capability_preparation` intention with the agent tuning transaction.
+Each capability has its own current preparation; an unchanged save keeps its
+existing intention. A new upload replaces only the uploaded slots. Superseded
+intentions remain historical and cannot publish a result.
+
+The following team routes require `CAN_UPDATE_AGENTS` and an own credential.
+Both first check that the agent belongs to the target team:
+
+| Route | Response or effect |
+| --- | --- |
+| `GET /teams/{team_id}/agent-instances/{agent_instance_id}/preparations?limit=32&offset=0` | Current status per capability, ordered by capability ID. `limit` is 1-100; `has_more` indicates another page. No binary, configuration or object key is returned. |
+| `POST /teams/{team_id}/agent-instances/{agent_instance_id}/preparations/{capability_id}/retry` | A failed current intention becomes historical and a new pending intention reuses its config and immutable assets. A non-failed intention returns 409. |
+
+The following internal routes require a verified workload whose client ID is
+configured as `preparation_client_id` for the preparation's runtime source.
+Wrong-runtime callers receive 404. Temporal history carries only the
+preparation ID, never asset bytes or configuration:
+
+| Route | Response or effect |
+| --- | --- |
+| `GET /internal/capability-preparations/{id}/work` | Bounded `PreparationWork` for a current running attempt. |
+| `GET /internal/capability-preparations/{id}/assets/{asset_id}` | Bounded asset bytes when that asset belongs to the current running attempt. |
+| `POST /internal/capability-preparations/{id}/result` | Accepts the input revision, attempt, state and a result reference or safe error. Publication succeeds only for the current running attempt; stale or duplicate completions return `accepted=false`. Result references must stay under `capability-results/{id}/{attempt}/`. |
+
+During the additive rollout, legacy capabilities still use pod-side
+`validate-config` and their existing readiness path. The current PPT Builder
+is migrated to these routes in the capability cutover.
