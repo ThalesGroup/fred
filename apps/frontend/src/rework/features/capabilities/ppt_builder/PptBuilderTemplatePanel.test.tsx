@@ -95,6 +95,9 @@ function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> =
     hasPersistedTemplate: true,
     error: null,
     canRerun: false,
+    retry: null,
+    retrying: false,
+    retryFailed: false,
     refreshing: false,
     platformTemplate: null,
     effective: null,
@@ -152,6 +155,15 @@ describe("AnalysisStatus", () => {
     expect(container.textContent).toContain("capability.ppt_builder.analysis.failed");
     expect(container.textContent).toContain("The file has no slide.");
     expect(container.querySelector("button")).toBeNull();
+  });
+
+  it("offers a retry for a failed shared preparation", () => {
+    const retry = vi.fn(async () => {});
+    render(<AnalysisStatus analysis={analysis("failed", { retry, canRerun: true })} />);
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.failedRetry");
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.retry");
+    act(() => container.querySelector("button")?.click());
+    expect(retry).toHaveBeenCalledOnce();
   });
 
   it("tells the author a save refreshes an outdated analysis", () => {
