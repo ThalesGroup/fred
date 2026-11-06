@@ -13,4 +13,4 @@
 
 ## 3. Close-out
 
-- [ ] 3.1 `make code-quality` and frontend `make test` green; migration note added; manual check in the UI.
+- [x] 3.1 tsc, prettier, eslint and the full frontend vitest suite green (5098 passed); UI package build passes; migration note added; checked by hand in the UI.
