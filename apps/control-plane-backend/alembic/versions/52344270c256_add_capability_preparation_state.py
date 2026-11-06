@@ -20,7 +20,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _tables() -> tuple[sa.Table, sa.Table, sa.Table]:
+def _tables() -> tuple[sa.Table, sa.Table, sa.Table, sa.Table]:
     metadata = sa.MetaData()
     asset = sa.Table(
         "capability_asset",
@@ -182,7 +182,27 @@ def _tables() -> tuple[sa.Table, sa.Table, sa.Table]:
         ),
     )
     sa.Index("ix_cap_prep_asset_asset", link.c.asset_id)
-    return asset, preparation, link
+    selection = sa.Table(
+        "capability_platform_selection",
+        metadata,
+        sa.Column("runtime_id", sa.String(255), primary_key=True),
+        sa.Column("capability_id", sa.String(255), primary_key=True),
+        sa.Column("slot_key", sa.String(128), primary_key=True),
+        sa.Column(
+            "active_preparation_id",
+            sa.String(36),
+            sa.ForeignKey("capability_preparation.id"),
+        ),
+        sa.Column(
+            "candidate_preparation_id",
+            sa.String(36),
+            sa.ForeignKey("capability_preparation.id"),
+        ),
+        sa.Column("settings_json", sa.JSON(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+    )
+    sa.Index("ix_cap_platform_candidate", selection.c.candidate_preparation_id)
+    return asset, preparation, link, selection
 
 
 def upgrade() -> None:

@@ -25,6 +25,7 @@ from control_plane_backend.models.capability_preparation_models import (
     CapabilityAssetRow,
     CapabilityPreparationAssetRow,
     CapabilityPreparationRow,
+    CapabilityPlatformSelectionRow,
 )
 
 
@@ -271,11 +272,25 @@ async def publish_worker_result(
     preparation_id: str,
     completion: WorkerPreparationResult,
 ) -> bool:
+    candidate = await session.get(CapabilityPreparationRow, preparation_id)
+    selection = None
+    if candidate is not None and candidate.owner_kind == "platform":
+        selection = (
+            await session.execute(
+                select(CapabilityPlatformSelectionRow)
+                .where(
+                    CapabilityPlatformSelectionRow.candidate_preparation_id
+                    == preparation_id
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
     row = (
         await session.execute(
             select(CapabilityPreparationRow)
             .where(CapabilityPreparationRow.id == preparation_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
     if (
@@ -284,6 +299,7 @@ async def publish_worker_result(
         or row.state != "running"
         or row.input_revision != completion.input_revision
         or row.attempts != completion.attempt
+        or (row.owner_kind == "platform" and selection is None)
     ):
         return False
     if completion.state == "succeeded":
@@ -298,6 +314,18 @@ async def publish_worker_result(
         row.error_detail = completion.error_detail
     row.state = completion.state
     row.completed_at = utcnow()
+    if selection is not None and completion.state == "succeeded":
+        if selection.active_preparation_id is not None:
+            previous = await session.get(
+                CapabilityPreparationRow,
+                selection.active_preparation_id,
+                with_for_update=True,
+            )
+            if previous is not None:
+                previous.is_current = False
+                previous.superseded_at = utcnow()
+        selection.active_preparation_id = row.id
+        selection.candidate_preparation_id = None
     return True
 
 

@@ -174,3 +174,24 @@ class CapabilityPreparationAssetRow(Base):
         ForeignKey("capability_asset.id", ondelete="RESTRICT"),
         nullable=False,
     )
+
+
+class CapabilityPlatformSelectionRow(Base):
+    __tablename__ = "capability_platform_selection"
+    __table_args__ = (Index("ix_cap_platform_candidate", "candidate_preparation_id"),)
+
+    runtime_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    capability_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    slot_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    active_preparation_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("capability_preparation.id")
+    )
+    candidate_preparation_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("capability_preparation.id")
+    )
+    settings_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
