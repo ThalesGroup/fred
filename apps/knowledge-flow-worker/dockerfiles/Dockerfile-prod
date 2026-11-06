@@ -65,8 +65,9 @@ COPY libs/fred-pod/pyproject.toml /workspace/libs/fred-pod/
 COPY libs/fred-core/pyproject.toml /workspace/libs/fred-core/
 COPY libs/fred-knowledge/pyproject.toml /workspace/libs/fred-knowledge/
 RUN --mount=type=secret,id=ca-bundle \
+    --mount=type=cache,id=fred-knowledge-uv,target=/root/.cache/uv \
     if [ -s /run/secrets/ca-bundle ]; then export SSL_CERT_FILE=/run/secrets/ca-bundle; fi && \
-    make prod VENV=/app/venv TARGET=/app/target \
+    UV_LINK_MODE=copy make prod VENV=/app/venv TARGET=/app/target \
     UV_SYNC_ARGS="--no-install-project --no-install-local"
 
 # Prepare local encodings directory
