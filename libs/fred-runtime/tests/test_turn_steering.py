@@ -753,6 +753,41 @@ def test_visible_reply_disables_openai_compatible_reasoning_only_for_interim(
     assert request.model_settings == {"reasoning_effort": "high"}
 
 
+def test_visible_reply_preserves_explicitly_disabled_reasoning() -> None:
+    @tool
+    def read_document(uid: str) -> str:
+        """Read one document."""
+        return uid
+
+    model = ChatOpenAI.model_validate(
+        {
+            "model": "gpt-6-luna",
+            "api_key": "offline-test",
+            "reasoning_effort": "none",
+            "use_responses_api": False,
+        }
+    )
+    request = ModelRequest(
+        model=model,
+        messages=[HumanMessage(content="Where are you?")],
+        tools=[read_document],
+    )
+
+    interim = turn_steering._visible_reply_request(
+        request, SystemMessage(content="Answer briefly.")
+    )
+    interim_model = cast(ChatOpenAI, interim.model)
+    bound = interim_model.bind_tools(
+        interim.tools, tool_choice=interim.tool_choice, **interim.model_settings
+    )
+    assert isinstance(bound, RunnableBinding)
+    payload = interim_model._get_request_payload(interim.messages, **bound.kwargs)
+
+    assert payload["reasoning_effort"] == "none"
+    assert payload["tool_choice"] == "none"
+    assert model.reasoning_effort == "none"
+
+
 def test_visible_reply_uses_provider_neutral_tool_suppression() -> None:
     @tool
     def read_document(uid: str) -> str:

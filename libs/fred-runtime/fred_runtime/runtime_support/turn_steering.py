@@ -92,13 +92,23 @@ def _visible_reply_request(
     tool_choice = None
     if isinstance(model, BaseChatOpenAI):
         # This call needs visible text; reasoning-only output cannot answer the update.
-        model = model.model_copy(update={"reasoning_effort": None, "reasoning": None})
+        disabled_effort = (
+            "none"
+            if request.model_settings.get("reasoning_effort") == "none"
+            or model.reasoning_effort == "none"
+            else None
+        )
+        model = model.model_copy(
+            update={"reasoning_effort": disabled_effort, "reasoning": None}
+        )
         messages = cast(list[AnyMessage], strip_reasoning_from_history(messages))
         settings = {
             key: value
             for key, value in settings.items()
             if key not in {"reasoning_effort", "reasoning"}
         }
+        if disabled_effort is not None:
+            settings["reasoning_effort"] = disabled_effort
         tools = request.tools
         tool_choice = "none"
         if not request.tools:
