@@ -574,7 +574,7 @@ class PostgresHistoryStore(BaseHistoryStore):
                         timestamp=datetime.now(timezone.utc),
                         role=Role.user.value,
                         channel=Channel.final.value,
-                        exchange_id="",
+                        exchange_id=f"pending:{message_id}",
                         team_id=team_id,
                         agent_instance_id=agent_instance_id,
                         parts_json=[{"type": "text", "text": normalized_content}],

@@ -107,6 +107,8 @@ async def test_submission_is_durable_ordered_and_idempotent_across_replicas(tmp_
             content="first",
         )
         assert (first_row.rank, second_row.rank, retry.rank) == (-1, -2, -1)
+        assert first_row.exchange_id == retry.exchange_id == "pending:m1"
+        assert second_row.exchange_id == "pending:m2"
         assert [
             _text(row) for row in await first.pending_steered_messages("s", "u")
         ] == [
@@ -131,6 +133,7 @@ async def test_submission_is_durable_ordered_and_idempotent_across_replicas(tmp_
             expected_content="first",
         )
         assert delivered is not None and delivered.rank == 0
+        assert delivered.exchange_id == "ex"
         assert [
             row.rank for row in await second.pending_steered_messages("s", "u")
         ] == [-2]

@@ -1672,7 +1672,7 @@ describe("useManagedChat — session write reliability", () => {
     chatSseMessages = [
       {
         session_id: "session-1",
-        exchange_id: "",
+        exchange_id: "pending:m1",
         rank: -1,
         timestamp: "2026-11-06T12:00:00Z",
         role: "user",

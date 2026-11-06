@@ -71,6 +71,25 @@ it("keeps a provisional user message at the bottom while tool trace advances", (
   expect(rows[1].traceMessages).toHaveLength(2);
 });
 
+it("keeps a pending message separate from a legacy exchange with an empty ID", () => {
+  const rows = toThreadMessages(
+    [
+      msg({ exchange_id: "", role: "user", rank: 0, parts: [{ type: "text", text: "Earlier" }] }),
+      msg({ exchange_id: "", rank: 1, parts: [{ type: "text", text: "Earlier reply" }] }),
+      msg({
+        exchange_id: "pending:m1",
+        role: "user",
+        rank: -1,
+        parts: [{ type: "text", text: "Update" }],
+        metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+      }),
+    ],
+    false,
+  );
+  expect(rows.map((row) => row.text)).toEqual(["Earlier", "Earlier reply", "Update"]);
+  expect(rows[2]).toMatchObject({ role: "user", steeringState: "pending" });
+});
+
 it("shows a steered user message in the current exchange", () => {
   const rows = toThreadMessages(
     [
