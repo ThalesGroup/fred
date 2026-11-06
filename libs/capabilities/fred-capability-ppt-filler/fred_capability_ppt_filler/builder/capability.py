@@ -42,12 +42,12 @@ from fred_sdk.contracts.capability import (
     SidePanelSpec,
     UploadedFile,
 )
-from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.capability.preparation import (
     PreparationContext,
     PreparationResult,
     PreparationSpec,
 )
+from fred_sdk.contracts.models import FieldSpec, UIHints
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
     CapabilityPreparationManager,
@@ -65,6 +65,10 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field, model_validator
 
 from fred_capability_ppt_filler.builder import analysis_job
+from fred_capability_ppt_filler.builder.analysis import (
+    ANALYSIS_VERSION,
+    analyze_template,
+)
 from fred_capability_ppt_filler.builder.analysis_job import (
     BUILTIN_ID,
     PLATFORM_ID,
@@ -88,12 +92,9 @@ from fred_capability_ppt_filler.builder.analysis_job import (
     status_response,
 )
 from fred_capability_ppt_filler.builder.assign import VarietyCheck
-from fred_capability_ppt_filler.builder.analysis import (
-    ANALYSIS_VERSION,
-    analyze_template,
-)
 from fred_capability_ppt_filler.builder.builtin import builtin_template, sha256_of
 from fred_capability_ppt_filler.builder.deck_plans import DeckPlanRow
+from fred_capability_ppt_filler.builder.labelling import label_inventory
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
     AnalyzeResult,
@@ -105,7 +106,6 @@ from fred_capability_ppt_filler.builder.overrides import (
     prune_overrides,
 )
 from fred_capability_ppt_filler.builder.preview import build_patterns_deck
-from fred_capability_ppt_filler.builder.labelling import label_inventory
 from fred_capability_ppt_filler.builder.tools import (
     ASK_USER,
     BUILD_TOOL_NAME,
@@ -990,18 +990,19 @@ class _PptBuilderMiddleware(AgentMiddleware):
             try:
                 content, inventory = builtin_template()
                 overrides: List[PatternOverride] = []
-                if self._prepared is not None:
-                    settings = self._prepared.settings(
+                prepared = self._prepared
+                if prepared is not None:
+                    settings = prepared.settings(
                         f"{PPT_BUILDER_CAPABILITY_ID}:platform:{TEMPLATE_SLOT}"
                     )
                     overrides = [
                         PatternOverride.model_validate(item)
                         for item in settings.get("overrides", [])
                     ]
-                    if self._prepared.has_result(
+                    if prepared.has_result(
                         f"{PPT_BUILDER_CAPABILITY_ID}:platform:{TEMPLATE_SLOT}"
                     ):
-                        raw = await self._prepared.read_result(
+                        raw = await prepared.read_result(
                             f"{PPT_BUILDER_CAPABILITY_ID}:platform:{TEMPLATE_SLOT}"
                         )
                         if raw is None:
@@ -1009,7 +1010,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
                         inventory = TemplateInventory.model_validate_json(raw)
 
                         async def load() -> bytes:
-                            template = await self._prepared.read_sibling(
+                            template = await prepared.read_sibling(
                                 f"{PPT_BUILDER_CAPABILITY_ID}:platform:{TEMPLATE_SLOT}",
                                 "template.pptx",
                             )
@@ -1322,7 +1323,9 @@ class PptBuilderCapability(
             if config.use_vision and (template_uploads or config.template_sha256):
                 vision = ctx.services.preparation_vision
                 if vision is None or not await vision.available():
-                    raise ValueError("Knowledge Flow vision is unavailable")
+                    if "use_vision" in config.model_fields_set:
+                        raise ValueError("Knowledge Flow vision is unavailable")
+                    config = config.model_copy(update={"use_vision": False})
             if template_uploads:
                 content = await asyncio.to_thread(
                     _check_readable, template_uploads[0].content

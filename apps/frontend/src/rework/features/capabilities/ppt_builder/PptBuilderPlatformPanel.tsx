@@ -91,7 +91,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
     [USE_VISION_KEY]: platform?.use_vision ?? true,
   };
   const visionChoice = {
-    use_vision: visionValues[USE_VISION_KEY] !== false,
+    use_vision: vision.available !== false && visionValues[USE_VISION_KEY] !== false,
   };
 
   const savedOverrides = (platform?.overrides ?? []) as PatternOverride[];

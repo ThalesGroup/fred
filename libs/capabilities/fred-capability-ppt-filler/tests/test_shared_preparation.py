@@ -2,17 +2,15 @@
 
 import hashlib
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
-import pytest
 import httpx
-from fastapi import FastAPI, HTTPException
-from fred_sdk.contracts.capability.preparation import (
-    PreparationAsset,
-    PreparationContext,
-    PreparationWork,
-)
+import pytest
+from fastapi import APIRouter, FastAPI, HTTPException
+from fred_capability_ppt_filler.builder import capability as builder
+from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_sdk.contracts.capability.context import (
     CapabilityContext,
     CapabilityIdentity,
@@ -20,18 +18,20 @@ from fred_sdk.contracts.capability.context import (
     SaveContext,
 )
 from fred_sdk.contracts.capability.manifest import UploadedFile
+from fred_sdk.contracts.capability.preparation import (
+    PreparationAsset,
+    PreparationContext,
+    PreparationWork,
+)
 from fred_sdk.contracts.runtime import (
     CapabilityPreparationManager,
     CapabilityPreparationReader,
     CapabilityTeamAuthorizer,
     RuntimeServices,
-    capability_preparation_reader,
     capability_preparation_manager,
+    capability_preparation_reader,
     capability_team_authorizer,
 )
-
-from fred_capability_ppt_filler.builder import capability as builder
-from fred_capability_ppt_filler.builder.builtin import builtin_template
 
 
 class Artifacts:
@@ -40,6 +40,12 @@ class Artifacts:
 
     async def write(self, path: str, content: bytes) -> None:
         self.data[path] = content
+
+    async def read(self, path: str) -> bytes:
+        return self.data[path]
+
+    async def delete(self, path: str) -> None:
+        self.data.pop(path, None)
 
 
 @pytest.mark.asyncio
@@ -84,7 +90,7 @@ async def test_prepare_writes_inventory_preview_and_template(
     result = await builder.PptBuilderCapability().prepare(
         PreparationContext(
             work=work,
-            assets=SimpleNamespace(read=AsyncMock(return_value=template)),
+            assets=cast(Any, SimpleNamespace(read=AsyncMock(return_value=template))),
             artifacts=artifacts,
         )
     )
@@ -94,6 +100,7 @@ async def test_prepare_writes_inventory_preview_and_template(
         artifacts.data[f"capability-results/{preparation_id}/1/patterns.pdf"] == b"%PDF"
     )
     assert artifacts.data[f"capability-results/{preparation_id}/1/template.pptx"]
+    assert label.await_args is not None
     assert label.await_args.kwargs["use_vision"] is False
 
 
@@ -144,7 +151,7 @@ async def test_turn_reads_only_the_bound_preparation_revision() -> None:
         ),
         turn_options=EmptyModel(),
         services=RuntimeServices(
-            preparation_artifacts=BoundArtifacts(),
+            preparation_artifacts=cast(Any, BoundArtifacts()),
             preparation_enabled_capabilities=("ppt_builder",),
         ),
     )
@@ -178,7 +185,9 @@ async def test_shared_save_rejects_vision_without_knowledge_flow() -> None:
     context = SaveContext(
         identity=CapabilityIdentity(user_id="editor", agent_instance_id=str(uuid4())),
         services=RuntimeServices(
-            preparation_vision=SimpleNamespace(available=AsyncMock(return_value=False))
+            preparation_vision=cast(
+                Any, SimpleNamespace(available=AsyncMock(return_value=False))
+            )
         ),
         preparation_enabled=True,
     )
@@ -191,9 +200,30 @@ async def test_shared_save_rejects_vision_without_knowledge_flow() -> None:
 
 
 @pytest.mark.asyncio
+async def test_shared_save_defaults_to_rules_without_knowledge_flow() -> None:
+    template, _ = builtin_template()
+    context = SaveContext(
+        identity=CapabilityIdentity(user_id="editor", agent_instance_id=str(uuid4())),
+        services=RuntimeServices(
+            preparation_vision=cast(
+                Any, SimpleNamespace(available=AsyncMock(return_value=False))
+            )
+        ),
+        preparation_enabled=True,
+    )
+    stored = await builder.PptBuilderCapability().validate_config(
+        builder.PptBuilderConfig(),
+        {"template": [UploadedFile(filename="template.pptx", content=template)]},
+        context,
+    )
+    assert stored.use_vision is False
+
+
+@pytest.mark.asyncio
 async def test_shared_agent_routes_read_current_inventory_and_preview() -> None:
     template, inventory = builtin_template()
     reference = "capability-results/current/1/inventory.json"
+    expected_reference = reference
 
     class Authorizer(CapabilityTeamAuthorizer):
         async def require_agent_editor(self, team_id: str) -> None:
@@ -225,16 +255,16 @@ async def test_shared_agent_routes_read_current_inventory_and_preview() -> None:
                 "created_at": "2026-11-06T12:00:00Z",
             }
 
-        async def read_result(self, result_reference):
-            assert result_reference == reference
+        async def read_result(self, reference):
+            assert reference == expected_reference
             return inventory.model_dump_json().encode()
 
-        async def read_sibling(self, result_reference, filename):
-            assert (result_reference, filename) == (reference, "patterns.pdf")
+        async def read_sibling(self, reference, filename):
+            assert (reference, filename) == (expected_reference, "patterns.pdf")
             return b"%PDF"
 
-        async def sibling_exists(self, result_reference, filename):
-            return (result_reference, filename) == (reference, "patterns.pdf")
+        async def sibling_exists(self, reference, filename):
+            return (reference, filename) == (expected_reference, "patterns.pdf")
 
     app = FastAPI()
     router = builder.PptBuilderCapability.manifest.router
@@ -309,6 +339,7 @@ async def test_shared_platform_turn_uses_active_inventory_and_settings(
 async def test_shared_platform_routes_preserve_active_on_failed_candidate() -> None:
     template, inventory = builtin_template()
     reference = "capability-results/active/1/inventory.json"
+    expected_reference = reference
     active = {
         "state": "succeeded",
         "assets": [
@@ -344,19 +375,21 @@ async def test_shared_platform_routes_preserve_active_on_failed_candidate() -> N
         async def agent_status(self, team_id, agent_instance_id, capability_id):
             return None
 
-        async def read_result(self, result_reference):
-            assert result_reference == reference
+        async def read_result(self, reference):
+            assert reference == expected_reference
             return inventory.model_dump_json().encode()
 
-        async def read_sibling(self, result_reference, filename):
-            assert (result_reference, filename) == (reference, "patterns.pdf")
+        async def read_sibling(self, reference, filename):
+            assert (reference, filename) == (expected_reference, "patterns.pdf")
             return b"%PDF"
 
-        async def sibling_exists(self, result_reference, filename):
+        async def sibling_exists(self, reference, filename):
             return True
 
     app = FastAPI()
-    app.include_router(builder.PptBuilderCapability.manifest.router)
+    router = builder.PptBuilderCapability.manifest.router
+    assert isinstance(router, APIRouter)
+    app.include_router(router)
     app.dependency_overrides[capability_preparation_reader] = Reader
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://pod"
@@ -413,20 +446,22 @@ async def test_shared_platform_mutations_use_generic_manager(
             self.settings = AsyncMock(return_value=selection)
             self.reset = AsyncMock(return_value=selection)
 
-        async def upload_platform_candidate(self, *args):
-            return await self.upload(*args)
+        async def upload_platform_candidate(
+            self, capability_id, slot_key, content, filename, config
+        ):
+            return await self.upload(capability_id, slot_key, content, filename, config)
 
-        async def retry_platform_candidate(self, *args):
+        async def retry_platform_candidate(self, capability_id, slot_key):
             return selection
 
-        async def refresh_platform_candidate(self, *args):
-            return await self.refresh(*args)
+        async def refresh_platform_candidate(self, capability_id, slot_key, config):
+            return await self.refresh(capability_id, slot_key, config)
 
-        async def set_platform_settings(self, *args):
-            return await self.settings(*args)
+        async def set_platform_settings(self, capability_id, slot_key, settings):
+            return await self.settings(capability_id, slot_key, settings)
 
-        async def reset_platform_selection(self, *args):
-            return await self.reset(*args)
+        async def reset_platform_selection(self, capability_id, slot_key):
+            return await self.reset(capability_id, slot_key)
 
     manager = Manager()
     monkeypatch.setattr(builder, "_readable_upload", AsyncMock(return_value=template))
@@ -434,7 +469,9 @@ async def test_shared_platform_mutations_use_generic_manager(
         builder, "get_analysis_store", lambda: pytest.fail("legacy store accessed")
     )
     app = FastAPI()
-    app.include_router(builder.PptBuilderCapability.manifest.router)
+    router = builder.PptBuilderCapability.manifest.router
+    assert isinstance(router, APIRouter)
+    app.include_router(router)
     app.dependency_overrides[capability_team_authorizer] = Authorizer
     app.dependency_overrides[capability_preparation_reader] = Reader
     app.dependency_overrides[capability_preparation_manager] = lambda: manager

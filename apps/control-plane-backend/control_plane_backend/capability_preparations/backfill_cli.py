@@ -26,6 +26,7 @@ from control_plane_backend.app.context import ApplicationContext
 from control_plane_backend.capability_preparations.backfill import (
     LEGACY_BUILTIN_ID,
     LegacyPptAnalysis,
+    count_unprepared_ppt_agents,
     import_legacy_builtin_overrides,
     import_legacy_ppt_analysis,
 )
@@ -58,13 +59,16 @@ async def _artifact_filesystem(settings: dict[str, Any]):
         secret = store.get("secret_key") or os.getenv("MINIO_SECRET_KEY")
         if not secret:
             raise ValueError("Runtime MinIO secret is unavailable")
+        secure = store.get("secure", False)
+        if not isinstance(secure, bool):
+            raise ValueError("Runtime MinIO secure must be a boolean")
         return await asyncio.to_thread(
             MinioFilesystem,
             endpoint=store["endpoint"],
             access_key=store["access_key"],
             secret_key=secret,
             bucket_name=store.get("bucket_name", "fred-runtime"),
-            secure=store.get("secure", False),
+            secure=secure,
         )
     if kind == "gcs":
         return await asyncio.to_thread(
@@ -146,6 +150,17 @@ async def _run(args: argparse.Namespace) -> Counter[str]:
                             artifacts=artifact_store,
                         )
             counts[outcome] += 1
+        if sessions is not None:
+            async with sessions() as destination:
+                missing = await count_unprepared_ppt_agents(
+                    destination,
+                    runtime_id=runtime_id,
+                    rules_version=args.rules_version,
+                )
+            if missing:
+                raise ValueError(
+                    f"Cutover blocked: {missing} PPT agents have no current preparation"
+                )
         return counts
     finally:
         await runtime_engine.dispose()

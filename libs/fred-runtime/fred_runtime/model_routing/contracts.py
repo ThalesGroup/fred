@@ -188,7 +188,9 @@ class ModelProfile(FrozenModel):
     @classmethod
     def _ignore_legacy_vision_flag(cls, value: object) -> object:
         if isinstance(value, dict) and "supports_vision" in value:
-            return {key: item for key, item in value.items() if key != "supports_vision"}
+            return {
+                key: item for key, item in value.items() if key != "supports_vision"
+            }
         return value
 
     profile_id: str = Field(..., min_length=1)

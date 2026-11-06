@@ -44,20 +44,12 @@ from fred_core import (
 from fred_core.common import TeamId
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.rebac.rebac_engine import RebacDisabledResult
-from fred_sdk.contracts.capability import CapabilityConfigCopyRequest
-from fred_sdk.contracts.capability import CapabilityCatalogEntry, PreparationCopyAsset
+from fred_sdk.contracts.capability import (
+    CapabilityCatalogEntry,
+    CapabilityConfigCopyRequest,
+    PreparationCopyAsset,
+)
 from sqlalchemy import select
-
-from control_plane_backend.capability_preparations.admission import (
-    cleanup_staged_assets,
-    persist_agent_preparations,
-    stage_assets,
-)
-from control_plane_backend.models.capability_preparation_models import (
-    CapabilityAssetRow,
-    CapabilityPreparationAssetRow,
-    CapabilityPreparationRow,
-)
 
 from control_plane_backend.agent_instances.names import (
     CopyLocale,
@@ -69,6 +61,16 @@ from control_plane_backend.agent_instances.store import (
     AgentNameAlreadyExistsError,
 )
 from control_plane_backend.capabilities.authz import usable_capability_ids
+from control_plane_backend.capability_preparations.admission import (
+    cleanup_staged_assets,
+    persist_agent_preparations,
+    stage_assets,
+)
+from control_plane_backend.models.capability_preparation_models import (
+    CapabilityAssetRow,
+    CapabilityPreparationAssetRow,
+    CapabilityPreparationRow,
+)
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (

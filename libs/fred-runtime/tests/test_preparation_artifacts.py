@@ -1,7 +1,9 @@
 """Only current, bound capability result paths are readable during a turn."""
 
-import pytest
+from typing import cast
 
+import pytest
+from fred_core.filesystem.structures import BaseFilesystem
 from fred_runtime.capabilities.preparation_artifacts import BoundPreparationArtifacts
 
 
@@ -13,7 +15,7 @@ class Filesystem:
 @pytest.mark.asyncio
 async def test_artifact_reader_is_bound_to_published_result() -> None:
     reader = BoundPreparationArtifacts(
-        Filesystem(),
+        cast(BaseFilesystem, Filesystem()),
         {"ppt_builder": "capability-results/job-1/1/result.json"},
         {"ppt_builder:platform:template": {"overrides": []}},
     )

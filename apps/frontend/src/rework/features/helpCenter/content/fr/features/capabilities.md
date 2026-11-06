@@ -159,13 +159,11 @@ défini par l'administrateur** et le nom du fichier, voir
 à défaut, le template Fred intégré. Déposer un template sur l'agent reprend
 toujours la main.
 
-**Utiliser un modèle de vision** — quand un modèle d'IA capable de lire les
-images est disponible, il regarde chaque slide du template pour
-la nommer et comprendre à quoi elle sert. Vous pouvez choisir le modèle
-d'IA qui s'en charge, ou garder celui de l'agent. Sans un tel modèle d'IA,
-l'interrupteur est verrouillé et
-les slides sont nommées par des règles : cela fonctionne, mais les noms
-sont moins précis.
+**Utiliser un modèle de vision** — le modèle de vision configuré dans
+Knowledge Flow regarde chaque slide du template pour la nommer et comprendre
+à quoi elle sert. Quand ce modèle est indisponible, l'interrupteur est
+verrouillé et les slides sont nommées par des règles : cela fonctionne, mais
+les noms sont moins précis.
 
 **Forcer de la variété** — limite le nombre de fois qu'une même slide
 revient dans une présentation. **Par nom de slide** (par défaut) : chaque

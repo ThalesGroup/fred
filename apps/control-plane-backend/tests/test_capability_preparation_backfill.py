@@ -1,22 +1,22 @@
 """Legacy PPT rows import once without losing active agent or platform state."""
 
+# pyright: reportArgumentType=false
+
 from __future__ import annotations
 
 import hashlib
 import json
 import os
-from types import SimpleNamespace
 from dataclasses import replace
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 import yaml
-
 from control_plane_backend.capability_preparations.backfill import (
     LegacyPptAnalysis,
+    count_unprepared_ppt_agents,
     import_legacy_builtin_overrides,
     import_legacy_ppt_analysis,
 )
@@ -24,10 +24,12 @@ from control_plane_backend.capability_preparations.backfill_cli import _run
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.capability_preparation_models import (
     CapabilityAssetRow,
+    CapabilityPlatformSelectionRow,
     CapabilityPreparationAssetRow,
     CapabilityPreparationRow,
-    CapabilityPlatformSelectionRow,
 )
+from sqlalchemy import create_engine, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class ContentStore:
@@ -185,6 +187,25 @@ async def test_backfill_preserves_agent_and_platform_results() -> None:
                     )
                 )
         async with sessions() as session:
+            assert (
+                await count_unprepared_ppt_agents(
+                    session, runtime_id="fred-agents", rules_version="23"
+                )
+                == 1
+            )
+        async with sessions() as session:
+            async with session.begin():
+                with pytest.raises(ValueError, match="outdated"):
+                    await import_legacy_ppt_analysis(
+                        session,
+                        legacy=replace(legacy, analysis_version=22),
+                        runtime_id="fred-agents",
+                        rules_version="23",
+                        content_store=content,
+                        artifacts=artifacts,
+                    )
+        assert content.objects == {}
+        async with sessions() as session:
             async with session.begin():
                 assert (
                     await import_legacy_ppt_analysis(
@@ -210,6 +231,35 @@ async def test_backfill_preserves_agent_and_platform_results() -> None:
                     )
                     == "existing"
                 )
+        async with sessions() as session:
+            assert (
+                await count_unprepared_ppt_agents(
+                    session, runtime_id="fred-agents", rules_version="23"
+                )
+                == 0
+            )
+            assert (
+                await count_unprepared_ppt_agents(
+                    session, runtime_id="fred-agents", rules_version="24"
+                )
+                == 1
+            )
+        async with sessions() as session:
+            async with session.begin():
+                agent = await session.get(AgentInstanceRow, agent_id)
+                assert agent is not None
+                tuning = json.loads(agent.tuning_json)
+                tuning["capability_config"]["ppt_builder"]["config"]["use_vision"] = (
+                    True
+                )
+                agent.tuning_json = json.dumps(tuning)
+        async with sessions() as session:
+            assert (
+                await count_unprepared_ppt_agents(
+                    session, runtime_id="fred-agents", rules_version="23"
+                )
+                == 1
+            )
         async with sessions() as session:
             row = await session.scalar(
                 text(

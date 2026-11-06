@@ -1,5 +1,7 @@
 """Durable dispatch claims and uncertain Temporal delivery."""
 
+# pyright: reportAttributeAccessIssue=false
+
 from __future__ import annotations
 
 import os
@@ -10,15 +12,14 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from temporalio.exceptions import WorkflowAlreadyStartedError
-
 from control_plane_backend.capability_preparations import dispatcher
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.capability_preparation_models import (
     CapabilityPreparationRow,
 )
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from temporalio.exceptions import WorkflowAlreadyStartedError
 
 
 @pytest.mark.asyncio
@@ -32,6 +33,7 @@ async def test_uncertain_start_reconciles_existing_workflow(
         deadline_at=utcnow() + timedelta(minutes=1),
         claim_id=str(uuid4()),
         dispatch_attempts=1,
+        worker_token=str(uuid4()),
     )
     handle = SimpleNamespace(
         describe=AsyncMock(
@@ -55,6 +57,7 @@ async def test_uncertain_start_reconciles_existing_workflow(
     monkeypatch.setattr(dispatcher, "finish_delivery", finish)
     await dispatcher._deliver(client, cast(Any, object()), delivery)
     finish.assert_awaited_once()
+    assert finish.await_args is not None
     assert finish.await_args.kwargs == {
         "run_id": "run-1",
         "terminal_without_result": False,

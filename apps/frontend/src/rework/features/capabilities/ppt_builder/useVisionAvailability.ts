@@ -2,10 +2,11 @@ import { useGetVisionAvailabilityQuery } from "../../../../slices/knowledgeFlow/
 
 export interface VisionAvailability {
   available: boolean | null;
+  failed?: boolean;
 }
 
 export function visionAvailability(available: boolean | undefined, failed = false): VisionAvailability {
-  return { available: available ?? (failed ? false : null) };
+  return { available: failed ? null : (available ?? null), failed };
 }
 
 export function useVisionAvailability(skip = false): VisionAvailability {

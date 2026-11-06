@@ -22,9 +22,9 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.capability_preparation_models import (
     CapabilityAssetRow,
+    CapabilityPlatformSelectionRow,
     CapabilityPreparationAssetRow,
     CapabilityPreparationRow,
-    CapabilityPlatformSelectionRow,
 )
 
 PPT_CAPABILITY_ID = "ppt_builder"
@@ -118,6 +118,8 @@ async def import_legacy_ppt_analysis(
 
     if not legacy.template_pptx or len(legacy.template_pptx) > 64 * 1024 * 1024:
         raise ValueError("Legacy PPT template is empty or too large")
+    if legacy.status == "succeeded" and legacy.analysis_version != int(rules_version):
+        raise ValueError("Legacy PPT analysis rules are outdated; rerun before cutover")
     if owner == LEGACY_PLATFORM_ID and legacy.status != "succeeded":
         raise ValueError("Legacy platform default is not ready")
     if owner == LEGACY_CANDIDATE_ID and legacy.status == "succeeded":
@@ -148,6 +150,7 @@ async def import_legacy_ppt_analysis(
     if await session.get(CapabilityPreparationRow, prep_id) is not None:
         return "existing"
     asset_id = str(uuid5(_IMPORT_NAMESPACE, f"asset:{prep_id}"))
+    selection: CapabilityPlatformSelectionRow | None = None
     if is_platform:
         selection = await session.get(
             CapabilityPlatformSelectionRow,
@@ -250,6 +253,7 @@ async def import_legacy_ppt_analysis(
         )
     )
     if is_platform:
+        assert selection is not None
         if owner == LEGACY_PLATFORM_ID:
             selection.active_preparation_id = prep_id
             selection.settings_json = {"overrides": _overrides(legacy.overrides_json)}
@@ -276,3 +280,82 @@ async def import_legacy_builtin_overrides(
         session.add(selection)
     if selection.active_preparation_id is None and not selection.settings_json:
         selection.settings_json = {"overrides": _overrides(overrides_json)}
+
+
+async def count_unprepared_ppt_agents(
+    session: AsyncSession, *, runtime_id: str, rules_version: str
+) -> int:
+    """Block cutover if an active PPT template has no imported preparation."""
+    cursor = ""
+    missing = 0
+    while True:
+        rows = (
+            await session.execute(
+                select(AgentInstanceRow.agent_instance_id, AgentInstanceRow.tuning_json)
+                .where(
+                    AgentInstanceRow.source_runtime_id == runtime_id,
+                    AgentInstanceRow.agent_instance_id > cursor,
+                )
+                .order_by(AgentInstanceRow.agent_instance_id)
+                .limit(500)
+            )
+        ).all()
+        if not rows:
+            return missing
+        cursor = rows[-1].agent_instance_id
+        expected: dict[str, tuple[str, bool]] = {}
+        for agent_id, tuning_json in rows:
+            if not tuning_json:
+                continue
+            tuning = ManagedAgentTuning.model_validate_json(tuning_json)
+            if (
+                tuning.selected_capability_ids is not None
+                and PPT_CAPABILITY_ID not in tuning.selected_capability_ids
+            ):
+                continue
+            config = (tuning.capability_config.get(PPT_CAPABILITY_ID) or {}).get(
+                "config"
+            ) or {}
+            template_hash = config.get("template_sha256")
+            if isinstance(template_hash, str) and template_hash:
+                expected[agent_id] = (
+                    template_hash,
+                    config.get("use_vision") is not False,
+                )
+        if not expected:
+            continue
+        current = {
+            owner_id: (sha256, version, public_config)
+            for owner_id, sha256, version, public_config in (
+                await session.execute(
+                    select(
+                        CapabilityPreparationRow.owner_id,
+                        CapabilityAssetRow.sha256,
+                        CapabilityPreparationRow.rules_version,
+                        CapabilityPreparationRow.public_config_json,
+                    )
+                    .join(
+                        CapabilityPreparationAssetRow,
+                        CapabilityPreparationAssetRow.preparation_id
+                        == CapabilityPreparationRow.id,
+                    )
+                    .join(
+                        CapabilityAssetRow,
+                        CapabilityAssetRow.id == CapabilityPreparationAssetRow.asset_id,
+                    )
+                    .where(
+                        CapabilityPreparationRow.owner_kind == "agent",
+                        CapabilityPreparationRow.runtime_id == runtime_id,
+                        CapabilityPreparationRow.capability_id == PPT_CAPABILITY_ID,
+                        CapabilityPreparationRow.owner_id.in_(list(expected)),
+                        CapabilityPreparationRow.is_current.is_(True),
+                        CapabilityAssetRow.slot_key == PPT_TEMPLATE_SLOT,
+                    )
+                )
+            ).all()
+        }
+        missing += sum(
+            current.get(agent_id)
+            != (template_hash, rules_version, {"use_vision": use_vision})
+            for agent_id, (template_hash, use_vision) in expected.items()
+        )

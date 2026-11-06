@@ -16,7 +16,9 @@
 // the Simple "Generate a presentation" pack alike: it owns every config field.
 
 import type { CapabilityConfigWidgetProps } from "../types";
+import { useEffect } from "react";
 import { PptBuilderTemplatePanel } from "./PptBuilderTemplatePanel";
+import { USE_VISION_KEY } from "./types";
 import { usePptBuilderAnalysis } from "./usePptBuilderAnalysis";
 import { useVisionAvailability } from "./useVisionAvailability";
 
@@ -43,6 +45,11 @@ export function PptBuilderConfigForm({
     onAssetFileChange,
   });
   const vision = useVisionAvailability();
+  useEffect(() => {
+    if (vision.available === false && configValues[USE_VISION_KEY] !== false) {
+      onConfigChange(USE_VISION_KEY, false);
+    }
+  }, [vision.available, configValues, onConfigChange]);
   return (
     <PptBuilderTemplatePanel
       disabled={disabled}

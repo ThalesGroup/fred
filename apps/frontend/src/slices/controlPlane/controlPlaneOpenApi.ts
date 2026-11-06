@@ -1109,6 +1109,9 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/internal/capability-preparations/${queryArg.preparationId}/work`,
+        headers: {
+          "X-Preparation-Token": queryArg["X-Preparation-Token"],
+        },
       }),
     }),
     postCapabilityPreparationAttemptControlPlaneV1InternalCapabilityPreparationsPreparationIdAttemptsAttemptPost:
@@ -1119,6 +1122,9 @@ const injectedRtkApi = api.injectEndpoints({
         query: (queryArg) => ({
           url: `/control-plane/v1/internal/capability-preparations/${queryArg.preparationId}/attempts/${queryArg.attempt}`,
           method: "POST",
+          headers: {
+            "X-Preparation-Token": queryArg["X-Preparation-Token"],
+          },
         }),
       }),
     getCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGet: build.query<
@@ -1127,6 +1133,9 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/internal/capability-preparations/${queryArg.preparationId}/assets/${queryArg.assetId}`,
+        headers: {
+          "X-Preparation-Token": queryArg["X-Preparation-Token"],
+        },
       }),
     }),
     postCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPost: build.mutation<
@@ -1137,6 +1146,9 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/internal/capability-preparations/${queryArg.preparationId}/result`,
         method: "POST",
         body: queryArg.workerPreparationResult,
+        headers: {
+          "X-Preparation-Token": queryArg["X-Preparation-Token"],
+        },
       }),
     }),
     completeCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsPreparationIdCleanupCompletePost:
@@ -3164,6 +3176,7 @@ export type GetCapabilityPreparationWorkControlPlaneV1InternalCapabilityPreparat
   /** status 200 Successful Response */ PreparationWork;
 export type GetCapabilityPreparationWorkControlPlaneV1InternalCapabilityPreparationsPreparationIdWorkGetApiArg = {
   preparationId: string;
+  "X-Preparation-Token"?: string | null;
 };
 export type PostCapabilityPreparationAttemptControlPlaneV1InternalCapabilityPreparationsPreparationIdAttemptsAttemptPostApiResponse =
   /** status 200 Successful Response */ WorkerAttemptResponse;
@@ -3171,6 +3184,7 @@ export type PostCapabilityPreparationAttemptControlPlaneV1InternalCapabilityPrep
   {
     preparationId: string;
     attempt: number;
+    "X-Preparation-Token"?: string | null;
   };
 export type GetCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGetApiResponse =
   unknown;
@@ -3178,11 +3192,13 @@ export type GetCapabilityPreparationAssetControlPlaneV1InternalCapabilityPrepara
   {
     preparationId: string;
     assetId: string;
+    "X-Preparation-Token"?: string | null;
   };
 export type PostCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPostApiResponse =
   /** status 200 Successful Response */ WorkerResultAck;
 export type PostCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPostApiArg = {
   preparationId: string;
+  "X-Preparation-Token"?: string | null;
   workerPreparationResult: WorkerPreparationResult;
 };
 export type CompleteCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsPreparationIdCleanupCompletePostApiResponse =

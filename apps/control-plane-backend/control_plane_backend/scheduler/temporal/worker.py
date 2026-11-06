@@ -18,10 +18,10 @@ import asyncio
 import logging
 
 from fred_core.common import TemporalSchedulerConfig
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from control_plane_backend.capability_preparations.dispatcher import run_dispatcher
 from control_plane_backend.scheduler.dependencies import LifecycleActionDependencies

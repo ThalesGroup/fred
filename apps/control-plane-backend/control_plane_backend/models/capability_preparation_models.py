@@ -3,6 +3,7 @@
 """Durable, capability-neutral inputs and preparation state."""
 
 from datetime import datetime
+from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
@@ -138,6 +139,9 @@ class CapabilityPreparationRow(Base):
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     workflow_id: Mapped[str] = mapped_column(String(255), nullable=False)
     task_queue: Mapped[str] = mapped_column(String(255), nullable=False)
+    worker_token: Mapped[str] = mapped_column(
+        String(36), nullable=False, default=lambda: str(uuid4())
+    )
     run_id: Mapped[str | None] = mapped_column(String(255))
     delivery_due_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow

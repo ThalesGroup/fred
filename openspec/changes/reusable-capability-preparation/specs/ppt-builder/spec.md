@@ -38,6 +38,11 @@ The system SHALL render each example slide to an image with its slots numbered a
 - **WHEN** an editor opens vision settings while Knowledge Flow has no configured vision model
 - **THEN** the toggle is disabled and off with a rules-only explanation; an existing saved vision-enabled preparation reports the missing configuration clearly until corrected
 
+#### Scenario: Vision availability lookup fails
+
+- **WHEN** the availability request fails while an editor opens an existing vision-enabled configuration
+- **THEN** the toggle is temporarily disabled, the saved choice remains selected, and an unrelated edit does not silently turn vision off
+
 ### Requirement: Analysis runs in the background
 
 The system SHALL complete the agent save without waiting for template analysis, persist the input, status and result durably across replicas through the shared capability-preparation lifecycle, and expose the analysis status to the agent form.

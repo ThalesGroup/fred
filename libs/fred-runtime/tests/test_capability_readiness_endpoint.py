@@ -28,12 +28,12 @@ from fred_sdk.contracts.capability import (
     CapabilityReadiness,
     EmptyModel,
 )
-from pydantic import BaseModel
 from fred_sdk.contracts.capability.preparation import (
     PreparationContext,
     PreparationResult,
     PreparationSpec,
 )
+from pydantic import BaseModel
 from test_capability_endpoints_1974 import _app_with_capabilities
 
 _URL = "/pod/v1/agents/capabilities/readiness"

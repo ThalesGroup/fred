@@ -36,6 +36,33 @@ def _verdict(rows: Sequence[CapabilityPreparationRow]) -> ReadinessVerdict:
     )
 
 
+async def current_agent_snapshot(
+    session: AsyncSession, *, team_id: str, agent_instance_id: str
+) -> tuple[dict[str, str], ReadinessVerdict | None]:
+    """Read result references and readiness from the same current-row snapshot."""
+    rows = (
+        (
+            await session.execute(
+                select(CapabilityPreparationRow).where(
+                    CapabilityPreparationRow.owner_kind == "agent",
+                    CapabilityPreparationRow.team_id == team_id,
+                    CapabilityPreparationRow.owner_id == agent_instance_id,
+                    CapabilityPreparationRow.is_current.is_(True),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    results = {
+        row.capability_id: row.result_reference
+        for row in rows
+        if row.state == "succeeded" and row.result_reference is not None
+    }
+    gates = [row for row in rows if row.gates_readiness]
+    return results, _verdict(gates) if gates else None
+
+
 async def agent_preparation_readiness(
     session: AsyncSession,
     *,

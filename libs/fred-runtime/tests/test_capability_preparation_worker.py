@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from types import SimpleNamespace
 from typing import Any, cast
@@ -9,6 +10,13 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.capabilities import preparation_worker
+from fred_runtime.capabilities.preparation_worker import (
+    CapabilityPreparationActivities,
+    WorkerAssetReader,
+)
+from fred_runtime.capabilities.registry import CapabilityRegistry
 from fred_sdk.contracts.capability.preparation import (
     PreparationAsset,
     PreparationResult,
@@ -16,13 +24,6 @@ from fred_sdk.contracts.capability.preparation import (
     PreparationWork,
 )
 from temporalio.exceptions import ApplicationError
-
-from fred_runtime.app.config import AgentPodConfig
-from fred_runtime.capabilities.preparation_worker import (
-    CapabilityPreparationActivities,
-    WorkerAssetReader,
-)
-from fred_runtime.capabilities.registry import CapabilityRegistry
 
 
 class MemoryFilesystem:
@@ -94,6 +95,34 @@ class ReverseCapability(Capability):
 
 
 @pytest.mark.asyncio
+async def test_stalled_activity_heartbeats_until_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = asyncio.Event()
+    heartbeats: list[None] = []
+
+    async def stalled(_preparation_id: str, _attempt: int, _worker_token: str) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    worker = object.__new__(CapabilityPreparationActivities)
+    monkeypatch.setattr(worker, "prepare_once", stalled)
+    monkeypatch.setattr(
+        preparation_worker.activity, "heartbeat", lambda: heartbeats.append(None)
+    )
+    monkeypatch.setattr(
+        preparation_worker.activity, "info", lambda: SimpleNamespace(attempt=1)
+    )
+    task = asyncio.create_task(worker.prepare_capability("preparation", "token"))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await asyncio.sleep(0)
+    assert heartbeats
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
 async def test_new_worker_instance_resumes_without_serving_pod_state() -> None:
     asset_id = uuid4()
     preparation_id = uuid4()
@@ -102,6 +131,7 @@ async def test_new_worker_instance_resumes_without_serving_pod_state() -> None:
     results: list[dict[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["X-Preparation-Token"] == "job-token"
         if request.url.path.endswith("/attempts/1") or request.url.path.endswith(
             "/attempts/2"
         ):
@@ -156,14 +186,14 @@ async def test_new_worker_instance_resumes_without_serving_pod_state() -> None:
             config,
         )
         with pytest.raises(ApplicationError):
-            await first.prepare_once(str(preparation_id), 1)
+            await first.prepare_once(str(preparation_id), 1, "job-token")
         second = CapabilityPreparationActivities(
             cast(CapabilityRegistry, Registry(Capability())),
             client,
             cast(Any, filesystem),
             config,
         )
-        await second.prepare_once(str(preparation_id), 2)
+        await second.prepare_once(str(preparation_id), 2, "job-token")
     assert attempts == [1, 2]
     assert len(results) == 1
     assert results[0]["state"] == "succeeded"
@@ -200,7 +230,7 @@ async def test_asset_reader_rejects_corrupt_bytes() -> None:
         transport=httpx.MockTransport(lambda _: httpx.Response(200, content=b"evil")),
     ) as client:
         with pytest.raises(ValueError, match="integrity"):
-            await WorkerAssetReader(client, work).read(asset_id)
+            await WorkerAssetReader(client, work, "job-token").read(asset_id)
 
 
 @pytest.mark.asyncio
@@ -260,7 +290,7 @@ async def test_failed_attempt_removes_unpublished_artifacts() -> None:
             cast(Any, filesystem),
             config,
         )
-        await worker.prepare_once(str(preparation_id), 1)
+        await worker.prepare_once(str(preparation_id), 1, "job-token")
     assert filesystem.objects == {}
     assert results[0]["state"] == "failed"
 
@@ -330,7 +360,7 @@ async def test_two_installed_capabilities_use_the_same_worker_path() -> None:
             config,
         )
         for preparation_id in preparation_ids.values():
-            await worker.prepare_once(str(preparation_id), 1)
+            await worker.prepare_once(str(preparation_id), 1, "job-token")
     assert {result["state"] for result in reported} == {"succeeded"}
     assert (
         filesystem.objects[

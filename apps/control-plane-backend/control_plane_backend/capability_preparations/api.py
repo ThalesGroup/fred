@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 from types import SimpleNamespace
 from typing import Annotated
@@ -15,6 +16,7 @@ from fastapi import (
     Depends,
     File,
     Form,
+    Header,
     HTTPException,
     Path,
     Query,
@@ -25,25 +27,14 @@ from fred_core import (
     KeycloakUser,
     TeamPermission,
     get_principal_context,
-    require_own_credential,
     is_service_agent,
+    require_own_credential,
 )
 from fred_core.common import TeamId
-from fred_core.security.structure import PrincipalContext
-from fred_core.security.structure import LOCAL_DEV_CLIENT_ID
+from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, PrincipalContext
 from fred_sdk.contracts.capability.preparation import PreparationWork
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from control_plane_backend.capability_preparations.schemas import (
-    CleanupBatch,
-    CleanupCompletion,
-    PreparationStatus,
-    PreparationStatusPage,
-    PlatformPreparationSelection,
-    WorkerPreparationResult,
-    WorkerResultAck,
-    WorkerAttemptResponse,
-)
 from control_plane_backend.capability_preparations.admission import (
     cleanup_staged_assets,
     stage_assets,
@@ -55,6 +46,16 @@ from control_plane_backend.capability_preparations.platform import (
     retry_platform_candidate,
     set_platform_selection_settings,
     start_platform_candidate,
+)
+from control_plane_backend.capability_preparations.schemas import (
+    CleanupBatch,
+    CleanupCompletion,
+    PlatformPreparationSelection,
+    PreparationStatus,
+    PreparationStatusPage,
+    WorkerAttemptResponse,
+    WorkerPreparationResult,
+    WorkerResultAck,
 )
 from control_plane_backend.capability_preparations.service import (
     begin_worker_attempt,
@@ -359,6 +360,19 @@ async def _require_worker(
     return row
 
 
+async def _require_job(
+    session: AsyncSession,
+    deps: ProductServiceDependencies,
+    principals: PrincipalContext,
+    preparation_id: str,
+    worker_token: str | None,
+) -> CapabilityPreparationRow:
+    row = await _require_worker(session, deps, principals, preparation_id)
+    if worker_token is None or not hmac.compare_digest(row.worker_token, worker_token):
+        raise HTTPException(status_code=404, detail="Preparation not found")
+    return row
+
+
 def _require_runtime_worker(
     deps: ProductServiceDependencies,
     principals: PrincipalContext,
@@ -472,9 +486,10 @@ async def get_capability_preparation_work(
     preparation_id: UUID,
     deps: Dependencies,
     principals: PrincipalContext = Depends(get_principal_context),
+    worker_token: Annotated[str | None, Header(alias="X-Preparation-Token")] = None,
 ) -> PreparationWork:
     async with _sessions(deps)() as session:
-        await _require_worker(session, deps, principals, str(preparation_id))
+        await _require_job(session, deps, principals, str(preparation_id), worker_token)
         work = await get_worker_work(session, str(preparation_id))
     if work is None:
         raise HTTPException(status_code=404, detail="Preparation not found")
@@ -490,10 +505,13 @@ async def post_capability_preparation_attempt(
     attempt: Annotated[int, Path(ge=1, le=10)],
     deps: Dependencies,
     principals: PrincipalContext = Depends(get_principal_context),
+    worker_token: Annotated[str | None, Header(alias="X-Preparation-Token")] = None,
 ) -> WorkerAttemptResponse:
     async with _sessions(deps)() as session:
         async with session.begin():
-            await _require_worker(session, deps, principals, str(preparation_id))
+            await _require_job(
+                session, deps, principals, str(preparation_id), worker_token
+            )
             work = await begin_worker_attempt(
                 session, preparation_id=str(preparation_id), attempt=attempt
             )
@@ -509,9 +527,10 @@ async def get_capability_preparation_asset(
     asset_id: UUID,
     deps: Dependencies,
     principals: PrincipalContext = Depends(get_principal_context),
+    worker_token: Annotated[str | None, Header(alias="X-Preparation-Token")] = None,
 ) -> Response:
     async with _sessions(deps)() as session:
-        await _require_worker(session, deps, principals, str(preparation_id))
+        await _require_job(session, deps, principals, str(preparation_id), worker_token)
         asset = await get_work_asset(
             session, preparation_id=str(preparation_id), asset_id=str(asset_id)
         )
@@ -540,10 +559,13 @@ async def post_capability_preparation_result(
     body: WorkerPreparationResult,
     deps: Dependencies,
     principals: PrincipalContext = Depends(get_principal_context),
+    worker_token: Annotated[str | None, Header(alias="X-Preparation-Token")] = None,
 ) -> WorkerResultAck:
     async with _sessions(deps)() as session:
         async with session.begin():
-            await _require_worker(session, deps, principals, str(preparation_id))
+            await _require_job(
+                session, deps, principals, str(preparation_id), worker_token
+            )
             try:
                 accepted = await publish_worker_result(
                     session, preparation_id=str(preparation_id), completion=body

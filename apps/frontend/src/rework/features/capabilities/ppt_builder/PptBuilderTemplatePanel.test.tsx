@@ -188,7 +188,8 @@ describe("AnalysisStatus", () => {
 describe("visionAvailability", () => {
   it("reflects Knowledge Flow's configured model", () => {
     expect(visionAvailability(undefined).available).toBeNull();
-    expect(visionAvailability(undefined, true).available).toBe(false);
+    expect(visionAvailability(undefined, true).available).toBeNull();
+    expect(visionAvailability(undefined, true).failed).toBe(true);
     expect(visionAvailability(false).available).toBe(false);
     expect(visionAvailability(true).available).toBe(true);
   });
@@ -208,14 +209,14 @@ describe("PptBuilderVisionSettings", () => {
     return onConfigChange;
   }
 
-  it("explains the unavailable model and lets an existing choice be turned off", () => {
+  it("shows vision unavailable even for an existing choice", () => {
     const onConfigChange = renderSettings({ available: false }, { use_vision: true });
     const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    expect(toggle.checked).toBe(true);
-    expect(toggle.disabled).toBe(false);
+    expect(toggle.checked).toBe(false);
+    expect(toggle.disabled).toBe(true);
     expect(container.textContent).toContain("capability.ppt_builder.fields.use_vision.unavailable");
     act(() => toggle.click());
-    expect(onConfigChange).toHaveBeenCalledWith("use_vision", false);
+    expect(onConfigChange).not.toHaveBeenCalled();
   });
 
   it("is on by default when Knowledge Flow has a vision model", () => {
@@ -224,6 +225,15 @@ describe("PptBuilderVisionSettings", () => {
     expect(toggle.checked).toBe(true);
     expect(toggle.disabled).toBe(false);
     expect(container.querySelector("select")).toBeNull();
+  });
+
+  it("keeps the saved choice when availability cannot be checked", () => {
+    const onConfigChange = renderSettings({ available: null, failed: true }, { use_vision: true });
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    expect(toggle.disabled).toBe(true);
+    expect(container.textContent).toContain("capability.ppt_builder.fields.use_vision.availability_error");
+    expect(onConfigChange).not.toHaveBeenCalled();
   });
 
   it("keeps the toggle off when Knowledge Flow has no vision model", () => {

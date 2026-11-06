@@ -18,10 +18,12 @@ per-destination authorization, readiness preview, capabilities left out,
 naming, partial failure and the audit event.
 """
 
+# pyright: reportArgumentType=false
+
 from __future__ import annotations
 
-from typing import Any
 from types import SimpleNamespace
+from typing import Any
 
 import control_plane_backend.product.agent_copy as agent_copy
 import pytest
@@ -29,8 +31,10 @@ from control_plane_backend.config.models import ManagedAgentTuning
 from fastapi import HTTPException
 from fred_core.common import TeamId
 from fred_core.security.rebac.rebac_engine import RebacReference
-from fred_sdk.contracts.capability import CapabilityConfigCopyRequest
-from fred_sdk.contracts.capability import CapabilityCatalogEntry
+from fred_sdk.contracts.capability import (
+    CapabilityCatalogEntry,
+    CapabilityConfigCopyRequest,
+)
 from fred_sdk.contracts.capability.manifest import AssetSlot
 from fred_sdk.contracts.capability.preparation import PreparationSpec
 from httpx import ASGITransport, AsyncClient

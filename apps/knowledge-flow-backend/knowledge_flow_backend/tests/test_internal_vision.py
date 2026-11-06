@@ -3,14 +3,15 @@
 import asyncio
 import io
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from fastapi import APIRouter, FastAPI
+from fred_core import get_current_user_without_gcu, get_principal_context
 from PIL import Image
 
-from fred_core import get_current_user_without_gcu, get_principal_context
 from knowledge_flow_backend.features.vision.controller import VisionController
 
 
@@ -31,7 +32,7 @@ def _app(*, configured: bool = True, client_id: str = "agentic"):
         get_vision_model=lambda: model,
     )
     router = APIRouter()
-    VisionController(router, context)
+    VisionController(router, cast(Any, context))
     app = FastAPI()
     app.include_router(router)
 

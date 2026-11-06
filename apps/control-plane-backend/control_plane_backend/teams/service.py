@@ -61,13 +61,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.store import TeamAgentsDeletion
-from control_plane_backend.capability_preparations.service import (
-    retire_agent_preparations,
-)
 from control_plane_backend.agent_marketplace.store import (
     RemovalReason,
     RemovedEntry,
     emit_unpublished,
+)
+from control_plane_backend.capability_preparations.service import (
+    retire_agent_preparations,
 )
 from control_plane_backend.common.avatar_image import read_avatar_upload
 from control_plane_backend.marketplace_settings.effective import (

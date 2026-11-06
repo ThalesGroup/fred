@@ -1,27 +1,23 @@
 """Focused admission and transaction checks for reusable preparation."""
 
+# pyright: reportArgumentType=false, reportOptionalMemberAccess=false, reportAttributeAccessIssue=false
+
 from __future__ import annotations
 
-import io
 import asyncio
+import io
 import os
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any, Callable
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
-from unittest.mock import AsyncMock
-from types import SimpleNamespace
-from fred_core import TeamPermission
-from fred_core.common import TeamId
-from fred_sdk.contracts.capability import CapabilityCatalogEntry
-from fred_sdk.contracts.capability.manifest import AssetSlot
-from fred_sdk.contracts.capability.preparation import PreparationSpec
-from fred_sdk.contracts.capability.preparation import PreparationResult
-from sqlalchemy import create_engine, func, select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
+from control_plane_backend.agent_instances.store import (
+    AgentInstanceRecord,
+    AgentInstanceStore,
+)
 from control_plane_backend.capability_preparations.admission import (
     StagedAsset,
     persist_agent_preparations,
@@ -44,10 +40,6 @@ from control_plane_backend.capability_preparations.service import (
     publish_worker_result,
     retry_agent_preparation,
 )
-from control_plane_backend.agent_instances.store import (
-    AgentInstanceRecord,
-    AgentInstanceStore,
-)
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.capability_preparation_models import (
@@ -56,6 +48,14 @@ from control_plane_backend.models.capability_preparation_models import (
     CapabilityPreparationRow,
 )
 from control_plane_backend.product import api as product_api
+from fastapi import HTTPException
+from fred_core import TeamPermission
+from fred_core.common import TeamId
+from fred_sdk.contracts.capability import CapabilityCatalogEntry
+from fred_sdk.contracts.capability.manifest import AssetSlot
+from fred_sdk.contracts.capability.preparation import PreparationResult, PreparationSpec
+from sqlalchemy import create_engine, func, select, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @dataclass
@@ -134,6 +134,28 @@ async def test_multipart_parser_bounds_uploaded_content(
             ["example:source"], [Upload()]
         )
     assert error.value.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_multipart_parser_bounds_aggregate_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(product_api, "MAX_CAPABILITY_ASSET_BYTES", 4)
+    monkeypatch.setattr(product_api, "MAX_CAPABILITY_REQUEST_BYTES", 5)
+
+    class Upload:
+        filename = "a.txt"
+        content_type = "text/plain"
+
+        async def read(self, size: int) -> bytes:
+            return b"abc"[:size]
+
+    with pytest.raises(HTTPException) as error:
+        await product_api._parse_capability_asset_uploads(
+            ["example:first", "other:second"], [Upload(), Upload()]
+        )
+    assert error.value.status_code == 413
+    assert "in total" in str(error.value.detail)
 
 
 @pytest.mark.asyncio
@@ -612,6 +634,27 @@ async def test_two_capabilities_share_save_dispatch_status_and_readiness() -> No
                 session, team_id="t1", agent_instance_ids=["a1"]
             )
             assert verdict["a1"].capability_ids == ("reverse",)
+        semaphore = asyncio.Semaphore(8)
+
+        async def save_one(index: int) -> None:
+            async with semaphore, sessions() as session, session.begin():
+                await persist_agent_preparations(
+                    session,
+                    owner_id=f"batch-{index}",
+                    team_id="t1",
+                    runtime_id="fred-agents",
+                    available=[_entry()],
+                    selected_ids=["example"],
+                    capability_config={"example": {"config": {}}},
+                    staged=[],
+                )
+
+        await asyncio.gather(*(save_one(index) for index in range(128)))
+        batches = await asyncio.gather(
+            *(claim_due(sessions, limit=20) for _ in range(8))
+        )
+        claimed = [delivery.preparation_id for batch in batches for delivery in batch]
+        assert len(claimed) == len(set(claimed)) == 128
     finally:
         await engine.dispose()
         with sync_engine.begin() as connection:

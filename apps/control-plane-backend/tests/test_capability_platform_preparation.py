@@ -1,22 +1,19 @@
 """Platform candidates never replace the active result until success."""
 
+# pyright: reportArgumentType=false
+
 from __future__ import annotations
 
-import os
 import io
+import os
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
 from typing import Literal
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException, UploadFile
-from fred_sdk.contracts.capability.preparation import PreparationResult, PreparationSpec
-from sqlalchemy import create_engine, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-from control_plane_backend.capability_preparations.admission import StagedAsset
 from control_plane_backend.capability_preparations import api as preparation_api
+from control_plane_backend.capability_preparations.admission import StagedAsset
 from control_plane_backend.capability_preparations.platform import (
     refresh_platform_candidate,
     reset_platform_selection,
@@ -33,10 +30,14 @@ from control_plane_backend.capability_preparations.service import (
 )
 from control_plane_backend.models.capability_preparation_models import (
     CapabilityAssetRow,
+    CapabilityPlatformSelectionRow,
     CapabilityPreparationAssetRow,
     CapabilityPreparationRow,
-    CapabilityPlatformSelectionRow,
 )
+from fastapi import HTTPException, UploadFile
+from fred_sdk.contracts.capability.preparation import PreparationResult, PreparationSpec
+from sqlalchemy import create_engine, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.mark.asyncio

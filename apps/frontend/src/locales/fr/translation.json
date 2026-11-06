@@ -401,6 +401,7 @@
         "use_vision": {
           "title": "Utiliser un modèle de vision",
           "description": "Le modèle de vision de Knowledge Flow lit chaque slide pour la nommer et comprendre son usage.",
+          "availability_error": "La disponibilité du modèle de vision n'a pas pu être vérifiée. Votre choix enregistré reste inchangé.",
           "unavailable": "Le modèle de vision de Knowledge Flow est indisponible ; les slides sont nommées par des règles."
         },
         "variety_check": {

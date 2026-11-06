@@ -23,9 +23,9 @@ from control_plane_backend.capability_preparations.service import (
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.capability_preparation_models import (
     CapabilityAssetRow,
+    CapabilityPlatformSelectionRow,
     CapabilityPreparationAssetRow,
     CapabilityPreparationRow,
-    CapabilityPlatformSelectionRow,
 )
 
 

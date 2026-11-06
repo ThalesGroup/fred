@@ -5,7 +5,6 @@ from __future__ import annotations
 import httpx
 import pytest
 from fastapi import HTTPException
-
 from fred_runtime.capabilities.preparation_routes import RuntimePreparationRouteReader
 
 
@@ -112,5 +111,10 @@ async def test_platform_port_uses_scoped_control_plane_routes() -> None:
         await port.set_platform_settings("ppt_builder", "template", {"overrides": []})
         await port.reset_platform_selection("ppt_builder", "template")
     assert [method for method, _ in methods] == [
-        "GET", "PUT", "POST", "POST", "PUT", "DELETE"
+        "GET",
+        "PUT",
+        "POST",
+        "POST",
+        "PUT",
+        "DELETE",
     ]

@@ -85,6 +85,7 @@ def _tables() -> tuple[sa.Table, sa.Table, sa.Table, sa.Table]:
         sa.Column("lease_until", sa.DateTime(timezone=True)),
         sa.Column("workflow_id", sa.String(255), nullable=False),
         sa.Column("task_queue", sa.String(255), nullable=False),
+        sa.Column("worker_token", sa.String(36), nullable=False),
         sa.Column("run_id", sa.String(255)),
         sa.Column("delivery_due_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("dispatch_owner", sa.String(36)),

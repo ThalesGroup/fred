@@ -35,6 +35,11 @@ The system SHALL store immutable input references and committed results in share
 - **WHEN** an editor saves an unchanged resource and preparation settings after a successful preparation
 - **THEN** no duplicate job is scheduled and the existing result remains in use
 
+#### Scenario: Aggregate upload limit
+
+- **WHEN** a multipart save contains several individually valid files whose combined bytes exceed 64 MiB
+- **THEN** admission rejects the request before retaining all payloads or scheduling preparation
+
 ### Requirement: Preparation is recoverable and stale results are fenced
 
 The system SHALL durably track pending, running, succeeded and failed preparations. Interrupted work SHALL be retried with bounded attempts, and only the current input revision SHALL be allowed to publish a result. Superseded or deleted resources SHALL be reclaimed after their readers and in-flight attempts release them.
@@ -43,6 +48,11 @@ The system SHALL durably track pending, running, succeeded and failed preparatio
 
 - **WHEN** a worker stops while preparing an input
 - **THEN** another worker can resume or retry the job without a new user save
+
+#### Scenario: Worker loses its activity lease
+
+- **WHEN** an active worker stops sending heartbeats before the job deadline
+- **THEN** Temporal retries the activity on a live worker before its two-hour start-to-close limit
 
 #### Scenario: Replacement overtakes an old result
 
@@ -68,6 +78,11 @@ The system SHALL evaluate every selected capability's current preparation indepe
 
 - **WHEN** all current preparations succeed
 - **THEN** the agent becomes available without another save if no other rule suspends it
+
+#### Scenario: Worker publishes while the binding is read
+
+- **WHEN** a worker publishes a result while a serving pod resolves an agent binding
+- **THEN** the binding has either a blocked verdict or the matching result reference, never a ready verdict without that reference
 
 #### Scenario: Existing suspension persists
 

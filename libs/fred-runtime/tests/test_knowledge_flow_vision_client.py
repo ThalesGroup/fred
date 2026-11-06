@@ -2,7 +2,6 @@
 
 import httpx
 import pytest
-
 from fred_runtime.capabilities.vision_client import (
     KnowledgeFlowVisionClient,
     SaveVisionAvailabilityClient,

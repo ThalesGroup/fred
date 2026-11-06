@@ -401,6 +401,7 @@
         "use_vision": {
           "title": "Use a vision model",
           "description": "Knowledge Flow's vision model reads each slide to name it and understand its purpose.",
+          "availability_error": "Vision availability could not be checked. Your saved choice is unchanged.",
           "unavailable": "Knowledge Flow's vision model is unavailable; slides are labelled by rules."
         },
         "variety_check": {

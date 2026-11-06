@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+from typing import Literal, cast
 from uuid import UUID, uuid4
 
-from fred_sdk.contracts.capability.preparation import PreparationAsset, PreparationWork
 from fred_core.store.base_content_store import ContentStore
-from sqlalchemy import or_, select
-from sqlalchemy import update
+from fred_sdk.contracts.capability.preparation import PreparationAsset, PreparationWork
+from pydantic import JsonValue
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.capability_preparations.schemas import (
@@ -23,9 +24,9 @@ from control_plane_backend.capability_preparations.schemas import (
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.capability_preparation_models import (
     CapabilityAssetRow,
+    CapabilityPlatformSelectionRow,
     CapabilityPreparationAssetRow,
     CapabilityPreparationRow,
-    CapabilityPlatformSelectionRow,
 )
 
 
@@ -35,7 +36,7 @@ def _status(
     return PreparationStatus(
         capability_id=row.capability_id,
         preparation_id=row.id,
-        state=row.state,
+        state=cast(Literal["pending", "running", "succeeded", "failed"], row.state),
         input_revision=row.input_revision,
         attempts=row.attempts,
         max_attempts=row.max_attempts,
@@ -216,7 +217,7 @@ async def get_worker_work(
     )
     return PreparationWork(
         preparation_id=UUID(row.id),
-        owner_kind=row.owner_kind,
+        owner_kind=cast(Literal["agent", "platform"], row.owner_kind),
         owner_id=row.owner_id,
         runtime_id=row.runtime_id,
         capability_id=row.capability_id,
@@ -234,7 +235,7 @@ async def get_worker_work(
             )
             for asset in linked
         ),
-        config=row.config_json,
+        config=cast(dict[str, JsonValue], row.config_json),
     )
 
 
@@ -298,7 +299,11 @@ async def current_platform_results(
     settings = {}
     for selection in selections:
         key = f"{selection.capability_id}:platform:{selection.slot_key}"
-        row = active_rows.get(selection.active_preparation_id)
+        row = (
+            active_rows.get(selection.active_preparation_id)
+            if selection.active_preparation_id is not None
+            else None
+        )
         if row is not None and row.result_reference:
             results[key] = row.result_reference
         if selection.settings_json:

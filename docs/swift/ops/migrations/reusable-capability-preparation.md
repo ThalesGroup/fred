@@ -13,7 +13,8 @@ The preparation worker calls Knowledge Flow's internal vision endpoint using
 the workload identity named by `vision_worker_client_id`; the caller never
 chooses a model. The PPT settings retain only `use_vision`. When Knowledge
 Flow reports that no vision model is available, the form disables this switch
-and preparation uses the slide labelling rules.
+and preparation uses the slide labelling rules. If the availability lookup fails,
+the form preserves the saved choice and reports that it could not be checked.
 
 The Helm chart defines `applications.fred-agents-preparation-worker` as a
 separate deployment using the same capability registry and runtime storage as
@@ -25,6 +26,8 @@ pods. `preparation.max_concurrent_jobs` bounds work per worker replica, and
 work within that replica. Set control-plane runtime catalog source
 `preparation_enabled` and serving pod `preparation.enabled_capabilities` only
 after backfill and worker deployment are complete.
+Temporal retries a worker activity after two minutes without a heartbeat.
+Agent multipart saves accept at most 64 MiB across all capability assets.
 
 ## Deployment order
 
@@ -67,6 +70,11 @@ the serving image.
 The JSON result reports `total` and counts for `imported`, `imported_builtin`,
 `existing`, and `skipped_*`. Check that their sum equals `total`. Deleted agents
 can be skipped.
+The import command exits with an error if any live agent with a selected PPT
+template has no current preparation, including one skipped because its template
+changed. It also refuses a successful legacy analysis made with older rules;
+re-run that analysis on the old service, then repeat the import. Stop edits for
+the final pass so this check remains valid until the flags are enabled.
 Investigate changed or unconfigured agents before cutover, and check the active
 platform default and replacement in the PPT admin panel. The dry pass never
 writes to the control-plane database or either object store.

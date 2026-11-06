@@ -629,6 +629,7 @@ class CapabilityModelPort(ABC):
     ) -> AIMessage:
         """Run one chat completion and return the model's message."""
 
+
 # Request-state keys under which the pod binds the caller's authorizer and the
 # teamless model port before a capability route runs.
 CAPABILITY_TEAM_AUTHORIZER_STATE: Final = "fred_capability_team_authorizer"

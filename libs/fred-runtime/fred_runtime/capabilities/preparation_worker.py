@@ -32,28 +32,32 @@ from temporalio.worker import Worker
 
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.filesystem_factory import build_runtime_filesystem
+from fred_runtime.capabilities.preparation_workflow import CapabilityPreparationWorkflow
 from fred_runtime.capabilities.registry import (
     CapabilityRegistry,
     boot_capability_registry,
 )
-from fred_runtime.capabilities.preparation_workflow import CapabilityPreparationWorkflow
 from fred_runtime.capabilities.vision_client import KnowledgeFlowVisionClient
 
 logger = logging.getLogger(__name__)
 
 
 class WorkerAssetReader:
-    def __init__(self, client: httpx.AsyncClient, work: PreparationWork) -> None:
+    def __init__(
+        self, client: httpx.AsyncClient, work: PreparationWork, worker_token: str
+    ) -> None:
         self._client = client
         self._preparation_id = work.preparation_id
         self._assets = {asset.asset_id: asset for asset in work.assets}
+        self._headers = {"X-Preparation-Token": worker_token}
 
     async def read(self, asset_id: UUID) -> bytes:
         asset: PreparationAsset | None = self._assets.get(asset_id)
         if asset is None:
             raise ValueError("Asset is outside the preparation")
         response = await self._client.get(
-            f"/internal/capability-preparations/{self._preparation_id}/assets/{asset_id}"
+            f"/internal/capability-preparations/{self._preparation_id}/assets/{asset_id}",
+            headers=self._headers,
         )
         response.raise_for_status()
         content = response.content
@@ -134,9 +138,13 @@ class CapabilityPreparationActivities:
             for capability_id in registry.ids()
         }
 
-    async def prepare_once(self, preparation_id: str, attempt: int) -> None:
+    async def prepare_once(
+        self, preparation_id: str, attempt: int, worker_token: str
+    ) -> None:
+        headers = {"X-Preparation-Token": worker_token}
         response = await self._client.post(
-            f"/internal/capability-preparations/{preparation_id}/attempts/{attempt}"
+            f"/internal/capability-preparations/{preparation_id}/attempts/{attempt}",
+            headers=headers,
         )
         response.raise_for_status()
         work_data = response.json().get("work")
@@ -144,20 +152,20 @@ class CapabilityPreparationActivities:
             return
         work = PreparationWork.model_validate(work_data)
         if work.runtime_id != self._runtime_id:
-            await self._report_unavailable(preparation_id, work, attempt)
+            await self._report_unavailable(preparation_id, work, attempt, headers)
             return
         if work.capability_id not in self._registry:
-            await self._report_unavailable(preparation_id, work, attempt)
+            await self._report_unavailable(preparation_id, work, attempt, headers)
             return
         capability = self._registry.capability(work.capability_id)
         spec = capability.manifest.preparation
         if spec is None or spec.rules_version != work.rules_version:
-            await self._report_unavailable(preparation_id, work, attempt)
+            await self._report_unavailable(preparation_id, work, attempt, headers)
             return
         artifacts = WorkerArtifactStore(self._filesystem, work.preparation_id, attempt)
         context = PreparationContext(
             work=work,
-            assets=WorkerAssetReader(self._client, work),
+            assets=WorkerAssetReader(self._client, work, worker_token),
             artifacts=artifacts,
             vision=self._vision_client,
         )
@@ -193,11 +201,16 @@ class CapabilityPreparationActivities:
         result_response = await self._client.post(
             f"/internal/capability-preparations/{preparation_id}/result",
             json=completion,
+            headers=headers,
         )
         result_response.raise_for_status()
 
     async def _report_unavailable(
-        self, preparation_id: str, work: PreparationWork, attempt: int
+        self,
+        preparation_id: str,
+        work: PreparationWork,
+        attempt: int,
+        headers: dict[str, str],
     ) -> None:
         response = await self._client.post(
             f"/internal/capability-preparations/{preparation_id}/result",
@@ -207,6 +220,7 @@ class CapabilityPreparationActivities:
                 "state": "failed",
                 "error_code": "preparation_rules_unavailable",
             },
+            headers=headers,
         )
         response.raise_for_status()
 
@@ -228,8 +242,20 @@ class CapabilityPreparationActivities:
         return len(items)
 
     @activity.defn(name="prepare_capability")
-    async def prepare_capability(self, preparation_id: str) -> None:
-        await self.prepare_once(preparation_id, activity.info().attempt)
+    async def prepare_capability(self, preparation_id: str, worker_token: str) -> None:
+        async def heartbeat_loop() -> None:
+            while True:
+                activity.heartbeat()
+                await asyncio.sleep(30)
+
+        heartbeat_task = asyncio.create_task(heartbeat_loop())
+        try:
+            await self.prepare_once(
+                preparation_id, activity.info().attempt, worker_token
+            )
+        finally:
+            heartbeat_task.cancel()
+            await asyncio.gather(heartbeat_task, return_exceptions=True)
 
 
 async def run_preparation_worker(config: AgentPodConfig) -> None:

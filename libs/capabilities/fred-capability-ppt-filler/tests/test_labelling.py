@@ -113,6 +113,9 @@ async def test_preparation_vision_port_keeps_ppt_prompt_and_fallback(
                 raise RuntimeError("Knowledge Flow unavailable")
             return self.response
 
+        async def available(self) -> bool:
+            return self.response is not None
+
     valid = Vision(
         json.dumps(
             {

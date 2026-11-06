@@ -60,6 +60,9 @@ from control_plane_backend.bootstrap.api import (
 )
 from control_plane_backend.bootstrap.api import router as bootstrap_router
 from control_plane_backend.capabilities.api import router as capabilities_router
+from control_plane_backend.capability_preparations.api import (
+    router as capability_preparations_router,
+)
 from control_plane_backend.config.loader import (
     get_loaded_config_file_path,
     get_loaded_env_file_path,
@@ -82,9 +85,6 @@ from control_plane_backend.platform_ui_settings.api import (
     router as platform_ui_settings_router,
 )
 from control_plane_backend.product.api import router as product_router
-from control_plane_backend.capability_preparations.api import (
-    router as capability_preparations_router,
-)
 from control_plane_backend.routing_policy.api import (
     register_exception_handlers as register_routing_policy_exception_handlers,
 )

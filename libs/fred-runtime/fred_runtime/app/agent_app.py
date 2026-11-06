@@ -213,6 +213,8 @@ from fred_runtime.capabilities.platform_ports import (
     require_team_permission,
     team_authorizer_binder,
 )
+from fred_runtime.capabilities.preparation_artifacts import BoundPreparationArtifacts
+from fred_runtime.capabilities.vision_client import SaveVisionAvailabilityClient
 from fred_runtime.common.background_tasks import spawn
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.common.outbound_credentials import (
@@ -227,8 +229,6 @@ from fred_runtime.common.outbound_credentials import (
     static_person_provider,
 )
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.capabilities.preparation_artifacts import BoundPreparationArtifacts
-from fred_runtime.capabilities.vision_client import SaveVisionAvailabilityClient
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.deep.deep_runtime import (
     DeepAgentRuntime,

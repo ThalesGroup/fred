@@ -507,6 +507,7 @@ async def patch_team_agent_instance(
 
 
 MAX_CAPABILITY_ASSET_BYTES = 64 * 1024 * 1024
+MAX_CAPABILITY_REQUEST_BYTES = 64 * 1024 * 1024
 
 
 async def _parse_capability_asset_uploads(
@@ -531,6 +532,7 @@ async def _parse_capability_asset_uploads(
     if len(asset_files) > 32:
         raise HTTPException(status_code=413, detail="Too many capability assets.")
     uploads: dict[str, list[CapabilityAssetFile]] = {}
+    total_bytes = 0
     for slot_ref, upload in zip(asset_slots, asset_files):
         capability_id, separator, slot_key = slot_ref.partition(":")
         if not separator or not capability_id or not slot_key:
@@ -541,11 +543,17 @@ async def _parse_capability_asset_uploads(
                     "'{capability_id}:{slot_key}'."
                 ),
             )
-        content = await upload.read(MAX_CAPABILITY_ASSET_BYTES + 1)
+        remaining = MAX_CAPABILITY_REQUEST_BYTES - total_bytes
+        content = await upload.read(min(MAX_CAPABILITY_ASSET_BYTES, remaining) + 1)
         if len(content) > MAX_CAPABILITY_ASSET_BYTES:
             raise HTTPException(
                 status_code=413, detail="Capability asset exceeds 64 MiB."
             )
+        if len(content) > remaining:
+            raise HTTPException(
+                status_code=413, detail="Capability assets exceed 64 MiB in total."
+            )
+        total_bytes += len(content)
         uploads.setdefault(capability_id, []).append(
             CapabilityAssetFile(
                 slot_key=slot_key,

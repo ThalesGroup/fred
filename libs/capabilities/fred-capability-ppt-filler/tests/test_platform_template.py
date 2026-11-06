@@ -66,6 +66,7 @@ class _Port(CapabilityModelPort):
     async def ainvoke(self, messages, *, profile_id=None, require_vision=False):
         raise AssertionError("label_inventory is faked here")
 
+
 PORT = _Port()
 
 

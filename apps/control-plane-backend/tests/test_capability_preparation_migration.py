@@ -12,6 +12,7 @@ import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from sqlalchemy.exc import IntegrityError
 
 
 def _migration():
@@ -95,6 +96,7 @@ def _preparation(owner_id: str, revision: str, *, current: bool) -> dict[str, ob
         "deadline_at": now,
         "workflow_id": f"prepare-{uuid4()}",
         "task_queue": "fred-agents-preparation",
+        "worker_token": str(uuid4()),
         "delivery_due_at": now,
         "created_at": now,
         "updated_at": now,
@@ -108,6 +110,7 @@ def test_upgrade_downgrade_and_revision_constraints(database):
         "capability_asset",
         "capability_preparation",
         "capability_preparation_asset",
+        "capability_platform_selection",
     }
     with engine.begin() as connection:
         if schema:
@@ -118,13 +121,13 @@ def test_upgrade_downgrade_and_revision_constraints(database):
         first = _preparation("agent-1", "revision-1", current=True)
         connection.execute(table.insert().values(**first))
 
-        with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+        with pytest.raises(IntegrityError), connection.begin_nested():
             connection.execute(
                 table.insert().values(
                     **_preparation("agent-1", "revision-1", current=False)
                 )
             )
-        with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+        with pytest.raises(IntegrityError), connection.begin_nested():
             connection.execute(
                 table.insert().values(
                     **_preparation("agent-1", "revision-2", current=True)
@@ -135,7 +138,7 @@ def test_upgrade_downgrade_and_revision_constraints(database):
         )
         second = _preparation("agent-1", "revision-2", current=True)
         connection.execute(table.insert().values(**second))
-        with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
+        with pytest.raises(IntegrityError), connection.begin_nested():
             connection.execute(
                 table.update()
                 .where(table.c.id == second["id"])

@@ -1,3 +1,5 @@
+# pyright: reportArgumentType=false
+
 """Readiness combines every current gate without erasing other suspensions."""
 
 import os
@@ -7,15 +9,12 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fred_core.common import TeamId
-from sqlalchemy import create_engine, select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.agent_instances.suspension import SuspensionReason
-from control_plane_backend.capability_preparations.readiness import _verdict
 from control_plane_backend.capability_preparations.readiness import (
+    _verdict,
     agent_preparation_readiness,
+    current_agent_snapshot,
 )
 from control_plane_backend.capability_preparations.schemas import (
     WorkerPreparationResult,
@@ -35,6 +34,9 @@ from control_plane_backend.models.capability_preparation_models import (
     CapabilityPreparationRow,
 )
 from control_plane_backend.product import service
+from fred_core.common import TeamId
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 def _record(reason: str | None = None) -> AgentInstanceRecord:
@@ -211,6 +213,17 @@ async def test_batch_readiness_uses_only_current_team_gates() -> None:
         assert "a2" not in verdicts
         assert "a3" not in verdicts
         async with sessions() as session:
+            pending_results, pending_verdict = await current_agent_snapshot(
+                session, agent_instance_id="a1", team_id="t1"
+            )
+            assert pending_results == {}
+            assert pending_verdict is not None
+            assert pending_verdict.capability_ids == ("alpha", "beta")
+            ready_results, ready_verdict = await current_agent_snapshot(
+                session, agent_instance_id="a4", team_id="t1"
+            )
+            assert ready_results["zeta"].endswith("/result.json")
+            assert ready_verdict is not None and ready_verdict.ready
             assert (
                 await current_agent_results(
                     session, agent_instance_id="a4", team_id="t1"

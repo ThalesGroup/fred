@@ -35,6 +35,7 @@ class Delivery:
     deadline_at: datetime
     claim_id: str
     dispatch_attempts: int
+    worker_token: str
 
 
 async def claim_due(
@@ -87,6 +88,7 @@ async def claim_due(
                         deadline_at=row.deadline_at,
                         claim_id=claim_id,
                         dispatch_attempts=row.dispatch_attempts,
+                        worker_token=row.worker_token,
                     )
                 )
     return deliveries
@@ -167,7 +169,7 @@ async def _deliver(
         handle = await asyncio.wait_for(
             client.start_workflow(
                 "CapabilityPreparationWorkflow",
-                delivery.preparation_id,
+                args=[delivery.preparation_id, delivery.worker_token],
                 id=delivery.workflow_id,
                 task_queue=delivery.task_queue,
                 id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
@@ -186,7 +188,10 @@ async def _deliver(
                     timeout=10,
                 )
                 run_id = description.run_id
-                terminal = description.status.name != "RUNNING"
+                terminal = (
+                    description.status is not None
+                    and description.status.name != "RUNNING"
+                )
             except Exception as reconcile_error:
                 logger.warning(
                     "Preparation delivery reconciliation failed: %s",

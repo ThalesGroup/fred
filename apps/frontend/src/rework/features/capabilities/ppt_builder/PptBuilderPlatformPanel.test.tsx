@@ -233,6 +233,20 @@ describe("PptBuilderPlatformPanel", () => {
     expect(container.querySelector("select")).toBeNull();
   });
 
+  it("uploads with rules when Knowledge Flow vision is unavailable", async () => {
+    h.visionAvailability.mockReturnValue({ available: false });
+    show({ analysis: null });
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    expect(toggle.disabled).toBe(true);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File(["x"], "brand.pptx")] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(h.upload).toHaveBeenCalledWith("/pod/capabilities/ppt_builder", expect.any(File), {
+      use_vision: false,
+    });
+  });
+
   it("lets a manager edit the slides and saves the edits when the review closes", async () => {
     show({ analysis: analysis(), template_filename: "brand.pptx", overrides: [] });
     act(() => button("capability.ppt_builder.form.review").click());

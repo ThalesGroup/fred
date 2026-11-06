@@ -231,8 +231,8 @@ vision n'a pas lue.
 
 Déposez le fichier modifié et enregistrez l'agent : le template est relu en
 entier, et l'agent reste indisponible pendant la lecture. Redéposer le même
-fichier garde la lecture précédente. Activer ou couper le modèle de vision, ou
-en changer, relance aussi la lecture. Les corrections faites dans **Vérifier
+fichier garde la lecture précédente. Activer ou couper la vision relance aussi
+la lecture. Les corrections faites dans **Vérifier
 les slides** ne sont gardées que pour les slides toujours présentes ;
 les notes et les noms de formes, eux, voyagent avec le fichier.
 

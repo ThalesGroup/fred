@@ -71,6 +71,7 @@ from fred_sdk.contracts.capability.manifest import (
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.names import normalize_agent_name
@@ -100,6 +101,7 @@ from control_plane_backend.capability_preparations.admission import (
 )
 from control_plane_backend.capability_preparations.readiness import (
     agent_preparation_readiness,
+    current_agent_snapshot,
 )
 from control_plane_backend.capability_preparations.service import (
     current_agent_results,
@@ -112,6 +114,7 @@ from control_plane_backend.config.models import (
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
 )
+from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
@@ -3550,7 +3553,7 @@ async def update_agent_instance(
                 "Capability asset storage is unavailable.", http_status=503
             ) from exc
     try:
-        update_kwargs = dict(
+        update_kwargs: dict[str, Any] = dict(
             agent_instance_id=agent_instance_id,
             team_id=team_id,
             display_name=request.display_name,
@@ -4155,6 +4158,16 @@ async def get_runtime_binding_for_team(
     # Two concurrent sessions of short sequential reads: at most 2 pooled
     # connections per turn instead of one per read (design.md, D12 notes).
     async def _team_reads(session: AsyncSession | None):
+        if session is not None:
+            # Keep the agent revision stable until its preparation gate and result are read.
+            await session.execute(
+                select(AgentInstanceRow.agent_instance_id)
+                .where(
+                    AgentInstanceRow.agent_instance_id == agent_instance_id,
+                    AgentInstanceRow.team_id == str(team_id),
+                )
+                .with_for_update(read=True)
+            )
         instance = await deps.get_agent_instance_store().get_for_team(
             agent_instance_id, team_id, session=session
         )
@@ -4169,11 +4182,17 @@ async def get_runtime_binding_for_team(
         )
         results: dict[str, str] = {}
         platform_settings: dict[str, dict[str, object]] = {}
+        preparation_verdict = None
+        runtime_sources = getattr(
+            getattr(getattr(deps, "configuration", None), "platform", None),
+            "runtime_catalog_sources",
+            (),
+        )
         platform_preparation_enabled = any(
             source.runtime_id == instance.source_runtime_id
             and source.enabled
             and source.preparation_enabled
-            for source in deps.configuration.platform.runtime_catalog_sources
+            for source in runtime_sources
         )
         session_factory_provider = getattr(deps, "get_sql_session_factory", None)
         if session_factory_provider is not None:
@@ -4193,7 +4212,7 @@ async def get_runtime_binding_for_team(
                         )
                         results.update(platform_results)
             else:
-                results = await current_agent_results(
+                results, preparation_verdict = await current_agent_snapshot(
                     session,
                     agent_instance_id=agent_instance_id,
                     team_id=str(team_id),
@@ -4206,7 +4225,14 @@ async def get_runtime_binding_for_team(
                         session, runtime_id=instance.source_runtime_id
                     )
                     results.update(platform_results)
-        return instance, settings, policy, results, platform_settings
+        return (
+            instance,
+            settings,
+            policy,
+            results,
+            platform_settings,
+            preparation_verdict,
+        )
 
     async def _platform_reads(session: AsyncSession | None):
         reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(
@@ -4252,10 +4278,8 @@ async def get_runtime_binding_for_team(
         routing_policy,
         preparation_results,
         platform_preparation_settings,
+        preparation_verdict,
     ) = team_result
-    preparation_verdict = (await _preparation_verdicts(deps, [instance])).get(
-        instance.agent_instance_id
-    )
     (
         reasoning_enabled_model_ids,
         platform_chat_model_binding,

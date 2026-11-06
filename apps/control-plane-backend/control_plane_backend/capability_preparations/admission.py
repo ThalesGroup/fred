@@ -208,7 +208,12 @@ async def persist_agent_preparations(
             assets.extend(
                 (asset.id, asset.slot_key, asset.sha256) for asset in new_assets
             )
-        full_config = dict(capability_config.get(cap_id, {}).get("config") or {})
+        raw_config = capability_config.get(cap_id, {}).get("config") or {}
+        if not isinstance(raw_config, dict) or any(
+            not isinstance(key, str) for key in raw_config
+        ):
+            raise ValueError("Preparation config must be an object")
+        full_config: dict[str, object] = dict(raw_config)
         if spec.activation_field and not full_config.get(spec.activation_field):
             if previous is not None:
                 previous.is_current = False

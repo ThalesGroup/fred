@@ -563,8 +563,14 @@ def test_legacy_vision_declaration_is_accepted_but_not_projected() -> None:
     catalog = _catalog((profile,))
 
     assert "supports_vision" not in profile.model_dump()
-    assert "vision_profile_ids" not in _project_model_catalog_entries(catalog)[0].model_dump()
-    assert "vision_profile_ids" not in _project_model_catalog_response(catalog).model_dump()
+    assert (
+        "vision_profile_ids"
+        not in _project_model_catalog_entries(catalog)[0].model_dump()
+    )
+    assert (
+        "vision_profile_ids"
+        not in _project_model_catalog_response(catalog).model_dump()
+    )
 
 
 def test_reasoning_efforts_lists_only_profiles_with_selectable_levels() -> None:

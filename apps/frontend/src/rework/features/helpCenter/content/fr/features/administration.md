@@ -113,8 +113,8 @@ qui n'en ont pas à eux (le template Fred tant que rien n'est changé) :
 - **Téléverser un template .pptx** — le fichier est lu en arrière-plan. Tant
   que la lecture n'a pas réussi, ou si elle échoue, les agents gardent le
   template précédent.
-- **Utiliser un modèle de vision** — le modèle d'IA qui lit les slides de ce
-  template ; par défaut, le modèle par défaut de la plateforme. Le choix vaut
+- **Utiliser un modèle de vision** — le modèle configuré dans Knowledge Flow
+  lit les slides de ce template lorsqu'il est disponible. Ce réglage vaut
   au prochain téléversement ou à **Relancer la lecture**, et ne change rien aux
   agents. Il n'a aucun effet sur le template Fred, déjà lu.
 - **Vérifier les slides** — renommez une slide, changez son type ou
