@@ -400,14 +400,9 @@
         },
         "use_vision": {
           "title": "Utiliser un modèle de vision",
-          "description": "Un modèle d'IA capable de lire les images regarde chaque slide du template pour la nommer et comprendre à quoi elle sert.",
-          "unavailable": "Aucun modèle d'IA capable de lire les images n'est disponible pour cet agent ; les slides sont nommées par des règles."
-        },
-        "labelling_model": {
-          "title": "Modèle d'IA qui lit les slides",
-          "description": "Gardez le modèle de l'agent pour utiliser celui avec lequel il répond.",
-          "agentDefault": "Le modèle d'IA de l'agent",
-          "rereadOnSave": "Changer de modèle relit le template à l'enregistrement de l'agent."
+          "description": "Le modèle de vision de Knowledge Flow lit chaque slide pour la nommer et comprendre son usage.",
+          "availability_error": "La disponibilité du modèle de vision n'a pas pu être vérifiée. Votre choix enregistré reste inchangé.",
+          "unavailable": "Le modèle de vision de Knowledge Flow est indisponible ; les slides sont nommées par des règles."
         },
         "variety_check": {
           "title": "Forcer de la variété",
@@ -448,6 +443,9 @@
         "inProgress": "Lecture du template en cours… L'agent devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
         "unknown": "L'état du template n'est pas disponible pour le moment.",
         "failed": "Le template n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas ; enregistrez l'agent pour le relire.",
+        "failedRetry": "Le template n'a pas pu être lu. L'agent reste indisponible jusqu'à la réussite de la lecture.",
+        "retry": "Relancer la lecture",
+        "retryError": "La lecture n'a pas pu être relancée.",
         "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible jusqu'à ce que vous l'enregistriez pour relancer la lecture.",
         "outdated": "Ce template a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire et profiter des dernières améliorations.",
         "refreshing": "Nouvelle lecture du template… L'agent garde la lecture précédente jusqu'à la fin."
@@ -589,8 +587,6 @@
         },
         "refreshing": "Nouvelle lecture du template… Les agents gardent la lecture précédente jusqu'à la fin.",
         "outdated": "Ce template a été lu avec une version plus ancienne. Les agents continuent de l'utiliser ; relancez la lecture pour profiter des dernières améliorations.",
-        "defaultModel": "Le modèle d'IA par défaut de la plateforme",
-        "visionRereads": "Un nouveau modèle sert à la prochaine lecture du template.",
         "rerun": "Relancer la lecture",
         "rerunStarted": "Nouvelle lecture lancée.",
         "rerunError": "La lecture n'a pas pu être relancée.",

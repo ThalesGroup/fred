@@ -886,6 +886,11 @@ applications:
           workflow_id_prefix: "task"
           connect_timeout_seconds: 5
 
+      preparation:
+        max_concurrent_jobs: 4
+        per_capability_concurrency:
+          ppt_builder: 2
+
       ai:
         knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v1"
         timeout:
@@ -999,7 +1004,6 @@ applications:
         - profile_id: chat.mistral.medium
           capability: chat
           model_display_name: "Mistral Medium 3.5"
-          supports_vision: true
           supports_thinking: true
           model:
             provider: openai
@@ -1013,7 +1017,6 @@ applications:
         - profile_id: default.chat.openai.prod
           capability: chat
           model_display_name: "GPT-5.1"
-          supports_vision: true
           description: "Default balanced chat model for production conversations."
           # Selectable reasoning effort (optional): list the levels the provider
           # really accepts, e.g. for GPT-5.1 (with supports_thinking: true):
@@ -1028,7 +1031,6 @@ applications:
         - profile_id: default.chat.local
           capability: chat
           model_display_name: "GPT-5.1"
-          supports_vision: true
           description: "Local default chat profile with retries and shorter timeout."
           model:
             provider: openai
@@ -1040,7 +1042,6 @@ applications:
         - profile_id: chat.openai.gpt52
           capability: chat
           model_display_name: "GPT-5.2"
-          supports_vision: true
           description: "Highest-quality GPT-5.2 profile for complex reasoning and synthesis."
           model:
             provider: openai
@@ -1049,7 +1050,6 @@ applications:
         - profile_id: chat.openai.gpt5
           capability: chat
           model_display_name: "GPT-5"
-          supports_vision: true
           description: "Strong general-purpose GPT-5 profile, balanced quality and latency."
           model:
             provider: openai
@@ -1058,7 +1058,6 @@ applications:
         - profile_id: chat.openai.gpt5mini
           capability: chat
           model_display_name: "GPT-5 mini"
-          supports_vision: true
           description: "Faster and lower-cost GPT-5 Mini profile for everyday chat tasks."
           model:
             provider: openai
@@ -1067,7 +1066,6 @@ applications:
         - profile_id: chat.openai.gpt5nano
           capability: chat
           model_display_name: "GPT-5 nano"
-          supports_vision: true
           description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple prompts."
           model:
             provider: openai
@@ -1076,7 +1074,6 @@ applications:
         - profile_id: chat.openai.gpt41
           capability: chat
           model_display_name: "GPT-4.1"
-          supports_vision: true
           description: "Reliable GPT-4.1 profile for broad compatibility and stable outputs."
           model:
             provider: openai
@@ -1085,7 +1082,6 @@ applications:
         - profile_id: chat.openai.gpt41mini
           capability: chat
           model_display_name: "GPT-4.1 mini"
-          supports_vision: true
           description: "Cost-efficient GPT-4.1 Mini profile for quick conversational responses."
           model:
             provider: openai
@@ -1094,7 +1090,6 @@ applications:
         - profile_id: chat.azure_apim.gpt4o
           capability: chat
           model_display_name: "GPT-4o (Azure)"
-          supports_vision: true
           description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
           model:
             provider: azure-apim
@@ -1143,6 +1138,61 @@ applications:
       #     url: "https://jira.example.com/mcp"
       #     sse_read_timeout: 2000
       #     auth_mode: "no_token"
+
+  # Start the worker; capability cutover still requires explicit preparation flags.
+  fred-agents-preparation-worker:
+    inheritFrom: fred-agents
+    enabled: true
+    applicationName: fred-agents-preparation-worker
+    deployment:
+      enabled: true
+    migration:
+      enabled: false
+    replicaCount: 1
+    command:
+      enabled: true
+      data: ["python", "-m", "fred_runtime", "preparation-worker"]
+    ports: []
+    service:
+      enabled: false
+    metricsService:
+      enabled: false
+    serviceAccount:
+      enabled: true
+      name: fred-agents-preparation-worker
+      automountServiceAccountToken: false
+      rbac:
+        enabled: false
+    kubeconfig:
+      enabled: false
+    volumeMounts:
+      - name: fred-agents-preparation-worker-vol
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: fred-agents-preparation-worker-catalog-vol
+        mountPath: /app/config/models_catalog.yaml
+        subPath: models_catalog.yaml
+      - name: fred-agents-preparation-worker-catalog-vol
+        mountPath: /app/config/mcp_catalog_external.yaml
+        subPath: mcp_catalog_external.yaml
+      - name: fred-agents-preparation-worker-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: fred-agents-preparation-worker-vol
+        configMap:
+          name: fred-agents-preparation-worker-back
+      - name: fred-agents-preparation-worker-catalog-vol
+        configMap:
+          name: fred-agents-preparation-worker-catalog
+      - name: fred-agents-preparation-worker-env-vol
+        secret:
+          secretName: fred-agents-preparation-worker-env
+    probes:
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
 
   # ── 3.2 Frontend ───────────────────────────────────────────────────
   frontend:
@@ -1544,6 +1594,7 @@ applications:
       document_sources: *kf-document-sources
       embedding_model: *kf-embedding-model
       chat_model:      *kf-chat-model
+      vision_worker_client_id: agentic
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
@@ -2259,6 +2310,7 @@ applications:
           - runtime_id: fred-agents
             base_url: http://fred-agents/fred/agents/v2
             enabled: true
+            preparation_client_id: agentic
             ingress_prefix: /fred/agents/v2
         # The applications this deployment serves (application_sources) and the
         # Knowledge Base publishers (knowledge_bases.publishers) are derived from

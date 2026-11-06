@@ -64,6 +64,7 @@ from pydantic import BaseModel, ConfigDict
 from .context import CapabilityContext, CapabilityIdentity, EmptyModel, SaveContext
 from .hitl import HitlSpec
 from .manifest import CapabilityManifest, ChatControlSpec, UploadedFile
+from .preparation import PreparationContext, PreparationResult
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -123,6 +124,15 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        manifest = getattr(cls, "manifest", None)
+        if (
+            manifest is not None
+            and manifest.preparation is not None
+            and cls.prepare is AgentCapability.prepare
+        ):
+            raise ValueError(
+                f"Capability '{manifest.id}' declares preparation but has no prepare hook"
+            )
         # StoredConfigModel defaults to ConfigModel (RFC §3.2). Only default it
         # when the subclass declares its own ConfigModel and no
         # StoredConfigModel is visible anywhere in the MRO.
@@ -184,6 +194,19 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
 
         del stored, identity
         return CapabilityReadiness.ready()
+
+    async def prepare(self, ctx: PreparationContext) -> PreparationResult:
+        """Produce a durable result for a declared preparation."""
+
+        del ctx
+        raise NotImplementedError("This capability does not declare preparation")
+
+    async def retire_preparation(
+        self, ctx: PreparationContext, result: PreparationResult
+    ) -> None:
+        """Remove derived artifacts after their result is no longer current."""
+
+        del ctx, result
 
     def hitl_specs(self) -> Sequence[HitlSpec]:
         """

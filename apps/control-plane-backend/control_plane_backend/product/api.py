@@ -506,6 +506,10 @@ async def patch_team_agent_instance(
     return result
 
 
+MAX_CAPABILITY_ASSET_BYTES = 64 * 1024 * 1024
+MAX_CAPABILITY_REQUEST_BYTES = 64 * 1024 * 1024
+
+
 async def _parse_capability_asset_uploads(
     asset_slots: list[str],
     asset_files: list[UploadFile],
@@ -514,9 +518,8 @@ async def _parse_capability_asset_uploads(
     Pair the parallel `asset_slots` / `asset_files` multipart arrays (#1903).
 
     Each slot entry is `{capability_id}:{slot_key}` and addresses the file at
-    the same index. Control-plane never opens the bytes — the pod's declared
-    `AssetSlot` gate (cardinality, extension) and the capability's own content
-    validation both run pod-side on the relayed multipart.
+    the same index. Reads are bounded before pod validation and immutable
+    object storage for capabilities declaring preparation.
     """
     if len(asset_slots) != len(asset_files):
         raise HTTPException(
@@ -526,7 +529,10 @@ async def _parse_capability_asset_uploads(
                 f"(got {len(asset_slots)} slots for {len(asset_files)} files)."
             ),
         )
+    if len(asset_files) > 32:
+        raise HTTPException(status_code=413, detail="Too many capability assets.")
     uploads: dict[str, list[CapabilityAssetFile]] = {}
+    total_bytes = 0
     for slot_ref, upload in zip(asset_slots, asset_files):
         capability_id, separator, slot_key = slot_ref.partition(":")
         if not separator or not capability_id or not slot_key:
@@ -537,11 +543,22 @@ async def _parse_capability_asset_uploads(
                     "'{capability_id}:{slot_key}'."
                 ),
             )
+        remaining = MAX_CAPABILITY_REQUEST_BYTES - total_bytes
+        content = await upload.read(min(MAX_CAPABILITY_ASSET_BYTES, remaining) + 1)
+        if len(content) > MAX_CAPABILITY_ASSET_BYTES:
+            raise HTTPException(
+                status_code=413, detail="Capability asset exceeds 64 MiB."
+            )
+        if len(content) > remaining:
+            raise HTTPException(
+                status_code=413, detail="Capability assets exceed 64 MiB in total."
+            )
+        total_bytes += len(content)
         uploads.setdefault(capability_id, []).append(
             CapabilityAssetFile(
                 slot_key=slot_key,
                 filename=upload.filename or slot_key,
-                content=await upload.read(),
+                content=content,
                 content_type=upload.content_type,
             )
         )
@@ -582,10 +599,9 @@ async def post_team_agent_instance_with_assets(
     AGENT-CAPABILITY-RFC §3.4).
 
     Why this endpoint exists:
-    - an asset-bearing capability (e.g. `ppt_filler`) needs its uploaded file to
-      travel INSIDE the atomic agent save, so the pod's `validate_config` can
-      parse it, store the binary, and persist the derived config in one step —
-      control-plane is a pure relay and never opens the bytes
+    - an asset-bearing capability needs its uploaded file during agent save.
+      The pod validates its content; a declared preparation also stores an
+      immutable original and a durable intention with the agent revision
     - the JSON route stays unchanged for every save that carries no upload
     """
     team_id = await require_team_access(
@@ -1781,6 +1797,11 @@ async def get_team_agent_instance_runtime(
     if not binding.enabled:
         raise HTTPException(
             status_code=409, detail="Managed agent instance is disabled."
+        )
+    if getattr(binding, "preparation_blocked", False):
+        raise HTTPException(
+            status_code=409,
+            detail="Managed agent instance is waiting for capability preparation.",
         )
     if (
         binding.disabled_platform_skills

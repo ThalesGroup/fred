@@ -8,6 +8,7 @@
         "knowledge-flow-backend",
         "frontend",
         "kf-worker",
+        "fred-agents-worker",
         "control-plane"
       ],
       "dependsOrder": "parallel",
@@ -24,6 +25,7 @@
         "knowledge-flow-backend-prod",
         "frontend",
         "kf-worker",
+        "fred-agents-worker-prod",
         "control-plane-prod",
         "control-plane-worker-prod"
       ],
@@ -200,6 +202,48 @@
       "icon": {
         "id": "filter",
         "color": "terminal.ansiBlue"
+      }
+    },
+    {
+      "label": "fred-agents-worker",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM; make run-worker"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/apps/fred-agents"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "filter",
+        "color": "terminal.ansiMagenta"
+      }
+    },
+    {
+      "label": "fred-agents-worker-prod",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM; make run-worker-prod"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/apps/fred-agents"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "filter",
+        "color": "terminal.ansiMagenta"
       }
     },
     {

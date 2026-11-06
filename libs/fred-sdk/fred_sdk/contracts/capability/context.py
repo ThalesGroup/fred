@@ -93,6 +93,7 @@ class SaveContext:
     services: RuntimeServices
     copied_from_another_scope: bool = False
     notices: list[str] = field(default_factory=list)
+    preparation_enabled: bool = False
 
 
 @dataclass(frozen=True)

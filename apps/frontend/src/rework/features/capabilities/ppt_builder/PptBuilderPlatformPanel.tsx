@@ -42,11 +42,11 @@ import {
 } from "./api/pptBuilderCapabilityOpenApi";
 import { PatternReviewDialog } from "./PatternReviewDialog";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
-import { effectiveInventory, LABELLING_MODEL_KEY, summarize, upsertOverride, USE_VISION_KEY } from "./types";
+import { effectiveInventory, summarize, upsertOverride, USE_VISION_KEY } from "./types";
 import type { PatternOverride } from "./types";
 import { TemplateGuideLink } from "./PptBuilderTemplatePanel";
 import { uploadPlatformTemplate } from "./uploadPlatformTemplate";
-import { usePlatformVisionProfiles } from "./useVisionAvailability";
+import { useVisionAvailability } from "./useVisionAvailability";
 import styles from "./PptBuilderTemplatePanel.module.css";
 
 const POLL_MS = 3000;
@@ -86,14 +86,12 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
   const [visionDraft, setVisionDraft] = useState<Record<string, unknown> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const visionProfiles = usePlatformVisionProfiles(!canManage);
+  const vision = useVisionAvailability(!canManage);
   const visionValues = visionDraft ?? {
     [USE_VISION_KEY]: platform?.use_vision ?? true,
-    [LABELLING_MODEL_KEY]: platform?.vision_profile_id ?? null,
   };
   const visionChoice = {
-    use_vision: visionValues[USE_VISION_KEY] !== false,
-    vision_profile_id: (visionValues[LABELLING_MODEL_KEY] as string | null) ?? null,
+    use_vision: vision.available !== false && visionValues[USE_VISION_KEY] !== false,
   };
 
   const savedOverrides = (platform?.overrides ?? []) as PatternOverride[];
@@ -263,9 +261,7 @@ export function PptBuilderPlatformPanel({ canManage }: CapabilityPlatformPanelPr
             disabled={busy}
             configValues={visionValues}
             onConfigChange={(key, value) => setVisionDraft({ ...visionValues, [key]: value })}
-            vision={{ available: true, visionProfiles }}
-            defaultModelLabel={t(`${K}.defaultModel`)}
-            changeHint={t(`${K}.visionRereads`)}
+            vision={vision}
           />
           {(hasTemplate || savedOverrides.length > 0) && (
             <div className={styles.uploadRow}>

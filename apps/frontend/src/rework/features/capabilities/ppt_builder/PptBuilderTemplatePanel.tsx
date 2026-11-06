@@ -178,7 +178,6 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
           configValues={configValues}
           onConfigChange={onConfigChange}
           vision={vision}
-          changeHint={t("capability.ppt_builder.fields.labelling_model.rereadOnSave")}
         />
         <PptBuilderVarietySettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
       </AdvancedSettingsSection>
@@ -236,7 +235,7 @@ export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
 
   const message =
     phase === "failed"
-      ? t("capability.ppt_builder.analysis.failed")
+      ? t(analysis.retry ? "capability.ppt_builder.analysis.failedRetry" : "capability.ppt_builder.analysis.failed")
       : phase === "interrupted"
         ? t("capability.ppt_builder.analysis.interrupted")
         : t("capability.ppt_builder.analysis.outdated");
@@ -244,6 +243,19 @@ export function AnalysisStatus({ analysis }: { analysis: PptBuilderAnalysis }) {
     <div className={styles.failure} role={phase === "succeeded" ? undefined : "alert"}>
       <p className={phase === "succeeded" ? styles.status : styles.error}>{message}</p>
       {analysis.error && <p className={styles.error}>{analysis.error}</p>}
+      {analysis.retry && (
+        <Button
+          type="button"
+          color="primary"
+          variant="outlined"
+          size="small"
+          disabled={analysis.retrying}
+          onClick={analysis.retry}
+        >
+          {t("capability.ppt_builder.analysis.retry")}
+        </Button>
+      )}
+      {analysis.retryFailed && <p className={styles.error}>{t("capability.ppt_builder.analysis.retryError")}</p>}
     </div>
   );
 }

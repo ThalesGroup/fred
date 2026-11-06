@@ -213,6 +213,8 @@ from fred_runtime.capabilities.platform_ports import (
     require_team_permission,
     team_authorizer_binder,
 )
+from fred_runtime.capabilities.preparation_artifacts import BoundPreparationArtifacts
+from fred_runtime.capabilities.vision_client import SaveVisionAvailabilityClient
 from fred_runtime.common.background_tasks import spawn
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 from fred_runtime.common.outbound_credentials import (
@@ -985,6 +987,8 @@ def _build_runtime_services(
     credential_provider: OutboundCredentialProvider | None = None,
     conversation_filesystem: ConversationFilesystemService | None = None,
     bound_library_ids: Sequence[str] | None = None,
+    preparation_results: Mapping[str, str] | None = None,
+    platform_preparation_settings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> RuntimeServices:
     """
     Assemble the full `RuntimeServices` bundle for one pod request.
@@ -1200,6 +1204,17 @@ def _build_runtime_services(
         ),
         conversation_filesystem=conversation_port,
         skills=skills,
+        preparation_artifacts=(
+            BoundPreparationArtifacts(
+                runtime_config.filesystem,
+                preparation_results or {},
+                platform_preparation_settings or {},
+            )
+            if runtime_config.filesystem is not None
+            and (preparation_results or platform_preparation_settings)
+            else None
+        ),
+        preparation_enabled_capabilities=runtime_config.preparation_capabilities,
     )
 
 
@@ -1466,9 +1481,6 @@ class _ModelCatalogEntry(BaseModel):
     for profiles declaring two or more (`ModelProfile.reasoning_levels`).
     Absent: that thinking profile is on/off only. Empty: no level a platform
     helper can send (`ModelProfile.reasoning_on_effort` is None)."""
-    vision_profile_ids: list[str] = Field(default_factory=list)
-    """The subset of `profile_ids` declaring `supports_vision` — what lets a
-    capability form offer image reading only when a vision model exists."""
     display_name: str | None = None
     """The ops-authored `model_display_name` of this model's first profile that
     declares one — the label the composer shows instead of splitting the
@@ -1674,8 +1686,6 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
             elif profile.reasoning_on_effort is None:
                 # Nothing a platform helper could send: reported as no levels.
                 existing.reasoning_efforts[profile.profile_id] = []
-        if profile.supports_vision:
-            existing.vision_profile_ids.append(profile.profile_id)
     return list(seen.values())
 
 
@@ -1779,6 +1789,11 @@ class _ResolvedAgentInstance(BaseModel):
     owner_team_id: str | None = None
     enabled: bool = True
     tuning: AgentTuning
+    preparation_results: dict[str, str] = Field(default_factory=dict)
+    platform_preparation_settings: dict[str, dict[str, Any]] = Field(
+        default_factory=dict
+    )
+    preparation_blocked: bool = False
     # Per-team enablement settings resolved control-plane-side at session prep
     # (CAPAB-01 / #1980, RFC §8.2), keyed by capability id and already
     # restricted to the instance's selected capabilities.
@@ -1823,6 +1838,10 @@ class _ResolvedExecutionTarget:
     # execution path assembles into the frame's capability block. None for
     # direct template execution — no capabilities there.
     tuning: AgentTuning | None = None
+    preparation_results: dict[str, str] = field(default_factory=dict)
+    platform_preparation_settings: dict[str, dict[str, Any]] = field(
+        default_factory=dict
+    )
     # Per-team enablement settings (CAPAB-01 / #1980, RFC §8.2), keyed by
     # capability id. Reaches each capability as `CapabilityContext.team_settings`
     # — never an LLM tool signature. Empty for direct template execution.
@@ -2138,6 +2157,10 @@ async def _resolve_agent_instance(
         )
     if response.status_code == status.HTTP_403_FORBIDDEN:
         raise HTTPException(status_code=403, detail=response.text or "Forbidden.")
+    if response.status_code == status.HTTP_409_CONFLICT:
+        raise HTTPException(
+            status_code=409, detail="Managed agent instance is unavailable."
+        )
     if response.status_code >= 400:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -2148,6 +2171,10 @@ async def _resolve_agent_instance(
         )
 
     resolution = _ResolvedAgentInstance.model_validate(response.json())
+    if resolution.preparation_blocked:
+        raise HTTPException(
+            status_code=409, detail="Managed agent instance preparation is pending."
+        )
     if resolution.model_discovery_urls:
         runtime_config = get_runtime_context().config
         factory = runtime_config.chat_model_factory
@@ -2187,6 +2214,8 @@ async def _resolve_agent_instance(
         team_id=resolution.owner_team_id,
         agent_instance_name=resolution.display_name or None,
         tuning=resolution.tuning,
+        preparation_results=resolution.preparation_results,
+        platform_preparation_settings=resolution.platform_preparation_settings,
         team_settings=resolution.team_capability_settings,
         reasoning_enabled_model_ids=tuple(resolution.reasoning_enabled_model_ids),
         team_disabled_model_ids=tuple(resolution.team_disabled_model_ids),
@@ -4105,6 +4134,8 @@ async def _stream(
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
+    preparation_results: Mapping[str, str] | None = None,
+    platform_preparation_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     disabled_platform_skills: tuple[str, ...] = (),
@@ -4192,6 +4223,8 @@ async def _stream(
         tuning=tuning,
         capability_registry=capability_registry,
         team_settings=team_settings,
+        preparation_results=preparation_results,
+        platform_preparation_settings=platform_preparation_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
         disabled_platform_skills=disabled_platform_skills,
@@ -4290,6 +4323,7 @@ def _build_capability_save_services(
     access_token: str | None,
     agent_instance_id: str | None = None,
     routing: CapabilitySaveRouting | None = None,
+    preparation_vision: SaveVisionAvailabilityClient | None = None,
 ) -> RuntimeServices:
     """
     Minimal `RuntimeServices` for one capability save-time validation (#1974).
@@ -4356,6 +4390,7 @@ def _build_capability_save_services(
             factory=runtime_config.chat_model_factory,
             rebac=runtime_config.rebac_engine,
         ),
+        preparation_vision=preparation_vision,
     )
 
 
@@ -4847,6 +4882,8 @@ async def _iterate_runtime_event_payloads(
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
+    preparation_results: Mapping[str, str] | None = None,
+    platform_preparation_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     disabled_platform_skills: tuple[str, ...] = (),
@@ -4876,6 +4913,8 @@ async def _iterate_runtime_event_payloads(
         tuning=tuning,
         capability_registry=capability_registry,
         team_settings=team_settings,
+        preparation_results=preparation_results,
+        platform_preparation_settings=platform_preparation_settings,
         reasoning_enabled_model_ids=reasoning_enabled_model_ids,
         team_disabled_model_ids=team_disabled_model_ids,
         disabled_platform_skills=disabled_platform_skills,
@@ -4998,6 +5037,8 @@ async def _iterate_runtime_event_payloads_inner(
     tuning: AgentTuning | None = None,
     capability_registry: CapabilityRegistry | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
+    preparation_results: Mapping[str, str] | None = None,
+    platform_preparation_settings: Mapping[str, Mapping[str, Any]] | None = None,
     reasoning_enabled_model_ids: tuple[str, ...] | None = None,
     team_disabled_model_ids: tuple[str, ...] = (),
     disabled_platform_skills: tuple[str, ...] = (),
@@ -5221,6 +5262,8 @@ async def _iterate_runtime_event_payloads_inner(
         bound_library_ids=_instance_bound_library_ids(
             capability_registry, tuning, definition
         ),
+        preparation_results=preparation_results,
+        platform_preparation_settings=platform_preparation_settings,
     )
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
@@ -6227,6 +6270,10 @@ def _build_agent_router(
         team_id = form_team_id if isinstance(form_team_id, str) else None
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
+        container = get_pod_container_from_app(http_request.app)
+        preparation_enabled = (
+            capability_id in container.configuration.preparation.enabled_capabilities
+        )
         save_ctx = SaveContext(
             identity=CapabilityIdentity(
                 user_id=(caller.uid if caller is not None else None) or "anonymous",
@@ -6246,7 +6293,17 @@ def _build_agent_router(
                 )
                 or None,
                 routing=parse_save_routing(http_request.query_params),
+                preparation_vision=(
+                    SaveVisionAvailabilityClient(
+                        container.get_control_plane_http_client(),
+                        container.configuration.ai.knowledge_flow_url,
+                        access_token,
+                    )
+                    if preparation_enabled
+                    else None
+                ),
             ),
+            preparation_enabled=preparation_enabled,
         )
         try:
             stored = await capability.validate_config(config, uploads, save_ctx)
@@ -6283,6 +6340,11 @@ def _build_agent_router(
     ) -> SaveContext:
         user_id = (caller.uid if caller is not None else None) or "anonymous"
         auth = http_request.headers.get("Authorization", "")
+        access_token = auth.removeprefix("Bearer ").strip() or None
+        container = get_pod_container_from_app(http_request.app)
+        preparation_enabled = (
+            capability_id in container.configuration.preparation.enabled_capabilities
+        )
         return SaveContext(
             identity=CapabilityIdentity(
                 user_id=user_id,
@@ -6293,10 +6355,20 @@ def _build_agent_router(
                 capability_id=capability_id,
                 user_id=user_id,
                 team_id=team_id,
-                access_token=auth.removeprefix("Bearer ").strip() or None,
+                access_token=access_token,
                 agent_instance_id=agent_instance_id,
                 routing=routing,
+                preparation_vision=(
+                    SaveVisionAvailabilityClient(
+                        container.get_control_plane_http_client(),
+                        container.configuration.ai.knowledge_flow_url,
+                        access_token,
+                    )
+                    if preparation_enabled
+                    else None
+                ),
             ),
+            preparation_enabled=preparation_enabled,
         )
 
     @router.post("/capabilities/{capability_id}/copy-config")
@@ -6454,10 +6526,21 @@ def _build_agent_router(
             agent_instance_id=body.agent_instance_id,
         )
         results: list[_ReadinessResult] = []
+        preparation_enabled = frozenset(
+            get_runtime_context().config.preparation_capabilities
+        )
         for item in body.items:
             if item.capability_id not in capability_registry:
                 continue
             capability = capability_registry.capability(item.capability_id)
+            if (
+                item.capability_id in preparation_enabled
+                and capability.manifest.preparation is not None
+            ):
+                results.append(
+                    _ReadinessResult(capability_id=item.capability_id, state="ready")
+                )
+                continue
             try:
                 stored = (
                     capability.StoredConfigModel.model_validate(item.stored.config)
@@ -7085,6 +7168,8 @@ def _build_agent_router(
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
+                preparation_results=target.preparation_results,
+                platform_preparation_settings=target.platform_preparation_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 disabled_platform_skills=target.disabled_platform_skills,
@@ -7198,6 +7283,8 @@ def _build_agent_router(
                 tuning=target.tuning,
                 capability_registry=_capability_registry_of(http_request),
                 team_settings=target.team_settings,
+                preparation_results=target.preparation_results,
+                platform_preparation_settings=target.platform_preparation_settings,
                 reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
                 team_disabled_model_ids=target.team_disabled_model_ids,
                 disabled_platform_skills=target.disabled_platform_skills,
@@ -7375,6 +7462,8 @@ def _build_agent_router(
             tuning=target.tuning,
             capability_registry=_capability_registry_of(http_request),
             team_settings=target.team_settings,
+            preparation_results=target.preparation_results,
+            platform_preparation_settings=target.platform_preparation_settings,
             reasoning_enabled_model_ids=target.reasoning_enabled_model_ids,
             team_disabled_model_ids=target.team_disabled_model_ids,
             disabled_platform_skills=target.disabled_platform_skills,
@@ -7636,6 +7725,7 @@ def create_agent_app(
                         checkpointer=checkpointer,
                         history_store=history_store,
                         filesystem=container.get_filesystem(),
+                        preparation_capabilities=config.preparation.enabled_capabilities,
                         skills=skills,
                         conversation_filesystem_quotas=(
                             config.storage.conversation_filesystem

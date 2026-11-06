@@ -400,14 +400,9 @@
         },
         "use_vision": {
           "title": "Use a vision model",
-          "description": "A model that reads images looks at each slide of the template to name it and understand what it is for.",
-          "unavailable": "No vision-capable model is available for this agent; slides are labelled by rules."
-        },
-        "labelling_model": {
-          "title": "Model that reads the slides",
-          "description": "Leave the agent's model to use the one it answers with.",
-          "agentDefault": "The agent's model",
-          "rereadOnSave": "Changing the model reads the template again when you save the agent."
+          "description": "Knowledge Flow's vision model reads each slide to name it and understand its purpose.",
+          "availability_error": "Vision availability could not be checked. Your saved choice is unchanged.",
+          "unavailable": "Knowledge Flow's vision model is unavailable; slides are labelled by rules."
         },
         "variety_check": {
           "title": "Enforce variety",
@@ -448,6 +443,9 @@
         "inProgress": "Reading the template… The agent becomes available when it is done; you can close this window.",
         "unknown": "The template's status is not available right now.",
         "failed": "The template could not be read. The agent stays unavailable until it is; save the agent to read it again.",
+        "failedRetry": "The template could not be read. The agent stays unavailable until the analysis succeeds.",
+        "retry": "Run the analysis again",
+        "retryError": "The analysis could not be started again.",
         "interrupted": "Reading the template was interrupted. The agent stays unavailable until you save it to read the template again.",
         "outdated": "This template was read with an older version. The agent keeps using it; save the agent to read it again and benefit from the latest improvements.",
         "refreshing": "Reading the template again… The agent keeps using the previous reading until it is done."
@@ -589,8 +587,6 @@
         },
         "refreshing": "Reading the template again… Agents keep the previous reading until it ends.",
         "outdated": "This template was read by an older version. Agents keep using it; run the analysis again to get the latest improvements.",
-        "defaultModel": "The platform's default AI model",
-        "visionRereads": "A new model is used the next time the template is read.",
         "rerun": "Run the analysis again",
         "rerunStarted": "Analysis started again.",
         "rerunError": "The analysis could not be started again.",

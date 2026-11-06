@@ -615,9 +615,8 @@ class CapabilityModelPort(ABC):
     default, catalogue default), within the team's usable models. A `profile_id`
     replaces that default and is never swapped for it. Fails closed with
     `CapabilityModelUnavailableError`, including when that profile is unknown or
-    outside the usable models, and when `require_vision` is set and the resolved
-    profile does not declare `supports_vision`. Images go as
-    LangChain `image_url` content parts.
+    outside the usable models. Legacy `require_vision` calls fail closed; image
+    description for preparations is served by Knowledge Flow.
     """
 
     @abstractmethod
@@ -630,19 +629,13 @@ class CapabilityModelPort(ABC):
     ) -> AIMessage:
         """Run one chat completion and return the model's message."""
 
-    async def require_vision_profile(self, profile_id: str) -> None:
-        """Raise `CapabilityModelUnavailableError` unless `profile_id` is a
-        vision chat profile this port may use, without calling the model.
-        Refuses unless an implementer overrides it."""
-        raise CapabilityModelUnavailableError(
-            f"Model profile {profile_id!r} cannot be checked here."
-        )
-
 
 # Request-state keys under which the pod binds the caller's authorizer and the
 # teamless model port before a capability route runs.
 CAPABILITY_TEAM_AUTHORIZER_STATE: Final = "fred_capability_team_authorizer"
 CAPABILITY_PLATFORM_MODEL_STATE: Final = "fred_capability_platform_model"
+CAPABILITY_PREPARATION_READER_STATE: Final = "fred_capability_preparation_reader"
+CAPABILITY_PREPARATION_MANAGER_STATE: Final = "fred_capability_preparation_manager"
 
 
 class CapabilityTeamAuthorizer(ABC):
@@ -660,9 +653,75 @@ class CapabilityTeamAuthorizer(ABC):
         raise HTTPException(status_code=403, detail=CAPABILITY_MANAGER_DENIED)
 
 
+class CapabilityPreparationReader(ABC):
+    """Authenticated current status and artifacts for a capability router."""
+
+    @abstractmethod
+    def enabled(self, capability_id: str) -> bool: ...
+
+    @abstractmethod
+    async def agent_status(
+        self, team_id: str, agent_instance_id: str, capability_id: str
+    ) -> Mapping[str, Any] | None: ...
+
+    @abstractmethod
+    async def read_result(self, reference: str) -> bytes: ...
+
+    @abstractmethod
+    async def read_sibling(self, reference: str, filename: str) -> bytes: ...
+
+    @abstractmethod
+    async def sibling_exists(self, reference: str, filename: str) -> bool: ...
+
+    @abstractmethod
+    async def platform_status(
+        self, capability_id: str, slot_key: str
+    ) -> Mapping[str, Any]: ...
+
+
+class CapabilityPreparationManager(ABC):
+    """Authenticated platform mutation port for capability managers."""
+
+    @abstractmethod
+    async def upload_platform_candidate(
+        self,
+        capability_id: str,
+        slot_key: str,
+        content: bytes,
+        filename: str,
+        config: Mapping[str, Any],
+    ) -> Mapping[str, Any]: ...
+
+    @abstractmethod
+    async def retry_platform_candidate(
+        self, capability_id: str, slot_key: str
+    ) -> Mapping[str, Any]: ...
+
+    @abstractmethod
+    async def refresh_platform_candidate(
+        self, capability_id: str, slot_key: str, config: Mapping[str, Any]
+    ) -> Mapping[str, Any]: ...
+
+    @abstractmethod
+    async def reset_platform_selection(
+        self, capability_id: str, slot_key: str
+    ) -> Mapping[str, Any]: ...
+
+    @abstractmethod
+    async def set_platform_settings(
+        self, capability_id: str, slot_key: str, settings: Mapping[str, Any]
+    ) -> Mapping[str, Any]: ...
+
+
 CAPABILITY_MANAGER_DENIED: Final = "You cannot manage the platform's capabilities."
 
-_ROUTE_DEPENDENCIES = ("capability_team_authorizer", "capability_platform_model")
+_ROUTE_DEPENDENCIES = (
+    "capability_team_authorizer",
+    "capability_platform_model",
+    "capability_platform_model_optional",
+    "capability_preparation_reader",
+    "capability_preparation_manager",
+)
 
 
 def __getattr__(name: str) -> Any:
@@ -1645,6 +1704,20 @@ class TeamWikiPort(ABC):
         """
 
 
+class PreparationArtifactsPort(Protocol):
+    def has_result(self, capability_id: str) -> bool: ...
+
+    def settings(self, capability_id: str) -> Mapping[str, Any]: ...
+
+    async def read_result(self, capability_id: str) -> bytes | None: ...
+
+    async def read_sibling(self, capability_id: str, filename: str) -> bytes | None: ...
+
+
+class PreparationVisionAvailabilityPort(Protocol):
+    async def available(self) -> bool: ...
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -1734,6 +1807,9 @@ class RuntimeServices:
     # Turn-free model access for save-time and background capability work.
     # Appended last to preserve positional compatibility.
     capability_model: CapabilityModelPort | None = None
+    preparation_artifacts: PreparationArtifactsPort | None = None
+    preparation_enabled_capabilities: tuple[str, ...] = ()
+    preparation_vision: PreparationVisionAvailabilityPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

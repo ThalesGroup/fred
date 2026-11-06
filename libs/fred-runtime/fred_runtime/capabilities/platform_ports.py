@@ -25,15 +25,12 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from fastapi import Depends, HTTPException, Request, status
 from fred_core.common.team_id import is_personal_team_ref, personal_team_id
-from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.models import AuthorizationError
 from fred_core.security.oidc import get_current_user
-from fred_core.security.rebac.capability_authz import CapabilityEnablementFacts
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
-    RebacDisabledResult,
     RebacEngine,
-    RebacReference,
     TeamPermission,
 )
 from fred_core.security.structure import KeycloakUser
@@ -47,6 +44,8 @@ from fred_sdk.contracts.models import AgentDefinition, ExecutionCategory
 from fred_sdk.contracts.runtime import (
     CAPABILITY_MANAGER_DENIED,
     CAPABILITY_PLATFORM_MODEL_STATE,
+    CAPABILITY_PREPARATION_MANAGER_STATE,
+    CAPABILITY_PREPARATION_READER_STATE,
     CAPABILITY_TEAM_AUTHORIZER_STATE,
     CapabilityModelPort,
     CapabilityModelUnavailableError,
@@ -59,6 +58,7 @@ from ..model_routing.authz import usable_model_capability_ids
 from ..model_routing.contracts import ModelNotUsableError, TeamRoutingProfileDriftError
 from ..model_routing.provider import RoutedChatModelFactory
 from ..runtime_context import get_runtime_context_or_none
+from .preparation_routes import RuntimePreparationRouteReader
 
 
 class CapabilitySaveRouting(BaseModel):
@@ -125,12 +125,16 @@ class RoutedCapabilityModelPort(CapabilityModelPort):
         profile_id: str | None = None,
         require_vision: bool = False,
     ) -> AIMessage:
+        if require_vision:
+            raise CapabilityModelUnavailableError(
+                "PPT vision is supplied by Knowledge Flow preparation"
+            )
         factory = self._factory
         if not isinstance(factory, RoutedChatModelFactory):
             raise CapabilityModelUnavailableError("No routed chat model on this pod.")
         binding = await self._usable_binding()
         try:
-            model, selection = factory.build_for_chat(
+            model, _ = factory.build_for_chat(
                 definition=self._definition, binding=binding, profile_id=profile_id
             )
         except (
@@ -140,34 +144,10 @@ class RoutedCapabilityModelPort(CapabilityModelPort):
             ValueError,
         ) as exc:
             raise CapabilityModelUnavailableError(str(exc)) from exc
-        if require_vision and not factory.supports_vision(selection):
-            raise CapabilityModelUnavailableError(
-                f"Model profile {selection.profile_id!r} does not support vision."
-            )
         result = await model.ainvoke(list(messages))
         if not isinstance(result, AIMessage):
             raise TypeError(f"Chat model returned {type(result).__name__}.")
         return result
-
-    async def require_vision_profile(self, profile_id: str) -> None:
-        """Without a team, the model must also be on for every team: the same
-        rule as control-plane's platform model list, minus the pod coverage
-        only control-plane can see."""
-        factory = self._factory
-        if not isinstance(factory, RoutedChatModelFactory):
-            raise CapabilityModelUnavailableError("No routed chat model on this pod.")
-        binding = await self._usable_binding()
-        selection = factory.usable_profile_selection(profile_id, binding)
-        if selection is None or not factory.supports_vision(selection):
-            raise CapabilityModelUnavailableError(
-                f"Model profile {profile_id!r} is not a vision model this port may use."
-            )
-        if binding.runtime_context.team_id is None and not await _on_for_every_team(
-            self._rebac, selection.capability_id
-        ):
-            raise CapabilityModelUnavailableError(
-                f"Model profile {profile_id!r} is not enabled for every team."
-            )
 
     def _fresh(self) -> BoundRuntimeContext | None:
         if _monotonic() - self._resolved_at < _USABLE_MODELS_TTL_S:
@@ -192,19 +172,6 @@ class RoutedCapabilityModelPort(CapabilityModelPort):
             )
             self._resolved, self._resolved_at = resolved, _monotonic()
             return resolved
-
-
-async def _on_for_every_team(rebac: RebacEngine | None, capability_id: str) -> bool:
-    """The org `default_on` marker; without ReBAC nothing is restricted."""
-    if rebac is None or not rebac.enabled:
-        return True
-    relations = await rebac.list_direct_relations(
-        RebacReference(type=Resource.CAPABILITY, id=capability_id),
-        subject=RebacReference(type=Resource.ORGANIZATION, id=ORGANIZATION_ID),
-    )
-    if isinstance(relations, RebacDisabledResult):
-        return True
-    return CapabilityEnablementFacts.from_relations(relations).default_on
 
 
 async def require_team_permission(
@@ -309,6 +276,27 @@ def _bind(request: Request, user: KeycloakUser | None, enforce: bool) -> None:
     if runtime is not None:
         port = platform_model_port(runtime.config.chat_model_factory, rebac)
         setattr(request.state, CAPABILITY_PLATFORM_MODEL_STATE, port)
+        config = runtime.config
+        if (
+            config.control_plane_url is not None
+            and config.service_name is not None
+            and config.control_plane_http_client is not None
+            and config.filesystem is not None
+        ):
+            preparation_port = RuntimePreparationRouteReader(
+                control_plane_url=config.control_plane_url,
+                runtime_id=config.service_name,
+                client=config.control_plane_http_client,
+                filesystem=config.filesystem,
+                authorization=request.headers.get("Authorization"),
+                enabled_capabilities=config.preparation_capabilities,
+            )
+            setattr(
+                request.state, CAPABILITY_PREPARATION_READER_STATE, preparation_port
+            )
+            setattr(
+                request.state, CAPABILITY_PREPARATION_MANAGER_STATE, preparation_port
+            )
 
 
 _platform_port: tuple[object, RoutedCapabilityModelPort] | None = None
