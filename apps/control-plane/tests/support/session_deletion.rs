@@ -357,7 +357,7 @@ async fn organization_purge_drains_conversations_and_attachments_in_teams_projec
         .unwrap();
     for space in [&team, &project, &personal] {
         let conversation = session(&e, space, fred_rust_agent::DEFINITION.provider).await;
-        sqlx::query("insert into document(id,space_id,session_id,name,mime,size,sha256,created_by,object_key,quota_owner) values($1,$2,$3,'attachment.txt','text/plain',1,$4,'alice',$5,$2)")
+        sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_session_id=>$3,p_name=>'attachment.txt',p_mime=>'text/plain',p_size=>1,p_sha256=>$4,p_created_by=>'alice',p_object_key=>$5,p_quota_owner=>$2)")
             .bind(Uuid::new_v4()).bind(space.id).bind(conversation).bind("a".repeat(64)).bind(format!("fixture/{conversation}")).execute(&e.pool).await.unwrap();
     }
     let parent = lifecycle("PT0S")

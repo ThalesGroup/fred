@@ -16,12 +16,12 @@ use uuid::Uuid;
 /// Published counts come from the document's official generation, never a failed attempt.
 macro_rules! summary_from {
     () => {
-        "p.id, p.document_id, p.profile, p.status, p.stage, p.revision, p.error_code, p.created_at, p.completed_at, p.retry_of, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document d on d.id = p.document_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
+        "p.id, p.document_id, p.profile, p.status, p.stage, p.revision, p.error_code, p.created_at, p.completed_at, p.retry_of, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document_current d on d.id = p.document_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
     };
 }
 macro_rules! row {
     () => {
-        "select p.*, p.submission->'files'->0 as file, d.sha256 as original_sha256, d.space_id, d.session_id, s.organization_id, d.published_generation, d.deletion_id is not null as retired, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document d on d.id = p.document_id join space s on s.id = d.space_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
+        "select p.*, p.submission->'files'->0 as file, d.sha256 as original_sha256, d.space_id, d.session_id, s.organization_id, d.published_generation, d.deletion_id is not null as retired, coalesce(cardinality(g.vector_ordinals), 0)::bigint as chunks, coalesce(cardinality(g.vector_ordinals), 0)::bigint as vectors, g.rows from document_processing p join document_current d on d.id = p.document_id join space s on s.id = d.space_id left join generation g on g.id = d.published_generation and g.processing_id = p.id"
     };
 }
 

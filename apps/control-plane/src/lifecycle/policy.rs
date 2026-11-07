@@ -75,6 +75,9 @@ fn parse_duration(input: &str) -> Result<Retention> {
 fn week() -> Retention {
     Retention(604800)
 }
+fn month() -> Retention {
+    Retention(30 * 86400)
+}
 fn interval() -> Retention {
     Retention(600)
 }
@@ -234,12 +237,15 @@ pub struct SpacePolicies {
 pub struct Catalog {
     pub version: String,
     pub space_policies: SpacePolicies,
+    #[serde(default = "month")]
+    pub wiki_proposal_retention: Retention,
 }
 impl Default for Catalog {
     fn default() -> Self {
         Self {
             version: "v1".into(),
             space_policies: SpacePolicies::default(),
+            wiki_proposal_retention: month(),
         }
     }
 }

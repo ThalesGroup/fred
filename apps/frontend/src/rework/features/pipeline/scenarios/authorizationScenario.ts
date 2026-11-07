@@ -137,7 +137,10 @@ export const authorizationScenario: Scenario<AuthorizationDeps> = async (deps, r
     const leaks: string[] = [];
     for (const teamId of foreign) {
       for (const route of MEMBER_ROUTES) {
-        const { status } = await deps.request(`${CP}/teams/${encodeURIComponent(teamId)}/${route}`, token);
+        const { status } = await deps.request(
+          `${CP}/${route === "wiki/pages" ? "spaces" : "teams"}/${encodeURIComponent(teamId)}/${route}`,
+          token,
+        );
         if (status !== 403 && status !== 404) leaks.push(`${teamId}/${route}: HTTP ${status}`);
       }
     }

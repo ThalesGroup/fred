@@ -22,12 +22,21 @@ import { formatBytes as formatBytesUnit } from "@shared/utils/formatBytes";
 import type { SessionAttachment } from "@rework/types/attachments";
 import DocumentPreviewDrawer from "../DocumentPreviewDrawer/DocumentPreviewDrawer";
 import { isEmailFile } from "../../../../utils/documentViewerUtils";
+import type { ConversationFile } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { conversationFileUrl } from "../../../../features/conversationFiles";
+import { downloadAuthed } from "../../../../../utils/downloadUtils";
+import { useToast } from "../Toast/ToastProvider";
 import styles from "./SessionAttachmentsDrawer.module.css";
 
 interface SessionAttachmentsDrawerProps {
   open: boolean;
   onClose: () => void;
   attachments: SessionAttachment[];
+  files?: ConversationFile[];
+  spaceId?: string;
+  sessionId?: string;
+  filesError?: boolean;
+  filesLoading?: boolean;
   isLoading?: boolean;
   readOnly?: boolean;
   onDelete: (attachmentId: string) => void;
@@ -49,11 +58,26 @@ export function SessionAttachmentsDrawer({
   open,
   onClose,
   attachments,
+  files = [],
+  spaceId = "",
+  sessionId = "",
+  filesError = false,
+  filesLoading = false,
   isLoading = false,
   readOnly = false,
   onDelete,
 }: SessionAttachmentsDrawerProps) {
   const { t } = useTranslation();
+  const { showError } = useToast();
+  const download = async (id: string) => {
+    const file = files.find((item) => item.document_id === id);
+    if (!file) return;
+    try {
+      await downloadAuthed(conversationFileUrl(spaceId, sessionId, id), file.name);
+    } catch {
+      showError({ summary: t("chatbot.sessionAttachments.downloadError") });
+    }
+  };
   const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,6 +101,32 @@ export function SessionAttachmentsDrawer({
         persistKey="session-attachments-panel"
         fill
       >
+        <div className={styles.hint}>{t("chatbot.sessionAttachments.deliverables")}</div>
+        {filesError ? (
+          <div className={styles.empty} role="alert">
+            {t("chatbot.sessionAttachments.filesError")}
+          </div>
+        ) : files.length === 0 ? (
+          <div className={styles.empty}>
+            {t(filesLoading ? "chatbot.sessionAttachments.loading" : "chatbot.sessionAttachments.noDeliverables")}
+          </div>
+        ) : (
+          <AttachmentChips
+            stacked
+            attachments={files.map((file) => ({
+              id: file.document_id,
+              name: file.path,
+              size: file.size,
+              mime: file.mime,
+              status: "ready" as const,
+              canRemove: false,
+              detail: [formatBytes(file.size), formatTimestamp(file.updated_at)].filter(Boolean).join(" · "),
+            }))}
+            onOpen={(id) => void download(id)}
+            onRemove={() => undefined}
+          />
+        )}
+        <div className={styles.hint}>{t("chatbot.sessionAttachments.sources")}</div>
         <UploadWarningBanner />
         <div className={styles.hint}>{t("chatbot.attachments.readyHint")}</div>
         <div className={styles.list}>

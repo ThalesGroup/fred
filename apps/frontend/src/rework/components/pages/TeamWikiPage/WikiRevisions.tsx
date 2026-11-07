@@ -20,15 +20,12 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
-import { useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import {
   useRestoreWikiRevisionMutation,
-  useUsersByIdsQuery,
   useWikiRevisionsQuery,
-} from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useApiErrorToast } from "@rework/core/hooks/useApiErrorToast";
 import { useClickOutside } from "@shared/hooks/UseClickOutside";
-import { userDisplayName } from "@rework/core/utils/userDisplayName";
 import { historyEntries } from "@rework/features/teamWiki/historyEntries";
 import { emptyHistoryPages, mergeHistoryPage } from "@rework/features/teamWiki/historyPages";
 import { formatDateTime } from "@rework/utils/formatDateTime";
@@ -37,7 +34,7 @@ import styles from "./WikiRevisions.module.css";
 interface WikiRevisionsProps {
   /** Kept mounted while closed so it can slide out rather than vanish. */
   open: boolean;
-  teamId: string;
+  spaceId: string;
   pageId: string;
   currentRevisionId: string | null;
   canRestore: boolean;
@@ -56,7 +53,7 @@ interface WikiRevisionsProps {
  * History is bounded server-side (WIKI-05): this component owns the walk
  * backward through it, accumulating pages client-side via `historyPages.ts`.
  */
-export function WikiRevisions({ open, teamId, pageId, currentRevisionId, canRestore, onClose }: WikiRevisionsProps) {
+export function WikiRevisions({ open, spaceId, pageId, currentRevisionId, canRestore, onClose }: WikiRevisionsProps) {
   const { t } = useTranslation();
   const [preview, setPreview] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -111,7 +108,7 @@ export function WikiRevisions({ open, teamId, pageId, currentRevisionId, canRest
     isFetching,
     isError,
     refetch,
-  } = useWikiRevisionsQuery({ teamId, pageId, cursor: fetchCursor }, { skip: !hasOpenedOnce || !pageId });
+  } = useWikiRevisionsQuery({ spaceId, pageId, cursor: fetchCursor }, { skip: !hasOpenedOnce || !pageId });
 
   // Fires once bound to `cursor: undefined` (immediately, or after the reset
   // above takes effect) and forces a real request, bypassing cache freshness.
@@ -142,38 +139,15 @@ export function WikiRevisions({ open, teamId, pageId, currentRevisionId, canRest
     setFetchCursor(pages.nextCursor);
   };
 
-  // A revision stores the author's uid. Showing it raw makes the history a
-  // column of opaque strings, which is the opposite of what it is for — the
-  // point of the panel is knowing WHO changed a page.
-  const authorIds = useMemo(
-    () => Array.from(new Set(revisions.map((revision) => revision.author_user_id).filter(Boolean))),
-    [revisions],
-  );
-  const { data: authors = [] } = useUsersByIdsQuery({ ids: authorIds }, { skip: authorIds.length === 0 });
-  const authorById = useMemo(() => new Map(authors.map((user) => [user.id, user])), [authors]);
-
-  // Which agent wrote a revision, by name. Only fetched once the history holds
-  // an agent revision — most pages never do, and "an agent" reads no worse than
-  // a name the user would have to wait for.
-  const hasAgentRevision = revisions.some((revision) => revision.agent_instance_id);
-  const { data: agentInstances = [] } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
-    { teamId },
-    { skip: !teamId || !hasAgentRevision },
-  );
-  const agentNameById = useMemo(
-    () => new Map(agentInstances.map((instance) => [instance.agent_instance_id, instance.display_name])),
-    [agentInstances],
-  );
-
   const entries = useMemo(() => historyEntries(revisions), [revisions]);
 
-  const nameOf = (userId: string) => userDisplayName(userId, authorById.get(userId));
+  const nameOf = (userId: string) => pages.authors[userId] ?? userId;
 
   const { notifyApiError } = useApiErrorToast();
   const [restoreRevision, { isLoading: restoring }] = useRestoreWikiRevisionMutation();
   const onRestore = async (revisionId: string) => {
     try {
-      await restoreRevision({ teamId, pageId, revisionId }).unwrap();
+      await restoreRevision({ spaceId, pageId, revisionId }).unwrap();
     } catch (error) {
       // A failed restore leaves the reader exactly where they were — but they
       // must be told, not left to think it silently worked.
@@ -255,7 +229,7 @@ export function WikiRevisions({ open, teamId, pageId, currentRevisionId, canRest
           const { revision } = entry;
           const isCurrent = revision.revision_id === currentRevisionId;
           const isOpen = preview === revision.revision_id;
-          const agentName = revision.agent_instance_id ? agentNameById.get(revision.agent_instance_id) : undefined;
+          const agentName = revision.agent_name;
           const what =
             revision.author_kind !== "agent"
               ? t("rework.wiki.history.event.humanEdit")

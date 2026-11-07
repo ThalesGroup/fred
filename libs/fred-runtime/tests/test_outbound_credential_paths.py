@@ -171,6 +171,7 @@ def binding(token: str | None = "person-bearer") -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
             session_id="s-1",
+            space_id=SPACE_ID,
             user_id="alice",
             team_id="team-1",
             agent_instance_id="instance-1",

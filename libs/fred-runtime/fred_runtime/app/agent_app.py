@@ -153,7 +153,6 @@ from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
     AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
-    ConversationScratchpadFileNotFoundError,
     ConversationScratchpadInvalidPathError,
     ConversationScratchpadStorageError,
     ExecutionConfig,
@@ -1070,7 +1069,7 @@ def _build_runtime_services(
         credentials=credential_provider,
         document_scope=document_scope,
     )
-    workspace_fs = FredWorkspaceFs(binding=binding)
+    workspace_fs = FredWorkspaceFs(binding=binding, credentials=credential_provider)
     handlers = (
         build_authored_tool_handlers(
             definition=definition,  # type: ignore[arg-type]
@@ -5641,48 +5640,6 @@ def _build_agent_router(
                 status_code=503, detail="session_purge_unavailable"
             ) from exc
         return _ConversationFilesystemPurgeResponse(purged=True)
-
-    @router.get("/sessions/{session_id}/filesystem/exports/{path:path}")
-    async def download_session_export(
-        http_request: Request,
-        session_id: str,
-        path: str,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
-    ) -> Response:
-        """Read generated artifacts through the same live ownership as history."""
-        import mimetypes
-        from urllib.parse import quote
-
-        await authorize_history_read(
-            session_id, caller, http_request.headers.get("Authorization")
-        )
-        runtime = get_runtime_context().config
-        if runtime.filesystem is None:
-            raise HTTPException(
-                status_code=503, detail="session_filesystem_unavailable"
-            )
-        try:
-            content = (
-                await ConversationFilesystemService(runtime.filesystem, session_id)
-                .exports()
-                .read_bytes(path)
-            )
-        except ConversationScratchpadInvalidPathError as exc:
-            raise HTTPException(
-                status_code=422, detail="Invalid artifact path"
-            ) from exc
-        except ConversationScratchpadFileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail="Artifact not found") from exc
-        return Response(
-            content=content,
-            media_type=mimetypes.guess_type(path)[0] or "application/octet-stream",
-            headers={
-                "Cache-Control": "no-store",
-                "X-Content-Type-Options": "nosniff",
-                "Content-Disposition": "attachment; filename*=UTF-8''"
-                + quote(path.rsplit("/", 1)[-1], safe=""),
-            },
-        )
 
     @router.delete(
         "/sessions/{session_id}/filesystem",

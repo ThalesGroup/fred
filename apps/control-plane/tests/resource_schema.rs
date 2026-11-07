@@ -357,7 +357,7 @@ async fn chat_space_survives_agent_deletion_and_owns_attachments() {
         );
     }
     for (space, expected) in [(org, false), (project, true)] {
-        let result = sqlx::query("insert into document(id,space_id,session_id,name,mime,size,sha256,created_by,object_key,quota_owner) values($1,$2,$3,'file.txt','text/plain',1,repeat('a',64),'alice',$1::text,$4)")
+        let result = sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_session_id=>$3,p_name=>'file.txt',p_mime=>'text/plain',p_size=>1,p_sha256=>repeat('a',64),p_created_by=>'alice',p_object_key=>$1::text,p_quota_owner=>$4)")
             .bind(Uuid::new_v4()).bind(space).bind(chat).bind(team).execute(&pool).await;
         if expected {
             result.unwrap();

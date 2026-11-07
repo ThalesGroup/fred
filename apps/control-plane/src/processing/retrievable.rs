@@ -157,11 +157,12 @@ impl Processing {
             spaces::authorized_mutation(&self.pool, actor, document.space_id, Permission::Write)
                 .await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
-        let document: Document =
-            sqlx::query_as("select * from document where id=$1 and deletion_id is null for update")
-                .bind(id)
-                .fetch_one(&mut *tx)
-                .await?;
+        let document: Document = sqlx::query_as(
+            "select * from document_current where id=$1 and deletion_id is null for update",
+        )
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
         let vectors: i64 = sqlx::query_scalar("select coalesce(cardinality(g.vector_ordinals),0)::bigint from document d left join generation g on g.id=d.published_generation where d.id=$1")
             .bind(id)
             .fetch_one(&mut *tx)
@@ -177,7 +178,7 @@ impl Processing {
             if !tabular {
                 return Err(conflict("document_not_indexed"));
             }
-            let updated = sqlx::query_as("update document set retrievable=$2,retrieval_id=null,retrieval_actor=null,retrieval_target=null,retrieval_phase=null,retrieval_confirmed=null where id=$1 returning *")
+            let updated = sqlx::query_as("update document d set retrievable=$2,retrieval_id=null,retrieval_actor=null,retrieval_target=null,retrieval_phase=null,retrieval_confirmed=null from document_content c where d.id=$1 and c.id=d.current_content_id returning d.*,c.mime,c.size,c.sha256")
                 .bind(id).bind(input.retrievable).fetch_one(&mut *tx).await?;
             tx.commit().await?;
             tracing::info!(document_id=%id,retrievable=input.retrievable,"Tabular inclusion updated");

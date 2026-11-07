@@ -1,119 +1,88 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// Two things this state has to get right: the deck belongs to ONE conversation
-// (without the stamp, a deck filled earlier lights the launcher up on a brand-new
-// chat), and what the pane shows moves only on an explicit open - the pane keys
-// its pdf.js worker on it, and that lifecycle does not survive a churning value.
-
+// SPDX-License-Identifier: Apache-2.0
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import type { ConversationFile } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { openPreview, pptPreviewSlice, registerPreview, type PptPreviewState } from "./pptPreviewSlice";
+import { useHasPptPreview, useSessionPptPreview } from "./useSessionPptPreview";
 import type { PptPreviewPartData } from "./types";
 
-const state = vi.hoisted(() => ({ session: "", ppt: null as unknown }));
-
-vi.mock("react-router-dom", () => ({
-  useSearchParams: () => [new URLSearchParams(state.session ? `session=${state.session}` : "")],
+const fixture = vi.hoisted(() => ({
+  session: "s1",
+  state: {} as { pptPreview: PptPreviewState },
+  files: [] as ConversationFile[],
 }));
-
 vi.mock("react-redux", () => ({
-  useSelector: (selector: (s: { pptPreview: unknown }) => unknown) => selector({ pptPreview: state.ppt }),
+  useSelector: (select: (state: typeof fixture.state) => unknown) => select(fixture.state),
 }));
-
-const { useHasPptPreview, useSessionPptPreview } = await import("./useSessionPptPreview");
-
+vi.mock("../useOpenSessionId", () => ({ useOpenSessionId: () => fixture.session }));
+vi.mock("../../conversationFiles", async (original) => ({
+  ...(await original<typeof import("../../conversationFiles")>()),
+  useConversationFiles: () => ({
+    files: fixture.session === "s1" ? fixture.files : [],
+    spaceId: "space",
+    sessionId: fixture.session,
+  }),
+}));
 const deck: PptPreviewPartData = {
   type: "ppt_preview",
-  preview_id: "deck-1",
-  title: "Q3 review",
-  pdf_download_url: "/fs/download/deck-1.pdf",
+  preview_id: "deck",
+  title: "Deck",
+  pdf_download_url: "/old",
   version: "v1",
 };
-
-const other: PptPreviewPartData = { ...deck, preview_id: "deck-2", title: "Kickoff", version: "v9" };
-
-/** The slice's own reducer builds the state, so the test can't drift from it. */
-function sliceState(sessionId: string, ...actions: { type: string; payload: unknown }[]): PptPreviewState {
-  return actions.reduce(
-    (state, action) => pptPreviewSlice.reducer(state, action as never),
-    pptPreviewSlice.reducer(undefined, registerPreview({ sessionId, preview: deck })),
-  );
+function file(id = "deck", preview: string | null = "v1"): ConversationFile {
+  return {
+    document_id: id,
+    content_id: `${id}-content`,
+    name: `${id}.pptx`,
+    path: `${id}.pptx`,
+    mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    size: 10,
+    sha256: "a".repeat(64),
+    updated_at: "2026-11-07T00:00:00Z",
+    preview_content_id: preview,
+  };
 }
-
-function read(openSession: string, ppt: PptPreviewState): PptPreviewPartData | null {
-  let seen: PptPreviewPartData | null = null;
-  state.session = openSession;
-  state.ppt = ppt;
+function read(session: string, state: PptPreviewState, files: ConversationFile[]) {
+  fixture.session = session;
+  fixture.state = { pptPreview: state };
+  fixture.files = files;
+  let result: PptPreviewPartData | null = null;
+  let available = false;
   function Probe() {
-    seen = useSessionPptPreview();
+    result = useSessionPptPreview();
+    available = useHasPptPreview();
     return null;
   }
   renderToStaticMarkup(<Probe />);
-  return seen;
+  return { preview: result as PptPreviewPartData | null, available };
 }
+const empty = () => pptPreviewSlice.reducer(undefined, { type: "init" });
+const selected = () => pptPreviewSlice.reducer(empty(), registerPreview({ sessionId: "s1", preview: deck }));
 
-function hasDeck(openSession: string, ppt: PptPreviewState): boolean {
-  let seen = false;
-  state.session = openSession;
-  state.ppt = ppt;
-  function Probe() {
-    seen = useHasPptPreview();
-    return null;
-  }
-  renderToStaticMarkup(<Probe />);
-  return seen;
-}
-
-describe("useSessionPptPreview", () => {
-  it("returns the deck the open conversation registered", () => {
-    expect(read("s1", sliceState("s1"))).toEqual(deck);
+describe("catalogue-backed PowerPoint preview", () => {
+  it("restores the latest saved preview without replaying message cards", () => {
+    const result = read("s1", empty(), [file()]);
+    expect(result.available).toBe(true);
+    expect(result.preview?.preview_id).toBe("deck");
+    expect(result.preview?.pdf_download_url).toBe("/control-plane/v1/spaces/space/sessions/s1/files/deck/preview");
   });
-
-  it("ignores a deck registered by another conversation", () => {
-    expect(read("s2", sliceState("s1"))).toBeNull();
+  it("uses the current content even when the message describes an older render", () => {
+    expect(read("s1", selected(), [file("deck", "v2")]).preview?.version).toBe("v2");
   });
-
-  it("returns nothing while no conversation is open", () => {
-    expect(read("", sliceState("s1"))).toBeNull();
+  it("does not revive an old preview while a replacement has none", () => {
+    expect(read("s1", selected(), [file("deck", null)])).toEqual({ preview: null, available: false });
   });
-
-  it("does not move the pane when another card registers its deck", () => {
-    // Registering is what lights the launcher up; moving the pane on it would
-    // rebuild the pdf.js worker under a document that is still loading.
-    const state = sliceState("s1", registerPreview({ sessionId: "s1", preview: other }));
-
-    expect(read("s1", state)).toEqual(deck);
+  it("never carries another conversation's files into an empty or different conversation", () => {
+    for (const session of ["s2", ""])
+      expect(read(session, selected(), [file()])).toEqual({ preview: null, available: false });
   });
-
-  it("moves the pane on an explicit open", () => {
-    const state = sliceState("s1", openPreview({ sessionId: "s1", preview: other }));
-
-    expect(read("s1", state)).toEqual(other);
-  });
-});
-
-describe("useHasPptPreview", () => {
-  it("is true once the open conversation has produced a deck", () => {
-    expect(hasDeck("s1", sliceState("s1"))).toBe(true);
-  });
-
-  it("ignores a deck produced by another conversation", () => {
-    expect(hasDeck("s2", sliceState("s1"))).toBe(false);
-  });
-
-  it("is false before any deck", () => {
-    expect(hasDeck("s1", pptPreviewSlice.reducer(undefined, { type: "init" }))).toBe(false);
+  it("keeps the selected deck when another card registers and moves only on explicit open", () => {
+    const other = { ...deck, preview_id: "other" };
+    const registered = pptPreviewSlice.reducer(selected(), registerPreview({ sessionId: "s1", preview: other }));
+    expect(read("s1", registered, [file("other"), file()]).preview?.preview_id).toBe("deck");
+    const opened = pptPreviewSlice.reducer(registered, openPreview({ sessionId: "s1", preview: other }));
+    expect(read("s1", opened, [file("other"), file()]).preview?.preview_id).toBe("other");
   });
 });

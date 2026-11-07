@@ -157,21 +157,7 @@ impl Storage {
             return Ok((false, row.receipt));
         }
         let outcome = async {
-            let (certain, result) = self
-                .objects
-                .put_file(&row.object_key, spool.file, spool.size, &spool.digest)
-                .await;
-            if certain {
-                sqlx::query("update document_upload set put_pending=false where id=$1")
-                    .bind(row.id)
-                    .execute(&self.pool)
-                    .await?;
-            }
-            result.map_err(|_| unavailable())?;
-            self.objects
-                .verify(&row.object_key, spool.size, &spool.digest)
-                .await
-                .map_err(|_| unavailable())?;
+            self.transfer_upload(row.id, &row.object_key, spool).await?;
             self.publish(user, destination, &row, processing).await
         }
         .await;
@@ -189,6 +175,25 @@ impl Storage {
                 Err(error)
             }
         }
+    }
+
+    /// Shared journal acknowledgement and read-back verification, always outside SQL transactions.
+    pub(super) async fn transfer_upload(&self, id: Uuid, key: &str, spool: Spool) -> AppResult<()> {
+        let (certain, result) = self
+            .objects
+            .put_file(key, spool.file, spool.size, &spool.digest)
+            .await;
+        if certain {
+            sqlx::query("update document_upload set put_pending=false where id=$1")
+                .bind(id)
+                .execute(&self.pool)
+                .await?;
+        }
+        result.map_err(|_| unavailable())?;
+        self.objects
+            .verify(key, spool.size, &spool.digest)
+            .await
+            .map_err(|_| unavailable())
     }
 
     pub(super) async fn spool(&self, mut multipart: Multipart) -> AppResult<Spool> {
@@ -358,11 +363,11 @@ impl Storage {
         // Names are unique per folder or per conversation; each predicate matches the unique indexes.
         let (scope, target) = match destination {
             Destination::Folder(id) => (
-                "select exists(select 1 from document where deletion_id is null and space_id=$1 and folder_id=$2 and session_id is null and name=$3) or exists(select 1 from document_upload where space_id=$1 and folder_id=$2 and session_id is null and name=$3 and status='pending')",
+                "select exists(select 1 from document where purpose='source' and deletion_id is null and space_id=$1 and folder_id=$2 and session_id is null and name=$3) or exists(select 1 from document_upload where purpose='source' and space_id=$1 and folder_id=$2 and session_id is null and name=$3 and status='pending')",
                 id,
             ),
             Destination::Conversation { session_id, .. } => (
-                "select exists(select 1 from document where deletion_id is null and space_id=$1 and folder_id is null and session_id=$2 and name=$3) or exists(select 1 from document_upload where space_id=$1 and folder_id is null and session_id=$2 and name=$3 and status='pending')",
+                "select exists(select 1 from document where purpose='source' and deletion_id is null and space_id=$1 and folder_id is null and session_id=$2 and name=$3) or exists(select 1 from document_upload where purpose='source' and space_id=$1 and folder_id is null and session_id=$2 and name=$3 and status='pending')",
                 session_id,
             ),
         };
@@ -383,9 +388,9 @@ impl Storage {
             // by their document; only pending uploads add a separate reservation.
             let (files, bytes): (i64, i64) = sqlx::query_as(
                 "select count(*), coalesce(sum(size), 0)::bigint from (
-                    select size from document where space_id=$1 and session_id=$2 and deletion_id is null
+                    select size from document_current where purpose='source' and space_id=$1 and session_id=$2 and deletion_id is null
                     union all
-                    select size from document_upload where space_id=$1 and folder_id is null and session_id=$2 and status='pending'
+                    select size from document_upload where purpose='source' and space_id=$1 and folder_id is null and session_id=$2 and status='pending'
                 ) as occupied",
             )
             .bind(space.id)
@@ -407,15 +412,8 @@ impl Storage {
                 ));
             }
         }
-        let (owner, limit) = self.quota(space)?;
-        let usage = Self::occupied_bytes(&mut *tx, owner).await?;
-        if file.size > limit.saturating_sub(usage) {
-            return Err(AppError::problem(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "quota_exceeded",
-                "The destination storage quota is exhausted",
-            ));
-        }
+        let (owner, _) = self.quota(space)?;
+        self.ensure_budgets(&mut tx, space).await?;
         self.require_cleanup_capacity(&mut *tx).await?;
         let id = Uuid::new_v4();
         let object_key = format!("{}{id}/input/{}", self.prefix, file.name);
@@ -424,7 +422,7 @@ impl Storage {
                 "The encoded document path exceeds the object-store key limit",
             ));
         }
-        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile,put_pending) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),$15,$16,true) returning *, null::uuid as document_id")
+        let row: UploadRow = sqlx::query_as("insert into document_upload (id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,retry_of,processing_profile,put_pending,reserved_bytes) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),$15,$16,true,$11) returning *, null::uuid as document_id")
             .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space.id).bind(folder_id).bind(session_id).bind(owner)
             .bind(&file.name).bind(&file.mime).bind(file.size).bind(&digest).bind(object_key)
             .bind(self.config.limits.lease_seconds() as f64).bind(predecessor.as_ref().map(|p|p.id)).bind(profile).fetch_one(&mut *tx).await?;
@@ -459,10 +457,20 @@ impl Storage {
         if let Destination::Folder(id) = destination {
             db::folder(&mut *tx, id).await?;
         }
-        sqlx::query("insert into document (id,space_id,folder_id,session_id,name,mime,size,sha256,created_by,object_key,quota_owner) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
-            .bind(row.id).bind(row.receipt.space_id).bind(row.receipt.folder_id).bind(row.receipt.session_id).bind(&row.receipt.name).bind(&row.receipt.mime).bind(row.receipt.size).bind(&row.receipt.sha256).bind(&row.actor).bind(&row.object_key).bind(row.quota_owner).execute(&mut *tx).await?;
         let receipt = sqlx::query_as("update document_upload set status='stored',completed_at=clock_timestamp() where id=$1 and status='pending' and expires_at>clock_timestamp() returning *, id as document_id")
             .bind(row.id).fetch_one(&mut *tx).await?;
+        sqlx::query("insert into document (id,space_id,folder_id,session_id,name,created_by,quota_owner) values ($1,$2,$3,$4,$5,$6,$7)")
+            .bind(row.id).bind(row.receipt.space_id).bind(row.receipt.folder_id).bind(row.receipt.session_id).bind(&row.receipt.name).bind(&row.actor).bind(row.quota_owner).execute(&mut *tx).await?;
+        sqlx::query("insert into document_content (id,document_id,kind,mime,size,sha256,object_key,published_at) values ($1,$1,'primary',$2,$3,$4,$5,clock_timestamp())")
+            .bind(row.id).bind(&row.receipt.mime).bind(row.receipt.size).bind(&row.receipt.sha256).bind(&row.object_key).execute(&mut *tx).await?;
+        sqlx::query("update document set current_content_id=$1 where id=$1")
+            .bind(row.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("update document_upload set target_document_id=$1,content_id=$1 where id=$1")
+            .bind(row.id)
+            .execute(&mut *tx)
+            .await?;
         if let Some(profile) = row.receipt.processing_profile {
             processing
                 .ok_or_else(crate::processing::unavailable)?

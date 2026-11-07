@@ -27,17 +27,17 @@ export interface PptPreviewPartData {
   /** Human title shown on the card and the pane header. */
   title: string;
   /**
-   * Durable, origin-relative Knowledge Flow `/fs/download` href for the rendered
+   * Durable, protected Control Plane href for the current
    * PDF. It is bearer-protected — fetch it WITH the Authorization header (never a
    * bare anchor). Stays valid across chat reloads (no expiring signature baked in).
    */
   pdf_download_url: string;
   /**
-   * Per-fill content hash. Doubles as the PDF cache-bust query value and the
+   * Immutable preview content identifier. Doubles as the PDF cache-bust query value and the
    * react-pdf remount key, so a re-fill re-fetches instead of showing a stale deck.
    */
   version: string;
-  /** Bearer-protected KF href for the source `.pptx` (download button). */
+  /** Bearer-protected Control Plane href for the current `.pptx` (download button). */
   pptx_download_url?: string;
   /** Suggested download file name for the `.pptx`. */
   file_name?: string;

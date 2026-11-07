@@ -1898,6 +1898,19 @@ def build_builder_tools(
             raise RuntimeError(
                 "ppt_builder: RuntimeServices.workspace_fs is not available on this execution path."
             )
+        file_name = (
+            _sanitize_output_file_name(plan.file_name)
+            if plan.file_name
+            else _DEFAULT_FILE_NAME
+        )
+        # Keyed by the deck's name: a deck split over several calls, or retried
+        # after a busy answer, is one presentation, not a card per fragment.
+        output_path = (
+            f"outputs/{session_id}/{file_name}"
+            if session_id
+            else f"outputs/{file_name}"
+        )
+        expected_content_id = await workspace.snapshot(output_path)
         started = time.monotonic()
         try:
             template_bytes = await template_bytes_loader()
@@ -1928,22 +1941,11 @@ def build_builder_tools(
             logger.exception("render FAILED after %.0fs", elapsed)
             return _error(_INTERNAL_ERROR)
 
-        file_name = (
-            _sanitize_output_file_name(plan.file_name)
-            if plan.file_name
-            else _DEFAULT_FILE_NAME
-        )
-        # Keyed by the deck's name: a deck split over several calls, or retried
-        # after a busy answer, is one presentation, not a card per fragment.
-        output_path = (
-            f"outputs/{session_id}/{file_name}"
-            if session_id
-            else f"outputs/{file_name}"
-        )
         try:
             pptx_artifact = await workspace.write(
                 output_path,
                 result.pptx,
+                expected_content_id=expected_content_id,
                 content_type=_PPTX_CONTENT_TYPE,
                 title=file_name,
             )
@@ -2005,15 +2007,19 @@ def build_builder_tools(
             # deck must never imply its temporary files have been cleaned up.
             logger.warning("preview conversion failed: %s", type(exc).__name__)
             pdf_bytes = None
+        preview_version = ""
         pdf_url: Optional[str] = None
         if pdf_bytes is not None:
             try:
                 pdf_artifact = await workspace.write(
-                    _pdf_key_for(output_path),
+                    output_path,
                     pdf_bytes,
+                    expected_content_id=None,
+                    source_content_id=pptx_artifact.content_id,
                     content_type=_PDF_CONTENT_TYPE,
                     title=_pdf_key_for(file_name),
                 )
+                preview_version = pdf_artifact.content_id or _preview_version(pdf_bytes)
                 pdf_url = pdf_artifact.href
             except Exception as exc:  # noqa: BLE001 - preview is best effort
                 logger.warning(
@@ -2026,7 +2032,7 @@ def build_builder_tools(
                 preview_id=pptx_artifact.key,
                 title=file_name,
                 pdf_download_url=pdf_url,
-                version=_preview_version(pdf_bytes),
+                version=preview_version,
                 pptx_download_url=pptx_artifact.href,
                 # The stored key is unique per deck; the user downloads the name
                 # the model chose.

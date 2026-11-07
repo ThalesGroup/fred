@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useMemo } from "react";
+import { controlPlaneApi } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { legacyControlPlaneApi } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { knowledgeFlowApi } from "../../../../slices/legacyKnowledgeFlow/knowledgeFlowOpenApi";
 import { KeyCloakService } from "../../../../security/KeycloakService";
@@ -149,55 +150,44 @@ export function useTeamsDeps(): TeamsDeps {
           }),
         ).unwrap();
       },
-      wikiEnabled: async (teamId) =>
-        (
-          await dispatch(
-            cp.wikiAvailabilityControlPlaneV1TeamsTeamIdWikiAvailabilityGet.initiate({ teamId }, FRESH),
-          ).unwrap()
-        ).enabled,
-      createWikiPage: async (teamId, title, content) => {
+      wikiEnabled: async (spaceId) =>
+        (await dispatch(controlPlaneApi.endpoints.wikiAvailability.initiate({ spaceId }, FRESH)).unwrap()).enabled,
+      createWikiPage: async (spaceId, title, content) => {
         const page = await dispatch(
-          cp.createPageControlPlaneV1TeamsTeamIdWikiPagesPost.initiate({
-            teamId,
+          controlPlaneApi.endpoints.createWikiPage.initiate({
+            spaceId,
             createWikiPageRequest: { title, content_md: content },
           }),
         ).unwrap();
         return { pageId: page.page.page_id, slug: page.page.slug, revisionId: page.revision_id ?? null };
       },
-      writeWikiPage: async (teamId, pageId, content, baseRevisionId) => {
+      writeWikiPage: async (spaceId, pageId, content, baseRevisionId) => {
         await dispatch(
-          cp.writePageContentControlPlaneV1TeamsTeamIdWikiPagesPageIdContentPut.initiate({
-            teamId,
+          controlPlaneApi.endpoints.writeWikiPage.initiate({
+            spaceId,
             pageId,
-            updateWikiPageContentRequest: { content_md: content, base_revision_id: baseRevisionId },
+            updateWikiContentRequest: { content_md: content, base_revision_id: baseRevisionId },
           }),
         ).unwrap();
       },
-      wikiRevisions: async (teamId, pageId) =>
+      wikiRevisions: async (spaceId, pageId) =>
         (
-          await dispatch(
-            cp.listRevisionsControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsGet.initiate({ teamId, pageId }, FRESH),
-          ).unwrap()
+          await dispatch(controlPlaneApi.endpoints.wikiRevisions.initiate({ spaceId, pageId }, FRESH)).unwrap()
         ).revisions?.map((r) => r.revision_id) ?? [],
-      restoreWikiRevision: async (teamId, pageId, revisionId) => {
+      restoreWikiRevision: async (spaceId, pageId, revisionId) => {
         await dispatch(
-          cp.restoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePost.initiate({
-            teamId,
+          controlPlaneApi.endpoints.restoreWikiRevision.initiate({
+            spaceId,
             pageId,
             revisionId,
           }),
         ).unwrap();
       },
-      readWikiPage: async (teamId, slug) =>
-        (
-          await dispatch(
-            cp.readPageControlPlaneV1TeamsTeamIdWikiPagesSlugGet.initiate({ teamId, slug }, FRESH),
-          ).unwrap()
-        ).content_md ?? "",
-      deleteWikiPage: async (teamId, pageId) => {
-        await dispatch(
-          cp.deletePageControlPlaneV1TeamsTeamIdWikiPagesPageIdDelete.initiate({ teamId, pageId }),
-        ).unwrap();
+      readWikiPage: async (spaceId, slug) =>
+        (await dispatch(controlPlaneApi.endpoints.wikiPage.initiate({ spaceId, pageId: slug }, FRESH)).unwrap())
+          .content_md ?? "",
+      deleteWikiPage: async (spaceId, pageId) => {
+        await dispatch(controlPlaneApi.endpoints.deleteWikiPage.initiate({ spaceId, pageId })).unwrap();
       },
       setJoinLink: async (teamId, enabled) => {
         const link = await dispatch(

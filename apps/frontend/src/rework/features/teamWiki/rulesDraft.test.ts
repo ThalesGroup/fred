@@ -13,13 +13,23 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { WikiPageDetail } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { WikiPageDetail } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { rulesDraft } from "./rulesDraft";
 
 const TEMPLATE = "## Vocabulary\n";
 
 const detail = (over: Partial<WikiPageDetail>): WikiPageDetail => ({
-  page: { page_id: "", slug: "rules", title: "Rules", kind: "rules" },
+  page: {
+    page_id: "",
+    slug: "__rules__",
+    title: "Rules",
+    kind: "rules",
+    needs_review: false,
+    position: 0,
+    updated_at: "",
+    updated_by: "",
+  },
+  author_kind: "human",
   content_md: "",
   revision_id: null,
   ...over,

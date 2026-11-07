@@ -86,7 +86,7 @@ async fn consumers_only_read_their_cp_read_contract_and_visibility_tracks_public
         .bind(conversation).bind(org).execute(&e.pool).await.unwrap();
     sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$1,$1,'fixture','Fixture',1)")
         .bind(conversation).bind(org).execute(&e.pool).await.unwrap();
-    sqlx::query("insert into document(id,space_id,session_id,name,mime,size,sha256,created_by,object_key,quota_owner,retrievable) values($1,$2,$3,'fixture','text/plain',1,repeat('a',64),'alice','fixture',$2,true)")
+    sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_session_id=>$3,p_name=>'fixture',p_mime=>'text/plain',p_size=>1,p_sha256=>repeat('a',64),p_created_by=>'alice',p_object_key=>'fixture',p_quota_owner=>$2,p_retrievable=>true)")
         .bind(doc).bind(org).bind(conversation).execute(&e.pool).await.unwrap();
     assert!(!visible(&e.pool, doc).await);
     sqlx::query("insert into document_processing(id,document_id,actor,request_key,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$2,'alice',$1,'fast','fixture','{}',now()+interval '1 hour','{}',60,60,60)")

@@ -23,6 +23,13 @@ pub struct Policy {
 }
 
 impl Policy {
+    /// A shared application is available when at least one authorized pod offers it.
+    pub fn any_usable(&self, space: &Space, capability_id: &str) -> bool {
+        self.enabled
+            .keys()
+            .any(|runtime| usable(self, space, runtime, capability_id))
+    }
+
     pub async fn load<'e>(
         ex: impl sqlx::PgExecutor<'e>,
         organization_id: Uuid,

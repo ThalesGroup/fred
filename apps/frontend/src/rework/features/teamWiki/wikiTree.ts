@@ -19,7 +19,7 @@
 // sidebar renders is built here — as pure functions, because every interesting
 // case is a data case: an orphan, a cycle, the rules page.
 
-import type { WikiPageSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { WikiPageSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 /** Reserved slug of the rules page — must match the backend's RULES_PAGE_SLUG. */
 export const RULES_PAGE_SLUG = "__rules__";

@@ -309,8 +309,7 @@ async fn organization_admin_scope_is_checked_on_insert_and_role_or_space_update(
 async fn processing_document(pool: &PgPool, space: Uuid) -> Uuid {
     let id = Uuid::new_v4();
     sqlx::query(
-        "insert into document(id,space_id,name,mime,size,sha256,created_by,object_key,quota_owner)
-        values($1,$2,$1::text,'text/plain',1,repeat('a',64),'alice',$1::text,$2)",
+        "select fixture_document(p_id=>$1,p_space_id=>$2,p_name=>$1::text,p_mime=>'text/plain',p_size=>1,p_sha256=>repeat('a',64),p_created_by=>'alice',p_object_key=>$1::text,p_quota_owner=>$2)",
     )
     .bind(id)
     .bind(space)

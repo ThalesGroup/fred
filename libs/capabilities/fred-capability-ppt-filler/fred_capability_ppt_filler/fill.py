@@ -819,6 +819,14 @@ def build_fill_tools(
                 "on this execution path."
             )
 
+        output_file_name = _sanitize_output_file_name(provided.get(_OUTPUT_NAME_FIELD))
+        output_path = (
+            f"outputs/{session_id}/{output_file_name}"
+            if session_id
+            else f"outputs/{output_file_name}"
+        )
+        expected_content_id = await workspace.snapshot(output_path)
+
         # 1. Fetch the template from the per-instance config-asset store.
         try:
             template_bytes = await assets.fetch(template_key)
@@ -880,16 +888,11 @@ def build_fill_tools(
         # 4. Publish through the conversation filesystem (so outputs of
         #    different conversations never clobber each other) and build the
         #    durable download href.
-        output_file_name = _sanitize_output_file_name(provided.get(_OUTPUT_NAME_FIELD))
-        output_path = (
-            f"outputs/{session_id}/{output_file_name}"
-            if session_id
-            else f"outputs/{output_file_name}"
-        )
         try:
             pptx_artifact: PublishedArtifact = await workspace.write(
                 output_path,
                 filled_bytes,
+                expected_content_id=expected_content_id,
                 content_type=_PPTX_CONTENT_TYPE,
                 title=output_file_name,
             )
@@ -912,6 +915,7 @@ def build_fill_tools(
         #    beside the .pptx. Any failure (conversion unavailable/timeout,
         #    upload error) degrades to the plain download chip so a preview
         #    problem never costs the user the deck.
+        preview_version = ""
         pdf_download_url: Optional[str] = None
         try:
             pdf_bytes = await workspace.convert_office_to_pdf(
@@ -925,11 +929,14 @@ def build_fill_tools(
         if pdf_bytes is not None:
             try:
                 pdf_artifact = await workspace.write(
-                    _pdf_key_for(output_path),
+                    output_path,
                     pdf_bytes,
+                    expected_content_id=None,
+                    source_content_id=pptx_artifact.content_id,
                     content_type=_PDF_CONTENT_TYPE,
                     title=_pdf_key_for(output_file_name),
                 )
+                preview_version = pdf_artifact.content_id or _preview_version(pdf_bytes)
                 pdf_download_url = pdf_artifact.href
             except Exception as exc:
                 logger.warning(
@@ -942,7 +949,7 @@ def build_fill_tools(
                 preview_id=pptx_artifact.key,
                 title=output_file_name,
                 pdf_download_url=pdf_download_url,
-                version=_preview_version(pdf_bytes),
+                version=preview_version,
                 pptx_download_url=pptx_artifact.href,
                 file_name=pptx_artifact.file_name,
             )

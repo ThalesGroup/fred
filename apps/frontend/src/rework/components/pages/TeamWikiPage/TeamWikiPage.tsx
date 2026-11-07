@@ -29,8 +29,8 @@ import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@rework/core/hooks/useApiErrorToast";
 import { usePaneResize } from "@rework/core/hooks/usePaneResize";
-import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
-import { useTeamCapabilities } from "@hooks/useTeamCapabilities";
+import { useSpaceAccess } from "@hooks/useSpaceAccess";
+import { resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
 import { rulesDraft } from "@rework/features/teamWiki/rulesDraft";
 import { buildWikiTree, findRulesPage, moveTargets, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
 import { conflictFrom, errorText, type StaleWrite } from "@rework/features/teamWiki/wikiErrors";
@@ -44,10 +44,9 @@ import {
   useWikiRulesQuery,
   useWriteWikiPageMutation,
   useWriteWikiRulesMutation,
-  useUsersByIdsQuery,
-} from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import { userDisplayName } from "@rework/core/utils/userDisplayName";
-import type { WikiPageSummary } from "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+  useMySpacesQuery,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { WikiArticle } from "./WikiArticle";
 // Split out: the editor pulls MDXEditor and the whole lexical graph, and it is
 // only ever rendered in edit mode — a static import put all of it in the chunk
@@ -89,9 +88,9 @@ export default function TeamWikiPage() {
   const { notifyApiError } = useApiErrorToast();
   const navigate = useNavigate();
   const { teamId: routeTeamId, slug } = useParams<{ teamId: string; slug?: string }>();
-  const { selectedTeam } = useSelectedTeam();
-  const { canUpdateResources: canEdit } = useTeamCapabilities(selectedTeam);
-  const teamId = routeTeamId ?? "";
+  const memberships = useMySpacesQuery();
+  const spaceId = resolveAgentSpace(memberships.currentData, routeTeamId)?.id ?? "";
+  const { allowed: canEdit } = useSpaceAccess(spaceId || undefined, "write");
 
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
   const editing = editingTarget !== null;
@@ -139,10 +138,11 @@ export default function TeamWikiPage() {
   // agent is approved in the CHAT, and nothing there invalidates this cache —
   // so opening the wiki right afterwards showed the tree as it was before the
   // approval.
-  const { data: tree, isLoading: treeLoading } = useWikiPagesQuery(
-    { teamId },
-    { skip: !teamId, refetchOnMountOrArgChange: true },
-  );
+  const {
+    currentData: tree,
+    isLoading: treeLoading,
+    error: treeError,
+  } = useWikiPagesQuery({ spaceId }, { skip: !spaceId, refetchOnMountOrArgChange: true });
   const pages = useMemo(() => tree?.pages ?? [], [tree]);
   const rulesPage = useMemo(() => findRulesPage(pages), [pages]);
 
@@ -154,12 +154,12 @@ export default function TeamWikiPage() {
   const activeSlug = slug ?? firstSlug;
 
   const { currentData: pageDetail, isFetching: pageLoading } = useWikiPageQuery(
-    { teamId, slug: activeSlug ?? "" },
-    { skip: !teamId || !activeSlug || isRules, refetchOnMountOrArgChange: true },
+    { spaceId, pageId: activeSlug ?? "" },
+    { skip: !spaceId || !activeSlug || isRules, refetchOnMountOrArgChange: true },
   );
   const { currentData: rulesDetail, isFetching: rulesLoading } = useWikiRulesQuery(
-    { teamId },
-    { skip: !teamId || !isRules, refetchOnMountOrArgChange: true },
+    { spaceId },
+    { skip: !spaceId || !isRules, refetchOnMountOrArgChange: true },
   );
   const detail = isRules ? rulesDetail : pageDetail;
 
@@ -170,18 +170,7 @@ export default function TeamWikiPage() {
   const [deletePage] = useDeleteWikiPageMutation();
   const [setReviewMark] = useSetWikiReviewMarkMutation();
 
-  // The page stores its last author's uid; the meta line needs their name.
-  const lastAuthorId = detail?.page.updated_by ?? null;
-  const { data: lastAuthors = [] } = useUsersByIdsQuery(
-    { ids: lastAuthorId ? [lastAuthorId] : [] },
-    { skip: !lastAuthorId },
-  );
-  const lastAuthorName = lastAuthorId
-    ? userDisplayName(
-        lastAuthorId,
-        lastAuthors.find((user) => user.id === lastAuthorId),
-      )
-    : null;
+  const lastAuthorName = detail?.author_name ?? detail?.page.updated_by ?? null;
 
   // Where this page may be moved. The root is always offered; the rest is what
   // the depth cap and the page's own subtree leave available.
@@ -199,7 +188,8 @@ export default function TeamWikiPage() {
   }, [pages, detail, t]);
 
   /** Open a wiki page, or the wiki's root when `target` is null. */
-  const goTo = (target: string | null) => navigate(target ? `/team/${teamId}/wiki/${target}` : `/team/${teamId}/wiki`);
+  const goTo = (target: string | null) =>
+    navigate(target ? `/team/${routeTeamId}/wiki/${target}` : `/team/${routeTeamId}/wiki`);
 
   // Leaving an open editor throws the draft away — the page is re-read from the
   // server on arrival — so the user is asked first rather than told afterwards.
@@ -235,14 +225,14 @@ export default function TeamWikiPage() {
       const base = baseOverride ?? editingTarget.revisionId;
       if (isRules) {
         await writeRules({
-          teamId,
-          updateWikiRulesRequest: { content_md: contentMd, base_revision_id: base },
+          spaceId,
+          updateWikiContentRequest: { content_md: contentMd, base_revision_id: base },
         }).unwrap();
       } else {
         await writePage({
-          teamId,
+          spaceId,
           pageId: editingTarget.pageId,
-          updateWikiPageContentRequest: { content_md: contentMd, base_revision_id: base },
+          updateWikiContentRequest: { content_md: contentMd, base_revision_id: base },
         }).unwrap();
       }
       setHistoryGeneration((n) => n + 1);
@@ -271,9 +261,9 @@ export default function TeamWikiPage() {
     if (!detail || !detail.revision_id) return;
     try {
       await setReviewMark({
-        teamId,
+        spaceId,
         pageId: detail.page.page_id,
-        setNeedsReviewRequest: { needs_review: false, base_revision_id: detail.revision_id },
+        wikiReviewRequest: { needs_review: false, base_revision_id: detail.revision_id },
       }).unwrap();
       setHistoryGeneration((n) => n + 1);
     } catch (error) {
@@ -302,7 +292,7 @@ export default function TeamWikiPage() {
     if (!title) return;
     try {
       const created = await createPage({
-        teamId,
+        spaceId,
         createWikiPageRequest: { title, content_md: "", parent_page_id: newParent?.page_id ?? null },
       }).unwrap();
       closeCreate();
@@ -320,11 +310,11 @@ export default function TeamWikiPage() {
     if (!title || !detail) return;
     try {
       await patchPage({
-        teamId,
+        spaceId,
         pageId: detail.page.page_id,
         // `parent_page_id: null` means "leave it where it is", so detaching a
         // page has its own flag — otherwise a move to the root is unsayable.
-        updateWikiPageMetadataRequest: renameParentId
+        updateWikiMetadataRequest: renameParentId
           ? { title, parent_page_id: renameParentId }
           : { title, move_to_root: true },
       }).unwrap();
@@ -340,7 +330,7 @@ export default function TeamWikiPage() {
   const handleDelete = async () => {
     if (!detail) return;
     try {
-      await deletePage({ teamId, pageId: detail.page.page_id }).unwrap();
+      await deletePage({ spaceId, pageId: detail.page.page_id }).unwrap();
       setConfirmDelete(false);
       goTo(null);
     } catch (error) {
@@ -350,11 +340,11 @@ export default function TeamWikiPage() {
     }
   };
 
-  if (!teamId) {
+  if (!spaceId || treeError) {
     return (
       <div className={styles.frame}>
         <div className={styles.page}>
-          <div className={styles.state}>{t("rework.wiki.missingTeam")}</div>
+          <div className={styles.state}>{t(treeError ? "rework.wiki.notFound" : "rework.wiki.missingTeam")}</div>
         </div>
       </div>
     );
@@ -403,7 +393,18 @@ export default function TeamWikiPage() {
           </div>
           <WikiTree
             pages={pages}
-            rulesPage={rulesPage ?? { page_id: "", slug: RULES_PAGE_SLUG, title: "Rules", kind: "rules" }}
+            rulesPage={
+              rulesPage ?? {
+                page_id: "",
+                slug: RULES_PAGE_SLUG,
+                title: "Rules",
+                kind: "rules",
+                position: 0,
+                needs_review: false,
+                updated_at: "",
+                updated_by: "",
+              }
+            }
             activeSlug={activeSlug}
             onSelect={goTo}
             onSelectRules={() => goTo(RULES_PAGE_SLUG)}
@@ -499,7 +500,7 @@ export default function TeamWikiPage() {
           />
         )}
 
-        {detail && (
+        {detail?.revision_id && (
           <WikiRevisions
             // A new page id already needs a fresh walk; folding it into the key
             // (rather than a separate effect keyed on the prop) means a local
@@ -508,7 +509,7 @@ export default function TeamWikiPage() {
             // so this never fights the close-on-navigate behavior.
             key={`${detail.page.page_id}-${historyGeneration}`}
             open={showHistory}
-            teamId={teamId}
+            spaceId={spaceId}
             pageId={detail.page.page_id}
             currentRevisionId={detail.revision_id ?? null}
             canRestore={canEdit}

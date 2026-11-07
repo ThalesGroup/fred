@@ -24,8 +24,10 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
-import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
-import { useWikiProposalQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import { useParams } from "react-router-dom";
+import { resolveAgentSpace } from "../../../components/pages/TeamAgentsPage/weaverAgents";
+import { useMySpacesQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useWikiProposalQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { diffStat, lineDiff } from "@rework/features/teamWiki/lineDiff";
 import type { CapabilityHitlRendererProps } from "../types";
 import styles from "./WikiProposalReview.module.css";
@@ -43,13 +45,15 @@ function proposalIdFrom(preview: string | undefined): string | null {
 
 export function WikiProposalReview({ call }: CapabilityHitlRendererProps) {
   const { t } = useTranslation();
-  const { teamId } = useSelectedTeam();
+  const { teamId } = useParams<{ teamId: string }>();
+  const memberships = useMySpacesQuery();
+  const spaceId = resolveAgentSpace(memberships.currentData, teamId)?.id;
   const [open, setOpen] = useState(false);
   const proposalId = proposalIdFrom(call.args_preview);
 
   const { data: proposal, isFetching } = useWikiProposalQuery(
-    { teamId: teamId ?? "", proposalId: proposalId ?? "" },
-    { skip: !teamId || !proposalId },
+    { spaceId: spaceId ?? "", proposalId: proposalId ?? "" },
+    { skip: !spaceId || !proposalId, refetchOnMountOrArgChange: true },
   );
 
   // One pass, on render rather than on open: the summary line needs the

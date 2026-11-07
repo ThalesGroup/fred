@@ -42,7 +42,7 @@ from contextlib import contextmanager
 from functools import partial
 from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 from fred_core.common import OwnerFilter
@@ -76,6 +76,8 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.runtime import (
     AgentAssetPort,
     ChatModelFactoryPort,
+    ConversationFileContent,
+    ConversationFileEntry,
     DocumentContentPort,
     DocumentExtractionPort,
     DocumentExtractionResult,
@@ -2073,56 +2075,188 @@ class FredMcpToolProvider(ToolProviderPort):
 
 
 class FredWorkspaceFs(WorkspaceFsPort):
-    """Publish capability outputs in the existing conversation filesystem.
-
-    Configuration assets retain their separate AgentConfigAssetsAdapter. This
-    write port accepts only outputs of the currently bound conversation.
-    """
+    """Publish conversation deliverables through the authoritative CP catalogue."""
 
     def __init__(
         self,
         *,
         binding: BoundRuntimeContext,
+        credentials: OutboundCredentialProvider | None = None,
     ) -> None:
         self._binding = binding
+        self._credentials = credentials
 
     def bind(self, binding: BoundRuntimeContext) -> None:
         self._binding = binding
+
+    def _base(self) -> str:
+        context = self._binding.runtime_context
+        if not context.session_id or not context.space_id:
+            raise RuntimeError("Publishing requires a bound conversation")
+        return (
+            f"/spaces/{quote(context.space_id, safe='')}"
+            f"/sessions/{quote(context.session_id, safe='')}/files"
+        )
+
+    def _target(self, path: str) -> tuple[str, str]:
+        base = self._base()
+        prefix = f"outputs/{self._binding.runtime_context.session_id}/"
+        if not path.startswith(prefix):
+            raise PermissionError("Artifacts must belong to the bound conversation")
+        return base, path.removeprefix(prefix)
+
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, str],
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+        request_key: str | None = None,
+        max_bytes: int = 16 * 1024 * 1024,
+    ) -> httpx.Response:
+        runtime = get_runtime_context().config
+        client = runtime.control_plane_http_client
+        provider = self._credentials
+        if client is None or provider is None or not runtime.control_plane_url:
+            raise RuntimeError(
+                "Conversation files require the admitted workload credentials"
+            )
+        credentials = await provider.credentials()
+        if not credentials.delegated:
+            raise PermissionError("Conversation files require an admitted workload")
+        kwargs = attach_grant({"params": params}, credentials.parameters)
+        headers = {
+            **outbound_context_headers(),
+            "Authorization": credentials.authorization,
+        }
+        if request_key is not None:
+            headers["Idempotency-Key"] = request_key
+
+        url = f"{runtime.control_plane_url.rstrip('/')}{url}"
+
+        # A lost response may hide a committed write. Replay once with the same
+        # key, bytes and expected content; CP arbitrates pending/failed attempts.
+        async def send() -> httpx.Response:
+            async with client.stream(
+                method,
+                url,
+                headers=headers,
+                files=files,
+                auth=M2MBearerAuth(provider)
+                if isinstance(provider, DelegatedCredentialProvider)
+                else httpx.USE_CLIENT_DEFAULT,
+                follow_redirects=False,
+                timeout=360.0,
+                **kwargs,
+            ) as response:
+                if response.status_code in (401, 403):
+                    raise AuthorityLostError()
+                response.raise_for_status()
+                length = response.headers.get("content-length")
+                if length is not None and int(length) > max_bytes:
+                    raise ValueError(
+                        "Conversation file response exceeds the byte limit"
+                    )
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    if len(content) + len(chunk) > max_bytes:
+                        raise ValueError(
+                            "Conversation file response exceeds the byte limit"
+                        )
+                    content.extend(chunk)
+                # aiter_bytes has already decoded any HTTP content encoding.
+                decoded_headers = dict(response.headers)
+                decoded_headers.pop("content-encoding", None)
+                decoded_headers.pop("content-length", None)
+                return httpx.Response(
+                    response.status_code,
+                    headers=decoded_headers,
+                    content=bytes(content),
+                    request=response.request,
+                )
+
+        try:
+            return await send()
+        except httpx.TransportError:
+            if request_key is None and method != "GET":
+                raise
+            return await send()
+
+    async def list(
+        self, *, limit: int = 100, offset: int = 0
+    ) -> tuple[ConversationFileEntry, ...]:
+        if not 1 <= limit <= 100 or not 0 <= offset <= 10000:
+            raise ValueError("Conversation file list bounds exceeded")
+        response = await self._request(
+            "GET", self._base(), params={"limit": str(limit), "offset": str(offset)}
+        )
+        rows = response.json()
+        if not isinstance(rows, list) or len(rows) > limit:
+            raise ValueError("Invalid conversation file list")
+        return tuple(ConversationFileEntry.model_validate(row) for row in rows)
+
+    async def read(
+        self, document_id: str, *, max_bytes: int
+    ) -> ConversationFileContent:
+        if not 1 <= max_bytes <= 32 * 1024 * 1024:
+            raise ValueError("Conversation file read bounds exceeded")
+        response = await self._request(
+            "GET",
+            f"{self._base()}/{quote(document_id, safe='')}/content",
+            params={},
+            max_bytes=max_bytes,
+        )
+        return ConversationFileContent(
+            document_id=document_id,
+            content_id=str(UUID(response.headers["x-content-id"])),
+            content=response.content,
+        )
+
+    async def snapshot(self, path: str) -> str | None:
+        base, relative = self._target(path)
+        result = await self._request(
+            "GET", f"{base}/write-target", params={"path": relative}
+        )
+        return result.json()["current_content_id"]
 
     async def write(
         self,
         path: str,
         content: bytes,
         *,
+        expected_content_id: str | None,
+        source_content_id: str | None = None,
+        request_key: str | None = None,
         content_type: str | None = None,
         title: str | None = None,
     ) -> PublishedArtifact:
-        from fred_runtime.conversation_filesystem import ConversationFilesystemService
-
-        session_id = self._binding.runtime_context.session_id
-        if not session_id:
-            raise RuntimeError("Publishing an artifact requires a conversation")
-        prefix = f"outputs/{session_id}/"
-        if not path.startswith(prefix):
-            raise PermissionError("Artifacts must belong to the bound conversation")
-        relative = path.removeprefix(prefix)
-        runtime = get_runtime_context().config
-        if runtime.filesystem is None:
-            raise RuntimeError("Conversation filesystem unavailable")
-        filesystem = ConversationFilesystemService(
-            runtime.filesystem,
-            session_id,
-            fence=runtime.session_fence,
-            kpi=runtime.kpi_writer,
-        )
-        await filesystem.exports().write_bytes(relative, content)
-        session_id = filesystem.session_id
+        base, relative = self._target(path)
         file_name = relative.rsplit("/", 1)[-1]
+        params = {"path": relative}
+        if expected_content_id is not None:
+            params["expected_content_id"] = expected_content_id
+        if source_content_id is not None:
+            params["source_content_id"] = source_content_id
+            file_name = title or f"{file_name}.pdf"
+        result = await self._request(
+            "POST",
+            base,
+            params=params,
+            request_key=request_key if request_key is not None else str(uuid4()),
+            files={
+                "file": (file_name, content, content_type or "application/octet-stream")
+            },
+        )
+        receipt = result.json()
+        document_id = receipt["document_id"]
         return PublishedArtifact(
-            key=f"conversations/{session_id}/exports/{relative}",
+            key=document_id,
+            document_uid=document_id,
+            content_id=receipt["content_id"],
             file_name=file_name,
             size=len(content),
-            href=f"{runtime.api_base_url.rstrip('/')}/agents/sessions/{quote(session_id, safe='')}/filesystem/exports/{quote(relative, safe='/')}",
+            href=f"/control-plane/v1{base}/{document_id}/{'preview' if source_content_id else 'content'}",
             mime=content_type,
             title=title or file_name,
         )
@@ -2828,10 +2962,9 @@ class TeamWikiAdapter(TeamWikiPort):
     and access token are captured here and never cross into
     `CapabilityContext`. The capability names a slug; it cannot name a team.
 
-    The control-plane is the authority, not this adapter. It re-checks team
-    membership on every call, and refuses the whole wiki when an admin has not
-    enabled the `team_wiki` capability for the team — so an agent whose
-    selection survived a revoke gets a clean refusal rather than a stale read.
+    Control Plane owns the Wiki in the admitted canonical space. Delegated
+    calls retain admission authority and check the live private conversation;
+    the parent team id of a project never grants access to that team's Wiki.
 
     `read_page` memoises one page's content per slug on this per-turn instance
     (cleared on `rebind`, same doctrine as `DocumentMarkdownAdapter`), guarded
@@ -2875,12 +3008,12 @@ class TeamWikiAdapter(TeamWikiPort):
                 "The team wiki is unavailable: this pod has no control-plane URL "
                 "configured."
             )
-        team_id = getattr(self._binding.runtime_context, "team_id", None)
-        if not team_id:
+        space_id = self._binding.runtime_context.space_id
+        if not space_id:
             raise TeamWikiPortError(
-                "The team wiki is unavailable: this conversation has no team."
+                "The team wiki is unavailable: this conversation has no bound space."
             )
-        return f"{self._control_plane_url.rstrip('/')}/teams/{team_id}/wiki"
+        return f"{self._control_plane_url.rstrip('/')}/spaces/{space_id}/wiki"
 
     async def _request(self, method: str, path: str, json: Any = None) -> Any:
         url = f"{self._base()}{path}"
@@ -2896,9 +3029,15 @@ class TeamWikiAdapter(TeamWikiPort):
             ),
         )
         credentials = await provider.credentials()
+        session_id = self._binding.runtime_context.session_id
+        if not session_id:
+            raise TeamWikiPortError("The Wiki requires a bound conversation.")
         request_kwargs: dict[str, Any] = attach_grant(
-            {"json": json} if json is not None else {}, credentials.parameters
+            {"params": {"session_id": session_id}},
+            credentials.parameters,
         )
+        if json is not None:
+            request_kwargs["json"] = json
         headers = (
             {"Authorization": credentials.authorization}
             if credentials.authorization
@@ -3028,14 +3167,6 @@ class TeamWikiAdapter(TeamWikiPort):
                 "title": title,
                 "content_md": content_md,
                 "parent_slug": parent_slug,
-                # The audit trail back to the conversation that produced it.
-                # Read from the binding, never from the model.
-                "agent_instance_id": getattr(
-                    self._binding.runtime_context, "agent_instance_id", None
-                ),
-                "session_id": getattr(
-                    self._binding.runtime_context, "session_id", None
-                ),
             },
         )
         return self._proposal_ref(payload, verb="create")
@@ -3051,12 +3182,6 @@ class TeamWikiAdapter(TeamWikiPort):
                     "slug": slug,
                     "content_md": content_md,
                     "base_revision_id": base_revision_id,
-                    "agent_instance_id": getattr(
-                        self._binding.runtime_context, "agent_instance_id", None
-                    ),
-                    "session_id": getattr(
-                        self._binding.runtime_context, "session_id", None
-                    ),
                 },
             )
         except TeamWikiPortError as exc:

@@ -1581,3 +1581,68 @@ Les tests sont regroupés en une campagne complète jusqu'à k3d, une fois le ra
 le modèle Zabbix (demande client, compatibilité Weaver exigée), les SBOM d'images (`9cdd1ac99`), le wiki d'équipe
 (`bef0098f4`) et, en priorité, l'affichage des pièces jointes (`ad5a1d2d3`). Leur forme dans Weaver reste à décider
 commit par commit.
+
+
+### Wiki — premier lot implémenté, recette différée (7 novembre)
+
+Base Weaver `404237a02`, branche `codex/weaver-conversation-files` ; source Swift
+examinée `d7e7f99e7` (parcours Wiki, service et store). Aucun merge ni changement
+de borne Swift intégrée. Les modifications PowerPoint/Deep préexistantes restent
+conservées ; les raccords partagés sont limités au routeur, au nettoyage, au client
+généré, au README et à la classe `TeamWikiAdapter`.
+
+- **Repris :** arbre sur quatre niveaux, éditeur MDX et protection du brouillon,
+  règles, noms uniques entre voisins, historique paginé de 50 révisions, diff,
+  restauration comme nouvelle révision, validation éditoriale et publication HITL.
+- **Adapté :** `0015_team_wiki.sql` et `src/wiki/` placent pages/révisions dans le CP
+  PostgreSQL ; les propositions sont des révisions, pas une troisième autorité.
+  Espace personnel ou équipe canonique, sans repli d'un projet sur son équipe.
+  Droits `read`/`write` et autorisation des offres `team_wiki` réutilisés.
+- **Confidentialité :** proposition créée par un runtime délégué, liée à la
+  conversation privée et lisible/publiable seulement par son propriétaire.
+  Retirer la conversation ferme immédiatement l'accès aux propositions privées ;
+  leur purge utilise sa rétention. Les publications survivent à la conversation.
+  Une suppression d'équipe/organisation purge son Wiki avec le worker existant.
+- **Hors lot :** quotas éditoriaux globaux, catalogue de fichiers, pièces jointes,
+  exports, miroir Markdown, indexation et migration des données Swift.
+- **Chemins remplacés :** consommateurs UI et port agent vers `/spaces/{id}/wiki` ;
+  suppression des hooks/cache Wiki manuels du client legacy et des lectures legacy
+  séparées pour les noms d'auteurs et d'agents. Le vieux fichier TypeScript généré
+  conserve ses définitions inactives : sa source OpenAPI n'est plus dans ce checkout ;
+  il n'a pas été modifié à la main.
+
+Contrats CP/TypeScript régénérés. Compilation, formatage, lint et analyse de types
+ont été exécutés ; les fixtures existantes sont raccordées au nouveau contrat,
+sans nouvelle campagne de tests. Aucun service, déploiement, sous-agent ou commit.
+Les migrations n'ont pas été appliquées. Le diagramme SQL reste à régénérer avec
+sa procédure PostgreSQL : celle-ci démarre un service et n'est pas autorisée ici.
+
+Qualité : `make -o dev code-quality` sur le CP ; `make code-quality` sur le frontend ;
+`UV_NO_SYNC=1 make -o dev code-quality` sur le runtime. Les dépendances installées
+ont été réutilisées. La capacité Wiki utilise l'environnement du runtime pour ses
+outils ; son analyse de types passe avec `basedpyright --venvpath ../../fred-runtime`.
+La référence REST A12 a été régénérée et vérifiée sans PostgreSQL. Le contrôle de
+liens du README signale un lien **préexistant** vers l'ancre absente
+`09-quality.md#organization-supervision-read-budget`, laissé hors de ce lot.
+
+
+**Recette restant à autoriser :**
+
+1. Appliquer toute la chaîne SQL sur installation fraîche, puis vérifier les
+   contraintes, conflits concurrents et reprise des lots de nettoyage.
+2. En personnel et en équipe : créer/éditer/déplacer/renommer/supprimer une feuille,
+   garder l'URL après renommage ; refuser doublon, cycle et cinquième niveau.
+3. Préserver le brouillon en navigation et conflit ; lire les règles absentes sans
+   écriture, enregistrer puis vider volontairement les règles sans réinsérer de modèle.
+4. Lire plus de 50 révisions, afficher les auteurs, comparer, restaurer et valider
+   la bonne révision ; refuser une validation devenue périmée.
+5. Lecteur : consulter et approuver une proposition d'agent, sans édition directe ;
+   rédacteur : éditer/valider. Refuser les accès étrangers, y compris à une
+   proposition connue d'un autre membre/rédacteur et depuis un projet voisin.
+6. Agent : lecture complète avant remplacement, proposition privée, refus/accord
+   HITL, publication unique avec marque de revue ; aucune écriture des règles.
+7. Désactiver/réactiver sans perte. Une admission nouvelle respecte la révocation ;
+   un tour déjà admis conserve son autorité, sous réserve des ressources encore actives.
+8. Supprimer la conversation avant/après publication et purger après rétention ;
+   vérifier l'expiration des propositions ainsi que la suppression équipe/organisation.
+   Refaire ensuite la recette PowerPoint/Deep sur ce même état intégré.

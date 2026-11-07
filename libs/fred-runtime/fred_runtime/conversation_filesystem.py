@@ -232,14 +232,6 @@ class ConversationFilesystemService:
             max_files=self._quotas.scratchpad_max_files,
         )
 
-    def exports(self) -> ConversationTextNamespacePort:
-        """Generated binary artifacts share the conversation lifecycle."""
-        return self.namespace(
-            "exports",
-            max_bytes=self._quotas.deep_max_bytes,
-            max_files=self._quotas.deep_max_files,
-        )
-
     def namespace(
         self, namespace_id: str, *, max_bytes: int, max_files: int
     ) -> ConversationTextNamespacePort:

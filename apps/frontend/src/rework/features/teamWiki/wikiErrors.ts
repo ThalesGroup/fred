@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { WikiConflictResponse } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { WikiConflict } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 export interface StaleWrite {
   currentContentMd: string;
@@ -24,8 +24,8 @@ export interface StaleWrite {
  *  duplicate title or a has-children refusal reuses the same status code but
  *  carries `detail` only, so the shape (not the status) is what tells them
  *  apart. */
-export function isWikiConflictResponse(data: unknown): data is WikiConflictResponse {
-  const body = data as Partial<WikiConflictResponse> | undefined;
+export function isWikiConflictResponse(data: unknown): data is WikiConflict {
+  const body = data as Partial<WikiConflict> | undefined;
   return typeof body?.current_revision_id === "string" && typeof body?.current_content_md === "string";
 }
 

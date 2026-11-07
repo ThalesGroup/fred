@@ -49,6 +49,8 @@ pub struct Limits {
     pub personal_bytes: i64,
     pub team_bytes: i64,
     pub organization_bytes: i64,
+    /// Optional combined ceiling across all storage spaces in an organization.
+    pub organization_total_bytes: Option<i64>,
     pub conversation_files: u32,
     /// Source file bytes, excluding retired documents and failed uploads.
     pub conversation_bytes: i64,
@@ -71,6 +73,7 @@ impl Default for Limits {
             personal_bytes: 5 * 1024 * 1024 * 1024,
             team_bytes: 5 * 1024 * 1024 * 1024,
             organization_bytes: 5 * 1024 * 1024 * 1024,
+            organization_total_bytes: None,
             conversation_files: 100,
             conversation_bytes: 1024 * 1024 * 1024,
             cleanup_backlog_bytes: 1024 * 1024 * 1024,
@@ -164,8 +167,12 @@ impl ContentConfig {
             "content quotas and cleanup budget must be positive"
         );
         ensure!(
-            l.conversation_files > 0,
-            "content conversation file limit must be positive"
+            l.organization_total_bytes.is_none_or(|n| n > 0),
+            "organization total budget must be positive"
+        );
+        ensure!(
+            (1..=10000).contains(&l.conversation_files),
+            "content conversation file limit must be 1..10000"
         );
         ensure!(
             (1..=300).contains(&l.cleanup_interval_seconds)

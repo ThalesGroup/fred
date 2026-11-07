@@ -35,8 +35,6 @@ export interface PptPreviewState {
    * churns with re-renders.
    */
   current: PptPreviewPartData | null;
-  /** This conversation produced at least one deck (drives the launcher). */
-  produced: boolean;
 }
 
 // Local root-state shape — avoids a circular import with common/store.tsx. The
@@ -45,14 +43,13 @@ interface PptPreviewRootState {
   pptPreview: PptPreviewState;
 }
 
-const initialState: PptPreviewState = { sessionId: null, current: null, produced: false };
+const initialState: PptPreviewState = { sessionId: null, current: null };
 
 /** A write from another conversation starts that conversation's state from scratch. */
 function rebase(state: PptPreviewState, sessionId: string): void {
   if (state.sessionId === sessionId) return;
   state.sessionId = sessionId;
   state.current = null;
-  state.produced = false;
 }
 
 export const pptPreviewSlice = createSlice({
@@ -60,20 +57,17 @@ export const pptPreviewSlice = createSlice({
   initialState,
   reducers: {
     /**
-     * Every rendered card registers its deck, history replay included: that is how
-     * the launcher knows this conversation produced one. It seeds `current` only
-     * while the pane has nothing, so later re-renders cannot move what it shows.
+     * Every rendered card registers its deck, history replay included. It seeds
+     * `current` only while the pane has nothing; the catalogue drives availability.
      */
     registerPreview(state, action: PayloadAction<{ sessionId: string; preview: PptPreviewPartData }>) {
       rebase(state, action.payload.sessionId);
-      state.produced = true;
       if (state.current === null) state.current = action.payload.preview;
     },
 
     /** Show this deck in the pane - a card's Open button, or a live fill. */
     openPreview(state, action: PayloadAction<{ sessionId: string; preview: PptPreviewPartData }>) {
       rebase(state, action.payload.sessionId);
-      state.produced = true;
       state.current = action.payload.preview;
     },
   },
@@ -85,9 +79,6 @@ export const { registerPreview, openPreview } = pptPreviewSlice.actions;
 
 /** The deck the pane should render, whichever conversation it came from. */
 export const selectCurrentPreview = (state: PptPreviewRootState): PptPreviewPartData | null => state.pptPreview.current;
-
-/** Did the registered conversation produce a deck at all? */
-export const selectPptPreviewProduced = (state: PptPreviewRootState): boolean => state.pptPreview.produced;
 
 /** The conversation this state belongs to, or null. */
 export const selectPptPreviewSessionId = (state: PptPreviewRootState): string | null => state.pptPreview.sessionId;

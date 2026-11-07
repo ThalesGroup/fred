@@ -17,17 +17,9 @@ impl Storage {
         // Revoke publication of admitted uploads, without pretending their PUT ended.
         sqlx::query("update document_upload u set status='failed',error_code='destination_deleted',completed_at=clock_timestamp() where status='pending' and (exists(select 1 from session_metadata s where s.session_id=u.session_id and s.deletion_id=$1) or exists(select 1 from space s where s.id=u.space_id and s.deletion_id=$1))")
             .bind(deletion).execute(&self.pool).await?;
-        let originals: Vec<(Uuid, String)> = sqlx::query_as("select d.id,d.object_key from document d where d.deletion_id=$1 and d.original_cleaned_at is null and not exists(select 1 from document_upload u where u.id=d.id and u.put_pending) order by d.id limit $2")
-            .bind(deletion).bind(i64::from(self.config.limits.cleanup_batch)).fetch_all(&self.pool).await?;
-        for (document, key) in originals {
-            self.objects.delete(&key).await?;
-            ensure!(
-                self.objects.absent(&key).await?,
-                "original cleanup incomplete"
-            );
-            sqlx::query("update document set original_cleaned_at=clock_timestamp() where id=$1 and deletion_id=$2")
-                .bind(document).bind(deletion).execute(&self.pool).await?;
-        }
+        self.cleanup_contents(Some(deletion), None).await?;
+        sqlx::query("update document d set original_cleaned_at=clock_timestamp() where d.deletion_id=$1 and d.original_cleaned_at is null and not exists(select 1 from document_content c where c.document_id=d.id and c.cleaned_at is null) and not exists(select 1 from document_upload u where u.target_document_id=d.id and u.put_pending)")
+            .bind(deletion).execute(&self.pool).await?;
         let uploads: Vec<(Uuid, String)> = sqlx::query_as("select u.id,u.object_key from document_upload u where u.status='failed' and not u.put_pending and u.cleaned_at is null and (exists(select 1 from session_metadata s where s.session_id=u.session_id and s.deletion_id=$1) or exists(select 1 from space s where s.id=u.space_id and s.deletion_id=$1)) order by u.id limit $2")
             .bind(deletion).bind(i64::from(self.config.limits.cleanup_batch)).fetch_all(&self.pool).await?;
         for (upload, key) in uploads {
@@ -38,6 +30,24 @@ impl Storage {
             );
             sqlx::query("update document_upload set cleaned_at=clock_timestamp() where id=$1 and not put_pending")
                 .bind(upload).execute(&self.pool).await?;
+        }
+        Ok(())
+    }
+
+    /// Immutable superseded content can never become current again through the write API.
+    async fn cleanup_contents(&self, deletion: Option<Uuid>, lease: Option<Uuid>) -> Result<()> {
+        let due: Vec<(Uuid,String)> = sqlx::query_as("select c.id,c.object_key from document_content c join document d on d.id=c.document_id where c.cleaned_at is null and c.cleanup_after<=clock_timestamp() and (($1::uuid is not null and d.deletion_id=$1) or ($1::uuid is null and d.deletion_id is null and c.id is distinct from d.current_content_id and c.source_content_id is distinct from d.current_content_id)) and not exists(select 1 from document_upload u where u.content_id=c.id and u.put_pending) order by c.cleanup_after,c.id limit $2")
+            .bind(deletion).bind(i64::from(self.config.limits.cleanup_batch)).fetch_all(&self.pool).await?;
+        for (id, key) in due {
+            if let Some(owner) = lease {
+                self.renew(owner).await?;
+            }
+            let removed = match self.objects.delete(&key).await {
+                Ok(()) => self.objects.absent(&key).await.unwrap_or(false),
+                Err(_) => false,
+            };
+            sqlx::query("update document_content set cleaned_at=case when $2 then clock_timestamp() end,cleanup_after=clock_timestamp()+interval '30 seconds' where id=$1 and cleaned_at is null")
+                .bind(id).bind(removed).execute(&self.pool).await?;
         }
         Ok(())
     }
@@ -68,6 +78,7 @@ impl Storage {
     }
 
     async fn cleanup_page(&self, owner: Uuid) -> Result<()> {
+        self.cleanup_contents(None, Some(owner)).await?;
         let batch = i64::from(self.config.limits.cleanup_batch);
         let expired: Vec<(Uuid,Uuid)> = sqlx::query_as("select id,organization_id from document_upload where status='pending' and expires_at<=clock_timestamp() and cleanup_due_at<=clock_timestamp() order by cleanup_due_at,expires_at,id limit $1")
             .bind(batch).fetch_all(&self.pool).await?;
@@ -111,6 +122,11 @@ impl Storage {
                 .bind(id).bind(deleted).execute(&self.pool).await?;
             tracing::info!(operation_id=%id,outcome=if deleted {"cleaned"}else{"retry"},"document cleanup");
         }
+        // Receipts bound the technical retention window; there is no user revision archive.
+        sqlx::query("delete from document_upload where id in (select u.id from document_upload u join document_content c on c.id=u.content_id where u.purpose<>'source' and u.status='stored' and c.cleaned_at is not null and c.published_at<clock_timestamp()-make_interval(days=>$1) order by c.published_at,c.id limit $2)")
+            .bind(self.config.limits.receipt_retention_days as i32).bind(batch).execute(&self.pool).await?;
+        sqlx::query("delete from document_content where id in (select c.id from document_content c join document d on d.id=c.document_id where c.cleaned_at is not null and c.id is distinct from d.current_content_id and not exists(select 1 from document_upload u where u.content_id=c.id) and not exists(select 1 from document_content p where p.source_content_id=c.id) order by c.cleanup_after,c.id limit $1)")
+            .bind(batch).execute(&self.pool).await?;
         self.renew(owner).await?;
         let cursor: Option<String> = sqlx::query_scalar(
             "select inventory_cursor from document_storage where singleton and lease_owner=$1",
@@ -137,7 +153,7 @@ impl Storage {
             if let Some((id, org)) = pending {
                 self.expire_or_defer(id, org).await?;
             }
-            let live: bool=sqlx::query_scalar("select exists(select 1 from document where object_key=$1) or exists(select 1 from document_upload where object_key=$1 and (status='pending' or put_pending)) or exists(select 1 from powerpoint_file where object_key=$1 and (status in ('pending','stored') or cleanup_due_at>clock_timestamp()))")
+            let live: bool=sqlx::query_scalar("select exists(select 1 from document_content where object_key=$1 and cleaned_at is null) or exists(select 1 from document_upload where object_key=$1 and (status='pending' or put_pending)) or exists(select 1 from powerpoint_file where object_key=$1 and (status in ('pending','stored') or cleanup_due_at>clock_timestamp()))")
                 .bind(&key).fetch_one(&self.pool).await?;
             // Unknown ownership never authorizes deletion. Count inaccessible
             // candidates conservatively and advance so one key cannot starve a sweep.

@@ -48,7 +48,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError, showSuccess: vi.fn() }),
 }));
 
-import { enhancedControlPlaneApi } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+import { enhancedControlPlaneApi } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { WikiRevisions } from "./WikiRevisions";
 
 interface FakeRevision {
@@ -69,7 +69,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-describe("WikiRevisions — against the real legacyControlPlaneApi store", () => {
+describe("WikiRevisions — against the real controlPlaneApi store", () => {
   let allRevisions: FakeRevision[];
   let restoreShouldFail: boolean;
   let revisionsGetCount: number;
@@ -104,6 +104,7 @@ describe("WikiRevisions — against the real legacyControlPlaneApi store", () =>
     const reachedEnd = startIndex + PAGE_SIZE >= allRevisions.length;
     return {
       revisions: slice,
+      authors: {},
       contents: Object.fromEntries(slice.map((r) => [r.revision_id, `content of ${r.revision_id}`])),
       next_cursor: reachedEnd || slice.length === 0 ? null : slice[slice.length - 1].revision_id,
     };
@@ -161,7 +162,7 @@ describe("WikiRevisions — against the real legacyControlPlaneApi store", () =>
         <Provider store={store}>
           <WikiRevisions
             open={props.open ?? true}
-            teamId="team-1"
+            spaceId="team-1"
             pageId="page-1"
             currentRevisionId={props.currentRevisionId ?? allRevisions[0]?.revision_id ?? null}
             canRestore
@@ -214,16 +215,16 @@ describe("WikiRevisions — against the real legacyControlPlaneApi store", () =>
     // mutation with the currently-displayed revision as its base.
     await act(async () => {
       await store.dispatch(
-        enhancedControlPlaneApi.endpoints.setReviewMarkControlPlaneV1TeamsTeamIdWikiPagesPageIdReviewPost.initiate({
-          teamId: "team-1",
+        enhancedControlPlaneApi.endpoints.setWikiReviewMark.initiate({
+          spaceId: "team-1",
           pageId: "page-1",
-          setNeedsReviewRequest: { needs_review: false, base_revision_id: allRevisions[0].revision_id },
+          wikiReviewRequest: { needs_review: false, base_revision_id: allRevisions[0].revision_id },
         }),
       );
     });
     await settle();
 
-    // Without the HISTORY-${teamId}-${pageId} tag on setReviewMark, this
+    // Without the space Wiki tag on setWikiReviewMark, this
     // panel's own subscribed query never refetches and the count stays at
     // PAGE_SIZE with no review entry.
     expect(revisionRowCount()).toBe(PAGE_SIZE + 1);

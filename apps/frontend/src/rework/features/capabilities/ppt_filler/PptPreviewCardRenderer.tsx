@@ -26,10 +26,8 @@
 // once, and only if the page has been open for >5s (history replay happens in the
 // first moments after load; a live fill happens well after).
 //
-// Every mount REGISTERS the deck, replay included: that is what tells the pane's
-// launcher this conversation produced something. Registering never moves what the
-// pane shows - only an explicit open does, because the pane keys its pdf.js worker
-// on that value.
+// Every mount registers the deck, replay included, to seed the panel selection.
+// Later registrations preserve that selection; the catalogue drives availability.
 
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";

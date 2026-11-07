@@ -107,7 +107,7 @@ impl Processing {
         } else {
             // Serialize admission with retirement; ACK never needs a live document.
             let retired: bool = sqlx::query_scalar(
-                "select deletion_id is not null from document where id=$1 for update",
+                "select deletion_id is not null from document_current where id=$1 for update",
             )
             .bind(receipt.work.document_id)
             .fetch_one(&mut *tx)
@@ -167,7 +167,7 @@ impl Processing {
             profile,
         };
         let due: Vec<DueGeneration> = sqlx::query_as(concat!(
-            "with due as materialized (select g.id, p.document_id, p.profile, d.sha256 as original_sha256, d.published_generation is not distinct from g.id as published from generation g join document_processing p on p.id = g.processing_id join document d on d.id = p.document_id where g.cleanup_after <= now() and ",
+            "with due as materialized (select g.id, p.document_id, p.profile, d.sha256 as original_sha256, d.published_generation is not distinct from g.id as published from generation g join document_processing p on p.id = g.processing_id join document_current d on d.id = p.document_id where g.cleanup_after <= now() and ",
             generation_due!(),
             " order by g.cleanup_after, g.id limit $1 for update of g skip locked) update generation g set cleanup_after = clock_timestamp() + make_interval(secs => $2) from due where g.id = due.id returning g.*, due.document_id, due.profile, due.original_sha256, due.published"
         ))
@@ -202,7 +202,7 @@ impl Processing {
             })
             .collect();
         let purges: Vec<DuePurge> = sqlx::query_as(concat!(
-            "with due as materialized (select d.id as document_id, latest.processing_id, latest.profile, d.sha256 as original_sha256, latest.generation from document d cross join lateral (select p.id as processing_id, p.profile, g.id as generation from document_processing p join generation g on g.processing_id = p.id where p.document_id = d.id order by g.created_at desc, g.id desc limit 1) latest where d.purge_after <= now() and ",
+            "with due as materialized (select d.id as document_id, latest.processing_id, latest.profile, d.sha256 as original_sha256, latest.generation from document_current d cross join lateral (select p.id as processing_id, p.profile, g.id as generation from document_processing p join generation g on g.processing_id = p.id where p.document_id = d.id order by g.created_at desc, g.id desc limit 1) latest where d.purge_after <= now() and ",
             purge_due!(),
             " order by d.purge_after, d.id limit $1 for update of d skip locked) update document d set purge_after = clock_timestamp() + make_interval(secs => $2) from due where d.id = due.document_id returning due.*"
         ))
@@ -262,7 +262,7 @@ impl Processing {
         } else {
             // The queue time can be pushed back by a claim; the lease end is the fence.
             let due: bool = sqlx::query_scalar(concat!(
-                "select exists(select 1 from generation g join document_processing p on p.id = g.processing_id join document d on d.id = p.document_id where g.id = $1 and g.expires_at < clock_timestamp() - interval '60 seconds' and ",
+                "select exists(select 1 from generation g join document_processing p on p.id = g.processing_id join document_current d on d.id = p.document_id where g.id = $1 and g.expires_at < clock_timestamp() - interval '60 seconds' and ",
                 generation_due!(),
                 ")"
             ))

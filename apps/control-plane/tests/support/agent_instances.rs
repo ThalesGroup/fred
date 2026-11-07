@@ -1526,10 +1526,7 @@ async fn runtime_binding_lists_all_eligible_conversation_attachments() {
         assert_eq!(response.0, 201, "{response:?}");
     }
     let ids: Vec<Uuid> = sqlx::query_scalar(
-        "insert into document(id,space_id,session_id,name,mime,size,sha256,created_by,object_key,quota_owner,retrievable)
-         select gen_random_uuid(),$1,case n when 5 then null::uuid when 6 then $3 else $2 end,'file-' || n || case n % 3 when 0 then '.csv' when 1 then '.xlsx' else '.txt' end,
-         case n % 3 when 0 then 'text/csv' when 1 then 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' else 'text/plain' end,
-         1,repeat('a',64),'alice',gen_random_uuid()::text,$1,true from generate_series(1,110) n returning id",
+        "select fixture_document(p_id=>gen_random_uuid(),p_space_id=>$1,p_session_id=>case n when 5 then null::uuid when 6 then $3 else $2 end,p_name=>'file-' || n || case n % 3 when 0 then '.csv' when 1 then '.xlsx' else '.txt' end,p_mime=>case n % 3 when 0 then 'text/csv' when 1 then 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' else 'text/plain' end,p_size=>1,p_sha256=>repeat('a',64),p_created_by=>'alice',p_object_key=>gen_random_uuid()::text,p_quota_owner=>$1,p_retrievable=>true) from generate_series(1,110) n",
     ).bind(team.id).bind(session).bind(other).fetch_all(&e.pool).await.unwrap();
     sqlx::query(
         "insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds)

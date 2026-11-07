@@ -5957,7 +5957,11 @@ def test_complete_session_purge_retries_storage_failure(monkeypatch, tmp_path):
                 "retired-capability", max_bytes=100, max_files=5
             ).write_text("file", "secret")
         )
-        asyncio.run(service.exports().write_bytes("deck.pptx", b"binary"))
+        asyncio.run(
+            service.namespace("deep", max_bytes=1024, max_files=10).write_bytes(
+                "deck.pptx", b"binary"
+            )
+        )
         asyncio.run(other.scratchpad().write_text("file", "retain"))
         real_delete = filesystem.delete
         monkeypatch.setattr(

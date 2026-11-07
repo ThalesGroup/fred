@@ -82,7 +82,7 @@ pub async fn insert_document(
     pool: &PgPool,
     d: &control_plane::domain::Document,
 ) -> sqlx::Result<()> {
-    sqlx::query("insert into document (id,space_id,folder_id,name,mime,size,sha256,created_by,created_at,object_key,quota_owner) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$2)")
+    sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_folder_id=>$3,p_name=>$4,p_mime=>$5,p_size=>$6,p_sha256=>$7,p_created_by=>$8,p_created_at=>$9,p_object_key=>$10,p_quota_owner=>(select case when kind='project' then parent_id else id end from space where id=$2))")
         .bind(d.id).bind(d.space_id).bind(d.folder_id).bind(&d.name).bind(&d.mime).bind(d.size).bind(&d.sha256).bind(&d.created_by).bind(d.created_at).bind(format!("fixture/{}",d.id))
         .execute(pool).await?;
     Ok(())

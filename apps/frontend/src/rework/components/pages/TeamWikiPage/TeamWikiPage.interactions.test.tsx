@@ -42,11 +42,8 @@ vi.mock("react-i18next", () => ({
 vi.mock("@rework/core/hooks/usePaneResize", () => ({
   usePaneResize: () => ({ width: 260, handleProps: {} }),
 }));
-vi.mock("../../../../hooks/useSelectedTeam", () => ({
-  useSelectedTeam: () => ({ selectedTeam: { id: "team-1" } }),
-}));
-vi.mock("@hooks/useTeamCapabilities", () => ({
-  useTeamCapabilities: () => ({ canUpdateResources: true }),
+vi.mock("@hooks/useSpaceAccess", () => ({
+  useSpaceAccess: () => ({ allowed: true }),
 }));
 
 const h = vi.hoisted(() => ({
@@ -64,9 +61,10 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError: h.showError, showSuccess: vi.fn() }),
 }));
 
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useMySpacesQuery: () => ({ currentData: [{ id: "team-1", kind: "team" }] }),
   useWikiPagesQuery: () => ({
-    data: { pages: [{ page_id: "page-1", slug: "s", title: "S", kind: "page", parent_page_id: null }] },
+    currentData: { pages: [{ page_id: "page-1", slug: "s", title: "S", kind: "page", parent_page_id: null }] },
     isLoading: false,
   }),
   useWikiPageQuery: () => ({ currentData: h.detail, isFetching: false }),
@@ -77,7 +75,6 @@ vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements
   usePatchWikiPageMutation: () => [vi.fn()],
   useDeleteWikiPageMutation: () => [vi.fn()],
   useSetWikiReviewMarkMutation: () => [h.setReviewMark],
-  useUsersByIdsQuery: () => ({ data: [] }),
 }));
 
 vi.mock("./WikiTree", () => ({ WikiTree: () => null }));
@@ -152,9 +149,9 @@ describe("TeamWikiPage — review mark wiring", () => {
     await settle();
 
     expect(h.setReviewMark).toHaveBeenCalledWith({
-      teamId: "team-1",
+      spaceId: "team-1",
       pageId: "page-1",
-      setNeedsReviewRequest: { needs_review: false, base_revision_id: "rev-A" },
+      wikiReviewRequest: { needs_review: false, base_revision_id: "rev-A" },
     });
   });
 

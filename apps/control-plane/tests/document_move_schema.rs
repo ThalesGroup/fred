@@ -36,7 +36,7 @@ async fn spaces(pool: &PgPool) -> [Uuid; 4] {
 
 async fn document(pool: &PgPool, space: Uuid) -> Uuid {
     let id = Uuid::new_v4();
-    sqlx::query("insert into document(id,space_id,name,mime,size,sha256,created_by,object_key,quota_owner) values($1,$2,$1::text || '.txt','text/plain',10,repeat('a',64),'alice',$1::text,$2)")
+    sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_name=>$1::text || '.txt',p_mime=>'text/plain',p_size=>10,p_sha256=>repeat('a',64),p_created_by=>'alice',p_object_key=>$1::text,p_quota_owner=>(select case when kind='project' then parent_id else id end from space where id=$2))")
         .bind(id).bind(space).execute(pool).await.unwrap();
     id
 }

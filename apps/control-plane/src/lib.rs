@@ -52,6 +52,7 @@ pub mod spaces;
 pub mod supervision;
 pub mod user_preferences;
 pub mod users;
+pub mod wiki;
 
 pub mod provisioning;
 

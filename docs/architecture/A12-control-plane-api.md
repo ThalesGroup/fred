@@ -1126,8 +1126,29 @@ Operation `powerpoint_upload_receipt`.
 | POST | [/spaces/{space_id}/sessions/{session_id}/attachments](#post-spacesspace_idsessionssession_idattachments) | Attach one file to the caller's conversation and request its `fast` processing atomically |
 | DELETE | [/spaces/{space_id}/sessions/{session_id}/attachments/{document_id}](#delete-spacesspace_idsessionssession_idattachmentsdocument_id) | Delete one attachment of the caller's conversation, as `DELETE /documents/{id}` does |
 | POST | [/spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage](#post-spacesspace_idsessionssession_idexchangesexchange_idusage) | Atomically record consumption reported by a trusted runtime workload in its own name |
+| GET | [/spaces/{space_id}/sessions/{session_id}/files](#get-spacesspace_idsessionssession_idfiles) |  |
+| POST | [/spaces/{space_id}/sessions/{session_id}/files](#post-spacesspace_idsessionssession_idfiles) |  |
+| GET | [/spaces/{space_id}/sessions/{session_id}/files/write-target](#get-spacesspace_idsessionssession_idfileswrite-target) |  |
+| GET | [/spaces/{space_id}/sessions/{session_id}/files/{document_id}/content](#get-spacesspace_idsessionssession_idfilesdocument_idcontent) |  |
+| GET | [/spaces/{space_id}/sessions/{session_id}/files/{document_id}/preview](#get-spacesspace_idsessionssession_idfilesdocument_idpreview) |  |
 | POST | [/spaces/{space_id}/sessions/{session_id}/generated-title](#post-spacesspace_idsessionssession_idgenerated-title) |  |
 | GET | [/spaces/{space_id}/usage](#get-spacesspace_idusage) | Read team/project consumption with direct ReadUsage (Owner or Analyst) |
+| GET | [/spaces/{space_id}/wiki/availability](#get-spacesspace_idwikiavailability) |  |
+| GET | [/spaces/{space_id}/wiki/pages](#get-spacesspace_idwikipages) |  |
+| POST | [/spaces/{space_id}/wiki/pages](#post-spacesspace_idwikipages) |  |
+| GET | [/spaces/{space_id}/wiki/pages/{page_id}](#get-spacesspace_idwikipagespage_id) |  |
+| PATCH | [/spaces/{space_id}/wiki/pages/{page_id}](#patch-spacesspace_idwikipagespage_id) |  |
+| DELETE | [/spaces/{space_id}/wiki/pages/{page_id}](#delete-spacesspace_idwikipagespage_id) |  |
+| PUT | [/spaces/{space_id}/wiki/pages/{page_id}/content](#put-spacesspace_idwikipagespage_idcontent) |  |
+| POST | [/spaces/{space_id}/wiki/pages/{page_id}/review](#post-spacesspace_idwikipagespage_idreview) |  |
+| GET | [/spaces/{space_id}/wiki/pages/{page_id}/revisions](#get-spacesspace_idwikipagespage_idrevisions) |  |
+| POST | [/spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore](#post-spacesspace_idwikipagespage_idrevisionsrevision_idrestore) |  |
+| POST | [/spaces/{space_id}/wiki/proposals/edit](#post-spacesspace_idwikiproposalsedit) |  |
+| POST | [/spaces/{space_id}/wiki/proposals/page](#post-spacesspace_idwikiproposalspage) |  |
+| GET | [/spaces/{space_id}/wiki/proposals/{proposal_id}](#get-spacesspace_idwikiproposalsproposal_id) |  |
+| POST | [/spaces/{space_id}/wiki/proposals/{proposal_id}/publish](#post-spacesspace_idwikiproposalsproposal_idpublish) |  |
+| GET | [/spaces/{space_id}/wiki/rules](#get-spacesspace_idwikirules) |  |
+| PUT | [/spaces/{space_id}/wiki/rules](#put-spacesspace_idwikirules) |  |
 
 ### POST /spaces
 
@@ -1824,6 +1845,98 @@ Request: [`UsageReport`](#usagereport).
 - 404: [`ErrorBody`](#errorbody) — Session not found in this space
 - 409: [`ErrorBody`](#errorbody) — idempotency_conflict: the report key already identifies a different consumption report
 
+### GET /spaces/{space_id}/sessions/{session_id}/files
+
+Operation `list_conversation_files`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes |  |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+| `limit` | query | integer (int64) |  |  |
+| `offset` | query | integer (int64) |  |  |
+
+- 200: array of [`ConversationFile`](#conversationfile)
+- 404: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /spaces/{space_id}/sessions/{session_id}/files
+
+Operation `write_conversation_file`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes |  |
+| `path` | query | string | yes |  |
+| `person` | query | string | yes |  |
+| `run` | query | string | yes |  |
+| `agent` | query | string | yes |  |
+| `expected_content_id` | query | string (uuid) |  |  |
+| `source_content_id` | query | string (uuid) |  |  |
+| `Idempotency-Key` | header | string (uuid) | yes |  |
+
+Request: [`FileUpload`](#fileupload) (`multipart/form-data`).
+
+- 200: [`FileWrite`](#filewrite)
+- 409, 422: [`ErrorBody`](#errorbody)
+
+### GET /spaces/{space_id}/sessions/{session_id}/files/write-target
+
+Operation `file_write_target`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes |  |
+| `path` | query | string | yes |  |
+| `person` | query | string | yes |  |
+| `run` | query | string | yes |  |
+| `agent` | query | string | yes |  |
+
+- 200: [`FileWriteTarget`](#filewritetarget)
+- 404: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /spaces/{space_id}/sessions/{session_id}/files/{document_id}/content
+
+Operation `download_conversation_file`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes |  |
+| `document_id` | path | string (uuid) | yes |  |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+
+- 200: no body — Current file bytes
+- 404: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+Response 200 header `X-Content-Id`: string (uuid). Identity of the returned bytes
+
+### GET /spaces/{space_id}/sessions/{session_id}/files/{document_id}/preview
+
+Operation `preview_conversation_file`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | path | string (uuid) | yes |  |
+| `document_id` | path | string (uuid) | yes |  |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+
+- 200: no body — Preview of the current file
+- 404: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
 ### POST /spaces/{space_id}/sessions/{session_id}/generated-title
 
 Operation `record_title`.
@@ -1854,6 +1967,259 @@ Operation `space_usage`.
 
 - 200: [`UsageResponse`](#usageresponse)
 - 401, 403, 404, 409, 422, 500, 503: [`ErrorBody`](#errorbody)
+
+### GET /spaces/{space_id}/wiki/availability
+
+Operation `wiki_availability`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+| `session_id` | query | string (uuid) |  |  |
+| `space_id` | path | string (uuid) | yes |  |
+
+- 200: [`WikiAvailability`](#wikiavailability)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /spaces/{space_id}/wiki/pages
+
+Operation `wiki_pages`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+| `session_id` | query | string (uuid) |  |  |
+| `space_id` | path | string (uuid) | yes |  |
+
+- 200: [`WikiPageTree`](#wikipagetree)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /spaces/{space_id}/wiki/pages
+
+Operation `create_wiki_page`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+
+Request: [`CreateWikiPageRequest`](#createwikipagerequest).
+
+- 201: [`WikiPageDetail`](#wikipagedetail)
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 409: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /spaces/{space_id}/wiki/pages/{page_id}
+
+Operation `wiki_page`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+| `session_id` | query | string (uuid) |  |  |
+| `space_id` | path | string (uuid) | yes |  |
+| `page_id` | path | string | yes | Stable page slug |
+
+- 200: [`WikiPageDetail`](#wikipagedetail)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### PATCH /spaces/{space_id}/wiki/pages/{page_id}
+
+Operation `patch_wiki_page`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `page_id` | path | string (uuid) | yes |  |
+
+Request: [`UpdateWikiMetadataRequest`](#updatewikimetadatarequest).
+
+- 200: [`WikiPageSummary`](#wikipagesummary)
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 409: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### DELETE /spaces/{space_id}/wiki/pages/{page_id}
+
+Operation `delete_wiki_page`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `page_id` | path | string (uuid) | yes |  |
+
+- 204: no body
+- 409: [`ErrorBody`](#errorbody)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### PUT /spaces/{space_id}/wiki/pages/{page_id}/content
+
+Operation `write_wiki_page`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `page_id` | path | string (uuid) | yes |  |
+
+Request: [`UpdateWikiContentRequest`](#updatewikicontentrequest).
+
+- 200: [`WikiPageDetail`](#wikipagedetail)
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 409: [`WikiConflict`](#wikiconflict)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /spaces/{space_id}/wiki/pages/{page_id}/review
+
+Operation `set_wiki_review_mark`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `page_id` | path | string (uuid) | yes |  |
+
+Request: [`WikiReviewRequest`](#wikireviewrequest).
+
+- 200: [`WikiPageSummary`](#wikipagesummary)
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 409: [`WikiConflict`](#wikiconflict)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /spaces/{space_id}/wiki/pages/{page_id}/revisions
+
+Operation `wiki_revisions`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+| `session_id` | query | string (uuid) |  |  |
+| `space_id` | path | string (uuid) | yes |  |
+| `page_id` | path | string (uuid) | yes |  |
+| `cursor` | query | string |  |  |
+
+- 200: [`WikiRevisionList`](#wikirevisionlist)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore
+
+Operation `restore_wiki_revision`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+| `page_id` | path | string (uuid) | yes |  |
+| `revision_id` | path | string (uuid) | yes |  |
+
+- 200: [`WikiPageDetail`](#wikipagedetail)
+- 409: [`WikiConflict`](#wikiconflict)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /spaces/{space_id}/wiki/proposals/edit
+
+Operation `propose_wiki_edit`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string | yes |  |
+| `run` | query | string | yes |  |
+| `agent` | query | string | yes |  |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | query | string (uuid) | yes |  |
+
+Request: [`ProposeWikiEditRequest`](#proposewikieditrequest).
+
+- 201: [`WikiProposal`](#wikiproposal)
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 409: [`WikiConflict`](#wikiconflict)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /spaces/{space_id}/wiki/proposals/page
+
+Operation `propose_wiki_page`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string | yes |  |
+| `run` | query | string | yes |  |
+| `agent` | query | string | yes |  |
+| `space_id` | path | string (uuid) | yes |  |
+| `session_id` | query | string (uuid) | yes |  |
+
+Request: [`ProposeWikiPageRequest`](#proposewikipagerequest).
+
+- 201: [`WikiProposal`](#wikiproposal)
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /spaces/{space_id}/wiki/proposals/{proposal_id}
+
+Operation `wiki_proposal`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+| `session_id` | query | string (uuid) |  |  |
+| `space_id` | path | string (uuid) | yes |  |
+| `proposal_id` | path | string (uuid) | yes |  |
+
+- 200: [`WikiProposal`](#wikiproposal)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### POST /spaces/{space_id}/wiki/proposals/{proposal_id}/publish
+
+Operation `publish_wiki_proposal`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+| `session_id` | query | string (uuid) |  |  |
+| `space_id` | path | string (uuid) | yes |  |
+| `proposal_id` | path | string (uuid) | yes |  |
+
+- 200: [`WikiPageDetail`](#wikipagedetail)
+- 409: [`WikiConflict`](#wikiconflict)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### GET /spaces/{space_id}/wiki/rules
+
+Operation `wiki_rules`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `person` | query | string |  |  |
+| `run` | query | string |  |  |
+| `agent` | query | string |  |  |
+| `session_id` | query | string (uuid) |  |  |
+| `space_id` | path | string (uuid) | yes |  |
+
+- 200: [`WikiPageDetail`](#wikipagedetail)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
+
+### PUT /spaces/{space_id}/wiki/rules
+
+Operation `write_wiki_rules`.
+
+| Parameter | In | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `space_id` | path | string (uuid) | yes |  |
+
+Request: [`UpdateWikiContentRequest`](#updatewikicontentrequest).
+
+- 200: [`WikiPageDetail`](#wikipagedetail)
+- 400: [`ErrorBody`](#errorbody) — Malformed JSON body
+- 409: [`WikiConflict`](#wikiconflict)
+- 422: [`ErrorBody`](#errorbody) — Invalid path, query or body fields
 
 ## /users routes
 
@@ -2204,6 +2570,20 @@ One of: `source_guarantee`, `api_metadata`.
 | `stage` | [`Stage`](#stage) | yes |  |
 | `work` | [`Work`](#work) | yes |  |
 
+### ConversationFile
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content_id` | string (uuid) | yes |  |
+| `document_id` | string (uuid) | yes |  |
+| `mime` | string | yes |  |
+| `name` | string | yes |  |
+| `path` | string | yes |  |
+| `preview_content_id` | string (uuid) or null |  |  |
+| `sha256` | string | yes |  |
+| `size` | integer (int64) | yes |  |
+| `updated_at` | string (date-time) | yes |  |
+
 ### CorpusLevel
 
 One of: `organization`, `team`, `project`.
@@ -2276,6 +2656,15 @@ One of: `organization`, `team`, `project`.
 | `name` | string | yes |  |
 | `owner` | string | yes | Initial business owner; creation grants the caller nothing on the new space. |
 | `parent_id` | string (uuid) | yes |  |
+
+### CreateWikiPageRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content_md` | string |  |  |
+| `parent_page_id` | string (uuid) or null |  |  |
+| `position` | integer (int32) |  |  |
+| `title` | string | yes |  |
 
 ### Descriptor
 
@@ -2463,6 +2852,19 @@ Multipart body: exactly one `file` part.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `file` | string (binary) | yes | The file; its multipart filename becomes the document name. |
+
+### FileWrite
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content_id` | string (uuid) | yes |  |
+| `document_id` | string (uuid) | yes |  |
+
+### FileWriteTarget
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `current_content_id` | string (uuid) or null |  | Null means create; a write must submit this value unchanged after rendering. |
 
 ### Folder
 
@@ -3144,6 +3546,22 @@ Extends [`PromptMetadata`](#promptmetadata) with:
 | `is_favorite` | boolean | yes |  |
 | `text_preview` | string, max length 240 | yes | First 240 characters, selected in PostgreSQL without fetching the full body. |
 
+### ProposeWikiEditRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `base_revision_id` | string (uuid) | yes |  |
+| `content_md` | string | yes |  |
+| `slug` | string | yes |  |
+
+### ProposeWikiPageRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content_md` | string | yes |  |
+| `parent_slug` | string or null |  |  |
+| `title` | string | yes |  |
+
 ### ProvisioningUpload
 
 | Field | Type | Required | Description |
@@ -3786,6 +4204,22 @@ Absent fields stay unchanged. A named account becomes the role's sole direct hol
 | `title` | string, max length 500 or null |  | Omitted/null keeps the current title; an empty string explicitly clears it. |
 | `updated_at` | string (date-time) or null |  | Last observed activity. Monotonic, capped at server time; omission keeps activity. |
 
+### UpdateWikiContentRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `base_revision_id` | string (uuid) or null |  |  |
+| `content_md` | string | yes |  |
+
+### UpdateWikiMetadataRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `move_to_root` | boolean |  |  |
+| `parent_page_id` | string (uuid) or null |  |  |
+| `position` | integer (int32) or null |  |  |
+| `title` | string or null |  |  |
+
 ### UploadReceipt
 
 Durable outcome of one upload request, readable by its request key.
@@ -3889,6 +4323,96 @@ Extends [`UsageTotals`](#usagetotals) with:
 | `count` | integer (int32), >= 0 | yes |  |
 | `generation` | string (uuid) | yes |  |
 | `work` | [`Work`](#work) | yes |  |
+
+### WikiAvailability
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `enabled` | boolean | yes |  |
+
+### WikiConflict
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `current_content_md` | string | yes |  |
+| `current_revision_id` | string (uuid) or null |  |  |
+| `detail` | string | yes |  |
+
+### WikiPageDetail
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `author_kind` | string | yes |  |
+| `author_name` | string or null |  |  |
+| `content_md` | string | yes |  |
+| `page` | [`WikiPageSummary`](#wikipagesummary) | yes |  |
+| `revision_id` | string (uuid) or null |  |  |
+
+### WikiPageSummary
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | string | yes |  |
+| `needs_review` | boolean | yes |  |
+| `page_id` | string (uuid) | yes |  |
+| `parent_page_id` | string (uuid) or null |  |  |
+| `position` | integer (int32) | yes |  |
+| `slug` | string | yes |  |
+| `title` | string | yes |  |
+| `updated_at` | string (date-time) or null |  |  |
+| `updated_by` | string | yes |  |
+
+### WikiPageTree
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `pages` | array of [`WikiPageSummary`](#wikipagesummary) | yes |  |
+
+### WikiProposal
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent_instance_id` | string (uuid) or null |  |  |
+| `author_user_id` | string | yes |  |
+| `content_md` | string | yes |  |
+| `created_at` | string (date-time) | yes |  |
+| `current_content_md` | string | yes |  |
+| `kind` | string | yes |  |
+| `parent_slug` | string or null |  |  |
+| `proposal_id` | string (uuid) | yes |  |
+| `slug` | string or null |  |  |
+| `title` | string | yes |  |
+
+### WikiReviewRequest
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `base_revision_id` | string (uuid) | yes |  |
+| `needs_review` | boolean | yes |  |
+
+### WikiRevisionList
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `authors` | map of string | yes |  |
+| `contents` | map of string | yes |  |
+| `next_cursor` | string or null |  |  |
+| `revisions` | array of [`WikiRevisionSummary`](#wikirevisionsummary) | yes |  |
+
+### WikiRevisionSummary
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent_instance_id` | string (uuid) or null |  |  |
+| `agent_name` | string or null |  |  |
+| `author_kind` | string | yes |  |
+| `author_user_id` | string | yes |  |
+| `created_at` | string (date-time) | yes |  |
+| `reviewed_at` | string (date-time) or null |  |  |
+| `reviewed_by` | string or null |  |  |
+| `revision_id` | string (uuid) | yes |  |
+| `session_id` | string (uuid) or null |  |  |
+| `status` | string | yes |  |
 
 ### Work
 

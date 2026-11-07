@@ -913,6 +913,7 @@ class PublishedArtifact(FrozenModel):
     size: int = Field(..., ge=0)
     href: str | None = None
     document_uid: str | None = None
+    content_id: str | None = None
     mime: str | None = None
     title: str | None = None
     link_kind: LinkKind = LinkKind.download

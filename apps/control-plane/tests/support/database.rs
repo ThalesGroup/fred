@@ -60,5 +60,9 @@ pub async fn database() -> PgPool {
         .options([("search_path", "control_plane")]);
     let pool = PgPool::connect_with(options).await.unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
+    sqlx::raw_sql(include_str!("document_fixture.sql"))
+        .execute(&pool)
+        .await
+        .unwrap();
     pool
 }

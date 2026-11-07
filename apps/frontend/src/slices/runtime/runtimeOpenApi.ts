@@ -178,14 +178,6 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem`, method: "DELETE" }),
     }),
-    downloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGet: build.query<
-      DownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetApiResponse,
-      DownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem/exports/${queryArg.path}`,
-      }),
-    }),
     getSessionMessagesPodV1AgentsSessionsSessionIdMessagesGet: build.query<
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse,
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg
@@ -406,12 +398,6 @@ export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteA
   /** status 200 Successful Response */ ConversationFilesystemPurgeResponse;
 export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg = {
   sessionId: string;
-};
-export type DownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type DownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetApiArg = {
-  sessionId: string;
-  path: string;
 };
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse =
   /** status 200 Successful Response */ ChatMessage[];
@@ -1508,8 +1494,6 @@ export const {
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   usePurgeSessionPodV1AgentsSessionsSessionIdDeleteMutation,
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
-  useDownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetQuery,
-  useLazyDownloadSessionExportPodV1AgentsSessionsSessionIdFilesystemExportsPathGetQuery,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,

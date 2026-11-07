@@ -509,8 +509,12 @@ erDiagram
 "control_plane.document" }o--|| "control_plane.folder" : "folder_id, space_id"
 "control_plane.document" }o--|| "control_plane.generation" : "published_generation, id"
 "control_plane.document" }o--|| "control_plane.session_metadata" : "session_id, space_id"
+"control_plane.document" }o--|| "control_plane.document_content" : "current_content_id, id"
+"control_plane.document_upload" }o--o| "control_plane.document" : "target_document_id"
 "control_plane.document_upload" |o--o| "control_plane.document_upload" : "retry_of"
 "control_plane.document_upload" }o--|| "control_plane.session_metadata" : "session_id, space_id"
+"control_plane.document_upload" }o--o| "control_plane.document_content" : "content_id"
+"control_plane.document_upload" }o--o| "control_plane.document_content" : "content_id, target_document_id"
 "control_plane.document_processing" }o--|| "control_plane.document" : "document_id"
 "control_plane.document_processing" |o--o| "control_plane.document_processing" : "retry_of"
 "control_plane.generation" }o--|| "control_plane.document_processing" : "processing_id, document_id"
@@ -552,6 +556,14 @@ erDiagram
 "control_plane.organization_powerpoint_settings" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
 "control_plane.organization_powerpoint_settings" }o--o| "control_plane.powerpoint_file" : "file_id"
 "control_plane.embedded_agent_conversation" |o--|| "control_plane.session_metadata" : "session_id"
+"control_plane.document_content" }o--|| "control_plane.document" : "document_id"
+"control_plane.document_content" }o--|| "control_plane.document_content" : "source_content_id, document_id"
+"control_plane.wiki_page" }o--|| "control_plane.space" : "space_id"
+"control_plane.wiki_page" }o--|| "control_plane.wiki_page" : "parent_page_id, space_id"
+"control_plane.wiki_page" }o--|| "control_plane.wiki_revision" : "current_revision_id, page_id, space_id"
+"control_plane.wiki_revision" }o--|| "control_plane.space" : "space_id"
+"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "page_id, space_id"
+"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "proposed_parent_page_id, space_id"
 
 "control_plane.deletion" {
   uuid id
@@ -598,12 +610,8 @@ erDiagram
   uuid folder_id FK
   uuid session_id FK
   text name
-  text mime
-  bigint size
-  text sha256
   text created_by
   timestamp_with_time_zone created_at
-  text object_key
   uuid quota_owner FK
   boolean retrievable
   uuid retrieval_id
@@ -617,6 +625,10 @@ erDiagram
   timestamp_with_time_zone purge_after
   uuid deletion_id FK
   timestamp_with_time_zone original_cleaned_at
+  text purpose
+  text parent_path
+  uuid current_content_id FK
+  timestamp_with_time_zone updated_at
 }
 "control_plane.platform_bootstrap" {
   boolean singleton
@@ -680,6 +692,12 @@ erDiagram
   integer cleanup_attempts
   timestamp_with_time_zone cleaned_at
   boolean put_pending
+  uuid target_document_id FK
+  uuid content_id FK
+  uuid expected_content_id
+  text purpose
+  text parent_path
+  bigint reserved_bytes
 }
 "control_plane.document_processing" {
   uuid id
@@ -932,28 +950,6 @@ erDiagram
   uuid organization_id FK
   timestamp_with_time_zone completed_at
 }
-"cp_read.document_visibility" {
-  uuid document_id
-  uuid space_id
-  uuid folder_id
-  uuid conversation_id
-  text conversation_owner
-  uuid generation_id
-  integer__ vector_ordinals
-  text name
-  text source_revision
-  boolean visible
-  text__ rejection_reasons
-  text mime
-  timestamp_with_time_zone created_at
-}
-"cp_read.published_artifact" {
-  uuid document_id
-  text path
-  bigint size
-  text sha256
-  text prefix
-}
 "cp_read.space_state" {
   uuid id
   boolean retired
@@ -1053,6 +1049,102 @@ erDiagram
   uuid session_id FK
   bytea log
 }
+"control_plane.document_content" {
+  uuid id
+  uuid document_id FK
+  text kind
+  uuid source_content_id FK
+  text object_key
+  text mime
+  bigint size
+  text sha256
+  timestamp_with_time_zone published_at
+  timestamp_with_time_zone cleanup_after
+  timestamp_with_time_zone cleaned_at
+}
+"control_plane.document_current" {
+  uuid id
+  uuid space_id
+  uuid folder_id
+  uuid session_id
+  text name
+  text created_by
+  timestamp_with_time_zone created_at
+  uuid quota_owner
+  boolean retrievable
+  uuid retrieval_id
+  text retrieval_actor
+  boolean retrieval_target
+  text retrieval_phase
+  boolean retrieval_confirmed
+  boolean retrievable_pending
+  uuid published_generation
+  timestamp_with_time_zone purged_at
+  timestamp_with_time_zone purge_after
+  uuid deletion_id
+  timestamp_with_time_zone original_cleaned_at
+  text purpose
+  text parent_path
+  uuid current_content_id
+  timestamp_with_time_zone updated_at
+  text mime
+  bigint size
+  text sha256
+  text object_key
+}
+"cp_read.document_visibility" {
+  uuid document_id
+  uuid space_id
+  uuid folder_id
+  uuid conversation_id
+  text conversation_owner
+  uuid generation_id
+  integer__ vector_ordinals
+  text name
+  text source_revision
+  boolean visible
+  text__ rejection_reasons
+  text mime
+  timestamp_with_time_zone created_at
+}
+"cp_read.published_artifact" {
+  uuid document_id
+  text path
+  bigint size
+  text sha256
+  text prefix
+}
+"control_plane.wiki_page" {
+  uuid page_id FK
+  uuid space_id FK
+  text slug
+  text title
+  text kind
+  uuid parent_page_id FK
+  integer position
+  uuid current_revision_id FK
+  boolean needs_review
+  timestamp_with_time_zone updated_at
+  text updated_by
+}
+"control_plane.wiki_revision" {
+  uuid revision_id
+  uuid space_id FK
+  uuid page_id FK
+  text content_md
+  text status
+  uuid base_revision_id
+  text author_user_id
+  text author_kind
+  uuid agent_instance_id
+  uuid session_id
+  text proposed_title
+  uuid proposed_parent_page_id FK
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  timestamp_with_time_zone reviewed_at
+  text reviewed_by
+}
 ```
 <!-- end generated -->
 
@@ -1079,7 +1171,7 @@ indexes support the actual traversal, quota and retry paths:
 | --- | --- |
 | Spaces | `space_organization_name` makes organization names unique. `space_deletion_manifest` indexes rows participating in deletion. `space_organization` and `space_parent` support foreign-key reference checks during deletion. `space_personal_identity` requires an owner exactly for kind `personal` and forbids its parent; `space_personal_owner` keeps one active personal space per owner and organization and serves its lookup. |
 | Folders and documents | Composite foreign keys keep folders/documents in their containing space. Partial unique indexes with `NULLS NOT DISTINCT` prevent duplicate active sibling names, including at the root. `folder_deletion_manifest` and `document_deletion_manifest` index retired rows by deletion receipt. Placement triggers prevent moves. |
-| Original documents | Size is between 0 and 104857600 bytes (100 MiB); SHA-256 is 64 lowercase hexadecimal characters. Object keys are unique. `document_quota_owner` includes sizes for quota accounting. |
+| Original documents | Size is between 0 and 104857600 bytes (100 MiB); SHA-256 is 64 lowercase hexadecimal characters. Object keys, sizes and hashes belong to immutable `document_content` rows. `document.current_content_id` selects the current primary; `storage_budget` maintains transactional used/reserved counters. |
 | Deletion receipts | Deadline cannot precede request time; completion timestamp agrees with status. `deletion_due` selects unfinished work; `deletion_overlap` supports overlap detection. |
 | Upload receipts | Status is `pending`, `stored` or `failed`; stored status requires a document, and pending status has no completion timestamp. Partial indexes protect active names and index active quota, unacknowledged receipts, cleanup and expiration. |
 | Processing attempts | One active and one successful attempt per document are enforced by partial unique indexes. Additional indexes cover history, delivery and cleanup. Checks bound counters and the generations array (at most 64). Triggers verify the original's space/digest and prevent changes to processing identity or terminal outcome. |

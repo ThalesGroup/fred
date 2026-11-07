@@ -32,6 +32,7 @@ import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
+import { useConversationFiles } from "../../../features/conversationFiles";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import { DocumentScopePanel } from "@shared/molecules/DocumentScopePanel/DocumentScopePanel";
 import { AgentTodoPanel } from "@shared/molecules/AgentTodoPanel/AgentTodoPanel";
@@ -256,6 +257,11 @@ function ManagedChatContent({
   const isAdmin =
     space.kind === "personal" || space.roles.some((role) => role === "owner" || role === "organization_admin");
   const chat = useManagedChat({ teamId, spaceId: space.id, agentInstanceId });
+  const conversationFiles = useConversationFiles();
+  const { refetch: refreshFiles, isUninitialized: filesUninitialized } = conversationFiles;
+  useEffect(() => {
+    if (!chat.waitResponse && !filesUninitialized) void refreshFiles();
+  }, [chat.waitResponse, filesUninitialized, refreshFiles]);
   const skillPreview = useWeaverSkillDetailQuery(
     {
       spaceId: teamId,
@@ -462,13 +468,13 @@ function ManagedChatContent({
   // second door to the same panel, not a different one.
   const railLaunchers = useMemo(
     () => [
-      ...(allowChatAttachments || attachmentsCount > 0
+      ...(allowChatAttachments || attachmentsCount > 0 || chat.sessionId
         ? [
             {
               key: "attachments",
               label: t("chatbot.sessionAttachments.title"),
               icon: "attach_file" as const,
-              badgeCount: attachmentsCount,
+              badgeCount: attachmentsCount + conversationFiles.files.length,
               selected: attachmentsDrawerOpen,
               onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
             },
@@ -487,7 +493,16 @@ function ManagedChatContent({
           ]
         : []),
     ],
-    [chat.executionDisabled, allowChatAttachments, attachmentsCount, attachmentsDrawerOpen, activePushDrawer, t],
+    [
+      chat.executionDisabled,
+      chat.sessionId,
+      conversationFiles.files.length,
+      allowChatAttachments,
+      attachmentsCount,
+      attachmentsDrawerOpen,
+      activePushDrawer,
+      t,
+    ],
   );
   // The composer options menu always renders: even when an agent exposes no
   // search options, the prompt-library row is always available (personal +
@@ -1330,6 +1345,11 @@ function ManagedChatContent({
             onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
             readOnly={chat.executionDisabled}
             attachments={chat.persistedAttachments}
+            files={conversationFiles.files}
+            spaceId={space.id}
+            sessionId={chat.sessionId ?? ""}
+            filesError={!!conversationFiles.error}
+            filesLoading={conversationFiles.isFetching}
             isLoading={chat.isHydratingAttachments}
             onDelete={(attachmentId) => {
               void chat.deletePersistedAttachment(attachmentId);

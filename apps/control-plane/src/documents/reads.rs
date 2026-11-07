@@ -96,9 +96,11 @@ impl Storage {
             .execute(&mut *tx)
             .await?;
         // The quota counts attachments; the space's own document figures do not.
-        let (used_bytes,reserved_bytes,documents,bytes): (i64,i64,i64,i64) = sqlx::query_as("select coalesce((select sum(size) from document where quota_owner=$1 and deletion_id is null),0)::bigint + coalesce((select sum(size) from powerpoint_file where quota_owner=$1 and status='stored'),0)::bigint, coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint + coalesce((select sum(size) from powerpoint_file where quota_owner=$1 and status='pending'),0)::bigint, (select count(*) from document where space_id=$2 and deletion_id is null and session_id is null), coalesce((select sum(size) from document where space_id=$2 and deletion_id is null and session_id is null),0)::bigint")
-            .bind(owner).bind(space.id).fetch_one(&mut *tx).await?;
-        let types = sqlx::query_as("with grouped as (select mime,count(*)::bigint as documents,sum(size)::bigint as bytes from document where space_id=$1 and deletion_id is null and session_id is null group by mime), ranked as (select *,row_number() over(order by bytes desc,mime) as rank from grouped) select case when rank<=20 then mime else 'other' end as mime,sum(documents)::bigint as documents,sum(bytes)::bigint as bytes from ranked group by 1 order by bytes desc,mime")
+        let (used_bytes,reserved_bytes,quota_bytes): (i64,i64,i64) = sqlx::query_as("select coalesce(b.used_bytes,0),coalesce(b.reserved_bytes,0),coalesce(b.limit_bytes,$2) from (select 1) seed left join storage_budget b on b.space_id=$1 and b.scope='local'")
+            .bind(owner).bind(quota_bytes).fetch_one(&mut *tx).await?;
+        let (documents,bytes):(i64,i64) = sqlx::query_as("select count(*),coalesce(sum(size),0)::bigint from document_current where space_id=$1 and deletion_id is null and session_id is null")
+            .bind(space.id).fetch_one(&mut *tx).await?;
+        let types = sqlx::query_as("with grouped as (select mime,count(*)::bigint as documents,sum(size)::bigint as bytes from document_current where space_id=$1 and deletion_id is null and session_id is null group by mime), ranked as (select *,row_number() over(order by bytes desc,mime) as rank from grouped) select case when rank<=20 then mime else 'other' end as mime,sum(documents)::bigint as documents,sum(bytes)::bigint as bytes from ranked group by 1 order by bytes desc,mime")
             .bind(space.id).fetch_all(&mut *tx).await?;
         tx.commit().await?;
         Ok(StorageSummary {
@@ -138,7 +140,7 @@ impl Storage {
                 ));
             }
         }
-        let conflicts = sqlx::query_scalar("select name from document where space_id=$1 and deletion_id is null and folder_id=$2 and name=any($3) union select name from document_upload where space_id=$1 and folder_id=$2 and name=any($3) and status='pending' order by name")
+        let conflicts = sqlx::query_scalar("select name from document_current where space_id=$1 and deletion_id is null and folder_id=$2 and name=any($3) union select name from document_upload where space_id=$1 and folder_id=$2 and name=any($3) and status='pending' order by name")
             .bind(space.id).bind(id).bind(&names).fetch_all(&self.pool).await?;
         Ok(PreflightResult {
             conflicts,
@@ -204,7 +206,7 @@ impl Storage {
         .collect();
         let mut document_rows: std::collections::HashMap<Uuid, Document> =
             sqlx::query_as::<_, Document>(
-                "select * from document where id=any($1) and deletion_id is null",
+                "select * from document_current where id=any($1) and deletion_id is null",
             )
             .bind(&documents)
             .fetch_all(&mut *tx)
@@ -251,7 +253,7 @@ impl Storage {
     pub(crate) async fn stream_original(&self, document: Document) -> AppResult<Response> {
         let id = document.id;
         let key: String = sqlx::query_scalar(
-            "select object_key from document where id=$1 and deletion_id is null",
+            "select object_key from document_current where id=$1 and deletion_id is null",
         )
         .bind(id)
         .fetch_one(&self.pool)
@@ -376,7 +378,7 @@ fn directory_selection(
         ),
         (
             "1 as kind,id,name,created_at,size",
-            "document",
+            "document_current",
             "deletion_id is null and session_id is null",
             "folder_id",
         ),

@@ -13,10 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type {
-  WikiRevisionList,
-  WikiRevisionSummary,
-} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { WikiRevisionList, WikiRevisionSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { emptyHistoryPages, mergeHistoryPage, type HistoryPages } from "./historyPages";
 
 const revision = (id: string): WikiRevisionSummary => ({
@@ -24,10 +21,12 @@ const revision = (id: string): WikiRevisionSummary => ({
   status: "published",
   author_user_id: "alice",
   author_kind: "human",
+  created_at: "2026-09-06T10:00:00Z",
 });
 
 const page = (ids: string[], nextCursor: string | null = null): WikiRevisionList => ({
   revisions: ids.map(revision),
+  authors: {},
   contents: Object.fromEntries(ids.map((id) => [id, `body-${id}`])),
   next_cursor: nextCursor,
 });

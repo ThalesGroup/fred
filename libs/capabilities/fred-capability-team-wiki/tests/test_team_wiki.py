@@ -1237,7 +1237,9 @@ async def test_the_runtime_adapter_stop_ends_the_tool_call(
     )
     runtime.records.admit(RunRecord(run_id="run-1", person_id="p-1", agent_id="a-1"))
     binding = BoundRuntimeContext(
-        runtime_context=RuntimeContext(session_id="s", user_id="p-1", team_id="t-1"),
+        runtime_context=RuntimeContext(
+            session_id="s", user_id="p-1", team_id="t-1", space_id="s-1"
+        ),
         portable_context=PortableContext(
             request_id="r",
             correlation_id="c",

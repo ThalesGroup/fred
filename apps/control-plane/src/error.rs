@@ -87,6 +87,16 @@ impl From<sqlx::Error> for AppError {
     fn from(e: sqlx::Error) -> Self {
         match &e {
             sqlx::Error::RowNotFound => AppError::NotFound,
+            sqlx::Error::Database(db)
+                if db.code().as_deref() == Some("P0001")
+                    && db.message() == "storage quota exceeded" =>
+            {
+                AppError::problem(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "quota_exceeded",
+                    "The destination storage quota is exhausted",
+                )
+            }
             // Unique and foreign-key violations are caller errors: duplicate name, non-empty folder...
             sqlx::Error::Database(db)
                 if db.is_unique_violation() || db.is_foreign_key_violation() =>

@@ -28,6 +28,7 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock("../Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));

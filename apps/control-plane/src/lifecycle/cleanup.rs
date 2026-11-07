@@ -14,6 +14,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 pub async fn candidates(pool: &PgPool, limit: u32) -> AppResult<Vec<Uuid>> {
+    crate::wiki::lifecycle::expire(pool, limit).await?;
     Ok(sqlx::query_scalar("with selected as (select id from deletion where status <> 'completed' and due_at <= now() order by last_visit nulls first, due_at, id limit $1 for update skip locked) update deletion d set last_visit = now() from selected where d.id = selected.id returning d.id")
         .bind(i64::from(limit)).fetch_all(pool).await?)
 }
@@ -65,6 +66,17 @@ pub async fn batch(
     });
     spaces::lock_organization(&mut tx, &organization).await?;
     sqlx::query("update deletion set status = 'running', last_visit = now(), error_code = null where id = $1").bind(id).execute(&mut *tx).await?;
+    if receipt.target_kind != TargetKind::Document
+        && crate::wiki::lifecycle::purge(
+            &mut tx,
+            id,
+            (receipt.target_kind == TargetKind::Session).then_some(receipt.target_id),
+        )
+        .await?
+    {
+        tx.commit().await?;
+        return Ok(());
+    }
     let docs: bool = sqlx::query_scalar("select exists(select 1 from document where deletion_id is distinct from $1 and (session_id is null or deletion_id is null) and space_id in (select id from space where deletion_id = $1)) or exists(select 1 from document_upload where status = 'pending' and session_id is null and space_id in (select id from space where deletion_id = $1))").bind(id).fetch_one(&mut *tx).await?;
     if docs {
         sqlx::query("update deletion set status = 'blocked', error_code = 'unsupported_documents' where id = $1")
@@ -120,7 +132,7 @@ pub async fn batch(
              where d.deletion_id = $1
                and d.original_cleaned_at is not null
                and d.retrieval_phase is distinct from 'writing'
-               and not exists (select 1 from document_upload u where u.id=d.id and u.put_pending)
+               and not exists (select 1 from document_upload u where u.target_document_id=d.id and u.put_pending)
                and (d.purged_at is not null or not exists (
                    select 1 from document_processing p
                    left join generation g on g.processing_id = p.id
@@ -141,7 +153,7 @@ pub async fn batch(
                 .bind(&ready)
                 .execute(&mut *tx)
                 .await?;
-            sqlx::query("delete from document_upload where id = any($1) and status = 'stored'")
+            sqlx::query("delete from document_upload where target_document_id = any($1) and status = 'stored'")
                 .bind(&ready)
                 .execute(&mut *tx)
                 .await?;

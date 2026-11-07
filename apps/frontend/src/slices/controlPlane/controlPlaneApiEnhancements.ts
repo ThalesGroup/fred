@@ -79,6 +79,10 @@ function catalogQuery<Item, Args extends { after?: string } = ListPromptsApiArg>
   };
 }
 
+const wikiTags = (_result: unknown, _error: unknown, { spaceId }: { spaceId: string }) => [
+  { type: "Wiki" as const, id: spaceId },
+];
+
 // The generator types binary fields as Blob, but sends the enclosing object as
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
@@ -101,8 +105,24 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "AgentTemplates",
     "Sessions",
     "Attachments",
+    "Wiki",
   ],
   endpoints: {
+    wikiAvailability: { providesTags: ["Wiki", "OrganizationCapabilities", "AgentTemplates"] },
+    replaceSpaceCapabilityPolicy: { invalidatesTags: ["Wiki"], extraOptions: { retryUnauthorized: false } },
+    wikiPages: { providesTags: wikiTags },
+    wikiPage: { providesTags: wikiTags },
+    wikiRules: { providesTags: wikiTags },
+    wikiRevisions: { providesTags: wikiTags },
+    wikiProposal: { providesTags: wikiTags, keepUnusedDataFor: 0 },
+    createWikiPage: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    writeWikiPage: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    writeWikiRules: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    patchWikiPage: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    deleteWikiPage: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    setWikiReviewMark: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    restoreWikiRevision: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    publishWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     mySpaces: { providesTags: ["MySpaces"] },
     spaceMembers: {
       keepUnusedDataFor: 0,
@@ -340,7 +360,13 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     deleteSession: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: (_result, error, { spaceId }) => (error ? [] : [{ type: "Sessions", id: spaceId }]),
+      invalidatesTags: (_result, error, { spaceId }) =>
+        error
+          ? []
+          : [
+              { type: "Sessions", id: spaceId },
+              { type: "Wiki", id: spaceId },
+            ],
     },
 
     listAgentInstances(endpoint) {
@@ -509,6 +535,19 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useWikiAvailabilityQuery,
+  useWikiPagesQuery,
+  useWikiPageQuery,
+  useWikiRulesQuery,
+  useWikiRevisionsQuery,
+  useWikiProposalQuery,
+  useCreateWikiPageMutation,
+  useWriteWikiPageMutation,
+  useWriteWikiRulesMutation,
+  usePatchWikiPageMutation,
+  useDeleteWikiPageMutation,
+  useSetWikiReviewMarkMutation,
+  useRestoreWikiRevisionMutation,
   useUploadPowerpointTemplateMutation,
   useRemovePowerpointTemplateMutation,
   useResolvePowerpointTemplateQuery,

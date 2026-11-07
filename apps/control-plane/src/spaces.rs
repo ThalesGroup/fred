@@ -697,15 +697,28 @@ async fn mutation_transaction(
     pool: &PgPool,
     space_id: Uuid,
 ) -> AppResult<Transaction<'static, Postgres>> {
+    storage_transaction(pool, space_id, false).await
+}
+
+/// Shared organization guard for file writes; exclusive governance still fences retirement.
+pub(crate) async fn storage_transaction(
+    pool: &PgPool,
+    space_id: Uuid,
+    shared: bool,
+) -> AppResult<Transaction<'static, Postgres>> {
     let space = load(pool, space_id).await?;
     let mut tx = tokio::time::timeout(Duration::from_secs(5), async {
         let key = i64::from_be_bytes(space.organization.as_bytes()[..8].try_into().unwrap());
         loop {
             let mut tx = pool.begin().await?;
-            let acquired: bool = sqlx::query_scalar("select pg_try_advisory_xact_lock($1)")
-                .bind(key)
-                .fetch_one(&mut *tx)
-                .await?;
+            let acquired: bool = sqlx::query_scalar(if shared {
+                "select pg_try_advisory_xact_lock_shared($1)"
+            } else {
+                "select pg_try_advisory_xact_lock($1)"
+            })
+            .bind(key)
+            .fetch_one(&mut *tx)
+            .await?;
             if acquired {
                 return Ok::<_, sqlx::Error>(tx);
             }

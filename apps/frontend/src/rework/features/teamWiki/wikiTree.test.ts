@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { WikiPageSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { WikiPageSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { ancestorsOf, buildWikiTree, canHaveChild, findRulesPage, moveTargets, visibleNodes } from "./wikiTree";
 
 function page(id: string, overrides: Partial<WikiPageSummary> = {}): WikiPageSummary {
@@ -25,8 +25,10 @@ function page(id: string, overrides: Partial<WikiPageSummary> = {}): WikiPageSum
     parent_page_id: null,
     position: 0,
     needs_review: false,
+    updated_at: "2026-09-06T10:00:00Z",
+    updated_by: "alice",
     ...overrides,
-  } as WikiPageSummary;
+  };
 }
 
 describe("buildWikiTree", () => {

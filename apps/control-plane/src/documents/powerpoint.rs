@@ -266,15 +266,9 @@ impl Storage {
                 change.expected_file_id,
                 current(&mut *tx, space_id, agent, runtime).await?.as_ref(),
             )?;
-            let (owner, limit) = self.quota(&space)?;
-            let usage = Self::occupied_bytes(&mut *tx, owner).await?;
-            if spool.size > limit.saturating_sub(usage) {
-                return Err(AppError::problem(
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    "quota_exceeded",
-                    "The destination storage quota is exhausted",
-                ));
-            }
+            let (owner, _) = self.quota(&space)?;
+            self.ensure_budgets(&mut tx, &space).await?;
+
             self.require_cleanup_capacity(&mut *tx).await?;
             let id = Uuid::new_v4();
             let object_key = format!("{}{id}/input/{}", self.prefix, spool.name);

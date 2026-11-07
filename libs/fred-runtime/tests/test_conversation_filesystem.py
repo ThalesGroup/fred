@@ -536,9 +536,16 @@ async def test_uuid_aliases_share_physical_identity_and_purge(alias):
     reader = ConversationFilesystemService(storage, canonical)
     assert writer.session_id == canonical
     await writer.scratchpad().write_text("note", "private")
-    await reader.exports().write_bytes("deck.pptx", b"generated")
+    await reader.namespace("deep", max_bytes=1024, max_files=10).write_bytes(
+        "deck.pptx", b"generated"
+    )
     assert await reader.scratchpad().read_text("note") == "private"
-    assert await writer.exports().read_bytes("deck.pptx") == b"generated"
+    assert (
+        await writer.namespace("deep", max_bytes=1024, max_files=10).read_bytes(
+            "deck.pptx"
+        )
+        == b"generated"
+    )
     other = ConversationFilesystemService(storage, canonical + "-neighbour")
     await other.scratchpad().write_text("note", "retained")
     await reader.purge()

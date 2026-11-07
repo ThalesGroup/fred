@@ -4,6 +4,7 @@
 //! Original storage and upload recovery, with optional atomic processing intent.
 mod cleanup;
 pub mod config;
+pub mod conversation;
 pub mod http;
 pub mod models;
 pub mod object_store;
@@ -139,22 +140,37 @@ impl Storage {
         }))
     }
 
-    /// Original files and reserved uploads share the existing local storage budget.
-    pub(crate) async fn occupied_bytes<'e>(
-        ex: impl sqlx::PgExecutor<'e>,
-        owner: Uuid,
-    ) -> AppResult<i64> {
-        Ok(sqlx::query_scalar("select coalesce((select sum(size) from document where deletion_id is null and quota_owner=$1),0)::bigint + coalesce((select sum(size) from document_upload where quota_owner=$1 and status='pending'),0)::bigint + coalesce((select sum(size) from powerpoint_file where quota_owner=$1 and status in ('pending','stored')),0)::bigint")
-            .bind(owner).fetch_one(ex).await?)
-    }
-
     pub(crate) async fn require_cleanup_capacity<'e>(
         &self,
         ex: impl sqlx::PgExecutor<'e>,
     ) -> AppResult<()> {
-        let backlog: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document_upload where status='failed' and cleaned_at is null),0)::bigint + coalesce((select sum(size) from powerpoint_file where status='retired' and cleaned_at is null),0)::bigint + coalesce((select orphan_bytes from document_storage where singleton),0)").fetch_one(ex).await?;
+        let backlog: i64 = sqlx::query_scalar("select coalesce((select sum(size) from document_content where cleaned_at is null and cleanup_after<=clock_timestamp()),0)::bigint + coalesce((select sum(size) from document_upload where status='failed' and cleaned_at is null),0)::bigint + coalesce((select sum(size) from powerpoint_file where status='retired' and cleaned_at is null),0)::bigint + coalesce((select orphan_bytes from document_storage where singleton),0)").fetch_one(ex).await?;
         if backlog >= self.config.limits.cleanup_backlog_bytes {
             return Err(unavailable());
+        }
+        Ok(())
+    }
+
+    /// Provision counters in the same order as every delta: organization, then local.
+    pub(crate) async fn ensure_budgets(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        space: &Space,
+    ) -> AppResult<()> {
+        let (owner, limit) = self.quota(space)?;
+        for (id, scope, limit) in [
+            (
+                space.organization,
+                "organization_total",
+                self.config
+                    .limits
+                    .organization_total_bytes
+                    .unwrap_or(i64::MAX),
+            ),
+            (owner, "local", limit),
+        ] {
+            sqlx::query("insert into storage_budget(space_id,scope,limit_bytes,used_bytes,reserved_bytes) values($1,$2,$3,0,0) on conflict(space_id,scope) do nothing")
+                .bind(id).bind(scope).bind(limit).execute(&mut **tx).await?;
         }
         Ok(())
     }

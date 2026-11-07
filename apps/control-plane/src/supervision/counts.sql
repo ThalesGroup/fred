@@ -4,7 +4,7 @@
 with documents as materialized (
     select d.id, d.space_id, d.size, d.published_generation,
            d.deletion_id is null and s.deletion_id is null as active
-    from document d join space s on s.id = d.space_id
+    from document_current d join space s on s.id = d.space_id
     where s.organization_id = $1
       and ($2::uuid is null or s.id = $2 or s.parent_id = $2)
       -- Conversation attachments are private to their owner, so absent from every count.

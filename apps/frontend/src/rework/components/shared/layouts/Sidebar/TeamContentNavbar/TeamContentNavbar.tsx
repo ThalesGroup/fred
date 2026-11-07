@@ -18,6 +18,7 @@ import { useEffect } from "react";
 import {
   useMySpacesQuery,
   usePromptPublicationTeamsQuery,
+  useWikiAvailabilityQuery,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
@@ -42,7 +43,6 @@ import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
-import { useWikiAvailabilityQuery } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -133,11 +133,14 @@ export default function TeamContentNavbar() {
   // optimistically: an entry that appears and then vanishes on a slow answer
   // reads worse than one that arrives a moment late, and the control-plane
   // refuses the wiki routes anyway.
-  const { data: wikiAvailability } = useWikiAvailabilityQuery(
-    { teamId: teamId ?? "" },
-    { skip: agentManagement || !canReadContent || !teamId },
+  const { currentData: wikiAvailability, isError: wikiUnavailable } = useWikiAvailabilityQuery(
+    { spaceId: space?.id ?? "" },
+    {
+      skip: agentManagement || !canReadContent || !space || !["team", "personal"].includes(space.kind),
+      refetchOnMountOrArgChange: true,
+    },
   );
-  const showWiki = canReadContent && wikiAvailability?.enabled === true;
+  const showWiki = !wikiUnavailable && canReadContent && wikiAvailability?.enabled === true;
   // Porting entry only: it does not depend on the removed Swift catalog.
   const showKnowledgeBases = canReadContent && (!!space || capabilities.canUseTeamKnowledgeBases);
 

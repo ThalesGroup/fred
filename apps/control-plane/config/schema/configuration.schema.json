@@ -226,6 +226,15 @@
           "format": "int64",
           "type": "integer"
         },
+        "organization_total_bytes": {
+          "default": null,
+          "description": "Optional combined ceiling across all storage spaces in an organization.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "personal_bytes": {
           "default": 5368709120,
           "format": "int64",

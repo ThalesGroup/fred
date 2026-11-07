@@ -499,7 +499,7 @@ async fn document_contract_guards_and_shared_project_quota() {
         .await;
     assert_eq!(summary["used_bytes"], 5);
     assert_eq!(summary["reserved_bytes"], 0);
-    let (id, key): (Uuid, String) = sqlx::query_as("select id,object_key from document")
+    let (id, key): (Uuid, String) = sqlx::query_as("select id,object_key from document_current")
         .fetch_one(&d.e.pool)
         .await
         .unwrap();
@@ -1073,7 +1073,7 @@ async fn document_revocation_cleanup_and_late_put_recovery() {
     assert_eq!(stats["used_bytes"], 7);
     assert_eq!(stats["reserved_bytes"], 0);
     // Successful originals survive every inventory pass.
-    let ready: String = sqlx::query_scalar("select object_key from document")
+    let ready: String = sqlx::query_scalar("select object_key from document_current")
         .fetch_one(&d.e.pool)
         .await
         .unwrap();
@@ -1226,7 +1226,7 @@ async fn document_cleanup_skips_a_contended_organization_without_starving_other_
         .unwrap();
     let id = Uuid::new_v4();
     let failed = Uuid::new_v4();
-    let pending_key:String=sqlx::query_scalar("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at) select $1,$1,actor,organization_id,space_id,folder_id,quota_owner,'pending.txt',mime,size,sha256,replace(object_key,id::text,$1::text),'pending',clock_timestamp()-interval '1 second' from document_upload where status='stored' returning object_key")
+    let pending_key:String=sqlx::query_scalar("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,reserved_bytes) select $1,$1,actor,organization_id,space_id,folder_id,quota_owner,'pending.txt',mime,size,sha256,replace(object_key,id::text,$1::text),'pending',clock_timestamp()-interval '1 second',size from document_upload where status='stored' returning object_key")
         .bind(id).fetch_one(&d.e.pool).await.unwrap();
     let failed_key:String=sqlx::query_scalar("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,completed_at) select $1,$1,'peer-owner',$2,$2,folder_id,$2,'failed.txt',mime,size,sha256,replace(object_key,id::text,$1::text),'failed',clock_timestamp()-interval '1 second',clock_timestamp() from document_upload where status='stored' returning object_key")
         .bind(failed).bind(peer.id).fetch_one(&d.e.pool).await.unwrap();
@@ -1285,10 +1285,11 @@ async fn shared_swift_bucket_cleanup_preserves_foreign_objects_and_reclaims_owne
         .upload("writer", "source.txt", b"source", Uuid::new_v4(), None)
         .await;
     assert_eq!(status, 201, "{receipt}");
-    let (document, original): (Uuid, String) = sqlx::query_as("select id,object_key from document")
-        .fetch_one(&d.e.pool)
-        .await
-        .unwrap();
+    let (document, original): (Uuid, String) =
+        sqlx::query_as("select id,object_key from document_current")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
     assert_eq!(original, format!("{document}/input/source.txt"));
     let installation: Uuid = sqlx::query_scalar("select namespace from document_storage")
         .fetch_one(&d.e.pool)

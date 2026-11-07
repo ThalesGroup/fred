@@ -536,11 +536,12 @@ async def test_successful_fill_emits_ppt_preview_and_writes_pdf(
     _content, artifact = await _fill_tool(ctx).coroutine(slide_1={"name": "Jane"})
 
     assert artifact.is_error is False
-    # Two writes: the .pptx then the preview .pdf, session-scoped sibling paths.
+    # The preview belongs to the exact primary content, not a sibling user file.
     assert len(workspace.writes) == 2
     pptx_write, pdf_write = workspace.writes
     assert pptx_write["path"] == "outputs/sess-9/filled_presentation.pptx"
-    assert pdf_write["path"] == "outputs/sess-9/filled_presentation.pdf"
+    assert pdf_write["path"] == pptx_write["path"]
+    assert pdf_write["source_content_id"] == "content-1"
     assert pdf_write["content_type"] == "application/pdf"
 
     assert len(artifact.ui_parts) == 1
@@ -548,7 +549,8 @@ async def test_successful_fill_emits_ppt_preview_and_writes_pdf(
     assert isinstance(part, PptPreviewPart)
     assert not any(isinstance(p, LinkPart) for p in artifact.ui_parts)
     assert (
-        part.pdf_download_url == "/fs/download/outputs/sess-9/filled_presentation.pdf"
+        part.pdf_download_url
+        == "/fs/download/outputs/sess-9/filled_presentation.pptx/preview"
     )
     assert part.pptx_download_url == (
         "/fs/download/outputs/sess-9/filled_presentation.pptx"

@@ -1326,10 +1326,342 @@ async fn session_purge_waits_for_admitted_original_and_derived_writers() {
     let retained: bool = sqlx::query_scalar("select exists(select 1 from session_metadata where session_id=$1) or exists(select 1 from document where session_id=$1) or exists(select 1 from document_upload where session_id=$1)")
         .bind(session).fetch_one(&d.e.pool).await.unwrap();
     assert!(!retained);
-    let witness_key: String = sqlx::query_scalar("select object_key from document where id=$1")
-        .bind(kept)
+    let witness_key: String =
+        sqlx::query_scalar("select object_key from document_current where id=$1")
+            .bind(kept)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert!(d.storage.objects.get(&witness_key).await.is_ok());
+}
+
+/// A pod with trusted delegation writes bytes; the owner's catalogue outlives that pod.
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn conversation_outputs_are_private_conditional_and_retired_with_the_session() {
+    use control_plane::{auth::Authenticator, config::Configuration};
+    let limits = control_plane::documents::config::Limits {
+        conversation_files: 1,
+        ..Default::default()
+    };
+    let (mut d, p) = Box::pin(setup_with_content_limits(deletion(), limits)).await;
+    let mut config: Configuration =
+        serde_yaml_ng::from_str(include_str!("../../config/configuration.yaml")).unwrap();
+    config.security.user.realm_url = d.identity.realm.clone();
+    config.security.m2m = None;
+    config.security.delegation.accept_delegated_calls = true;
+    config.security.delegation.service_accounts_only = true;
+    d.app = api::router(
+        api::AppState {
+            pool: d.e.pool.clone(),
+            auth: Arc::new(
+                Authenticator::start(config.security().unwrap())
+                    .await
+                    .unwrap(),
+            ),
+            content: Some(d.storage.clone()),
+            processing: Some(p),
+            directory: None,
+            onboarding: Default::default(),
+            lifecycle: deletion(),
+            agent_catalog: Default::default(),
+        },
+        "/v1",
+        &[],
+    );
+    let space = d.folder.space_id;
+    let session = conversation(&d, "reader", space).await;
+    let agent: Uuid =
+        sqlx::query_scalar("select agent_instance_id from session_metadata where session_id=$1")
+            .bind(session)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let now = chrono::Utc::now().timestamp();
+    let token = d.identity.sign(json!({"sub":"service-account-agent","preferred_username":"service-account-agent","azp":"agent","client_id":"agent","iss":d.identity.realm,"aud":"fred-delegation","iat":now,"exp":now+300,"resource_access":{"fred-delegation":{"roles":["delegation_caller"]}}}));
+    let path = format!("/spaces/{space}/sessions/{session}/files");
+    let write_path = format!("{path}?person=reader&run=test-run&agent={agent}&path=deck.pptx");
+    async fn write(
+        d: &Documents,
+        token: &str,
+        path: &str,
+        bytes: &[u8],
+        key: Uuid,
+    ) -> (u16, Value) {
+        let mut body=b"--fixture\r\nContent-Disposition: form-data; name=\"file\"; filename=\"deck.pptx\"\r\nContent-Type: application/octet-stream\r\n\r\n".to_vec();
+        body.extend_from_slice(bytes);
+        body.extend_from_slice(b"\r\n--fixture--\r\n");
+        json_response(
+            d.app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(format!("/v1{path}"))
+                        .header("authorization", format!("Bearer {token}"))
+                        .header("idempotency-key", key.to_string())
+                        .header("content-type", "multipart/form-data; boundary=fixture")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap(),
+        )
+        .await
+    }
+    let key = Uuid::new_v4();
+    let first = write(&d, &token, &write_path, b"first", key).await;
+    assert_eq!(first.0, 200, "{first:?}");
+    assert_eq!(write(&d, &token, &write_path, b"first", key).await, first);
+    let id = first.1["document_id"].as_str().unwrap();
+    let content = first.1["content_id"].as_str().unwrap();
+    assert_eq!(status(&d, "writer", "GET", &path).await, 404);
+    let listed = json_response(
+        d.request("reader", "GET", &path, Body::empty(), "", None)
+            .await,
+    )
+    .await;
+    assert_eq!(listed.1.as_array().unwrap().len(), 1);
+    async fn delegated_read(d: &Documents, token: &str, path: &str) -> axum::response::Response {
+        d.app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1{path}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+    let delegated = format!("person=reader&run=test-run&agent={agent}");
+    let page =
+        json_response(delegated_read(&d, &token, &format!("{path}?{delegated}&limit=1")).await)
+            .await;
+    assert_eq!(page.0, 200, "{page:?}");
+    assert_eq!(page.1[0]["document_id"], id);
+    assert_eq!(
+        delegated_read(&d, &token, &format!("{path}?{delegated}&limit=10001"))
+            .await
+            .status(),
+        422
+    );
+    assert_eq!(delegated_read(&d, &token, &path).await.status(), 403);
+    for query in [
+        format!("person=writer&run=test-run&agent={agent}"),
+        format!("person=reader&run=test-run&agent={}", Uuid::new_v4()),
+    ] {
+        assert_eq!(
+            delegated_read(&d, &token, &format!("{path}?{query}"))
+                .await
+                .status(),
+            404
+        );
+        assert_eq!(
+            delegated_read(&d, &token, &format!("{path}/{id}/content?{query}"))
+                .await
+                .status(),
+            404
+        );
+    }
+    // A resource read is not a new turn admission after a role revocation.
+    control_plane::spaces::revoke(&d.e.pool, "owner", space, Role::Member, "reader")
+        .await
+        .unwrap();
+    assert_eq!(
+        delegated_read(&d, &token, &format!("{path}?{delegated}"))
+            .await
+            .status(),
+        200
+    );
+    assert_eq!(
+        delegated_read(&d, &token, &format!("{path}/{id}/content?{delegated}"))
+            .await
+            .status(),
+        200
+    );
+    crate::grant(&d.e, space, Role::Member, "reader").await;
+    // Hold an actual old response across the replacement. Its immutable bytes
+    // and content identity must remain paired, even when the catalogue changes.
+    let old_read = delegated_read(&d, &token, &format!("{path}/{id}/content?{delegated}")).await;
+    assert_eq!(old_read.status(), 200);
+    assert_eq!(old_read.headers()["x-content-id"], content);
+    assert_eq!(
+        write(&d, &token, &write_path, b"silent overwrite", Uuid::new_v4())
+            .await
+            .0,
+        409
+    );
+    let update = format!("{write_path}&expected_content_id={content}");
+    let (left, right) = tokio::join!(
+        write(&d, &token, &update, b"new", Uuid::new_v4()),
+        write(&d, &token, &update, b"new", Uuid::new_v4())
+    );
+    assert!(
+        (left.0 == 200 && right.0 == 409) || (left.0 == 409 && right.0 == 200),
+        "{left:?} {right:?}"
+    );
+    let new = if left.0 == 200 { left.1 } else { right.1 };
+    assert_eq!(
+        axum::body::to_bytes(old_read.into_body(), 1000)
+            .await
+            .unwrap()
+            .as_ref(),
+        b"first"
+    );
+    assert_eq!(
+        write(&d, &token, &update, b"stale read", Uuid::new_v4())
+            .await
+            .0,
+        409
+    );
+
+    assert_eq!(new["document_id"], id);
+    assert_eq!(
+        write(
+            &d,
+            &token,
+            &format!("{write_path}&source_content_id={content}"),
+            b"stale preview",
+            Uuid::new_v4()
+        )
+        .await
+        .0,
+        409
+    );
+    let current = new["content_id"].as_str().unwrap();
+    let preview = write(
+        &d,
+        &token,
+        &format!("{write_path}&source_content_id={current}"),
+        b"pdf",
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(preview.0, 200, "{preview:?}");
+    let response = d
+        .request(
+            "reader",
+            "GET",
+            &format!("{path}/{id}/content"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await;
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        axum::body::to_bytes(response.into_body(), 1000)
+            .await
+            .unwrap()
+            .as_ref(),
+        b"new"
+    );
+    let counters: Vec<(i64, i64)> =
+        sqlx::query_as("select used_bytes,reserved_bytes from storage_budget order by scope")
+            .fetch_all(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(counters, vec![(3, 0), (3, 0)]);
+    let no_ingestion: i64 = sqlx::query_scalar("select count(*) from document_processing")
         .fetch_one(&d.e.pool)
         .await
         .unwrap();
-    assert!(d.storage.objects.get(&witness_key).await.is_ok());
+    assert_eq!(no_ingestion, 0);
+    d.proxy.fault.lock().await.deny_put = true;
+    let failed = write(
+        &d,
+        &token,
+        &format!("{write_path}&expected_content_id={current}"),
+        b"interrupted",
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(failed.0, 503, "{failed:?}");
+    d.proxy.fault.lock().await.deny_put = false;
+    let reserved: i64 =
+        sqlx::query_scalar("select sum(reserved_bytes)::bigint from storage_budget")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(reserved, 0);
+    // A source with the same name remains admissible while its output is being
+    // replaced, even with one file allowed in each inventory.
+    let gate = Arc::new(crate::support::Gate::default());
+    d.proxy.fault.lock().await.hold_put = Some(gate.clone());
+    let replacing = format!("{write_path}&expected_content_id={current}");
+    let (output, source) = tokio::join!(
+        write(&d, &token, &replacing, b"next", Uuid::new_v4()),
+        async {
+            tokio::time::timeout(Duration::from_secs(10), gate.entered.notified())
+                .await
+                .unwrap();
+            let source = attach(&d, "reader", space, session, "deck.pptx", b"source").await;
+            gate.release.notify_one();
+            source
+        }
+    );
+    assert_eq!(output.0, 200, "{output:?}");
+    assert_eq!(source.0, 201, "{source:?}");
+    let attachments = json_response(
+        d.request(
+            "reader",
+            "GET",
+            &format!("/spaces/{space}/sessions/{session}/attachments"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(attachments.0, 200);
+    assert_eq!(attachments.1.as_array().unwrap().len(), 1);
+    assert_eq!(attachments.1[0]["document_id"], source.1["document_id"]);
+    finish_processing(
+        &d,
+        source.1["document_id"].as_str().unwrap().parse().unwrap(),
+    )
+    .await;
+    let erased = json_response(
+        d.request(
+            "reader",
+            "DELETE",
+            &format!("/spaces/{space}/sessions/{session}"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(erased.0, 202, "{erased:?}");
+    let deletion: Uuid =
+        sqlx::query_scalar("select deletion_id from session_metadata where session_id=$1")
+            .bind(session)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    sqlx::query("update deletion set due_at=clock_timestamp() where id=$1")
+        .bind(deletion)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    d.storage.purge_retired_originals(deletion).await.unwrap();
+    assert_eq!(
+        status(&d, "reader", "GET", &format!("{path}/{id}/content")).await,
+        404
+    );
+    let remaining: i64 =
+        sqlx::query_scalar("select count(*) from document_content where cleaned_at is null")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 0);
+    let used: i64 = sqlx::query_scalar("select sum(used_bytes)::bigint from storage_budget")
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(used, 0);
 }

@@ -132,24 +132,29 @@ async fn budget_numbers_are_required_and_nonnegative_without_forcing_usage_below
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
-async fn document_creation_does_not_invent_storage_counters() {
+async fn document_publication_updates_both_storage_counters() {
     let pool = database().await;
     let [org, _, _, _] = spaces(&pool).await;
-    sqlx::query("insert into document(id,space_id,name,mime,size,sha256,created_by,object_key,quota_owner) values($1,$1,'existing.txt','text/plain',400,repeat('a',64),'alice',$1::text,$1)")
+    sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$1,p_name=>'existing.txt',p_mime=>'text/plain',p_size=>400,p_sha256=>repeat('a',64),p_created_by=>'alice',p_object_key=>$1::text,p_quota_owner=>$1)")
         .bind(org).execute(&pool).await.unwrap();
     let accounts: i64 = sqlx::query_scalar("select count(*) from storage_budget")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(accounts, 0);
+    assert_eq!(accounts, 2);
     let usage: i64 = sqlx::query_scalar(
-        "select sum(size)::bigint from document where quota_owner=$1 and deletion_id is null",
+        "select sum(size)::bigint from document_current where quota_owner=$1 and deletion_id is null",
     )
     .bind(org)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(usage, 400);
+    let counters: Vec<i64> = sqlx::query_scalar("select used_bytes from storage_budget")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(counters, vec![400, 400]);
 }
 
 #[tokio::test]

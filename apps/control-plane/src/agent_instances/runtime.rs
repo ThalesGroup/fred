@@ -304,7 +304,7 @@ async fn resolve_runtime_binding(
     let attachments = if let Some(conversation) = &query.conversation {
         crate::sessions::require_association(&mut *tx, subject, conversation, &record).await?;
         sqlx::query_as::<_, RuntimeAttachment>(
-            "select d.id as document_id, d.name, d.mime from document d
+            "select d.id as document_id, d.name, d.mime from document_current d
              join generation g on g.id = d.published_generation
              where d.session_id = $1 and d.space_id = $2
              and d.deletion_id is null and d.retrievable and not d.retrievable_pending

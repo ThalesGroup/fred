@@ -743,12 +743,47 @@ class ToolProviderPort(ABC):
         """Release provider resources."""
 
 
+class ConversationFileEntry(BaseModel):
+    """A current deliverable in the bound conversation's common catalogue."""
+
+    document_id: str
+    content_id: str
+    path: str
+    name: str
+    mime: str
+    size: int = Field(ge=0)
+
+
+class ConversationFileContent(BaseModel):
+    """Bytes and identity selected atomically, never a separate latest snapshot."""
+
+    document_id: str
+    content_id: str
+    content: bytes
+
+
 class WorkspaceFsPort(ABC):
-    """Technical output writer used by capabilities such as PPT Filler."""
+    """Conversation deliverable access, shared by runtimes and capabilities."""
 
     @abstractmethod
     def bind(self, binding: BoundRuntimeContext) -> None:
         """Refresh the verified team, agent and user context for this run."""
+
+    @abstractmethod
+    async def list(
+        self, *, limit: int = 100, offset: int = 0
+    ) -> tuple[ConversationFileEntry, ...]:
+        """List a bounded page of current deliverables, newest first."""
+
+    @abstractmethod
+    async def read(
+        self, document_id: str, *, max_bytes: int
+    ) -> ConversationFileContent:
+        """Read bounded bytes with their content id for a conditional replacement."""
+
+    @abstractmethod
+    async def snapshot(self, path: str) -> str | None:
+        """Capture the current content id before computing a replacement."""
 
     @abstractmethod
     async def write(
@@ -756,10 +791,18 @@ class WorkspaceFsPort(ABC):
         path: str,
         content: bytes,
         *,
+        expected_content_id: str | None,
+        source_content_id: str | None = None,
+        request_key: str | None = None,
         content_type: str | None = None,
         title: str | None = None,
     ) -> PublishedArtifact:
-        """Write an agent output and return its downloadable description."""
+        """Write an agent output and return its downloadable description.
+
+        Retain a UUID request_key to replay an uncertain attempt with identical
+        arguments. Omission starts a new attempt; a terminal failure needs a new
+        key. Replaying must not take a new snapshot or recompute the content.
+        """
 
     @abstractmethod
     async def convert_office_to_pdf(

@@ -922,6 +922,55 @@ Decision endpoints accept authenticated people or trusted person/run/agent deleg
 evaluate the person's admission and rights, and return `Cache-Control: no-store`.
 
 
+## Conversation file catalogue
+
+Conversation deliverables share the `document` catalogue with source documents.
+`document` owns placement and the stable file identity; `document_content` owns
+immutable object keys, hashes and sizes. `document_current` projects the current
+primary content for existing readers. Source originals remain immutable and only
+sources can enter Knowledge Flow processing. A preview references its exact primary
+content and disappears from current reads as soon as that primary is replaced.
+
+The conversation owner lists and downloads deliverables through
+`/spaces/{space}/sessions/{session}/files`. Listing, download, `write-target` and multipart write
+routes accept the existing trusted person/run/agent assertion and verify the live
+conversation association without readmitting the turn. Browser reads retain owner
+admission and consent checks. Content downloads include `X-Content-Id`, selected
+with the immutable object key in one SQL row. A replacement based on read bytes
+submits that returned identity as `expected_content_id`; it must not refresh the
+snapshot at submission time. PowerPoint rendering can still capture
+`current_content_id` through `write-target` before it starts.
+A conflict requires reading the current target again; it never overwrites silently.
+The idempotency key binds destination, content and expected revision. File links
+identify the current saved file, not a historical message snapshot.
+Browser links use origin-relative `/control-plane/v1` URLs, independently of the
+pod's internal Control Plane address. The workspace port accepts a retained UUID
+`request_key` for an identical replay and retries a transport failure once with
+the same key and payload. Business conflicts and terminal failures are not retried.
+
+Writes reuse the bounded original transfer, checksum verification and
+`document_upload` journal. The organization advisory guard is shared for deliverables
+and exclusive for governance. A short conversation lock coordinates its inventory;
+file publication and budget deltas are transactional. Organization-total then local
+budget rows arbitrate concurrent reservations across replicas. Bulk document updates
+aggregate quota deltas per account, so retirement does not rewrite the same counter
+for every file. Transfers never hold
+a SQL transaction. `storage_budget` counts current primary bytes and positive pending
+growth, including configuration PowerPoint files. Defaults are provisioned on first
+write; the optional `organization_total_bytes` ceiling has no limit by default.
+Previews are physical content inventory, separate from user quota. Superseded content
+enters an indexed cleanup queue; uncertain PUTs remain fenced. Technical receipts
+expire only after physical cleanup and the configured receipt retention period.
+
+Source and output inventories each use `conversation_files` and `conversation_bytes`;
+all transfers use the configured file ceiling, at most 100 MiB. The current API
+returns at most 10,000 deliverables (`limit` and `offset` are bounded), with
+downloads bounded by the shared content transfer slots. The common Python port
+lists up to 100 entries per call and bounds streamed reads to the caller's limit,
+at most 32 MiB. SQL counters and these bounds are not a production capacity test.
+Deep's scratchpad and wiki domain revisions retain their existing owners; this port
+does not implicitly ingest files, publish to a team, or implement wiki revision semantics.
+
 ## Background tasks
 
 `control-plane serve` supervises HTTP, storage cleanup, the processing dispatcher
@@ -1201,3 +1250,38 @@ vector reads. No latency or throughput measurement is claimed. Unsupported vecto
 backends explicitly reject both generation-scoped mutation and verification.
 
 The manager index remains isolated from legacy search/chat.
+
+
+## Wiki editorial storage
+
+The Wiki uses migration `0015_team_wiki.sql` and `src/wiki/`: one editorial tree
+per canonical team or personal space. Projects do not inherit their parent team's
+Wiki. Page content and revisions are not catalogue files; this port adds neither
+editorial quotas nor file mirrors, attachments, exports or indexing.
+
+The existing space `read`/`write` decisions and authorized `team_wiki` pod offers
+control human access. Disabling the offer hides the Wiki without deleting it.
+Delegated calls retain turn admission authority; they check the live space and
+private conversation association. The adapter uses `RuntimeContext.space_id` and
+sends `session_id` and the workload assertion in query parameters, outside tool
+arguments. Only a delegated workload creates an agent-attributed proposal. Its
+conversation owner may read and approve it; other readers and editors cannot.
+The existing mandatory `wiki_publish_proposal` approval gate is retained.
+
+Published revisions survive conversation removal. Pending/rejected proposals
+become inaccessible when their conversation is retired, and the existing
+lifecycle worker purges them after retention. Space/organization cleanup purges
+its complete editorial history in bounded batches. Unpublished proposals expire
+after `P30D` by default: `wiki_proposal_retention` in the existing lifecycle policy
+catalogue sets this duration. Expiry rejects a proposal; conversation cleanup
+removes it. There is no additional scheduler or storage service.
+
+The API preserves four tree levels, unique sibling titles, revision comparisons,
+restoration as a new revision, 50-entry history pages, the agent review mark and
+base-revision conflicts. Text limits remain 100,000 characters per page and 4,000
+for rules. Reading absent rules returns an empty view and does not create a row.
+The existing MDX editor and draft safeguards remain the UI implementation.
+
+This increment has not been applied to PostgreSQL or received in k3d. Run the
+migration chain and the human/agent lifecycle journeys before treating it as
+functionally validated; static compilation does not validate SQL execution.

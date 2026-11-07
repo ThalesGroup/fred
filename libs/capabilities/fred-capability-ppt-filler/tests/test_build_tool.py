@@ -300,8 +300,9 @@ async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_
     paths = [w["path"] for w in workspace.writes]
     assert paths == [
         "outputs/sess-9/Kick off 2026.pptx",
-        "outputs/sess-9/Kick off 2026.pdf",
+        "outputs/sess-9/Kick off 2026.pptx",
     ]
+    assert workspace.writes[1]["source_content_id"] == "content-1"
     deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
     assert [cast(Any, s.shapes.title).text for s in deck.slides] == ["Kick-off", "Plan"]
 

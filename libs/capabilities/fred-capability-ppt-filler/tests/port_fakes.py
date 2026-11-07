@@ -90,29 +90,35 @@ class FakeWorkspace(WorkspaceFsPort):
     def bind(self, binding) -> None:  # pragma: no cover - not exercised
         raise NotImplementedError
 
-    async def read_bytes(self, path: str) -> bytes:  # pragma: no cover
+    async def list(self, *, limit=100, offset=0):
         raise NotImplementedError
 
-    async def read_text(self, path: str) -> str:  # pragma: no cover
+    async def read(self, document_id, *, max_bytes):
         raise NotImplementedError
 
-    async def read_team_bytes(self, path: str) -> bytes:  # pragma: no cover
-        raise NotImplementedError
+    async def snapshot(self, path: str) -> str | None:
+        return None
 
     async def write(
         self,
         path: str,
         content: bytes,
         *,
+        expected_content_id: str | None,
+        source_content_id: str | None = None,
+        request_key: str | None = None,
         content_type: Optional[str] = None,
         title: Optional[str] = None,
     ) -> PublishedArtifact:
-        file_name = path.split("/")[-1]
+        file_name = title if source_content_id and title else path.split("/")[-1]
         self.writes.append(
             {
                 "path": path,
                 "content": bytes(content),
                 "content_type": content_type,
+                "expected_content_id": expected_content_id,
+                "source_content_id": source_content_id,
+                "request_key": request_key,
                 "title": title,
             }
         )
@@ -120,8 +126,9 @@ class FakeWorkspace(WorkspaceFsPort):
             key=path,
             file_name=file_name,
             size=len(content),
-            href=f"/fs/download/{path}",
+            href=f"/fs/download/{path}" + ("/preview" if source_content_id else ""),
             document_uid=f"uid-{path}",
+            content_id=f"content-{len(self.writes)}",
             mime=content_type,
         )
 

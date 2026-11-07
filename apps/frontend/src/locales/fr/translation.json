@@ -333,9 +333,9 @@
       },
       "preview": {
         "untitled": "Présentation",
-        "open": "Ouvrir l'aperçu",
+        "open": "Ouvrir l’aperçu actuel",
         "cardAria": "Aperçu de la présentation",
-        "download": "Télécharger le .pptx",
+        "download": "Télécharger la dernière version",
         "downloadError": "Échec du téléchargement",
         "close": "Fermer l'aperçu",
         "loadError": "Impossible de charger l'aperçu.",
@@ -843,7 +843,12 @@
       "filePreviewTitle": "Aperçu de la pièce jointe",
       "loading": "Chargement des pièces jointes...",
       "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
-      "title": "Pièces jointes"
+      "title": "Fichiers de la conversation",
+      "deliverables": "Livrables · dernière version conservée",
+      "sources": "Sources transmises à l’agent",
+      "noDeliverables": "Aucun livrable conservé.",
+      "filesError": "Les livrables sont momentanément indisponibles.",
+      "downloadError": "Le téléchargement a échoué."
     },
     "sessionTitleEditor": {
       "untitled": "Conversation sans titre",

@@ -13,8 +13,12 @@ erDiagram
 "control_plane.document" }o--|| "control_plane.folder" : "folder_id, space_id"
 "control_plane.document" }o--|| "control_plane.generation" : "published_generation, id"
 "control_plane.document" }o--|| "control_plane.session_metadata" : "session_id, space_id"
+"control_plane.document" }o--|| "control_plane.document_content" : "current_content_id, id"
+"control_plane.document_upload" }o--o| "control_plane.document" : "target_document_id"
 "control_plane.document_upload" |o--o| "control_plane.document_upload" : "retry_of"
 "control_plane.document_upload" }o--|| "control_plane.session_metadata" : "session_id, space_id"
+"control_plane.document_upload" }o--o| "control_plane.document_content" : "content_id"
+"control_plane.document_upload" }o--o| "control_plane.document_content" : "content_id, target_document_id"
 "control_plane.document_processing" }o--|| "control_plane.document" : "document_id"
 "control_plane.document_processing" |o--o| "control_plane.document_processing" : "retry_of"
 "control_plane.generation" }o--|| "control_plane.document_processing" : "processing_id, document_id"
@@ -56,6 +60,14 @@ erDiagram
 "control_plane.organization_powerpoint_settings" }o--|| "control_plane.runtime_capability" : "runtime_id, capability_id"
 "control_plane.organization_powerpoint_settings" }o--o| "control_plane.powerpoint_file" : "file_id"
 "control_plane.embedded_agent_conversation" |o--|| "control_plane.session_metadata" : "session_id"
+"control_plane.document_content" }o--|| "control_plane.document" : "document_id"
+"control_plane.document_content" }o--|| "control_plane.document_content" : "source_content_id, document_id"
+"control_plane.wiki_page" }o--|| "control_plane.space" : "space_id"
+"control_plane.wiki_page" }o--|| "control_plane.wiki_page" : "parent_page_id, space_id"
+"control_plane.wiki_page" }o--|| "control_plane.wiki_revision" : "current_revision_id, page_id, space_id"
+"control_plane.wiki_revision" }o--|| "control_plane.space" : "space_id"
+"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "page_id, space_id"
+"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "proposed_parent_page_id, space_id"
 
 "control_plane.deletion" {
   uuid id
@@ -102,12 +114,8 @@ erDiagram
   uuid folder_id FK
   uuid session_id FK
   text name
-  text mime
-  bigint size
-  text sha256
   text created_by
   timestamp_with_time_zone created_at
-  text object_key
   uuid quota_owner FK
   boolean retrievable
   uuid retrieval_id
@@ -121,6 +129,10 @@ erDiagram
   timestamp_with_time_zone purge_after
   uuid deletion_id FK
   timestamp_with_time_zone original_cleaned_at
+  text purpose
+  text parent_path
+  uuid current_content_id FK
+  timestamp_with_time_zone updated_at
 }
 "control_plane.platform_bootstrap" {
   boolean singleton
@@ -184,6 +196,12 @@ erDiagram
   integer cleanup_attempts
   timestamp_with_time_zone cleaned_at
   boolean put_pending
+  uuid target_document_id FK
+  uuid content_id FK
+  uuid expected_content_id
+  text purpose
+  text parent_path
+  bigint reserved_bytes
 }
 "control_plane.document_processing" {
   uuid id
@@ -436,28 +454,6 @@ erDiagram
   uuid organization_id FK
   timestamp_with_time_zone completed_at
 }
-"cp_read.document_visibility" {
-  uuid document_id
-  uuid space_id
-  uuid folder_id
-  uuid conversation_id
-  text conversation_owner
-  uuid generation_id
-  integer__ vector_ordinals
-  text name
-  text source_revision
-  boolean visible
-  text__ rejection_reasons
-  text mime
-  timestamp_with_time_zone created_at
-}
-"cp_read.published_artifact" {
-  uuid document_id
-  text path
-  bigint size
-  text sha256
-  text prefix
-}
 "cp_read.space_state" {
   uuid id
   boolean retired
@@ -556,4 +552,100 @@ erDiagram
 "control_plane.embedded_agent_conversation" {
   uuid session_id FK
   bytea log
+}
+"control_plane.document_content" {
+  uuid id
+  uuid document_id FK
+  text kind
+  uuid source_content_id FK
+  text object_key
+  text mime
+  bigint size
+  text sha256
+  timestamp_with_time_zone published_at
+  timestamp_with_time_zone cleanup_after
+  timestamp_with_time_zone cleaned_at
+}
+"control_plane.document_current" {
+  uuid id
+  uuid space_id
+  uuid folder_id
+  uuid session_id
+  text name
+  text created_by
+  timestamp_with_time_zone created_at
+  uuid quota_owner
+  boolean retrievable
+  uuid retrieval_id
+  text retrieval_actor
+  boolean retrieval_target
+  text retrieval_phase
+  boolean retrieval_confirmed
+  boolean retrievable_pending
+  uuid published_generation
+  timestamp_with_time_zone purged_at
+  timestamp_with_time_zone purge_after
+  uuid deletion_id
+  timestamp_with_time_zone original_cleaned_at
+  text purpose
+  text parent_path
+  uuid current_content_id
+  timestamp_with_time_zone updated_at
+  text mime
+  bigint size
+  text sha256
+  text object_key
+}
+"cp_read.document_visibility" {
+  uuid document_id
+  uuid space_id
+  uuid folder_id
+  uuid conversation_id
+  text conversation_owner
+  uuid generation_id
+  integer__ vector_ordinals
+  text name
+  text source_revision
+  boolean visible
+  text__ rejection_reasons
+  text mime
+  timestamp_with_time_zone created_at
+}
+"cp_read.published_artifact" {
+  uuid document_id
+  text path
+  bigint size
+  text sha256
+  text prefix
+}
+"control_plane.wiki_page" {
+  uuid page_id FK
+  uuid space_id FK
+  text slug
+  text title
+  text kind
+  uuid parent_page_id FK
+  integer position
+  uuid current_revision_id FK
+  boolean needs_review
+  timestamp_with_time_zone updated_at
+  text updated_by
+}
+"control_plane.wiki_revision" {
+  uuid revision_id
+  uuid space_id FK
+  uuid page_id FK
+  text content_md
+  text status
+  uuid base_revision_id
+  text author_user_id
+  text author_kind
+  uuid agent_instance_id
+  uuid session_id
+  text proposed_title
+  uuid proposed_parent_page_id FK
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+  timestamp_with_time_zone reviewed_at
+  text reviewed_by
 }

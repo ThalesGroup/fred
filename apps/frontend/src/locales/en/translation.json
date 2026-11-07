@@ -333,9 +333,9 @@
       },
       "preview": {
         "untitled": "Presentation",
-        "open": "Open preview",
+        "open": "Open current preview",
         "cardAria": "Presentation preview",
-        "download": "Download .pptx",
+        "download": "Download latest version",
         "downloadError": "Download failed",
         "close": "Close preview",
         "loadError": "Failed to load preview.",
@@ -843,7 +843,12 @@
       "filePreviewTitle": "Attachment preview",
       "loading": "Loading attachments...",
       "noSummary": "_(No summary returned by Knowledge Flow)_",
-      "title": "Attachments"
+      "title": "Conversation files",
+      "deliverables": "Deliverables · latest saved version",
+      "sources": "Sources provided to the agent",
+      "noDeliverables": "No saved deliverables.",
+      "filesError": "Deliverables are temporarily unavailable.",
+      "downloadError": "Download failed."
     },
     "sessionTitleEditor": {
       "untitled": "Untitled conversation",

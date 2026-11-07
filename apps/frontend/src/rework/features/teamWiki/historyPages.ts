@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type {
-  WikiRevisionList,
-  WikiRevisionSummary,
-} from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { WikiRevisionList, WikiRevisionSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 /**
  * A page's history, accumulated client-side across one or more bounded
@@ -26,11 +23,12 @@ import type {
 export interface HistoryPages {
   revisions: WikiRevisionSummary[];
   contents: Record<string, string>;
+  authors: Record<string, string>;
   /** `cursor` to request the next, older page; `null` at the end of history. */
   nextCursor: string | null;
 }
 
-export const emptyHistoryPages: HistoryPages = { revisions: [], contents: {}, nextCursor: null };
+export const emptyHistoryPages: HistoryPages = { revisions: [], contents: {}, authors: {}, nextCursor: null };
 
 /**
  * Folds one server response into the accumulated state.
@@ -51,7 +49,12 @@ export function mergeHistoryPage(
   page: WikiRevisionList,
 ): HistoryPages {
   if (fetchedWithCursor === undefined) {
-    return { revisions: page.revisions, contents: page.contents, nextCursor: page.next_cursor ?? null };
+    return {
+      revisions: page.revisions,
+      contents: page.contents,
+      authors: page.authors ?? {},
+      nextCursor: page.next_cursor ?? null,
+    };
   }
 
   const seen = new Set(state.revisions.map((revision) => revision.revision_id));
@@ -59,6 +62,7 @@ export function mergeHistoryPage(
   return {
     revisions: [...state.revisions, ...fresh],
     contents: { ...state.contents, ...page.contents },
+    authors: { ...state.authors, ...page.authors },
     nextCursor: page.next_cursor ?? null,
   };
 }

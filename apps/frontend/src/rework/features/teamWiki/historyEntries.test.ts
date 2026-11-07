@@ -13,13 +13,14 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { WikiRevisionSummary } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { WikiRevisionSummary } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import { historyEntries } from "./historyEntries";
 
 const revision = (over: Partial<WikiRevisionSummary> & { revision_id: string }): WikiRevisionSummary => ({
   status: "published",
   author_user_id: "alice",
   author_kind: "human",
+  created_at: "2026-09-06T10:00:00Z",
   ...over,
 });
 

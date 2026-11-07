@@ -823,6 +823,67 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    listConversationFiles: build.query<ListConversationFilesApiResponse, ListConversationFilesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/files`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          limit: queryArg.limit,
+          offset: queryArg.offset,
+        },
+      }),
+    }),
+    writeConversationFile: build.mutation<WriteConversationFileApiResponse, WriteConversationFileApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/files`,
+        method: "POST",
+        body: queryArg.fileUpload,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+        params: {
+          path: queryArg.path,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          expected_content_id: queryArg.expectedContentId,
+          source_content_id: queryArg.sourceContentId,
+        },
+      }),
+    }),
+    fileWriteTarget: build.query<FileWriteTargetApiResponse, FileWriteTargetApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/files/write-target`,
+        params: {
+          path: queryArg.path,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    downloadConversationFile: build.query<DownloadConversationFileApiResponse, DownloadConversationFileApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/files/${queryArg.documentId}/content`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    previewConversationFile: build.query<PreviewConversationFileApiResponse, PreviewConversationFileApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/files/${queryArg.documentId}/preview`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
     recordTitle: build.mutation<RecordTitleApiResponse, RecordTitleApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/generated-title`,
@@ -837,6 +898,158 @@ const injectedRtkApi = api.injectEndpoints({
           since: queryArg.since,
           until: queryArg.until,
         },
+      }),
+    }),
+    wikiAvailability: build.query<WikiAvailabilityApiResponse, WikiAvailabilityApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/availability`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    wikiPages: build.query<WikiPagesApiResponse, WikiPagesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    createWikiPage: build.mutation<CreateWikiPageApiResponse, CreateWikiPageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages`,
+        method: "POST",
+        body: queryArg.createWikiPageRequest,
+      }),
+    }),
+    wikiPage: build.query<WikiPageApiResponse, WikiPageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    deleteWikiPage: build.mutation<DeleteWikiPageApiResponse, DeleteWikiPageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}`,
+        method: "DELETE",
+      }),
+    }),
+    patchWikiPage: build.mutation<PatchWikiPageApiResponse, PatchWikiPageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}`,
+        method: "PATCH",
+        body: queryArg.updateWikiMetadataRequest,
+      }),
+    }),
+    writeWikiPage: build.mutation<WriteWikiPageApiResponse, WriteWikiPageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}/content`,
+        method: "PUT",
+        body: queryArg.updateWikiContentRequest,
+      }),
+    }),
+    setWikiReviewMark: build.mutation<SetWikiReviewMarkApiResponse, SetWikiReviewMarkApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}/review`,
+        method: "POST",
+        body: queryArg.wikiReviewRequest,
+      }),
+    }),
+    wikiRevisions: build.query<WikiRevisionsApiResponse, WikiRevisionsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}/revisions`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    restoreWikiRevision: build.mutation<RestoreWikiRevisionApiResponse, RestoreWikiRevisionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}/revisions/${queryArg.revisionId}/restore`,
+        method: "POST",
+      }),
+    }),
+    proposeWikiEdit: build.mutation<ProposeWikiEditApiResponse, ProposeWikiEditApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/edit`,
+        method: "POST",
+        body: queryArg.proposeWikiEditRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    proposeWikiPage: build.mutation<ProposeWikiPageApiResponse, ProposeWikiPageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/page`,
+        method: "POST",
+        body: queryArg.proposeWikiPageRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    wikiProposal: build.query<WikiProposalApiResponse, WikiProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    publishWikiProposal: build.mutation<PublishWikiProposalApiResponse, PublishWikiProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}/publish`,
+        method: "POST",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    wikiRules: build.query<WikiRulesApiResponse, WikiRulesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/rules`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    writeWikiRules: build.mutation<WriteWikiRulesApiResponse, WriteWikiRulesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/rules`,
+        method: "PUT",
+        body: queryArg.updateWikiContentRequest,
       }),
     }),
     getMyPreferences: build.query<GetMyPreferencesApiResponse, GetMyPreferencesApiArg>({
@@ -1530,6 +1743,56 @@ export type RecordUsageApiArg = {
   exchangeId: string;
   usageReport: UsageReport;
 };
+export type ListConversationFilesApiResponse = /** status 200 undefined */ ConversationFile[];
+export type ListConversationFilesApiArg = {
+  spaceId: string;
+  sessionId: string;
+  person?: string;
+  run?: string;
+  agent?: string;
+  limit?: number;
+  offset?: number;
+};
+export type WriteConversationFileApiResponse = /** status 200 undefined */ FileWrite;
+export type WriteConversationFileApiArg = {
+  spaceId: string;
+  sessionId: string;
+  path: string;
+  person: string;
+  run: string;
+  agent: string;
+  expectedContentId?: string;
+  sourceContentId?: string;
+  "Idempotency-Key": string;
+  fileUpload: FileUpload;
+};
+export type FileWriteTargetApiResponse = /** status 200 undefined */ FileWriteTarget;
+export type FileWriteTargetApiArg = {
+  spaceId: string;
+  sessionId: string;
+  path: string;
+  person: string;
+  run: string;
+  agent: string;
+};
+export type DownloadConversationFileApiResponse = unknown;
+export type DownloadConversationFileApiArg = {
+  spaceId: string;
+  sessionId: string;
+  documentId: string;
+  person?: string;
+  run?: string;
+  agent?: string;
+};
+export type PreviewConversationFileApiResponse = unknown;
+export type PreviewConversationFileApiArg = {
+  spaceId: string;
+  sessionId: string;
+  documentId: string;
+  person?: string;
+  run?: string;
+  agent?: string;
+};
 export type RecordTitleApiResponse = unknown;
 export type RecordTitleApiArg = {
   spaceId: string;
@@ -1543,6 +1806,125 @@ export type SpaceUsageApiArg = {
   since?: string;
   /** Exclusive ISO 8601 instant with offset; defaults to now. Maximum range: 366 days. */
   until?: string;
+};
+export type WikiAvailabilityApiResponse = /** status 200 undefined */ WikiAvailability;
+export type WikiAvailabilityApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  spaceId: string;
+};
+export type WikiPagesApiResponse = /** status 200 undefined */ WikiPageTree;
+export type WikiPagesApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  spaceId: string;
+};
+export type CreateWikiPageApiResponse = /** status 201 undefined */ WikiPageDetail;
+export type CreateWikiPageApiArg = {
+  spaceId: string;
+  createWikiPageRequest: CreateWikiPageRequest;
+};
+export type WikiPageApiResponse = /** status 200 undefined */ WikiPageDetail;
+export type WikiPageApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  spaceId: string;
+  /** Stable page slug */
+  pageId: string;
+};
+export type DeleteWikiPageApiResponse = unknown;
+export type DeleteWikiPageApiArg = {
+  spaceId: string;
+  pageId: string;
+};
+export type PatchWikiPageApiResponse = /** status 200 undefined */ WikiPageSummary;
+export type PatchWikiPageApiArg = {
+  spaceId: string;
+  pageId: string;
+  updateWikiMetadataRequest: UpdateWikiMetadataRequest;
+};
+export type WriteWikiPageApiResponse = /** status 200 undefined */ WikiPageDetail;
+export type WriteWikiPageApiArg = {
+  spaceId: string;
+  pageId: string;
+  updateWikiContentRequest: UpdateWikiContentRequest;
+};
+export type SetWikiReviewMarkApiResponse = /** status 200 undefined */ WikiPageSummary;
+export type SetWikiReviewMarkApiArg = {
+  spaceId: string;
+  pageId: string;
+  wikiReviewRequest: WikiReviewRequest;
+};
+export type WikiRevisionsApiResponse = /** status 200 undefined */ WikiRevisionList;
+export type WikiRevisionsApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  spaceId: string;
+  pageId: string;
+  cursor?: string;
+};
+export type RestoreWikiRevisionApiResponse = /** status 200 undefined */ WikiPageDetail;
+export type RestoreWikiRevisionApiArg = {
+  spaceId: string;
+  pageId: string;
+  revisionId: string;
+};
+export type ProposeWikiEditApiResponse = /** status 201 undefined */ WikiProposal;
+export type ProposeWikiEditApiArg = {
+  person: string;
+  run: string;
+  agent: string;
+  spaceId: string;
+  sessionId: string;
+  proposeWikiEditRequest: ProposeWikiEditRequest;
+};
+export type ProposeWikiPageApiResponse = /** status 201 undefined */ WikiProposal;
+export type ProposeWikiPageApiArg = {
+  person: string;
+  run: string;
+  agent: string;
+  spaceId: string;
+  sessionId: string;
+  proposeWikiPageRequest: ProposeWikiPageRequest;
+};
+export type WikiProposalApiResponse = /** status 200 undefined */ WikiProposal;
+export type WikiProposalApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  spaceId: string;
+  proposalId: string;
+};
+export type PublishWikiProposalApiResponse = /** status 200 undefined */ WikiPageDetail;
+export type PublishWikiProposalApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  spaceId: string;
+  proposalId: string;
+};
+export type WikiRulesApiResponse = /** status 200 undefined */ WikiPageDetail;
+export type WikiRulesApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+  spaceId: string;
+};
+export type WriteWikiRulesApiResponse = /** status 200 undefined */ WikiPageDetail;
+export type WriteWikiRulesApiArg = {
+  spaceId: string;
+  updateWikiContentRequest: UpdateWikiContentRequest;
 };
 export type GetMyPreferencesApiResponse = /** status 200 undefined */ UserPreferences;
 export type GetMyPreferencesApiArg = void;
@@ -3074,10 +3456,122 @@ export type UsageReport = {
   /** Time of consumption; at most five minutes ahead of server time. */
   occurred_at: string;
 };
+export type ConversationFile = {
+  content_id: string;
+  document_id: string;
+  mime: string;
+  name: string;
+  path: string;
+  preview_content_id?: string | null;
+  sha256: string;
+  size: number;
+  updated_at: string;
+};
+export type FileWrite = {
+  content_id: string;
+  document_id: string;
+};
+export type FileWriteTarget = {
+  /** Null means create; a write must submit this value unchanged after rendering. */
+  current_content_id?: string | null;
+};
 export type GeneratedTitle = {
   agent_instance_id: string;
   attempt_id: string;
   subject_id: string;
+  title: string;
+};
+export type WikiAvailability = {
+  enabled: boolean;
+};
+export type WikiPageSummary = {
+  kind: string;
+  needs_review: boolean;
+  page_id: string;
+  parent_page_id?: string | null;
+  position: number;
+  slug: string;
+  title: string;
+  updated_at?: string | null;
+  updated_by: string;
+};
+export type WikiPageTree = {
+  pages: WikiPageSummary[];
+};
+export type WikiPageDetail = {
+  author_kind: string;
+  author_name?: string | null;
+  content_md: string;
+  page: WikiPageSummary;
+  revision_id?: string | null;
+};
+export type CreateWikiPageRequest = {
+  content_md?: string;
+  parent_page_id?: string | null;
+  position?: number;
+  title: string;
+};
+export type UpdateWikiMetadataRequest = {
+  move_to_root?: boolean;
+  parent_page_id?: string | null;
+  position?: number | null;
+  title?: string | null;
+};
+export type WikiConflict = {
+  current_content_md: string;
+  current_revision_id?: string | null;
+  detail: string;
+};
+export type UpdateWikiContentRequest = {
+  base_revision_id?: string | null;
+  content_md: string;
+};
+export type WikiReviewRequest = {
+  base_revision_id: string;
+  needs_review: boolean;
+};
+export type WikiRevisionSummary = {
+  agent_instance_id?: string | null;
+  agent_name?: string | null;
+  author_kind: string;
+  author_user_id: string;
+  created_at: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  revision_id: string;
+  session_id?: string | null;
+  status: string;
+};
+export type WikiRevisionList = {
+  authors: {
+    [key: string]: string;
+  };
+  contents: {
+    [key: string]: string;
+  };
+  next_cursor?: string | null;
+  revisions: WikiRevisionSummary[];
+};
+export type WikiProposal = {
+  agent_instance_id?: string | null;
+  author_user_id: string;
+  content_md: string;
+  created_at: string;
+  current_content_md: string;
+  kind: string;
+  parent_slug?: string | null;
+  proposal_id: string;
+  slug?: string | null;
+  title: string;
+};
+export type ProposeWikiEditRequest = {
+  base_revision_id: string;
+  content_md: string;
+  slug: string;
+};
+export type ProposeWikiPageRequest = {
+  content_md: string;
+  parent_slug?: string | null;
   title: string;
 };
 export type AgentSort = "name" | "created_at:desc" | "updated_at:desc";
@@ -3279,9 +3773,40 @@ export const {
   useUploadAttachmentMutation,
   useDeleteAttachmentMutation,
   useRecordUsageMutation,
+  useListConversationFilesQuery,
+  useLazyListConversationFilesQuery,
+  useWriteConversationFileMutation,
+  useFileWriteTargetQuery,
+  useLazyFileWriteTargetQuery,
+  useDownloadConversationFileQuery,
+  useLazyDownloadConversationFileQuery,
+  usePreviewConversationFileQuery,
+  useLazyPreviewConversationFileQuery,
   useRecordTitleMutation,
   useSpaceUsageQuery,
   useLazySpaceUsageQuery,
+  useWikiAvailabilityQuery,
+  useLazyWikiAvailabilityQuery,
+  useWikiPagesQuery,
+  useLazyWikiPagesQuery,
+  useCreateWikiPageMutation,
+  useWikiPageQuery,
+  useLazyWikiPageQuery,
+  useDeleteWikiPageMutation,
+  usePatchWikiPageMutation,
+  useWriteWikiPageMutation,
+  useSetWikiReviewMarkMutation,
+  useWikiRevisionsQuery,
+  useLazyWikiRevisionsQuery,
+  useRestoreWikiRevisionMutation,
+  useProposeWikiEditMutation,
+  useProposeWikiPageMutation,
+  useWikiProposalQuery,
+  useLazyWikiProposalQuery,
+  usePublishWikiProposalMutation,
+  useWikiRulesQuery,
+  useLazyWikiRulesQuery,
+  useWriteWikiRulesMutation,
   useGetMyPreferencesQuery,
   useLazyGetMyPreferencesQuery,
   usePatchMyPreferencesMutation,

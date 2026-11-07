@@ -130,8 +130,8 @@ async fn list_attachments(
     let mut attachments: Vec<Attachment> = sqlx::query_as(
         "select d.id as document_id, d.name, d.mime, d.size, d.created_at,
          (g.id is not null and d.retrievable and not d.retrievable_pending) as ready
-         from document d left join generation g on g.id = d.published_generation
-         where d.session_id = $1 and d.space_id = $2 and d.deletion_id is null
+         from document_current d left join generation g on g.id = d.published_generation
+         where d.session_id = $1 and d.space_id = $2 and d.purpose = 'source' and d.deletion_id is null
          order by d.created_at, d.id",
     )
     .bind(session_id)

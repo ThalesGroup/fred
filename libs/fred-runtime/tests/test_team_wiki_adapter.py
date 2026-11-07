@@ -62,6 +62,7 @@ class _RecordingClient:
         *,
         headers: dict[str, str],
         json: Any = None,
+        params: dict[str, str] | None = None,
         auth: httpx.Auth | object = httpx.USE_CLIENT_DEFAULT,
     ) -> _FakeResponse:
         self.call_count += 1
@@ -70,6 +71,7 @@ class _RecordingClient:
             "url": url,
             "headers": headers,
             "json": json,
+            "params": params,
             "auth": auth,
         }
         return _FakeResponse(self._response_payload)
@@ -95,6 +97,7 @@ class _ScriptedClient:
         *,
         headers: dict[str, str],
         json: Any = None,
+        params: dict[str, str] | None = None,
         auth: httpx.Auth | object = httpx.USE_CLIENT_DEFAULT,
     ) -> Any:
         item = self._payloads.pop(0)
@@ -120,7 +123,7 @@ def _conflict_response(
 def _binding() -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
-            session_id="s-1", team_id="team-1", access_token="tok"
+            session_id="s-1", team_id="team-1", space_id="space-1", access_token="tok"
         ),
         portable_context=PortableContext(
             request_id="request-1",

@@ -1974,7 +1974,7 @@ async fn retired_folders_and_documents_are_absent_from_reads_and_producers() {
         Box::pin(d.storage.objects.put_verified(&key, file.path(), 4, &hash))
             .await
             .unwrap();
-        sqlx::query("insert into document (id,space_id,folder_id,name,mime,size,sha256,created_by,object_key,quota_owner) values ($1,$2,$3,$4,'application/pdf',4,$5,'writer',$6,$2)")
+        sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_folder_id=>$3,p_name=>$4,p_mime=>'application/pdf',p_size=>4,p_sha256=>$5,p_created_by=>'writer',p_object_key=>$6,p_quota_owner=>$2)")
             .bind(id).bind(space).bind(folder).bind(name)
             .bind(format!("{:x}", Sha256::digest(bytes))).bind(key)
             .execute(&d.e.pool).await.unwrap();
@@ -2405,7 +2405,7 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     assert_eq!(status, 201, "{upload}");
     let d2: Uuid = upload["document_id"].as_str().unwrap().parse().unwrap();
     let originals: Vec<String> =
-        sqlx::query_scalar("select object_key from document where id=any($1)")
+        sqlx::query_scalar("select object_key from document_current where id=any($1)")
             .bind(&[work.document_id, d2][..])
             .fetch_all(&d.e.pool)
             .await
@@ -2437,11 +2437,12 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .await;
     assert_eq!(status, 201, "{witness}");
     let witness: Uuid = witness["document_id"].as_str().unwrap().parse().unwrap();
-    let witness_key: String = sqlx::query_scalar("select object_key from document where id=$1")
-        .bind(witness)
-        .fetch_one(&d.e.pool)
-        .await
-        .unwrap();
+    let witness_key: String =
+        sqlx::query_scalar("select object_key from document_current where id=$1")
+            .bind(witness)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
     d.folder = target.clone();
     expire_generations(&d.e.pool, processing).await;
     sqlx::query("update generation set cleanup_cursor=200 where id=$1")
@@ -2752,16 +2753,18 @@ async fn editor_deletes_document_without_retiring_its_folder() {
         .await;
     assert_eq!(status, 201, "{witness}");
     let witness: Uuid = witness["document_id"].as_str().unwrap().parse().unwrap();
-    let original: String = sqlx::query_scalar("select object_key from document where id=$1")
-        .bind(work.document_id)
-        .fetch_one(&d.e.pool)
-        .await
-        .unwrap();
-    let witness_key: String = sqlx::query_scalar("select object_key from document where id=$1")
-        .bind(witness)
-        .fetch_one(&d.e.pool)
-        .await
-        .unwrap();
+    let original: String =
+        sqlx::query_scalar("select object_key from document_current where id=$1")
+            .bind(work.document_id)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let witness_key: String =
+        sqlx::query_scalar("select object_key from document_current where id=$1")
+            .bind(witness)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
     let path = format!("/documents/{}", work.document_id);
     assert_eq!(
         d.request("reader", "DELETE", &path, Body::empty(), "", None)

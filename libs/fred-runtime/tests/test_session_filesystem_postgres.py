@@ -93,10 +93,12 @@ async def test_cancelled_file_writer_blocks_purge_until_actual_completion(databa
     await _delete_root(cp)
     assert storage.files == {}
     with pytest.raises(ConversationScratchpadStorageError):
-        await service.exports().write_bytes("late.pptx", b"private")
+        await service.namespace("deep", max_bytes=1024, max_files=10).write_bytes(
+            "late.pptx", b"private"
+        )
     await (
         ConversationFilesystemService(storage, OTHER, fence=fence)
-        .exports()
+        .namespace("deep", max_bytes=1024, max_files=10)
         .write_bytes("retained", b"other")
     )
     await service.purge()
