@@ -839,11 +839,12 @@
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
-      "empty": "No attachments in this conversation.",
-      "filePreviewTitle": "Attachment preview",
-      "loading": "Loading attachments...",
+      "uploadedSection": "Attachments",
+      "empty": "No documents in this conversation.",
+      "filePreviewTitle": "Document preview",
+      "loading": "Loading documents...",
       "noSummary": "_(No summary returned by Knowledge Flow)_",
-      "title": "Attachments"
+      "title": "Conversation documents"
     },
     "sessionTitleEditor": {
       "untitled": "Untitled conversation",

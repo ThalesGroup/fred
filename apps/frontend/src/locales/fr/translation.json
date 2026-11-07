@@ -839,11 +839,12 @@
     "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
-      "empty": "Aucune pièce jointe dans cette conversation.",
-      "filePreviewTitle": "Aperçu de la pièce jointe",
-      "loading": "Chargement des pièces jointes...",
+      "uploadedSection": "Pièces jointes",
+      "empty": "Aucun document dans cette conversation.",
+      "filePreviewTitle": "Aperçu du document",
+      "loading": "Chargement des documents...",
       "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
-      "title": "Pièces jointes"
+      "title": "Documents de la conversation"
     },
     "sessionTitleEditor": {
       "untitled": "Conversation sans titre",

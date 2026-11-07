@@ -144,17 +144,21 @@ export function ChatLauncherRail({
           onOpen={launcher.onOpen}
         />
       ))}
-      {entries.map((entry) => (
-        <PanelLauncher
-          key={entryKey(entry)}
-          entry={entry}
-          label={launcherLabelOf(t, entry)}
-          selected={entryKey(entry) === activeKey}
-          // Clicking the open one closes it, so the launcher is the way in and
-          // the way out.
-          onToggle={() => onActiveKeyChange(entryKey(entry) === activeKey ? null : entryKey(entry))}
-        />
-      ))}
+      {/* A launcher may render nothing yet, so the divider lives in CSS on this
+          wrapper and disappears with it while it is empty. */}
+      <div className={launchers.length > 0 ? `${styles.railViewers} ${styles.railViewersDivided}` : styles.railViewers}>
+        {entries.map((entry) => (
+          <PanelLauncher
+            key={entryKey(entry)}
+            entry={entry}
+            label={launcherLabelOf(t, entry)}
+            selected={entryKey(entry) === activeKey}
+            // Clicking the open one closes it, so the launcher is the way in and
+            // the way out.
+            onToggle={() => onActiveKeyChange(entryKey(entry) === activeKey ? null : entryKey(entry))}
+          />
+        ))}
+      </div>
       {footerLaunchers.length > 0 && (
         <div className={styles.railFooter}>
           {footerLaunchers.map((launcher) => (

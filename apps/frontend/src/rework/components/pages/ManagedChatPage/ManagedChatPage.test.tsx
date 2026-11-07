@@ -554,10 +554,16 @@ describe("ManagedChatPage deleted agent", () => {
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).toContain("Preserved assistant");
     expect(html).toContain("chatbot.deletedAgentSuffix");
+    expect(html).toContain('data-agent-deleted="true"');
     expect(html).toContain('data-placeholder="chatbot.readOnlyComposerPlaceholder"');
     expect(html).toContain('data-description="chatbot.deletedAgentTooltip"');
     const rendered = document.createElement("div");
     rendered.innerHTML = html;
+    const deletedAgent = rendered.querySelector('[data-agent-deleted="true"]');
+    expect(deletedAgent?.textContent).toContain("chatbot.deletedAgentSuffix");
+    // The suffix sits beside the chip, out of the truncating label.
+    const chipLabel = deletedAgent?.querySelector('[title="Preserved assistant"]');
+    expect(chipLabel?.textContent).toBe("Preserved assistant");
     expect(rendered.textContent).not.toContain("chatbot.deletedAgentTooltip");
     expect(html).toContain('data-composer-disabled="true"');
     expect(html).toContain('data-send-disabled="true"');
@@ -918,7 +924,7 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
       mount();
       expect(rail.footerLaunchers.map((l) => l.key)).toEqual(keys);
       // The glyph a reasoning row carries in the chain of thought.
-      expect(rail.footerLaunchers[0]).toMatchObject({ icon: "settings", iconFilled: true });
+      expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
     } finally {
       spaceRoles.current = [];
     }

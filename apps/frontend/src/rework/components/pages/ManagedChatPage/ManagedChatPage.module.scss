@@ -190,10 +190,10 @@
   pointer-events: auto;
 }
 
-/* First child, not the name itself: a Tooltip may wrap it. */
+/* First child, not the name itself: a Tooltip may wrap it. The agent chip never
+   shrinks for the title; only a very long agent name truncates, past 40%. */
 .topBarTitle > :first-child {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
   max-width: 40%;
 }
 
@@ -202,10 +202,35 @@
   overflow: hidden;
 }
 
-.topBarAgentName > span {
+.topBarAgentName > span:first-child {
   border-radius: var(--radius-full);
   padding: var(--spacing-3xs) var(--spacing-xs) var(--spacing-3xs) var(--spacing-3xs);
   max-width: 100%;
+}
+
+/* Deleted agent: muted chip that may shrink; the suffix beside it never does. */
+.deletedAgent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.deletedAgent > span:first-child {
+  flex-shrink: 1;
+  min-width: 0;
+  color: var(--on-surface-muted);
+}
+
+.deletedAgent .agentChipIcon {
+  background-color: var(--surface-container-highest);
+  color: var(--on-surface-muted);
+}
+
+.deletedAgentSuffix {
+  flex: 0 0 auto;
+  color: var(--on-surface-muted);
+  font: var(--font-label-large);
+  white-space: nowrap;
 }
 
 .agentChipIcon {
