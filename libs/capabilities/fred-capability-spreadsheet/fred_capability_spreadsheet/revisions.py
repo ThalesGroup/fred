@@ -161,8 +161,11 @@ class _Errors:
         self.items.append(f"changes[{index}] ({op}): {message}")
 
 
-def apply_changes(base: Spec, changes: list[Any]) -> Spec:
-    """The request that results from `changes` on `base`, or `ChangeError`."""
+def apply_changes(
+    base: Spec, changes: list[Any], report: list[str] | None = None
+) -> Spec:
+    """The request that results from `changes` on `base`, or `ChangeError`.
+    `report` receives one line naming the base rows touched, by their label."""
 
     base = normalize_spec(base)
     errors = _Errors()
@@ -212,7 +215,68 @@ def apply_changes(base: Spec, changes: list[Any]) -> Spec:
             "is, so nothing changed. Do not tell the user it was changed; send the "
             "change they asked for."
         )
+    if report is not None:
+        report.extend(_row_report(sheets))
     return result
+
+
+def _label(sheet: _Sheet, row: int) -> str:
+    """Base row number with its first non-formula value, e.g. `row 3 (Voyages)`."""
+
+    values = sheet.rows[row][1]
+    for index, column in enumerate(sheet.base_columns):
+        value = values[index] if index < len(values) else None
+        if column.get("formula") or value is None or isinstance(value, dict):
+            continue
+        text = str(value).strip()
+        if text:
+            return f"row {row + 2} ({text[:40]})"
+        break
+    return f"row {row + 2}"
+
+
+def _row_report(sheets: list[_Sheet]) -> list[str]:
+    """The base rows each sheet's changes touched, so the model can catch a row
+    number off by one; empty when no row was addressed."""
+
+    parts: list[str] = []
+    for sheet in sheets:
+        done: list[str] = []
+        if sheet.removed_rows:
+            done.append(
+                "removed "
+                + ", ".join(_label(sheet, r) for r in sorted(sheet.removed_rows)[:10])
+            )
+        if sheet.edits:
+            done.append(
+                "changed "
+                + ", ".join(_label(sheet, r) for r in sorted(sheet.edits)[:10])
+            )
+        for target in sorted(set(sheet.moved_rows.values())):
+            moved = sorted(r for r, t in sheet.moved_rows.items() if t == target)
+            done.append(
+                f"moved {', '.join(_label(sheet, r) for r in moved[:10])} to '{target}'"
+            )
+        positions: dict[int | None, int] = {}
+        for position, _ in sheet.added_rows:
+            positions[position] = positions.get(position, 0) + 1
+        for position, count in positions.items():
+            rows = f"{count} row{'s' if count > 1 else ''}"
+            if position is None:
+                done.append(f"added {rows} at the end")
+            elif position == -1:
+                done.append(f"added {rows} before row 2")
+            else:
+                done.append(f"added {rows} after {_label(sheet, position)}")
+        if done:
+            parts.append(f"sheet '{sheet.base_name or sheet.name}': {'; '.join(done)}")
+    if not parts:
+        return []
+    return [
+        "rows touched, by row numbers of the previous file: "
+        + " · ".join(parts)
+        + ". If one is not the row the user meant, fix it with another change."
+    ]
 
 
 def _refusal(items: list[str]) -> str:

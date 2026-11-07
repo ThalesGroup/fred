@@ -319,6 +319,47 @@ def test_nothing_changed_is_an_error():
 # --- through the tool -------------------------------------------------------------
 
 
+def test_the_report_names_each_touched_row_by_its_label():
+    report: list[str] = []
+    apply_changes(
+        BUDGET,
+        [
+            {"op": "remove_rows", "sheet": "Budget", "rows": [4, 3]},
+            {"op": "edit_cell", "sheet": "Budget", "cell": "C2", "value": 1100},
+            {
+                "op": "add_rows",
+                "sheet": "Budget",
+                "after": 2,
+                "rows": [["Formation", 1, 1]],
+            },
+            {
+                "op": "move_rows",
+                "sheet": "Synthèse",
+                "rows": [3],
+                "to_sheet": "Archive",
+            },
+        ],
+        report,
+    )
+    (text,) = report
+    assert "row numbers of the previous file" in text
+    assert "sheet 'Budget': removed row 3 (Voyages), row 4 (Matériel)" in text
+    assert "changed row 2 (Loyer)" in text
+    assert "added 1 row after row 2 (Loyer)" in text
+    assert "sheet 'Synthèse': moved row 3 (Loyer réel) to 'Archive'" in text
+    assert "not the row the user meant" in text
+
+
+def test_column_changes_alone_give_no_row_report():
+    report: list[str] = []
+    apply_changes(
+        BUDGET,
+        [{"op": "add_column", "sheet": "Budget", "column": {"header": "Note"}}],
+        report,
+    )
+    assert report == []
+
+
 def _tool(workspace: FakeWorkspace, instance: str | None = "agent-1"):
     ctx = CapabilityContext(
         identity=CapabilityIdentity(
@@ -339,6 +380,18 @@ def store():
     set_workbook_spec_store_provider(lambda: memory)
     yield memory
     clear_workbook_spec_store_provider()
+
+
+@pytest.mark.asyncio
+async def test_a_revision_tells_the_model_which_rows_it_touched(store):
+    workspace = FakeWorkspace()
+    await _tool(workspace)(**BUDGET)
+    text, artifact = await _tool(workspace)(
+        changes=[{"op": "remove_rows", "sheet": "Budget", "rows": [3]}]
+    )
+    assert artifact.is_error is False, text
+    assert "removed row 3 (Voyages)" in text
+    assert text.endswith("otherwise reply now.")
 
 
 @pytest.mark.asyncio

@@ -378,7 +378,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
         # Applying changes and serializing a request are CPU work proportional to
         # the workbook (~0.2 s at the cell limit): off the event loop.
         try:
-            request, request_key, spec_json = await asyncio.to_thread(
+            request, request_key, spec_json, row_report = await asyncio.to_thread(
                 _resolve_request,
                 base.spec_json if changes and base else None,
                 changes,
@@ -503,7 +503,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
             outputs.summary,
             revisable,
             outputs.computed_at,
-            outputs.notes,
+            [*outputs.notes, *row_report],
         )
         turn.created[request_key] = text
         if change_key is not None:
@@ -537,11 +537,13 @@ def _resolve_request(
     file_name: str | None,
     sheets: list[SheetSpec] | None,
     language: str | None,
-) -> tuple[CreateSpreadsheetInput, str, str]:
-    """The request to build, its per-turn dedupe key and its stored JSON."""
+) -> tuple[CreateSpreadsheetInput, str, str, list[str]]:
+    """The request to build, its per-turn dedupe key, its stored JSON and the
+    rows the changes touched."""
 
+    row_report: list[str] = []
     if base_json is not None and changes:
-        spec = apply_changes(json.loads(base_json), changes)
+        spec = apply_changes(json.loads(base_json), changes, row_report)
         if file_name:
             spec["file_name"] = file_name
         if language:
@@ -565,7 +567,7 @@ def _resolve_request(
     key = hashlib.sha256(
         json.dumps(key_spec, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()
-    return request, key, json.dumps(spec, ensure_ascii=False)
+    return request, key, json.dumps(spec, ensure_ascii=False), row_report
 
 
 def request_spec(request: CreateSpreadsheetInput) -> dict[str, Any]:
