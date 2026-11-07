@@ -1,6 +1,6 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `174a38854cbd265dd6ae5b63a3f46c4982eb9063`** (merge `57925ec07`, section 14).
+**Borne Swift intégrée : `9cdd1ac9950da0bc6cafa425e5ec14ca59c35e04`** (merge `d0495bad0`, section 14).
 Cette borne sert à inventorier les
 prochaines arrivées Swift. La dernière tranche complète s'arrête à `89baab5b6` (merge `04aee8fbb`, section 14). Les réceptions et portages différés
 restent un inventaire distinct ; leur présence dans l'ascendance ne vaut pas
@@ -18,7 +18,7 @@ initiale ; ce n'est pas une liste de missions à relancer intégralement.
 > Un comportement différé peut déjà avoir son commit Swift dans l'ascendance.
 > Un nouveau merge ne le réapplique pas. Les portages adaptés ne déplacent pas
 > à eux seuls la borne Swift. Celle de la tranche initiale était `53e39f6f7` ;
-> la borne actuelle après les tranches suivantes est `a2ebfe48c`.
+> la borne actuelle est celle de l'en-tête.
 
 ## 1. Point de reprise consolidé au 6 novembre 2026
 
@@ -1600,14 +1600,12 @@ commit par commit.
 | --- | --- |
 | `f951e3438` (#3487) oauthlib | Mergé en `6aefa8684` sans changement de fichier : aucun verrou de Weaver ne le contient |
 | `6f3b28478` (#3485), `6fae3a708` (#3486) UI-PORT | Mergés en `e8cb6dad9` et `d34f2f7e6`, non reçus |
-| `174a38854` (#3498) test | Mergé en `57925ec07`, fixtures seules |
-| `9cdd1ac99` SBOM | Non commencé |
+| `174a38854` (#3498) test | Mergé en `57925ec07`, nettoyage automatique seul (`6c93c393f`) |
+| `9cdd1ac99` SBOM | Mergé en `d0495bad0`, simplifié, non reçu |
 | `ad5a1d2d3` (#3490) pièces jointes | Non commencé. Décision : affichage dérivé des pièces jointes du Control Plane, sans contrat ni écriture runtime |
 | `bef0098f4` (#3491) wiki | Non commencé |
 
 - **Limite acceptée :** `metricsService.enabled: false` retire le Service, mais l'exporteur reste à l'écoute dans le pod.
-- **A trancher en fin de rattrapage :** la CLI de `fred-runtime` (`url_helpers.py`, `pod_client.py`, `entrypoint.py` et son README) lit encore
-  `app.metrics_port`, alors que le port vit sous `observability.kpi.prometheus`.
 
 ### UI-PORT : décisions
 
@@ -1623,3 +1621,15 @@ commit par commit.
 - Les thèmes en clair et en sombre, surtout la sélection de texte et les rayons.
 - Focus au clavier : `SettingsModal`, recherche des agents, `TaskDetailPopover`.
 - Chat avec panneaux ouverts : badge et séparateur du rail, repli du panneau de navigation.
+
+### SBOM : décisions et réception
+
+- **Repris :** les rapports CycloneDX avec CVE aux tags de release, et `make sbom`.
+- **Adapté à Weaver :** Trivy local uniquement par son conteneur épinglé, comme le scan de vulnérabilités existant ; usage court dans `deploy/README.md`.
+- **A recevoir :** `make sbom` sur des images construites, y compris `knowledge-flow-worker-pymupdf`, et l'artefact d'un vrai tag de release si le CI est activé pour `weaver`.
+
+### A trancher en fin de rattrapage
+
+- La CLI de `fred-runtime` lit encore `app.metrics_port`.
+- `TaskIndicator` et `TaskDetailPopover` n'ont pour seul usage en production aucun écran : leur seul consommateur est `TaskPlayground`, page limitée au mode
+  développement (`dev/tasks`). Leur retrait est à décider.
