@@ -39,6 +39,8 @@ interface TaskDetailPopoverProps {
 export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetailPopoverProps) {
   const { t } = useTranslation();
   const task = useSelector(selectTask(taskId));
+  const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
+  const { copied: errorCopied, confirmCopied: confirmErrorCopied } = useCopyConfirmation();
   const popoverRef = React.useRef<HTMLDivElement>(null);
 
   // Below the anchor by default; above it, held by its bottom edge, when a low anchor leaves more room there.
@@ -102,36 +104,6 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
 
   if (!open || !task || !pos) return null;
 
-  return createPortal(
-    <div
-      ref={popoverRef}
-      className={styles.popover}
-      role="dialog"
-      aria-modal="false"
-      aria-label={t("rework.tasks.popover.title", { label: task.target?.label ?? task.taskId })}
-      style={{ top: pos.top, bottom: pos.bottom, left: pos.left, maxHeight: pos.maxHeight }}
-    >
-      <TaskDetailContent taskId={taskId} onClose={onClose} />
-    </div>,
-    document.body,
-  );
-}
-
-interface TaskDetailContentProps {
-  taskId: string;
-  /** Without it the panel is passive (a hover panel): no close button, no acknowledgement. */
-  onClose?: () => void;
-}
-
-/** The task's state, progress, step and error; the surface around it belongs to the caller. */
-export function TaskDetailContent({ taskId, onClose }: TaskDetailContentProps) {
-  const { t } = useTranslation();
-  const task = useSelector(selectTask(taskId));
-  const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
-  const { copied: errorCopied, confirmCopied: confirmErrorCopied } = useCopyConfirmation();
-
-  if (!task) return null;
-
   const handleCopyError = () => {
     if (!task.error) return;
     writeRichClipboard("", taskSupportDetails(task, t)).then((ok) => {
@@ -144,13 +116,20 @@ export function TaskDetailContent({ taskId, onClose }: TaskDetailContentProps) {
   const targetLabel = task.target?.label ?? task.taskId;
   const needsAttention = (task.state === "failed" || task.state === "cancelled") && task.acknowledgedAt === null;
 
-  return (
-    <div className={styles.content}>
-      <div className={styles.header}>
-        <span className={styles.title} title={targetLabel}>
-          {targetLabel}
-        </span>
-        {onClose && (
+  return createPortal(
+    <div
+      ref={popoverRef}
+      className={styles.popover}
+      role="dialog"
+      aria-modal="false"
+      aria-label={t("rework.tasks.popover.title", { label: targetLabel })}
+      style={{ top: pos.top, bottom: pos.bottom, left: pos.left, maxHeight: pos.maxHeight }}
+    >
+      <div className={styles.content}>
+        <div className={styles.header}>
+          <span className={styles.title} title={targetLabel}>
+            {targetLabel}
+          </span>
           <IconButton
             variant="icon"
             size="medium"
@@ -158,55 +137,56 @@ export function TaskDetailContent({ taskId, onClose }: TaskDetailContentProps) {
             aria-label={t("rework.tasks.popover.close")}
             onClick={onClose}
           />
+        </div>
+
+        <div className={styles.stateRow}>
+          <TaskStateBadge state={task.state} size="sm" />
+          {progressPct && <span className={styles.meta}>{progressPct}</span>}
+        </div>
+
+        <TaskProgressBar state={task.state} progress={task.progress} />
+
+        {task.step && (
+          <div className={styles.stepRow}>
+            <span className={styles.step}>{stepLabel(task, t)}</span>
+            <span className={styles.meta}>· {elapsedLabel}</span>
+          </div>
+        )}
+
+        {task.error && (
+          <div className={styles.errorRow}>
+            <span className={styles.errorText}>{task.error}</span>
+            <IconButton
+              variant="icon"
+              size="medium"
+              icon={{ category: "outlined", type: errorCopied ? "check_circle" : "content_copy" }}
+              aria-label={errorCopied ? t("rework.tasks.popover.errorCopied") : t("rework.tasks.popover.copyError")}
+              onClick={handleCopyError}
+            />
+          </div>
+        )}
+
+        {task.error && (
+          <span className={styles.supportRef}>{t("rework.tasks.popover.supportReference", { id: task.taskId })}</span>
+        )}
+
+        {needsAttention && (
+          <div className={styles.ackRow}>
+            <Button
+              color="on-surface"
+              variant="text"
+              size="small"
+              onClick={async () => {
+                if (await acknowledge(task.taskId, task.kind, task.localOnly)) onClose();
+              }}
+              disabled={isAcknowledging(task.taskId)}
+            >
+              {t("rework.tasks.popover.acknowledge")}
+            </Button>
+          </div>
         )}
       </div>
-
-      <div className={styles.stateRow}>
-        <TaskStateBadge state={task.state} size="sm" />
-        {progressPct && <span className={styles.meta}>{progressPct}</span>}
-      </div>
-
-      <TaskProgressBar state={task.state} progress={task.progress} />
-
-      {task.step && (
-        <div className={styles.stepRow}>
-          <span className={styles.step}>{stepLabel(task, t)}</span>
-          <span className={styles.meta}>· {elapsedLabel}</span>
-        </div>
-      )}
-
-      {task.error && (
-        <div className={styles.errorRow}>
-          <span className={styles.errorText}>{task.error}</span>
-          <IconButton
-            variant="icon"
-            size="medium"
-            icon={{ category: "outlined", type: errorCopied ? "check_circle" : "content_copy" }}
-            aria-label={errorCopied ? t("rework.tasks.popover.errorCopied") : t("rework.tasks.popover.copyError")}
-            onClick={handleCopyError}
-          />
-        </div>
-      )}
-
-      {task.error && (
-        <span className={styles.supportRef}>{t("rework.tasks.popover.supportReference", { id: task.taskId })}</span>
-      )}
-
-      {onClose && needsAttention && (
-        <div className={styles.ackRow}>
-          <Button
-            color="on-surface"
-            variant="text"
-            size="small"
-            onClick={async () => {
-              if (await acknowledge(task.taskId, task.kind, task.localOnly)) onClose();
-            }}
-            disabled={isAcknowledging(task.taskId)}
-          >
-            {t("rework.tasks.popover.acknowledge")}
-          </Button>
-        </div>
-      )}
-    </div>
+    </div>,
+    document.body,
   );
 }

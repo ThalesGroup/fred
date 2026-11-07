@@ -13,8 +13,7 @@
  * limitations under the License.
  */
 
-/* Click surface: the MenuPopover grammar (shadow, outline, corner, floating
-   surface). In hover mode the Tooltip atom provides the surface instead. */
+/* The MenuPopover grammar (shadow, outline, corner, floating surface). */
 .popover {
   position: fixed;
   z-index: 1400;
@@ -34,10 +33,6 @@
   flex-direction: column;
   gap: var(--spacing-xs);
   padding: var(--spacing-s);
-  width: 280px;
-  max-width: 100%;
-  text-align: left;
-  white-space: normal;
 }
 
 .header {

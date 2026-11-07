@@ -21,8 +21,8 @@ export interface ChipProps {
   label: string;
   /** Full text for the title tooltip when the label is truncated. Defaults to `label`. */
   title?: string;
-  /** Muted secondary line under the label (e.g. a file status or a task indicator). */
-  secondary?: ReactNode;
+  /** Muted secondary line under the label (e.g. a file status). */
+  secondary?: string;
   /** "large" uses the larger label role, for a chip that stands alone in a bar. */
   size?: "medium" | "large";
   /**

@@ -80,8 +80,6 @@ export function SessionAttachmentsDrawer({
         <UploadWarningBanner />
         <div className={styles.hint}>{t("chatbot.attachments.readyHint")}</div>
         <div className={styles.list}>
-          {/* The user's uploads; the agent's generated deliverables will get their own section. */}
-          <h3 className={styles.sectionTitle}>{t("chatbot.sessionAttachments.uploadedSection")}</h3>
           {isLoading && attachments.length === 0 ? (
             <div className={styles.empty}>{t("chatbot.sessionAttachments.loading")}</div>
           ) : attachments.length === 0 ? (
