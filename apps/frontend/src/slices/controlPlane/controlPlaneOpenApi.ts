@@ -813,6 +813,11 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    downloadAttachment: build.query<DownloadAttachmentApiResponse, DownloadAttachmentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/attachments/${queryArg.documentId}/content`,
+      }),
+    }),
     recordUsage: build.mutation<RecordUsageApiResponse, RecordUsageApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/exchanges/${queryArg.exchangeId}/usage`,
@@ -1729,6 +1734,12 @@ export type UploadAttachmentApiArg = {
 };
 export type DeleteAttachmentApiResponse = /** status 200 undefined */ Receipt | /** status 202 undefined */ Receipt;
 export type DeleteAttachmentApiArg = {
+  spaceId: string;
+  sessionId: string;
+  documentId: string;
+};
+export type DownloadAttachmentApiResponse = /** status 200 undefined */ string;
+export type DownloadAttachmentApiArg = {
   spaceId: string;
   sessionId: string;
   documentId: string;
@@ -3772,6 +3783,8 @@ export const {
   useLazyListAttachmentsQuery,
   useUploadAttachmentMutation,
   useDeleteAttachmentMutation,
+  useDownloadAttachmentQuery,
+  useLazyDownloadAttachmentQuery,
   useRecordUsageMutation,
   useListConversationFilesQuery,
   useLazyListConversationFilesQuery,

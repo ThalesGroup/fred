@@ -73,10 +73,11 @@ __all__ = [
 
 def extract_messages_from_update(update: object) -> list[BaseMessage]:
     """
-    Collect LangChain messages from one nested LangGraph update payload.
+    Collect execution messages from one nested LangGraph update payload.
 
     Why this exists:
     - LangGraph update events can nest message lists under multiple keys
+    - Deep's dangling-call repair republishes history, not new execution events
     - model middleware can also update old context without creating new events
     - the runtime event bridge should not know those traversal details
 
@@ -100,6 +101,11 @@ def extract_messages_from_update(update: object) -> list[BaseMessage]:
             )
         for key, value in update.items():
             if key != "messages":
+                # Deep's PatchToolCallsMiddleware.before_agent republishes the
+                # full checkpoint after a dangling call. Its synthetic result
+                # repairs model context, not a tool execution in this exchange.
+                if key == "PatchToolCallsMiddleware.before_agent":
+                    continue
                 if key == "model" and isinstance(value, (list, tuple)):
                     # LangChain factory._build_commands puts the response first.
                     # Later message Commands patch context (pins/clipped results).

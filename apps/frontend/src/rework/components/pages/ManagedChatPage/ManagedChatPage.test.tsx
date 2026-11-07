@@ -82,6 +82,9 @@ vi.mock("react-i18next", () => ({
 
 let chatValue: Record<string, unknown>;
 vi.mock("./useManagedChat", () => ({ useManagedChat: () => chatValue }));
+vi.mock("../../../features/conversationFiles", () => ({
+  useConversationFiles: () => ({ files: [], isUninitialized: true }),
+}));
 vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@shared/molecules/RichInputField/RichInputField")>()),
   RichInputField: (props: {

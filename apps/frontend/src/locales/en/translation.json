@@ -730,8 +730,7 @@
         "storage_unavailable": "The service is unavailable. The upload outcome still needs verification.",
         "interrupted_before_send": "No receipt found. Select the same file to retry the upload.",
         "wrong_file": "Select the original file with the same name and size."
-      },
-      "readyHint": "Ready files are considered at the start of the next turn, according to the agent’s enabled capabilities."
+      }
     },
     "composerActions": {
       "dialogAria": "Chat actions",
@@ -839,16 +838,19 @@
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
-      "empty": "No attachments in this conversation.",
-      "filePreviewTitle": "Attachment preview",
-      "loading": "Loading attachments...",
-      "noSummary": "_(No summary returned by Knowledge Flow)_",
+      "empty": "No files in this conversation.",
+      "loading": "Loading files...",
       "title": "Conversation files",
-      "deliverables": "Deliverables · latest saved version",
-      "sources": "Sources provided to the agent",
-      "noDeliverables": "No saved deliverables.",
-      "filesError": "Deliverables are temporarily unavailable.",
-      "downloadError": "Download failed."
+      "deliverables": "Created files",
+      "sources": "Attachments",
+      "filesError": "Unable to load created files. Try again.",
+      "attachmentsError": "Unable to load attachments. Try again.",
+      "deleteError": "Deletion failed. The attachment is still available. Try again once preparation has finished; if the problem persists, contact support.",
+      "downloadError": "Download failed. Click Download to try again. If the problem persists, contact support with the file name and this conversation.",
+      "previewError": "Unable to display the preview. Try again or download the file. If the problem persists, contact support with the file name and this conversation.",
+      "preparationError": "This file could not be prepared. You can download the original or remove the attachment and add it again. ",
+      "preview": "Preview",
+      "download": "Download"
     },
     "sessionTitleEditor": {
       "untitled": "Untitled conversation",
@@ -2581,14 +2583,14 @@
       "failure": {
         "arguments": "Call arguments:",
         "error": "Error:",
-        "invalidArguments": "The call arguments were rejected.",
-        "authentication": "Authentication was refused (HTTP 401).",
-        "unavailable": "The requested resource is unavailable in this access scope.",
-        "rateLimited": "The service request limit was reached (HTTP 429).",
-        "busy": "The service is temporarily unavailable or at capacity (HTTP 503).",
-        "timeout": "The operation exceeded its time budget (HTTP 504).",
-        "service": "The service could not complete this operation (HTTP 500).",
-        "unknown": "The call failed. No further usable diagnostic was recorded."
+        "invalidArguments": "The call arguments were rejected. Check the call arguments and correct them before retrying.",
+        "authentication": "Authentication was refused (HTTP 401). Restore authentication before retrying.",
+        "unavailable": "The requested resource is unavailable in this access scope. Choose a resource available in your current access scope.",
+        "rateLimited": "The service request limit was reached (HTTP 429). Wait for the limit to reset before retrying.",
+        "busy": "The service is temporarily unavailable or at capacity (HTTP 503). Try again later.",
+        "timeout": "The operation exceeded its time budget (HTTP 504). Narrow the request before retrying.",
+        "service": "The service could not complete this operation (HTTP 500). Try again later; contact support if the problem persists.",
+        "unknown": "The call failed. No further usable diagnostic was recorded. Review the call details and contact support with the conversation and any diagnostic reference shown."
       }
     },
     "collapse": "Collapse",

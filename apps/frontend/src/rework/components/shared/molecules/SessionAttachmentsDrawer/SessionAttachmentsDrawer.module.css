@@ -14,21 +14,36 @@
  * limitations under the License.
  */
 
-/* The scrolling half of the body: the upload warning above it stays pinned. */
-.list {
+.list,
+.file {
   display: flex;
-  flex: 1;
   flex-direction: column;
-  min-height: 0;
-  overflow-y: auto;
+  gap: var(--spacing-xs);
+  min-width: 0;
 }
 
-.hint {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
+.heading {
+  margin: 0;
+  font: var(--font-label-large);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.empty,
+.error {
+  margin: 0;
+  font: var(--font-body-medium);
+  overflow-wrap: anywhere;
 }
 
 .empty {
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
+}
+
+.error {
+  color: var(--error);
 }

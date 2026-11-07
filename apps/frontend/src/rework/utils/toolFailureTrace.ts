@@ -45,6 +45,8 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 const ARGUMENTS: Record<string, string[]> = {
+  read_conversation_file: ["document_id", "workspace_path"],
+  publish_conversation_file: ["workspace_path", "path", "expected_content_id", "request_key"],
   list_tabular_documents: [],
   describe_tabular_documents: ["document_uids", "table_names"],
   get_tabular_document_markdown: ["document_uid"],
@@ -80,16 +82,17 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   const slug = toolSlug(name);
   const query = /^(?:mcp__knowledge_flow__)?query_tabular_documents(?:_\d+)?$/.test(name);
   const tabular = query || tabularToolKind(name) !== null;
+  const conversationFile = ["read_conversation_file", "publish_conversation_file"].includes(name);
   const content = toolResultContent(entry.result).trim();
   const errorKey = Object.prototype.hasOwnProperty.call(ERROR_MESSAGES, content) ? ERROR_MESSAGES[content] : undefined;
-  if (!tabular && !errorKey) return null;
   const args = toolArgs(entry.call);
   const budget = { remaining: 20000 };
-  const displayed = tabular
-    ? Object.fromEntries(
-        (ARGUMENTS[slug] ?? []).filter((key) => key in args).map((key) => [key, displayArgument(args[key], budget)]),
-      )
-    : null;
+  const displayed =
+    tabular || conversationFile
+      ? Object.fromEntries(
+          (ARGUMENTS[slug] ?? []).filter((key) => key in args).map((key) => [key, displayArgument(args[key], budget)]),
+        )
+      : null;
   const sqlFailure =
     query &&
     !errorKey &&
@@ -101,6 +104,18 @@ export function toolFailureDetail(entry: Extract<TraceEntry, { kind: "combo" }>)
   return {
     arguments: displayed,
     errorKey: `rework.chatTrace.failure.${errorKey ?? "unknown"}`,
-    error: sqlFailure?.error ? String(displayArgument(sqlFailure.error)) : null,
+    error: sqlFailure?.error
+      ? String(displayArgument(sqlFailure.error))
+      : conversationFile && /^(Reading|Publishing) the conversation file failed: /.test(content)
+        ? String(displayArgument(content))
+        : null,
   };
+}
+
+/** Current runtime failures carry a safe explanation and a server diagnostic reference.
+ * Older provider dumps must not become visible when expanding inline errors. */
+export function executionFailureText(text: string): string | null {
+  return /^[^\r\n]+ Contact support with reference [a-f0-9]{32}\.$/.test(text.trim())
+    ? String(displayArgument(text.trim()))
+    : null;
 }

@@ -204,6 +204,15 @@
   color: var(--error);
 }
 
+.failureText {
+  flex-basis: 100%;
+  color: var(--error);
+  font: var(--font-label-medium);
+  user-select: text;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* Trailing latency */
 .secondary {
   flex-shrink: 0;

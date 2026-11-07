@@ -4,15 +4,11 @@
 
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 import pytest_asyncio
-from fred_runtime.common.outbound_credentials import (
-    OutboundCredentialProvider,
-    OutboundCredentials,
-)
+from conftest import StaticWorkloadTokens, admitted_provider
 from fred_runtime.integrations.v2_runtime import adapters
 from fred_runtime.integrations.v2_runtime.adapters import FredWorkspaceFs
 from fred_sdk.contracts.context import BoundRuntimeContext
@@ -28,22 +24,8 @@ async def workspace(monkeypatch):
             return httpx.Response(200, json={"current_content_id": "before"})
         return httpx.Response(200, json={"document_id": "file", "content_id": "after"})
 
-    provider = cast(
-        OutboundCredentialProvider,
-        SimpleNamespace(
-            credentials=AsyncMock(
-                return_value=OutboundCredentials(
-                    authorization="Bearer fixture",
-                    delegated=True,
-                    parameters={
-                        "person": "alice",
-                        "run": "admitted-run",
-                        "agent": "instance",
-                    },
-                )
-            )
-        ),
-    )
+    provider = admitted_provider(StaticWorkloadTokens())
+    assert (await provider.credentials()).authorization is None
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         config = SimpleNamespace(
             control_plane_url="http://control-plane-backend:8222/control-plane/v1",
@@ -79,9 +61,9 @@ async def test_workspace_snapshots_before_write_and_returns_catalogue_identity(
     assert requests[1].url.host == "control-plane-backend"
     assert requests[1].url.params["expected_content_id"] == "before"
     assert requests[1].url.params["person"] == "alice"
-    assert requests[1].url.params["run"] == "admitted-run"
-    assert requests[1].url.params["agent"] == "instance"
-    assert requests[1].headers["authorization"] == "Bearer fixture"
+    assert requests[1].url.params["run"] == "run-7"
+    assert requests[1].url.params["agent"] == "agent-a"
+    assert requests[1].headers["authorization"] == "Bearer workload-token"
     assert requests[1].headers["idempotency-key"]
     assert b"\x00\xff" in requests[1].content
     assert artifact.document_uid == artifact.key == "file"
@@ -91,6 +73,45 @@ async def test_workspace_snapshots_before_write_and_returns_catalogue_identity(
         == "/control-plane/v1/spaces/space/sessions/conversation/files/file/content"
     )
     assert artifact.size == 2
+
+
+@pytest.mark.asyncio
+async def test_delegated_markdown_publication_uses_m2m_auth(workspace):
+    writer, requests = workspace
+    name = "RECETTE-20261107-DEEP-01.md"
+    content = b"# Recette filesystem\n\nAlpha\nBravo\nCharlie\n"
+    key = "9e911123-1b42-434c-8421-22f9f72c3bc2"
+    artifact = await writer.write(
+        f"outputs/conversation/{name}",
+        content,
+        expected_content_id=None,
+        request_key=key,
+        content_type="text/markdown",
+    )
+
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.method == "POST"
+    assert (
+        request.url.path == "/control-plane/v1/spaces/space/sessions/conversation/files"
+    )
+    assert dict(request.url.params) == {
+        "path": name,
+        "person": "alice",
+        "run": "run-7",
+        "agent": "agent-a",
+    }
+    assert request.headers["authorization"] == "Bearer workload-token"
+    assert request.headers["idempotency-key"] == key
+    assert f'filename="{name}"'.encode() in request.content
+    assert b"Content-Type: text/markdown" in request.content
+    assert content in request.content
+    assert artifact.document_uid == artifact.key == "file"
+    assert artifact.content_id == "after"
+    assert artifact.file_name == name
+    assert artifact.size == len(content)
+    assert artifact.mime == "text/markdown"
+    assert artifact.href == f"{request.url.path}/file/content"
 
 
 @pytest.mark.asyncio
@@ -122,7 +143,11 @@ async def test_lost_response_replays_the_same_attempt(workspace, monkeypatch):
     assert len(requests) == 3
     for request in requests:
         assert request.method == "POST"
+        assert request.headers["authorization"] == "Bearer workload-token"
         assert request.headers["idempotency-key"] == key
+        assert request.url.params["person"] == "alice"
+        assert request.url.params["run"] == "run-7"
+        assert request.url.params["agent"] == "agent-a"
         assert request.url.params["expected_content_id"] == "before"
         assert b"deck bytes" in request.content
 
@@ -230,8 +255,8 @@ async def test_read_returns_identity_from_the_byte_response_and_admitted_scope(
         "/spaces/space/sessions/conversation/files/file/content"
     )
     assert requests[0].url.params["person"] == "alice"
-    assert requests[0].url.params["run"] == "admitted-run"
-    assert requests[0].url.params["agent"] == "instance"
+    assert requests[0].url.params["run"] == "run-7"
+    assert requests[0].url.params["agent"] == "agent-a"
 
 
 @pytest.mark.asyncio

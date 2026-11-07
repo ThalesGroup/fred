@@ -50,7 +50,7 @@ import { parseTabularTraceResult, tabularToolKind } from "../../../../../utils/t
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "../../../../../utils/webResearchTrace";
 import phaseStyles from "../phaseBadge.module.css";
 import { formatSqlForDisplay } from "./formatSqlForDisplay";
-import { toolFailureDetail } from "../../../../../utils/toolFailureTrace";
+import { executionFailureText, toolFailureDetail } from "../../../../../utils/toolFailureTrace";
 import { historicalDocumentTreeText, parseDocumentTreeTrace } from "../../../../../utils/documentTreeTrace";
 import { DocumentTreeDetail } from "./DocumentTreeDetail";
 import { TabularToolDetail } from "./TabularToolDetail";
@@ -199,6 +199,18 @@ function FailedToolDetail({ detail }: { detail: NonNullable<ReturnType<typeof to
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
 function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
   const failure = toolFailureDetail(entry);
+  const webKind = webResearchToolKind(toolName(entry.call));
+  const webResult = webKind && entry.result ? parseWebResearchResult(toolResultContent(entry.result)) : null;
+  // A bare-named MCP `web_search` with another payload shape keeps the generic view.
+  if (webKind && (webResult?.kind === "error" || (!failure && (webResult || !entry.result)))) {
+    return (
+      <WebResearchToolDetail
+        kind={webKind}
+        target={webResearchTarget(webKind, toolArgs(entry.call))}
+        result={webResult}
+      />
+    );
+  }
   if (failure) return <FailedToolDetail detail={failure} />;
   if (toolName(entry.call) === "ask_user") {
     const summary = messages ? hitlAnswerSummaryForTool(messages, entry.call) : null;
@@ -221,18 +233,6 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
       />
     ) : (
       <GenericToolDetail entry={entry} />
-    );
-  }
-  const webKind = webResearchToolKind(toolName(entry.call));
-  const webResult = webKind && entry.result ? parseWebResearchResult(toolResultContent(entry.result)) : null;
-  // A bare-named MCP `web_search` with another payload shape keeps the generic view.
-  if (webKind && (webResult || !entry.result)) {
-    return (
-      <WebResearchToolDetail
-        kind={webKind}
-        target={webResearchTarget(webKind, toolArgs(entry.call))}
-        result={webResult}
-      />
     );
   }
   const data = entry.result ? parseToolResultContent(entry.result) : null;
@@ -260,10 +260,10 @@ function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "c
   return <GenericToolDetail entry={entry} />;
 }
 
-/** Detail view for a turn-crash error entry: the raw error message (the same
- *  text shown in the transient toast), in an error-styled block. */
+/** Safe runtime explanation and support reference, preserved in history. */
 function ErrorDetail({ entry }: { entry: TraceEntry }) {
-  const text = detailTextForEntry(entry);
+  const { t } = useTranslation();
+  const text = executionFailureText(detailTextForEntry(entry)) ?? t("rework.chatTrace.failure.unknown");
   return (
     <div className={styles.detail}>
       <div className={styles.errorDetailBox}>{text}</div>

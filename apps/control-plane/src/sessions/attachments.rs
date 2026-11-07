@@ -63,6 +63,7 @@ pub(super) fn routes() -> OpenApiRouter<AppState> {
         )))
         .routes(routes!(list_attachments))
         .routes(routes!(delete_attachment))
+        .routes(routes!(download_attachment))
         .route_layer(axum::middleware::from_fn(no_store))
 }
 
@@ -176,4 +177,36 @@ async fn delete_attachment(
         },
         Json(receipt),
     ))
+}
+
+/// Download an original through its owning conversation, including after preparation failure.
+#[utoipa::path(get, path = "/spaces/{space_id}/sessions/{session_id}/attachments/{document_id}/content",
+    params(("space_id" = Uuid, Path), ("session_id" = Uuid, Path), ("document_id" = Uuid, Path)),
+    responses((status = 200, body = String, content_type = "application/octet-stream"),
+        (status = 401, body = crate::error::ErrorBody), (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody), (status = 422, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)))]
+async fn download_attachment(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath((space_id, session_id, document_id)): ApiPath<(Uuid, Uuid, Uuid)>,
+) -> AppResult<Response> {
+    super::require_owner(&s.pool, &user.uid, space_id, session_id).await?;
+    let belongs: bool = sqlx::query_scalar(
+        "select exists(select 1 from document_current where id=$1 and space_id=$2 and session_id=$3 and purpose='source' and deletion_id is null)",
+    )
+    .bind(document_id)
+    .bind(space_id)
+    .bind(session_id)
+    .fetch_one(&s.pool)
+    .await?;
+    if !belongs {
+        return Err(crate::error::AppError::NotFound);
+    }
+    let document = crate::db::pipeline_document(&s.pool, document_id).await?;
+    s.content
+        .as_ref()
+        .ok_or_else(crate::documents::unavailable)?
+        .stream_original(document)
+        .await
 }

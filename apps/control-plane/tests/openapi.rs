@@ -232,7 +232,29 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /spaces/{space_id}/sessions/{session_id}/exchanges/{exchange_id}/usage",
         "post /spaces/{space_id}/sessions/{session_id}/attachments",
         "get /spaces/{space_id}/sessions/{session_id}/attachments",
+        "get /spaces/{space_id}/sessions/{session_id}/files",
+        "post /spaces/{space_id}/sessions/{session_id}/files",
+        "get /spaces/{space_id}/sessions/{session_id}/files/write-target",
+        "get /spaces/{space_id}/sessions/{session_id}/files/{document_id}/content",
+        "get /spaces/{space_id}/sessions/{session_id}/files/{document_id}/preview",
+        "get /spaces/{space_id}/sessions/{session_id}/attachments/{document_id}/content",
         "delete /spaces/{space_id}/sessions/{session_id}/attachments/{document_id}",
+        "get /spaces/{space_id}/wiki/availability",
+        "get /spaces/{space_id}/wiki/pages",
+        "post /spaces/{space_id}/wiki/pages",
+        "get /spaces/{space_id}/wiki/pages/{page_id}",
+        "delete /spaces/{space_id}/wiki/pages/{page_id}",
+        "patch /spaces/{space_id}/wiki/pages/{page_id}",
+        "put /spaces/{space_id}/wiki/pages/{page_id}/content",
+        "post /spaces/{space_id}/wiki/pages/{page_id}/review",
+        "get /spaces/{space_id}/wiki/pages/{page_id}/revisions",
+        "post /spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore",
+        "post /spaces/{space_id}/wiki/proposals/edit",
+        "post /spaces/{space_id}/wiki/proposals/page",
+        "get /spaces/{space_id}/wiki/proposals/{proposal_id}",
+        "post /spaces/{space_id}/wiki/proposals/{proposal_id}/publish",
+        "get /spaces/{space_id}/wiki/rules",
+        "put /spaces/{space_id}/wiki/rules",
         "get /organizations/{organization_id}/supervision",
         "get /organizations/{organization_id}/supervision/teams/{team_id}",
         "put /organizations/{organization_id}/agents/{agent_id}/default-on",
@@ -243,8 +265,8 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
     .map(String::from)
     .collect();
     assert_eq!(actual, expected);
-    // One error format: every error answer is ErrorBody JSON, and any route with
-    // parameters or a body declares the extractors' 422.
+    // Errors use ErrorBody JSON; wiki edit conflicts also carry the current revision.
+    // Any route with parameters or a body declares the extractors' 422.
     for (path, item) in api["paths"].as_object().unwrap() {
         for (method, operation) in item.as_object().unwrap() {
             for (status, response) in operation["responses"].as_object().unwrap() {
@@ -255,9 +277,25 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
                         ["application/json"],
                         "{method} {path} {status}"
                     );
+                    let wiki_conflict = status == "409"
+                        && matches!(
+                            operation["operationId"].as_str(),
+                            Some(
+                                "write_wiki_page"
+                                    | "write_wiki_rules"
+                                    | "set_wiki_review_mark"
+                                    | "restore_wiki_revision"
+                                    | "propose_wiki_edit"
+                                    | "publish_wiki_proposal"
+                            )
+                        );
                     assert_eq!(
                         content["application/json"]["schema"]["$ref"],
-                        "#/components/schemas/ErrorBody",
+                        if wiki_conflict {
+                            "#/components/schemas/WikiConflict"
+                        } else {
+                            "#/components/schemas/ErrorBody"
+                        },
                         "{method} {path} {status}"
                     );
                 }

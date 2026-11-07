@@ -71,8 +71,8 @@ vi.mock("react-i18next", () => ({
 // The PDF path pulls in react-pdf and a pdf.js worker; the markdown-mode tests
 // only need to observe WHICH renderer was chosen.
 vi.mock("../../../../../common/PdfStreamingDocumentViewer", () => ({
-  PdfStreamingDocumentViewer: ({ documentUid }: { documentUid: string }) => (
-    <p data-testid="pdf">{`pdf:${documentUid}`}</p>
+  PdfStreamingDocumentViewer: ({ documentUid, sourceUrl }: { documentUid: string; sourceUrl?: string }) => (
+    <p data-testid="pdf" data-source={sourceUrl}>{`pdf:${documentUid}`}</p>
   ),
 }));
 
@@ -151,6 +151,35 @@ describe("DocumentViewer — markdown mode for a natively-rendered file", () => 
   it("renders the PDF viewer for a .pdf when no view is passed (default)", () => {
     render(<DocumentViewer documentUid="doc-pdf" fileName="facture.pdf" />);
     expect(container.querySelector('[data-testid="pdf"]')?.textContent).toBe("pdf:doc-pdf");
+  });
+
+  it("keeps native attachment previews in their owning conversation", () => {
+    render(<DocumentViewer documentUid="doc-pdf" sessionId="conversation" fileName="file.pdf" />);
+    expect(container.querySelector('[data-testid="pdf"]')?.getAttribute("data-source")).toBe(
+      "/control-plane/v1/documents/doc-pdf/preview?artifact=native&session_id=conversation",
+    );
+  });
+
+  it("uses the existing PDF viewer for the catalogue's preview URL", () => {
+    render(<DocumentViewer documentUid="deck" fileName="Slides.pptx" sourceUrl="/conversation/files/deck/preview" />);
+    expect(container.querySelector('[data-testid="pdf"]')?.getAttribute("data-source")).toBe(
+      "/conversation/files/deck/preview",
+    );
+    expect(fetchPreview).not.toHaveBeenCalled();
+  });
+
+  it("reports failed and empty previews to its host without a false success", async () => {
+    const onError = vi.fn();
+    const onLoaded = vi.fn();
+    render(<DocumentViewer documentUid="failed" fileName="notes.md" onError={onError} onLoaded={onLoaded} />);
+    await act(async () => pending.get("failed")!.reject({ status: 503 }));
+    expect(onError).toHaveBeenCalledWith({ status: 503 });
+    act(() =>
+      root.render(<DocumentViewer documentUid="empty" fileName="notes.md" onError={onError} onLoaded={onLoaded} />),
+    );
+    await act(async () => pending.get("empty")!.resolve(""));
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(onLoaded).not.toHaveBeenCalled();
   });
 
   it("renders the markdown extraction for that same .pdf when view is raw", async () => {

@@ -812,6 +812,17 @@ describe("TraceDetailDrawer web research", () => {
     expect(html).not.toContain("error_code");
   });
 
+  it.each(["unrecognized provider failure", { results: [{ snippet: "private provider content" }] }])(
+    "keeps unrecognized failed web payloads behind the safe failure view",
+    (content) => {
+      const entry = webEntry("web_search", { query: "python" }, content, false);
+      const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+      expect(html).toContain("The call failed.");
+      expect(html).not.toContain("unrecognized provider failure");
+      expect(html).not.toContain("private provider content");
+    },
+  );
+
   it("says which daily quota is spent", () => {
     const search = webEntry("web_search", { query: "python" }, { error_code: "quota_exceeded" }, false);
     const fetch = webEntry("fetch_url", { url: "https://python.org/" }, { error_code: "quota_exceeded" }, false);

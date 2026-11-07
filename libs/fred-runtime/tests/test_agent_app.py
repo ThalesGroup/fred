@@ -5833,7 +5833,9 @@ def test_admitted_space_reaches_capability_history_and_checkpoints(
                 for event in events
             )
         elif route == "execute":
-            assert response.json()["content"] == "done"
+            payload = response.json()
+            assert payload.get("kind") == "final", payload
+            assert payload.get("content") == "done", payload
 
         checkpointer = get_runtime_context().config.checkpointer
         assert isinstance(checkpointer, FredSqlCheckpointer)

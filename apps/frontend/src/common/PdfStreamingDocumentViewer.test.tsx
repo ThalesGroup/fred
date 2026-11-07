@@ -375,7 +375,7 @@ it("keeps a document-specific failure local when the person remains admitted", a
   await render(<PdfStreamingDocumentViewer documentUid="doc-1" />);
   await act(async () => documentProps.current.onLoadError(new Error("Document unavailable")));
   expect(admission.denied).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Document unavailable");
+  expect(container.textContent).toContain("rework.resources.preview.pdf.loadFailed");
 });
 
 it("detects admission revocation during a later PDF page range/render failure", async () => {
@@ -384,4 +384,26 @@ it("detects admission revocation during a later PDF page range/render failure", 
   admission.status.admitted = false;
   await act(async () => admission.pages[admission.pages.length - 1].onRenderError(new Error("Range refused")));
   expect(admission.denied).toHaveBeenCalledWith(403, { detail: "platform_access_denied" });
+});
+
+it("reports page rendering failures without exposing exception text or clearing on a late page success", async () => {
+  const onError = vi.fn();
+  const onLoaded = vi.fn();
+  await render(
+    <PdfStreamingDocumentViewer
+      documentUid="deck"
+      sourceUrl="/conversation/preview"
+      onError={onError}
+      onLoaded={onLoaded}
+    />,
+  );
+  await loadDocument(2);
+  const page = admission.pages[admission.pages.length - 1];
+  const failure = new Error("secret URL and internal trace");
+  await act(async () => page.onRenderError(failure));
+  expect(onError).toHaveBeenCalledWith(failure);
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("rework.resources.preview.pdf.loadFailed");
+  expect(container.textContent).not.toContain("secret");
+  act(() => page.onRenderSuccess());
+  expect(onLoaded).not.toHaveBeenCalled();
 });

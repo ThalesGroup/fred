@@ -13,14 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Regression coverage: each attachment row used to be one <button> wrapping the
-// delete IconButton - invalid HTML that React flags as a hydration error. The
-// preview target and the delete control must stay siblings.
-
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionAttachment } from "@rework/types/attachments";
+import type { ConversationFile } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { DocumentPreviewDrawerProps } from "../DocumentPreviewDrawer/DocumentPreviewDrawer";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -28,123 +26,194 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock("../Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}));
-
-// Only the attachment list is under test: the drawer chrome and the warning
-// banner are reduced to their children, the preview modal to its open flag.
+const download = vi.hoisted(() => vi.fn());
+const viewer = vi.hoisted(() => ({ props: null as DocumentPreviewDrawerProps | null }));
+vi.mock("../../../../../utils/downloadUtils", () => ({ downloadAuthed: download }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("../InlineDrawer/InlineDrawer", () => ({
   InlineDrawer: ({ children }: { children: React.ReactNode }) => <aside>{children}</aside>,
 }));
-vi.mock("../MarkdownPreviewModal/MarkdownPreviewModal", () => ({
-  MarkdownPreviewModal: ({ open }: { open: boolean }) => <div data-preview-open={open} />,
-}));
-vi.mock("@shared/molecules/UploadWarningBanner/UploadWarningBanner", () => ({
-  default: () => null,
-}));
-
 vi.mock("../DocumentPreviewDrawer/DocumentPreviewDrawer", () => ({
-  default: ({ target }: { target: { documentUid: string; sessionId: string } }) => (
-    <div data-email-document={target.documentUid} data-email-session={target.sessionId} />
-  ),
+  default: (props: DocumentPreviewDrawerProps) => {
+    viewer.props = props;
+    return <div data-preview-open />;
+  },
 }));
 
 import { SessionAttachmentsDrawer } from "./SessionAttachmentsDrawer";
 
 const attachment: SessionAttachment = {
   attachmentId: "att-1",
-  name: "diff_main_swift.md",
+  documentUid: "att-1",
+  sessionId: "session",
+  name: "notes.md",
   mime: "text/markdown",
   sizeBytes: 1024,
-  summaryMd: "# summary",
+  summaryMd: "",
   status: "ready",
 };
-
+const file: ConversationFile = {
+  document_id: "deck",
+  content_id: "v1",
+  preview_content_id: "pdf-v1",
+  name: "Slides.pptx",
+  path: "internal/Slides.pptx",
+  mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  size: 2048,
+  sha256: "hash",
+  updated_at: "2026-11-07",
+};
 let container: HTMLDivElement;
 let root: Root;
-
-afterEach(() => {
-  act(() => {
-    root.unmount();
-  });
-  container.remove();
-});
-
-function renderDrawer(onDelete = vi.fn(), readOnly = false, shown = attachment) {
+let props: ComponentProps<typeof SessionAttachmentsDrawer>;
+function renderDrawer(overrides: Partial<typeof props> = {}) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => {
-    root.render(
-      <SessionAttachmentsDrawer
-        readOnly={readOnly}
-        open
-        onClose={() => {}}
-        attachments={[shown]}
-        onDelete={onDelete}
-      />,
-    );
-  });
-  return onDelete;
+  props = {
+    open: true,
+    onClose: vi.fn(),
+    attachments: [attachment],
+    onDelete: vi.fn(),
+    spaceId: "space",
+    sessionId: "session",
+    ...overrides,
+  };
+  rerender();
 }
-
-function click(element: Element | null) {
-  act(() => {
-    element?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
+function rerender(overrides: Partial<typeof props> = {}) {
+  props = { ...props, ...overrides };
+  act(() => root.render(<SessionAttachmentsDrawer {...props} />));
 }
-
-function previewOpen(): string | null | undefined {
-  return container.querySelector("[data-preview-open]")?.getAttribute("data-preview-open");
+function button(label: string) {
+  return Array.from(container.querySelectorAll("button")).find((element) => element.textContent === label)!;
 }
+async function click(element: Element) {
+  expect(element).toBeTruthy();
+  await act(async () => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+}
+const text = () => container.textContent ?? "";
+const previewButton = () => button("chatbot.sessionAttachments.preview");
+const downloadButton = () => button("chatbot.sessionAttachments.download");
 
-describe("SessionAttachmentsDrawer - attachment row markup", () => {
-  it("never nests the delete button inside the preview button", () => {
-    renderDrawer();
-
-    expect(container.querySelectorAll("button")).toHaveLength(2);
-    expect(container.querySelector("button button")).toBeNull();
-  });
-
-  it("opens the preview when the attachment itself is clicked", () => {
-    renderDrawer();
-
-    click(container.querySelector("button"));
-
-    expect(previewOpen()).toBe("true");
-  });
-
-  it("deletes without opening the preview when the delete button is clicked", () => {
-    const onDelete = renderDrawer();
-
-    click(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]'));
-
-    expect(onDelete).toHaveBeenCalledWith("att-1");
-    expect(previewOpen()).toBe("false");
-  });
-  it("offers no delete action while the file is processing", () => {
-    renderDrawer(vi.fn(), false, { ...attachment, status: "ingesting" });
-    expect(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]')).toBeNull();
-  });
-  it("keeps the preview accessible without a delete action in a read-only conversation", () => {
-    const onDelete = renderDrawer(vi.fn(), true);
-    expect(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]')).toBeNull();
-    click(container.querySelector("button"));
-    expect(previewOpen()).toBe("true");
-    expect(onDelete).not.toHaveBeenCalled();
-  });
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+  download.mockReset();
+  viewer.props = null;
 });
 
-it("opens mail details through the existing viewer with its owning conversation", () => {
-  renderDrawer(vi.fn(), false, {
-    ...attachment,
-    name: "message.eml",
-    documentUid: "document",
-    sessionId: "conversation",
+describe("conversation files drawer", () => {
+  it("shows a single simple empty state", () => {
+    renderDrawer({ attachments: [] });
+    expect(text()).toContain("chatbot.sessionAttachments.empty");
+    expect(container.querySelector("section")).toBeNull();
   });
-  click(container.querySelector("button"));
-  expect(container.querySelector("[data-email-document]")?.getAttribute("data-email-document")).toBe("document");
-  expect(container.querySelector("[data-email-session]")?.getAttribute("data-email-session")).toBe("conversation");
+  it("shows only created files and restores their preview and download from the catalogue", async () => {
+    renderDrawer({ attachments: [], files: [file] });
+    expect(container.querySelectorAll("section")).toHaveLength(1);
+    expect(text()).toContain("chatbot.sessionAttachments.deliverables");
+    expect(text()).not.toContain("chatbot.sessionAttachments.sources");
+    expect(text()).not.toContain("internal/");
+    expect(text()).not.toContain("readyHint");
+    expect(text()).toContain("2 kB");
+    await click(previewButton());
+    expect(viewer.props?.target?.sourceUrl).toBe("/control-plane/v1/spaces/space/sessions/session/files/deck/preview");
+    await click(downloadButton());
+    expect(download).toHaveBeenCalledWith(
+      "/control-plane/v1/spaces/space/sessions/session/files/deck/content",
+      "Slides.pptx",
+    );
+  });
+  it("shows both named sections with separate actions and no nested buttons", () => {
+    renderDrawer({ files: [file] });
+    expect(container.querySelectorAll("section")).toHaveLength(2);
+    expect(container.querySelector("button button")).toBeNull();
+  });
+  it("keeps attachment previews in their owning conversation and downloads through that boundary", async () => {
+    renderDrawer();
+    await click(previewButton());
+    expect(viewer.props?.target).toMatchObject({ documentUid: "att-1", sessionId: "session" });
+    await click(downloadButton());
+    expect(download).toHaveBeenCalledWith(
+      "/control-plane/v1/spaces/space/sessions/session/attachments/att-1/content",
+      "notes.md",
+    );
+  });
+  it("deletes independently of preview, and protects read-only and processing files", async () => {
+    renderDrawer();
+    await click(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]')!);
+    expect(props.onDelete).toHaveBeenCalledWith("att-1");
+    expect(viewer.props).toBeNull();
+    rerender({ readOnly: true });
+    expect(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]')).toBeNull();
+    expect(previewButton()).toBeTruthy();
+    rerender({ readOnly: false, attachments: [{ ...attachment, status: "ingesting" }] });
+    expect(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]')).toBeNull();
+    expect(previewButton()).toBeUndefined();
+    expect(text()).toContain("chatbot.attachmentChip.processing");
+  });
+  it.each(["filesError", "attachmentsError"] as const)(
+    "never presents %s as an empty conversation",
+    async (errorProp) => {
+      const retry = vi.fn();
+      renderDrawer({
+        attachments: [],
+        [errorProp]: { status: 503, data: { detail: "secret traceback" } },
+        onRetryFiles: retry,
+        onRetryAttachments: retry,
+      });
+      expect(container.querySelector('[role="alert"]')).not.toBeNull();
+      expect(text()).toContain("HTTP 503");
+      expect(text()).not.toContain("secret");
+      expect(text()).not.toContain("chatbot.sessionAttachments.empty");
+      await click(button("common.retry"));
+      expect(retry).toHaveBeenCalledOnce();
+    },
+  );
+  it("keeps a failed download visible through a pending retry, clearing only after success", async () => {
+    download.mockRejectedValueOnce(new Error("Download failed (403)"));
+    renderDrawer({ files: [file], attachments: [] });
+    await click(downloadButton());
+    expect(text()).toContain("chatbot.sessionAttachments.downloadError (HTTP 403)");
+    rerender({ open: false });
+    rerender({ open: true });
+    expect(text()).toContain("downloadError");
+    let finish!: () => void;
+    download.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await click(downloadButton());
+    expect(text()).toContain("downloadError");
+    expect(downloadButton().disabled).toBe(true);
+    await act(async () => finish());
+    expect(text()).not.toContain("downloadError");
+  });
+  it("retains preview failure after closing and reopening until the viewer succeeds", async () => {
+    renderDrawer({ files: [file], attachments: [] });
+    await click(previewButton());
+    act(() => viewer.props?.onError?.(new Error("secret internal URL")));
+    act(() => viewer.props?.onClose());
+    expect(text()).toContain("chatbot.sessionAttachments.previewError");
+    expect(text()).not.toContain("secret");
+    await click(previewButton());
+    expect(text()).toContain("previewError");
+    act(() => viewer.props?.onLoaded?.());
+    expect(text()).not.toContain("previewError");
+  });
+  it("keeps refused deletion visible while retaining the file", async () => {
+    renderDrawer({ onDelete: vi.fn().mockResolvedValue(false) });
+    await click(container.querySelector('button[aria-label="chatbot.attachmentChip.removeAria"]')!);
+    expect(text()).toContain("chatbot.sessionAttachments.deleteError");
+    expect(text()).toContain("notes.md");
+  });
+  it("explains preparation failure beyond the badge and preserves the original download", () => {
+    renderDrawer({ attachments: [{ ...attachment, status: "error", error: "unsupported_input" }] });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("preparationError");
+    expect(downloadButton()).toBeTruthy();
+    expect(previewButton()).toBeUndefined();
+  });
 });

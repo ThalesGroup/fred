@@ -1541,7 +1541,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
   const setComposerInput = useMemo(() => guardChange(setInput), [guardChange]);
   const deletePersistedAttachment = useCallback(
     async (id: string) => {
-      if (!executionDisabledRef.current) await attachments.deletePersistedAttachment(id);
+      return !executionDisabledRef.current && (await attachments.deletePersistedAttachment(id));
     },
     [attachments.deletePersistedAttachment],
   );

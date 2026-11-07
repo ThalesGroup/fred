@@ -65,7 +65,7 @@ describe("historyEntries", () => {
 
   it("sorts a revision with no timestamp last rather than first", () => {
     const entries = historyEntries([
-      revision({ revision_id: "undated" }),
+      revision({ revision_id: "undated", created_at: "" }),
       revision({ revision_id: "r1", created_at: "2026-09-06T10:00:00+00:00" }),
     ]);
     expect(entries.map((e) => e.key)).toEqual(["r1", "undated"]);

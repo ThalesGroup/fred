@@ -23,7 +23,9 @@ import {
   statusForEntry,
   skillLoadOf,
   toolDiscriminator,
+  textOf,
 } from "../../../../../utils/traceUtils";
+import { executionFailureText, toolFailureDetail } from "../../../../../utils/toolFailureTrace";
 import { useTraceDrawer } from "../traceDrawerContext";
 import { HitlAnswerSummary } from "../../HitlAnswerSummary/HitlAnswerSummary";
 import type { HitlAnswerSummary as Summary } from "@rework/utils/hitlAnswerSummary";
@@ -87,6 +89,13 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   // keep the red status dot but their own label/text, not the crash wording.
   const isCrashLine = entry.kind === "solo" && status === "error";
   const isCancelled = isCancelledByUser(entry);
+  const failure = entry.kind === "combo" && !isCancelled ? toolFailureDetail(entry) : null;
+  const failureText =
+    isCrashLine && entry.kind === "solo"
+      ? (executionFailureText(textOf(entry.message)) ?? t("rework.chatTrace.failure.unknown"))
+      : failure
+        ? (failure.error ?? t(failure.errorKey))
+        : "";
 
   // Safe result metadata distinguishes repeated calls with the same label.
   const discriminator = toolDiscriminator(entry);
@@ -96,10 +105,10 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
 
   return (
     <div
-      className={`${styles.row} ${hitlAnswerSummary ? styles.hasAnswer : ""}`}
+      className={`${styles.row} ${hitlAnswerSummary || failureText ? styles.hasAnswer : ""}`}
       role="button"
       tabIndex={0}
-      aria-label={`${index !== null ? `${index}. ` : ""}${label}${primary ? `: ${primary}` : ""}${hitlAnswerSummary ? `. ${hitlAnswerSummary.question}: ${hitlAnswerSummary.skipped ? t("rework.hitlPrompt.skipped") : (hitlAnswerSummary.answer ?? "")}` : ""}`}
+      aria-label={`${index !== null ? `${index}. ` : ""}${label}${primary ? `: ${primary}` : ""}${failureText ? `: ${failureText}` : ""}${hitlAnswerSummary ? `. ${hitlAnswerSummary.question}: ${hitlAnswerSummary.skipped ? t("rework.hitlPrompt.skipped") : (hitlAnswerSummary.answer ?? "")}` : ""}`}
       onClick={() => openTrace(entry)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -143,6 +152,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
 
       {/* A cancelled tool never ran — its latency is meaningless, so drop it. */}
       {secondary && !isCancelled && <span className={styles.secondary}>{secondary}</span>}
+      {failureText && <div className={styles.failureText}>{failureText}</div>}
       {hitlAnswerSummary && (
         <div className={styles.answerWrap}>
           <HitlAnswerSummary summary={hitlAnswerSummary} inTrace />

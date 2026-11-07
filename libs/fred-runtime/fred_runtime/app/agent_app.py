@@ -3124,16 +3124,24 @@ async def _write_turn_history(
             messages.append(hitl_message)
             rank += 1
 
-        elif kind == "node_error":
+        elif kind in {"node_error", "execution_error"}:
             messages.append(
                 ChatMessage(
                     session_id=session_id,
                     exchange_id=exchange_id,
                     rank=rank,
                     timestamp=datetime.now(timezone.utc),
-                    role=Role.system,
+                    role=Role.assistant if kind == "execution_error" else Role.system,
                     channel=Channel.error,
-                    parts=[TextPart(text=payload.get("error_message", "node error"))],
+                    parts=[
+                        TextPart(
+                            text=(
+                                payload.get("message", "Agent execution error")
+                                if kind == "execution_error"
+                                else payload.get("error_message", "node error")
+                            )
+                        )
+                    ],
                 )
             )
             rank += 1

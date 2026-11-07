@@ -367,7 +367,7 @@ describe("categorized tool labels", () => {
 
   const translate = (key: string): string => instances.fr.t(key);
 
-  it.each(["en", "fr"] as const)("localizes safe failure causes without recovery advice in %s", (language) => {
+  it.each(["en", "fr"] as const)("localizes safe failure causes and recovery advice in %s", (language) => {
     const [entry] = groupTraceEntries([
       toolCallMsg("failed", "describe_tabular_documents", { document_uids: ["invalid-id"] }),
       toolResultMsg(
@@ -381,7 +381,7 @@ describe("categorized tool labels", () => {
     expect(detail?.arguments).toEqual({ document_uids: ["invalid-id"] });
     const cause = instances[language].t(detail!.errorKey);
     expect(cause).toContain("HTTP 401");
-    expect(cause).not.toMatch(/restored|retry|reconnect|relance|suite/i);
+    expect(cause).toMatch(/before retrying|avant de réessayer/i);
     for (const field of Object.keys(en.rework.chatTrace.failure)) {
       const key = `rework.chatTrace.failure.${field}`;
       expect(instances[language].t(key)).not.toBe(key);

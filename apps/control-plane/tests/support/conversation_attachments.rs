@@ -604,6 +604,27 @@ async fn reader_attaches_privately_to_own_conversation() {
     assert_eq!(listed[0]["name"], "notes.txt");
     assert_eq!(listed[0]["ready"], false);
 
+    // Originals stay downloadable independently of processing, in this conversation only.
+    let download_path = format!("{}/{document}/content", attachments(team, bob));
+    let response = d
+        .request("reader", "GET", &download_path, Body::empty(), "", None)
+        .await;
+    assert_eq!(response.status(), 200);
+    let bytes = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
+    assert_eq!(bytes.as_ref(), b"private");
+    assert_eq!(
+        status(
+            &d,
+            "reader",
+            "GET",
+            &format!("{}/{document}/content", attachments(team, other))
+        )
+        .await,
+        404
+    );
+
     // Names are unique per conversation, not per space.
     assert_eq!(
         attach(&d, "reader", team, bob, "notes.txt", b"again")
@@ -617,6 +638,11 @@ async fn reader_attaches_privately_to_own_conversation() {
 
     // Other readers of the space find no such conversation; a team admin reads no content at all.
     for (user, refused) in [("alice", 404), ("writer", 404), ("owner", 403)] {
+        assert_eq!(
+            status(&d, user, "GET", &download_path).await,
+            refused,
+            "{user}"
+        );
         assert_eq!(
             status(&d, user, "GET", &attachments(team, bob)).await,
             refused,

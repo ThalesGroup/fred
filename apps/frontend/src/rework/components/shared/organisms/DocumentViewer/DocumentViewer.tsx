@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
@@ -34,6 +34,9 @@ export type ViewMode = "file" | "raw" | "metadata";
 interface DocumentViewerProps {
   documentUid: string;
   sessionId?: string;
+  sourceUrl?: string;
+  onError?: (error: unknown) => void;
+  onLoaded?: () => void;
   /** Real file name incl. extension — decides the render strategy (§2.1, FRONT-13). Falls
    * back to markdown rendering when absent, matching the pre-FRONT-13 behavior. */
   fileName?: string | null;
@@ -62,12 +65,23 @@ interface DocumentViewerProps {
  * Deliberately chrome-less: both hosting contexts already provide their own
  * header/close affordance (the page's top bar, `InlineDrawer`'s header).
  */
-export function DocumentViewer({ documentUid, sessionId, fileName, onMarkdownLoaded, view }: DocumentViewerProps) {
-  if (!hasNativePreview(fileName)) {
+export function DocumentViewer({
+  documentUid,
+  sessionId,
+  fileName,
+  onMarkdownLoaded,
+  view,
+  sourceUrl,
+  onError,
+  onLoaded,
+}: DocumentViewerProps) {
+  if (!sourceUrl && !hasNativePreview(fileName)) {
     return (
       <MarkdownDocumentBody
         documentUid={documentUid}
         sessionId={sessionId}
+        onError={onError}
+        onReady={onLoaded}
         onLoaded={onMarkdownLoaded}
         fullWidth={isTabularFile(fileName)}
         artifact={isEmailFile(fileName) && view === "metadata" ? "metadata" : "raw"}
@@ -76,7 +90,15 @@ export function DocumentViewer({ documentUid, sessionId, fileName, onMarkdownLoa
   }
 
   const nativeBody = (
-    <PdfStreamingDocumentViewer documentUid={documentUid} sourceUrl={documentPdfSourceUrl(documentUid)} />
+    <PdfStreamingDocumentViewer
+      documentUid={documentUid}
+      sourceUrl={
+        sourceUrl ??
+        `${documentPdfSourceUrl(documentUid)}${sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : ""}`
+      }
+      onError={onError}
+      onLoaded={onLoaded}
+    />
   );
 
   if (!view) {
@@ -88,7 +110,13 @@ export function DocumentViewer({ documentUid, sessionId, fileName, onMarkdownLoa
       {view === "file" ? (
         nativeBody
       ) : (
-        <MarkdownDocumentBody documentUid={documentUid} sessionId={sessionId} onLoaded={onMarkdownLoaded} />
+        <MarkdownDocumentBody
+          documentUid={documentUid}
+          sessionId={sessionId}
+          onLoaded={onMarkdownLoaded}
+          onError={onError}
+          onReady={onLoaded}
+        />
       )}
     </div>
   );
@@ -135,16 +163,22 @@ function MarkdownDocumentBody({
   documentUid,
   sessionId,
   onLoaded,
+  onError,
+  onReady,
   fullWidth,
   artifact = "raw",
 }: {
   documentUid: string;
   sessionId?: string;
   onLoaded?: (content: string) => void;
+  onError?: (error: unknown) => void;
+  onReady?: () => void;
   fullWidth?: boolean;
   artifact?: "raw" | "metadata";
 }) {
   const { t } = useTranslation();
+  const callbacks = useRef({ onError, onReady });
+  callbacks.current = { onError, onReady };
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   // Set when the markdown extraction cannot be served (404 — the document never
@@ -180,12 +214,19 @@ function MarkdownDocumentBody({
     response
       .then((decoded) => {
         if (cancelled) return;
+        if (artifact === "metadata") {
+          const metadata = JSON.parse(decoded) as MetadataPreview;
+          if (!metadata.identity || !metadata.extensions?.email) throw new Error("Invalid mail preview");
+        }
         setContent(decoded);
         setUnavailable(decoded.trim() === "");
+        if (!decoded.trim()) callbacks.current.onError?.(new Error("Empty preview"));
+        else callbacks.current.onReady?.();
         if (artifact === "raw") onLoaded?.(decoded);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) return;
+        callbacks.current.onError?.(error);
         setContent("");
         setUnavailable(true);
       })

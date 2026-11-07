@@ -85,7 +85,7 @@ async fn named_page(
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/availability",operation_id="wiki_availability",
-    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path)),responses((status=200,body=WikiAvailability)))]
+    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path)),responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiAvailability)))]
 async fn wiki_availability(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -99,7 +99,7 @@ async fn wiki_availability(
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/pages",operation_id="wiki_pages",
-    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path)),responses((status=200,body=WikiPageTree)))]
+    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path)),responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiPageTree)))]
 async fn wiki_pages(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -111,7 +111,7 @@ async fn wiki_pages(
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/pages/{page_id}",operation_id="wiki_page",
-    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path),("page_id"=String,Path,description="Stable page slug")),responses((status=200,body=WikiPageDetail)))]
+    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path),("page_id"=String,Path,description="Stable page slug")),responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiPageDetail)))]
 async fn wiki_page(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -128,7 +128,7 @@ async fn wiki_page(
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/rules",operation_id="wiki_rules",
-    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path)),responses((status=200,body=WikiPageDetail)))]
+    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path)),responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiPageDetail)))]
 async fn wiki_rules(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -143,7 +143,7 @@ async fn wiki_rules(
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/pages",operation_id="create_wiki_page",
     params(("space_id"=Uuid,Path)),request_body=CreateWikiPageRequest,
-    responses((status=201,body=WikiPageDetail),(status=409,body=crate::error::ErrorBody)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=201,body=WikiPageDetail),(status=409,body=crate::error::ErrorBody)))]
 async fn create_wiki_page(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -159,7 +159,7 @@ async fn create_wiki_page(
 
 #[utoipa::path(put,path="/spaces/{space_id}/wiki/pages/{page_id}/content",operation_id="write_wiki_page",
     params(("space_id"=Uuid,Path),("page_id"=Uuid,Path)),request_body=UpdateWikiContentRequest,
-    responses((status=200,body=WikiPageDetail),(status=409,body=WikiConflict)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiPageDetail),(status=409,body=WikiConflict)))]
 async fn write_wiki_page(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -178,7 +178,7 @@ async fn write_wiki_page(
 
 #[utoipa::path(put,path="/spaces/{space_id}/wiki/rules",operation_id="write_wiki_rules",
     params(("space_id"=Uuid,Path)),request_body=UpdateWikiContentRequest,
-    responses((status=200,body=WikiPageDetail),(status=409,body=WikiConflict)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiPageDetail),(status=409,body=WikiConflict)))]
 async fn write_wiki_rules(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -194,7 +194,7 @@ async fn write_wiki_rules(
 
 #[utoipa::path(patch,path="/spaces/{space_id}/wiki/pages/{page_id}",operation_id="patch_wiki_page",
     params(("space_id"=Uuid,Path),("page_id"=Uuid,Path)),request_body=UpdateWikiMetadataRequest,
-    responses((status=200,body=WikiPageSummary),(status=409,body=crate::error::ErrorBody)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiPageSummary),(status=409,body=crate::error::ErrorBody)))]
 async fn patch_wiki_page(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -209,7 +209,7 @@ async fn patch_wiki_page(
 }
 
 #[utoipa::path(delete,path="/spaces/{space_id}/wiki/pages/{page_id}",operation_id="delete_wiki_page",
-    params(("space_id"=Uuid,Path),("page_id"=Uuid,Path)),responses((status=204),(status=409,body=crate::error::ErrorBody)))]
+    params(("space_id"=Uuid,Path),("page_id"=Uuid,Path)),responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=204),(status=409,body=crate::error::ErrorBody)))]
 async fn delete_wiki_page(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -224,7 +224,7 @@ async fn delete_wiki_page(
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/pages/{page_id}/review",operation_id="set_wiki_review_mark",
     params(("space_id"=Uuid,Path),("page_id"=Uuid,Path)),request_body=WikiReviewRequest,
-    responses((status=200,body=WikiPageSummary),(status=409,body=WikiConflict)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiPageSummary),(status=409,body=WikiConflict)))]
 async fn set_wiki_review_mark(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -240,7 +240,7 @@ async fn set_wiki_review_mark(
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/pages/{page_id}/revisions",operation_id="wiki_revisions",
     params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path),("page_id"=Uuid,Path),("cursor"=Option<String>,Query)),
-    responses((status=200,body=WikiRevisionList)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiRevisionList)))]
 async fn wiki_revisions(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -262,7 +262,7 @@ async fn wiki_revisions(
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore",operation_id="restore_wiki_revision",
     params(("space_id"=Uuid,Path),("page_id"=Uuid,Path),("revision_id"=Uuid,Path)),
-    responses((status=200,body=WikiPageDetail),(status=409,body=WikiConflict)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiPageDetail),(status=409,body=WikiConflict)))]
 async fn restore_wiki_revision(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -277,7 +277,7 @@ async fn restore_wiki_revision(
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/proposals/page",operation_id="propose_wiki_page",
     params(("person"=String,Query),("run"=String,Query),("agent"=String,Query),("space_id"=Uuid,Path),("session_id"=Uuid,Query)),request_body=ProposeWikiPageRequest,
-    responses((status=201,body=WikiProposal)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=201,body=WikiProposal)))]
 async fn propose_wiki_page(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -293,7 +293,7 @@ async fn propose_wiki_page(
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/proposals/edit",operation_id="propose_wiki_edit",
     params(("person"=String,Query),("run"=String,Query),("agent"=String,Query),("space_id"=Uuid,Path),("session_id"=Uuid,Query)),request_body=ProposeWikiEditRequest,
-    responses((status=201,body=WikiProposal),(status=409,body=WikiConflict)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=201,body=WikiProposal),(status=409,body=WikiConflict)))]
 async fn propose_wiki_edit(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -308,7 +308,7 @@ async fn propose_wiki_edit(
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/proposals/{proposal_id}",operation_id="wiki_proposal",
-    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path),("proposal_id"=Uuid,Path)),responses((status=200,body=WikiProposal)))]
+    params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path),("proposal_id"=Uuid,Path)),responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiProposal)))]
 async fn wiki_proposal(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -321,7 +321,7 @@ async fn wiki_proposal(
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/proposals/{proposal_id}/publish",operation_id="publish_wiki_proposal",
     params(("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query),("space_id"=Uuid,Path),("proposal_id"=Uuid,Path)),
-    responses((status=200,body=WikiPageDetail),(status=409,body=WikiConflict)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=WikiPageDetail),(status=409,body=WikiConflict)))]
 async fn publish_wiki_proposal(
     State(s): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,

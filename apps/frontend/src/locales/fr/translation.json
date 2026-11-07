@@ -730,8 +730,7 @@
         "storage_unavailable": "Le service est indisponible. L’issue du dépôt reste à vérifier.",
         "interrupted_before_send": "Aucun reçu trouvé. Sélectionnez le même fichier pour réessayer le dépôt.",
         "wrong_file": "Sélectionnez le fichier original avec le même nom et la même taille."
-      },
-      "readyHint": "Les fichiers prêts sont pris en compte au début du prochain tour, selon les capacités activées de l’agent."
+      }
     },
     "composerActions": {
       "dialogAria": "Actions de conversation",
@@ -839,16 +838,19 @@
     "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
-      "empty": "Aucune pièce jointe dans cette conversation.",
-      "filePreviewTitle": "Aperçu de la pièce jointe",
-      "loading": "Chargement des pièces jointes...",
-      "noSummary": "_(Aucun résumé renvoyé par Knowledge Flow)_",
+      "empty": "Aucun fichier dans cette conversation.",
+      "loading": "Chargement des fichiers...",
       "title": "Fichiers de la conversation",
-      "deliverables": "Livrables · dernière version conservée",
-      "sources": "Sources transmises à l’agent",
-      "noDeliverables": "Aucun livrable conservé.",
-      "filesError": "Les livrables sont momentanément indisponibles.",
-      "downloadError": "Le téléchargement a échoué."
+      "deliverables": "Fichiers créés",
+      "sources": "Pièces jointes",
+      "filesError": "Impossible de charger les fichiers créés. Réessayez.",
+      "attachmentsError": "Impossible de charger les pièces jointes. Réessayez.",
+      "deleteError": "La suppression a échoué. La pièce jointe est conservée. Réessayez après la fin de sa préparation ; si le problème persiste, contactez le support.",
+      "downloadError": "Le téléchargement a échoué. Cliquez sur Télécharger pour réessayer. Si le problème persiste, contactez le support en indiquant le fichier et cette conversation.",
+      "previewError": "Impossible d'afficher l'aperçu. Réessayez ou téléchargez le fichier. Si le problème persiste, contactez le support en indiquant le fichier et cette conversation.",
+      "preparationError": "La préparation de ce fichier a échoué. Vous pouvez télécharger l'original ou supprimer la pièce jointe puis l'ajouter à nouveau. ",
+      "preview": "Aperçu",
+      "download": "Télécharger"
     },
     "sessionTitleEditor": {
       "untitled": "Conversation sans titre",
@@ -2581,14 +2583,14 @@
       "failure": {
         "arguments": "Arguments de l'appel :",
         "error": "Erreur :",
-        "invalidArguments": "Les arguments de l'appel ont été refusés.",
-        "authentication": "La demande d'authentification a été refusée (HTTP 401).",
-        "unavailable": "La ressource demandée est indisponible dans ce périmètre d'accès.",
-        "rateLimited": "La limite de requêtes du service a été atteinte (HTTP 429).",
-        "busy": "Le service est temporairement indisponible ou à capacité (HTTP 503).",
-        "timeout": "L'opération a dépassé son délai maximal (HTTP 504).",
-        "service": "Le service n'a pas pu terminer cette opération (HTTP 500).",
-        "unknown": "L'appel a échoué. Aucun diagnostic supplémentaire exploitable n'a été enregistré."
+        "invalidArguments": "Les arguments de l'appel ont été refusés. Vérifiez et corrigez les arguments de l'appel avant de réessayer.",
+        "authentication": "La demande d'authentification a été refusée (HTTP 401). Rétablissez l'authentification avant de réessayer.",
+        "unavailable": "La ressource demandée est indisponible dans ce périmètre d'accès. Choisissez une ressource disponible dans votre périmètre d'accès actuel.",
+        "rateLimited": "La limite de requêtes du service a été atteinte (HTTP 429). Attendez la réinitialisation de la limite avant de réessayer.",
+        "busy": "Le service est temporairement indisponible ou à capacité (HTTP 503). Réessayez plus tard.",
+        "timeout": "L'opération a dépassé son délai maximal (HTTP 504). Réduisez la demande avant de réessayer.",
+        "service": "Le service n'a pas pu terminer cette opération (HTTP 500). Réessayez plus tard ; contactez le support si le problème persiste.",
+        "unknown": "L'appel a échoué. Aucun diagnostic supplémentaire exploitable n'a été enregistré. Consultez les détails de l'appel et contactez le support en indiquant la conversation et toute référence de diagnostic affichée."
       }
     },
     "collapse": "Réduire",

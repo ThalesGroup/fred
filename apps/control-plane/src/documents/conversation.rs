@@ -175,7 +175,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
     params(("space_id"=Uuid,Path),("session_id"=Uuid,Path),
         ("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),
         ("limit"=Option<i64>,Query),("offset"=Option<i64>,Query)),
-    responses((status=200,body=[ConversationFile]),(status=404,body=crate::error::ErrorBody)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=[ConversationFile]),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
 async fn list_conversation_files(
     State(state): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -196,7 +196,7 @@ async fn list_conversation_files(
 #[utoipa::path(get,path="/spaces/{space_id}/sessions/{session_id}/files/write-target",
     params(("space_id"=Uuid,Path),("session_id"=Uuid,Path),("path"=String,Query),
         ("person"=String,Query),("run"=String,Query),("agent"=String,Query)),
-    responses((status=200,body=FileWriteTarget),(status=404,body=crate::error::ErrorBody)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=FileWriteTarget),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
 async fn file_write_target(
     State(state): State<AppState>,
     RuntimeCaller(caller): RuntimeCaller,
@@ -239,7 +239,7 @@ struct Attempt {
         ("expected_content_id"=Option<Uuid>,Query),("source_content_id"=Option<Uuid>,Query),
         ("Idempotency-Key"=Uuid,Header)),
     request_body(content=super::http::FileUpload,content_type="multipart/form-data"),
-    responses((status=200,body=FileWrite),(status=409,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
+    responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,body=FileWrite),(status=409,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
 async fn write_conversation_file(
     State(state): State<AppState>,
     RuntimeCaller(caller): RuntimeCaller,
@@ -475,7 +475,7 @@ async fn download(
 
 #[utoipa::path(get,path="/spaces/{space_id}/sessions/{session_id}/files/{document_id}/content",
     params(("space_id"=Uuid,Path),("session_id"=Uuid,Path),("document_id"=Uuid,Path),
-        ("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query)),responses((status=200,description="Current file bytes",headers(("X-Content-Id"=Uuid,description="Identity of the returned bytes"))),(status=404,body=crate::error::ErrorBody)))]
+        ("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query)),responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,description="Current file bytes",headers(("X-Content-Id"=Uuid,description="Identity of the returned bytes"))),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
 async fn download_conversation_file(
     State(state): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,
@@ -488,7 +488,7 @@ async fn download_conversation_file(
 
 #[utoipa::path(get,path="/spaces/{space_id}/sessions/{session_id}/files/{document_id}/preview",
     params(("space_id"=Uuid,Path),("session_id"=Uuid,Path),("document_id"=Uuid,Path),
-        ("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query)),responses((status=200,description="Preview of the current file"),(status=404,body=crate::error::ErrorBody)))]
+        ("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query)),responses((status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=200,description="Preview of the current file"),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
 async fn preview_conversation_file(
     State(state): State<AppState>,
     RuntimeCaller(user): RuntimeCaller,

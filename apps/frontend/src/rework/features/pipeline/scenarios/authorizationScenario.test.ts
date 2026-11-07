@@ -43,7 +43,7 @@ const probe: AuthzProbeDeps = {
 /** A correct deployment: 401 without a valid token, admin routes open, foreign team content refused. */
 function secure(path: string, token?: string): number {
   if (token !== TOKEN) return 401;
-  if (/\/teams\/t\d\//.test(path)) return 403;
+  if (/\/(?:teams|spaces)\/t\d\//.test(path)) return 403;
   return 200;
 }
 
@@ -114,9 +114,9 @@ describe("authorizationScenario", () => {
   it("bounds the foreign sweep and never probes the personal space", async () => {
     const calls: string[] = [];
     await run(deps(secure, calls));
-    const foreign = calls.filter((p) => /\/teams\/t\d\//.test(p));
+    const foreign = calls.filter((p) => /\/(?:teams|spaces)\/t\d\//.test(p));
     expect(foreign).toHaveLength(MAX_FOREIGN_TEAMS * MEMBER_ROUTES.length);
-    expect(calls.some((p) => p.includes("/teams/personal-x/"))).toBe(false);
+    expect(calls.some((p) => /\/(?:teams|spaces)\/personal-x\//.test(p))).toBe(false);
   });
 
   it("fails an admin route closed to the platform admin", async () => {

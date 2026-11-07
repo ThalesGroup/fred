@@ -2126,10 +2126,9 @@ class FredWorkspaceFs(WorkspaceFsPort):
         if not credentials.delegated:
             raise PermissionError("Conversation files require an admitted workload")
         kwargs = attach_grant({"params": params}, credentials.parameters)
-        headers = {
-            **outbound_context_headers(),
-            "Authorization": credentials.authorization,
-        }
+        headers = outbound_context_headers()
+        if credentials.authorization:
+            headers["Authorization"] = credentials.authorization
         if request_key is not None:
             headers["Idempotency-Key"] = request_key
 

@@ -1337,6 +1337,7 @@ function ManagedChatContent({
           />
 
           <SessionAttachmentsDrawer
+            key={`${space.id}:${chat.sessionId}`}
             open={attachmentsDrawerOpen}
             onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
             readOnly={chat.executionDisabled}
@@ -1344,12 +1345,13 @@ function ManagedChatContent({
             files={conversationFiles.files}
             spaceId={space.id}
             sessionId={chat.sessionId ?? ""}
-            filesError={!!conversationFiles.error}
+            filesError={conversationFiles.error}
+            attachmentsError={chat.attachmentListError}
+            onRetryFiles={() => void refreshFiles()}
+            onRetryAttachments={() => void chat.refreshAttachments()}
             filesLoading={conversationFiles.isFetching}
             isLoading={chat.isHydratingAttachments}
-            onDelete={(attachmentId) => {
-              void chat.deletePersistedAttachment(attachmentId);
-            }}
+            onDelete={chat.deletePersistedAttachment}
           />
 
           {/* Document-scope side panel (#2259) — opened from the tune menu's

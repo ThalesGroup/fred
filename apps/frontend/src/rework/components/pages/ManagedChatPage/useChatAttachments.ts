@@ -181,10 +181,10 @@ export function useChatAttachments({
   );
   const deletePersistedAttachment = useCallback(
     async (documentId: string) => {
-      if (!enabled || !sessionId || managerActor() !== actor) return;
+      if (!enabled || !sessionId || managerActor() !== actor) return false;
       try {
         await deleteDocument({ spaceId, sessionId, documentId }).unwrap();
-        if (managerActor() !== actor) return;
+        if (managerActor() !== actor) return false;
         if (visibleScope.current === scope)
           setAcceptedDeletions((previous) => ({
             scope,
@@ -193,6 +193,7 @@ export function useChatAttachments({
         // Only the accepted lifecycle receipt authorizes removal; physical purge is separate.
         for (const entry of scope.entries)
           if (entry.receipt?.document_id === documentId) forgetAttachmentUpload(scope, entry.key);
+        return true;
       } catch (error) {
         if (managerActor() === actor && visibleScope.current === scope)
           showError({
@@ -201,6 +202,7 @@ export function useChatAttachments({
               defaultValue: t("chatbot.errors.attachmentDeleteFailedDetail"),
             }),
           });
+        return false;
       }
     },
     [actor, deleteDocument, enabled, scope, sessionId, showError, spaceId, t],

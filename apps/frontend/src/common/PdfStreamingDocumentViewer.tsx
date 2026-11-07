@@ -29,6 +29,8 @@ type Props = {
   /** Where to fetch the PDF bytes. Defaults to the document's own raw stream; the
    * document viewer overrides it for formats served through the render endpoint. */
   sourceUrl?: string;
+  onError?: (error: unknown) => void;
+  onLoaded?: () => void;
 };
 
 // Resolved by Vite to the bundled pdf.js worker asset. Kept as a URL (not a
@@ -148,7 +150,10 @@ export function reduceMountedPages(
 // Header-less by design: the two hosting contexts (DocumentViewerPage's own
 // top bar, InlineDrawer's own title+close) already provide chrome, so this
 // component owns only the PDF surface itself.
-export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourceUrl }) => {
+export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourceUrl, onError, onLoaded }) => {
+  const callbacks = useRef({ onError, onLoaded });
+  callbacks.current = { onError, onLoaded };
+  const failed = useRef(false);
   const { t } = useTranslation();
   const token = useAuthToken();
   const [checkAdmission] = useLazyPlatformAccessStatusQuery();
@@ -345,15 +350,21 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourc
         void recheckAdmission();
       });
   };
-  const onDocumentLoadError = (err: any) => {
-    void recheckAdmission();
-    setLoadError(err?.message || "Failed to load PDF.");
-    setIsLoading(false);
-  };
+  const onDocumentLoadError = useCallback(
+    (error: unknown) => {
+      void recheckAdmission();
+      failed.current = true;
+      callbacks.current.onError?.(error);
+      setLoadError(t("rework.resources.preview.pdf.loadFailed"));
+      setIsLoading(false);
+    },
+    [recheckAdmission, t],
+  );
 
   useEffect(() => {
     setIsLoading(true);
     setLoadError(null);
+    failed.current = false;
     setNumPages(null);
     setMountedPages(new Set([1]));
     setPageAspectRatio(FALLBACK_PAGE_ASPECT_RATIO);
@@ -417,8 +428,11 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourc
         >
           {mountedPages.has(pageNumber) && (
             <Page
-              onLoadError={() => void recheckAdmission()}
-              onRenderError={() => void recheckAdmission()}
+              onLoadError={onDocumentLoadError}
+              onRenderError={onDocumentLoadError}
+              onRenderSuccess={() => {
+                if (!failed.current) callbacks.current.onLoaded?.();
+              }}
               pageNumber={pageNumber}
               width={pageWidth}
               renderAnnotationLayer
@@ -428,7 +442,7 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourc
         </div>
       );
     });
-  }, [numPages, pageWidth, pageAspectRatio, mountedPages, showPages, recheckAdmission]);
+  }, [numPages, pageWidth, pageAspectRatio, mountedPages, showPages, onDocumentLoadError]);
 
   const guardPanel = (body: string) => (
     <div className={styles.guard} role="status">
@@ -442,7 +456,11 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ documentUid, sourc
 
   return (
     <div ref={contentRef} className={styles.viewer}>
-      {!isLoading && loadError && <p className={styles.error}>{loadError}</p>}
+      {!isLoading && loadError && (
+        <p className={styles.error} role="alert">
+          {loadError}
+        </p>
+      )}
 
       {/* The size probe is one request for one byte, but <Document> must not mount
           before it answers — mounting is the expensive act this guard prevents. */}

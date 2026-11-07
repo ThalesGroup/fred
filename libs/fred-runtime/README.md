@@ -180,7 +180,16 @@ inference/title admission. See the [operator note](../../deploy/release-notes/ch
 Deep registers `list_conversation_files`, `read_conversation_file` and
 `publish_conversation_file` through its existing middleware tool mechanism. They
 reuse `RuntimeServices.workspace_fs`, the admitted CP delegation, the common writer
-and its transport replay. Lists contain up to 100 entries per call. Reading copies
+and its transport replay. Lists contain up to 100 entries per call. Read with the
+listed `document_id` (the publication receipt calls it `document_uid`), never the
+revision's `content_id`. Invalid or unavailable file identities (422/404) return
+a tool error directing the model to relist and correct the identifier; transport
+failures return a retry hint. Neither creates a workspace file or changes the
+deliverable. An occupied workspace path also returns a tool error asking for
+another path, before reading the deliverable; the existing workspace file stays
+unchanged. These recoverable errors carry the same safe explanation in model text
+and UI artifacts, so a successful retry does not erase the earlier failure from
+the exchange history. Authority loss still stops the turn. Reading copies
 UTF-8 bytes into an unused workspace path and returns the content identity selected
 with those bytes. The model retains that identity in the conversation tool result
 and submits it unchanged when replacing the original catalogue path on a later turn.

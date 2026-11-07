@@ -82,9 +82,12 @@ class _ScriptedClient:
         *,
         headers: dict[str, str],
         json: Any = None,
+        params: dict[str, str] | None = None,
         auth: httpx.Auth | object = httpx.USE_CLIENT_DEFAULT,
     ) -> Any:
-        self.calls.append({"method": method, "url": url, "json": json})
+        self.calls.append(
+            {"method": method, "url": url, "json": json, "params": params}
+        )
         item = self._payloads.pop(0)
         if isinstance(item, httpx.Response):
             return item
@@ -108,7 +111,7 @@ def _conflict_response(
 def _binding() -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
-            session_id="s-1", team_id="team-1", access_token="tok"
+            session_id="s-1", space_id="space-1", team_id="team-1", access_token="tok"
         ),
         portable_context=PortableContext(
             request_id="request-1",
@@ -198,3 +201,6 @@ def test_conflict_recovery_across_the_real_adapter_and_capability() -> None:
     ]
     read_calls = [c for c in client.calls if c["url"].endswith("/pages/s1")]
     assert len(read_calls) == 2  # the conflict forced a real second GET, not a replay
+
+    assert all(c["params"] == {"session_id": "s-1"} for c in client.calls)
+    assert all("/spaces/space-1/wiki/" in c["url"] for c in client.calls)

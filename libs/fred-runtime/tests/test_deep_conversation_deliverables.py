@@ -10,8 +10,16 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from fred_runtime.deep.conversation_files import MAX_BYTES, ConversationFilesMiddleware
+from fred_runtime.runtime_support.authority import (
+    AuthorityLostError,
+    DelegationUnavailableError,
+)
 from fred_sdk.contracts.context import PublishedArtifact
-from fred_sdk.contracts.runtime import ConversationFileContent, WorkspaceFsPort
+from fred_sdk.contracts.runtime import (
+    ConversationFileContent,
+    ConversationFileEntry,
+    WorkspaceFsPort,
+)
 from langchain_core.messages import ToolMessage
 from test_deep_concat_files import _scratchpad
 
@@ -32,7 +40,18 @@ def catalogue():
                 document_id="doc", content_id="read-version", content=b"old report"
             )
         ),
-        list=AsyncMock(return_value=()),
+        list=AsyncMock(
+            return_value=(
+                ConversationFileEntry(
+                    document_id="doc",
+                    content_id="read-version",
+                    path="report.md",
+                    name="report.md",
+                    mime="text/markdown",
+                    size=len(b"old report"),
+                ),
+            )
+        ),
         snapshot=AsyncMock(
             side_effect=AssertionError("Never refresh the read version")
         ),
@@ -71,12 +90,16 @@ async def test_next_turn_reads_edits_and_replaces_the_version_actually_read():
     next_turn = ConversationFilesMiddleware(
         workspace.port, cast(WorkspaceFsPort, port), "conversation"
     )
+    listing = await invoke(next_turn, "list_conversation_files")
+    assert isinstance(listing.content, str)
+    listed = json.loads(listing.content)
     read = await invoke(
         next_turn,
         "read_conversation_file",
-        document_id="doc",
+        document_id=listed["document_id"],
         workspace_path="/revision.md",
     )
+    port.read.assert_awaited_once_with("doc", max_bytes=MAX_BYTES)
     assert "content_id=read-version" in read.content
     assert await workspace.read_text("revision.md") == "old report"
     await workspace.port.edit_text("/revision.md", "old", "edited", origin="agent")
@@ -100,6 +123,114 @@ async def test_next_turn_reads_edits_and_replaces_the_version_actually_read():
     )
     assert port.write.call_args.kwargs["expected_content_id"] == "read-version"
     port.snapshot.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "document_id,status",
+    [("read-version", 404), ("missing-file", 404), ("not-a-uuid", 422)],
+)
+async def test_read_error_allows_relisting_and_correcting_only_the_file_identity(
+    document_id,
+    status,
+):
+    workspace = _scratchpad()
+    port = catalogue()
+    original = port.read.return_value
+    port.read.side_effect = [
+        httpx.HTTPStatusError(
+            "private diagnostic",
+            request=httpx.Request("GET", "https://cp.internal/files"),
+            response=httpx.Response(status, json={"detail": "private diagnostic"}),
+        ),
+        original,
+    ]
+    middleware = ConversationFilesMiddleware(
+        workspace.port, cast(WorkspaceFsPort, port), "conversation"
+    )
+    result = await invoke(
+        middleware,
+        "read_conversation_file",
+        document_id=document_id,
+        workspace_path="/read.md",
+    )
+    assert result.artifact.is_error
+    assert not result.artifact.ui_parts
+    assert "list_conversation_files" in result.content
+    assert "document_id" in result.content and "content_id" in result.content
+    assert "private diagnostic" not in result.content
+    assert "cp.internal" not in result.content
+    assert not await workspace.exists("read.md")
+    # The failed identifier is forwarded unchanged, with no revision lookup or fallback.
+    port.read.assert_awaited_once_with(document_id, max_bytes=MAX_BYTES)
+
+    listing = await invoke(middleware, "list_conversation_files")
+    assert isinstance(listing.content, str)
+    corrected = await invoke(
+        middleware,
+        "read_conversation_file",
+        document_id=json.loads(listing.content)["document_id"],
+        workspace_path="/read.md",
+    )
+    assert not corrected.artifact.is_error
+    port.read.assert_awaited_with("doc", max_bytes=MAX_BYTES)
+    assert await workspace.read_text("read.md") == "old report"
+    port.write.assert_not_called()
+    port.snapshot.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_read_transport_failure_returns_a_sanitized_retry_hint():
+    workspace = _scratchpad()
+    port = catalogue()
+    port.read.side_effect = httpx.ReadError("private transport diagnostic")
+    middleware = ConversationFilesMiddleware(
+        workspace.port, cast(WorkspaceFsPort, port), "conversation"
+    )
+    result = await invoke(
+        middleware,
+        "read_conversation_file",
+        document_id="doc",
+        workspace_path="/read.md",
+    )
+    assert result.artifact.is_error
+    assert not result.artifact.ui_parts
+    assert "Retry with the same document_id" in result.content
+    assert "private transport diagnostic" not in result.content
+    assert not await workspace.exists("read.md")
+    port.write.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure", [401, 403, 500, AuthorityLostError(), DelegationUnavailableError()]
+)
+async def test_read_does_not_swallow_authority_loss_or_unexpected_failures(failure):
+    workspace = _scratchpad()
+    port = catalogue()
+    error = (
+        httpx.HTTPStatusError(
+            "denied or failed",
+            request=httpx.Request("GET", "https://cp.internal/files"),
+            response=httpx.Response(failure),
+        )
+        if isinstance(failure, int)
+        else failure
+    )
+    port.read.side_effect = error
+    middleware = ConversationFilesMiddleware(
+        workspace.port, cast(WorkspaceFsPort, port), "conversation"
+    )
+    with pytest.raises(type(error)) as raised:
+        await invoke(
+            middleware,
+            "read_conversation_file",
+            document_id="doc",
+            workspace_path="/read.md",
+        )
+    assert raised.value is error
+    assert not await workspace.exists("read.md")
+    port.write.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -154,13 +285,17 @@ async def test_workspace_limits_and_internal_files_are_not_bypassed():
             workspace_path="/report.md",
             path="report.exe",
         )
-    with pytest.raises(ValueError, match="unused"):
-        await invoke(
-            middleware,
-            "read_conversation_file",
-            document_id="doc",
-            workspace_path="/report.md",
-        )
+    occupied = await invoke(
+        middleware,
+        "read_conversation_file",
+        document_id="doc",
+        workspace_path="/report.md",
+    )
+    assert occupied.artifact.is_error
+    assert "Choose another unused workspace_path" in occupied.content
+    assert occupied.artifact.blocks[0].text == occupied.content
+    assert await workspace.read_text("report.md") == "x" * (MAX_BYTES + 1)
+    port.read.assert_not_awaited()
     from fred_sdk.contracts.runtime import ConversationFilesystemPermissionError
 
     with pytest.raises(ConversationFilesystemPermissionError):
@@ -220,6 +355,12 @@ def test_deep_registration_uses_the_bound_conversation_and_effective_workspace(c
         assert not (
             {"person", "run", "agent", "space_id", "session_id"} & tool.args.keys()
         )
+    read_tool = next(
+        tool for tool in deliveries[0].tools if tool.name == "read_conversation_file"
+    )
+    description = read_tool.args["document_id"]["description"]
+    assert "document_id from list_conversation_files" in description
+    assert "Never use content_id" in description
 
 
 @pytest.mark.asyncio

@@ -26,6 +26,8 @@ import {
   traceRows,
   traceSummary,
   toolCallId,
+  statusForEntry,
+  isCancelledByUser,
 } from "../../../../utils/traceUtils";
 import { useTraceExpansion } from "../../../../core/hooks/useTraceExpansion";
 import { ReasoningRow } from "./ReasoningRow/ReasoningRow";
@@ -90,13 +92,18 @@ export function ThoughtTrace({
   const summary = useMemo(() => traceSummary(entries, pendingToolCallIds), [entries, pendingToolCallIds]);
   const label = useSummaryLabel(summary);
   const { expanded, toggle } = useTraceExpansion(done);
-  // Only when open. `toThreadMessages` rebuilds every exchange's traceMessages
-  // array on each streamed frame, so this memo is invalidated for the WHOLE
-  // conversation on every token — and traceRows flattens markdown. Behind the
-  // toggle, a long history's collapsed traces cost nothing per token.
+  const hasFailures = entries.some((entry) => statusForEntry(entry) === "error" && !isCancelledByUser(entry));
+  // Failed exchanges keep their calls/results visible, including successful
+  // retries. Collapsing reasoning must not hide a failure after a later success.
+  // Avoid flattening reasoning for ordinary collapsed traces.
   const rows = useMemo(
-    () => (expanded ? traceRows(entries).slice(initialSkillCount) : EMPTY_ROWS),
-    [entries, expanded, initialSkillCount],
+    () =>
+      expanded || hasFailures
+        ? traceRows(entries)
+            .slice(initialSkillCount)
+            .filter(({ entry }) => expanded || entry.kind === "combo" || statusForEntry(entry) === "error")
+        : EMPTY_ROWS,
+    [entries, expanded, hasFailures, initialSkillCount],
   );
   const hasActivities = entries.length > initialSkillCount;
 
@@ -128,7 +135,7 @@ export function ThoughtTrace({
 
       {/* One sequence, in the order the turn actually unfolded: reasoning and
           tool steps alternate rather than being stacked into two lanes. */}
-      {expanded && hasActivities && (
+      {rows.length > 0 && hasActivities && (
         <div className={styles.body}>
           {rows.map(({ entry, lane, index, reasoningText, restated }) =>
             lane === "reasoning" ? (

@@ -585,7 +585,9 @@ def _filesystem_prompt_suffix(*, available_tool_names: Collection[str]) -> str:
         parts.append(
             "Deliver saved Markdown/CSV workspace files with publish_conversation_file. "
             "On a later turn, list_conversation_files and read_conversation_file recover "
-            "the deliverable into the workspace. Retain that read's content_id for "
+            "the deliverable into the workspace: pass the listed document_id to "
+            "read_conversation_file, never content_id (which identifies a revision). "
+            "Retain that read's content_id for "
             "replacement; never refresh it at publication time. Editor buffers are "
             "not synchronized with workspace files. Announce delivery only after the "
             "tool returns the CP receipt and download link."

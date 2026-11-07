@@ -116,7 +116,12 @@ def answered(text: str, user: str = USER) -> List[Any]:
 
 
 def deck(workspace: FakeWorkspace) -> Any:
-    pptx = [w for w in workspace.writes if w["path"].endswith(".pptx")]
+    # A PDF preview shares the deck path but references its source content.
+    pptx = [
+        w
+        for w in workspace.writes
+        if w["path"].endswith(".pptx") and w["source_content_id"] is None
+    ]
     return Presentation(io.BytesIO(pptx[-1]["content"]))
 
 
