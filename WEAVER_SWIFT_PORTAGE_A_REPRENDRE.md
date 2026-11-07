@@ -1,7 +1,7 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `303b7456e9709880a9fd6503d0d29a12e34f9793`** (merge `e9d18c16b`,
-étape 3 de la tranche en cours, section 14). Cette borne sert à inventorier les
+**Borne Swift intégrée : `f951e343823efae25056c8e372d5f72e1c70974d`** (merge `6aefa8684`, section 14).
+Cette borne sert à inventorier les
 prochaines arrivées Swift. La dernière tranche complète s'arrête à
 `3d18384205a469f691bbf3ca3cb697911bc6b257` : le merge Swift `394a9150f` part de Weaver
 `e017f869ea5d5668a47d04da3c2de572e97af8b7` et reprend quatre nouveaux commits ; voir la
@@ -1488,7 +1488,7 @@ arrivés ensuite, restent hors de cette tranche.
 | 1 | `b00551906` (#3460) tabulaire | Mergée en `d294b0e4e`, poussée sur `weaver`, non reçue |
 | 2 | `a2ebfe48c` (#3476) Azure APIM | Mergée en `4830c58bc` sans changement de fichier, poussée sur `weaver`, non reçue |
 | 3 | `d9eb3738f` (#3453), `303b7456e` (#3483) | Mergée en `f06d57650` et `e9d18c16b`, non reçue |
-| 4 | `507866562` (#3475), `89baab5b6` (#3455) | Non commencée |
+| 4 | `507866562` (#3475), `89baab5b6` (#3455) | Mergée en `735d818ef` et `04aee8fbb`, non reçue. Tranche vers `89baab5b6` terminée |
 
 ### Etape 1 : décisions
 
@@ -1581,3 +1581,33 @@ Les tests sont regroupés en une campagne complète jusqu'à k3d, une fois le ra
 le modèle Zabbix (demande client, compatibilité Weaver exigée), les SBOM d'images (`9cdd1ac99`), le wiki d'équipe
 (`bef0098f4`) et, en priorité, l'affichage des pièces jointes (`ad5a1d2d3`). Leur forme dans Weaver reste à décider
 commit par commit.
+
+### Etape 4 : décisions
+
+- **Repris de `507866562` :** le modèle Zabbix, sans modification, et son README corrigé pour décrire les endpoints réels de Weaver.
+  Le Control Plane n'expose pas de `/metrics`.
+- **Exclu volontairement :** le guide SIEM de `89baab5b6`, qui décrit OpenFGA et des événements d'audit Swift. Un besoin SIEM
+  demanderait un guide court écrit depuis les événements réels de Weaver.
+- **Défaut corrigé en passant :** le Service de métriques du chart `fred` n'était jamais créé, car il exigeait une clé absente du chart
+  (`5f29e4ba6`, `13cc6d4bb`). `metricsService` décide seul, et `values.yaml` lie les exporteurs concernés à `0.0.0.0`.
+
+### Etape 4 : à recevoir
+
+- `kubectl get service` liste `fred-agents-metrics`, `knowledge-flow-backend-metrics` et `knowledge-flow-worker-metrics`, et `/metrics`
+  répond depuis le cluster.
+- **Non prouvé :** l'import du modèle dans un vrai Zabbix 7.0, et un vrai Prometheus.
+
+### Rattrapage après `89baab5b6`
+
+| Commit Swift | Etat |
+| --- | --- |
+| `f951e3438` (#3487) oauthlib | Mergé en `6aefa8684` sans changement de fichier : aucun verrou de Weaver ne le contient |
+| `6f3b28478` (#3485), `6fae3a708` (#3486) UI-PORT | Non commencé |
+| `174a38854` (#3498) test | Non commencé |
+| `9cdd1ac99` SBOM | Non commencé |
+| `ad5a1d2d3` (#3490) pièces jointes | Non commencé. Décision : affichage dérivé des pièces jointes du Control Plane, sans contrat ni écriture runtime |
+| `bef0098f4` (#3491) wiki | Non commencé |
+
+- **Limite acceptée :** `metricsService.enabled: false` retire le Service, mais l'exporteur reste à l'écoute dans le pod.
+- **A trancher en fin de rattrapage :** la CLI de `fred-runtime` (`url_helpers.py`, `pod_client.py`, `entrypoint.py` et son README) lit encore
+  `app.metrics_port`, alors que le port vit sous `observability.kpi.prometheus`.
